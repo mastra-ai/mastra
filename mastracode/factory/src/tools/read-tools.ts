@@ -1,7 +1,14 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, isTerminalWorkItem } from '../boards/index.js';
+import {
+  awaitsAcceptance,
+  boardFlow,
+  boardForWorkItem,
+  isTerminalWorkItem,
+  pullRequestSourceNumber,
+  pullRequestSources,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -15,7 +22,6 @@ import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
@@ -45,7 +51,6 @@ export interface FactoryReadToolDependencies {
     | 'listWorkItemSubscribers'
     | 'listSessionSubscriptions'
   >;
-  comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
   /** A fixed registry, or the per-project boards. */
   boards: BoardRegistry | ProjectBoardSource;
@@ -102,15 +107,25 @@ export async function findWorkItem(
   if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
   const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
-  // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
+  // Issue and PR numbers share a space on GitHub; prefer the issue's card.
   const workCards = matches.filter(item => item.externalSource?.type !== 'pull-request');
   // Hand-filed card numbers and issue numbers from several repositories can repeat; refuse to guess.
-  if (workCards.length > 1) {
-    const candidates = workCards.map(item => `${item.id} (${item.title})`).join(', ');
-    throw new Error(`#${number} matches more than one work item; use its id instead: ${candidates}.`);
-  }
+  refuseAmbiguous(number, workCards);
   const match = workCards[0] ?? matches[0];
-  return match ? structuredClone(match) : null;
+  if (match) return structuredClone(match);
+  // A pull request attached to an issue's card is found through that card. Pull request numbers
+  // repeat across repositories too.
+  const carriers = items.filter(item =>
+    pullRequestSources(item).some(source => pullRequestSourceNumber(source) === Number(number)),
+  );
+  refuseAmbiguous(number, carriers);
+  return carriers[0] ? structuredClone(carriers[0]) : null;
+}
+
+function refuseAmbiguous(number: string, items: readonly Card[]): void {
+  if (items.length <= 1) return;
+  const candidates = items.map(item => `${item.id} (${item.title})`).join(', ');
+  throw new Error(`#${number} matches more than one work item; use its id instead: ${candidates}.`);
 }
 
 export function workItemNotFound(ref: string): Error {
@@ -166,17 +181,20 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-const PAST_TRIAGE = new Set(['planning', 'execute', 'review']);
-
 /**
- * Held: a Work card triage left in Intake (or whose source asks for approval), until a person
- * moves it on. A card that has been past Triage since (parked by self-review, or dragged back)
- * resumes instead, matching the board's held state.
+ * Held: a card triage left resting (or whose source asks for approval), until a person moves it
+ * on. A card that has been past triage since (parked by self-review, or dragged back) resumes
+ * instead, matching the board's held state.
  */
-function isHeld(item: Card): boolean {
-  if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
-  if (needsApproval(item)) return true;
-  return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));
+function isHeld(boards: BoardRegistry, item: Card): boolean {
+  const board = boards.get(boardForWorkItem(item));
+  const stage = item.stages.length === 1 ? item.stages[0]! : undefined;
+  if (!board || !stage || board.phaseKind(stage) !== 'resting') return false;
+  if (needsApproval(item, phase => awaitsAcceptance(board, phase))) return true;
+  const triage = boardFlow(board).triage;
+  const triageRole = triage ? board.roleForPhase(triage) : undefined;
+  if (!triageRole || item.sessions[triageRole] === undefined) return false;
+  return !item.stageHistory.some(entry => entry.stage !== triage && board.isWorking(entry.stage));
 }
 
 const listInputSchema = z
@@ -271,16 +289,15 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_inspect_work_item: createTool({
       id: 'factory_inspect_work_item',
       description:
-        'Everything the Factory knows about one work item: stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
+        'Everything the Factory knows about one work item: its description, stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
       inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
         if (!item) throw workItemNotFound(workItem);
-        const [bindings, decisions, audit, feed, all, subscribers] = await Promise.all([
+        const [bindings, decisions, audit, all, subscribers] = await Promise.all([
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id),
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.audit.list({ ...project, limit: 200 }),
-          deps.comments.listRecent({ ...project, workItemId: item.id, limit: 10 }),
           deps.workItems.listShared(project),
           deps.workItems.listWorkItemSubscribers({ orgId: scope.orgId, workItemId: item.id }),
         ]);
@@ -323,6 +340,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         return {
           item: {
             ...summarizeItem(item, bindings),
+            description: item.description,
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
             sourceUrl: typeof item.workItem.url === 'string' ? item.workItem.url : null,
             revision: item.revision,
@@ -345,13 +363,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
               actorType: event.actorType,
               occurredAt: iso(event.occurredAt),
             })),
-          feed: feed.map(comment => ({
-            id: comment.id,
-            kind: comment.kind,
-            author: comment.author,
-            occurredAt: iso(comment.occurredAt),
-            body: truncate(comment.body, MAX_TEXT),
-          })),
           parent: parent ? summarizeItem(parent, bindings) : null,
           children: children.slice(0, MAX_LIST).map(child => summarizeItem(child, bindings)),
           subscribers: subscribers.slice(0, MAX_LIST).map(subscription => ({
@@ -410,7 +421,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           incidents.flatMap(group => group.shown),
         );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
-        const held = items.filter(isHeld);
+        const held = items.filter(item => isHeld(boards, item));
         const unplaced = await cardsWithoutRepository(
           items.filter(item => !item.externalSource && !isTerminalWorkItem(boards, item)),
         );

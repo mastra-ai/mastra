@@ -148,6 +148,18 @@ export function pullRequestStatusForItem(item: Pick<WorkItem, 'workItem' | 'meta
   return metadata.draft === true ? 'draft' : 'open';
 }
 
+/** Status of a pull request attached to an issue card, read from that source alone. */
+export function pullRequestStatusForSource(source: {
+  state: string | null;
+  metadata: Record<string, unknown> | null;
+}): PullRequestStatus {
+  const metadata = source.metadata ?? {};
+  const state = source.state ?? metadata.state;
+  if (state === 'merged' || metadata.merged === true) return 'merged';
+  if (state === 'closed') return 'closed';
+  return metadata.draft === true ? 'draft' : 'open';
+}
+
 /**
  * Source key for a GitHub issue or pull request. Numbers repeat across a
  * project's repositories, so the key is repository-scoped whenever the
@@ -190,9 +202,13 @@ export function sourceCreatedAt(metadata: Record<string, unknown>): string | und
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
 }
 
-export function doneAt(item: Pick<WorkItem, 'stages' | 'stageHistory'>): number | undefined {
-  if (!item.stages.includes('done')) return undefined;
-  const entry = item.stageHistory.findLast(candidate => candidate.stage === 'done');
+/** When a card last entered its board's completed phase, if it sits there now. */
+export function doneAt(
+  item: Pick<WorkItem, 'stages' | 'stageHistory'>,
+  completed: string | undefined,
+): number | undefined {
+  if (completed === undefined || !item.stages.includes(completed)) return undefined;
+  const entry = item.stageHistory.findLast(candidate => candidate.stage === completed);
   return entry && Date.parse(entry.enteredAt);
 }
 

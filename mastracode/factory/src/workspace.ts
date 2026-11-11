@@ -19,6 +19,7 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -42,6 +43,12 @@ import {
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
+  attachSandboxEnvRefresh,
+  resolveSandboxEnv,
+  resolveSandboxEnvOrEmpty,
+  sandboxBuildContext,
+} from './sandbox/sandbox-env.js';
+import {
   createEnvironmentSetupHook,
   createSessionSetupHook,
   evictSessionSandbox,
@@ -59,6 +66,7 @@ import {
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SandboxEnvStore } from './storage/domains/sandbox-envs/base.js';
 import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -112,7 +120,7 @@ export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): stri
 export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
-  'factory-complete-issue',
+  'factory-build',
   'factory-gitlab-rereview',
   'factory-gitlab-review',
   'factory-plan',
@@ -429,7 +437,7 @@ function isActiveReviewBinding(
   runBinding: { role: string; status: string; orgId: string } | null | undefined,
   orgId: string | undefined,
 ): boolean {
-  return runBinding?.role === 'review' && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+  return runBinding?.role === REVIEW_CONTEXT && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
 }
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
@@ -467,6 +475,8 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /** The Factory's sandbox environment variables, applied to each session sandbox. */
+  sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
   /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
@@ -677,7 +687,7 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides, sandboxEnvs } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -783,6 +793,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // a factory session, list form or single repository.
     const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
     const sandboxSettings = resolvedEnvironment?.settings ?? {};
+    // The Factory's variables, read before construction (which is synchronous).
+    const envScope =
+      sandboxEnvs && session.factoryProjectId
+        ? { orgId: session.orgId, projectId: session.factoryProjectId }
+        : undefined;
+    const sandboxEnv = envScope ? await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope) : undefined;
+    // Re-read when setup actually runs, which can be long after this request.
+    // Runtime values ride along only so a failed setup can mask them.
+    const setupEnv = async (): Promise<[Record<string, string>?, Record<string, string>?]> => {
+      if (!envScope) return [];
+      const env = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
+      return [env.build, env.runtime];
+    };
     // The session's own link must be part of the environment: it is the
     // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
     // whose link left the environment keeps its single-repository sandbox.
@@ -991,6 +1014,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 // original VM instead of provisioning a replacement.
                 sandboxId: session.sandboxId ?? undefined,
                 repoFullName,
+                ...sandboxBuildContext(sandboxEnv),
                 ...(environment
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
@@ -1013,6 +1037,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          // Before Factory's own GH_TOKEN, so a host env key is remembered before Factory writes it.
+          if (envScope && sandboxEnv) {
+            attachSandboxEnvRefresh(sandbox, {
+              initial: sandboxEnv,
+              revision: async () => (await sandboxEnvs!.revisions(envScope.orgId, envScope.projectId))?.revision ?? '',
+              load: () => resolveSandboxEnv(sandboxEnvs!, envScope),
+            });
+          }
           // A turn can outlive the token installed when the workspace was
           // resolved, so check its age before every command and background
           // spawn. Best-effort: a failed re-mint leaves the current token in
@@ -1506,7 +1538,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          await timedPhase('workspace.setup', async () =>
+            runSetupCommand(target, workdir, projectRepository.setupCommand!, ...(await setupEnv())),
+          );
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
@@ -1654,8 +1688,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             continue;
           }
           try {
-            await timedPhase(`workspace.setup(${repo.slug})`, () =>
-              runSetupCommand(target, entry.dir, repo.setupCommand!),
+            await timedPhase(`workspace.setup(${repo.slug})`, async () =>
+              runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
             );
             await entry.gate.markSetupDone();
           } catch (error) {
@@ -1684,8 +1718,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
           } else {
             try {
-              await timedPhase('workspace.setup(workspace)', () =>
-                runSetupCommand(target, gate.root, workspaceCommand),
+              await timedPhase('workspace.setup(workspace)', async () =>
+                runSetupCommand(target, gate.root, workspaceCommand, ...(await setupEnv())),
               );
               await gate.workspace.markSetupDone();
             } catch (error) {

@@ -21,18 +21,6 @@
     "minimax-m3"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "glm-5.3-fast": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-v4-pro-fast": [
       {
         "type": "effort",
@@ -51,16 +39,28 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash-fast": [
+    "glm-5.3-fast": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

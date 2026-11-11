@@ -1,11 +1,10 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 
-import { createBoardRegistry } from '../boards/index.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -48,7 +47,6 @@ function item(overrides: Partial<Card> & { id: string }): Card {
     triageType: null,
     autonomyArmedAt: null,
     acceptedAt: null,
-    commentCount: 0,
     revision: 1,
     createdBy: 'someone-else',
     createdAt: new Date(clock),
@@ -122,7 +120,6 @@ function setup({
   bindings = [],
   decisions = [],
   audit = [],
-  comments = [],
   subscriptions = [],
   sessions,
 }: {
@@ -130,7 +127,6 @@ function setup({
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
-  comments?: WorkItemCommentRow[];
   subscriptions?: WorkItemSubscription[];
   sessions?: FactoryReadToolDependencies['sessions'];
 }) {
@@ -160,9 +156,8 @@ function setup({
         subscriptions.filter(row => row.factoryProjectId === factoryProjectId && row.sessionId === sessionId),
       ),
     },
-    comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createBoardRegistry(),
+    boards: createTriageWorkRegistry(),
     ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
@@ -202,7 +197,7 @@ describe('factory_list_work_items', () => {
       id: 'c',
       title: 'Review: dark mode',
       stages: ['review'],
-      board: 'review',
+      board: 'release',
       sessions: { review: { sessionId: 's-c', branch: 'b', threadId: 't-c', startedBy: 'x' } },
     }),
     item({ id: 'd', title: 'Other factory', factoryProjectId: 'project-2' }),
@@ -221,7 +216,7 @@ describe('factory_list_work_items', () => {
     expect(await ids({ query: 'LOGIN' })).toEqual(['a']);
     expect(await ids({ query: '#12' })).toEqual(['a']);
     expect(await ids({ stage: 'execute' })).toEqual(['b']);
-    expect(await ids({ board: 'review' })).toEqual(['c']);
+    expect(await ids({ board: 'release' })).toEqual(['c']);
     expect(await ids({ board: 'work' })).toEqual(['b', 'a']);
     expect(await ids({ role: 'review' })).toEqual(['c']);
     expect(await ids({ active: true })).toEqual(['b']);
@@ -262,7 +257,7 @@ describe('factory_list_work_items', () => {
         'https://factory.example.com/factories/project-1/work?item=a',
       );
       expect(result.items.find(row => row.id === 'c')?.url).toBe(
-        'https://factory.example.com/factories/project-1/review?item=c',
+        'https://factory.example.com/factories/project-1/boards/release?item=c',
       );
     } finally {
       vi.unstubAllEnvs();
@@ -317,7 +312,6 @@ describe('factory_inspect_work_item', () => {
       decisions: [
         decision({ id: 'd1', workItemId: TARGET, lastError: 'e'.repeat(1000), failureCode: 'session_unavailable' }),
       ],
-      comments: [{ id: 'c1', kind: 'comment', body: 'b'.repeat(1000), author: { type: 'human', id: 'u' } } as never],
       audit: [
         {
           id: 'a1',
@@ -344,7 +338,6 @@ describe('factory_inspect_work_item', () => {
     });
     const decisions = byId.decisions as Array<{ error: string }>;
     expect(decisions[0]!.error).toHaveLength(MAX_ERROR);
-    expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
   });
 
   it('shows whether each session is mid-run and when its thread last moved (#27742)', async () => {

@@ -28,6 +28,7 @@ import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffe
 import { withSpanPreviews } from './span-previews';
 import { StorageByteTracker, resolveStorageByteBatching } from './storage-byte-tracker';
 import type { StorageByteBatchingConfig, StorageByteBatchingStats } from './storage-byte-tracker';
+import { skipLocalStorageOnPlatform } from './storage-platform-policy';
 export type { StorageByteBatchingConfig, StorageByteBatchingStats } from './storage-byte-tracker';
 
 /** Configuration for the MastraStorageExporter's batching, retry, and strategy behavior. */
@@ -169,6 +170,13 @@ export class MastraStorageExporter extends BaseExporter {
       this.warnUnavailable(
         'MastraStorageExporter unavailable: Observability storage not available. Traces will not be persisted until storage becomes available.',
       );
+      return;
+    }
+
+    if (skipLocalStorageOnPlatform(this.#observabilityStorage, this.logger)) {
+      this.#observabilityStorage = undefined;
+      // Do not retry initialization or warn again on each exported event.
+      this.#storage = undefined;
       return;
     }
 

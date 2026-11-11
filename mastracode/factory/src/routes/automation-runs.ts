@@ -5,7 +5,7 @@
  * The endpoint is a constrained ingress in front of
  * `WorkItemsStorage.commitRuleEvaluation()`: it commits exactly one
  * `invokeSkill` decision, stamps a non-human system actor, and leaves
- * execution (session creation, auto-run/approval policy, retry, restart
+ * execution (session creation, the board's approval policy, retry, restart
  * recovery) to the `FactoryDecisionDispatcher`.
  *
  * Idempotency: the `requestId` becomes the ingress identity, so replaying the
@@ -19,6 +19,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { boardForWorkItem, createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import { workLaneForRole } from '../boards/legacy-plan-role.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { AuditAction } from '../storage/domains/audit/actions.js';
 import type { AuditTarget } from '../storage/domains/audit/base.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -76,6 +81,15 @@ export interface AutomationRunRoutesDeps extends RouteDependencies {
   workItems: WorkItemsStorage;
   /** Config version stamped on the committed rule evaluation. */
   configVersion: string;
+  /** The project's boards, whose phases name the roles a run can start in; defaults to the built-in boards. */
+  boards?: BoardRegistry | ProjectBoardSource;
+}
+
+/** Whether a run decided for `role` has a seat on the board: a working phase runs in its context. */
+function boardSeatsRole(board: InstalledBoard | undefined, role: string): boolean {
+  if (!board) return false;
+  if (workLaneForRole(board, role) !== undefined) return true;
+  return Object.values(board.phases).some(phase => phase.kind === 'working' && phase.runner.context === role);
 }
 
 /** Resolved ingress scope for an automation-run request. */
@@ -204,6 +218,13 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
             (parsedPath.data as { workItemId: string }).workItemId,
           );
           if (!item) return c.json({ error: 'Work item not found' }, 404);
+          const boards = await toBoardSource(this.deps.boards ?? createBoardRegistry()).load({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          if (!boardSeatsRole(boards.get(boardForWorkItem(item)), request.role)) {
+            return c.json({ error: 'invalid_automation_run_request' }, 400);
+          }
 
           const idempotencyKey = `external-orchestrator:${request.requestId}`;
           const decision = {
