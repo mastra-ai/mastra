@@ -1,4 +1,5 @@
 import type { SerializedError } from '../../error/utils';
+import { getSpanErrorOrigin } from '../../observability/error-count';
 
 const MAX_CAUSE_DEPTH = 5;
 
@@ -28,6 +29,9 @@ export function serializeError(err: Error, depth = 0): SerializedError {
     if (key === 'message' || key === 'name' || key === 'stack' || key === 'cause') continue;
     json[key] = (err as unknown as Record<string, unknown>)[key];
   }
+
+  const origin = getSpanErrorOrigin(err);
+  if (origin) json.__mastraSpanErrorOrigin = origin;
 
   return json;
 }

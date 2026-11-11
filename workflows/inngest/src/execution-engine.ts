@@ -6,6 +6,7 @@ import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
+import * as coreObservability from '@mastra/core/observability';
 import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
@@ -144,13 +145,28 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
       try {
-        const result = await retryCountStorage.run(i, () => this.runDurably(stepId, runStep, NonRetriableError));
+        const attemptId = `${params.stepSpan?.id ?? stepId}:attempt:${i}`;
+        const runAttempt = () => this.runDurably(stepId, runStep, NonRetriableError);
+        const result = await retryCountStorage.run(
+          i,
+          () => coreObservability.withSpanErrorAttempt?.(attemptId, runAttempt) ?? runAttempt(),
+        );
         return { ok: true, result };
       } catch (e) {
         // Decide from the serialized failure in the cause, not the thrown error: the
         // transport error is always NonRetriableError (a StepError named
         // "NonRetriableError" under a real Inngest server), whatever the step threw.
         const cause = (e as any)?.cause;
+        // This catch runs for both a fresh attempt and its memoized failure. Rebuild
+        // the local count from that same attempt identity, without re-exporting children.
+        const failure = getErrorFromUnknown(cause?.status === 'failed' ? cause.error : e);
+        const transportedOrigin = coreObservability.getSpanErrorOrigin?.(e);
+        if (transportedOrigin) coreObservability.setSpanErrorOrigin?.(failure, transportedOrigin);
+        const attemptId = `${params.stepSpan?.id ?? stepId}:attempt:${i}`;
+        const record = () => params.stepSpan?.recordError?.(failure, { occurrenceId: attemptId });
+        if (coreObservability.withSpanErrorAttempt) coreObservability.withSpanErrorAttempt(attemptId, record);
+        else record();
+        if (cause?.status === 'failed') cause.error = failure;
         const isNonRetryable = isNonRetryableStepFailure(cause?.status === 'failed' ? cause : e);
 
         if (isNonRetryable || i === params.retries) {
@@ -163,7 +179,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   status: 'failed',
                   error: cause.error,
                 }),
-                error: getErrorFromUnknown(e),
+                error: failure,
                 attributes: { status: 'failed' },
               },
             });
@@ -268,6 +284,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           cause: {
             status: 'failed',
             error: errorInstance,
+            __mastraSpanErrorOrigin: coreObservability.getSpanErrorOrigin?.(errorInstance),
             endedAt: Date.now(),
             ...(isNonRetryable && { nonRetryable: true as const }),
           },

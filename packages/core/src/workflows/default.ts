@@ -8,6 +8,7 @@ import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
 import { createObservabilityContext, getResumeTracingContext } from '../observability';
+import { withSpanErrorAttempt } from '../observability/error-count';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
@@ -544,7 +545,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
       try {
-        const result = await retryCountStorage.run(i, () => this.wrapDurableOperation(stepId, runStep));
+        const result = await retryCountStorage.run(i, () =>
+          withSpanErrorAttempt(`${params.stepSpan?.id ?? stepId}:attempt:${i}`, async () => {
+            try {
+              return await this.wrapDurableOperation(stepId, runStep);
+            } catch (error) {
+              const failure = getErrorFromUnknown(error, { supportSerialization: false });
+              params.stepSpan?.recordError?.(failure, { occurrenceId: `${params.stepSpan.id}:attempt:${i}` });
+              throw failure;
+            }
+          }),
+        );
         return { ok: true, result };
       } catch (e) {
         const isNonRetryable = e instanceof MastraNonRetryableError;

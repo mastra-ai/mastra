@@ -27,6 +27,48 @@ import {
 
 const empty = z.object({});
 
+describe.each(['default', 'evented'] as const)('originating failures across %s retries', engine => {
+  it('retains two failed attempts after success when the step rethrows the same Error', async () => {
+    const exporter = new TestExporter();
+    const failure = new Error('service unavailable');
+    const step = createStep({
+      id: 'retry-error-count',
+      inputSchema: empty,
+      outputSchema: empty,
+      execute: async ({ retryCount }) => {
+        if (retryCount < 2) throw failure;
+        return {};
+      },
+    });
+    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
+      id: 'retry-error-count',
+      inputSchema: empty,
+      outputSchema: empty,
+      retryConfig: { attempts: 2, delay: 0 },
+    })
+      .then(step)
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { workflow },
+      observability: new Observability({ configs: { default: { serviceName: 'errors', exporters: [exporter] } } }),
+    });
+    try {
+      if (engine === 'evented') await mastra.startWorkers();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('success');
+      const spans = new Map(
+        exporter.getByEventType(TracingEventType.SPAN_ENDED).map(event => [event.exportedSpan.id, event.exportedSpan]),
+      );
+      expect([...spans.values()].reduce((sum, span) => sum + (span.errorCount ?? NaN), 0)).toBe(2);
+      expect([...spans.values()].find(span => span.type === SpanType.WORKFLOW_RUN)?.errorCount).toBe(0);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+});
+
 const quickStep = createStep({
   id: 'quick',
   inputSchema: empty,

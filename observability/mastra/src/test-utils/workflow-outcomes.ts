@@ -32,6 +32,14 @@ export function expectWorkflowOutcome(spans: AnyExportedSpan[], mode: WorkflowOu
   const roots = spans.filter(span => span.type === SpanType.WORKFLOW_RUN);
   expect(roots).toHaveLength(1);
   expect(roots[0]).toMatchObject(expected);
+  if (mode === 'error' || mode === 'retry') {
+    // OBS-901: failures belong to their originating step, even when the run
+    // propagates the failure or a later attempt succeeds. Deduplicate exports.
+    const localCounts = [...new Map(spans.map(span => [span.id, span.errorCount])).values()];
+    expect(localCounts.every(count => typeof count === 'number')).toBe(true);
+    expect(localCounts.reduce<number>((sum, count) => sum + (count ?? NaN), 0)).toBe(1);
+    expect(roots[0]?.errorCount).toBe(0);
+  }
   expect(
     spans.findLast(span => span.type === SpanType.WORKFLOW_STEP && span.entityId === `decision-${mode}`),
   ).toMatchObject(expected);
