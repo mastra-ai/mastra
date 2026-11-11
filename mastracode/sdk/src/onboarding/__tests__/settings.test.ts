@@ -1,12 +1,13 @@
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveExperimentalAgent } from '../../experimental-agent.js';
 import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
+  expandHomePath,
   getCustomProviderId,
   loadSettings,
   migrateAccountPreferences,
@@ -1548,6 +1549,54 @@ describe('parseBrowserSettings — viewport', () => {
       expect(parseBrowser({ viewport: value }).viewport).toEqual({ width: 1280, height: 720 });
     },
   );
+});
+
+// Windows does not set HOME, so these run with it removed to prove the home
+// directory comes from os.homedir() and never stays a literal ~ (#30102).
+describe('browser paths — home expansion', () => {
+  let previousHome: string | undefined;
+  beforeEach(() => {
+    previousHome = process.env.HOME;
+    delete process.env.HOME;
+  });
+  afterEach(() => {
+    if (previousHome !== undefined) process.env.HOME = previousHome;
+  });
+
+  it.each([
+    ['~', homedir()],
+    ['~/.mastracode/profile', `${homedir()}/.mastracode/profile`],
+    ['~\\profile', `${homedir()}\\profile`],
+  ])('expands %s to the home directory', (input, expected) => {
+    expect(expandHomePath(input)).toBe(expected);
+  });
+
+  it.each([['~foo/profile'], ['/abs/~/profile'], ['rel/~/profile'], ['C:\\profile']])('leaves %s unchanged', input => {
+    expect(expandHomePath(input)).toBe(input);
+  });
+
+  it('expands ~ in browser paths already saved in settings', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-home-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        browser: {
+          profile: '~/.mastracode/browser-profile-agent-browser',
+          executablePath: '~/chrome',
+          agentBrowser: { storageState: '~/state.json' },
+        },
+      }),
+    );
+    try {
+      const browser = loadSettings(file).browser;
+      expect(browser.profile).toBe(`${homedir()}/.mastracode/browser-profile-agent-browser`);
+      expect(browser.executablePath).toBe(`${homedir()}/chrome`);
+      expect(browser.agentBrowser?.storageState).toBe(`${homedir()}/state.json`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('createBrowserFromSettings — recording tools gating', () => {

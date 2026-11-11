@@ -5,6 +5,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { OMModel } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -956,9 +957,11 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
         : DEFAULTS.browser.provider,
     headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
     cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
-    profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
+    profile: typeof raw.profile === 'string' && raw.profile.trim() ? expandHomePath(raw.profile.trim()) : undefined,
     executablePath:
-      typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
+      typeof raw.executablePath === 'string' && raw.executablePath.trim()
+        ? expandHomePath(raw.executablePath.trim())
+        : undefined,
     viewport: parseStoredViewport(raw.viewport),
     scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
     stagehand: {
@@ -979,9 +982,17 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
     },
     agentBrowser:
       typeof rawAgentBrowser.storageState === 'string' && rawAgentBrowser.storageState.trim()
-        ? { storageState: rawAgentBrowser.storageState.trim() }
+        ? { storageState: expandHomePath(rawAgentBrowser.storageState.trim()) }
         : undefined,
   };
+}
+
+/**
+ * Expand a leading `~` (alone or followed by `/` or `\`) to the OS home directory.
+ * Uses os.homedir() because Windows does not set HOME.
+ */
+export function expandHomePath(path: string): string {
+  return path.replace(/^~(?=$|[\\/])/, () => homedir());
 }
 
 function parseShellPassthroughSettings(rawShellPassthrough: unknown): ShellPassthroughSettings {
