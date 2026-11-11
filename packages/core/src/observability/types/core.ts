@@ -337,8 +337,9 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the scored target when available.
    * Include `spanId` when the score is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addScore?(args: {
     traceId?: string;
@@ -353,8 +354,9 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the feedback target when available.
    * Include `spanId` when the feedback is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addFeedback?(args: {
     traceId?: string;
@@ -362,6 +364,9 @@ export interface ObservabilityEntrypoint {
     correlationContext?: CorrelationContext;
     feedback: FeedbackInput;
   }): Promise<void>;
+
+  /** @internal Notify exporters of an HTTP-created record already persisted by the server. */
+  __exportPersistedEvent?(event: ScoreEvent | FeedbackEvent): Promise<void>;
 
   /**
    * Returns the proxy responsible for client observability (W3C trace

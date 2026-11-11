@@ -18,6 +18,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryAggregatedRoots: false,
   traceQueryTextSearch: false,
   spanQueryTextSearch: false,
   traceQueryRootDuration: false,
