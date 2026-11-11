@@ -92,6 +92,99 @@ function exporter(endpoint: string, overrides: Partial<MastraPlatformExporterCon
 }
 
 describe('Platform uploads over HTTP', () => {
+  describe.each([
+    {
+      name: 'storage',
+      create: (maxBatchSize: number) => new MastraStorageExporter({ maxBatchWaitMs: 60_000, maxBatchSize }),
+    },
+    {
+      name: 'storage bytes',
+      create: (maxBatchSize: number) =>
+        new MastraStorageExporter({ maxBatchWaitMs: 60_000, maxBatchSize, byteBatching: {} }),
+    },
+    {
+      name: 'legacy storage',
+      create: (maxBatchSize: number) => new DefaultExporter({ maxBatchWaitMs: 60_000, maxBatchSize }),
+    },
+  ])('$name review ordering', ({ create }) => {
+    it.each(['buffered', 'resolving', 'inflight'] as const)(
+      'applies review updates after a %s create without delaying remote updates',
+      async scenario => {
+        const receiver = await collector();
+        const storage = new InMemoryStore();
+        const store = (await storage.getStore('observability'))!;
+        await store.createSpan({
+          span: {
+            traceId: 'trace',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.GENERIC,
+            isEvent: false,
+            startedAt: new Date(),
+            endedAt: new Date(),
+          },
+        });
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        if (scenario === 'resolving') {
+          const getTrace = store.getTrace.bind(store);
+          store.getTrace = async args => {
+            await gate;
+            return getTrace(args);
+          };
+        }
+        if (scenario === 'inflight') {
+          const batchCreate = store.batchCreateFeedback.bind(store);
+          store.batchCreateFeedback = async args => {
+            await gate;
+            return batchCreate(args);
+          };
+        }
+        let feedbackId = '';
+        const observability = new Observability({
+          configs: {
+            default: {
+              serviceName: 'ordered-local-review',
+              exporters: [
+                create(scenario === 'inflight' ? 1 : 1000),
+                exporter(receiver.endpoint),
+                {
+                  name: 'feedback-id',
+                  exportTracingEvent() {},
+                  onFeedbackEvent(event) {
+                    feedbackId = event.feedback.feedbackId;
+                  },
+                  async flush() {},
+                  async shutdown() {},
+                },
+              ],
+            },
+          },
+        });
+        new Mastra({ storage, observability, logger: false });
+        cleanup.push(() => observability.shutdown());
+        try {
+          await observability.addFeedback({
+            traceId: 'trace',
+            ...(scenario === 'resolving' ? {} : { correlationContext: {} }),
+            feedback: { feedbackType: 'comment', value: 'keep' },
+          });
+          await observability.updateFeedbackReviewStatus({ feedbackId, reviewStatus: 'reviewed' });
+          await expect.poll(() => receiver.bodies.some(body => body.method === 'PATCH')).toBe(true);
+        } finally {
+          release();
+        }
+        await observability.flush();
+        expect((await store.listFeedback({})).feedback).toEqual([
+          expect.objectContaining({ feedbackId, value: 'keep', reviewStatus: 'reviewed' }),
+        ]);
+      },
+    );
+  });
+
   it.each(['flush', 'shutdown'] as const)(
     'preserves review order across retries on %s without blocking other feedback IDs',
     async lifecycle => {
