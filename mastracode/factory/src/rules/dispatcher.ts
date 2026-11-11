@@ -480,6 +480,7 @@ export interface FactoryDecisionDispatcherOptions {
   intakeRoutes?: IntakeRoutesReader;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
+  reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /**
@@ -693,6 +694,7 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #reconcileToolResults?: () => Promise<void>;
+  readonly #reconcileRunBinding?: FactoryDecisionDispatcherOptions['reconcileRunBinding'];
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #reportRunEnd?: FactoryRunEndReporter;
@@ -750,6 +752,7 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
+    this.#reconcileRunBinding = options.reconcileRunBinding;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
     this.#reportRunEnd = options.reportRunEnd;
@@ -1532,6 +1535,11 @@ export class FactoryDecisionDispatcher {
             phase.runner.skill === decision.skillName
               ? runItem!.revision
               : null;
+          const existingLinkedReviewIds = new Set(
+            workingRevision === null || !runItem
+              ? []
+              : (await this.#storage.listLinked({ item: runItem, limit: 100 })).map(card => card.id),
+          );
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
@@ -1627,8 +1635,25 @@ export class FactoryDecisionDispatcher {
                   await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
                   if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
                     return;
+                  // A final tool result can persist after agent_end. Read this binding's trailing
+                  // results before deciding the unchanged card means the run did no work.
+                  await this.#reconcileRunBinding?.(binding);
                   const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
                   if (after?.revision === workingRevision && !(await kickoffStale())) {
+                    const linked = await this.#storage.listLinked({ item: after, limit: 100 });
+                    const ownCardHandOff = linked.some(card => {
+                      if (
+                        card.parentWorkItemId !== after.id ||
+                        existingLinkedReviewIds.has(card.id) ||
+                        card.externalSource?.integrationId !== 'github' ||
+                        card.externalSource.type !== 'pull-request' ||
+                        card.stages.length !== 1
+                      )
+                        return false;
+                      const review = boards?.get(boardForWorkItem(card))?.phases[card.stages[0]!];
+                      return review?.kind === 'working' && review.runner.context === 'review';
+                    });
+                    if (ownCardHandOff) return;
                     throw new FactoryDispatchError(
                       'run_incomplete',
                       'Factory skill run ended before completing the working phase.',
