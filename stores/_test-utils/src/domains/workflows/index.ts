@@ -297,23 +297,29 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
     // count as activity, not only a full re-persist.
     it.each(['updateWorkflowResults', 'updateWorkflowState'] as const)(
       'should advance updatedAt on %s',
-      async method => {
-        if (!supportsConcurrentUpdates) return;
+      async (method, { skip }) => {
         const updatedAt = async () =>
           new Date((await workflowsStorage.getWorkflowRunById({ runId, workflowName }))!.updatedAt).getTime();
         const before = await updatedAt();
+        // Every adapter keeps updatedAt to the millisecond or finer.
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        if (method === 'updateWorkflowResults') {
-          await workflowsStorage.updateWorkflowResults({
-            workflowName,
-            runId,
-            stepId: 'later-step',
-            result: { status: 'success', output: {}, payload: {}, startedAt: Date.now(), endedAt: Date.now() } as any,
-            requestContext: {},
-          });
-        } else {
-          await workflowsStorage.updateWorkflowState({ workflowName, runId, opts: { status: 'running' } });
+        try {
+          if (method === 'updateWorkflowResults') {
+            await workflowsStorage.updateWorkflowResults({
+              workflowName,
+              runId,
+              stepId: 'later-step',
+              result: { status: 'success', output: {}, payload: {}, startedAt: Date.now(), endedAt: Date.now() } as any,
+              requestContext: {},
+            });
+          } else {
+            await workflowsStorage.updateWorkflowState({ workflowName, runId, opts: { status: 'running' } });
+          }
+        } catch (error) {
+          // Only adapters that don't implement the method at all are exempt.
+          if (/not (yet )?(implemented|supported)/i.test(String((error as Error)?.message ?? error))) return skip();
+          throw error;
         }
 
         expect(await updatedAt()).toBeGreaterThan(before);
