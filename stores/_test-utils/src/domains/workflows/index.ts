@@ -295,7 +295,7 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
     // The workflow recovery loop restarts a run nothing keeps alive once it has gone unwritten
     // for `recovery.workflowStallThresholdMs`, so every write an engine makes between steps must
     // count as activity, not only a full re-persist.
-    it.each(['updateWorkflowResults', 'updateWorkflowState'] as const)(
+    it.for(['updateWorkflowResults', 'updateWorkflowState'] as const)(
       'should advance updatedAt on %s',
       async (method, { skip }) => {
         const updatedAt = async () =>
