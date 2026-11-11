@@ -108,6 +108,14 @@ export const mastra = new Mastra({
     defaultValue: '0',
   },
   {
+    name: 'publishRetryBudgetMs',
+    type: 'number',
+    description:
+      'How long, in milliseconds, `publish` keeps retrying a write that failed with a transient connection error, such as a closed connection or Valkey answering `LOADING` after a restart. When the budget runs out, `publish` rejects with `PublishRetryBudgetExhaustedError` instead of hanging. `PublishRetryBudgetExhaustedError` is exported from `@mastra/valkey-streams`.',
+    isOptional: true,
+    defaultValue: '120000',
+  },
+  {
     name: 'logger',
     type: '{ debug?: Function; warn?: Function }',
     description: 'Optional diagnostic logger.',
@@ -121,6 +129,8 @@ export const mastra = new Mastra({
 `ValkeyStreamsPubSub` supports pull delivery and doesn't support numeric replay offsets. Grouped subscribers compete for events through a shared consumer group. Subscribers without a group receive fan-out delivery through private consumer groups.
 
 Use `startFrom: "latest"` to skip retained entries when a group is first created. The default, `"earliest"`, reads retained entries first.
+
+Delivery is at-least-once. When `publish` retries a write whose connection dropped, and Valkey applied the first attempt before the reply was lost, the retry appends a second copy of the same event id. Mastra's step fence drops the duplicate `workflow.step.run`, and other events are already handled as at-least-once.
 
 When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
 

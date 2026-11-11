@@ -1,5 +1,6 @@
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
+import { ConnectionError, RequestError, TimeoutError } from '@valkey/valkey-glide';
 import { createClient } from './client.js';
 import type { ValkeyClientOptions, ValkeyClientType } from './client.js';
 
@@ -8,6 +9,39 @@ const RECLAIM_PAGE_SIZE = 100;
 const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Page size for replaying existing entries to a fan-out subscriber joining a shared reader. */
 const REPLAY_PAGE_SIZE = 500;
+// A restarted Valkey answers `-LOADING` until it has replayed its RDB/AOF, which
+// takes from seconds to minutes, and a dropped connection fails the commands in
+// flight on it. GLIDE retries neither, so a publish that fails there loses the
+// event (e.g. a finished step's step.end, whose step then runs again).
+const PUBLISH_RETRY_BUDGET_MS = 120_000;
+const PUBLISH_RETRY_DELAY_MS = 250;
+// GLIDE maps a server `-LOADING` reply onto a plain RequestError whose message
+// does not start with `LOADING` the way node-redis' does, so the server-loading
+// case has to be matched inside the message it wraps.
+const SERVER_LOADING_PATTERN = /BusyLoadingError|is loading the dataset/i;
+
+function isServerLoadingError(error: unknown): boolean {
+  return error instanceof Error && SERVER_LOADING_PATTERN.test(error.message);
+}
+
+/**
+ * Whether a publish failed for a reason that a later attempt can get past: the
+ * server is still loading, or the connection dropped / the request timed out.
+ * Other server replies (wrong type, OOM, auth) are not retried, and neither is
+ * a client that was already closed (`ClosingError` extends `ValkeyError`, not
+ * `RequestError`, so it is not caught by the checks below either).
+ *
+ * The subclass checks must come first: `ConnectionError` and `TimeoutError`
+ * both extend `RequestError`, so a bare `RequestError` test would swallow them
+ * without saying why.
+ */
+function isTransientPublishError(error: unknown): boolean {
+  if (error instanceof ConnectionError) return true;
+  if (error instanceof TimeoutError) return true;
+  return error instanceof RequestError && isServerLoadingError(error);
+}
+
+type XaddTrimOptions = { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } };
 
 /**
  * Heartbeat: reset a pending entry's idle time only if this consumer still
@@ -164,12 +198,29 @@ export interface ValkeyStreamsPubSubConfig {
    */
   inFlightTimeoutMs?: number;
   /**
+   * How long `publish` keeps retrying a write that failed with a transient
+   * connection error (or `-LOADING`) before giving up. Defaults to 120000.
+   */
+  publishRetryBudgetMs?: number;
+  /**
    * Optional logger for diagnostics. When omitted, suppressed errors
    * (BUSYGROUP, malformed payloads, connection-close races) are swallowed
    * silently. When provided, those paths emit `debug`/`warn` entries so
    * operators can see what's happening without noise on the happy path.
    */
   logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
+}
+
+/**
+ * Thrown when a publish could not reach Valkey before the retry budget ran
+ * out, including when an attempt never settled because the server stopped
+ * answering.
+ */
+export class PublishRetryBudgetExhaustedError extends Error {
+  constructor(budgetMs: number, options?: { cause?: unknown }) {
+    super(`valkey-streams: publish did not reach Valkey within ${budgetMs}ms`, options);
+    this.name = 'PublishRetryBudgetExhaustedError';
+  }
 }
 
 export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
@@ -197,6 +248,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   #reclaimIdleMs: number;
   #maxDeliveryAttempts: number;
   #inFlightTimeoutMs: number;
+  #publishRetryBudgetMs: number;
   #logger?: ValkeyStreamsPubSubConfig['logger'];
   // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
   // multiple topics independently. Without the topic in the key,
@@ -259,6 +311,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       );
     }
     this.#inFlightTimeoutMs = inFlightTimeout;
+    this.#publishRetryBudgetMs = options.publishRetryBudgetMs ?? PUBLISH_RETRY_BUDGET_MS;
   }
 
   /**
@@ -378,6 +431,39 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     };
     const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
+    // A retry after a lost reply can append the event twice. Both copies carry
+    // the same event id; a duplicate workflow.step.run is dropped by the step
+    // fence, and other events are already handled as at-least-once deliveries.
+    const budgetMs = this.#publishRetryBudgetMs;
+    const deadline = Date.now() + budgetMs;
+    let lastError: unknown;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw lastError ?? new PublishRetryBudgetExhaustedError(budgetMs);
+      // GLIDE fails a dropped-connection command quickly (requestTimeout), but
+      // a server that accepts the socket and then stops answering leaves the
+      // command unsettled, so each attempt is bounded by what is left of the
+      // budget. Running out is final: the caller nacks as before.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const budgetExhausted = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new PublishRetryBudgetExhaustedError(budgetMs, { cause: lastError })),
+          remaining,
+        );
+      });
+      try {
+        return await Promise.race([this.#xaddEvent(streamKey, payload, xaddOptions), budgetExhausted]);
+      } catch (error) {
+        if (!isTransientPublishError(error) || this.#closed || Date.now() >= deadline) throw error;
+        lastError = error;
+        await new Promise(resolve => setTimeout(resolve, PUBLISH_RETRY_DELAY_MS));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  async #xaddEvent(streamKey: string, payload: Event, xaddOptions: XaddTrimOptions): Promise<void> {
     // When a TTL is configured the write and its PEXPIRE run in one MULTI
     // transaction. A detached PEXPIRE could fail or be skipped (process exit)
     // after a successful XADD — and on the *last* write before a topic is
@@ -405,7 +491,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     await promise;
   }
 
-  #xaddTrimOptions(): { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } {
+  #xaddTrimOptions(): XaddTrimOptions {
     if (this.#maxStreamLength <= 0) return {};
     return { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: this.#maxStreamLength } };
   }

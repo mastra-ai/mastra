@@ -175,7 +175,7 @@ export class ValkeyStreamsClient {
     if (!this.#client) {
       const { url, ...configuration } = this.options;
       const parsed = url ? new URL(url) : undefined;
-      this.#client = GlideClient.createClient({
+      const created = GlideClient.createClient({
         ...configuration,
         addresses: configuration.addresses ?? [
           { host: parsed?.hostname ?? 'localhost', port: Number(parsed?.port || 6379) },
@@ -187,6 +187,15 @@ export class ValkeyStreamsClient {
         useTLS:
           configuration.useTLS ??
           (parsed ? parsed.protocol === 'rediss:' || parsed.protocol === 'valkeys:' : undefined),
+      });
+      this.#client = created;
+      // A connect that fails must not stay cached: `isOpen` is derived from
+      // `#client`, so a rejected promise would report the client as open
+      // forever, `#ensureWriterConnected` would return early, and every later
+      // command would await the same rejection. Dropping it here lets the next
+      // call create a fresh client instead.
+      void created.catch(() => {
+        if (this.#client === created) this.#client = undefined;
       });
     }
     return this.#client;
