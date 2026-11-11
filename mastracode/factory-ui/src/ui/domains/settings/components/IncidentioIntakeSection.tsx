@@ -1,6 +1,4 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
@@ -92,16 +90,6 @@ export function IncidentioIntakeSection({
         )
       }
     >
-      {(directConfigured || connections.length > 0) && (
-        <SettingsRow
-          label="Incident board configuration"
-          description="Configure a dedicated board for incident response."
-        >
-          <Badge size="sm" variant="neutral">
-            Coming soon
-          </Badge>
-        </SettingsRow>
-      )}
       {config.incidentio.enabled && (credentialActive || Boolean(config.incidentio.sourceIds?.length)) && (
         <RoutedSourcePicker
           integrationId="incidentio"

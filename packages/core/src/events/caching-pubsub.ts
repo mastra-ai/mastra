@@ -33,6 +33,25 @@ export interface CachingPubSubOptions {
    */
   shouldCache?: (topic: string) => boolean;
   /**
+   * Only append to topics whose log this cache already holds. A publish to a
+   * topic with no log is delivered live and unnumbered, and `onUnlogged` is
+   * called with the topic.
+   *
+   * A process-local cache can only number a topic's frames consistently in the
+   * process that started its log. Another process numbering the same topic
+   * from 0 in its own cache would produce indices that observers drop as
+   * duplicates.
+   *
+   * @internal
+   */
+  extendExistingLogsOnly?: boolean;
+  /**
+   * Called when `extendExistingLogsOnly` leaves a publish unnumbered.
+   *
+   * @internal
+   */
+  onUnlogged?: (topic: string) => void;
+  /**
    * @deprecated No longer used. Evented steps now cache their frames when they
    * publish, so nothing needs to be copied in from another PubSub. Accepted and
    * ignored for compatibility.
@@ -55,11 +74,24 @@ const EMPTY_INDICES: ReadonlySet<number> = new Set();
  * ## One append path
  *
  * Every cached publish goes through {@link MastraServerCache.listPushIndexed},
- * which allocates the frame's index and appends it. The
- * cache list is therefore the run's log — position and index always agree —
- * and the transport only carries the live tail of that log. Subscribers hold a
- * single integer cursor and backfill any gap they observe from the log rather
- * than relying on transport replay.
+ * which allocates the frame's index and appends it. The cache list is
+ * therefore the run's log, and the transport only carries the
+ * live tail of that log. Subscribers hold a single integer cursor and backfill
+ * any gap they observe from the log rather than relying on transport replay.
+ *
+ * A list position is not necessarily its index: a cache whose append is not
+ * atomic can allocate an index and then fail to push the frame, leaving a hole
+ * that shifts every later frame to a lower position. Reads go through
+ * `readLogFrom`, which uses the counter minus the list length to find where
+ * index `from` can start, and returns entries in index order. A frame whose
+ * cache write failed is not recoverable.
+ *
+ * Limitation: a non-atomic append (the default
+ * {@link MastraServerCache.listPushIndexed}, or Redis after its CROSSSLOT
+ * fallback) can also let concurrent publishes store frames out of order. An
+ * entry that lands below the computed start position is then missed, e.g.
+ * the log `[0, 2, 1, 3]` read from index 2 loses index 2. Removing that needs
+ * an atomic append.
  *
  * If caching a frame fails, it is published without an index and delivered
  * live only.
@@ -91,6 +123,8 @@ export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
   private readonly shouldCache?: (topic: string) => boolean;
+  private readonly extendExistingLogsOnly: boolean;
+  private readonly onUnlogged?: (topic: string) => void;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -111,6 +145,8 @@ export class CachingPubSub extends PubSub {
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
+    this.extendExistingLogsOnly = options.extendExistingLogsOnly ?? false;
+    this.onUnlogged = options.onUnlogged;
   }
 
   /**
@@ -130,6 +166,17 @@ export class CachingPubSub extends PubSub {
 
   get supportsOffsets(): boolean {
     return true;
+  }
+
+  /**
+   * Topics `shouldCache` leaves out only reach the inner transport. With
+   * `extendExistingLogsOnly`, a process that doesn't hold a run's log
+   * publishes it live only; that setup is already warned about (`onUnlogged`)
+   * and its replays miss those frames whatever they carry, so it still counts
+   * as kept.
+   */
+  override __replaysTopic(topic: string): boolean {
+    return this.shouldCache?.(topic) !== false || this.inner.__replaysTopic(topic);
   }
 
   /**
@@ -168,6 +215,43 @@ export class CachingPubSub extends PubSub {
     return `${this.keyPrefix}${topic}:counter`;
   }
 
+  /**
+   * Read the log entries for `topic` whose index is `from` or later.
+   *
+   * Each hole left by an allocated-but-unpushed index moves later entries one
+   * position below their index, so slicing at `from` would skip them. The
+   * counter minus the list length is the number of holes; start that many
+   * positions earlier and filter by index. When either value is unavailable
+   * (a failed read, or a cache whose `get` does not return counters), read
+   * the whole log instead.
+   *
+   * Numbered entries are returned in index order, followed by unnumbered
+   * ones, because a non-atomic append can store frames out of order.
+   */
+  private async readLogFrom(topic: string, from: number): Promise<Event[]> {
+    const cacheKey = this.getCacheKey(topic);
+    let start = 0;
+    if (from > 0) {
+      // Length before counter: an append landing between the two reads can
+      // only overstate the holes, which starts the slice early, never late.
+      const length = await this.cache.listLength(cacheKey).catch(() => undefined);
+      const counter =
+        length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+      if (typeof length === 'number' && typeof counter === 'number') {
+        start = Math.max(0, from - Math.max(0, counter - length));
+      }
+    }
+    const entries = (await this.cache.listFromTo(cacheKey, start)) as Event[];
+    const numbered: Event[] = [];
+    const unnumbered: Event[] = [];
+    for (const event of entries) {
+      if (typeof event.index !== 'number') unnumbered.push(event);
+      else if (event.index >= from) numbered.push(event);
+    }
+    numbered.sort((a, b) => a.index! - b.index!);
+    return [...numbered, ...unnumbered];
+  }
+
   async publish(
     topic: string,
     event: Omit<Event, 'id' | 'createdAt' | 'index'>,
@@ -184,9 +268,15 @@ export class CachingPubSub extends PubSub {
       return;
     }
 
+    if (this.extendExistingLogsOnly && !(await this.hasLog(topic))) {
+      this.onUnlogged?.(topic);
+      await this.inner.publish(topic, fullEvent, options);
+      return;
+    }
+
     // Cache BEFORE live publish so late-joining observers never miss events,
-    // and allocate the index as part of that append so list position and index
-    // cannot disagree.
+    // and allocate the index as part of that append so the log stays in index
+    // order.
     let index: number | undefined;
     try {
       index = await this.cache.listPushIndexed(
@@ -214,6 +304,15 @@ export class CachingPubSub extends PubSub {
         indices.add(index);
       }
       throw error;
+    }
+  }
+
+  private async hasLog(topic: string): Promise<boolean> {
+    try {
+      return (await this.cache.listLength(this.getCacheKey(topic))) > 0;
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to read cached log length for ${topic}`, error);
+      return false;
     }
   }
 
@@ -316,7 +415,7 @@ export class CachingPubSub extends PubSub {
     /** Deliver everything the log holds between the cursor and `target`. */
     const backfill = async (target: number) => {
       if (target <= next) return;
-      const entries = (await this.cache.listFromTo(cacheKey, next)) as Event[];
+      const entries = await this.readLogFrom(topic, next);
       for (const entry of entries) {
         if (closed) return;
         const seq = entry.index;
@@ -489,7 +588,7 @@ export class CachingPubSub extends PubSub {
       pending = historyGate;
       try {
         await inFlight;
-        const entries = (await this.cache.listFromTo(cacheKey, next)) as Event[];
+        const entries = await this.readLogFrom(topic, next);
         for (const entry of entries) {
           if (closed) return;
           const seq = entry.index;
@@ -521,14 +620,10 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
-   * Get historical events for a topic from cache.
-   *
-   * The list is the log: entry position and `index` are allocated together, so
-   * a slice from `offset` is the events from that index on.
+   * Get historical events for a topic from cache, from index `offset` on.
    */
   async getHistory(topic: string, offset: number = 0): Promise<Event[]> {
-    const events = (await this.cache.listFromTo(this.getCacheKey(topic), offset)) as Event[];
-    return events.filter(event => typeof event.index !== 'number' || event.index >= offset);
+    return this.readLogFrom(topic, offset);
   }
 
   /**

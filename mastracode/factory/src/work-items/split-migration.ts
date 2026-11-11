@@ -141,6 +141,7 @@ export function splitLegacyWorkItem(
       org_id: row.org_id,
       factory_project_id: String(row.factory_project_id),
       title: row.title,
+      description: row.description ?? null,
       parent_work_item_id: null,
       revision: 1,
       created_at: row.created_at,
@@ -164,6 +165,7 @@ export function splitLegacyWorkItem(
           labels: provider.labels,
           author: provider.author,
           metadata: metadata.provider,
+          role: 'origin',
           revision: 1,
           synced_at: null,
           created_at: row.created_at,
@@ -185,9 +187,6 @@ export function splitLegacyWorkItem(
       accepted_at: row.accepted_at ?? null,
       autonomy_armed_at: row.autonomy_armed_at ?? null,
       plans_preapproved_at: row.plans_preapproved_at ?? null,
-      comment_count: row.comment_count ?? 0,
-      // The first recount must be able to correct a copied legacy count.
-      feed_activity_at: null,
       revision: revision ?? row.revision,
       created_by: row.created_by,
       created_at: row.created_at,
@@ -273,7 +272,7 @@ async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy
     }
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, card.workItem);
     if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);
-    await ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, card.boardItem);
+    await ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, { ...card.boardItem, changed_at: new Date() });
     return true;
   }
   // updateAtomic locks the board row until this transaction commits, so a new
@@ -294,10 +293,8 @@ async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy
     baseline = time(current.migrated_from_updated_at);
     return {
       ...card.boardItem,
-      ...(current.feed_activity_at
-        ? { comment_count: current.comment_count, feed_activity_at: current.feed_activity_at }
-        : {}),
       revision: Math.max(current.revision, card.boardItem.revision) + 1,
+      changed_at: new Date(Math.max(Date.now(), time(current.changed_at ?? null) + 1)),
     };
   });
   if (unchanged) return false;

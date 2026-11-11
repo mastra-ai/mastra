@@ -343,7 +343,8 @@
                       },
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -358,7 +359,19 @@
                         "role": "user",
                         "content": "Use metadata tool to process some data"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-metadata-1",
+                          "toolName": "metadataTool",
+                          "args": {
+                            "input": "some data"
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -721,7 +734,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -744,7 +758,11 @@
                         "role": "tool",
                         "content": "[tool-result: metadataTool]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 stream response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

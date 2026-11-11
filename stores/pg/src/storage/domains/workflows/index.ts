@@ -480,9 +480,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
     if (snapshotType !== 'jsonb') return;
 
+    const concurrently = !this.#db.isTableCreatedInThisInit(TABLE_WORKFLOW_SNAPSHOT);
     const indexName = workflowSnapshotStatusIndexName(this.#schema);
     try {
-      await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema, true));
+      await this.#db.createIndexFromStatement(
+        indexName,
+        workflowSnapshotStatusIndexSQL(indexName, this.#schema, concurrently),
+      );
     } catch (error) {
       this.logger?.warn?.(`Failed to create index ${indexName}:`, error);
     }
@@ -493,7 +497,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       await this.#db.createIndexFromStatement(
         threadIdIndexName,
-        workflowSnapshotThreadIdIndexSQL(threadIdIndexName, this.#schema, true),
+        workflowSnapshotThreadIdIndexSQL(threadIdIndexName, this.#schema, concurrently),
       );
     } catch (error) {
       this.logger?.warn?.(`Failed to create index ${threadIdIndexName}:`, error);

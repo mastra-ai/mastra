@@ -3,6 +3,8 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
+import type { WorkItemDbRow } from './base.js';
+import { Cards } from './cards.js';
 import type { BoardItemDbRecord } from './work-item-schema.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -84,5 +86,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('card reads on %
     await expect(workItems.list({ orgId: ORG, factoryProjectId: PROJECT })).rejects.toThrow(
       `Board item ${card.id} has no work item ${board!.work_item_id}.`,
     );
+  });
+
+  // The board list reloads only cards whose board row moved `changed_at`, so every change to a
+  // card must move it, whatever table the change lands in and whether the caller stamped it.
+  it.each<[string, Partial<WorkItemDbRow>]>([
+    ['moves to another phase', { stages: ['planning'] }],
+    ['changes its title', { title: 'Renamed' }],
+    ['changes its description', { description: 'New description' }],
+    ['changes its metadata', { metadata: { note: 'new' } }],
+  ])('moves changed_at forward when a card %s', async (_change, patch) => {
+    const { storage, file } = await setup();
+    const card = await file('Card');
+    const before = await storage.ops.findOne<BoardItemDbRecord>('factory_board_items', { id: card.id });
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    await storage.withTransaction(ops => new Cards(ops).updateAtomic({ id: card.id }, () => patch));
+
+    const after = await storage.ops.findOne<BoardItemDbRecord>('factory_board_items', { id: card.id });
+    expect(new Date(after!.changed_at!).getTime()).toBeGreaterThan(new Date(before!.changed_at!).getTime());
   });
 });

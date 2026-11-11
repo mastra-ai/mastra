@@ -50,7 +50,7 @@ function card(id: string, issue: number, title: string, stage: string, metadata:
     stageHistory: [],
     sessions: {},
     metadata,
-    commentCount: 0,
+    description: null,
     revision: 5,
     createdAt: '2026-11-06T08:00:00.000Z',
     updatedAt: '2026-11-06T10:00:00.000Z',
