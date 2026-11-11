@@ -138,6 +138,35 @@ describe('PlatformFactorySandbox', () => {
     expect(viaClass.buildEnvs).toMatchObject(buildEnv);
   });
 
+  describe('Factory build env from the context', () => {
+    const host = { TURBO_TOKEN: 'host-tok', SHARED: 'host' };
+
+    it('merges ctx.buildEnv over the host buildEnv as transient build envs only', async () => {
+      const ctx = { ...singleContext(), buildEnv: { SHARED: 'sentinel-factory', NPM_TOKEN: 'sentinel-npm' } };
+      const result = await identity(new PlatformFactorySandbox({ template: { buildEnv: host } }).template(ctx, {}));
+      expect(result.buildEnvs).toMatchObject({
+        TURBO_TOKEN: 'host-tok',
+        SHARED: 'sentinel-factory',
+        NPM_TOKEN: 'sentinel-npm',
+      });
+      expect(JSON.stringify(result.definition)).not.toContain('sentinel-');
+    });
+
+    it('template identity follows the revision, never the values', async () => {
+      const sandbox = new PlatformFactorySandbox({ template: { buildEnv: host } });
+      const of = (buildEnv: Record<string, string> | undefined, buildEnvRevision: string | undefined) =>
+        identity(sandbox.template({ ...singleContext(), buildEnv, buildEnvRevision }, {}));
+      const plain = await of(undefined, undefined);
+      const a = await of({ NPM_TOKEN: 'one' }, 'rev-a');
+      const aOtherValue = await of({ NPM_TOKEN: 'two' }, 'rev-a');
+      const b = await of({ NPM_TOKEN: 'one' }, 'rev-b');
+      expect(aOtherValue.definition).toEqual(a.definition);
+      expect(b.definition).not.toEqual(a.definition);
+      expect(a.definition).not.toEqual(plain.definition);
+      expect((await of({ NPM_TOKEN: 'one' }, undefined)).definition).toEqual(plain.definition);
+    });
+  });
+
   it('a setting wins over the provider default and changes the template', async () => {
     const ctx = listContext();
     const sandbox = new PlatformFactorySandbox({ defaults: { cpuCount: 4, memoryMb: 8192 } });

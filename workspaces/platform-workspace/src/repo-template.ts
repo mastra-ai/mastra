@@ -143,6 +143,13 @@ export interface PlatformRepoTemplateOptions {
    * Use for credentials; output-changing inputs belong in `setupCommand`.
    */
   buildEnv?: Record<string, string>;
+  /**
+   * Opaque id that changes whenever `buildEnv` changes. Written as a
+   * `MASTRA_BUILD_ENV_REVISION` env step ahead of the clone and setup steps,
+   * so a new revision changes the template identity and invalidates every
+   * cached step after it. Never derive it from the values.
+   */
+  buildEnvRevision?: string;
   /** Test/integration seam for resolving the default-branch head. */
   resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
@@ -333,6 +340,11 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     for (const repo of repos) if (repo.tokenEnv && repo.token) buildEnv[repo.tokenEnv] = repo.token;
     if (Object.keys(buildEnv).length > 0) template = template.setEnvs(buildEnv, { ephemeral: true });
     template = withResources(template, options);
+    if (options.buildEnvRevision) {
+      // Before every clone and setup step: each is its own cached build step,
+      // so a new revision must sit above them to make them rerun.
+      template = template.setEnvs({ MASTRA_BUILD_ENV_REVISION: options.buildEnvRevision });
+    }
     if (workingDirectory) {
       // Created by the build user so it is writable; `setWorkdir` then makes
       // it the cwd for the steps below and the runtime default, without

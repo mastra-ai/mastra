@@ -50,7 +50,7 @@ describe('Session track', () => {
       now,
       stageHistory: [
         { stage: 'execute', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
-        { stage: 'review', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
+        { stage: 'pr-review', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
       ],
       runs: [],
       ownerChanges: [],

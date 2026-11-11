@@ -536,6 +536,44 @@ describe('createRepoTemplate', () => {
     expect(JSON.stringify(definition)).not.toContain('turbo_secret');
   });
 
+  describe('buildEnvRevision', () => {
+    const base = {
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }),
+      resolveHead: headOf(SHA_1),
+      workingDirectory: '/home/user/repos',
+      setupCommand: 'pnpm install',
+    };
+    const definitionOf = async (options: Partial<Parameters<typeof createRepoTemplate>[0]>) =>
+      serializeSandboxTemplate((await createRepoTemplate({ ...base, ...options })!())!);
+
+    it('puts the revision ahead of every clone and setup step, values stay out', async () => {
+      const definition = await definitionOf({ buildEnv: { NPM_TOKEN: 'sentinel-value-1' }, buildEnvRevision: 'rev-a' });
+      const index = definition.operations.findIndex(
+        op => op.method === 'setEnvs' && JSON.stringify(op.args).includes('MASTRA_BUILD_ENV_REVISION'),
+      );
+      expect(definition.operations[index]).toEqual({
+        method: 'setEnvs',
+        args: [{ MASTRA_BUILD_ENV_REVISION: 'rev-a' }],
+      });
+      const firstRunCmd = definition.operations.findIndex(op => op.method === 'runCmd');
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThan(firstRunCmd);
+      expect(JSON.stringify(definition)).not.toContain('sentinel-value-1');
+    });
+
+    it('changes the definition when the revision changes, not when values change', async () => {
+      const a = await definitionOf({ buildEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-a' });
+      const b = await definitionOf({ buildEnv: { NPM_TOKEN: 'two' }, buildEnvRevision: 'rev-a' });
+      const c = await definitionOf({ buildEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-b' });
+      expect(b).toEqual(a);
+      expect(c).not.toEqual(a);
+    });
+
+    it('leaves the definition unchanged without a revision', async () => {
+      expect(await definitionOf({ buildEnv: { NPM_TOKEN: 'one' } })).toEqual(await definitionOf({}));
+    });
+  });
+
   it('rejects a hostile clone URL instead of interpolating it into build commands', async () => {
     const resolveHead = headOf(SHA_1);
     const resolveTemplate = createRepoTemplate({

@@ -27,6 +27,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -35,8 +36,6 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
-import type { CommentsDomain } from '../storage/domains/comments/domain.js';
-import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
@@ -113,8 +112,6 @@ export interface IntegrationContext {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
-  /** Feed slice for ingesting platform messages; present once work items are ready. */
-  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -164,8 +161,11 @@ export interface IntegrationContext {
     /** Operator-maintained provenance label stamped on audit rows. */
     configVersion: string;
     workItems: WorkItemsStorage;
-    /** Installed boards, so integrations read phase semantics instead of matching names. */
-    boards: BoardRegistry;
+    /**
+     * Installed boards, so integrations read phase semantics instead of matching names. The
+     * per-project source serves each project its stored boards.
+     */
+    boards: BoardRegistry | ProjectBoardSource;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -288,13 +288,6 @@ export interface FactoryIntegration {
    * loser would silently never receive a message.
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
-  /**
-   * Mirrors web feed comments outward — to the platform thread a work item is
-   * bound to, a webhook, or an issue tracker. Collected from every READY
-   * integration independent of `channels()`: an integration may publish without
-   * owning a chat channel.
-   */
-  feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

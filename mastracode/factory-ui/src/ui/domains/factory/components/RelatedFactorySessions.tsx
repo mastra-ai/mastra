@@ -1,6 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
@@ -13,15 +14,16 @@ import { getUserSessionLabel } from '../../workspaces/services/sessionPresentati
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { cardContextSessions, linearIdentifierForItem, phaseContext } from '../boardItems';
-import type { ContextPhase } from '../boardItems';
+import type { CardContextSession, ContextPhase } from '../boardItems';
 import { itemBoard } from '../boardStages';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
-import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
-import { isPullRequestSource } from '../services/workItems';
+import type { CardPullRequestLink, WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { cardPullRequestLinks, isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
+import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
@@ -48,6 +50,15 @@ function externalWorkItemLabel(item: WorkItem): string {
   return 'Work item';
 }
 
+function pullRequestLinkLabel(pullRequest: CardPullRequestLink): string {
+  const kind = pullRequest.provider === 'gitlab' ? 'MR' : 'PR';
+  const reference =
+    pullRequest.number === undefined
+      ? kind
+      : `${kind} ${pullRequest.provider === 'gitlab' ? '!' : '#'}${pullRequest.number}`;
+  return pullRequest.state === 'open' ? reference : `${reference} ${pullRequest.state}`;
+}
+
 function activeWorkItem(
   items: WorkItem[],
   factoryId?: string,
@@ -60,16 +71,25 @@ function activeWorkItem(
   );
 }
 
+interface SessionContextCrumb {
+  label: string;
+  /** Every session the card holds, one per context. */
+  sessions: CardContextSession[];
+  /** The phase the card is in, when that runs in another context, and that context's session. */
+  cardPhase?: { name: string; session?: CardContextSession };
+}
+
 /** The context this session runs in, and the phase the card is in when that runs elsewhere. */
 function sessionContextCrumb(
   item: WorkItem,
   phases: readonly ContextPhase[] | undefined,
   sessionId: string,
   threadId: string,
-): { label: string; cardPhase?: string } | undefined {
+): SessionContextCrumb | undefined {
   const stage = item.stages[0];
   if (stage === undefined) return undefined;
-  const entry = cardContextSessions(item, phases, stage).find(
+  const sessions = cardContextSessions(item, phases, stage);
+  const entry = sessions.find(
     candidate => candidate.ref.sessionId === sessionId && candidate.ref.threadId === threadId,
   );
   if (!entry) return undefined;
@@ -78,9 +98,16 @@ function sessionContextCrumb(
   // one the card moves out of, so the card being elsewhere says nothing.
   const phaseRunsHere = phases?.some(phase => phaseContext(phase) === entry.context);
   if (entry.current || !phaseRunsHere || !currentPhase || phaseContext(currentPhase) === undefined) {
-    return { label: entry.label };
+    return { label: entry.label, sessions };
   }
-  return { label: entry.label, cardPhase: currentPhase.name ?? currentPhase.title };
+  return {
+    label: entry.label,
+    sessions,
+    cardPhase: {
+      name: currentPhase.name ?? currentPhase.title,
+      session: sessions.find(candidate => candidate.current),
+    },
+  };
 }
 
 /** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
@@ -93,7 +120,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(factoryId);
-  const catalog = useBoardCatalog(factoryId);
+  const boards = useBoardCatalog(factoryId);
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
@@ -101,35 +128,53 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
-  const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
+  const board = currentItem ? itemBoard(currentItem) : undefined;
+  const boardEntry = boards.data?.find(entry => entry.id === board);
+  const boardTitle = boardEntry?.title ?? (board ? board.charAt(0).toUpperCase() + board.slice(1) : '');
   const contextCrumb =
     currentItem && sessionId && threadId
-      ? sessionContextCrumb(
-          currentItem,
-          catalog.data?.find(board => board.id === itemBoard(currentItem))?.phases,
-          sessionId,
-          threadId,
-        )
+      ? sessionContextCrumb(currentItem, boardEntry?.phases, sessionId, threadId)
       : undefined;
 
   const crumbs =
-    currentItem && factoryId ? (
+    currentItem && factoryId && board ? (
       <>
-        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
-          {isReview ? 'Review' : 'Work'}
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, board)}>
+          {boardTitle}
         </Crumb>
         <Crumb as="span" isCurrent={!contextCrumb}>
           {sessionTitle(currentItem)}
         </Crumb>
-        {contextCrumb ? (
-          <Crumb as="span" isCurrent>
-            <span className="flex items-baseline gap-2">
-              <span>{contextCrumb.label}</span>
-              {contextCrumb.cardPhase ? (
-                <span className="text-muted-foreground">card is now in {contextCrumb.cardPhase}</span>
-              ) : null}
-            </span>
+        {contextCrumb && sessionId ? (
+          <Crumb
+            as="span"
+            isCurrent
+            switcher={
+              contextCrumb.sessions.length > 1 ? (
+                <SessionContextMenu factoryId={factoryId} sessions={contextCrumb.sessions} openSessionId={sessionId} />
+              ) : undefined
+            }
+          >
+            {contextCrumb.label}
           </Crumb>
+        ) : null}
+        {contextCrumb?.cardPhase ? (
+          <li className="flex min-w-0 items-center px-2">
+            {contextCrumb.cardPhase.session ? (
+              <Link
+                to={cardSessionPath(factoryId, contextCrumb.cardPhase.session)}
+                className={`text-muted-foreground hover:text-foreground truncate rounded-sm ${focusRing}`}
+              >
+                <Txt as="span" variant="caption">
+                  card is now in {contextCrumb.cardPhase.name}
+                </Txt>
+              </Link>
+            ) : (
+              <Txt as="span" variant="caption" tone="muted" className="truncate">
+                card is now in {contextCrumb.cardPhase.name}
+              </Txt>
+            )}
+          </li>
         ) : null}
       </>
     ) : isUserThread && session ? (
@@ -190,6 +235,10 @@ function WorkItemActions({
 }) {
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
+  const relatedItems = relatedWorkItemIndex(allItems)(item);
+  // A pull request with its own Review card already has a link, as does the card's own.
+  const linkedUrls = new Set([externalItemUrl, ...relatedItems.map(related => related.url)]);
+  const pullRequests = cardPullRequestLinks(item).filter(pullRequest => !linkedUrls.has(pullRequest.url));
 
   return (
     <>
@@ -207,7 +256,25 @@ function WorkItemActions({
           {externalItemLabel}
         </Button>
       ) : null}
-      {relatedWorkItemIndex(allItems)(item).map(related => {
+      {pullRequests.map(pullRequest => {
+        const label = pullRequestLinkLabel(pullRequest);
+        return (
+          <Button
+            key={pullRequest.url}
+            as="a"
+            variant="ghost"
+            size="sm"
+            href={pullRequest.url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${label}`}
+          >
+            <SourceIcon source={pullRequest.provider === 'gitlab' ? 'gitlab-pr' : 'github-pr'} className="size-3.5" />
+            {label}
+          </Button>
+        );
+      })}
+      {relatedItems.map(related => {
         const label = relationshipLabel(related);
         const session = latestLiveSession(related, livePaths);
 

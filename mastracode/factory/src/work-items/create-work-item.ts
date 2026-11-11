@@ -3,10 +3,12 @@
  * so a card filed from a session goes through exactly what "New card" does.
  */
 
+import { DEFAULT_BOARD_ID } from '../boards/default-board.js';
 import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
+import { intakeTarget } from '../boards/semantics.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -19,6 +21,23 @@ type TransitionResult = Awaited<ReturnType<FactoryTransitionService['transition'
 
 /** Attempts at each step after the upsert before a card that keeps changing under its creator is left as is. */
 const STEP_ATTEMPTS = 3;
+
+/**
+ * Board metadata key holding the `#number` of a card filed without an issue
+ * behind it. Kept apart from `number`, which integrations read as the source
+ * issue's number.
+ */
+export const CARD_NUMBER_METADATA_KEY = 'cardNumber';
+
+/** One past the highest number given to a manually filed card in the project. */
+async function nextCardNumber(workItems: WorkItemsStorage, orgId: string, factoryProjectId: string): Promise<number> {
+  let highest = 0;
+  for (const card of await workItems.listShared({ orgId, factoryProjectId })) {
+    const number = card.metadata?.[CARD_NUMBER_METADATA_KEY];
+    if (typeof number === 'number' && number > highest) highest = number;
+  }
+  return highest + 1;
+}
 
 export type CreateFactoryWorkItemResult =
   /** A new card, entered into its board's first phase and audited. */
@@ -80,7 +99,8 @@ export async function createFactoryWorkItem({
           boards,
         )
       : undefined;
-  const boardId = placement?.board ?? input.board ?? 'work';
+  // No route took it: Work, else the project's first board (a project with only an app's boards).
+  const boardId = placement?.board ?? input.board ?? intakeTarget(boards)?.board ?? DEFAULT_BOARD_ID;
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];
@@ -93,12 +113,20 @@ export async function createFactoryWorkItem({
   }
 
   await workItems.ensureReady();
+  // A card with no issue behind it has no number of its own, so it gets the project's next one.
+  const metadata = input.externalSource
+    ? input.metadata
+    : {
+        ...input.metadata,
+        [CARD_NUMBER_METADATA_KEY]: await nextCardNumber(workItems, orgId, factoryProjectId),
+      };
   const result = await workItems.upsert({
     orgId,
     userId,
     factoryProjectId,
     input: {
       ...input,
+      ...(metadata ? { metadata } : {}),
       board: boardId,
       stages: initialStages,
     },
