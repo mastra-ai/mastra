@@ -2186,10 +2186,10 @@ export function createGithubPullRequestDiscovery(
         });
         if (projects.length === 0) continue;
         linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
-        const items: Card[] = [];
+        const items: Readonly<Card>[] = [];
         for (const project of projects) {
           await rules.loadBoards(project);
-          items.push(...(await options.storage.list({ orgId: project.orgId, factoryProjectId: project.factoryProjectId })));
+          items.push(...(await options.storage.listShared({ orgId: project.orgId, factoryProjectId: project.factoryProjectId })));
         }
         const authoring = (item: Card | undefined) =>
           item !== undefined &&
