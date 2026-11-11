@@ -633,6 +633,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
   const experimentalAgent = resolveExperimentalAgent(globalSettings);
+  const agentStreamsOff = resolveAgentStreamsOff();
   const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
@@ -1355,7 +1356,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
-    ...(resolveAgentStreamsOff() ? { durable: false } : {}),
+    ...(agentStreamsOff ? { durable: false } : {}),
     // Workspace is wired per-request at the AgentController level (see
     // `config.workspace` below), so opt out of the factory's default local
     // workspace. An explicit `undefined` is required: the factory only builds a
