@@ -19,7 +19,7 @@ import type { MastraStorage } from '../../../storage';
 import { getEntryWorkflow } from '../../step-entry';
 import type { StepFlowEntry } from '../../types';
 import type { Workflow } from '../../workflow';
-import { runLivenessKey, stepOccurrenceKey } from '../step-lease';
+import { runLivenessKey, stepOccurrenceKey } from '../leases';
 import { WorkflowEventProcessor } from '../workflow-event-processor';
 import { abandonLease } from './abandon-lease';
 import { createStep, createWorkflow } from '..';
