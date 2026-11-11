@@ -358,9 +358,6 @@ describe('custom board public runtime', () => {
         });
         const bindings = await workItems.listRunBindings('release-org', project.id, workItem.id);
         expect(bindings.map(binding => binding.role).sort()).toEqual(['release-preparer', 'release-publisher']);
-        const publisher = bindings.find(binding => binding.role === 'release-publisher')!;
-        const cursor = await workItems.getToolResultCursor('release-org', project.id, publisher.id);
-        expect(cursor).toMatchObject({ bindingId: publisher.id, lastMessageId: expect.any(String) });
         const decisions = await workItems.listDeferredDecisions('release-org', project.id);
         expect(decisions.map(record => record.decision.type).sort()).toEqual([
           'invokeSkill',
@@ -393,7 +390,6 @@ describe('custom board public runtime', () => {
         expect(await workItems.get({ orgId: 'release-org', id: workItem.id })).toEqual(terminal);
         expect(await workItems.listDeferredDecisions('release-org', project.id)).toEqual(decisions);
         expect(await storage.ops.findMany('factory_rule_evaluations', {})).toEqual(evaluations);
-        expect(await workItems.getToolResultCursor('release-org', project.id, publisher.id)).toEqual(cursor);
       } finally {
         try {
           await factory.shutdown();

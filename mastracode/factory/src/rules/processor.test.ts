@@ -9,6 +9,7 @@ import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegist
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
+import { createTerminalStageCleanup } from './terminal-cleanup.js';
 import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -1885,6 +1886,71 @@ describe('FactoryPhaseStateProcessor', () => {
     await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
       lastMessageId: trailing.id,
     });
+  });
+
+  it('does not wait on its own reconciliation when a tool-result rule ends the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'custom',
+      title: 'Custom',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'building' },
+        building: {
+          title: 'Building',
+          kind: 'working',
+          runner: { skill: 'build-it', context: 'builder' },
+          next: 'done',
+        },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+      tools: {
+        finish: {
+          onResult: () => ({ type: 'transition' as const, idempotencyKey: 'finish', board: 'custom', stage: 'done' }),
+        },
+      },
+    });
+    const boards = boardRegistryOf([board]);
+    const prepared = await prepare(storage, 'builder', 'issue', { id: 'custom', stage: 'building' });
+    const reader = {
+      listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'finish' })], hasMore: false })),
+    };
+    let processor!: FactoryPhaseStateProcessor;
+    let cleanupFinished = false;
+    const cleanup = createTerminalStageCleanup({
+      workItems: storage,
+      reconcileBinding: binding => processor.reconcileBinding(binding),
+      releaseSandboxes: async () => {
+        cleanupFinished = true;
+      },
+    });
+    const transitionService = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      boards,
+      terminalCleanupTimeoutMs: 200,
+      onTerminalStage: args =>
+        cleanup({
+          orgId: args.orgId,
+          factoryProjectId: args.factoryProjectId,
+          workItemId: args.workItemId,
+          revision: args.revision,
+          initiatingBindingId: args.initiatingBindingId,
+        }),
+    });
+    processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      storage,
+      boards,
+      transitionService,
+      messageReader: reader as never,
+    });
+
+    await processor.reconcileBinding(prepared.binding);
+
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.stages).toEqual(['done']);
+    expect(cleanupFinished).toBe(true);
+    expect(reader.listMessages).toHaveBeenCalledTimes(1);
   });
 
   it('reconciles paginated terminal results from a durable cursor across restart retries', async () => {

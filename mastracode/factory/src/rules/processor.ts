@@ -823,6 +823,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(entry.reenter ? { reenter: true } : {}),
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
+        initiatingBindingId: binding.id,
         ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],

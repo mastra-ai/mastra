@@ -50,8 +50,11 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
       const bindings = await options.workItems.listRunBindings(args.orgId, args.factoryProjectId, args.workItemId);
       for (const binding of bindings) {
         if (binding.status !== 'active') continue;
-        // The tool result that drove this terminal transition (e.g. PR
-        // creation) may not be ingested yet — reconcile before revoking.
+        // The initiating binding is already processing the result that committed
+        // this transition. Waiting for its queued reconciliation here would
+        // wait on the transition itself; earlier results were read in order.
+        if (binding.id === args.initiatingBindingId) continue;
+        // Other bound threads may still have results to ingest before revocation.
         await options.reconcileBinding?.(binding).catch(() => {});
       }
     } catch {
