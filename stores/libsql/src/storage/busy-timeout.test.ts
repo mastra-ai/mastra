@@ -49,7 +49,9 @@ describe('LibSQL busy_timeout configuration', () => {
       await store.init();
       await store.getStore('workflows');
 
-      await expect.poll(() => execute.mock.calls.some(([statement]) => String(statement).includes('synchronous'))).toBe(true);
+      await expect
+        .poll(() => execute.mock.calls.some(([statement]) => String(statement).includes('synchronous')))
+        .toBe(true);
       expect(execute.mock.calls.map(([statement]) => String(statement))).not.toContain('PRAGMA busy_timeout = 10000;');
       expect(await readBusyTimeout(client)).toBe(1234);
     } finally {
