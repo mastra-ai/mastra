@@ -38,7 +38,7 @@ describe('LibSQL busy_timeout configuration', () => {
     }
   });
 
-  it('honors a custom connectionTimeoutMs', async () => {
+  it('keeps a custom connectionTimeoutMs after the workflows domain initializes', async () => {
     const store = new LibSQLStore({
       id: 'busy-custom',
       url: `file:${path.join(tmpDir, 'custom.db')}`,
@@ -46,6 +46,7 @@ describe('LibSQL busy_timeout configuration', () => {
     });
     try {
       await store.init();
+      await store.getStore('workflows');
 
       expect(await readBusyTimeout(getClient(store))).toBe(1234);
     } finally {
