@@ -70,6 +70,8 @@ const OWNER_ID = quoteIdentifier('ownerId', 'column name');
 const LEASE_EXPIRES_AT = quoteIdentifier('leaseExpiresAt', 'column name');
 const UPDATED_AT = quoteIdentifier('updatedAt', 'column name');
 const RUN_OWNER_COLUMNS = `generation, ${OWNER_ID} AS ownerId, ${LEASE_EXPIRES_AT} AS leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
+/** Run ids per query in `getRunOwnerships`, keeping each prepared statement small. */
+const RUN_OWNERSHIP_BATCH_SIZE = 500;
 
 function toRunOwnershipRecord(runId: string, row: RowDataPacket): RunOwnershipRecord {
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
@@ -338,6 +340,34 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       return await readRunOwner(this.pool, runId);
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /** Reads the records with one query per {@link RUN_OWNERSHIP_BATCH_SIZE} runs. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+    try {
+      for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
+        const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
+        const [rows] = await this.pool.execute<RowDataPacket[]>(
+          `SELECT ${RUN_ID} AS runId, ${RUN_OWNER_COLUMNS} FROM ${RUN_OWNERS_TABLE}
+           WHERE ${RUN_ID} IN (${chunk.map(() => '?').join(', ')})`,
+          chunk,
+        );
+        for (const row of rows) records.set(String(row.runId), toRunOwnershipRecord(String(row.runId), row));
+      }
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
     }
   }
 

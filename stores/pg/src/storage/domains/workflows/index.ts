@@ -1350,6 +1350,31 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  /** Reads every run's record in one query. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+    if (ids.length === 0) return records;
+    try {
+      const rows = await this.#db.client.manyOrNone<RunOwnerRow & { runId: string }>(
+        `SELECT "runId", ${RUN_OWNER_COLUMNS} FROM ${this.#runOwnersTable()} WHERE "runId" = ANY($1::text[])`,
+        [ids],
+      );
+      for (const row of rows) records.set(row.runId, toRunOwnershipRecord(row.runId, row));
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
+    }
+  }
+
   supportsWorkflowStepGuards(): boolean {
     return true;
   }
