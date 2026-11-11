@@ -1047,6 +1047,21 @@ export class MastraFactory {
       );
     }
 
+    // Store the retired Review board's cards as Work, once. Not awaited: it rewrites rows one at a
+    // time, and reads translate legacy rows correctly until it finishes.
+    if (storage.isDomainReady('work-items')) {
+      void workItemsStorage
+        .storeLegacyReviewAsWork()
+        .then(projects => {
+          if (projects > 0) console.info(`[factory] stored Review board cards as Work in ${projects} project(s)`);
+        })
+        .catch(error =>
+          console.warn(
+            `[factory] storing Review board cards as Work failed: ${error instanceof Error ? error.message : error}`,
+          ),
+        );
+    }
+
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
     // mirroring stored API keys into process.env.

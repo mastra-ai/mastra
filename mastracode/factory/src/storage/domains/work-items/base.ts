@@ -3117,6 +3117,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * held there, once. A card with a live run, or one that changed under us, is
    * left alone. Returns the cards moved; a second run finds none.
    */
+  /**
+   * The Review board is retired. Store every card still placed on it, and every pull-request card
+   * filed before boards were recorded, as a Work card (`review` phase as `pr-review`), once, so
+   * reads stop checking each project's Review board. Reads keep translating legacy rows until
+   * this has run. Returns the number of projects whose cards moved; a second run finds none.
+   */
+  async storeLegacyReviewAsWork(): Promise<number> {
+    const changed = await this.#cards(this.#db, { transaction: false }).storeLegacyReviewAsWork();
+    if (changed.length > 0) await bumpBoardVersions(this.#db, changed);
+    return changed.length;
+  }
+
   async returnHeldTriageCards(): Promise<Card[]> {
     // A one-time migration of rows written when Work was the only board, so it reads Work's phase
     // keys (`triage`, `intake`) by name. Cards filed before boards were recorded carry no board;

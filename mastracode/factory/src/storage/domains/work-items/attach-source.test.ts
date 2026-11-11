@@ -279,6 +279,39 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('one card for an
       expect(await raw(storage, card.id)).toMatchObject({ board: 'review', stages: ['intake'] });
     });
 
+    it('stores every Review card as Work once, so the project stops using Review', async () => {
+      const { storage, workItems, scope, file } = await setup();
+      const open = await file(pullRequest34, { state: 'open' });
+      await storeOnReview(storage, open.id, 'review');
+      const done = await file({ ...pullRequest34, externalId: 'github:10:pull-request:35' }, { state: 'merged' });
+      await storeOnReview(storage, done.id, 'done');
+      const unboardedPullRequest = await file({ ...pullRequest34, externalId: 'github:10:pull-request:36' }, {});
+      const unboardedIssue = await file(issue12, {});
+      for (const id of [unboardedPullRequest.id, unboardedIssue.id]) {
+        await storage.ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, { id }, { board: null, stages: ['intake'] });
+      }
+      expect(await workItems.reviewBoardInUse(scope)).toBe(true);
+
+      expect(await workItems.storeLegacyReviewAsWork()).toBe(1);
+
+      expect(await raw(storage, open.id)).toMatchObject({ board: 'work', stages: ['pr-review'] });
+      const history = (await storage.ops.findOne<{ stage_history: { stage: string }[] }>(
+        FACTORY_BOARD_ITEMS_SCHEMA.name,
+        { id: open.id },
+      ))!.stage_history;
+      expect(history.map(entry => entry.stage)).toEqual(['pr-review']);
+      expect(await raw(storage, done.id)).toMatchObject({ board: 'work', stages: ['done'] });
+      expect(await raw(storage, unboardedPullRequest.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect((await raw(storage, unboardedIssue.id))?.board).toBeNull();
+      expect(await workItems.reviewBoardInUse(scope)).toBe(false);
+      expect(await workItems.get({ orgId: scope.orgId, id: open.id })).toMatchObject({
+        board: 'work',
+        stages: ['pr-review'],
+      });
+
+      expect(await workItems.storeLegacyReviewAsWork()).toBe(0);
+    });
+
     it("reads a project's Review cards as Work once none is open, and stores Work on the next write", async () => {
       const { storage, workItems, scope, file } = await setup();
       const card = await file(pullRequest34, { state: 'merged' });

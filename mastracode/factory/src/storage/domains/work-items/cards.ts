@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import type { CollectionListOptions, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionCursor, CollectionListOptions, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
 import { splitLegacyWorkItem } from '../../../work-items/split-migration.js';
 import type { ExternalWorkItemSource, WorkItemDbRow } from './base.js';
+import type { BoardScope } from './board-version.js';
 import {
   isLegacyReviewPlacement,
   LEGACY_REVIEW_BOARD,
@@ -24,6 +25,7 @@ import {
 import type { BoardItemDbRecord, WorkItemDbRecord, WorkItemSourceDbRecord } from './work-item-schema.js';
 
 const BOARD_ITEMS = FACTORY_BOARD_ITEMS_SCHEMA.name;
+const LEGACY_REVIEW_PAGE = 200;
 const WORK_ITEMS = FACTORY_WORK_ITEMS_SCHEMA.name;
 const SOURCES = FACTORY_WORK_ITEM_SOURCES_SCHEMA.name;
 const BOARD_COLUMNS = new Set(Object.keys(FACTORY_BOARD_ITEMS_SCHEMA.columns));
@@ -217,6 +219,64 @@ export class Cards {
     if (rest.factory_project_id !== undefined) scope.factory_project_id = rest.factory_project_id;
     const sources = await this.ops.findMany<WorkItemSourceDbRecord>(SOURCES, { ...scope, source_key: sourceKey });
     return sources.length ? { ...boardWhere, work_item_id: { in: sources.map(source => source.work_item_id) } } : null;
+  }
+
+  /**
+   * Store every legacy Review placement as Work, in pages: rows on the retired Review board and
+   * pull-request cards filed before boards were recorded. Each row is rewritten under its lock
+   * only while it still holds a legacy placement, so reruns and racing replicas are no-ops.
+   * Returns the projects whose rows changed.
+   */
+  async storeLegacyReviewAsWork(): Promise<BoardScope[]> {
+    if (this.legacyMode) return [];
+    const changed = new Map<string, BoardScope>();
+    let cursor: CollectionCursor | undefined;
+    for (;;) {
+      const page = await this.ops.findMany<BoardItemDbRecord>(
+        BOARD_ITEMS,
+        { board: { in: [LEGACY_REVIEW_BOARD, null] } },
+        { orderBy: [['id', 'asc']], limit: LEGACY_REVIEW_PAGE, ...(cursor ? { cursor } : {}) },
+      );
+      if (page.length === 0) break;
+      const unboarded = page.filter(row => row.board === null).map(row => row.work_item_id);
+      const originType = new Map<string, string>();
+      if (unboarded.length > 0) {
+        const sources = await this.ops.findMany<WorkItemSourceDbRecord>(
+          SOURCES,
+          { work_item_id: { in: unboarded } },
+          {
+            orderBy: [
+              ['created_at', 'asc'],
+              ['id', 'asc'],
+            ],
+          },
+        );
+        for (const source of sources) {
+          if (isOriginSource(source) && !originType.has(source.work_item_id)) {
+            originType.set(source.work_item_id, source.source_type);
+          }
+        }
+      }
+      for (const candidate of page) {
+        const sourceType = originType.get(candidate.work_item_id);
+        if (!isLegacyReviewPlacement(candidate.board, sourceType)) continue;
+        let rewrote = false;
+        const stored = await this.ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: candidate.id }, row => {
+          if (!isLegacyReviewPlacement(row.board, sourceType)) return null;
+          rewrote = true;
+          return { ...normalizeLegacyReviewColumns(row, {}), revision: row.revision + 1 };
+        });
+        if (stored && rewrote) {
+          changed.set(`${stored.org_id}\0${stored.factory_project_id}`, {
+            orgId: stored.org_id,
+            factoryProjectId: stored.factory_project_id,
+          });
+        }
+      }
+      if (page.length < LEGACY_REVIEW_PAGE) break;
+      cursor = { values: [page[page.length - 1]!.id] };
+    }
+    return [...changed.values()];
   }
 
   async #join(boards: readonly BoardItemDbRecord[]): Promise<WorkItemDbRow[]> {
