@@ -9,6 +9,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
   FeedbackReplacementEvent,
+  FeedbackReviewStatusEvent,
 } from '@mastra/core/observability';
 import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
@@ -478,6 +479,20 @@ export class MastraPlatformExporter extends BaseExporter {
     this.enqueueResolvedRecord('feedback', event.feedback, event.feedback.feedbackId);
   }
 
+  onFeedbackReviewStatusEvent(event: FeedbackReviewStatusEvent): void {
+    if (this.isDisabled || this.shuttingDown) return;
+    const { feedbackId, reviewStatus } = event.feedback;
+    if (!feedbackId?.trim() || !['needs-review', 'reviewed'].includes(reviewStatus)) {
+      this.logger.warn('Dropping feedback review update: feedbackId and reviewStatus are required');
+      return;
+    }
+    const url = new URL(
+      `/api/observability/feedback/${encodeURIComponent(feedbackId)}/review-status`,
+      this.platformConfig.feedbackEndpoint,
+    );
+    this.enqueueInteractiveWrite('feedback', url, JSON.stringify({ reviewStatus }), 'PATCH');
+  }
+
   private enqueueResolvedRecord(
     kind: 'score' | 'feedback',
     record: MastraPlatformScoreRecord | MastraPlatformFeedbackRecord,
@@ -500,6 +515,17 @@ export class MastraPlatformExporter extends BaseExporter {
       kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
     const url = new URL(`/api/observability/${kind === 'score' ? 'scores' : 'feedback'}`, collectorEndpoint);
     if (replacementId !== undefined) url.pathname += `/${encodeURIComponent(replacementId)}`;
+    this.enqueueInteractiveWrite(kind, url, body, replacementId !== undefined ? 'PUT' : 'POST');
+  }
+
+  private enqueueInteractiveWrite(
+    kind: 'score' | 'feedback',
+    url: URL,
+    body: string,
+    method: 'POST' | 'PUT' | 'PATCH',
+  ): void {
+    const collectorEndpoint =
+      kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
     // Full endpoint overrides take precedence over projectId for collector batches too.
     const projectId =
       new URL(collectorEndpoint).pathname.match(/\/projects\/([^/]+)\/ai\//)?.[1] ?? this.platformConfig.projectId;
@@ -512,7 +538,7 @@ export class MastraPlatformExporter extends BaseExporter {
     // Send buffered traces promptly, without making this request wait for collector
     // uploads or recursively waiting for itself through public flush().
     void this.flushBatches().catch(error => this.logger.warn('Failed to flush buffered telemetry', { error }));
-    const pending = publishResolvedRecord(url, body, headers, replacementId !== undefined ? 'PUT' : 'POST')
+    const pending = publishResolvedRecord(url, body, headers, method)
       .catch(error => this.logger.warn(`Dropping ${kind} after Platform delivery failed`, { error }))
       .finally(() => this.pendingRecords.delete(pending));
     this.pendingRecords.add(pending);

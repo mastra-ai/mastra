@@ -97,6 +97,30 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
           headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-token' },
           body: JSON.stringify({ feedback, contextMode }),
         });
+      const patchReview = (id: string, reviewStatus: unknown) =>
+        server.request(`${path}/${id}/review-status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-token' },
+          body: JSON.stringify({ reviewStatus }),
+        });
+      it('keeps local review updates working with older observability lacking export notification', async () => {
+        await post(original);
+        const response = await patchReview('edit', 'reviewed');
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ ...original, reviewStatus: 'reviewed' });
+      });
+      it('does not update missing or foreign feedback', async () => {
+        expect((await patchReview('missing', 'reviewed')).status).toBe(404);
+        await post({ ...original, organizationId: 'foreign' });
+        trustedScope.organizationId = 'trusted';
+        expect((await patchReview('edit', 'reviewed')).status).toBe(404);
+        expect((await store.getFeedbackById('edit'))?.reviewStatus).toBe('needs-review');
+      });
+      it.each([null, 'invalid'])('rejects invalid review status %s without changing feedback', async status => {
+        await post(original);
+        expect((await patchReview('edit', status)).status).toBe(400);
+        expect((await store.getFeedbackById('edit'))?.reviewStatus).toBe('needs-review');
+      });
       it.each([{ feedbackId: 'other' }, { timestamp: undefined }, { traceId: ' ' }])(
         'rejects malformed replacements: %j',
         async change => {
@@ -523,6 +547,98 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       expect(await list()).toEqual([expect.objectContaining({ [idField]: 'historical', traceId: null })]);
     });
   });
+  describe('feedback review-status export delivery', () => {
+    it.each(['flush', 'shutdown'] as const)(
+      'persists HTTP review changes before exporting and drains on %s',
+      async lifecycle => {
+        const writes: { method: string; path: string; body: unknown }[] = [];
+        const responses: import('node:http').ServerResponse[] = [];
+        const receiver = createServer(async (req, res) => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(Buffer.from(chunk));
+          writes.push({ method: req.method!, path: req.url!, body: JSON.parse(Buffer.concat(chunks).toString()) });
+          responses.push(res);
+        });
+        receiver.listen(0, '127.0.0.1');
+        await once(receiver, 'listening');
+        const address = receiver.address();
+        if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+        const storage = new InMemoryStore();
+        const store = (await storage.getStore('observability'))!;
+        const original = {
+          feedbackId: 'review/id',
+          timestamp: new Date(),
+          traceId: 'trace',
+          feedbackType: 'comment',
+          value: 'actionable',
+          feedbackUserId: 'author',
+          comment: 'keep',
+          tags: ['original'],
+          metadata: { detail: true },
+          reviewStatus: 'needs-review' as const,
+        };
+        await store.createFeedback({ feedback: original });
+        const observability = new Observability({
+          configs: {
+            default: {
+              serviceName: 'review',
+              exporters: [
+                new MastraStorageExporter(),
+                new MastraPlatformExporter({
+                  accessToken: 'test',
+                  endpoint: `http://127.0.0.1:${address.port}`,
+                  resolveFromEnv: false,
+                }),
+              ],
+            },
+          },
+        });
+        const server = await startServer(new Mastra({ storage, observability, logger: false }));
+        try {
+          const response = await server.request('/api/observability/feedback/review%2Fid/review-status', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reviewStatus: 'reviewed' }),
+            signal: AbortSignal.timeout(2000),
+          });
+          expect(response.status, await response.clone().text()).toBe(200);
+          expect(await response.json()).toMatchObject({
+            ...original,
+            timestamp: original.timestamp.toISOString(),
+            reviewStatus: 'reviewed',
+          });
+          expect(await store.getFeedbackById(original.feedbackId)).toMatchObject({
+            ...original,
+            reviewStatus: 'reviewed',
+          });
+          await expect.poll(() => writes.length, { timeout: 1500 }).toBe(1);
+          expect(writes).toEqual([
+            {
+              method: 'PATCH',
+              path: '/api/observability/feedback/review%2Fid/review-status',
+              body: { reviewStatus: 'reviewed' },
+            },
+          ]);
+          let drained = false;
+          const pending = observability[lifecycle]().then(() => {
+            drained = true;
+          });
+          await new Promise(resolve => setTimeout(resolve, 25));
+          expect(drained).toBe(false);
+          for (const res of responses) res.writeHead(204).end();
+          await pending;
+          expect((await store.listFeedback({})).feedback).toHaveLength(1);
+        } finally {
+          for (const res of responses) if (!res.writableEnded) res.writeHead(204).end();
+          await observability.shutdown();
+          await server.close();
+          receiver.closeAllConnections();
+          await new Promise<void>(resolve => receiver.close(() => resolve()));
+        }
+      },
+    );
+  });
+
   describe.each(['feedback', 'scores'] as const)('%s HTTP export delivery', collection => {
     it.each(['flush', 'shutdown'] as const)(
       'returns HTTP success before a custom exporter completes and drains delivery on %s',
