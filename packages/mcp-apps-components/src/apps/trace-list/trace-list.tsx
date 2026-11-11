@@ -71,10 +71,10 @@ function OpenedQueryBar({ query, onClear }: { query: Args; onClear: () => void }
         <Txt variant="body-sm" tone="muted">
           Also filtered by the query from the conversation.
         </Txt>
-        <button type="button" className="text-ui-sm text-accent1 underline" onClick={() => setOpen(v => !v)}>
+        <button type="button" className="text-body-sm underline" onClick={() => setOpen(v => !v)}>
           {open ? 'Hide' : 'Show'}
         </button>
-        <button type="button" className="text-ui-sm text-accent1 underline" onClick={onClear}>
+        <button type="button" className="text-body-sm underline" onClick={onClear}>
           Clear
         </button>
       </div>
@@ -142,7 +142,7 @@ function TraceView({
   return (
     <div className="flex flex-col">
       <div className="px-3 pt-3">
-        <button type="button" className="text-ui-sm text-accent1 underline" onClick={onBack}>
+        <button type="button" className="text-body-sm underline" onClick={onBack}>
           Back to the list
         </button>
       </div>
