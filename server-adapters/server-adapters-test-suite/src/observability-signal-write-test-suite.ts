@@ -2,9 +2,15 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { Mastra } from '@mastra/core';
 import { SpanType } from '@mastra/core/observability';
+import type { FeedbackEvent, ScoreEvent, ObservabilityInstance } from '@mastra/core/observability';
 import { EntityType, InMemoryStore } from '@mastra/core/storage';
 import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
-import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
+import {
+  Observability,
+  DefaultObservabilityInstance,
+  MastraStorageExporter,
+  MastraPlatformExporter,
+} from '@mastra/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 export interface ObservabilitySignalWriteTestConfig {
@@ -418,6 +424,114 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
     });
   });
   describe.each(['feedback', 'scores'] as const)('%s HTTP export delivery', collection => {
+    it.each(['flush', 'shutdown'] as const)(
+      'returns HTTP success before a custom exporter completes and drains delivery on %s',
+      async lifecycle => {
+        const accepted: (ScoreEvent | FeedbackEvent)[] = [];
+        const flushed: (ScoreEvent | FeedbackEvent)[] = [];
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        const receiver = createServer(async (req, res) => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString());
+          if (req.url === '/accept') {
+            accepted.push(body);
+            await gate;
+          } else flushed.push(...body);
+          res.writeHead(204).end();
+        });
+        receiver.listen(0, '127.0.0.1');
+        await once(receiver, 'listening');
+        const address = receiver.address();
+        if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+        const endpoint = `http://127.0.0.1:${address.port}`;
+        const buffered: (ScoreEvent | FeedbackEvent)[] = [];
+        const deliver = async (event: ScoreEvent | FeedbackEvent) => {
+          await fetch(`${endpoint}/accept`, { method: 'POST', body: JSON.stringify(event) });
+          buffered.push(event);
+        };
+        const flush = async () => {
+          if (buffered.length)
+            await fetch(`${endpoint}/flush`, { method: 'POST', body: JSON.stringify(buffered.splice(0)) });
+        };
+        const delegate = new DefaultObservabilityInstance({
+          name: 'custom',
+          serviceName: 'slow-custom-export',
+          exporters: [
+            {
+              name: 'http-buffer',
+              exportTracingEvent: async () => {},
+              onScoreEvent: deliver,
+              onFeedbackEvent: deliver,
+              flush,
+              shutdown: flush,
+            },
+          ],
+        });
+        // A real implementation using composition, rather than inheriting BaseObservabilityInstance.
+        const custom: ObservabilityInstance = {
+          getConfig: () => delegate.getConfig(),
+          getExporters: () => delegate.getExporters(),
+          getSpanOutputProcessors: () => delegate.getSpanOutputProcessors(),
+          getLogger: () => delegate.getLogger(),
+          getBridge: () => delegate.getBridge(),
+          startSpan: options => delegate.startSpan(options),
+          rebuildSpan: cached => delegate.rebuildSpan(cached),
+          __setLogger: logger => delegate.__setLogger(logger),
+          flush: () => delegate.flush(),
+          shutdown: () => delegate.shutdown(),
+        };
+        const observability = new Observability({});
+        observability.registerInstance('custom', custom, true);
+        const storage = new InMemoryStore();
+        const mastra = new Mastra({ storage, observability, logger: false });
+        const server = await startServer(mastra);
+        const isFeedback = collection === 'feedback';
+        const field = isFeedback ? 'feedback' : 'score';
+        const idField = isFeedback ? 'feedbackId' : 'scoreId';
+        try {
+          const response = await server.request(`/api/observability/${collection}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(2000),
+            body: JSON.stringify({
+              contextMode: 'provided',
+              [field]: {
+                [idField]: 'slow-export',
+                traceId: 'local-trace',
+                ...(isFeedback ? { feedbackType: 'comment', value: 'useful' } : { scorerId: 'quality', score: 1 }),
+              },
+            }),
+          });
+          expect(response.status, await response.clone().text()).toBe(200);
+          await expect.poll(() => accepted.length).toBe(1);
+          const store = (await storage.getStore('observability'))!;
+          const rows = isFeedback ? (await store.listFeedback({})).feedback : (await store.listScores({})).scores;
+          expect(rows).toEqual([expect.objectContaining({ [idField]: 'slow-export' })]);
+          let completed = false;
+          const draining = observability[lifecycle]().then(() => {
+            completed = true;
+          });
+          await new Promise(resolve => setTimeout(resolve, 25));
+          expect(completed).toBe(false);
+          expect(flushed).toHaveLength(0);
+          release();
+          await draining;
+          expect(flushed).toEqual(accepted);
+          expect(flushed).toHaveLength(1);
+        } finally {
+          release();
+          await observability.shutdown();
+          await server.close();
+          receiver.closeAllConnections();
+          await new Promise<void>(resolve => receiver.close(() => resolve()));
+        }
+      },
+    );
+
     it.each([
       { contextMode: 'provided', authenticated: true, emptyContext: false },
       { contextMode: 'resolve', authenticated: true, emptyContext: false },

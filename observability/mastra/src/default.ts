@@ -68,6 +68,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   #registry = new ObservabilityRegistry();
   #mastra?: Mastra;
   #clientObservabilityProxy?: ClientObservabilityProxy;
+  #pendingPersistedEvents = new Set<Promise<void>>();
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -320,12 +321,20 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     await this.#emitRecordedEvent(buildFeedbackEvent({ ...args, traceId, spanId }));
   }
 
-  /** @internal Export an HTTP-created record that has already been persisted locally. */
+  /** @internal Queue an HTTP-created record; flush/shutdown await delivery without holding the HTTP response open. */
   async __exportPersistedEvent(event: ScoreEvent | FeedbackEvent): Promise<void> {
     const storageExporters = new Set<ObservabilityHandler>(
       this.#getRecordedTraceInstance()?.getExporters().filter(isMastraBuiltInStorageExporter),
     );
-    await this.#emitRecordedEvent(event, handler => !storageExporters.has(handler));
+    const pending = this.#emitRecordedEvent(event, handler => !storageExporters.has(handler));
+    this.#pendingPersistedEvents.add(pending);
+    void pending.then(
+      () => this.#pendingPersistedEvents.delete(pending),
+      error => {
+        this.#pendingPersistedEvents.delete(pending);
+        this.logger.error('Failed to notify exporters of persisted feedback/score', { error, eventType: event.type });
+      },
+    );
   }
 
   /** Register a named observability instance, optionally marking it as default. */
@@ -377,12 +386,21 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
   /** Flush all registered instances without shutting down. */
   async flush(): Promise<void> {
+    await this.#drainPersistedEvents();
     await this.#registry.flush();
   }
 
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
+    await this.#drainPersistedEvents();
     await this.#registry.shutdown();
+  }
+
+  /** Let custom handlers finish filling exporter buffers before the instance lifecycle drains them. */
+  async #drainPersistedEvents(): Promise<void> {
+    while (this.#pendingPersistedEvents.size > 0) {
+      await Promise.allSettled([...this.#pendingPersistedEvents]);
+    }
   }
 
   /**
@@ -417,6 +435,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     return this.getDefaultInstance() ?? Array.from(this.listInstances().values())[0];
   }
 
+  /** Dispatch independently; the standard bus tracks delivery, while custom instances return handler promises. */
   async #emitRecordedEvent(
     event: ScoreEvent | FeedbackEvent,
     shouldHandle?: (handler: ObservabilityHandler) => boolean,
