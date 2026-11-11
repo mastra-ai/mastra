@@ -47,6 +47,24 @@ describe('resolveBuiltinMCPPath', () => {
     expect(resolveBuiltinMCPPath(mastraWith({ mcp: { path: '/mcp/:serverId/mcp' } }))).toBe('/mcp');
     expect(resolveBuiltinMCPPath(mastraWith({ mcp: { path: 'relative' } }))).toBe('/mcp');
   });
+
+  it('accepts only URL-unreserved characters, so the path is safe to paste into a shell or URL', () => {
+    expect(resolveBuiltinMCPPath(mastraWith({ mcp: { path: '/my-app_v1.2/~mcp' } }))).toBe('/my-app_v1.2/~mcp');
+    for (const path of [
+      '/mcp&readonly=1',
+      '/mcp;touch pwned',
+      '/$(touch pwned)',
+      '/`touch pwned`',
+      "/it's",
+      '/with space',
+      '/mcp#frag',
+      '/mcp%20x',
+      '/a/../mcp',
+      '/./mcp',
+    ]) {
+      expect(resolveBuiltinMCPPath(mastraWith({ mcp: { path } })), path).toBe('/mcp');
+    }
+  });
 });
 
 describe('getBuiltinMCPTransportOptions', () => {

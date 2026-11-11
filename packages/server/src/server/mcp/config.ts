@@ -74,8 +74,9 @@ export function warnOnReservedMCPServerId(mastra: Mastra): void {
 }
 
 /**
- * Path of the built-in MCP route (without the API prefix). Paths that could shadow the
- * `/mcp/v0/servers` registry or `/mcp/:serverId/*` routes fall back to `/mcp`.
+ * Path of the built-in MCP route (without the API prefix). Segments may only use URL-unreserved characters
+ * (`A-Z a-z 0-9 - . _ ~`), so the endpoint URL Studio shows can be pasted into a shell or client config as-is.
+ * Paths that could shadow the `/mcp/v0/servers` registry or `/mcp/:serverId/*` routes fall back to `/mcp`.
  */
 export function resolveBuiltinMCPPath(mastra: Mastra): string {
   const { path } = getMCPConfig(mastra);
@@ -84,7 +85,7 @@ export function resolveBuiltinMCPPath(mastra: Mastra): string {
   const valid =
     path.startsWith('/') &&
     segments.length > 0 &&
-    !/[:*?]/.test(path) &&
+    segments.every(segment => /^[\w.~-]+$/.test(segment) && segment !== '.' && segment !== '..') &&
     !(segments[0] === 'mcp' && segments.length > 2);
   if (valid) return `/${segments.join('/')}`;
   if (!warnedPath.has(mastra)) {
