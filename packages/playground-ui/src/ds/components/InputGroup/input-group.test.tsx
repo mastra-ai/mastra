@@ -51,7 +51,7 @@ describe('InputGroupAddon variants', () => {
 
     expect(defaultAddon.getAttribute('data-variant')).toBe('default');
     expect(defaultClasses).toEqual(
-      expect.arrayContaining(['gap-2', `${padding}-[calc(var(--control-px)-2px)]`, `has-[>button]:${padding}-1`]),
+      expect.arrayContaining(['gap-2', `${padding}-[calc(var(--control-px)-2px)]`, `has-[>button]:${padding}-[3px]`]),
     );
     expect(defaultClasses).not.toContain('[&>button]:mx-0');
 
@@ -61,7 +61,7 @@ describe('InputGroupAddon variants', () => {
     );
     expect(flushClasses).not.toContain('gap-2');
     expect(flushClasses).not.toContain(`${padding}-[calc(var(--control-px)-2px)]`);
-    expect(flushClasses).not.toContain(`has-[>button]:${padding}-1`);
+    expect(flushClasses).not.toContain(`has-[>button]:${padding}-[3px]`);
   });
 
   it.each(['block-start', 'block-end'] as const)('keeps %s spacing when flush is selected', align => {

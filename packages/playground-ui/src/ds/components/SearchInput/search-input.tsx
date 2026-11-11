@@ -54,6 +54,7 @@ export function SearchInput({
 }: SearchInputProps) {
   const [ownText, setOwnText] = useState(defaultValue);
   const text = value ?? ownText;
+  const hasButton = Boolean(onClose || text);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedChange = useDebouncedCallback(onValueChange, debounceMs);
 
@@ -92,20 +93,25 @@ export function SearchInput({
         value={text}
         onChange={event => change(event.target.value)}
       />
-      {(onClose || text) && (
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton
-            aria-label={onClose ? 'Close search' : 'Clear search'}
-            onClick={() => {
-              change('');
-              if (onClose) onClose();
-              else inputRef.current?.focus();
-            }}
-          >
-            <XIcon />
-          </InputGroupButton>
-        </InputGroupAddon>
-      )}
+      {/* Always rendered so the field keeps its width when text appears (it can be sized by its
+          content, e.g. joined in a ButtonsGroup); hidden and out of the tab order while empty. */}
+      <InputGroupAddon
+        align="inline-end"
+        className={hasButton ? undefined : 'invisible'}
+        aria-hidden={!hasButton}
+        inert={!hasButton}
+      >
+        <InputGroupButton
+          aria-label={onClose ? 'Close search' : 'Clear search'}
+          onClick={() => {
+            change('');
+            if (onClose) onClose();
+            else inputRef.current?.focus();
+          }}
+        >
+          <XIcon />
+        </InputGroupButton>
+      </InputGroupAddon>
     </InputGroup>
   );
 }
