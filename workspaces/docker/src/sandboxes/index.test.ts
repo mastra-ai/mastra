@@ -126,7 +126,7 @@ describe('DockerSandboxesSandbox', () => {
       onStdout: stdout,
     });
     expect(remote.processes.start).toHaveBeenCalledWith(
-      expect.objectContaining({ args: ['echo', 'hello'], workingDir: '/home/user', env: { TOKEN: 'test' } }),
+      expect.objectContaining({ args: ['sh', '-lc', 'echo hello'], workingDir: '/home/user', env: { TOKEN: 'test' } }),
       expect.anything(),
     );
     expect(stdout.mock.calls.map(([data]) => data).join('')).toBe('hello world');
@@ -138,6 +138,16 @@ describe('DockerSandboxesSandbox', () => {
       stdoutTruncated: true,
     });
     expect(connection.close).toHaveBeenCalledOnce();
+  });
+
+  it('runs command strings and quoted arguments through a shell', async () => {
+    const { sandbox, remote } = setup();
+    await sandbox.executeCommand('ls -la | head -3 && echo "done" > /tmp/out');
+    await sandbox.executeCommand('printf', ['%s\n', "it's $HOME"]);
+    expect(remote.processes.start.mock.calls.map(([request]) => request.args)).toEqual([
+      ['sh', '-lc', 'ls -la | head -3 && echo "done" > /tmp/out'],
+      ['sh', '-lc', `printf '%s\n' 'it'\\''s $HOME'`],
+    ]);
   });
 
   it('retains only complete UTF-8 characters when the byte limit splits one', async () => {

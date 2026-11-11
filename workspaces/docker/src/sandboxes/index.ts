@@ -22,7 +22,7 @@ export interface DockerSandboxesOptions extends MastraSandboxOptions {
   image: string;
   /** Docker Cloud Sandboxes client; defaults to the SDK's configured credentials. */
   client?: Sandboxes;
-  /** Options passed to a newly created cloud sandbox. */
+  /** Environment variables set on a newly created cloud sandbox. */
   environment?: Record<string, string>;
 }
 
@@ -150,7 +150,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
     try {
       process = await this.sandbox!.processes.start(
         {
-          args: [command, ...args],
+          args: ['sh', '-lc', args.length ? [command, ...args].map(shellQuote).join(' ') : command],
           workingDir: options.cwd ?? this.workingDirectory,
           env: Object.fromEntries(
             Object.entries({ ...this.getEnv(), ...options.env }).filter(
@@ -244,4 +244,9 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
       metadata: { sandboxId: this.remoteId, image: this.image },
     };
   }
+}
+
+function shellQuote(arg: string): string {
+  if (/^[a-zA-Z0-9._\-/=:@]+$/.test(arg)) return arg;
+  return `'${arg.replace(/'/g, "'\\''")}'`;
 }

@@ -130,6 +130,63 @@ check `.mastra-sandbox/setup-failed` first.
 If any entry's access or head can't be resolved, the whole resolution rejects
 and the sandbox falls back to its default template.
 
+## Docker Cloud Sandboxes
+
+`DockerSandboxesSandbox` runs commands in a Docker Cloud Sandboxes microVM instead of a local container. It uses the `@docker/sandboxes` SDK and its configured credentials unless you pass a `client`.
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { DockerSandboxesSandbox } from '@mastra/docker'
+
+const workspace = new Workspace({
+  sandbox: new DockerSandboxesSandbox({
+    id: sessionId,
+    image: 'ubuntu:24.04',
+    environment: { NODE_ENV: 'production' },
+  }),
+})
+```
+
+The `id` is used as the remote sandbox display name and creation idempotency key, so a new instance with the same `id` reconnects to the existing microVM and restarts it if it was stopped. Pass `sandboxId` to reconnect directly to a known remote sandbox.
+
+Commands run through `sh -lc`, so command strings can use pipes, redirects and `&&`. Separate `args` are shell-quoted. `executeCommand` supports `timeout`, `abortSignal`, streaming `onStdout`/`onStderr` callbacks and `maxRetainedBytes` (default 1 MiB per stream). Calling `destroy()` deletes the remote sandbox.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'image',
+    type: 'string',
+    description: 'Image used to create the cloud sandbox.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Stable logical identifier, used as the remote display name and idempotency key for reconnection.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'sandboxId',
+    type: 'string',
+    description: 'Remote sandbox name to reconnect to directly.',
+    isOptional: true,
+  },
+  {
+    name: 'environment',
+    type: 'Record<string, string>',
+    description: 'Environment variables set on a newly created cloud sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'Sandboxes',
+    description:
+      'Docker Cloud Sandboxes client. When omitted, a client is created from the SDK configuration and closed on `destroy()`.',
+    isOptional: true,
+  },
+]}
+/>
+
 ## Constructor parameters
 
 <PropertiesTable
