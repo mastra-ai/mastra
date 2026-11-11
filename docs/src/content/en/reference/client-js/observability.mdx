@@ -505,7 +505,7 @@ Explicit modes require server support. Older servers may ignore `contextMode`. D
 
 ### Replacing feedback
 
-`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. Platform and OSS servers with feedback replacement support accept this method. OSS returns `501` when its storage adapter doesn't support replacement. For OSS, check `capabilities.feedbackReplacement` before offering edits; a missing capability means unavailable.
+`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. Platform and OSS servers with feedback replacement support accept this method. OSS returns `501` when its storage adapter doesn't support replacement. For OSS, check `capabilities.feedbackReplacement` before offering edits. A missing capability means unavailable.
 
 ```typescript
 await mastraClient.replaceFeedback({

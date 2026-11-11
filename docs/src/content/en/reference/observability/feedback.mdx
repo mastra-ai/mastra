@@ -595,7 +595,7 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
 
 OSS writes to its configured storage before returning success and notifies supporting exporters independently. `contextMode` has the same meaning as on create. In `"resolve"` mode, the local trace or span must exist. A missing feedback record is created from the full replacement. Changing an existing record's trace or timestamp returns `409`.
 
-In-memory, PostgreSQL vNext, DuckDB, and ClickHouse vNext storage support replacement. Check `capabilities.feedbackReplacement` on the server; unsupported versions return `501`. Sequential retries of the original HTTP create don't undo a replacement. Direct storage `createFeedback()` calls retain upsert behavior; pass `onConflict: 'ignore'` to keep an existing record.
+In-memory, PostgreSQL vNext, DuckDB, and ClickHouse vNext storage support replacement. Check `capabilities.feedbackReplacement` on the server. Unsupported versions return `501`. Sequential retries of the original HTTP create don't undo a replacement. Direct storage `createFeedback()` calls retain upsert behavior. Pass `onConflict: 'ignore'` to keep an existing record.
 
 ClickHouse support uses the existing schema without a migration. Concurrent writes from separate processes can race, so it doesn't guarantee ordering between overlapping creates and replacements. Serialize edits to the same feedback record when using this adapter.
 
