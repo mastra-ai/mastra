@@ -88,15 +88,20 @@ const DATA_LIST_FADE_DEPTH = '1.25rem';
 
 const fadeSide = (side: MaskSide | undefined): MaskSide | undefined => (side === true ? DATA_LIST_FADE_DEPTH : side);
 
+/** The top fade's depth, or `false` for none. Omitted means on, at the default depth. */
+const topFadeDepth = (side: MaskSide = true): Exclude<MaskSide, true> => (side === true ? DATA_LIST_FADE_DEPTH : side);
+
 /**
  * Splits the caller's `mask` into the ScrollArea's fades (bottom, left, right) and the top fade.
  * The ScrollArea's own top fade stays off, since it would fade the sticky header with the rows;
  * the top edge is a gradient under the header instead (see `dataListTopFadeStyles`).
  */
-function resolveDataListMask(mask: ScrollAreaMask | undefined): { area: ScrollAreaMask; top: string | false } {
+function resolveDataListMask(mask: ScrollAreaMask | undefined): {
+  area: ScrollAreaMask;
+  top: Exclude<MaskSide, true>;
+} {
   if (mask === false) return { area: false, top: false };
   const sides = mask === true || mask === undefined ? {} : mask;
-  const top = fadeSide(sides.top ?? sides.y) ?? DATA_LIST_FADE_DEPTH;
   return {
     area: {
       x: DATA_LIST_FADE_DEPTH,
@@ -104,7 +109,7 @@ function resolveDataListMask(mask: ScrollAreaMask | undefined): { area: ScrollAr
       ...Object.fromEntries(Object.entries(sides).map(([key, side]) => [key, fadeSide(side)])),
       top: false,
     },
-    top: top as string | false,
+    top: topFadeDepth(sides.top ?? sides.y),
   };
 }
 
