@@ -406,13 +406,21 @@ export const supportAgent = new Agent({
     beforeToolCall: ({ toolName, input }) => {
       console.log(`Running ${toolName}`, input)
     },
-    afterToolCall: ({ toolName, output, error }) => {
-      console.log(`Finished ${toolName}`, { output, error })
+    afterToolCall: async ({ toolName, input, output, error }) => {
+      // Save an audit record with your application's storage
+      await db.auditLog.insert({
+        toolName,
+        input,
+        output,
+        error: error ? String(error) : undefined,
+      })
     },
   },
   // highlight-end
 })
 ```
+
+Hooks must return `void` (or `Promise<void>`). Await your storage call, but don't return its result. `afterToolCall` doesn't run for calls skipped by `beforeToolCall` or for declined [tool approvals](/docs/agents/human-in-the-loop), so record those decisions where you handle them.
 
 `beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely, the agent receives `output` as the tool result:
 
