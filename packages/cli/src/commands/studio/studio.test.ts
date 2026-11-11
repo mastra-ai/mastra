@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -342,9 +342,12 @@ describe('studio base path support', () => {
       const policy = htmlResponse.headers['content-security-policy'];
 
       expect(htmlResponse.status).toBe(200);
-      expect(policy).toContain("frame-src 'self' blob: data:");
+      expect(policy).toContain("frame-src 'self' blob: data: https:");
       expect(policy).toContain("object-src 'none'");
       expect(policy).toContain("frame-ancestors 'self'");
+      expect(readFileSync(new URL('../../../../playground/index.html', import.meta.url), 'utf8')).toContain(
+        "frame-src 'self' blob: data: https:",
+      );
     } finally {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
     }

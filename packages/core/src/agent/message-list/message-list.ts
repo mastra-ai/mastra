@@ -5,7 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import { sealUserTurnMessage } from '../../memory/turn-markup';
+import { messageDeclaresAuthoredTurn, sealUserTurnMessage } from '../../memory/turn-markup';
 import type { AnySpan } from '../../observability/types';
 import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
@@ -726,11 +726,11 @@ export class MessageList {
 
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
-      if ((message.role as string) !== 'signal') {
-        return [message];
+      if ((message.role as string) === 'signal') {
+        return this.convertSignalForModelPrompt(message);
       }
-
-      return this.convertSignalForModelPrompt(message);
+      // Stored text stays as written. Turn tags are escaped only on the copy the model reads.
+      return [sealUserTurnMessage(message)];
     });
   }
 
@@ -2689,9 +2689,18 @@ export class MessageList {
       });
     }
 
-    const messageV2 = sealUserTurnMessage(
-      convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext()),
-    );
+    const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    if (messageDeclaresAuthoredTurn(message) && messageV2.role === 'user' && !messageDeclaresAuthoredTurn(messageV2)) {
+      const metadata = messageV2.content.metadata ?? {};
+      const mastra =
+        typeof metadata.mastra === 'object' && metadata.mastra !== null
+          ? metadata.mastra
+          : ({} as Record<string, unknown>);
+      messageV2.content = {
+        ...messageV2.content,
+        metadata: { ...metadata, mastra: { ...mastra, userTurn: true } },
+      };
+    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)

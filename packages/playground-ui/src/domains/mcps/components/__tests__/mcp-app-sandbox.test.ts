@@ -8,7 +8,7 @@ import {
   sandboxProxyHtml,
 } from '../mcp-app-sandbox';
 
-const HOST = 'https://casco-marker-probe.studio.mastra.cloud';
+const HOST = 'https://studio.example';
 const FORGED_HTML = '<!DOCTYPE html><html><head></head><body><script>parent.document</script></body></html>';
 
 describe('MCP app sandbox', () => {
@@ -45,6 +45,20 @@ describe('MCP app sandbox', () => {
     expect(injectGuestHtml('<p>hi</p>', undefined, HOST)).toContain("connect-src 'none'");
   });
 
+  it('lets a declared app resource domain load scripts and styles', () => {
+    const html = injectGuestHtml(
+      '<html><head></head><body></body></html>',
+      {
+        resourceDomains: ['https://cdn.jsdelivr.net', HOST],
+      },
+      HOST,
+    );
+
+    expect(html).toMatch(/script-src[^;]*https:\/\/cdn\.jsdelivr\.net/);
+    expect(html).toMatch(/style-src[^;]*https:\/\/cdn\.jsdelivr\.net/);
+    expect(html).not.toContain(HOST);
+  });
+
   it('serves a proxy that does not write guest HTML into the Studio document', () => {
     const proxy = sandboxProxyHtml(HOST);
 
@@ -61,7 +75,7 @@ describe('MCP app sandbox', () => {
     const restore = installMcpAppSandboxLock(HOST);
     const frame = document.createElement('iframe');
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-top-navigation');
-    frame.src = 'blob:https://casco-marker-probe.studio.mastra.cloud/05310fc3-ae71-4d00-a86b-c54b2eefeb10';
+    frame.src = 'blob:https://studio.example/05310fc3-ae71-4d00-a86b-c54b2eefeb10';
 
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-forms');
     restore();

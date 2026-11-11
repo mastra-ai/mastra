@@ -42,7 +42,8 @@ const __dirname = dirname(__filename);
 
 // frame-ancestors is not valid in a meta tag, so the document response sets it here.
 // The Studio shell also ships a matching frame-src meta policy.
-const STUDIO_DOCUMENT_CSP = "frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'";
+const STUDIO_DOCUMENT_CSP =
+  "frame-src 'self' blob: data: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'";
 
 export async function studio(
   options: StudioOptions = {

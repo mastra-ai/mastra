@@ -22,16 +22,19 @@ function escapeTurnTags(value: string): string {
   return value.replace(TURN_TAG, tag => tag.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
 }
 
+/** Set on messages built with `asUserTurn`, so the model can keep that outer tag. */
+export const AUTHORED_USER_TURN = 'userTurn';
+
 /**
- * Neutralize turn-tag breakout in message text.
+ * Neutralize turn tags in text the model will read.
  *
- * A single outer `<turn>...</turn>` written by the application is kept, and any
- * further turn tags inside it are escaped. Text that is not one outer turn has
- * every turn tag escaped, so a stored payload cannot close one turn and open another.
- * A turn the application already escaped is left as-is.
+ * An authored turn keeps its one outer `<turn>` and escapes any further turn tags
+ * inside it. Every other message has every turn tag escaped, including a message
+ * whose whole text is a single `<turn>`.
  */
-export function sealTurnMarkup(content: string): string {
+export function sealTurnMarkup(content: string, options?: { authored?: boolean }): string {
   if (!/<\/?turn\b/i.test(content)) return content;
+  if (!options?.authored) return escapeTurnTags(content);
 
   const wrapped = /^(\s*<turn\b[^>]*>)([\s\S]*)(<\/turn>\s*)$/i.exec(content);
   if (!wrapped) return escapeTurnTags(content);
@@ -41,16 +44,39 @@ export function sealTurnMarkup(content: string): string {
   return `${wrapped[1]}${body}${wrapped[3]}`;
 }
 
+function isAuthoredUserTurn(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object') return false;
+  const mastra = (metadata as { mastra?: unknown }).mastra;
+  return !!mastra && typeof mastra === 'object' && (mastra as { userTurn?: unknown }).userTurn === true;
+}
+
+export function messageDeclaresAuthoredTurn(message: unknown): boolean {
+  if (!message || typeof message !== 'object') return false;
+  const record = message as { metadata?: unknown; content?: unknown };
+  if (isAuthoredUserTurn(record.metadata)) return true;
+  const content = record.content;
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return false;
+  return isAuthoredUserTurn((content as { metadata?: unknown }).metadata);
+}
+
 /**
  * Wrap one user's text in a `<turn>` tag.
  *
  * Speaker fields must come from the authenticated caller. The message text is escaped
  * so it cannot close this turn or open another one that claims a different person or role.
  */
-export function asUserTurn(speaker: TurnSpeaker, text: string): { role: 'user'; content: string } {
+export function asUserTurn(
+  speaker: TurnSpeaker,
+  text: string,
+): {
+  role: 'user';
+  content: string;
+  metadata: { mastra: { userTurn: true } };
+} {
   return {
     role: 'user',
     content: `<turn author_id="${escapeTurnAttribute(speaker.id)}" author_name="${escapeTurnAttribute(speaker.name)}" functional_role="${escapeTurnAttribute(speaker.role)}">\n${escapeTurnMarkup(text)}\n</turn>`,
+    metadata: { mastra: { [AUTHORED_USER_TURN]: true } },
   };
 }
 
@@ -62,6 +88,7 @@ interface TurnTextPart {
 interface TurnMessageContent {
   parts?: TurnTextPart[];
   content?: unknown;
+  metadata?: unknown;
 }
 
 interface TurnMessage {
@@ -69,15 +96,16 @@ interface TurnMessage {
   content?: TurnMessageContent;
 }
 
-/** Seal turn-tag breakout in a user message. Returns the same object when nothing changes. */
+/** Seal turn tags in a copy of a user message for the model. Returns the same object when nothing changes. */
 export function sealUserTurnMessage<T extends TurnMessage>(message: T): T {
   if (message.role !== 'user' || !message.content) return message;
 
   const content = message.content;
+  const authored = isAuthoredUserTurn(content.metadata);
   let changed = false;
   const parts = content.parts?.map(part => {
     if (part?.type !== 'text' || typeof part.text !== 'string') return part;
-    const text = sealTurnMarkup(part.text);
+    const text = sealTurnMarkup(part.text, { authored });
     if (text === part.text) return part;
     changed = true;
     return { ...part, text };
@@ -85,7 +113,7 @@ export function sealUserTurnMessage<T extends TurnMessage>(message: T): T {
 
   let contentText = content.content;
   if (typeof contentText === 'string') {
-    const sealed = sealTurnMarkup(contentText);
+    const sealed = sealTurnMarkup(contentText, { authored });
     if (sealed !== contentText) {
       changed = true;
       contentText = sealed;

@@ -3,4 +3,4 @@
 '@mastra/memory': patch
 ---
 
-Stopped a user message from closing a multi-user turn and opening another. `asUserTurn` escapes the message text, and Mastra escapes a stored breakout before the model sees it.
+User messages are stored as written. Before a message reaches the model, turn tags are escaped unless the message was built with `asUserTurn`, which keeps its one outer tag and escapes any further turn tags inside the text.

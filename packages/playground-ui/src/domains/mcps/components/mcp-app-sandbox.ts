@@ -73,10 +73,12 @@ const INJECT_GUEST_HTML = `function injectGuestHtml(html, csp, hostOrigin) {
   var frames = sources(csp && csp.frameDomains);
   var bases = sources(csp && csp.baseUriDomains);
   var resourceSrc = ['data:', 'blob:', 'https:'].concat(resources).join(' ');
+  var scriptSrc = "'unsafe-inline' 'unsafe-eval' blob: data:" + (resources.length ? ' ' + resources.join(' ') : '');
+  var styleSrc = "'unsafe-inline'" + (resources.length ? ' ' + resources.join(' ') : '');
   var policy = [
     "default-src 'none'",
-    "script-src 'unsafe-inline' 'unsafe-eval' blob: data:",
-    "style-src 'unsafe-inline'",
+    'script-src ' + scriptSrc,
+    'style-src ' + styleSrc,
     'img-src ' + resourceSrc,
     'font-src ' + resourceSrc,
     'media-src ' + resourceSrc,
@@ -163,29 +165,39 @@ export function sandboxProxyHtml(hostOrigin: string): string {
 <\/script></body></html>`;
 }
 
-let sandboxLockInstalled = false;
+let sandboxLocks = 0;
+let restoreSandboxLock: (() => void) | null = null;
 
 /**
- * `@mcp-ui/client` hardcodes the outer iframe sandbox and ignores `sandbox.permissions`.
- * Rewrite that attribute before the frame navigates.
+ * `@mcp-ui/client` 7.1.1 hardcodes the outer iframe sandbox with setAttribute and ignores
+ * `sandbox.permissions`. Rewrite that attribute before the frame navigates. Callers should
+ * install this only while an MCP App viewer is mounted.
  */
 export function installMcpAppSandboxLock(pageOrigin?: string): () => void {
-  if (sandboxLockInstalled || typeof document === 'undefined') return () => {};
-  sandboxLockInstalled = true;
-  const origin = pageOrigin ?? window.location.origin;
-  const originalCreate = document.createElement.bind(document);
+  if (typeof document === 'undefined') return () => {};
+  sandboxLocks += 1;
+  if (sandboxLocks === 1) {
+    const origin = pageOrigin ?? window.location.origin;
+    const originalCreate = document.createElement.bind(document);
+    document.createElement = (tagName: string, options?: ElementCreationOptions) => {
+      const element = originalCreate(tagName, options);
+      if (String(tagName).toLowerCase() === 'iframe' && element instanceof HTMLIFrameElement) {
+        lockIframeSandbox(element, origin);
+      }
+      return element;
+    };
+    restoreSandboxLock = () => {
+      document.createElement = originalCreate;
+      restoreSandboxLock = null;
+    };
+  }
 
-  document.createElement = (tagName: string, options?: ElementCreationOptions) => {
-    const element = originalCreate(tagName, options);
-    if (String(tagName).toLowerCase() === 'iframe' && element instanceof HTMLIFrameElement) {
-      lockIframeSandbox(element, origin);
-    }
-    return element;
-  };
-
+  let released = false;
   return () => {
-    document.createElement = originalCreate;
-    sandboxLockInstalled = false;
+    if (released) return;
+    released = true;
+    sandboxLocks -= 1;
+    if (sandboxLocks === 0) restoreSandboxLock?.();
   };
 }
 

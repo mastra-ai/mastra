@@ -2,7 +2,7 @@ import { AppRenderer } from '@mcp-ui/client';
 import type { AppRendererHandle, SandboxConfig } from '@mcp-ui/client';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolRequest, CallToolResult, JSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import type { McpAppModelContextParams } from '../context/mcp-app-host-context-value';
 import { installMcpAppSandboxLock, sandboxAttributeForProxy, sandboxProxyHtml } from './mcp-app-sandbox';
@@ -22,8 +22,6 @@ function getSandboxBlobUrl(): URL {
   }
   return _blobUrl;
 }
-
-if (typeof document !== 'undefined') installMcpAppSandboxLock();
 
 /** Renders an app's model context as text, labelled with the app it comes from. Empty context clears it. */
 function modelContextText(toolName: string, params: JSONRPCRequest['params']): string | undefined {
@@ -102,6 +100,9 @@ export function McpAppViewer({
   sandboxUrl,
   className,
 }: McpAppViewerProps) {
+  // Only while this viewer is mounted, and only for iframes that set a sandbox attribute.
+  // @mcp-ui/client 7.1.1 sets that attribute with setAttribute before assigning src.
+  useLayoutEffect(() => installMcpAppSandboxLock(), []);
   const appRef = useRef<AppRendererHandle>(null);
   const [height, setHeight] = useState(400);
 
