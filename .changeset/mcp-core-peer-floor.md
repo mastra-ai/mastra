@@ -2,4 +2,4 @@
 '@mastra/mcp': patch
 ---
 
-Require a compatible `@mastra/core` version that exports `getValidationIssuePaths`, preventing import failures when installing MCP with older core releases.
+Now requires `@mastra/core` 1.83.0 or later, the first release that exports `getValidationIssuePaths`. Installing `@mastra/mcp` with an older `@mastra/core` fails at import, so upgrade `@mastra/core` to 1.83.0 or later when moving to this release.
