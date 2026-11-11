@@ -60,6 +60,15 @@ export type { FactoryClaimableWorkScope } from './claimable-work.js';
 
 export type WorkItemStage = string;
 
+/** Freeze `value` and everything reachable from it, so shared cache entries cannot be written to. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const entry of Object.values(value)) deepFreeze(entry);
+  }
+  return value;
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -2008,7 +2017,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /**
    * Same rows as {@link list}, but shared with the list cache instead of cloned: the board poll
    * reads every card of the project every few seconds, and cloning thousands of rows per poll
-   * costs more than the query the cache saves. Callers must not mutate the result.
+   * costs more than the query the cache saves. The cached cards are frozen, so a caller that
+   * writes to one throws instead of changing the board every other caller sees.
    */
   async listShared({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<readonly Card[]> {
     return (await this.#listCached(orgId, factoryProjectId)).items;
@@ -2033,7 +2043,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
       return { items: await inFlight.items, cached: true };
     }
-    const read = this.#listWithOps(super.ops, orgId, factoryProjectId);
+    const read = this.#listWithOps(super.ops, orgId, factoryProjectId).then(deepFreeze);
     this.#listInFlight.set(key, { version, startedAt: Date.now(), items: read });
     try {
       const items = await read;

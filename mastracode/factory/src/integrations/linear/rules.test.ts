@@ -3,7 +3,8 @@ import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import type { FactoryLinearRuleContext } from '../../rules/types.js';
+import { FACTORY_LINEAR_EVENTS } from '../../rules/types.js';
+import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveLinearRules } from './default-rules.js';
 import type { LinearRuleOverrides } from './default-rules.js';
@@ -729,6 +730,55 @@ describe('LinearRules', () => {
       expect(boardHandler).not.toHaveBeenCalled();
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     });
+  });
+});
+
+describe('LinearRules and the shared board list', () => {
+  // The rules find an issue's card in the board list the storage caches for every reader in the
+  // process. A rule may write to the card it is handed, so a card leaked from that cache would
+  // corrupt every later read of the board.
+  it('hands every event kind its own copy of the card, leaving the cached board list untouched', async () => {
+    const seen = new Map<FactoryLinearEventName, FactoryRuleItemContext[]>();
+    const mutateItem = (event: FactoryLinearEventName) => (context: Readonly<FactoryLinearRuleContext>) => {
+      if (!context.item) return;
+      seen.set(event, [...(seen.get(event) ?? []), context.item]);
+      context.item.workItem.title = `mutated by ${event}`;
+      context.item.workItem.metadata = { ...context.item.workItem.metadata, mutatedBy: event };
+      if (context.item.metadata) context.item.metadata.mutatedBy = event;
+    };
+    const { project, service, workItems } = await setup(
+      Object.fromEntries(FACTORY_LINEAR_EVENTS.map(event => [event, mutateItem(event)])),
+    );
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+        title: 'ENG-42: Fix intake sync',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { linearIssueId: issue.id },
+      },
+    });
+    const deliveries: Array<[FactoryLinearEventName, typeof issue]> = [
+      ['issueObserved', issue],
+      // Linear renamed the identifier: the card is found by its stable issue id instead.
+      ['issueObserved', { ...issue, identifier: 'OPS-7', updatedAt: '2026-07-03T00:00:00Z' }],
+      ['issueClosed', { ...issue, state: 'Done', stateType: 'completed', updatedAt: '2026-07-04T00:00:00Z' }],
+    ];
+
+    for (const [event, delivery] of deliveries) {
+      const before = structuredClone(await workItems.listShared(scope));
+      await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [delivery] });
+      const after = await workItems.listShared(scope);
+      expect(after, `${event} wrote to the cached board list`).toEqual(before);
+      const cached = new Set<unknown>(after);
+      expect((seen.get(event) ?? []).some(item => cached.has(item.workItem))).toBe(false);
+    }
+    expect(seen.get('issueObserved')).toHaveLength(2);
+    expect(seen.get('issueClosed')).toHaveLength(1);
   });
 });
 

@@ -37,7 +37,7 @@ export interface BoardWritesDeps {
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
   boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
   /** Read to refuse edits that would strand cards. */
-  workItems: Pick<WorkItemsStorage, 'list'>;
+  workItems: Pick<WorkItemsStorage, 'listShared'>;
 }
 
 /** Who writes: stored as the board's author, and the audit event's actor. */
@@ -290,7 +290,7 @@ export class BoardWrites {
   async #occupancy(scope: StoredBoardScope, key: string): Promise<{ cards: number; phases: Map<string, number> }> {
     const phases = new Map<string, number>();
     let cards = 0;
-    for (const item of await this.deps.workItems.list(scope)) {
+    for (const item of await this.deps.workItems.listShared(scope)) {
       if (boardForWorkItem(item) !== key) continue;
       cards++;
       for (const stage of new Set(item.stages)) phases.set(stage, (phases.get(stage) ?? 0) + 1);
