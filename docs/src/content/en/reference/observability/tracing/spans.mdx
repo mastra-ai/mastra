@@ -332,7 +332,7 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
 
 `errorCount` counts failures originating on the span. It excludes child counts and repeated reports of the same failure on parent spans. A recovered failure still contributes to the count, so a successful span can have a positive count.
 
-An unset `errorCount` means the count is unavailable, not zero.
+An unset `errorCount` means the count is unavailable, not necessarily zero.
 
 ## Span lifecycle events
 
