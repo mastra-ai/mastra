@@ -2379,8 +2379,27 @@ export class DurableAgent<
     }
   }
 
-  private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+  /**
+   * Save the run's accepted input to memory before the workflow starts.
+   * EventedAgent overrides this to claim the thread first, so a run that cannot
+   * have the thread is rejected before its message is saved.
+   */
+  protected async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     await persistDurableRunInput(runId, workflowInput, this.#mastra);
+  }
+
+  /**
+   * Wait for any run already answering on this run's thread, as Agent does, so
+   * this run reads the earlier reply when preparation loads the thread history.
+   * The wait reserves the thread for runId until registerRun takes it over;
+   * callers release the reservation if the run fails before it starts.
+   */
+  async #waitForThread(runId: string, options: DurableAgentStreamOptions<TOutput> | undefined): Promise<void> {
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as unknown as Agent<any, any, any, any>,
+      { memory: options?.memory, requestContext: options?.requestContext, runId },
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -3220,6 +3239,7 @@ export class DurableAgent<
     // 1a. Prepare for durable execution (non-durable phase)
     let preparation: PreparationResult<TOutput>;
     try {
+      await this.#waitForThread(runId, options);
       preparation = await prepareForDurableExecution<TOutput>({
         agent: this.#wrappedAgent as Agent<string, any, TOutput>,
         messages,
@@ -3234,7 +3254,9 @@ export class DurableAgent<
         durableAgentName: this.name,
       });
     } catch (error) {
-      // The run never started: drop its owner record rather than leave it behind.
+      // The run never started: free the thread and drop its owner record rather
+      // than leave them behind.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, this.getPubSub());
       await executionFence.settle(async () => {});
       throw error;
     }
@@ -4804,6 +4826,7 @@ export class DurableAgent<
     // 1a. Prepare for durable execution (non-durable phase)
     let preparation: PreparationResult<TOutput>;
     try {
+      await this.#waitForThread(runId, options);
       preparation = await prepareForDurableExecution<TOutput>({
         agent: this.#wrappedAgent as Agent<string, any, TOutput>,
         messages,
@@ -4819,7 +4842,9 @@ export class DurableAgent<
         durableAgentName: this.name,
       });
     } catch (error) {
-      // The run never started: drop its owner record rather than leave it behind.
+      // The run never started: free the thread and drop its owner record rather
+      // than leave them behind.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, this.getPubSub());
       await executionFence.settle(async () => {});
       throw error;
     }
@@ -4969,6 +4994,20 @@ export class DurableAgent<
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
     }
+
+    // 4b. Hold the thread until this run settles, taking over the reservation
+    // from #waitForThread, so a later message on the thread waits for it.
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      options as AgentExecutionOptions<TOutput>,
+      this.getPubSub(),
+      {
+        generation: executionFence.generation,
+        ownershipLost: () => executionFence.isLost(),
+        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+      },
+    );
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = runCleanup.run;

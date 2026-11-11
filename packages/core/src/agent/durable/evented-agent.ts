@@ -168,9 +168,11 @@ export class EventedAgent<
     return false;
   }
 
-  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    // Captured now: a later resume() replaces the registry's fence before this
-    // segment's background promise settles.
+  /**
+   * Whether this run executes on shared workers under a storage-fenced claim,
+   * the only case where the run holds a cross-process thread lease.
+   */
+  #sharedExecution(runId: string) {
     const entry = getRunRegistryEntry(runId, this.getMastraInstance());
     const executionFence = entry?.executionFence;
     const pubsub = this.getMastraInstance()?.pubsub ?? this.getPubSub();
@@ -179,6 +181,39 @@ export class EventedAgent<
       pubsub !== undefined &&
       !(pubsub.__rawBus() instanceof EventEmitterPubSub);
     const sharedExecution = sharedTransport && executionFence?.generation !== undefined;
+    return { entry, executionFence, pubsub, sharedTransport, sharedExecution };
+  }
+
+  // Claim the thread before the message is saved: a run another process holds
+  // the thread for is rejected without leaving its message behind (#30069).
+  protected override async persistInitialInput(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<void> {
+    const { entry, executionFence, pubsub, sharedExecution } = this.#sharedExecution(runId);
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
+    if (sharedExecution && pubsub && entry?.requestContext && executionFence && threadId) {
+      const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+      await agentThreadStreamRuntime.claimDurableThreadLease(
+        pubsub,
+        runId,
+        threadId,
+        resourceId,
+        executionFence.generation,
+        executionFence.executionId,
+      );
+      setExecutionClaim(entry.requestContext, runId, { ...executionFence.claim, threadId, resourceId });
+    }
+    await super.persistInitialInput(runId, workflowInput);
+  }
+
+  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+    // Captured now: a later resume() replaces the registry's fence before this
+    // segment's background promise settles.
+    const { entry, executionFence, sharedTransport, sharedExecution } = this.#sharedExecution(runId);
     if (entry) entry.eventedExecution = sharedExecution;
     try {
       if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
@@ -200,22 +235,6 @@ export class EventedAgent<
       const memoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
-      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-      if (sharedExecution && entry?.requestContext && executionFence && threadId) {
-        await agentThreadStreamRuntime.claimDurableThreadLease(
-          pubsub,
-          runId,
-          threadId,
-          workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-          executionFence.generation,
-          executionFence.executionId,
-        );
-        setExecutionClaim(entry.requestContext, runId, {
-          ...executionFence.claim,
-          threadId,
-          resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        });
-      }
       // Note: unlike the default engine, evented `createRun` accepts no
       // `pubsub` — the engine always publishes on `mastra.pubsub` so any
       // worker in a fleet can execute a step. The agent's stream still sees
