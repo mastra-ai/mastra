@@ -175,7 +175,7 @@ overrides:
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.42
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.45
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
   '@ai-sdk/provider@>=3.0.0 <3.0.18': 3.0.18
   '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
@@ -10925,12 +10925,6 @@ packages:
     peerDependencies:
       zod: ^3.23.8
 
-  '@ai-sdk/provider-utils@3.0.42':
-    resolution: {integrity: sha512-5DMgJ2HD4rR6mvoc7mqeW5roLHTTqDKNkGuLOWnF0+UCOu96xqPFMy3RbGKYAYDh5YhkwGBdbV7f6xSkLxzGXw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: 4.6.7
-
   '@ai-sdk/provider-utils@3.0.43':
     resolution: {integrity: sha512-aygJpJAk/Utq+aUMs6K6xtKwRd/428h6in2KSbMQ+lDbRKP/3TchOFWPpztTReAuZOQ/c+0iI/WTR259M17ljA==}
     engines: {node: '>=18'}
@@ -10939,6 +10933,12 @@ packages:
 
   '@ai-sdk/provider-utils@3.0.44':
     resolution: {integrity: sha512-RmZLXkcoUgSyjp7gBF1Dvg+fYrnLjmIVPU2LXHEsU34RBf0ZA2GyBiUynFsqFXMJoUxhLAVTCVkNfDoT9db5fA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@ai-sdk/provider-utils@3.0.45':
+    resolution: {integrity: sha512-AfVd7CNBns6agdc9SWTr6kh8By45X48eenoyyYRUjX4we5rqoaowcff1L2U8sbYctxunKryiyBeNv005W60VDw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.6.7
@@ -15461,9 +15461,6 @@ packages:
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
-
-  '@isaacs/nonrecursive-glob-match@1.0.3':
-    resolution: {integrity: sha512-SI7kyKHq4XXDRozw+r9GlRZkia1ZkFrpLW98r2IC2Bpr8YkFGE3fvjzmxCG0x78A++69HmDNrDvSMYBZmHGpKA==}
 
   '@isaacs/nonrecursive-glob-match@1.1.0':
     resolution: {integrity: sha512-GPm/Dbvk5RLmhRnxXIa7nTpK0xtl4E0wj0MslsuNiJ1FIROU+2+9lgUC/dgF7Ey4QCWhfEsgxilMRMCdHPfDfw==}
@@ -25546,10 +25543,6 @@ packages:
   glob-to-regexp@0.4.1:
     resolution: {integrity: sha512-lkX1HJXwyMcprw/5YUZc2s7DrpAiHB21/V+E1rHUrVNokkvB6bqMzT0VfV6/86ZNabt1k14YOIaT7nDvOX3Iiw==}
 
-  glob@14.0.3:
-    resolution: {integrity: sha512-A1vjIwC3qpdCso45Iw127gnp7sPhqgY8lUQhDrArIs+GbmfaaVPFuoyy7WyLT9EPZCRZ7j7aLdwUhQmHWesEow==}
-    engines: {node: 18 || 20 || >=22}
-
   glob@14.0.4:
     resolution: {integrity: sha512-mMiwNKoJZ4HAIRVJxotO6LsNRReA30gQwP9E2/p94tfLv+jygCNpKDjhhSL6OLY6LE371EZm5EAf7RpYuUqlsw==}
     engines: {node: 18 || 20 || >=22}
@@ -27505,10 +27498,6 @@ packages:
 
   minimalistic-assert@1.0.1:
     resolution: {integrity: sha512-UtJcAD4yEaGtjPezWuO9wC4nwUnVH/8/Im3yEHQP4b67cXlD/Qr9hdITCU1xDbSEXg2XKNaP8jsReV7vQd00/A==}
-
-  minimatch@11.0.4:
-    resolution: {integrity: sha512-/UJ1dEoVQTjPNDh6SGlUo+ueLMmoHTas4q+8yaAR/5t6nLAIiBDJtoYUh20IYleix7ehiQkgczb84PE3uzHkxg==}
-    engines: {node: 20 || >=22}
 
   minimatch@11.0.5:
     resolution: {integrity: sha512-snPlVppFcYWfLLFQGhDxUyBcHNtMlWmn3jtj7pEaO+DP8pqL0IvAzXhMYmn1z9ASNtgmwLBdFxSf4tMUB0OTKA==}
@@ -32731,15 +32720,6 @@ snapshots:
       secure-json-parse: 2.7.0
       zod: 4.6.7
 
-  '@ai-sdk/provider-utils@3.0.42(zod@4.6.7)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.5
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.1.1
-      undici: 8.12.2
-      zod: 4.6.7
-    optional: true
-
   '@ai-sdk/provider-utils@3.0.43(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 2.0.5
@@ -32755,6 +32735,15 @@ snapshots:
       eventsource-parser: 3.1.1
       undici: 8.12.2
       zod: 4.6.7
+
+  '@ai-sdk/provider-utils@3.0.45(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.5
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.1
+      undici: 8.12.2
+      zod: 4.6.7
+    optional: true
 
   '@ai-sdk/provider-utils@4.0.63(zod@4.6.7)':
     dependencies:
@@ -38748,8 +38737,6 @@ snapshots:
     dependencies:
       minipass: 7.1.3
 
-  '@isaacs/nonrecursive-glob-match@1.0.3': {}
-
   '@isaacs/nonrecursive-glob-match@1.1.0': {}
 
   '@isaacs/ttlcache@2.1.5': {}
@@ -39739,7 +39726,7 @@ snapshots:
       '@microsoft/teams.common': 2.2.0(supports-color@10.2.2)
       '@microsoft/teams.graph': 2.2.0(supports-color@10.2.2)
       '@opentelemetry/api': 1.10.0
-      axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      axios: 1.21.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       cors: 2.8.6
       express: 5.3.0(supports-color@10.2.2)
       jsonwebtoken: 9.0.3
@@ -48450,7 +48437,7 @@ snapshots:
       '@e2b/dockerfile-utils': 0.1.1
       chalk: 5.6.2
       compare-versions: 6.1.1
-      glob: 14.0.3
+      glob: 14.0.4
       openapi-fetch: 0.17.0
       platform: 1.3.6
       tar: 7.5.22
@@ -49684,12 +49671,6 @@ snapshots:
       tslib: 2.9.1
 
   glob-to-regexp@0.4.1: {}
-
-  glob@14.0.3:
-    dependencies:
-      minimatch: 11.0.4
-      minipass: 7.1.3
-      path-scurry: 3.0.0
 
   glob@14.0.4:
     dependencies:
@@ -52216,11 +52197,6 @@ snapshots:
 
   minimalistic-assert@1.0.1: {}
 
-  minimatch@11.0.4:
-    dependencies:
-      '@isaacs/nonrecursive-glob-match': 1.0.3
-      brace-expansion: 5.0.12
-
   minimatch@11.0.5:
     dependencies:
       '@isaacs/nonrecursive-glob-match': 1.1.0
@@ -52745,7 +52721,7 @@ snapshots:
   ollama-ai-provider-v2@1.5.5(zod@4.6.7):
     dependencies:
       '@ai-sdk/provider': 2.0.5
-      '@ai-sdk/provider-utils': 3.0.42(zod@4.6.7)
+      '@ai-sdk/provider-utils': 3.0.45(zod@4.6.7)
       zod: 4.6.7
     optional: true
 
