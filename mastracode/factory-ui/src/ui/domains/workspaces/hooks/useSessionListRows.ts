@@ -83,6 +83,7 @@ export function useSessionListRows(
       pullRequest: workItem?.pullRequest,
       factoryId,
       pathname,
+      routeSessionId,
       running: runningById[session.sessionId] === true,
       pinned: pinnedSessions.has(session.sessionId),
       viewer,
