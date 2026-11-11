@@ -91,14 +91,17 @@ class ProcessRunLiveness {
     };
   }
 
+  /** Writes the run's liveness key, logging instead of rejecting when the write fails. */
   #writeOrWarn(runId: string): Promise<void> {
     return this.#write(runId).catch(error => this.logger?.warn('Failed to mark a workflow run live', { runId, error }));
   }
 
+  /** Milliseconds since this process last wrote the run's liveness key; infinite when it never did. */
   #age(runId: string): number {
     return Date.now() - (this.#lastWriteAt.get(runId) ?? -Infinity);
   }
 
+  /** Stops the renewal timer; the next leaf start creates it again. */
   #stopTimer() {
     clearInterval(this.#timer);
     this.#timer = undefined;
