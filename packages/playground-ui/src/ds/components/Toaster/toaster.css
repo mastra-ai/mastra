@@ -5,7 +5,10 @@
   --normal-text: var(--foreground);
   --normal-border: var(--surface-rim);
   --toast-settle-ease: cubic-bezier(0.645, 0.045, 0.355, 1);
-  --border-radius: var(--radius-lg);
+  /* Unscaled: toast-stack-layout.ts clips with it, and a round clip at today's radius never
+     cuts into the smoothed corner. */
+  --toast-radius: var(--radius-lg);
+  --border-radius: calc(var(--toast-radius) * var(--corner-scale, 1));
   font-family: var(--font-sans);
 }
 
@@ -53,6 +56,7 @@
   row-gap: calc(var(--spacing) * 2);
   padding: calc(var(--spacing) * 3);
   border: 0;
+  corner-shape: var(--corner-shape, round);
   background: var(--notice-fill);
   color: var(--notice-ink);
   box-shadow: var(--notice-shadow);
@@ -94,7 +98,8 @@
 [data-sonner-toaster].mastra-toaster [data-content]:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: -2px;
-  border-radius: var(--radius-sm);
+  border-radius: calc(var(--radius-sm) * var(--corner-scale, 1));
+  corner-shape: var(--corner-shape, round);
 }
 
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-title] {
@@ -151,7 +156,8 @@
   margin: 0;
   margin-inline-end: var(--spacing);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: calc(var(--radius-sm) * var(--corner-scale, 1));
+  corner-shape: var(--corner-shape, round);
   font: inherit;
   font-size: var(--text-label);
   font-weight: var(--text-label--font-weight);

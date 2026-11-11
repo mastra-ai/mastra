@@ -19,7 +19,9 @@
   align-self: stretch;
   min-width: 0;
   padding: 4px 4px 0;
-  border-radius: var(--tab-frame-radius) var(--tab-frame-radius) 0 0;
+  border-radius: calc(var(--tab-frame-radius) * var(--corner-scale, 1))
+    calc(var(--tab-frame-radius) * var(--corner-scale, 1)) 0 0;
+  corner-shape: var(--corner-shape, round);
   background: var(--muted);
 }
 
@@ -44,7 +46,8 @@
   align-items: center;
   overflow: clip;
   border: 1px solid var(--border);
-  border-radius: var(--tab-inner-radius);
+  border-radius: calc(var(--tab-inner-radius) * var(--corner-scale, 1));
+  corner-shape: var(--corner-shape, round);
   background: var(--muted);
 }
 
@@ -184,7 +187,7 @@
     align-self: auto;
     margin: 0;
     padding: var(--tab-inset);
-    border-radius: 0 var(--tab-frame-radius) 0 0;
+    border-radius: 0 calc(var(--tab-frame-radius) * var(--corner-scale, 1)) 0 0;
     background: var(--muted);
   }
 
@@ -194,7 +197,7 @@
 
   [data-slot='tabbed-container-query'] {
     width: 100%;
-    border-radius: var(--tab-inner-radius);
+    border-radius: calc(var(--tab-inner-radius) * var(--corner-scale, 1));
   }
 
   [data-slot='tabbed-container-search'] {

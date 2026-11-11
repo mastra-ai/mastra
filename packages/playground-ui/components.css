@@ -5,6 +5,7 @@
 @import 'tw-animate-css';
 
 @import './theme.css';
+@import './smooth-corners.css';
 
 @plugin '@tailwindcss/typography';
 
@@ -106,6 +107,7 @@
     inset: 1px;
     z-index: -1;
     border-radius: inherit;
+    corner-shape: inherit;
     pointer-events: none;
     transition: background-color var(--duration-fast) var(--ease-out-custom);
   }
@@ -136,16 +138,24 @@
   --scroll-area-scrollbar-inset: calc(--value(--radius-*, [length]) * 0.7);
 }
 
+/* Smoothed like the `rounded-*` utilities (see `smooth-corners.css`). */
 @utility rounded-studio-frame {
-  border-radius: var(--studio-frame-radius, 1.5rem);
+  border-radius: calc(var(--studio-frame-radius, 1.5rem) * var(--corner-scale, 1));
+  corner-shape: var(--corner-shape, round);
 }
 
 @utility rounded-studio-panel {
-  border-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+  border-radius: calc(
+    max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem))) * var(--corner-scale, 1)
+  );
+  corner-shape: var(--corner-shape, round);
 }
 
 @utility rounded-tr-studio-panel {
-  border-top-right-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+  border-top-right-radius: calc(
+    max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem))) * var(--corner-scale, 1)
+  );
+  corner-top-right-shape: var(--corner-shape, round);
 }
 
 @layer utilities {

@@ -98,7 +98,8 @@ export function createToastStackLayout(reduceMotion: MediaQueryList) {
           const style = getComputedStyle(notification);
           const translation = style.translate === 'none' ? 0 : Number.parseFloat(style.translate.split(' ')[1] ?? '0');
           const reveal = previous ? height - previous.height + translation : 0;
-          return { notification, height, position, previous, reveal, radius: style.borderRadius };
+          const radius = style.getPropertyValue('--toast-radius').trim() || style.borderRadius;
+          return { notification, height, position, previous, reveal, radius };
         });
       return { stack, notifications };
     });

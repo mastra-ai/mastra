@@ -108,7 +108,9 @@
 
     [data-slot='tabs-content'] {
       margin-top: -1px;
-      border-radius: 0 var(--radius-xl) var(--radius-xl) var(--radius-xl);
+      border-radius: 0 calc(var(--radius-xl) * var(--corner-scale, 1)) calc(var(--radius-xl) * var(--corner-scale, 1))
+        calc(var(--radius-xl) * var(--corner-scale, 1));
+      corner-shape: var(--corner-shape, round);
     }
 
     .tabs-overflow {
@@ -126,7 +128,8 @@
 
     &[data-frame='inset'] {
       [data-slot='tabs-list-scroll'] {
-        border-top-left-radius: var(--tab-frame-radius);
+        border-top-left-radius: calc(var(--tab-frame-radius) * var(--corner-scale, 1));
+        corner-top-left-shape: var(--corner-shape, round);
         container-type: inline-size;
         padding-bottom: var(--tab-frame-radius);
         margin-bottom: calc(-1 * var(--tab-frame-radius));
@@ -136,7 +139,9 @@
         width: max-content;
         min-width: 0;
         gap: 4px;
-        border-radius: var(--tab-frame-radius) var(--tab-frame-radius) 0 0;
+        border-radius: calc(var(--tab-frame-radius) * var(--corner-scale, 1))
+          calc(var(--tab-frame-radius) * var(--corner-scale, 1)) 0 0;
+        corner-shape: var(--corner-shape, round);
         background: var(--muted);
         padding: var(--tab-inset);
         margin-right: calc(var(--tab-frame-radius) + 8px);
@@ -161,7 +166,8 @@
       [data-slot='tab']:hover,
       [data-slot='tab'][data-active] {
         border: 0;
-        border-radius: var(--tab-inner-radius);
+        border-radius: calc(var(--tab-inner-radius) * var(--corner-scale, 1));
+        corner-shape: var(--corner-shape, round);
         margin-left: 0;
         background: transparent;
         box-shadow: none;
@@ -190,7 +196,8 @@
       [data-slot='tabs-content-body'] {
         display: block;
         min-width: 0;
-        border-radius: var(--radius-lg);
+        border-radius: calc(var(--radius-lg) * var(--corner-scale, 1));
+        corner-shape: var(--corner-shape, round);
         background: var(--background);
         padding: 24px;
       }
@@ -211,7 +218,9 @@
         bottom: auto;
         z-index: 0;
         height: calc(var(--active-tab-height) + var(--tab-join-radius));
-        border-radius: var(--tab-inner-radius) var(--tab-inner-radius) 0 0;
+        border-radius: calc(var(--tab-inner-radius) * var(--corner-scale, 1))
+          calc(var(--tab-inner-radius) * var(--corner-scale, 1)) 0 0;
+        corner-shape: var(--corner-shape, round);
         background: var(--background);
         transition: none;
       }
@@ -255,7 +264,7 @@
     &[data-frame='inset']:has([data-slot='tabs-content'][data-flush]:not([hidden])) {
       [data-slot='tabs-indicator'] {
         height: var(--active-tab-height);
-        border-radius: var(--tab-inner-radius);
+        border-radius: calc(var(--tab-inner-radius) * var(--corner-scale, 1));
       }
 
       [data-slot='tabs-indicator']::before,

@@ -146,7 +146,8 @@
   /* Fenced blocks render through the design-system CodeBlock, so this only ever
    * matches inline spans. */
   .mastra-markdown :not(pre) > code {
-    border-radius: 4px;
+    border-radius: calc(4px * var(--corner-scale, 1));
+    corner-shape: var(--corner-shape, round);
     background: var(--fill);
     padding: 0.1em 0.35em;
     color: var(--foreground);
@@ -188,13 +189,17 @@
   }
 
   .mastra-markdown :is(th, td):first-child {
-    border-top-left-radius: var(--radius-md);
-    border-bottom-left-radius: var(--radius-md);
+    border-top-left-radius: calc(var(--radius-md) * var(--corner-scale, 1));
+    border-bottom-left-radius: calc(var(--radius-md) * var(--corner-scale, 1));
+    corner-top-left-shape: var(--corner-shape, round);
+    corner-bottom-left-shape: var(--corner-shape, round);
   }
 
   .mastra-markdown :is(th, td):last-child {
-    border-top-right-radius: var(--radius-md);
-    border-bottom-right-radius: var(--radius-md);
+    border-top-right-radius: calc(var(--radius-md) * var(--corner-scale, 1));
+    border-bottom-right-radius: calc(var(--radius-md) * var(--corner-scale, 1));
+    corner-top-right-shape: var(--corner-shape, round);
+    corner-bottom-right-shape: var(--corner-shape, round);
   }
 
   /* Cell segments join into a straight divider. Only its outside ends fade,
@@ -249,6 +254,7 @@
 
   .mastra-markdown img {
     max-width: 100%;
-    border-radius: 8px;
+    border-radius: calc(8px * var(--corner-scale, 1));
+    corner-shape: var(--corner-shape, round);
   }
 }

@@ -155,6 +155,7 @@
 
   inset: -1px;
   border-radius: inherit;
+  corner-shape: inherit;
   pointer-events: none;
 
   animation:
@@ -263,6 +264,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  corner-shape: inherit;
   padding: 1px;
   background:
     var(--wick-beam),
@@ -283,6 +285,7 @@
   position: absolute;
   inset: -6px;
   border-radius: inherit;
+  corner-shape: inherit;
   background: var(--wick-beam);
   opacity: var(--wick-halo);
   filter: blur(9px);

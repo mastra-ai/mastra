@@ -10,6 +10,7 @@
     "dist",
     "theme.css",
     "components.css",
+    "smooth-corners.css",
     "sources.css",
     "fonts.css",
     "fonts",
@@ -20,6 +21,7 @@
     "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./components.css": "./components.css",
+    "./smooth-corners.css": "./smooth-corners.css",
     "./sources.css": "./sources.css",
     "./fonts.css": "./fonts.css",
     "./oxlint": {

@@ -50,6 +50,7 @@ html.light .composer-box {
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  corner-shape: inherit;
   content: '';
 }
 

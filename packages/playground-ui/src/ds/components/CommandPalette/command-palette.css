@@ -63,8 +63,10 @@
   pointer-events: none;
   content: '';
   background: linear-gradient(to top, var(--card) 0%, var(--card) 28%, transparent 100%);
-  border-bottom-right-radius: calc(var(--radius-xl) - 1px);
-  border-bottom-left-radius: calc(var(--radius-xl) - 1px);
+  border-bottom-right-radius: calc(var(--radius-xl) * var(--corner-scale, 1) - 1px);
+  border-bottom-left-radius: calc(var(--radius-xl) * var(--corner-scale, 1) - 1px);
+  corner-bottom-right-shape: var(--corner-shape, round);
+  corner-bottom-left-shape: var(--corner-shape, round);
 }
 
 .command-palette-list {

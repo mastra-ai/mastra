@@ -174,16 +174,20 @@
     > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
       :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) ~ *
     ) {
-    border-top-left-radius: var(--radius-xl);
-    border-top-right-radius: var(--radius-xl);
+    border-top-left-radius: calc(var(--radius-xl) * var(--corner-scale, 1));
+    border-top-right-radius: calc(var(--radius-xl) * var(--corner-scale, 1));
+    corner-top-left-shape: var(--corner-shape, round);
+    corner-top-right-shape: var(--corner-shape, round);
   }
 
   [data-slot='buttons-group'][data-orientation='vertical']
     > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
       :has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]))
     ) {
-    border-bottom-left-radius: var(--radius-xl);
-    border-bottom-right-radius: var(--radius-xl);
+    border-bottom-left-radius: calc(var(--radius-xl) * var(--corner-scale, 1));
+    border-bottom-right-radius: calc(var(--radius-xl) * var(--corner-scale, 1));
+    corner-bottom-left-shape: var(--corner-shape, round);
+    corner-bottom-right-shape: var(--corner-shape, round);
   }
 
   [data-slot='buttons-group'][data-orientation='vertical']
