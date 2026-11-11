@@ -7,14 +7,14 @@ import type { InputGroupInputProps, InputGroupProps } from '@/ds/components/Inpu
 import { useKeydown } from '@/lib/keyboard';
 import { mergeRefs } from '@/lib/merge-refs';
 
-export type SearchInputProps = Omit<InputGroupInputProps, 'value' | 'onChange' | 'type' | 'ref' | 'error'> & {
+type SearchInputBaseProps = Omit<
+  InputGroupInputProps,
+  'value' | 'defaultValue' | 'onChange' | 'type' | 'ref' | 'error'
+> & {
   /** The field's accessible name. */
   label: string;
-  /** The search text. Without it the field keeps its own text, e.g. a list search that only reports changes. */
-  value?: string;
-  /** Called with the text as it changes, after `debounceMs` while typing and right away when cleared. */
+  /** Called with the text as it changes; with `debounceMs`, after the pause and right away when cleared. */
   onValueChange: (value: string) => void;
-  debounceMs?: number;
   /** Cmd/Ctrl+Shift+F focuses the field. Give it to the one main search of a page. */
   shortcut?: boolean;
   /** Shows a Close button that clears the text and calls this, e.g. to collapse the search. */
@@ -25,12 +25,24 @@ export type SearchInputProps = Omit<InputGroupInputProps, 'value' | 'onChange' |
 };
 
 /**
+ * Controlled (`value`, reported on every keystroke) or keeping its own text (`defaultValue`,
+ * optionally reported after `debounceMs`). To reset a field that keeps its own text, remount it
+ * with a `key`.
+ */
+export type SearchInputProps = SearchInputBaseProps &
+  (
+    | { value: string; defaultValue?: never; debounceMs?: never }
+    | { value?: never; defaultValue?: string; debounceMs?: number }
+  );
+
+/**
  * A search field: an `InputGroup` with a search icon and a clear button, nothing styled of its
  * own. Compose `InputGroup` directly for anything this doesn't cover.
  */
 export function SearchInput({
   label,
   value,
+  defaultValue = '',
   onValueChange,
   debounceMs = 0,
   shortcut = false,
@@ -40,7 +52,8 @@ export function SearchInput({
   ref,
   ...inputProps
 }: SearchInputProps) {
-  const [text, setText] = useState(value ?? '');
+  const [ownText, setOwnText] = useState(defaultValue);
+  const text = value ?? ownText;
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedChange = useDebouncedCallback(onValueChange, debounceMs);
 
@@ -54,17 +67,10 @@ export function SearchInput({
     { enabled: shortcut },
   );
 
-  // The parent's text wins over a debounced change still pending (e.g. a Reset clearing it).
-  useEffect(() => {
-    if (value === undefined) return;
-    debouncedChange.cancel();
-    setText(value);
-  }, [value, debouncedChange]);
-
   useEffect(() => () => debouncedChange.cancel(), [debouncedChange]);
 
   const change = (next: string) => {
-    setText(next);
+    setOwnText(next);
     if (next && debounceMs > 0) {
       debouncedChange(next);
       return;

@@ -23,7 +23,7 @@ export function ScorersToolbar({
   hasActiveFilters,
 }: ScorersToolbarProps) {
   // Remount the search on Reset so a typed-but-uncommitted term is dropped even when the
-  // controlled `search` value is already '' (SearchInput only resyncs on value change).
+  // controlled `search` value is already '' (SearchInput keeps its own text).
   const [searchKey, setSearchKey] = useState(0);
 
   const handleReset = () => {
@@ -43,7 +43,7 @@ export function ScorersToolbar({
             key={searchKey}
             label="Search scorers"
             placeholder="Search by scorer name"
-            value={search}
+            defaultValue={search}
             onValueChange={onSearchChange}
           />
         </div>

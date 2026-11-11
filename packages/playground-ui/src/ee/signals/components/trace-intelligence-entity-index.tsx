@@ -80,7 +80,7 @@ function EntityIndexControls({
           debounceMs={300}
           shortcut
           className="max-w-120"
-          value={search}
+          defaultValue={search}
           onValueChange={onSearchChange}
           label="Search agents"
           placeholder="Search by agent identifier"

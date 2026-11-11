@@ -60,7 +60,7 @@ describe('SearchInput keyboard shortcut', () => {
 
   it('selects the existing value so the next keystroke replaces it', () => {
     setPlatform('MacIntel');
-    renderListSearch({ value: 'agent' });
+    renderListSearch({ defaultValue: 'agent' });
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 

@@ -174,7 +174,7 @@ export const SearchAndFilter: Story = {
             search={{
               label: 'Search runs',
               placeholder: 'Search runs',
-              value: runSearch,
+              defaultValue: runSearch,
               onSearch: setRunSearch,
             }}
             filter={{
@@ -253,7 +253,12 @@ export const SearchPerTab: Story = {
             label="Runs"
             columns="auto minmax(0,1fr) auto"
             fit="container"
-            search={{ label: 'Search runs', placeholder: 'Search runs', value: runSearch, onSearch: setRunSearch }}
+            search={{
+              label: 'Search runs',
+              placeholder: 'Search runs',
+              defaultValue: runSearch,
+              onSearch: setRunSearch,
+            }}
           >
             <DataList.Top>
               <DataList.TopCell>ID</DataList.TopCell>
@@ -277,7 +282,7 @@ export const SearchPerTab: Story = {
             search={{
               label: 'Search scores',
               placeholder: 'Search scorers',
-              value: scoreSearch,
+              defaultValue: scoreSearch,
               onSearch: setScoreSearch,
             }}
           >
@@ -351,7 +356,7 @@ export const OverflowAndClosable: Story = {
                 onClose={closeTab(tab.value)}
                 search={
                   tab.value === 'runs'
-                    ? { label: 'Search runs', placeholder: 'Search runs', value: search, onSearch: setSearch }
+                    ? { label: 'Search runs', placeholder: 'Search runs', defaultValue: search, onSearch: setSearch }
                     : undefined
                 }
               >

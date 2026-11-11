@@ -449,7 +449,7 @@ function CreditSearch({ search, onSearch }: CreditSearchProps) {
       className="max-w-120"
       label="Search credits"
       placeholder="Search credits"
-      value={search}
+      defaultValue={search}
       onValueChange={onSearch}
     />
   );
@@ -879,7 +879,7 @@ export const InsetPagination: Story = {
               className="max-w-120"
               label="Search credits"
               placeholder="Search credits"
-              value={search}
+              defaultValue={search}
               onValueChange={changeSearch}
             />
           </ActionRow.Start>

@@ -88,7 +88,7 @@ export function DatasetItemsToolbar({
         shortcut
         label="Search items"
         placeholder="Search items"
-        value={searchQuery ?? ''}
+        defaultValue={searchQuery ?? ''}
         onValueChange={query => onSearchChange?.(query)}
       />
     </div>
