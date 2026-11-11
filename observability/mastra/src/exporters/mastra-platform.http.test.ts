@@ -677,6 +677,77 @@ describe('SDK feedback and score delivery', () => {
     },
     15_000,
   );
+  it.each([
+    { StorageExporter: MastraStorageExporter, recovers: true },
+    { StorageExporter: DefaultExporter, recovers: true },
+    { StorageExporter: MastraStorageExporter, recovers: false },
+    { StorageExporter: DefaultExporter, recovers: false },
+  ])(
+    'retries failed local reads without delaying remote delivery ($StorageExporter, recovers: $recovers)',
+    async ({ StorageExporter, recovers }) => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      await store.createSpan({
+        span: {
+          traceId: 'read-failure',
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'root',
+          spanType: SpanType.GENERIC,
+          isEvent: false,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          tags: ['stored-tags'],
+        },
+      });
+      const readTrace = store.getTrace.bind(store);
+      let attempts = 0;
+      const failure = new Error('Storage temporarily unavailable');
+      // Inject read failures into real storage; successful reads and all writes remain real.
+      store.getTrace = async args => {
+        attempts++;
+        if (!recovers || attempts <= 2) throw failure;
+        return readTrace(args);
+      };
+      const localExporter = new StorageExporter();
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'read-failure-test',
+            exporters: [localExporter, exporter(receiver.endpoint)],
+          },
+        },
+      });
+      const mastra = new Mastra({ storage, observability, logger: false });
+      const error = vi.spyOn(console, 'error');
+      cleanup.push(async () => {
+        error.mockRestore();
+      });
+      cleanup.push(() => observability.shutdown());
+      await mastra.observability.addFeedback({
+        traceId: 'read-failure',
+        feedback: { feedbackType: 'comment', value: 'useful' },
+      });
+      await mastra.observability.addScore({ traceId: 'read-failure', score: { scorerId: 'quality', score: 1 } });
+      await expect.poll(() => receiver.bodies.length, { timeout: 1000 }).toBe(2);
+      await observability.flush();
+      const feedbackRows = (await store.listFeedback({})).feedback;
+      const scoreRows = (await store.listScores({})).scores;
+      if (recovers) {
+        expect(feedbackRows).toEqual([expect.objectContaining({ value: 'useful', tags: ['stored-tags'] })]);
+        expect(scoreRows).toEqual([expect.objectContaining({ score: 1, tags: ['stored-tags'] })]);
+        expect(error).not.toHaveBeenCalled();
+      } else {
+        expect(attempts).toBe(14); // Seven bounded attempts for each record.
+        expect(feedbackRows).toHaveLength(0);
+        expect(scoreRows).toHaveLength(0);
+        expect(error).toHaveBeenCalledWith(expect.stringContaining(localExporter.name), failure);
+      }
+    },
+    15_000,
+  );
+
   it('delivers to Platform and custom exporters without attached storage', async () => {
     const receiver = await collector();
     const webhook = await collector();
