@@ -276,7 +276,11 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
   get storage() {
     if (!this._storage) {
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.
+        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
+          this.#mastra
+            ? ''
+            : ' If this memory belongs to an agent that should inherit storage from Mastra, register the agent with that Mastra instance (for example, via mastra.addAgent(agent)). Standalone agents must configure storage directly on Memory.'
+        }
 
 https://mastra.ai/en/docs/memory/overview`,
       );

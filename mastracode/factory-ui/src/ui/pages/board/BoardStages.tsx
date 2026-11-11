@@ -14,7 +14,6 @@ import type { PhaseExitToolInfo } from '../../domains/factory/components/PhaseEx
 import { BoardOpenCardContext } from '../../domains/factory/context/BoardOpenCardContext';
 import { BoardScrollContext } from '../../domains/factory/context/BoardScrollContext';
 import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
-import type { LinkedComment } from '../../domains/factory/hooks/useOpenCardState';
 
 export interface BoardStageView {
   stage: { id: string; label: string };
@@ -34,20 +33,17 @@ export function BoardStages({
   layout,
   stages: stageViews,
   totalTaskCount,
-  linkedComment,
   onDrop,
   toolbar,
 }: {
   layout: BoardLayout;
   stages: BoardStageView[];
   totalTaskCount: number;
-  /** A `?item&comment` link, which opens its card. */
-  linkedComment: LinkedComment | undefined;
   onDrop: (payload: DragPayload, stage: string) => void;
   toolbar: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const openCard = useOpenCardState(linkedComment);
+  const openCard = useOpenCardState();
   return (
     <BoardScrollContext value={scrollRef}>
       <BoardOpenCardContext value={openCard}>

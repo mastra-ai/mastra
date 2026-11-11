@@ -432,7 +432,9 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("duplicate board id 'work'");
+    ).toThrow(
+      "MastraFactory: board id 'work' is Factory's Work board, which every project has. To run your own, store it under 'work' with factory.upsertBoard(board, { projects: 'all' }).",
+    );
   });
 
   describe('app skills', () => {
@@ -488,16 +490,18 @@ describe('MastraFactory constructor', () => {
     });
   });
 
-  it('allows replacing a built-in board when default boards are disabled', () => {
-    expect(
-      () =>
-        new MastraFactory({
-          secretEncryption,
-          storage: fakeStorage(),
-          includeDefaultBoards: false,
-          boards: [createTestBoard({ id: 'work' })],
-        }),
-    ).not.toThrow();
+  it('accepts and ignores the retired includeDefaultBoards, warning once per process', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const retired = (message: unknown) => String(message).includes('MastraFactory({ includeDefaultBoards })');
+    for (const includeDefaultBoards of [false, true, false]) {
+      expect(() => new MastraFactory({ secretEncryption, storage: fakeStorage(), includeDefaultBoards })).not.toThrow();
+    }
+    expect(warn.mock.calls.filter(([message]) => retired(message))).toEqual([
+      [
+        "[Mastra Factory] MastraFactory({ includeDefaultBoards }) is deprecated and ignored: every project gets Factory's Work board when it has no boards yet, and one that has any keeps what it has. To run your own Work board, store it under the 'work' key with factory.upsertBoard(board, { projects: 'all' }).",
+      ],
+    ]);
+    warn.mockRestore();
   });
 });
 
@@ -949,13 +953,13 @@ describe('MastraFactory.prepare', () => {
       'memory-settings',
       'boards',
       'custom-providers',
+      'sandbox-envs',
       'queue-health',
       'integrations',
       'projects',
       'filesystem',
       'source-control',
       'channel-identity',
-      'work-item-comments',
       'skill-overrides',
       'voice-settings',
     ]);
@@ -3206,60 +3210,6 @@ describe('MastraFactory.prepare integrations', () => {
       });
 
       await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
-    });
-
-    it("collects a ready integration's feedPublisher even when it provides no channels", async () => {
-      const setChannels = withController();
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      // Decoupled from channels(): the publisher is wired even though nothing
-      // attached channels.
-      expect(setChannels).not.toHaveBeenCalled();
-      expect(feedPublisher).toHaveBeenCalledOnce();
-      // Same context shape as routes()/workers().
-      const ctx = feedPublisher.mock.calls[0]![0];
-      expect(ctx.feed).toBeDefined();
-      expect(ctx.auth).toBeDefined();
-    });
-
-    it('collects a channel integration feedPublisher exactly once', async () => {
-      withController();
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'chat-platform', channels, feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      // Guards against a double-push: collection happens only in the feed pass,
-      // not also in the channels loop.
-      expect(feedPublisher).toHaveBeenCalledOnce();
-    });
-
-    it('does not collect a feedPublisher from an integration that is not ready', async () => {
-      withController();
-      const storage = fakeStorage();
-      vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage,
-        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      expect(feedPublisher).not.toHaveBeenCalled();
     });
   });
 });

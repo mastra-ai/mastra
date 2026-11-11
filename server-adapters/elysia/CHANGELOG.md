@@ -1,5 +1,20 @@
 # @mastra/elysia
 
+## 0.1.23-alpha.6
+
+### Patch Changes
+
+- Fixed two Elysia server problems on Node (`@elysiajs/node`) ([#29667](https://github.com/mastra-ai/mastra/issues/29667)): ([#29944](https://github.com/mastra-ai/mastra/pull/29944))
+
+  - A `POST`, `PUT`, `PATCH` or `DELETE` request with `Content-Type: application/json` and an empty body no longer fails with 400 before the route runs. For example, aborting a run from a client that always sends the JSON header now works.
+  - A stream that fails partway, such as observing a run whose replay ends in an error, now delivers the frames sent before the error and ends the response. Before, the connection was dropped and the client got nothing or a cut-off body.
+
+  Malformed JSON still returns 400, now with the same body as the other adapters: `{ "error": "Invalid request body", "issues": [{ "field": "body", "message": "..." }] }`.
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`94bf876`](https://github.com/mastra-ai/mastra/commit/94bf8761f4db6650c95f59fc51481e662c0d3436), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/server@1.83.0-alpha.6
+
 ## 0.1.23-alpha.5
 
 ### Patch Changes

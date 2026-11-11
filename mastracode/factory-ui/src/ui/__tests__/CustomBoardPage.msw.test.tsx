@@ -268,7 +268,7 @@ describe('custom-only board routing', () => {
         metadata: {},
         triageType: null,
         acceptedAt: null,
-        commentCount: 0,
+        description: null,
         revision: 1,
         createdAt: now,
         updatedAt: now,

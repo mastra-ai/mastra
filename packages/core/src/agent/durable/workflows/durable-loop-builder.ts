@@ -58,6 +58,7 @@ import {
   seedMessageListState,
   storeMessageListState,
   buildDeferredStepFinishChunk,
+  durableStopConditionSteps,
   readAccumulatedSteps,
   storeAccumulatedSteps,
   expandDurableSteps,
@@ -892,7 +893,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
         // Retries stay bounded by maxProcessorRetries.
         underMaxSteps: steps.filter(s => s.finishReason !== 'retry').length < runMaxSteps,
-        steps: expandDurableSteps(steps),
+        steps: durableStopConditionSteps(steps),
         stopWhen,
         consumeDelegationBail: () => {
           if (state.delegationBailed) {
