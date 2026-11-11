@@ -375,7 +375,7 @@ Scorer judges with legacy model adapters call `generateLegacy()`. They don't rec
     type: 'object',
     isOptional: true,
     description:
-      'The generated structured response. Present when a schema is provided via `output` or `experimental_output`.',
+      'The generated structured response when a schema is provided via `output` or `experimental_output`. With `experimental_output`, it may be undefined when generation finishes with a reason other than `stop`.',
   },
   {
     name: 'toolCalls',

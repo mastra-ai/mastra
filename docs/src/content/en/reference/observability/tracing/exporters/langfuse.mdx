@@ -41,73 +41,73 @@ Extends `BaseExporterConfig`, which includes:
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'publicKey',
     type: 'string',
     description: 'Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'secretKey',
     type: 'string',
     description: 'Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'baseUrl',
     type: 'string',
     description: 'Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var. Default: https://cloud.langfuse.com',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'additionalHeaders',
     type: 'Record<string, string>',
     description: 'Additional headers sent with requests to Langfuse.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'realtime',
     type: 'boolean',
     description: 'Enable realtime mode - exports spans immediately instead of batching',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'flushAt',
     type: 'number',
     description: 'Maximum number of spans per OTEL export batch. Forwarded to the underlying LangfuseSpanProcessor.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'flushInterval',
     type: 'number',
     description:
       'Maximum time in seconds before pending spans are exported. Forwarded to the underlying LangfuseSpanProcessor.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'environment',
     type: 'string',
     description: 'Environment tag for traces (e.g. production, staging). Shows in Langfuse UI for filtering.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'release',
     type: 'string',
     description: 'Release tag for traces (e.g. git commit hash). Used for version tracking.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'resourceAttributes',
     type: 'DetectedResourceAttributes',
     description: 'OpenTelemetry resource attributes, such as service.version. Values here override the defaults.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
     description: "Logger level (default: 'info')",
-    required: false,
+    isOptional: true,
   },
 ]}
 />
