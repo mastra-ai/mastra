@@ -73,6 +73,7 @@ import {
 import { acquireStepLease, enterRunLiveness, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
 import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../leases';
 import { StepExecutor } from '../step-executor';
+import { finishedOccurrence } from './finished-occurrence';
 import {
   evaluateLoopCondition,
   failedLoopStep,
@@ -1952,7 +1953,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   /**
    * Handles a `workflow.step.run` event: routes control entries (parallel,
    * conditional, foreach, sleep) to their dispatchers, ends the run past its
-   * last entry, and runs a leaf step under that step occurrence's lease.
+   * last entry, and runs a leaf step under that step occurrence's lease,
+   * unless the stored run shows the occurrence already finished.
    */
   protected async processWorkflowStepRun(args: ProcessorArgs, control: ControlAtDispatch = {}) {
     const {
@@ -2258,6 +2260,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     try {
+      // Unleased steps (no run fencing, or the workflow opted out of recovery) keep running on every delivery.
+      const finished = lease === UNLEASED_STEP ? 'run' : await this.#finishedOccurrence(leafArgs, leaf);
+      if (finished === 'drop') return;
+      if (finished !== 'run') return await this.processWorkflowStepEnd(finished);
       return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease);
     } finally {
       await lease.release();
@@ -2423,6 +2429,56 @@ export class WorkflowEventProcessor extends EventProcessor {
     const handoff = data.stepLeaseHandoff;
     const handedToThisDelivery = handoff && handoff.key === record.runId && handoff.generation === record.generation;
     return handedToThisDelivery ? null : { live: record };
+  }
+
+  /**
+   * Checks, once the worker holds the occurrence's lease, whether the stored
+   * run shows the occurrence already finished. Returns `'run'` when the step
+   * still has to run, `'drop'` when the delivery is a duplicate, or the step
+   * end arguments that continue the run from the saved result. See
+   * {@link finishedOccurrence}.
+   *
+   * A resume of the step and time travel run it again on purpose and skip the
+   * check.
+   */
+  async #finishedOccurrence(
+    args: Omit<ProcessorArgs, 'stepLeaseHandoff'>,
+    step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
+  ): Promise<'run' | 'drop' | ProcessorArgs> {
+    const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
+    if (args.timeTravel || args.resumeSteps?.[0] === leafId) return 'run';
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    if (!store) return 'run';
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+    // Mirrors the `guardStart` condition in runLeafStep.
+    const guarded =
+      store.supportsWorkflowStepGuards() &&
+      !!args.eventId &&
+      !args.restart &&
+      !args.resumeSteps?.length &&
+      step.type !== 'foreach';
+    const outcome = finishedOccurrence({
+      step,
+      executionPath: args.executionPath,
+      stepResults: args.stepResults,
+      restart: args.restart,
+      snapshot,
+      guarded,
+    });
+    if (outcome === 'run' || outcome === 'drop') return outcome;
+    this.mastra.getLogger()?.debug('Continuing a workflow run from a step occurrence that already finished', {
+      workflowId: args.workflowId,
+      runId: args.runId,
+      executionPath: args.executionPath,
+    });
+    const context = snapshot!.context;
+    return {
+      ...args,
+      stepResults: { ...args.stepResults, ...context },
+      prevResult: outcome.continueFrom,
+      state: context.__state ?? resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
+      requestContext: restoreLiveRequestContext(snapshot!.requestContext, args.requestContext),
+    };
   }
 
   /** Evaluates the loop condition after an iteration, then starts the next one or leaves the loop. */
