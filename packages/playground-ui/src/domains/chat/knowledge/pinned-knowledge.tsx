@@ -18,6 +18,29 @@ function summary({ mode, rows }: PinnedKnowledge): string {
     .join(' ');
 }
 
+/**
+ * Pages a listing names: its `- ` entries plus the count in its closing "…and N more" line.
+ * Core ends a listing cut short with a bare "…and more", so the count is then only a lower bound.
+ */
+function listedPageCount(text: string): { count: number; atLeast: boolean } {
+  const lines = text.split('\n').map(line => line.trim());
+  const listed = lines.filter(line => line.startsWith('- ')).length;
+  const more = lines.map(line => /^…and (\d+) more/.exec(line)?.[1]).find(Boolean);
+  return {
+    count: listed + (more ? Number(more) : 0),
+    atLeast: lines.some(line => line.startsWith('…and more')),
+  };
+}
+
+function toggleLabel(row: PinnedRow, open: boolean): string {
+  if (!row.listOf) return open ? 'Hide text' : 'Text';
+  if (open) return 'Hide pages';
+  const { count, atLeast } = listedPageCount(row.text ?? '');
+  if (count === 0) return 'Show pages';
+  if (atLeast) return `Show ${count}+ pages`;
+  return count === 1 ? 'Show 1 page' : `Show ${count} pages`;
+}
+
 function PinnedRowItem({ row }: { row: PinnedRow }) {
   const [open, setOpen] = useState(false);
   const removed = row.change === 'remove';
@@ -51,7 +74,8 @@ function PinnedRowItem({ row }: { row: PinnedRow }) {
             onClick={() => setOpen(value => !value)}
           >
             <Txt as="span" variant="meta">
-              {open ? (row.listOf ? 'Hide pages' : 'Hide text') : row.listOf ? 'Pages' : 'Text'}
+              {toggleLabel(row, open)}
+              {row.listOf ? <span aria-hidden>{open ? ' ▴' : ' ▾'}</span> : null}
             </Txt>
           </button>
         ) : null}

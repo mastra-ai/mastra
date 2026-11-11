@@ -51,6 +51,12 @@
       "@hono/node-server": "2.1.6"
     },
     "@hono/node-server": "2.1.6",
-    "chat": "4.44.0"
+    "chat": "4.44.0",
+    "rimraf": {
+      "glob": "14.0.4"
+    },
+    "readdir-glob": {
+      "minimatch": "11.0.5"
+    }
   }
 }

@@ -7,7 +7,6 @@ import { RecreateSandboxAction } from './RecreateSandboxAction';
 import type { RecreateSandboxTarget } from './RecreateSandboxAction';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
 import { IconNotepad } from '@mastra/playground-ui/icons/central/IconNotepad';
 
 interface WorkspaceOverviewProps {
@@ -16,9 +15,6 @@ interface WorkspaceOverviewProps {
   changesError?: Error;
   onShowFiles: () => void;
   onShowChanges: () => void;
-  /** From the board snapshot the thread already polls; absent when the thread has no work item. */
-  commentCount?: number;
-  onShowComments?: () => void;
   /** Present only when the server says the viewer may recreate this session's sandbox. */
   recreateSandbox?: RecreateSandboxTarget;
 }
@@ -42,8 +38,6 @@ export function WorkspaceOverview({
   changesError,
   onShowFiles,
   onShowChanges,
-  commentCount,
-  onShowComments,
   recreateSandbox,
 }: WorkspaceOverviewProps) {
   const stats = changeStats(changes);
@@ -70,15 +64,6 @@ export function WorkspaceOverview({
         <IconNotepad />
         <span>Files</span>
       </Button>
-      {onShowComments ? (
-        <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
-          <IconBubble2 />
-          <span>Comments</span>
-          <Txt as="span" variant="meta" tone="muted" className="ml-auto">
-            {commentCount === 0 ? 'None yet' : commentCount}
-          </Txt>
-        </Button>
-      ) : null}
       {recreateSandbox ? (
         <RecreateSandboxAction
           target={recreateSandbox}

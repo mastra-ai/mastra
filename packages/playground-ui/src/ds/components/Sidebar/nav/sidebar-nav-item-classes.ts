@@ -45,6 +45,13 @@ const nestedExpandedItemClasses = (level: number) => {
   return `gap-2 py-1 pr-3 pl-12 ${controlHeight.md}`;
 };
 
+// A row whose label carries a `description` grows to hold the second line at every depth,
+// and its direct icons take the first line's height (`1lh`) so their glyphs centre on the
+// label, not the middle of the box. Keyed off the description itself, so a collapsed
+// sidebar, which renders none, keeps the single-line row with no size prop to pair.
+const withDescriptionClasses =
+  'has-[[data-slot=sidebar-nav-description]]:h-auto has-[[data-slot=sidebar-nav-description]]:min-h-control-lg has-[[data-slot=sidebar-nav-description]]:items-start has-[[data-slot=sidebar-nav-description]]:py-1.5 has-[[data-slot=sidebar-nav-description]]:[&>svg]:h-lh';
+
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
 // current (`foreground`). Icons inherit that colour — lucide strokes with
 // `currentColor` — so there is nothing to restate per state.
@@ -70,6 +77,7 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
     '[&_svg]:size-4 [&_svg]:shrink-0',
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
+    !isCollapsed && withDescriptionClasses,
     isCollapsed && 'gap-0 px-[13.5px] py-0',
   );
 

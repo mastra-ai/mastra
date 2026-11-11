@@ -1,14 +1,25 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
+import {
+  InputNumber,
+  InputNumberDecrement,
+  InputNumberGroup,
+  InputNumberIncrement,
+  InputNumberInput,
+} from '@mastra/playground-ui/components/InputNumber';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
 
 import { Flag } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
@@ -34,25 +45,89 @@ import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 const NO_SKILL = '__none__';
-/** Side controls share one width, so their left edges line up down the page. */
-const CONTROL_WIDTH = 'sm:w-56 sm:shrink-0';
+/** Free-text fields share one width, so short values don't stretch across the page. */
+const FIELD_WIDTH = 'sm:max-w-xs';
 /** A counter only shows once its limit is near. */
 const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
 
 /** Runner context a phase gets when it names none. */
 const DEFAULT_SESSION = 'work';
 
-/** A skill's name with the same status badges as the Skills page. */
-function SkillName({ name, skill, missing = false }: { name: string; skill?: FactorySkillInfo; missing?: boolean }) {
+/** A skill's status, with the same badges as the Skills page. */
+function SkillBadges({ skill, missing }: { skill?: FactorySkillInfo; missing: boolean }) {
   return (
-    <span className="flex flex-wrap items-center gap-2">
-      <IconBook aria-hidden className="text-muted-foreground size-4 shrink-0" />
-      {name}
+    <>
       {missing && <Badge variant="destructive">Not found</Badge>}
       {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
       {skill?.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && <Badge>Overridden by app</Badge>}
       {skill?.edited && <Badge>Edited</Badge>}
-    </span>
+    </>
+  );
+}
+
+/**
+ * A setting whose heading and help sit above its control, so the control stands alone as the place to type.
+ * `after` follows the field in the same section, for a setting that tunes this one (a goal's run limit).
+ */
+function PhaseField({
+  title,
+  description,
+  error,
+  disabled,
+  children,
+  after,
+}: {
+  title: string;
+  description: string;
+  error?: string;
+  disabled?: boolean;
+  children: ReactNode;
+  after?: ReactNode;
+}) {
+  return (
+    <SettingsGroup>
+      <Field invalid={Boolean(error)} disabled={disabled}>
+        <SettingsTitle>{title}</SettingsTitle>
+        <FieldDescription>{description}</FieldDescription>
+        {children}
+        {error && <FieldError>{error}</FieldError>}
+      </Field>
+      {after}
+    </SettingsGroup>
+  );
+}
+
+/** Markdown written straight into a card, with room to click into while empty. */
+function MarkdownCard({
+  label,
+  value,
+  placeholder,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <SettingsContainer>
+      <div className="px-4 py-3">
+        <CodeEditor
+          aria-label={label}
+          value={value}
+          placeholder={placeholder}
+          editable={!disabled}
+          onChange={onChange}
+          language="markdown"
+          font="body"
+          variant="inline"
+          lineNumbers={false}
+          showCopyButton={false}
+        />
+      </div>
+    </SettingsContainer>
   );
 }
 
@@ -69,6 +144,7 @@ export function PhaseConfig({
   rawRules,
   onChange,
   onRawRule,
+  onUnfinished,
   onRemove,
 }: {
   phase: StoredPhaseInfo;
@@ -86,6 +162,8 @@ export function PhaseConfig({
   rawRules: Partial<Record<RuleField, string>>;
   onChange: (phase: StoredPhaseInfo) => void;
   onRawRule: (field: RuleField, text: string | undefined) => void;
+  /** A rule editor has a half-filled condition row, which holds the save. */
+  onUnfinished: (field: RuleField, unfinished: boolean) => void;
   /** Unset when the phase can't be removed. */
   onRemove?: () => void;
 }) {
@@ -164,6 +242,7 @@ export function PhaseConfig({
                   schema={cardRuleGroupSchema}
                   disabled={disabled}
                   json={json('autoStartWhen')}
+                  onUnfinished={unfinished => onUnfinished('autoStartWhen', unfinished)}
                   onChange={rule => onChange({ ...phase, autoStartWhen: rule })}
                 />
               </div>
@@ -172,105 +251,102 @@ export function PhaseConfig({
         </PhaseStep>
 
         <PhaseStep icon={<IconRobot />} title="Agent runs">
-          <SettingsContainer>
-            <SettingsRow
-              label="Instructions"
-              description={`Added to the agent's prompt when the phase starts.${countNear(instructions.length, MAX_INSTRUCTIONS)}`}
-              errorMsg={instructions.length > MAX_INSTRUCTIONS ? 'Too long to save.' : undefined}
+          <PhaseField
+            title="Instructions"
+            description={`Added to the agent's prompt when the phase starts.${countNear(instructions.length, MAX_INSTRUCTIONS)}`}
+            error={instructions.length > MAX_INSTRUCTIONS ? 'Too long to save.' : undefined}
+            disabled={disabled}
+          >
+            <MarkdownCard
+              label={`${phase.name} instructions`}
+              value={instructions}
+              placeholder="Tell the agent what to do, in Markdown"
               disabled={disabled}
-              className="sm:flex-col sm:items-stretch"
-            >
-              <Textarea
-                aria-label={`${phase.name} instructions`}
-                value={instructions}
-                maxLength={MAX_INSTRUCTIONS}
-                rows={4}
-                disabled={disabled}
-                onChange={event => setRunner({ instructions: event.target.value })}
-              />
-            </SettingsRow>
-            <SettingsRow
-              label="Goal"
-              description={`The agent keeps working until a judge finds this objective met. Leave empty for a single run.${countNear(objective.length, MAX_OBJECTIVE)}`}
-              errorMsg={objective.length > MAX_OBJECTIVE ? 'Too long to save.' : undefined}
+              onChange={text => setRunner({ instructions: text })}
+            />
+          </PhaseField>
+
+          <PhaseField
+            title="Goal"
+            description={`The agent keeps working until a judge finds this objective met. Leave empty for a single run.${countNear(objective.length, MAX_OBJECTIVE)}`}
+            error={objective.length > MAX_OBJECTIVE ? 'Too long to save.' : undefined}
+            disabled={disabled}
+            after={
+              goal && (
+                <Field invalid={!goalRunsValid(goal.maxRuns)} disabled={disabled}>
+                  <div className="flex items-center gap-3">
+                    <FieldLabel
+                      info={`After this many runs without meeting the goal, the card waits for a person. From 1 to ${MAX_GOAL_RUNS}; leave empty for Factory's default.`}
+                    >
+                      Pause goal after
+                    </FieldLabel>
+                    <InputNumber
+                      className="w-36"
+                      min={1}
+                      max={MAX_GOAL_RUNS}
+                      allowOutOfRange
+                      value={goal.maxRuns ?? null}
+                      disabled={disabled}
+                      onValueChange={runs => {
+                        const { maxRuns: _maxRuns, ...rest } = goal;
+                        setRunner({ goal: runs === null ? rest : { ...rest, maxRuns: runs } });
+                      }}
+                    >
+                      <InputNumberGroup size="sm">
+                        <InputNumberInput placeholder="Default" />
+                        <InputGroupAddon align="inline-end" variant="flush">
+                          <InputGroupText className="mr-1">runs</InputGroupText>
+                          <InputNumberDecrement />
+                          <InputNumberIncrement />
+                        </InputGroupAddon>
+                      </InputNumberGroup>
+                    </InputNumber>
+                  </div>
+                  {!goalRunsValid(goal.maxRuns) && (
+                    <FieldError>Use a whole number from 1 to {MAX_GOAL_RUNS}.</FieldError>
+                  )}
+                </Field>
+              )
+            }
+          >
+            <MarkdownCard
+              label={`${phase.name} goal`}
+              value={objective}
+              placeholder="Describe what done looks like"
               disabled={disabled}
-              className="sm:flex-col sm:items-stretch"
-            >
-              <Textarea
-                aria-label={`${phase.name} goal`}
-                value={objective}
-                maxLength={MAX_OBJECTIVE}
-                rows={4}
-                disabled={disabled}
-                onChange={event => {
-                  const text = event.target.value;
-                  setRunner({ goal: text.trim() ? { ...goal, objective: text } : undefined });
-                }}
-              />
-            </SettingsRow>
-            {goal && (
-              <SettingsRow
-                label="Goal runs"
-                description={`Runs before the goal pauses for a person, from 1 to ${MAX_GOAL_RUNS}. Leave empty for Factory's default.`}
-                errorMsg={goalRunsValid(goal.maxRuns) ? undefined : `Use a whole number from 1 to ${MAX_GOAL_RUNS}.`}
-                disabled={disabled}
-              >
-                <Input
-                  size="sm"
-                  type="number"
-                  min={1}
-                  max={MAX_GOAL_RUNS}
-                  className={CONTROL_WIDTH}
-                  aria-label={`${phase.name} goal runs`}
-                  value={goal.maxRuns ?? ''}
-                  disabled={disabled}
-                  onChange={event => {
-                    const runs = Number.parseInt(event.target.value, 10);
-                    const { maxRuns: _maxRuns, ...rest } = goal;
-                    setRunner({ goal: Number.isInteger(runs) ? { ...rest, maxRuns: runs } : rest });
-                  }}
-                />
-              </SettingsRow>
-            )}
-            <SettingsRow
-              label="Session"
-              description="Phases with the same session share one agent session per card."
+              onChange={text => setRunner({ goal: text.trim() ? { ...goal, objective: text } : undefined })}
+            />
+          </PhaseField>
+
+          <PhaseField
+            title="Session"
+            description="Phases with the same session share one agent session per card."
+            disabled={disabled}
+          >
+            <Input
+              className={FIELD_WIDTH}
+              aria-label={`${phase.name} session`}
+              value={phase.runner?.context ?? ''}
+              placeholder={DEFAULT_SESSION}
               disabled={disabled}
-            >
-              <Input
-                size="sm"
-                className={CONTROL_WIDTH}
-                aria-label={`${phase.name} session`}
-                value={phase.runner?.context ?? ''}
-                placeholder={DEFAULT_SESSION}
-                disabled={disabled}
-                onChange={event => setRunner({ context: event.target.value })}
-              />
-            </SettingsRow>
-          </SettingsContainer>
+              onChange={event => setRunner({ context: event.target.value })}
+            />
+          </PhaseField>
 
           <SettingsSubsection title="Skill">
             <SettingsContainer>
-              <SettingsRow
-                label={<SkillName name={skillName ?? 'None'} skill={skill} missing={skillMissing} />}
-                description={skill?.error ? undefined : skill?.description}
-                errorMsg={
-                  skill?.error
-                    ? `Agents can't load this skill: ${skill.error}`
-                    : skillMissing
-                      ? `This factory has no ${skillName} skill, so cards entering ${phase.name} fail to start.`
-                      : undefined
-                }
-                disabled={disabled}
-              >
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-1 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-2">
                   <Select
                     value={skillName ?? NO_SKILL}
                     disabled={disabled}
                     onValueChange={value => setRunner({ skill: value === NO_SKILL ? undefined : String(value) })}
                   >
-                    <SelectTrigger size="sm" aria-label={`${phase.name} skill`}>
-                      Change
+                    <SelectTrigger variant="ghost" size="sm" aria-label={`${phase.name} skill`} className="-ml-2 w-fit">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <IconBook aria-hidden className="text-muted-foreground size-4 shrink-0" />
+                        <span className="truncate">{skillName ?? 'No skill'}</span>
+                      </span>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NO_SKILL}>None</SelectItem>
@@ -281,18 +357,36 @@ export function PhaseConfig({
                       ))}
                     </SelectContent>
                   </Select>
+                  <SkillBadges skill={skill} missing={skillMissing} />
                   {skill && (
                     <Button
                       size="sm"
+                      variant="ghost"
                       icon={skillsEditable ? <IconPencil /> : <IconFileText />}
                       aria-label={`${skillsEditable ? 'Edit' : 'View'} ${skill.name}`}
+                      className="ml-auto"
                       onClick={() => setOpenSkill(skill)}
                     >
                       {skillsEditable ? 'Edit' : 'View'}
                     </Button>
                   )}
                 </div>
-              </SettingsRow>
+                {skill?.error ? (
+                  <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
+                    Agents can't load this skill: {skill.error}
+                  </Txt>
+                ) : skillMissing ? (
+                  <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
+                    This factory has no {skillName} skill, so cards entering {phase.name} fail to start.
+                  </Txt>
+                ) : (
+                  skill?.description && (
+                    <Txt as="p" variant="caption" tone="muted">
+                      {skill.description}
+                    </Txt>
+                  )
+                )}
+              </div>
             </SettingsContainer>
           </SettingsSubsection>
 
@@ -321,26 +415,25 @@ export function PhaseConfig({
         </PhaseStep>
 
         <PhaseStep icon={<Flag />} title="Ends">
-          <SettingsContainer>
-            <SettingsRow
-              label="Exit tool"
-              description="Ends the phase when it succeeds. Leave empty for none."
+          <PhaseField
+            title="Exit tool"
+            description="Ends the phase when it succeeds. Leave empty for none."
+            disabled={disabled}
+          >
+            <Input
+              className={FIELD_WIDTH}
+              aria-label={`${phase.name} exit tool`}
+              value={exitToolId}
               disabled={disabled}
-            >
-              <Input
-                size="sm"
-                className={CONTROL_WIDTH}
-                aria-label={`${phase.name} exit tool`}
-                value={exitToolId}
-                disabled={disabled}
-                onChange={event => {
-                  const value = event.target.value.trim();
-                  onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
-                  if (!value) onRawRule('autoApproveWhen', undefined);
-                }}
-              />
-            </SettingsRow>
-            {exitToolId !== '' && (
+              onChange={event => {
+                const value = event.target.value.trim();
+                onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
+                if (!value) onRawRule('autoApproveWhen', undefined);
+              }}
+            />
+          </PhaseField>
+          {exitToolId !== '' && (
+            <SettingsContainer>
               <SettingsRow label="Approve on its own" disabled={disabled}>
                 <Switch
                   aria-label={`${phase.name}: approve ${exitToolId} on its own`}
@@ -360,31 +453,32 @@ export function PhaseConfig({
                   }}
                 />
               </SettingsRow>
-            )}
-            {exitToolId !== '' && phase.exitTool?.autoApprove && (
-              <div className="px-4 py-3">
-                <RuleEditor
-                  label={`${phase.name}: approve only when`}
-                  description="Leave empty to approve for every card."
-                  rule={phase.exitTool.autoApproveWhen}
-                  schema={cardRuleGroupSchema}
-                  disabled={disabled}
-                  json={json('autoApproveWhen')}
-                  onChange={rule =>
-                    onChange({
-                      ...phase,
-                      exitTool: {
-                        ...phase.exitTool,
-                        id: exitToolId,
-                        autoApprove: true,
-                        autoApproveWhen: rule ?? undefined,
-                      },
-                    })
-                  }
-                />
-              </div>
-            )}
-          </SettingsContainer>
+              {phase.exitTool?.autoApprove && (
+                <div className="px-4 py-3">
+                  <RuleEditor
+                    label={`${phase.name}: approve only when`}
+                    description="Leave empty to approve for every card."
+                    rule={phase.exitTool.autoApproveWhen}
+                    schema={cardRuleGroupSchema}
+                    disabled={disabled}
+                    json={json('autoApproveWhen')}
+                    onUnfinished={unfinished => onUnfinished('autoApproveWhen', unfinished)}
+                    onChange={rule =>
+                      onChange({
+                        ...phase,
+                        exitTool: {
+                          ...phase.exitTool,
+                          id: exitToolId,
+                          autoApprove: true,
+                          autoApproveWhen: rule ?? undefined,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </SettingsContainer>
+          )}
         </PhaseStep>
 
         <PhaseStep icon={<IconDirection1 />} title="Allowed moves">

@@ -1,28 +1,23 @@
-import { useState } from 'react';
-
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { boardOf } from '../boardFlow';
 import type { CardContextSession } from '../boardItems';
-import { itemBoard } from '../boardStages';
 import type { ReworkReason } from '../reworkReason';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
-import { factoryAttentionTargetPath } from '../services/attention';
 import type { WorkItem } from '../services/workItems';
-import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { CardSourceDescription } from './BoardCardDetails';
 import { CardSessions } from './CardSessions';
-import { CommentComposer } from './feed/CommentComposer';
-import { CommentList } from './feed/CommentList';
-import type { FeedUser } from './feed/CommentList';
-import type { CommentQuoteDraft } from './feed/quoteDraft';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ActivityEvent } from './WorkItemActivity';
+import { WorkItemDescription } from './WorkItemDescription';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
 
-// One stream in time order, runs and moves and comments alike, the composer under it.
+// The card itself on top, then its runs and moves in time order.
 export function WorkItemTray({
   item,
   factoryId,
   projectRepositoryId,
-  enabled,
-  currentUser,
-  highlightCommentId,
   events,
   actors,
   contextSessions,
@@ -31,65 +26,57 @@ export function WorkItemTray({
   item: WorkItem;
   factoryId: string;
   projectRepositoryId: string;
-  /** Mounted only once the panel opens, so closed cards run no feed queries. */
-  enabled: boolean;
-  currentUser?: FeedUser;
-  highlightCommentId?: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
   contextSessions: readonly CardContextSession[];
   rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
-  const [quote, setQuote] = useState<CommentQuoteDraft>();
-  const description = useSourceDescription(item, projectRepositoryId, factoryProjectId);
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
 
   return (
-    <>
-      <CommentList
-        item={item}
-        factoryProjectId={factoryProjectId}
-        enabled={enabled}
-        currentUser={currentUser}
-        highlightCommentId={highlightCommentId}
-        events={events}
-        actors={actors}
-        leadingLoaded={description === undefined || !description.isPending}
-        leading={
-          <div className="bg-fill mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
-            <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
-              {item.title}
+    <ScrollArea className="min-h-0 grow px-1">
+      <ScrollAreaViewport>
+        <div className="bg-fill mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
+          <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
+            {item.title}
+          </Txt>
+          <CardSourceDescription
+            item={item}
+            projectRepositoryId={projectRepositoryId}
+            factoryProjectId={factoryProjectId}
+          />
+          <WorkItemDescription item={item} factoryProjectId={factoryProjectId} />
+          {rework && <WhyItMovedBack rework={rework} />}
+          <CardSessions factoryId={factoryId} sessions={contextSessions} />
+        </div>
+        <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+          <span className="bg-border h-px flex-1" />
+          <Txt tone="muted" as="span" variant="meta" className="block">
+            Activity
+          </Txt>
+          <span className="bg-border h-px flex-1" />
+        </div>
+        {events.length === 0 ? (
+          <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
+            <IconHistory size={14} aria-hidden />
+            <Txt as="span" variant="caption">
+              No activity yet
             </Txt>
-            <CardSourceDescription
-              item={item}
-              projectRepositoryId={projectRepositoryId}
-              factoryProjectId={factoryProjectId}
-            />
-            {rework && <WhyItMovedBack rework={rework} />}
-            <CardSessions factoryId={factoryId} sessions={contextSessions} />
           </div>
-        }
-        commentUrl={commentId =>
-          `${window.location.origin}${factoryAttentionTargetPath(factoryId, {
-            kind: 'work-item',
-            board: itemBoard(item),
-            workItemId: item.id,
-            commentId,
-          })}`
-        }
-        onQuote={setQuote}
-        className="min-h-0 grow px-1"
-      />
-      <div className="p-2">
-        <CommentComposer
-          workItemId={item.id}
-          factoryProjectId={factoryProjectId}
-          variant="panel"
-          quote={quote}
-          onDismissQuote={() => setQuote(undefined)}
-        />
-      </div>
-    </>
+        ) : (
+          <ol aria-label="Activity" className="m-0 list-none px-1 py-1">
+            {[...events]
+              .sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt))
+              .map(event => (
+                <li key={event.id}>
+                  <ActivityEvent event={event} actors={actors} board={board} className="px-2 py-1.5" />
+                </li>
+              ))}
+          </ol>
+        )}
+      </ScrollAreaViewport>
+    </ScrollArea>
   );
 }
 

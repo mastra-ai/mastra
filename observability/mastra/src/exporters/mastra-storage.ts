@@ -7,6 +7,7 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
   ObservabilityDropEvent,
   ObservabilityDropReason,
   ObservabilityDropSignal,
@@ -26,6 +27,7 @@ import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
 import { withSpanPreviews } from './span-previews';
+import { resolveStorageAnnotation } from './storage-annotation';
 import { StorageByteTracker, resolveStorageByteBatching } from './storage-byte-tracker';
 import type { StorageByteBatchingConfig, StorageByteBatchingStats } from './storage-byte-tracker';
 import { skipLocalStorageOnPlatform } from './storage-platform-policy';
@@ -100,6 +102,7 @@ export class MastraStorageExporter extends BaseExporter {
   #flushTimer?: NodeJS.Timeout;
   /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
   #inFlightFlushes = new Set<Promise<void>>();
+  #pendingAnnotations = new Set<Promise<void>>();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -626,7 +629,10 @@ export class MastraStorageExporter extends BaseExporter {
       const createTasks = [
         () =>
           this.flushCreates('feedback', createFeedbackEvents, events =>
-            this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
+            this.#observabilityStorage!.batchCreateFeedback({
+              feedbacks: events.map(f => buildFeedbackRecord(f)),
+              onConflict: 'ignore',
+            }),
           ),
         () =>
           this.flushCreates('log', createLogEvents, events =>
@@ -733,25 +739,57 @@ export class MastraStorageExporter extends BaseExporter {
     await this.handleBatchedFlush();
   }
 
-  /**
-   * Handle score events — buffer for batch flush.
-   */
-  async onScoreEvent(event: ScoreEvent): Promise<void> {
-    await this.ensureInitialized();
-    if (!this.#observabilityStorage) return;
-
-    this.#eventBuffer.addEvent(event);
-    await this.handleBatchedFlush();
+  onScoreEvent(event: ScoreEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
   }
 
-  /**
-   * Handle feedback events — buffer for batch flush.
-   */
-  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+  onFeedbackReplacementEvent(event: FeedbackReplacementEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
+  onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
+  private enqueueAnnotation(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void> {
+    const pending = this.storeAnnotation(event);
+    this.#pendingAnnotations.add(pending);
+    void pending.then(
+      () => this.#pendingAnnotations.delete(pending),
+      () => this.#pendingAnnotations.delete(pending),
+    );
+    return pending;
+  }
+
+  private async storeAnnotation(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void> {
     await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
-
-    this.#eventBuffer.addEvent(event);
+    const resolved = await resolveStorageAnnotation(event, this.#observabilityStorage, async () => {
+      // Flush buffered spans before retrying; the bus waits for this handler before its buffer drain.
+      await Promise.allSettled([...this.#inFlightFlushes]);
+      if (this.#eventBuffer.totalSize) await this.trackFlushBuffer();
+    });
+    if (!resolved) {
+      const record = event.type === 'score' ? event.score : event.feedback;
+      this.logger.warn('Storage export dropped because the target trace/span was not found', {
+        eventType: event.type,
+        traceId: record.traceId,
+        spanId: record.spanId,
+      });
+      return;
+    }
+    if (resolved.type === 'feedback_replacement') {
+      if (
+        typeof this.#observabilityStorage.replaceFeedback !== 'function' ||
+        !this.#observabilityStorage.getFeatures?.()?.includes('feedback-replacement')
+      ) {
+        this.logger.warn('Storage exporter skipped feedback replacement: upgrade the storage adapter and @mastra/core');
+        return;
+      }
+      await this.#observabilityStorage.replaceFeedback({ feedback: buildFeedbackRecord(resolved) });
+      return;
+    }
+    this.#eventBuffer.addEvent(resolved);
     await this.handleBatchedFlush();
   }
 
@@ -761,6 +799,7 @@ export class MastraStorageExporter extends BaseExporter {
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
+    await Promise.allSettled([...this.#pendingAnnotations]);
     if (this.#byteTracker) {
       if (!this.#observabilityStorage) return;
       this.#byteDrainers++;

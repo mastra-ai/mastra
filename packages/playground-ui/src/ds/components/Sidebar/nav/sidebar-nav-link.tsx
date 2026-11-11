@@ -5,6 +5,7 @@ import { useMaybeSidebarState } from '../root/sidebar-context';
 import { navItemClasses, navItemLayoutClasses, navRowSurfaceClasses } from './sidebar-nav-item-classes';
 import type { SidebarNavItemSize } from './sidebar-nav-item-classes';
 import { SidebarNavLabel } from './sidebar-nav-label';
+import { Button } from '@/ds/components/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
 import type { LinkComponent } from '@/ds/types/link-component';
@@ -187,9 +188,37 @@ function NavRowBody({
   if (!action) return children;
 
   return (
-    <div className={cn('flex min-w-0 items-center pr-1', surfaceClassName)}>
+    <div
+      className={cn(
+        'group/nav-row relative flex min-w-0 items-center pr-0.75 has-[[data-slot=sidebar-nav-description]]:items-start',
+        surfaceClassName,
+      )}
+    >
       {children}
-      {action}
+      {/* A row with a description tucks its actions into the top-right corner, as far from
+          the top as `Sidebar.NavAction` sits from the right. */}
+      <span className="flex shrink-0 items-center group-has-[[data-slot=sidebar-nav-description]]/nav-row:pt-0.75">
+        {action}
+      </span>
     </div>
+  );
+}
+
+/**
+ * An icon button for a row's `action` slot: 24px, so it keeps 3px from the row's top and
+ * right edges on a 30px row, with corners inset from the row's `rounded-lg` by those 3px.
+ *
+ * A row with actions is `group/nav-row` and `relative`, so hover-only actions reveal with
+ * `group-hover/nav-row:` without lighting up while a nested row in `subItems` is hovered.
+ */
+export function SidebarNavAction({ className, ...props }: Omit<ComponentProps<typeof Button>, 'variant' | 'size'>) {
+  return (
+    <Button
+      type="button"
+      {...props}
+      variant="ghost"
+      size="icon-sm"
+      className={cn('size-6 rounded-[calc(var(--radius-lg)-3px)]', className)}
+    />
   );
 }

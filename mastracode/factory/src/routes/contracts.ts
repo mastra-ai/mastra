@@ -32,6 +32,12 @@ const rawBoundedTrimmed = (max: number) =>
     .max(max)
     .transform(value => value.trim())
     .pipe(z.string().min(1));
+/** Card description: trimmed, and blank clears it. */
+const descriptionSchema = z
+  .string()
+  .max(8000)
+  .transform(value => value.trim() || null)
+  .nullable();
 const trimmedUuidSchema = z.string().trim().regex(new RegExp(UUID_PATTERN));
 const nullableTrimmed = (max: number) =>
   z.union([
@@ -281,6 +287,50 @@ export const environmentBuildTriggersSchema = z.object({
 /** The last build factory asked the provider for, from the project row only; status is read live. */
 export const environmentLastBuildSchema = z.object({ buildId: z.string(), attemptedAt: z.string().nullable() });
 
+/**
+ * Names Factory or a sandbox provider injects into the same environment maps.
+ * A variable with one of these names would swap a credential or be dropped.
+ */
+export const RESERVED_SANDBOX_ENV_NAMES: readonly RegExp[] = [
+  /^GH_TOKEN(_\d+)?$/,
+  /^MASTRA_REPOSITORY_ACCESS_TOKEN(_\d+)?$/,
+  /^MASTRA_BUILD_ENV_REVISION$/,
+];
+export const MAX_SANDBOX_ENV_VALUE_LENGTH = 32 * 1024;
+export const sandboxEnvNameSchema = z
+  .string()
+  .max(128, 'Use at most 128 characters.')
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Use letters, digits and underscores, not starting with a digit.')
+  .refine(name => !RESERVED_SANDBOX_ENV_NAMES.some(pattern => pattern.test(name)), {
+    message: 'This name is reserved by Factory.',
+  })
+  // Names like `__proto__` or `toString` collide with object built-ins and would be dropped or stick around.
+  .refine(name => !(name in Object.prototype), { message: "This name can't be used." });
+export const sandboxEnvAppliesToSchema = z.enum(['build', 'runtime', 'both']);
+const sandboxEnvPathSchema = z.object({ id: uuidSchema, name: sandboxEnvNameSchema });
+export const sandboxEnvSetBodySchema = z.object({
+  value: z
+    .string()
+    .max(MAX_SANDBOX_ENV_VALUE_LENGTH)
+    // A NUL byte in an env value makes every spawn fail.
+    .refine(value => !value.includes('\0'), { message: "Values can't contain NUL characters." }),
+  appliesTo: sandboxEnvAppliesToSchema,
+});
+export const sandboxEnvUpdateBodySchema = z.object({ appliesTo: sandboxEnvAppliesToSchema });
+/** A variable as routes return it. There is deliberately no value field. */
+const sandboxEnvSchema = z.object({
+  name: z.string(),
+  appliesTo: sandboxEnvAppliesToSchema,
+  updatedAt: z.string(),
+  updatedBy: z.string(),
+});
+const sandboxEnvsListResponseSchema = z.object({
+  envs: z.array(sandboxEnvSchema),
+  /** False when values can't be stored encrypted, so writes are refused. */
+  writable: z.boolean(),
+});
+const sandboxEnvResponseSchema = z.object({ env: sandboxEnvSchema });
+
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
     sandbox: environmentSandboxSchema,
@@ -407,6 +457,12 @@ const sessionSchema = z.object({
   threadId: z.string().min(1).max(512),
 });
 
+/** Without `sessionId`, the list is the whole board. */
+const workItemListQuerySchema = z.object({
+  /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
+  sessionId: z.array(sessionSchema.shape.sessionId).optional(),
+});
+
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
   .union([z.record(z.string(), z.unknown()), z.null()])
@@ -430,6 +486,7 @@ const metadataSchema = z
 
 export const createWorkItemBodySchema = z.object({
   title: rawBoundedTrimmed(500),
+  description: descriptionSchema.optional(),
   board: z.string().min(1).max(128).optional(),
   externalSource: externalSourceSchema.optional(),
   parentWorkItemId: uuidSchema.nullable().optional(),
@@ -441,6 +498,7 @@ export const createWorkItemBodySchema = z.object({
 export const updateWorkItemBodySchema = z
   .object({
     title: rawBoundedTrimmed(500).optional(),
+    description: descriptionSchema.optional(),
     board: z.string().min(1).max(128).optional(),
     parentWorkItemId: uuidSchema.nullable().optional(),
     stages: stagesSchema.optional(),
@@ -553,13 +611,7 @@ export const decisionQuerySchema = z.object({
   limit: boundedLimitSchema(25, 50),
 });
 
-const attentionKindSchema = z.enum([
-  'automation-failed',
-  'automation-proposed',
-  'mention',
-  'activity',
-  'agent-waiting',
-]);
+const attentionKindSchema = z.enum(['automation-failed', 'automation-proposed', 'agent-waiting']);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
 type AttentionStreamPosition = { occurredAt: Date; id: string };
 type AttentionCursorMap = Map<AttentionKind, AttentionStreamPosition | undefined>;
@@ -734,28 +786,43 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: buildPathSchema,
     responseSchema: environmentBuildResponseSchema,
   },
+  projectSandboxEnvsList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/sandbox-envs',
+    description:
+      'List the sandbox environment variables of a Factory project: names and where they apply, never values',
+    pathSchema: projectPathSchema,
+    responseSchema: sandboxEnvsListResponseSchema,
+  },
+  projectSandboxEnvSet: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Create or replace a sandbox environment variable of a Factory project',
+    pathSchema: sandboxEnvPathSchema,
+    bodySchema: sandboxEnvSetBodySchema,
+    responseSchema: sandboxEnvResponseSchema,
+  },
+  projectSandboxEnvUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Change where a sandbox environment variable of a Factory project applies',
+    pathSchema: sandboxEnvPathSchema,
+    bodySchema: sandboxEnvUpdateBodySchema,
+    responseSchema: sandboxEnvResponseSchema,
+  },
+  projectSandboxEnvDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Delete a sandbox environment variable of a Factory project',
+    pathSchema: sandboxEnvPathSchema,
+    responseSchema: z.null(),
+  },
   projectApplyDefaultModel: {
     method: 'POST',
     path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Apply the Factory default model to running work and review threads',
+    description: 'Start applying the Factory default model to running work and review threads in the background',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      modelId: z.string(),
-      applied: z.array(z.string()),
-      skipped: z.array(
-        z.object({
-          threadId: z.string(),
-          reason: z.enum([
-            'not-running',
-            'work-item-missing',
-            'stage-inactive',
-            'thread-missing',
-            'mode-unknown',
-            'apply-failed',
-          ]),
-        }),
-      ),
-    }),
+    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
   },
   projectDelete: {
     method: 'DELETE',
@@ -944,6 +1011,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/work-items',
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),

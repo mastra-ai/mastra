@@ -46,6 +46,8 @@ export const queryKeys = {
     ['factory', 'environment-builds', factoryProjectId ?? null] as const,
   factoryEnvironmentBuild: (factoryProjectId: string | undefined, buildId: string | undefined) =>
     ['factory', 'environment-build', factoryProjectId ?? null, buildId ?? null] as const,
+  factorySandboxEnvs: (factoryProjectId: string | undefined) =>
+    ['factory', 'sandbox-envs', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
@@ -102,17 +104,9 @@ export const queryKeys = {
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  /** Every comment read, all work items — the catch-up target after a stream drop. */
-  workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
-  /** Every comment read for a work item — the invalidation target for a feed event. */
-  workItemCommentsRoot: (workItemId: string | undefined) =>
-    [...queryKeys.workItemCommentsAll(), workItemId ?? null] as const,
-  // Page size is baked into the service, so feed surfaces share one cache entry
-  // per anchor: a deep link opens on a different first page than a plain read.
-  workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
-    [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
-  factoryMembers: (factoryProjectId: string | undefined) =>
-    ['factory', 'mention-roster', factoryProjectId ?? null] as const,
+  // Under the board's key: whatever refreshes or rewrites the board's cards reaches a session's too.
+  sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>

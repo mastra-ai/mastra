@@ -380,7 +380,8 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "timeToFirstTokenMs": "<ms>"
+                              "timeToFirstTokenMs": "<ms>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
@@ -680,7 +681,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -1061,7 +1063,8 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "timeToFirstTokenMs": "<ms>"
+                              "timeToFirstTokenMs": "<ms>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-3>",

@@ -14,7 +14,7 @@ import {
   OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY,
   observabilityWidgetHost,
 } from '../host';
-import type { McpAppRef, ObservabilityWidgetPin, ObservabilityWidgetView } from '../host';
+import type { McpAppRef, ObservabilityWidgetConfigure, ObservabilityWidgetPin, ObservabilityWidgetView } from '../host';
 import type { ObservabilityDashboardInput } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
 import { agentRunsChart, agentRunsKpi, draftOf, observabilityServer } from './observability-server';
@@ -538,4 +538,61 @@ it('goes back to the host state when the host refuses the update', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Pin agent-runs' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Pin agent-runs' })).toBeTruthy());
   expect(screen.queryByRole('button', { name: 'Unpin agent-runs' })).toBeNull();
+});
+
+/** A host that shows its own settings for a widget through `observabilityWidgetHost`'s `onConfigure`. */
+function configuringHost(view: ObservabilityWidgetView = {}) {
+  const configured: ObservabilityWidgetConfigure[] = [];
+  const host = observabilityWidgetHost({
+    ...view,
+    resourceUri: APP.resourceUri,
+    onConfigure: configure => configured.push(configure),
+  });
+  return {
+    configured,
+    hostContext: () => host.hostContext!(APP)!,
+    connect: (connected: AppBridge) => {
+      connected.onupdatemodelcontext = async params => {
+        host.onModelContext!(APP, params);
+        return {};
+      };
+    },
+  };
+}
+
+it.each([
+  ['KPI group', agentRunsKpi, 'agent-runs'],
+  ['chart', agentRunsChart, 'Agent runs over time'],
+])(
+  'hands a %s to the host when its settings are clicked, with the window it is drawn over',
+  async (_, widget, name) => {
+    const mcp = observabilityServer({
+      answers: {
+        getMetricAggregate: { data: { value: 1 } },
+        getMetricTimeSeries: { data: { series: [] } },
+      },
+    });
+    const host = configuringHost();
+
+    host.connect(
+      await openWidget(mcp, { dashboard: dashboardOf(widget), datePreset: '7d' }, host.hostContext(), PINNING),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: `Configure ${name}` }));
+    await waitFor(() =>
+      expect(host.configured).toEqual([{ widget: expect.objectContaining(widget), datePreset: '7d' }]),
+    );
+    // The host only configures: no pin button without `pins`.
+    expect(screen.queryByRole('button', { name: `Pin ${name}` })).toBeNull();
+  },
+);
+
+it('shows no settings button when the host passes no onConfigure', async () => {
+  const mcp = observabilityServer({ answers: { getMetricTimeSeries: { data: { series: [] } } } });
+  const host = pinningHost();
+
+  host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsChart) }, host.hostContext(), PINNING));
+
+  expect(await screen.findByRole('button', { name: 'Pin Agent runs over time' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /^Configure/ })).toBeNull();
 });

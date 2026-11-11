@@ -81,7 +81,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: `work-item-signal-${randomUUID()}`, url: ':memory:' });
     if (backend === 'libsql') onTestFinished(() => storage.close());
-    const { workItems, projects, comments, boards } = await createFactoryStorageForTests(storage);
+    const { workItems, projects, boards } = await createFactoryStorageForTests(storage);
     const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Acme' } });
     if (options.storedWithSelfReview) {
       await boards.insertIfMissing(
@@ -134,13 +134,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       source: pullRequest35,
       metadata: { state: 'closed', githubPullRequestNumber: 35, headBranch: 'evil..$(curl x)' },
     });
-    await comments.create({
-      orgId: 'org-1',
-      factoryProjectId: project.id,
-      workItemId: item.id,
-      author: { kind: 'user', id: 'user-2', displayName: 'Commenter' },
-      body: 'A comment thread the signal must not carry.',
-    });
     const processor = new FactoryWorkItemStateProcessor({
       storage: workItems,
       boards: new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage: boards, recheckMs: 0 }),
@@ -177,7 +170,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     expect(contents).not.toContain('<untrusted-source-description>');
   });
 
-  it('fences an untrusted author description, omits an unsafe head branch and carries no comments', async () => {
+  it('fences an untrusted author description, omits an unsafe head branch', async () => {
     const { processor, context } = await setup({ trusted: false });
 
     const contents = (await processor.computeStateSignal(stateArgs(context)))!.contents;
@@ -193,7 +186,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     );
     expect(contents).not.toContain('evil');
     expect(contents).not.toContain('curl');
-    expect(contents).not.toContain('A comment thread the signal must not carry.');
   });
 
   it("leaves self-review to the card's board, with no project switch in the signal", async () => {

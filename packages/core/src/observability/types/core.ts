@@ -10,7 +10,7 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { ClientObservabilityProxy } from './client';
-import type { FeedbackEvent, FeedbackInput } from './feedback';
+import type { FeedbackEvent, FeedbackInput, FeedbackReplacementEvent, FeedbackReplacementInput } from './feedback';
 import type { LoggerContext, LogEvent } from './logging';
 import type { MetricsContext, MetricEvent } from './metrics';
 import type { ScoreEvent, ScoreInput } from './scores';
@@ -161,7 +161,13 @@ export interface ObservabilityEventBus<TEvent> {
  * Union of all observability event types.
  * Used by the unified ObservabilityBus that handles all signals.
  */
-export type ObservabilityEvent = TracingEvent | LogEvent | MetricEvent | ScoreEvent | FeedbackEvent;
+export type ObservabilityEvent =
+  | TracingEvent
+  | LogEvent
+  | MetricEvent
+  | ScoreEvent
+  | FeedbackEvent
+  | FeedbackReplacementEvent;
 
 /** Signal whose event was dropped by the observability exporter pipeline. */
 export type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback';
@@ -337,8 +343,9 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the scored target when available.
    * Include `spanId` when the score is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addScore?(args: {
     traceId?: string;
@@ -353,8 +360,9 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the feedback target when available.
    * Include `spanId` when the feedback is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addFeedback?(args: {
     traceId?: string;
@@ -362,6 +370,12 @@ export interface ObservabilityEntrypoint {
     correlationContext?: CorrelationContext;
     feedback: FeedbackInput;
   }): Promise<void>;
+
+  /** Replace complete feedback independently at each supporting exporter. */
+  replaceFeedback?(args: FeedbackReplacementInput): Promise<void>;
+
+  /** @internal Notify non-storage exporters after the server has persisted a record. */
+  __exportPersistedEvent?(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void>;
 
   /**
    * Returns the proxy responsible for client observability (W3C trace
@@ -578,6 +592,9 @@ export interface ObservabilityEvents {
 
   /** Handle score events */
   onScoreEvent?(event: ScoreEvent): void | Promise<void>;
+
+  /** Handle full feedback replacements; unsupported exporters ignore them. */
+  onFeedbackReplacementEvent?(event: FeedbackReplacementEvent): void | Promise<void>;
 
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;

@@ -388,7 +388,7 @@ function SourcePickerDrawer({
 
 function SectionHeading({ id, children }: { id?: string; children: ReactNode }) {
   return (
-    <Txt as="h3" id={id} variant="meta" tone="muted" className="m-0 px-4 pt-4 pb-1 uppercase">
+    <Txt as="h3" id={id} variant="meta" tone="muted" className="m-0 px-4 pt-4 pb-1">
       {children}
     </Txt>
   );

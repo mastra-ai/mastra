@@ -125,6 +125,8 @@ const codeEditorVariants = cva(
       variant: {
         default: cn(inputSurfaceAndFocusWithinStyle, 'rounded-md p-1', fieldErrorRimWithin),
         embedded: 'rounded-none border-none bg-transparent p-0',
+        /** Prose edited in place: no frame, no gutter, text flush with the label above it. */
+        inline: 'rounded-none border-none bg-transparent p-0',
       },
     },
     defaultVariants: {
@@ -160,6 +162,12 @@ const editorFocusTheme = Prec.highest(
 );
 
 const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
+
+/** Drops the line inset so text lines up with surrounding copy, and keeps three lines to click into while empty. */
+const inlineTheme = EditorView.theme({
+  '.cm-content': { padding: '0', minHeight: '3lh' },
+  '.cm-line': { padding: '0' },
+});
 
 type CodeEditorContentAttributes = {
   'aria-label': string;
@@ -254,7 +262,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       const exts: Extension[] = [
         ...editorFocusExtensions,
         EditorView.contentAttributes.of(contentAttributes),
-        codeFoldGutter,
+        variant === 'inline' ? inlineTheme : codeFoldGutter,
       ];
 
       if (lineWrapping) {
@@ -286,6 +294,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       return exts;
     }, [
       extraExtensions,
+      variant,
       language,
       highlightVariables,
       schema,

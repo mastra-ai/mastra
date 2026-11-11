@@ -442,14 +442,10 @@ export async function updateFactoryThinkingDefault(
 
 export interface ApplyFactoryDefaultModelResult {
   modelId: string;
-  applied: string[];
-  skipped: Array<{
-    threadId: string;
-    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
-  }>;
+  status: 'started';
 }
 
-/** Apply the Factory default model to currently running work and review sessions. */
+/** Start applying the Factory default model to currently running work and review sessions. */
 export async function applyFactoryDefaultModelToSessions(
   baseUrl: string,
   factoryProjectId: string,

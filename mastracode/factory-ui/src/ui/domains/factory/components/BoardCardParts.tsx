@@ -24,7 +24,6 @@ import { attachedPullRequestSource } from '../services/workItems';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
-import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
 import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Finger';
@@ -81,22 +80,6 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
     >
       <IconExpand45 size={13} aria-hidden />
     </button>
-  );
-}
-
-export function CommentCount({ count }: { count: number }) {
-  if (count === 0) return null;
-  return (
-    <Txt
-      as="span"
-      variant="meta"
-      tone="faint"
-      className="flex shrink-0 items-center gap-1"
-      aria-label={`${count} ${count === 1 ? 'comment' : 'comments'}`}
-    >
-      <IconBubble2 size={11} aria-hidden />
-      {count}
-    </Txt>
   );
 }
 

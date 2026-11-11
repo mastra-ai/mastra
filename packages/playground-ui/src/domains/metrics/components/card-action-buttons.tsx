@@ -1,5 +1,5 @@
 import { LogsIcon } from 'lucide-react';
-import { Button } from '../../../ds/components/Button/Button';
+import { MetricsCard, onCardHover } from '../../../ds/components/MetricsCard';
 import { TraceIcon } from '../../../ds/icons/TraceIcon';
 import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
@@ -9,57 +9,51 @@ type CardActionButtonProps = {
 };
 
 /** Icon button in a MetricsCard top bar that opens the Traces page pre-filtered
- *  to whatever dimensions the card knows about. */
+ *  to whatever dimensions the card knows about. Waits for the card's hover. */
 export function OpenInTracesButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in traces" aria-label="View in traces">
+    <MetricsCard.Action label="View in traces" className={onCardHover} onClick={onClick}>
       <TraceIcon />
-    </Button>
+    </MetricsCard.Action>
   );
 }
 
 /** Icon button in a MetricsCard top bar that opens the Logs page scoped to
- *  errors for the card's current dimensions. */
+ *  errors for the card's current dimensions. Waits for the card's hover. */
 export function OpenErrorsInLogsButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button
-      onClick={onClick}
-      variant="ghost"
-      size="icon-sm"
-      tooltip="View errors in logs"
-      aria-label="View errors in logs"
-    >
+    <MetricsCard.Action label="View errors in logs" className={onCardHover} onClick={onClick}>
       <LogsIcon />
-    </Button>
+    </MetricsCard.Action>
   );
 }
 
 /** Icon button in a MetricsCard top bar that opens the Logs page scoped to
- *  the card's current dimensions, whatever their status. */
+ *  the card's current dimensions, whatever their status. Waits for the card's hover. */
 export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in logs" aria-label="View in logs">
+    <MetricsCard.Action label="View in logs" className={onCardHover} onClick={onClick}>
       <LogsIcon />
-    </Button>
+    </MetricsCard.Action>
   );
 }
 
 /** Icon button in a MetricsCard top bar that opens the Spans page scoped to
- *  the card's current dimensions. */
+ *  the card's current dimensions. Waits for the card's hover. */
 export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in spans" aria-label="View in spans">
+    <MetricsCard.Action label="View in spans" className={onCardHover} onClick={onClick}>
       <IconCodeTree />
-    </Button>
+    </MetricsCard.Action>
   );
 }
 
 /** Icon button in a MetricsCard top bar that opens the Threads page scoped to
- *  the card's current dimensions. */
+ *  the card's current dimensions. Waits for the card's hover. */
 export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in threads" aria-label="View in threads">
+    <MetricsCard.Action label="View in threads" className={onCardHover} onClick={onClick}>
       <IconChatBubbles />
-    </Button>
+    </MetricsCard.Action>
   );
 }

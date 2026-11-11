@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -40,6 +41,9 @@ import type {
 } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
+import { IconPin } from '@/ds/icons/central/IconPin';
+import { IconUnpin } from '@/ds/icons/central/IconUnpin';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -102,6 +106,28 @@ const note = (id: string, text: string, extra: Partial<DashboardWidget> = {}): D
   ...extra,
 });
 
+/** A host's pin state, as the MCP app's host keeps it: the widget's id says whether it's pinned. */
+type PinningProps = {
+  onPin: (widget: DashboardWidget, isPinned: boolean) => void;
+  isPinned: (widgetId: string) => boolean;
+};
+
+/** Pin buttons from a host's pin state, as a host composes them with `MetricsCard.Action`: waiting for hover, unless pinned. */
+const pinning =
+  ({ onPin, isPinned }: PinningProps) =>
+  (widget: DashboardWidget) => {
+    const pinned = isPinned(widget.id);
+    return (
+      <MetricsCard.Action
+        label={`${pinned ? 'Unpin' : 'Pin'} ${widget.title?.trim() || 'widget'}`}
+        onClick={() => onPin(widget, !pinned)}
+        className={pinned ? undefined : onCardHover}
+      >
+        {pinned ? <IconUnpin /> : <IconPin />}
+      </MetricsCard.Action>
+    );
+  };
+
 function renderDashboard(
   definition: DashboardDefinition,
   {
@@ -120,10 +146,7 @@ function renderDashboard(
     expand?: DashboardExpand;
     dragHandle?: DashboardRendererProps['dragHandle'];
     alert?: DashboardAlert;
-    pin?: {
-      onPin: NonNullable<DashboardRendererProps['onPin']>;
-      isPinned: NonNullable<DashboardRendererProps['isPinned']>;
-    };
+    pin?: PinningProps;
     scope?: { metrics: MetricsScope; dashboard: DashboardScope };
     environment?: string;
     filterTokens?: { fieldId: string; value: string }[];
@@ -150,7 +173,7 @@ function renderDashboard(
         expand={expand}
         dragHandle={dragHandle}
         alert={alert}
-        {...pin}
+        widgetActions={pin && pinning(pin)}
       />,
     ),
   );
@@ -430,24 +453,31 @@ describe('DashboardRenderer', () => {
       LinkComponent: RouterLink,
     };
 
-    it("links the card's title to the host's page in place of its views menu", async () => {
+    it("gives the card an expand action linking to the host's page, with its plain title in place of its views menu", async () => {
       const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand });
       const card = cell(container, 'token-usage');
-      const link = await within(card).findByRole('link', { name: 'Token usage' });
+      const link = await within(card).findByRole('link', { name: 'Expand Token usage' });
       expect(link.getAttribute('href')).toBe('/app/query?metric=token-usage');
+      expect(within(card).getByRole('heading', { name: 'Token usage' }).contains(link)).toBe(false);
       expect(within(card).queryByRole('button', { name: 'Token usage' })).toBeNull();
     });
 
-    it('names the link after the first view when the widget title is blank', async () => {
+    it('names the card and its action after the first view when the widget title is blank', async () => {
       const { container } = renderDashboard(definition({ ...metricsWidget('token-usage'), title: '  ' }), {
         expand,
       });
-      expect(await within(cell(container, 'token-usage')).findByRole('link', { name: 'Token usage' })).toBeDefined();
+      const card = cell(container, 'token-usage');
+      expect(await within(card).findByRole('link', { name: 'Expand Token usage' })).toBeDefined();
+      expect(within(card).getByRole('heading', { name: 'Token usage' })).toBeDefined();
     });
 
-    it('links a scores card the same way', async () => {
+    it('gives a scores card the same action', async () => {
       const { container } = renderDashboard(definition(scoresWidget), { expand });
-      const link = await within(cell(container, 'scores')).findByRole('link', { name: 'Scores' }, { timeout: 5000 });
+      const link = await within(cell(container, 'scores')).findByRole(
+        'link',
+        { name: 'Expand Scores' },
+        { timeout: 5000 },
+      );
       expect(link.getAttribute('href')).toBe('/app/query?metric=scores');
     });
 
@@ -488,18 +518,18 @@ describe('DashboardRenderer', () => {
       const card = cell(container, kpisWidget.id);
       const handle = await within(card).findByRole('button', { name: `Move ${kpisWidget.id}` }, { timeout: 5000 });
       expect(handle.getAttribute('draggable')).toBe('true');
-      expect(handle.closest('.opacity-0.group-hover\\/kpis\\:opacity-100')).not.toBeNull();
+      expect(handle.closest('.opacity-0.group-hover\\/metrics-card\\:opacity-100')).not.toBeNull();
       // Touch screens can't hover, so the handle stays shown and tappable there.
       expect(handle.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto')).not.toBeNull();
       fireEvent.dragStart(handle);
       expect(onDragStart).toHaveBeenCalledTimes(1);
     });
 
-    it('puts the handle before a linked title', async () => {
+    it('puts the handle before the title of a card that expands', async () => {
       const expand: DashboardExpand = { href: () => '/query', LinkComponent: props => <a {...props} /> };
       const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand, dragHandle });
       const card = cell(container, 'token-usage');
-      await within(card).findByRole('link', { name: 'Token usage' });
+      await within(card).findByRole('link', { name: 'Expand Token usage' });
       expect(firstControl(card)).toBe(within(card).getByRole('button', { name: 'Move token-usage' }));
     });
 
@@ -537,7 +567,7 @@ describe('DashboardRenderer', () => {
 
   describe('when the host can pin widgets', () => {
     /** A host that owns which widgets are pinned and passes that back down, as the MCP app's host does. */
-    function PinningHost({ widgets, onPin }: { widgets: DashboardWidget[]; onPin: DashboardRendererProps['onPin'] }) {
+    function PinningHost({ widgets, onPin }: { widgets: DashboardWidget[]; onPin: PinningProps['onPin'] }) {
       const [pinned, setPinned] = useState<string[]>([]);
       return (
         <MetricsProvider preset="24h" filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
@@ -545,11 +575,13 @@ describe('DashboardRenderer', () => {
             definition={definition(...widgets)}
             kinds={[noteKind, brokenKind]}
             scope="project"
-            isPinned={id => pinned.includes(id)}
-            onPin={(widget, next) => {
-              onPin?.(widget, next);
-              setPinned(ids => (next ? [...ids, widget.id] : ids.filter(id => id !== widget.id)));
-            }}
+            widgetActions={pinning({
+              isPinned: id => pinned.includes(id),
+              onPin: (widget, next) => {
+                onPin(widget, next);
+                setPinned(ids => (next ? [...ids, widget.id] : ids.filter(id => id !== widget.id)));
+              },
+            })}
           />
         </MetricsProvider>
       );
@@ -557,11 +589,23 @@ describe('DashboardRenderer', () => {
 
     /** The pin button's name: the widget's title, or "widget" for an untitled one like the KPI group. */
     const pinLabel = (verb: 'Pin' | 'Unpin', widget: DashboardWidget) => `${verb} ${widget.title?.trim() || 'widget'}`;
-    /** Whether the button only shows while the card is hovered. */
+    /** Whether the button only shows while the card is hovered or focused. */
     const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0') !== null;
-    /** Whether the button stays shown and tappable on touch screens, which can't hover. */
-    const reachableOnTouch = (button: HTMLElement) =>
-      button.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto') !== null;
+    /**
+     * Whether the button, and every hidden element around it, shows and takes taps on touch screens, which
+     * can't hover.
+     */
+    const reachableOnTouch = (button: HTMLElement) => {
+      for (let el: HTMLElement | null = button; el; el = el.parentElement) {
+        if (el.classList.contains('opacity-0') && !el.classList.contains('pointer-coarse:opacity-100')) return false;
+        if (
+          el.classList.contains('pointer-events-none') &&
+          !el.classList.contains('pointer-coarse:pointer-events-auto')
+        )
+          return false;
+      }
+      return true;
+    };
 
     it.each([
       ['a timeseries card', metricsWidget('agent-runs')],
@@ -609,25 +653,46 @@ describe('DashboardRenderer', () => {
       const card = cell(container, widget.id);
       const pin = await within(card).findByRole('button', { name: pinLabel('Pin', widget) }, { timeout: 5000 });
       expect(waitsForHover(pin)).toBe(true);
+      // Touch screens can't hover, so there the pin shows and takes taps.
+      expect(reachableOnTouch(pin)).toBe(true);
 
       fireEvent.click(pin);
       expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
     });
 
-    it('keeps the controls of a KPI group, which float over its border, for hover on screens that can hover, whether pinned or not', async () => {
+    it('keeps the controls of a KPI group, which float over its border, for hover, and reachable on touch', async () => {
       const { container } = renderWithProviders(<PinningHost widgets={[kpisWidget]} onPin={() => {}} />);
       const card = cell(container, kpisWidget.id);
       const pin = await within(card).findByRole('button', { name: pinLabel('Pin', kpisWidget) }, { timeout: 5000 });
       expect(waitsForHover(pin)).toBe(true);
       expect(pin.closest('.pointer-events-none')).not.toBeNull();
-      expect(reachableOnTouch(pin)).toBe(false);
+      expect(reachableOnTouch(pin)).toBe(true);
 
       fireEvent.click(pin);
       const unpin = within(card).getByRole('button', { name: pinLabel('Unpin', kpisWidget) });
       expect(waitsForHover(unpin)).toBe(true);
-      expect(unpin.closest('.pointer-events-none')).not.toBeNull();
-      // Touch screens can't hover, so a pinned group keeps its unpin button shown and tappable there.
       expect(reachableOnTouch(unpin)).toBe(true);
+    });
+
+    it.each([
+      ['a table card', models()],
+      ['a KPI group', kpisWidget],
+    ])('keeps the hover-only pin of %s in the tab order', async (_, widget) => {
+      const user = userEvent.setup();
+      const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={() => {}} />);
+      const pin = await within(cell(container, widget.id)).findByRole(
+        'button',
+        { name: pinLabel('Pin', widget) },
+        { timeout: 5000 },
+      );
+      expect(waitsForHover(pin)).toBe(true);
+      expect(pin.classList.contains('hidden')).toBe(false);
+
+      // Tab through the card's controls (the KPI figures' change badges come first) until the pin.
+      for (let i = 0; i < 20 && document.activeElement !== pin; i++) await user.tab();
+      expect(document.activeElement).toBe(pin);
+      // Focus inside the card is what reveals it.
+      expect(pin.className).toContain('group-focus-within/metrics-card:opacity-100');
     });
 
     it("shows the host's pinned widgets without a click", async () => {

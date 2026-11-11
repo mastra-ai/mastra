@@ -123,10 +123,10 @@ describe('Creating a board', () => {
     expect(form.getByRole('button', { name: 'Create board' })).toBeDisabled();
     await user.type(form.getByLabelText('Board name'), 'Bug Triage');
     expect(form.getByLabelText('Board key')).toHaveValue('bug-triage');
-    // Cards only reach a new board through intake, which has its own settings.
-    expect(form.getByRole('link', { name: 'Work Intake' })).toHaveAttribute(
+    // Cards only reach a new board through an intake route, which has its own settings.
+    expect(form.getByRole('link', { name: 'Intake routes' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/intake`,
+      `/factories/${FACTORY_ID}/settings/intake#new-cards`,
     );
     await user.click(form.getByRole('button', { name: 'Create board' }));
 
@@ -363,10 +363,11 @@ describe("Editing a board's phases", () => {
     const { client } = renderAt(`/factories/${FACTORY_ID}/work/config/execute`);
 
     const goal = await screen.findByRole('textbox', { name: 'Building goal' });
-    expect(goal).not.toHaveValue('');
-    await user.clear(goal);
+    expect(goal).toHaveTextContent(/\S/);
+    await user.click(goal);
+    await user.keyboard('{Control>}a{/Control}{Backspace}');
     await user.type(goal, 'Every test passes.');
-    const runs = screen.getByRole('spinbutton', { name: 'Building goal runs' });
+    const runs = screen.getByRole('textbox', { name: 'Pause goal after' });
     await user.clear(runs);
     await user.type(runs, '5');
 
@@ -392,7 +393,7 @@ describe("Editing a board's phases", () => {
     const user = userEvent.setup();
     renderAt(`/factories/${FACTORY_ID}/work/config/execute`);
 
-    const runs = await screen.findByRole('spinbutton', { name: 'Building goal runs' });
+    const runs = await screen.findByRole('textbox', { name: 'Pause goal after' });
     await user.clear(runs);
     await user.type(runs, '51');
     expect(await screen.findByText('Fix Building to save.')).toBeInTheDocument();

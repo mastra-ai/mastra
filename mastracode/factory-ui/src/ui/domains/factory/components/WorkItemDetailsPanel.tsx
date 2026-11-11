@@ -2,9 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
-import { useParams, useSearchParams } from 'react-router';
+import { useParams } from 'react-router';
 
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardState';
 import type { CardContextSession } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
@@ -51,10 +50,6 @@ export function WorkItemDetailsPanel({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const titleId = useId();
-  const auth = useFactoryAuth();
-  const [searchParams] = useSearchParams();
-  const highlightCommentId =
-    searchParams.get('item') === item.id ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const activity = workItemActivity(item, activityPage);
   const events = timelineEvents(activity);
@@ -111,9 +106,6 @@ export function WorkItemDetailsPanel({
         item={item}
         factoryId={factoryId}
         projectRepositoryId={projectRepositoryId}
-        enabled={morph.open}
-        currentUser={auth.data?.user}
-        highlightCommentId={highlightCommentId}
         events={events}
         actors={actors}
         contextSessions={contextSessions}

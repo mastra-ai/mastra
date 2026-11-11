@@ -25,6 +25,8 @@ export interface PromptContext {
   coAuthorName?: string;
   /** Email used in the commit `Co-Authored-By` line. Default: the mastra-platform bot noreply address. */
   coAuthorEmail?: string;
+  /** Whether approving a submit_plan plan starts it as a goal. False for hosts without goals (Factory). Default: true. */
+  planApprovalStartsGoal?: boolean;
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
@@ -32,6 +34,10 @@ export function buildBasePrompt(ctx: PromptContext): string {
   const productName = ctx.productName ?? 'Mastra Code';
   const coAuthorName = ctx.coAuthorName ?? 'mastra-platform[bot]';
   const coAuthorEmail = ctx.coAuthorEmail ?? '284800079+mastra-platform[bot]@users.noreply.github.com';
+  const goalEntryGuidance =
+    ctx.planApprovalStartsGoal === false
+      ? '- Approving a plan submitted with the submit_plan tool switches to Build mode for implementation; it does not start a goal.'
+      : '- Users can start goal mode directly with /goal <objective>. In plan mode, approving a plan submitted with the submit_plan tool starts it as a goal.';
 
   return `You are ${productName}, an interactive CLI coding agent that helps users with software engineering tasks.
 
@@ -60,7 +66,7 @@ ${ctx.toolGuidance}
 
 ## Goal Mode Awareness
 - ${productName} has a goal mode for longer-running work. A goal is a persistent objective that the agent continues pursuing across turns until a judge decides the goal is complete, should continue, should pause, or should wait for user input.
-- Users can start goal mode directly with /goal <objective>. In plan mode, plans submitted with the submit_plan tool may also be started as a goal if the user selects that option in the approval UI.
+${goalEntryGuidance}
 - Help users create good goals by making objectives concrete, outcome-focused, verifiable, and bounded. Prefer goals that state the desired end state, relevant constraints, and what proof or verification should be produced.
 - When writing implementation plans, make them goal-ready: structure steps so they can be carried out autonomously after approval, include clear verification criteria, call out risks/blockers, and avoid vague instructions that would leave the goal judge unable to determine completion.
 - If a proposed goal is too broad or ambiguous to pursue safely, ask a focused clarification or suggest a tighter objective.

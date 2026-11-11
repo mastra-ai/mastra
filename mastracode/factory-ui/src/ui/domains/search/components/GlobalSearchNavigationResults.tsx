@@ -80,7 +80,7 @@ export function GlobalSearchNavigationResults({
         icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.intake}
         subtitle="Settings"
-        value={`Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`}
+        value={`Work Intake Settings intake routes new cards ${settingsSectionPath(factoryId, 'intake')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem

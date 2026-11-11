@@ -39,6 +39,22 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
 } {
+  if (route.path === '/observability/feedback/:feedbackId' && route.method === 'PUT') {
+    return {
+      body: {
+        contextMode: 'provided',
+        feedback: {
+          feedbackId: 'test-feedback-replacement',
+          traceId: 'test-trace',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          feedbackSource: 'user',
+          feedbackType: 'comment',
+          value: 'replacement feedback',
+        },
+      },
+    };
+  }
+
   if (route.path === '/observability/traces/query/values') {
     return { body: { predicateScope: 'trace', path: 'entityName' } };
   }
@@ -165,10 +181,12 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   }
 
   if (typeName === 'ZodString') {
-    const hasDateTimeFormat = (def.checks ?? []).some((check: any) => {
-      const checkDef = check._zod?.def ?? check.def ?? check;
-      return check.kind === 'datetime' || check.format === 'datetime' || checkDef.format === 'datetime';
-    });
+    const hasDateTimeFormat =
+      def.format === 'datetime' ||
+      (def.checks ?? []).some((check: any) => {
+        const checkDef = check._zod?.def ?? check.def ?? check;
+        return check.kind === 'datetime' || check.format === 'datetime' || checkDef.format === 'datetime';
+      });
     if (hasDateTimeFormat) {
       if (fieldName?.toLowerCase() === 'from') return '2026-01-01T00:00:00.000Z';
       if (fieldName?.toLowerCase() === 'to') return '2026-01-02T00:00:00.000Z';
@@ -421,7 +439,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
     params.scorerId = 'test-scorer';
   }
   if (route.path.includes(':scoreId')) params.scoreId = 'test-score';
-  if (route.path.includes(':feedbackId')) params.feedbackId = 'test-feedback';
+  if (route.path.includes(':feedbackId')) {
+    params.feedbackId = route.method === 'PUT' ? 'test-feedback-replacement' : 'test-feedback';
+  }
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';
