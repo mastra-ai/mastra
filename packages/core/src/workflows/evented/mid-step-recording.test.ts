@@ -149,6 +149,7 @@ describe('evented mid-step recording (issue #22636)', () => {
     // Abandoned on purpose — host A is "killed" while step2 is executing.
     runA.start({ inputData: { value: 'go' } }).catch(() => {});
     await step2Started;
+    await mastraA.shutdown({ drainTimeout: 0 });
     await abandonLease(storage, stepOccurrenceKey(runId, [1]), runLivenessKey(runId));
 
     // ---- Host B: fresh instances over the SAME storage ----

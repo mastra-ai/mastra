@@ -84,7 +84,8 @@ describe('evented restart before workers have started', () => {
     // step itself before asserting. This also guards against a vacuous pass: the run
     // really is parked inside generation 1.
     await vi.waitFor(() => expect(log).toEqual([{ generation: 1, event: 'start' }]));
-    // Generation 1 stands in for a process that died mid-step, so its step lease lapses.
+    // Generation 1 stands in for a process that died mid-step, so its leases lapse.
+    await firstProcess.shutdown({ drainTimeout: 0 });
     await abandonLease(storage, stepOccurrenceKey(RUN_ID, [0]), runLivenessKey(RUN_ID));
 
     const secondProcess = new Mastra({
@@ -101,9 +102,9 @@ describe('evented restart before workers have started', () => {
       new Promise<string>(resolve => setTimeout(() => resolve(`stalled:${STALL_TIMEOUT_MS}ms`), STALL_TIMEOUT_MS)),
     ]);
 
+    // Generation 1 is shut down, so its run never reports back; the step only has to unblock.
     gate.release();
-    await firstRun;
-    await firstProcess.stopWorkers();
+    void firstRun.catch(() => {});
     await secondProcess.stopWorkers();
 
     expect(outcome).toBe('resolved:success');

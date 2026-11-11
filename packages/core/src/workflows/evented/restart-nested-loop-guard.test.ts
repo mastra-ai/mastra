@@ -103,7 +103,7 @@ describe('evented restart of a nested loop body', () => {
       }
       return { n: n + 1 };
     });
-    await makeHost(hostA, storage);
+    const processA = await makeHost(hostA, storage);
     const runA = await hostA['restart-loop-outer'].createRun({ runId });
     runA.start({ inputData: { n: 0 } }).catch(() => {});
     await crashed.promise;
@@ -115,6 +115,7 @@ describe('evented restart of a nested loop body', () => {
     expect(crashedLeaf?.status).toBe('running');
     expect(crashedLeaf?.metadata?.startedBy).toEqual(expect.any(String));
     const nestedRunId = crashedLeaf!.metadata!.nestedRunId;
+    await processA.shutdown({ drainTimeout: 0 });
     await abandonLease(
       storage,
       stepOccurrenceKey(nestedRunId, [0]),

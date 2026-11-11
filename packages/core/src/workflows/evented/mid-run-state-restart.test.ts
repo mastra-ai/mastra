@@ -88,10 +88,11 @@ describe('evented mid-run state recording', () => {
         return {};
       },
     );
-    await makeHost(workflowA, storage);
+    const hostA = await makeHost(workflowA, storage);
     const runA = await workflowA.createRun({ runId });
     runA.start({ inputData: {}, initialState }).catch(() => {});
     await step2Started.promise;
+    await hostA.shutdown({ drainTimeout: 0 });
     await abandonLease(storage, stepOccurrenceKey(runId, [1]), runLivenessKey(runId));
 
     const snapshot = await loadSnapshot(storage, workflowId, runId);
@@ -147,10 +148,11 @@ describe('evented mid-run state recording', () => {
       await new Promise<never>(() => {});
       return {};
     });
-    await makeHost(workflowA, storage);
+    const hostA = await makeHost(workflowA, storage);
     const runA = await workflowA.createRun({ runId });
     runA.start({ inputData: {}, initialState }).catch(() => {});
     await nextStarted.promise;
+    await hostA.shutdown({ drainTimeout: 0 });
     await abandonLease(storage, stepOccurrenceKey(runId, [1]), runLivenessKey(runId));
 
     const snapshot = await loadSnapshot(storage, workflowId, runId);
@@ -218,10 +220,11 @@ describe('evented mid-run state recording', () => {
       await new Promise<never>(() => {});
       return {};
     });
-    await makeHost(workflowA, storage);
+    const hostA = await makeHost(workflowA, storage);
     const runA = await workflowA.createRun({ runId });
     runA.start({ inputData: {}, initialState }).catch(() => {});
     await afterStarted.promise;
+    await hostA.shutdown({ drainTimeout: 0 });
     await abandonLease(storage, stepOccurrenceKey(runId, [2]), runLivenessKey(runId));
 
     const snapshot = await loadSnapshot(storage, workflowId, runId);
