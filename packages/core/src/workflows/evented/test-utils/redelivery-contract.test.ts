@@ -121,7 +121,13 @@ describe('redelivery processor draining', () => {
           return inputData + 1;
         },
       });
-    const workflow = createEventedWorkflow({ id: 'drain-contract', inputSchema: z.number(), outputSchema: z.number() })
+    // Unleased steps run again on a replay, which gives the drain descendants to wait for.
+    const workflow = createEventedWorkflow({
+      id: 'drain-contract',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      options: { autoRestartActiveRuns: false },
+    })
       .then(step('before'))
       .then(step('after'))
       .commit();
