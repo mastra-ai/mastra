@@ -365,6 +365,26 @@ describe('JsonRenderProcessor', () => {
       where: 'outside a code block, on a path an interface does not have',
       reply: 'Send this:\n{"op":"replace","path":"/name","value":"Ada"}\nThat is all.',
     },
+    {
+      where: 'in a tilde code block',
+      reply: 'Like this:\n~~~json\n{"op":"add","path":"/root","value":"card"}\n~~~\nThat is all.',
+    },
+    {
+      where: 'in a four-backtick block that also shows a three-backtick line',
+      reply: 'Like this:\n````md\n```\n{"op":"add","path":"/root","value":"card"}\n```\n````\nThat is all.',
+    },
+    {
+      where: 'in a code block, after a line that starts like a closing fence but is not one',
+      reply: 'Like this:\n```md\n```not a fence\n{"op":"add","path":"/root","value":"card"}\n```\nThat is all.',
+    },
+    {
+      where: 'in the middle of a line',
+      reply: 'Inline, it reads {"op":"add","path":"/root","value":"card"}\nThat is all.',
+    },
+    {
+      where: 'after a fence named in the middle of a line',
+      reply: 'Write ```spec then {"op":"add","path":"/root","value":"card"}\nThat is all.',
+    },
   ])('keeps a JSON patch shown $where as prose', async ({ reply }) => {
     const { model } = modelWriting(reply);
 

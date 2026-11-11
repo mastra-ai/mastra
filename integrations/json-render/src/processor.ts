@@ -34,14 +34,35 @@ export interface JsonRenderProcessorOptions {
   catalog: Catalog;
 }
 
+/** An open code block: its fence (three or more backticks or tildes), and whether it is a ```spec block. */
+interface Fence {
+  marker: string;
+  spec: boolean;
+}
+
 /** Where the text stream is: lines that may be a patch or a fence are held until they end. */
 interface Split {
   line: string;
   holding: boolean;
+  /** Whether the line has prose before this point, so a fence or patch can no longer start it. */
+  midLine: boolean;
   /** The code block the stream is in: a ```spec block, or any other, whose lines stay prose. */
-  fence?: 'spec' | 'other';
+  fence?: Fence;
   /** Whether the open fence has had its first patch, which decides if it starts a new spec or edits the last one. */
   started: boolean;
+}
+
+/** The code block a line opens, as CommonMark reads it. */
+function fenceOpenedBy(line: string): Fence | undefined {
+  const [, marker, info] = /^(`{3,}|~{3,})(.*)$/.exec(line) ?? [];
+  if (!marker || (marker.startsWith('`') && info!.includes('`'))) return;
+  return { marker, spec: info!.trim().split(/\s/)[0] === 'spec' };
+}
+
+/** Whether a line closes a code block: the fence's character, at least as many times, and nothing else. */
+function closes(fence: Fence, line: string) {
+  const [, marker] = /^(`+|~+)$/.exec(line) ?? [];
+  return !!marker && marker[0] === fence.marker[0] && marker.length >= fence.marker.length;
 }
 
 /**
@@ -50,7 +71,10 @@ interface Split {
  * only a reply cut off inside a patch line ends with text held back.
  */
 function couldOpenSpecLine(line: string) {
-  if (line.startsWith('`')) return FENCE_CLOSE.startsWith(line) || line.startsWith(FENCE_CLOSE);
+  if (line.startsWith('`') || line.startsWith('~')) {
+    const fence = line[0]!.repeat(3);
+    return fence.startsWith(line) || line.startsWith(fence);
+  }
   return /^\{\s*("|$)/.test(line);
 }
 
@@ -134,7 +158,12 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
     requestContext,
   }: ProcessOutputStreamArgs): Promise<ChunkType | null> {
     if (part.type !== 'text-delta' && part.type !== 'text-end') return part;
-    const split = ((state.split as Split | undefined) ??= { line: '', holding: false, started: false });
+    const split = ((state.split as Split | undefined) ??= {
+      line: '',
+      holding: false,
+      midLine: false,
+      started: false,
+    });
     const parts: SpecDataPart[] = [];
     let text = '';
 
@@ -145,23 +174,21 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       split.line = '';
       split.holding = false;
       const keep = () => void (text += last ? line : `${line}\n`);
-      if (split.fence === 'other') {
-        if (trimmed.startsWith(FENCE_CLOSE)) split.fence = undefined;
-        return keep();
+      const fence = split.fence;
+      if (fence && closes(fence, trimmed)) {
+        split.fence = undefined;
+        return fence.spec ? undefined : keep();
       }
-      if (!split.fence && trimmed.startsWith(FENCE_CLOSE)) {
-        if (!trimmed.startsWith(FENCE_OPEN)) {
-          split.fence = 'other';
-          return keep();
-        }
-        split.fence = 'spec';
+      if (fence && !fence.spec) return keep();
+      const opened = !fence && fenceOpenedBy(trimmed);
+      if (opened) {
+        split.fence = opened;
         split.started = false;
-        return;
+        return opened.spec ? undefined : keep();
       }
-      if (split.fence === 'spec' && trimmed === FENCE_CLOSE) return void (split.fence = undefined);
       const parsed = parseSpecStreamLine(trimmed);
       // The edit prompt asks for the patch lines alone, so they count outside a block too, when they write to a spec.
-      const patch = parsed && (split.fence === 'spec' || SPEC_PATH.test(parsed.path)) ? parsed : null;
+      const patch = parsed && (fence || SPEC_PATH.test(parsed.path)) ? parsed : null;
       if (patch && !split.started) {
         split.started = true;
         const edited = patch.path !== '/root' && messageList && latestSpec(messageList.get.all.db());
@@ -169,7 +196,7 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
         if (edited) parts.push({ type: 'flat', spec: uiState ? { ...edited, state: uiState } : edited });
       }
       if (patch) parts.push({ type: 'patch', patch });
-      else if (split.fence !== 'spec') keep();
+      else if (!fence) keep();
     };
 
     if (part.type === 'text-end') {
@@ -177,21 +204,25 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       state.split = undefined;
     } else {
       for (const char of part.payload.text) {
+        const inSpec = !!split.fence?.spec;
         if (char === '\n') {
           if (split.holding) endLine();
-          else if (split.fence !== 'spec') text += char;
+          else if (!inSpec) text += char;
+          split.midLine = false;
         } else if (split.holding) {
           split.line += char;
-          if (split.fence !== 'spec' && !couldOpenSpecLine(split.line)) {
+          if (!inSpec && !couldOpenSpecLine(split.line)) {
             text += split.line;
             split.line = '';
             split.holding = false;
+            split.midLine = true;
           }
-        } else if (split.fence === 'spec' || char === '{' || char === '`') {
+        } else if (inSpec || (!split.midLine && (char === '{' || char === '`' || char === '~'))) {
           split.holding = true;
           split.line = char;
         } else {
           text += char;
+          if (!/\s/.test(char)) split.midLine = true;
         }
       }
     }
