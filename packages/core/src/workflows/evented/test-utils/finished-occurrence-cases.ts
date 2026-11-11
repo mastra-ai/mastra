@@ -245,7 +245,9 @@ export function describeFinishedOccurrenceCases({
 
     /**
      * Starts a replica running `workflow` and the nested workflows its top-level
-     * steps call, recording the `workflows` events it publishes.
+     * steps call. `published` records the `workflows` events it publishes, and
+     * `delivered` the same events as its subscribers receive them, with the id a
+     * broker keeps on redelivery.
      */
     async function startReplica<W extends Built>(workflow: W, intercept?: Intercept) {
       const { pubsub, published } = recordWorkflowEvents(new EventEmitterPubSub(), intercept);
@@ -262,7 +264,13 @@ export function describeFinishedOccurrenceCases({
       });
       await mastra.startWorkers();
       replicas.push(mastra);
-      return { mastra, published, workflow };
+
+      const delivered: Event[] = [];
+      await pubsub.subscribe('workflows', event => {
+        delivered.push(copyEvent(event));
+      });
+
+      return { mastra, published, delivered, workflow };
     }
 
     /** A replica crashing: it stops renewing anything, and the leases it held lapse. */
@@ -470,7 +478,10 @@ export function describeFinishedOccurrenceCases({
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
       startInBackground(run, { n: 1 });
       await expect.poll(async () => (await storedRun(run.runId))?.context.first?.status).toBe('success');
-      const original = a.published.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
+      // With the id a broker keeps, so on a store with step guards the redelivery is the event that
+      // stamped the saved result.
+      const original = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
+      expect(original.id).toBeTruthy();
       await crash(a, [runLivenessKey(run.runId)]);
       return { executions, build, run, original };
     }
@@ -634,6 +645,71 @@ export function describeFinishedOccurrenceCases({
       expect(b.published.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
       expect((await storedRun(run.runId))?.status).toBe('success');
     }, 20_000);
+
+    it.each(['running', 'suspended'] as const)(
+      'drops a finished step whose redelivery exhausted its attempts while the next step is %s',
+      async state => {
+        const executions: string[] = [];
+        const blocked = deferred<void>();
+        const gate = deferred<void>();
+        const build = (replica: string) =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+            .then(
+              createStep({
+                id: 'second',
+                inputSchema: Num,
+                outputSchema: Num,
+                resumeSchema: z.object({ ok: z.boolean() }),
+                execute: async ({ inputData, resumeData, suspend }) => {
+                  executions.push(`${replica}:second`);
+                  if (state === 'suspended' && !resumeData) {
+                    await suspend({});
+                    return inputData;
+                  }
+
+                  if (state === 'running' && replica === 'A') {
+                    blocked.resolve();
+                    await gate.promise;
+                  }
+
+                  return inputData;
+                },
+              }),
+            )
+            .commit();
+        const a = await startReplica(build('A'));
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        const result = run.start({ inputData: { n: 1 } });
+        if (state === 'running') {
+          await blocked.promise;
+        } else {
+          expect((await result).status).toBe('suspended');
+        }
+
+        await expect.poll(async () => (await storedRun(run.runId))?.context.first?.status).toBe('success');
+        const first = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
+        expect(first.id).toBeTruthy();
+
+        // The first step's original message, with its original id, comes back once more after
+        // using up its delivery attempts. On a store with step guards its record carries that id.
+        const b = await startReplica(build('B'));
+        expect(await b.mastra.handleWorkflowEvent({ ...copyEvent(first), deliveryAttempt: EXHAUSTED_ATTEMPT })).toEqual(
+          {
+            ok: true,
+          },
+        );
+
+        expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
+        expect(b.published.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
+        expect((await storedRun(run.runId))?.status).toBe(state);
+        if (state === 'running') {
+          gate.resolve();
+          expect((await result).status).toBe('success');
+        }
+      },
+      20_000,
+    );
 
     it('runs a finished step and the steps after it again on time travel', async () => {
       const { executions, run } = await finishTwoSteps();
