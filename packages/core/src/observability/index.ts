@@ -29,4 +29,4 @@ export { compactStopReasonContext } from './outcome-schema';
 export { calculateObservedUsage, isUsageIncomplete } from './usage';
 
 /** @internal Origin accounting shared with independently upgraded observability packages. */
-export { claimSpanError, getSpanErrorOrigin, setSpanErrorOrigin, withSpanErrorAttempt } from './error-count';
+export { claimSpanError, getSpanErrorOrigin, setSpanErrorOrigin } from './error-count';

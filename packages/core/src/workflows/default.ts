@@ -8,7 +8,7 @@ import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
 import { createObservabilityContext, getResumeTracingContext } from '../observability';
-import { withSpanErrorAttempt } from '../observability/error-count';
+import { withSpanErrorAttempt } from '../observability/context-storage';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';

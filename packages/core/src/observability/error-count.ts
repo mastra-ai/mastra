@@ -1,6 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
-
 /** @internal Transported with failures, never inferred from messages or error codes. */
 export interface SpanErrorOrigin {
   traceId: string;
@@ -9,7 +6,7 @@ export interface SpanErrorOrigin {
   attemptId?: string;
 }
 
-const attempts = new AsyncLocalStorage<string>();
+let currentAttemptResolver: (() => string | undefined) | undefined;
 const origins = new WeakMap<object, SpanErrorOrigin>();
 const key = '__mastraSpanErrorOrigin';
 
@@ -18,9 +15,9 @@ function retryScope(attemptId: string | undefined): string | undefined {
   return boundary < 0 ? undefined : attemptId!.slice(0, boundary);
 }
 
-/** @internal An actual retry gets a new scope; durable replay uses the same scope. */
-export function withSpanErrorAttempt<T>(attemptId: string, fn: () => T): T {
-  return attempts.run(attemptId, fn);
+/** @internal Register the server-only retry context without importing Node APIs here. */
+export function setSpanErrorAttemptResolver(resolver: () => string | undefined): void {
+  currentAttemptResolver = resolver;
 }
 
 /** @internal Read through wrappers without retaining errors or traversing span trees. */
@@ -73,7 +70,7 @@ export function claimSpanError(
 ): string | undefined {
   if (options?.origin === 'propagated') return undefined;
   if (error === null || (typeof error !== 'object' && typeof error !== 'function')) return undefined;
-  const attemptId = attempts.getStore();
+  const attemptId = currentAttemptResolver?.();
   let origin = getSpanErrorOrigin(error);
   const scope = retryScope(attemptId);
   if (
@@ -90,7 +87,7 @@ export function claimSpanError(
     origin = {
       traceId,
       spanId,
-      occurrenceId: options?.occurrenceId ?? randomUUID(),
+      occurrenceId: options?.occurrenceId ?? globalThis.crypto.randomUUID(),
       ...(attemptId !== undefined ? { attemptId } : {}),
     };
   }

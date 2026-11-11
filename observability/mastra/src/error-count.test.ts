@@ -1,5 +1,6 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { SpanType, SamplingStrategyType, withSpanErrorAttempt } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
+import { withSpanErrorAttempt } from '@mastra/core/observability/context-storage';
 import { describe, expect, it } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
@@ -26,6 +27,30 @@ describe('originating error counts', () => {
     span.end({ outcome: 'success' });
     expect(span.exportSpan()).toMatchObject({ errorCount: 2, outcome: 'success' });
     expect(span.exportSpan()?.errorInfo).toBeUndefined();
+  });
+
+  it('keeps nested and concurrent retry scopes separate across async work', async () => {
+    const obs = tracing();
+    const spans = [0, 1].map(i => obs.startSpan({ name: `step-${i}`, type: SpanType.WORKFLOW_STEP }));
+    const failures = spans.map(() => new Error('retryable failure'));
+    await Promise.all(
+      spans.map((span, index) =>
+        withSpanErrorAttempt(`${span.id}:attempt:0`, async () => {
+          const outerFailure = new Error('another failure');
+          span.recordError?.(outerFailure);
+          span.recordError?.(failures[index]!);
+          await withSpanErrorAttempt(`${span.id}:attempt:1`, async () => {
+            await Promise.resolve();
+            span.recordError?.(failures[index]!);
+            span.recordError?.(failures[index]!);
+          });
+          // Restoring the outer context keeps this report a duplicate.
+          span.recordError?.(outerFailure);
+          span.end();
+        }),
+      ),
+    );
+    expect(spans.map(span => span.exportSpan()?.errorCount)).toEqual([3, 3]);
   });
 
   it('allows an independent failure to reference an earlier cause', () => {

@@ -8,6 +8,7 @@ import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import * as coreObservability from '@mastra/core/observability';
 import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
+import * as coreContextStorage from '@mastra/core/observability/context-storage';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -149,7 +150,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const runAttempt = () => this.runDurably(stepId, runStep, NonRetriableError);
         const result = await retryCountStorage.run(
           i,
-          () => coreObservability.withSpanErrorAttempt?.(attemptId, runAttempt) ?? runAttempt(),
+          () => coreContextStorage.withSpanErrorAttempt?.(attemptId, runAttempt) ?? runAttempt(),
         );
         return { ok: true, result };
       } catch (e) {
@@ -164,7 +165,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         if (transportedOrigin) coreObservability.setSpanErrorOrigin?.(failure, transportedOrigin);
         const attemptId = `${params.stepSpan?.id ?? stepId}:attempt:${i}`;
         const record = () => params.stepSpan?.recordError?.(failure, { occurrenceId: attemptId });
-        if (coreObservability.withSpanErrorAttempt) coreObservability.withSpanErrorAttempt(attemptId, record);
+        if (coreContextStorage.withSpanErrorAttempt) coreContextStorage.withSpanErrorAttempt(attemptId, record);
         else record();
         if (cause?.status === 'failed') cause.error = failure;
         const isNonRetryable = isNonRetryableStepFailure(cause?.status === 'failed' ? cause : e);

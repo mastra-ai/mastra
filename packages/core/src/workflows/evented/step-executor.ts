@@ -15,7 +15,7 @@ import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { TracingContext, TracingPolicy } from '../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../observability';
-import { withSpanErrorAttempt } from '../../observability/error-count';
+import { withSpanErrorAttempt } from '../../observability/context-storage';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { StepExecutionParentWorkflow } from '../../worker/types';
