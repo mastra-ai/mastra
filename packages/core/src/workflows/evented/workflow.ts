@@ -1956,13 +1956,33 @@ export class EventedRun<
    * instance's sweep does not restart it before a worker picks up its first
    * step. Marking it after the claim would leave the run `running` with no
    * live key for one storage round trip; a claim that loses only leaves a key
-   * that lapses one lease TTL later.
+   * that lapses one lease TTL later. `restartable` is whether the sweep
+   * restarts runs of `runId`'s workflow; nothing is written when it does not.
    */
-  async #markLive(runId = this.runId): Promise<void> {
-    if (!this.#restartable || !this.mastra) return;
+  async #markLive(runId = this.runId, restartable = this.#restartable): Promise<void> {
+    if (!restartable || !this.mastra) return;
     const store = await this.mastra.getStorage()?.getStore('workflows');
     if (!store || !(await store.supportsRunFencing())) return;
     await markRunLive({ scope: this.mastra, store, runId, logger: this.mastra.getLogger() });
+  }
+
+  /**
+   * Whether the recovery sweep restarts runs of the workflow this nested run
+   * continues, the same rule `EventedWorkflow.createRun` applies to its own
+   * runs. `false` when that workflow is not registered here.
+   */
+  #parentRestartable(): boolean {
+    const parent = this.parentWorkflow;
+    if (!parent || !this.mastra) return false;
+    let workflow: { type?: string; options?: { autoRestartActiveRuns?: boolean } } | undefined;
+    try {
+      workflow = this.mastra.__hasInternalWorkflow(parent.workflowId, parent.runId)
+        ? this.mastra.__getInternalWorkflow(parent.workflowId, parent.runId)
+        : this.mastra.getWorkflowById(parent.workflowId);
+    } catch {
+      return false;
+    }
+    return workflow?.options?.autoRestartActiveRuns !== false && workflow?.type !== 'processor';
   }
 
   /** `timeTravel()` makes the run `running` from the caller, so it is marked live first. */
@@ -2779,7 +2799,7 @@ export class EventedRun<
       try {
         // The parent's suspended step result hides this run from the restart check's walk into
         // nested runs, so the parent needs its own live key once it is `running` again.
-        await this.#markLive(this.parentWorkflow.runId);
+        await this.#markLive(this.parentWorkflow.runId, this.#parentRestartable());
         claimedParent = await workflowsStore.updateWorkflowState({
           workflowName: this.parentWorkflow.workflowId,
           runId: this.parentWorkflow.runId,

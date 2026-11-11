@@ -4490,6 +4490,16 @@ export class Mastra<
   }
 
   /**
+   * Re-checks a workflow run for recovery at `retryAt`, as the boot-time sweep does for a run
+   * another process still drove: the run is restarted then unless it settled or is still live,
+   * in which case the re-check is scheduled again. A no-op while shutting down.
+   * @internal
+   */
+  __scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number): void {
+    this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, retryAt);
+  }
+
+  /**
    * The resolved boot-time recovery configuration for this Mastra instance.
    * See {@link Config.recovery}.
    */

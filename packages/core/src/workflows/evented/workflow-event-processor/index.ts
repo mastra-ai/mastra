@@ -33,6 +33,7 @@ import {
   resolveRunFence,
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
+import type { RunOwnershipRecord } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -2300,27 +2301,35 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Whether another delivery holds a live lease on the leaf occurrence this
-   * `workflow.step.run` delivers. A hand-off the event carries for that very
-   * lease does not count: the lease is waiting for this delivery then.
+   * The live lease another delivery holds on the leaf occurrence this
+   * `workflow.step.run` delivers, or `null`. A hand-off the event carries for
+   * that very lease does not count: the lease is waiting for this delivery
+   * then. Events {@link processWorkflowStepRun} routes to a dispatcher or a
+   * sleep take no lease, so they get `null` too.
    */
-  async #isStepLeasedElsewhere(event: Event): Promise<boolean> {
+  async #liveStepLeaseElsewhere(event: Event): Promise<RunOwnershipRecord | null> {
     const data = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
-    if (!data?.workflowId || !data.executionPath?.length) return false;
+    if (!data?.workflowId || !data.executionPath?.length) return null;
     const workflow = this.#resolveLiveWorkflow(data) ?? undefined;
     const store = await this.#leaseStore(workflow);
-    if (!store || !workflow) return false;
+    if (!store || !workflow) return null;
+    const { restart } = data;
     const [index, branch] = data.executionPath;
-    const entry: StepFlowEntry | undefined = workflow.stepGraph[index!];
-    const leaf =
-      (entry?.type === 'parallel' || entry?.type === 'conditional') && branch !== undefined
-        ? entry.steps[branch]
-        : entry;
-    if (!leaf) return false;
+    let leaf: StepFlowEntry | undefined = workflow.stepGraph[index!];
+    // A restart's dispatcher event carries the path of the branch or item it publishes.
+    if (leaf?.type === 'parallel' || leaf?.type === 'conditional') {
+      if (branch === undefined || (restart && !restart.isParallelOrConditionalRestarted)) return null;
+      leaf = leaf.steps[branch];
+    } else if (leaf?.type === 'foreach') {
+      if (branch === undefined || (restart && !restart.isForeachRestarted)) return null;
+    } else if (leaf?.type === 'sleep' || leaf?.type === 'sleepUntil') {
+      return null;
+    }
+    if (!leaf) return null;
     const record = await store.getRunOwnership({ runId: this.#stepLeaseKey(data, leaf) });
-    if (!record?.live) return false;
+    if (!record?.live) return null;
     const handoff = data.stepLeaseHandoff;
-    return !(handoff && handoff.key === record.runId && handoff.generation === record.generation);
+    return handoff && handoff.key === record.runId && handoff.generation === record.generation ? null : record;
   }
 
   /** Evaluates the loop condition after an iteration, then starts the next one or leaves the loop. */
@@ -5144,13 +5153,23 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
         // Deliveries a shutting-down process deferred while another worker ran the step count
         // toward the transport's attempt number, though no attempt ran. Failing the run here would
-        // fail a step that is still running; the holder finishes it, and if the holder dies the
-        // recovery sweep restarts the run once its liveness lapses.
-        if (event.type === 'workflow.step.run' && (await this.#isStepLeasedElsewhere(event))) {
+        // fail a step that is still running. The holder finishes it instead. This delivery was the
+        // run's way back if the holder dies, so the run is re-checked for recovery the way a
+        // refused boot-time restart is, until it settles or its liveness lapses.
+        const holder = event.type === 'workflow.step.run' ? await this.#liveStepLeaseElsewhere(event) : null;
+        if (holder) {
           this.deliveryAttempts.delete(eventKey);
-          this.mastra.getLogger()?.debug('Dropping an exhausted delivery of a step another worker is running', {
+          let root = event.data as { workflowId: string; runId: string; parentWorkflow?: ParentWorkflow };
+          while (root.parentWorkflow) root = root.parentWorkflow;
+          this.mastra.__scheduleWorkflowRecoveryRecheck(
+            root.workflowId,
+            root.runId,
+            holder.leaseExpiresAt?.getTime() ?? Date.now(),
+          );
+          this.mastra.getLogger()?.warn('Dropped an exhausted delivery of a step another worker is running', {
             runId: event.runId,
             deliveryAttempt: event.deliveryAttempt,
+            recheckRunId: root.runId,
           });
           return { ok: true };
         }
