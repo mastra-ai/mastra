@@ -144,3 +144,15 @@ export interface FeedbackReplacementInput {
   correlationContext?: CorrelationContext;
   feedback: Omit<ExportedFeedback, 'traceId' | 'spanId' | 'correlationContext'>;
 }
+
+/** Change only the review status of feedback already stored at each destination. */
+export interface FeedbackReviewStatusInput {
+  feedbackId: string;
+  reviewStatus: 'needs-review' | 'reviewed';
+}
+
+/** Exporters opt in independently; never reinterpret a review update as a create. */
+export interface FeedbackReviewStatusEvent {
+  type: 'feedback_review_status';
+  feedback: FeedbackReviewStatusInput;
+}

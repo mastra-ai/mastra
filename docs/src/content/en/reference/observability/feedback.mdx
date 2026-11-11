@@ -615,6 +615,20 @@ await mastra.observability.replaceFeedback?.({
 
 Each exporter handles its destination independently. `MastraStorageExporter` resolves local span context when needed, and `MastraPlatformExporter` sends a PUT to Platform. Exporters without a replacement handler skip the event. `flush()` and `shutdown()` wait for pending deliveries.
 
+## Updating review status
+
+To change review status at configured exporter destinations, pass the feedback ID and either `"reviewed"` or `"needs-review"`:
+
+```typescript
+await mastra.observability.updateFeedbackReviewStatus?.({
+  feedbackId: 'feedback-123',
+  reviewStatus: 'reviewed',
+})
+await mastra.observability.flush()
+```
+
+Review updates go to each exporter that supports them, even when the feedback isn't stored locally. Call `flush()` or `shutdown()` to wait for pending deliveries.
+
 ## HTTP routes
 
 These routes belong to a Mastra runtime and use its configured observability storage. They're separate from the [unversioned Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api), which doesn't provide a feedback creation route.

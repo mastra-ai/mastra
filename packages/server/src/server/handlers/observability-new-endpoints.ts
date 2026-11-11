@@ -1522,9 +1522,30 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
   pathParamSchema: z.object({ feedbackId: z.string() }),
   bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
   responseSchema: feedbackRecordSchema,
-  handler: async ({ mastra, feedbackId, reviewStatus }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedbackId, reviewStatus }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    if (
+      typeof observabilityStore.getFeedbackById !== 'function' ||
+      typeof observabilityStore.updateFeedbackReviewStatus !== 'function'
+    ) {
+      throw new HTTPException(501, {
+        message: 'Feedback review updates require a supported storage adapter and @mastra/core version',
+      });
+    }
+    const existing = await observabilityStore.getFeedbackById(feedbackId);
+    // In OSS, organizationId is correlation metadata, not an authorization scope.
+    // Its presence in request context must not restrict this review update.
+    const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    if (!existing || (typeof resourceId === 'string' && resourceId && existing.resourceId !== resourceId)) {
+      throw new HTTPException(404, { message: 'Feedback not found' });
+    }
+    const updated = await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    await exportPersistedEvent(mastra, {
+      type: 'feedback_review_status',
+      feedback: { feedbackId, reviewStatus },
+    });
+    return updated;
   },
 });
 
