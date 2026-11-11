@@ -520,6 +520,8 @@ While a run executes, Mastra holds a storage lease on it and renews it in the ba
 
 On the evented engine, the worker running a step holds a lease on that step, and keeps a lease on the run fresh while any of its steps runs. `restart()` throws `WORKFLOW_RESTART_RUN_OWNED` while the run is starting (after `start()`, `resume()` or `timeTravel()` and before its first step begins), and while a step of the run, or of a nested workflow the run started, is running. It keeps throwing for up to `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) after the run's last step finished. The boot-time sweep skips such a run and checks it again later.
 
+These leases are `workflows.runOwnership` rows. An evented run keeps one row per step occurrence, including each loop iteration and foreach item, plus two rows for the run. Set a `workflows.runOwnership` policy and schedule pruning as described in [storage retention](/reference/storage/retention) to keep that table from growing without bound.
+
 A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step event that's redelivered while another worker runs the step waits for that worker and doesn't run the step again. It runs the step only if that worker stops and its lease expires. A redelivery that arrives after the step finished can still run it again. Make steps with side effects idempotent, so a repeated step has no additional effect.
 
 A step's `execute` function receives `runId` and `workflowId`. Combine them with the `id` you gave the step in `createStep()`, plus a name for each side effect when the step performs more than one, to build an idempotency key.
