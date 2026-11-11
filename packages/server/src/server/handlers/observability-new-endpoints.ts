@@ -330,6 +330,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     timeRange,
     where,
     textSearch,
+    rootSource,
     group,
     orderBy,
     page,
@@ -338,6 +339,12 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     after,
     limit,
   }) => {
+    if (rootSource === 'aggregated') {
+      throwTraceQueryError(501, {
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Aggregated trace roots are not supported by this server',
+      });
+    }
     let plan;
     try {
       const user = requestContext.get(MASTRA_USER_KEY);
@@ -360,6 +367,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
         {
           timeRange,
           where,
+          ...(rootSource === undefined || rootSource === 'legacy' ? {} : { rootSource }),
           ...(textSearch === undefined ? {} : { textSearch }),
           group,
           orderBy,

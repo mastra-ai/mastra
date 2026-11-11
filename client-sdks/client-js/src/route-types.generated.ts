@@ -3714,6 +3714,9 @@ type Shared_Type_64 = {
 type Shared_Type_65 = {
   traceId: string;
   rootSpanId: string;
+  rootKind?: ('native' | 'external') | undefined;
+  runtimeDurationMs?: (number | null) | undefined;
+  errorCount?: (number | null) | undefined;
   name: string;
   entityId: string | null;
   parentSpanId: string | null;
@@ -3892,6 +3895,8 @@ type Shared_Type_69 = {
   deltaPolling: boolean;
   /** Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead. */
   traceQuery: boolean;
+  /** Supports explicit `rootSource: 'aggregated'` trace queries */
+  traceQueryAggregatedRoots: boolean;
   /** Literal substring search across any span in a trace */
   traceQueryTextSearch: boolean;
   /** Literal substring search within individual spans */
@@ -10779,6 +10784,7 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 // Route: POST /observability/traces/query
 // ============================================================================
 export type PostObservabilityTracesQuery_Body = {
+  rootSource?: ('legacy' | 'aggregated') | undefined;
   textSearch?: string | undefined;
   timeRange: {
     from: string;
