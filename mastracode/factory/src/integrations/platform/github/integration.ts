@@ -59,8 +59,8 @@ import type {
 } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
-import { buildGithubRoutes } from '../../github/routes.js';
-import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from '../../github/routes.js';
+import { attachGithubReconciler, attachGithubRules, openPullRequestLister } from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
 import type { GitIdentity } from '../../github/sandbox.js';
 import {
@@ -256,6 +256,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #issueReconcileIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
@@ -684,6 +685,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGithubRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -708,6 +710,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           !route.path.startsWith('/auth/github/'),
       ),
     ];
+  }
+
+  /**
+   * Import a newly linked repository's open issues and pull requests onto
+   * the board. No-op until routes are mounted with rules configured.
+   */
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedRepositoryBacklog({
+      github: this as unknown as GithubIntegration,
+      ...args,
+      ingestFactoryEvent: this.#ingestFactoryEvent,
+    });
   }
 
   #statusRoute(ctx: IntegrationContext): ApiRoute {
@@ -872,7 +886,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
         reconcileFactoryState: this.#pullRequestReconcileEnabled
-          ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+          ? attachGithubReconciler(
+              this,
+              ctx,
+              input => this.fetchPullRequestState(input),
+              openPullRequestLister(this.versionControl),
+            )
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(
