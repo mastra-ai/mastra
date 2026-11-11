@@ -60,6 +60,7 @@ export async function mastraServer(databaseUrl: string, credential: string) {
       env: {
         ...process.env,
         NODE_ENV: 'development',
+        BILLING_MODE: 'local',
         BILLING_DATABASE_URL: databaseUrl,
         BILLING_PORT: String(port),
         BILLING_PROVIDER: 'local',

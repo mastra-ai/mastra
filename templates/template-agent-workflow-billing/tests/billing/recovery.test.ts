@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHmac, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -7,10 +7,11 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
 import { BillingRecovery } from '../../src/billing/recovery.js';
+import { BillingDatabase } from '../../src/billing/storage/database.js';
 import { initializeBilling } from '../../src/billing/setup.js';
 import { createBillingApp } from '../../src/server/billing.js';
 import { polarFixture } from '../support/polar.js';
-import { modelBoundary, runtimeFixture } from '../support/mastra.js';
+import { modelBoundary, runtimeFixture, operationBarrier } from '../support/mastra.js';
 import { independentClient, temporaryDatabase } from '../support/billing.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -295,6 +296,136 @@ describe('durable billing recovery', () => {
     f.records.close();
     expect((await send(signed(f.wire.ids.customer))).status).toBe(503);
   }, 30000);
+
+  it.each(['initial-acknowledged', 'initial-handoff', 'initial-v16', 'adopted'] as const)(
+    'startup respects the durable workflow boundary after interruption at %s',
+    async boundary => {
+      const database = await temporaryDatabase();
+      cleanups.push(database.cleanup);
+      const model = await modelBoundary();
+      cleanups.push(model.close);
+      const base = { databaseUrl: database.url, directory: database.directory, modelUrl: model.url };
+      const initial = await runtimeFixture(base);
+      const options = {
+        ...base,
+        credential: initial.credential,
+        workspaceId: initial.billingContext.workspaceId,
+        configuration: initial.configuration,
+      };
+      await initial.close();
+      const child = fork(
+        fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
+        [boundary === 'adopted' ? 'initial-acknowledged' : boundary, JSON.stringify(options)],
+        { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
+      );
+      cleanups.push(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      });
+      const [execution] = (await once(child, 'message')) as [{ executionId: string; boundary: string }];
+      expect(execution.boundary).toBe(boundary === 'adopted' ? 'initial-acknowledged' : boundary);
+      const observer = await independentClient(database.url);
+      cleanups.push(() => observer.close());
+      const claimed = boundary === 'initial-v16' || boundary === 'initial-handoff';
+      expect(
+        (await observer.execute('SELECT reserve_state, segment_deadline FROM billing_remote_operations')).rows,
+      ).toEqual([{ reserve_state: 'reserved', segment_deadline: claimed ? expect.any(BigInt) : null }]);
+      const records = await RecoveryStorage.open({ url: database.url });
+      cleanups.push(() => records.close());
+      expect(await records.recoverInterrupted()).toBe(0);
+      const exit = once(child, 'exit');
+      child.kill('SIGKILL');
+      await exit;
+      if (boundary === 'initial-v16') {
+        // Reconstruct a genuine v16 database from the committed v16 marker.
+        await observer.execute('DROP TABLE billing_workflow_resume_preparations');
+        await observer.execute('DROP TABLE billing_workflow_native_handoffs');
+        await observer.execute('DELETE FROM billing_migrations WHERE version >= 17');
+        await observer.execute('PRAGMA user_version = 16');
+      }
+      const restarted = await runtimeFixture(options);
+      cleanups.push(restarted.close);
+      const recovery = new BillingRecovery(records, restarted.provider, () => restarted.accounting.recoverFinancial());
+      cleanups.push(() => recovery.stop());
+      const handle = await restarted.billing
+        .workflow('report')
+        .getRun({ billing: restarted.billingContext, executionId: execution.executionId });
+
+      if (boundary === 'adopted') {
+        const selected = operationBarrier();
+        const write = BillingDatabase.prototype.write;
+        const recordsDatabase = (records as unknown as { database: BillingDatabase }).database;
+        let paused = false;
+        const observe = vi.spyOn(BillingDatabase.prototype, 'write').mockImplementation(async function (
+          this: BillingDatabase,
+          work,
+        ) {
+          const result = await write.call(this, work);
+          if (this === recordsDatabase && !paused) {
+            paused = true;
+            await selected.pause();
+          }
+          return result;
+        });
+        const recovering = recovery.runOnce();
+        try {
+          await selected.entered;
+          const tx = await observer.transaction('write');
+          try {
+            await tx.execute({
+              sql: 'INSERT INTO billing_runtimes VALUES (?, ?)',
+              args: ['live-adopted-owner', process.pid],
+            });
+            await tx.execute({
+              sql: 'UPDATE billing_workflow_runs SET owner = ? WHERE id = ?',
+              args: ['live-adopted-owner', execution.executionId],
+            });
+            await tx.commit();
+          } finally {
+            tx.close();
+          }
+          selected.release();
+          await recovering;
+          // A later scan must also respect the live workflow owner even while
+          // the execution still names the original, dead runtime.
+          await recovery.runOnce();
+          expect((await handle.status(restarted.billingContext)).billing).toMatchObject({
+            executionStatus: 'running',
+            settlementStatus: 'reserved',
+            billedUnits: null,
+          });
+          expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([]);
+        } finally {
+          selected.release();
+          await recovering.catch(() => {});
+          observe.mockRestore();
+        }
+      } else await recovery.runOnce();
+
+      if (boundary === 'initial-v16')
+        expect((await observer.execute('SELECT version, state FROM billing_workflow_native_handoffs')).rows).toEqual([
+          { version: 1n, state: 'active' },
+        ]);
+      await recovery.runOnce();
+      const canceled = await handle.cancel({
+        billing: restarted.billingContext,
+        idempotencyKey: 'cancel-after-restart',
+      });
+      expect(canceled.billing).toMatchObject(
+        claimed
+          ? { executionStatus: 'uncertain', settlementStatus: 'uncertain', billedUnits: null }
+          : {
+              executionStatus: boundary === 'adopted' ? 'canceled' : 'failed',
+              settlementStatus: 'released',
+              billedUnits: 0,
+            },
+      );
+      expect(model.requests).toHaveLength(0);
+      expect((await observer.execute('SELECT state FROM local_provider_reservations')).rows).toEqual([
+        { state: claimed ? 'reserved' : 'released' },
+      ]);
+      expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual(claimed ? [] : [{ units: 0n }]);
+    },
+  );
 
   it('restart recovery preserves uncertain work and expires confirmed suspended runs', async () => {
     const database = await temporaryDatabase();

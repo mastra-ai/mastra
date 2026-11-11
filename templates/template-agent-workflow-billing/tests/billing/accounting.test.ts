@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BillingGateway } from '../../src/billing/gateway.js';
 import type { UsageEvent } from '../../src/billing/contracts.js';
 import type { BoundedExecutor, ExecutorOutcome, Json } from '../../src/billing/accounting.js';
@@ -24,6 +24,7 @@ const charges: Charge[] = [
   { type: 'usage', meter: 'tokens', measure: 'token-count', maxUnits: 10, funding: 'prepaid' },
   { type: 'usage', meter: 'tokens', measure: 'token-count', maxUnits: 10, funding: 'metered' },
 ];
+const exportOnSuccess = [false, false, false, true, false, true] as const;
 const succeeded: ExecutorOutcome = {
   status: 'succeeded',
   result: { text: 'private result' },
@@ -176,34 +177,6 @@ async function seedHistory(f: Awaited<ReturnType<typeof fixture>>, count: number
   await f.observer.batch(statements, 'write');
   return events;
 }
-async function reflectHistory(f: Awaited<ReturnType<typeof fixture>>, events: UsageEvent[]) {
-  const units = events.reduce((sum, event) => sum + event.units, 0);
-  const first = events[0];
-  const statements: { sql: string; args: (string | number | bigint | null)[] }[] = events.map(event => ({
-    sql: 'INSERT INTO immutable_usage (id, account_id, meter, execution_id, policy_version, units, occurred_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    args: [
-      event.id,
-      event.account.id,
-      event.meter,
-      event.executionId,
-      event.policyVersion,
-      event.units,
-      event.occurredAt,
-      JSON.stringify(event),
-    ],
-  }));
-  statements.push(
-    {
-      sql: "UPDATE commercial_meters SET balance = CASE WHEN funding = 'prepaid' THEN balance - ? ELSE NULL END, consumed = consumed + ? WHERE account_id = ? AND key = ?",
-      args: [units, units, first.account.id, first.meter],
-    },
-    {
-      sql: 'UPDATE commercial_state SET version = version + ? WHERE account_id = ?',
-      args: [events.length, first.account.id],
-    },
-  );
-  await f.observer.batch(statements, 'write');
-}
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -214,10 +187,10 @@ function deferred<T = void>() {
 }
 
 describe('transactional billing gateway', () => {
-  it('policy matrix charges only successful execution and preserves policy snapshots', async () => {
+  it('local free subscription task and usage policies preserve provider contract', async () => {
     for (const kind of ['agent', 'workflow'] as const)
       for (const access of ['none', 'entitlement', 'subscription', 'both'] as const)
-        for (const charge of charges)
+        for (const [chargeIndex, charge] of charges.entries())
           for (const status of ['succeeded', 'failed', 'canceled'] as const) {
             const f = await fixture(charge, { kind, access, run: async () => ({ ...succeeded, status }) });
             const result = await f.gateway.execute(f.context, f.request('matrix'));
@@ -227,7 +200,7 @@ describe('transactional billing gateway', () => {
               policyVersion: 'v1',
               executionStatus: status === 'succeeded' ? 'completed' : status,
               billedUnits: units,
-              deliveryStatus: units > 0 ? 'pending' : 'not_required',
+              deliveryStatus: units > 0 && exportOnSuccess[chargeIndex] ? 'pending' : 'not_required',
             });
             const persisted = await totals(f);
             expect(persisted.ledger).toEqual([
@@ -239,8 +212,8 @@ describe('transactional billing gateway', () => {
                 : [{ units: BigInt(charge.type === 'usage' ? 10 : charge.units), active: 0n }],
             );
             expect(persisted.measurements).toEqual([{ id: 'call-1', units: 4n }]);
-            expect(persisted.events).toHaveLength(units > 0 ? 1 : 0);
-            if (units > 0)
+            expect(persisted.events).toHaveLength(units > 0 && exportOnSuccess[chargeIndex] ? 1 : 0);
+            if (units > 0 && exportOnSuccess[chargeIndex])
               expect(JSON.parse(String(persisted.events[0].payload))).toMatchObject({
                 id: persisted.events[0].id,
                 executionId: result.billing.executionId,
@@ -283,60 +256,37 @@ describe('transactional billing gateway', () => {
     };
     expect((await free.gateway.execute(free.context, free.request('free'))).billing.billedUnits).toBe(0);
 
-    for (const mutation of ['entitlement', 'subscription', 'meter', 'period', 'unverified', 'stale'] as const) {
+    for (const mutation of ['entitlement', 'subscription', 'meter', 'period', 'unverified'] as const) {
       const denied = await fixture(charges[1], { guards: true });
-      const reconcile = denied.provider.reconcile.bind(denied.provider);
-      let reads = 0;
-      denied.provider.reconcile = async request => {
-        reads++;
-        const observed = await reconcile(request);
-        if (observed.status !== 'confirmed') return observed;
-        if (mutation === 'entitlement') return { ...observed, snapshot: { ...observed.snapshot, entitlements: [] } };
-        if (mutation === 'subscription')
-          return {
-            ...observed,
-            snapshot: {
-              ...observed.snapshot,
-              subscriptions: observed.snapshot.subscriptions.map(grant => ({
-                ...grant,
-                validUntil: '2021-01-01T00:00:00Z',
-              })),
-            },
-          };
-        if (mutation === 'meter') return { ...observed, snapshot: { ...observed.snapshot, meters: [] } };
+      const readState = denied.provider.getState.bind(denied.provider);
+      denied.provider.getState = async account => {
+        const observed = await readState(account);
+        if (mutation === 'entitlement') return { ...observed, entitlements: [] };
+        if (mutation === 'subscription') return { ...observed, subscriptions: [] };
+        if (mutation === 'meter') return { ...observed, meters: [] };
         if (mutation === 'period')
           return {
             ...observed,
-            snapshot: {
-              ...observed.snapshot,
-              meters: observed.snapshot.meters.map(meter => ({
-                ...meter,
-                periodStart: '2020-01-01T00:00:00Z',
-                periodEnd: '2021-01-01T00:00:00Z',
-              })),
-            },
+            meters: observed.meters.map(meter => ({
+              ...meter,
+              periodStart: '2020-01-01T00:00:00Z',
+              periodEnd: '2021-01-01T00:00:00Z',
+            })),
           };
-        if (mutation === 'unverified') return { status: 'unverified', snapshot: observed.snapshot };
-        await denied.observer.execute('UPDATE commercial_state SET version = version + 1');
-        return observed;
+        return { ...observed, evidence: null };
       };
-      await expect(denied.gateway.execute(denied.context, denied.request('denied'))).rejects.toMatchObject({
-        code: mutation === 'unverified' || mutation === 'stale' ? 'state_unavailable' : 'forbidden',
-      });
+      if (mutation === 'unverified')
+        expect((await denied.gateway.execute(denied.context, denied.request('denied'))).billing).toMatchObject({
+          executionStatus: 'uncertain',
+          billedUnits: null,
+        });
+      else
+        await expect(denied.gateway.execute(denied.context, denied.request('denied'))).rejects.toMatchObject({
+          code: 'forbidden',
+        });
       expect((await totals(denied)).ledger).toEqual([]);
-      expect((await denied.observer.execute('SELECT id FROM billing_executions')).rows).toEqual([]);
-      expect(reads).toBe(mutation === 'stale' ? 3 : 1);
+      expect((await denied.observer.execute('SELECT id FROM local_provider_reservations')).rows).toEqual([]);
     }
-    const retry = await fixture();
-    const reconcile = retry.provider.reconcile.bind(retry.provider);
-    let reads = 0;
-    retry.provider.reconcile = async request => {
-      const result = await reconcile(request);
-      if (++reads === 1) await retry.observer.execute('UPDATE commercial_state SET version = version + 1');
-      return result;
-    };
-    expect((await retry.gateway.execute(retry.context, retry.request('fresh'))).billing.billedUnits).toBe(3);
-    expect(reads).toBe(2);
 
     for (const observation of [
       {
@@ -468,7 +418,7 @@ describe('transactional billing gateway', () => {
       // previous settled debits remain unreflected and must retain their holds.
       await f.observer.execute({
         sql: "UPDATE commercial_meters SET balance = ? WHERE account_id = ? AND key = 'credits'",
-        args: [(round + 1) * 3, account.id],
+        args: [3, account.id],
       });
       const barrier = await f.observer.transaction('write');
       try {
@@ -486,54 +436,22 @@ describe('transactional billing gateway', () => {
       ).toEqual([{ count: BigInt(round + 1), units: BigInt((round + 1) * 3) }]);
     }
     const persisted = await totals(f);
-    expect(persisted.events).toHaveLength(20);
+    expect(persisted.events).toEqual([]);
     expect(persisted.holds.every(hold => hold.active === 0n)).toBe(true);
-    // Local provider delivery reduces the confirmed balance. Its exact payload
-    // reflection removes the old debit hold, without subtracting the debit twice.
+    expect((await f.provider.getState(account)).meters.find(meter => meter.key === 'credits')?.confirmedBalance).toBe(
+      0,
+    );
     await f.observer.execute({
-      sql: "UPDATE commercial_meters SET balance = 63 WHERE account_id = ? AND key = 'credits'",
+      sql: "UPDATE commercial_meters SET balance = 3 WHERE account_id = ? AND key = 'credits'",
       args: [account.id],
     });
-    for (const event of persisted.events)
-      expect((await f.provider.reportUsage(JSON.parse(String(event.payload)))).status).toBe('accepted');
-    expect((await f.provider.getState(account)).meters.find(meter => meter.key === 'credits')?.confirmedBalance).toBe(
-      3,
-    );
-    expect((await f.gateway.execute(f.context, f.request('after-reflection'))).billing.billedUnits).toBe(3);
+    expect((await f.gateway.execute(f.context, f.request('after-confirmation'))).billing.billedUnits).toBe(3);
     await expect(f.gateway.execute(f.context, f.request('exhausted'))).rejects.toMatchObject({
       code: 'insufficient_credits',
     });
-    expect((await totals(f)).events).toHaveLength(21);
-    const history = await fixture(charges[1], { balance: 3009 });
-    const oldEvents = await seedHistory(history, 1000);
-    // There are 1,001 pending debits. A bounded provider request must not become
-    // a lifetime or pending-count cutoff on otherwise affordable work.
-    expect(
-      (await history.gateway.execute(history.context, history.request('after-pending-history'))).billing.billedUnits,
-    ).toBe(3);
-    await reflectHistory(history, oldEvents);
-    // These 1,000 exact payloads are reflected in this versioned SQL balance,
-    // even though none must appear in the next bounded reconciliation response.
-    expect(
-      (await history.gateway.execute(history.context, history.request('after-reflected-history'))).billing.billedUnits,
-    ).toBe(3);
-    await expect(history.gateway.execute(history.context, history.request('history-exhausted'))).rejects.toMatchObject({
-      code: 'insufficient_credits',
-    });
-    expect(
-      (await history.observer.execute('SELECT COUNT(*) AS count, SUM(units) AS units FROM billing_ledger')).rows,
-    ).toEqual([{ count: 1003n, units: 3009n }]);
-    const mismatch = await fixture(charges[1], { balance: 6 });
-    await mismatch.gateway.execute(mismatch.context, mismatch.request('mismatch-source'));
-    const mismatchedEvent = JSON.parse(String((await totals(mismatch)).events[0].payload)) as UsageEvent;
-    expect((await mismatch.provider.reportUsage({ ...mismatchedEvent, units: 1 })).status).toBe('accepted');
-    // An event ID alone cannot release a settled debit when its exact immutable
-    // provider payload differs from the billable event still in the outbox.
-    await expect(mismatch.gateway.execute(mismatch.context, mismatch.request('mismatch-held'))).rejects.toMatchObject({
-      code: 'insufficient_credits',
-    });
-    expect((await totals(mismatch)).ledger).toEqual([{ units: 3n, outcome: 'completed' }]);
-
+    expect((await totals(f)).events).toEqual([]);
+    // Reflected-prepaid-export cases are superseded by provider reservation
+    // authority. Bounded postpaid history retains the generic outbox contract.
     const metered = await fixture(charges[3]);
     await seedHistory(metered, 1000);
     expect(
@@ -610,7 +528,7 @@ describe('transactional billing gateway', () => {
     await expect(f.gateway.execute(f.context, f.request('same', { b: 3, a: { x: 0, y: 1 } }))).rejects.toMatchObject({
       code: 'conflict',
     });
-    const event = (await totals(f)).events[0];
+    const ledger = (await totals(f)).ledger;
     const noResources = { ...f.config, resources: [] };
     const edited = new BillingGateway(f.organizations, f.storage, f.provider, noResources, []);
     expect((await edited.execute(f.context, f.request('same', { b: 2, a: { y: 1, x: 0 } }))).billing).toMatchObject({
@@ -635,20 +553,23 @@ describe('transactional billing gateway', () => {
     await expect(f.gateway.execute(member, f.request('same', { b: 2, a: { y: 1, x: 0 } }))).rejects.toMatchObject({
       code: 'forbidden',
     });
-    expect((await totals(f)).events.find(row => row.id === event.id)).toEqual(event);
+    expect((await totals(f)).ledger).toEqual([...ledger, { units: 3n, outcome: 'completed' }]);
 
     // Credential revocation during the provider await must win final admission.
     const revoked = await fixture();
-    const reconcile = revoked.provider.reconcile.bind(revoked.provider);
-    revoked.provider.reconcile = async request => {
-      const result = await reconcile(request);
+    const getState = revoked.provider.getState.bind(revoked.provider);
+    revoked.provider.getState = async request => {
+      const result = await getState(request);
       await revoked.directory.revokeCredential(revoked.alice.credential!);
       return result;
     };
     await expect(revoked.gateway.execute(revoked.context, revoked.request('revoked'))).rejects.toMatchObject({
       code: 'unauthenticated',
     });
-    expect((await revoked.observer.execute('SELECT id FROM billing_executions')).rows).toEqual([]);
+    expect((await revoked.observer.execute('SELECT status, billed_units FROM billing_executions')).rows).toEqual([
+      { status: 'uncertain', billed_units: null },
+    ]);
+    expect((await revoked.observer.execute('SELECT id FROM local_provider_reservations')).rows).toEqual([]);
 
     const throwing = await fixture(charges[1], {
       run: async () => {
@@ -669,7 +590,7 @@ describe('transactional billing gateway', () => {
 
     // A real SQL trigger fails after terminal state/ledger writes, at outbox
     // insertion. The whole settlement rolls back and cannot dispatch work again.
-    const rollback = await fixture();
+    const rollback = await fixture(charges[3]);
     await rollback.observer.execute(
       "CREATE TRIGGER fail_outbox BEFORE INSERT ON billing_outbox BEGIN SELECT RAISE(ABORT, 'Injected outbox failure'); END",
     );
@@ -679,7 +600,7 @@ describe('transactional billing gateway', () => {
     expect(await totals(rollback)).toMatchObject({
       ledger: [],
       events: [],
-      holds: [{ units: 3n, active: 1n }],
+      holds: [{ units: 2n, active: 1n }],
       measurements: [],
     });
     const pending = await rollback.gateway.execute(rollback.context, rollback.request('rollback'));
@@ -713,6 +634,7 @@ describe('transactional billing gateway', () => {
     // uncertain execution. Confirmed success/cancel must publish one outcome.
     const terminal = await fixture(charges[1], { run: async () => ({ status: 'uncertain' }) });
     const competitor = await AccountingStorage.open({ url: terminal.database.url }, terminal.directory);
+    competitor.useReservations(terminal.provider);
     cleanups.push(() => competitor.close());
     let charged = 0;
     for (let round = 0; round < 20; round++) {
@@ -733,7 +655,10 @@ describe('transactional billing gateway', () => {
       } finally {
         barrier.close();
       }
-      expect(outcomes[0].billing).toEqual(outcomes[1].billing);
+      expect(outcomes[0].billing.executionId).toBe(outcomes[1].billing.executionId);
+      expect(outcomes[0].billing.executionStatus).toBe(outcomes[1].billing.executionStatus);
+      const settled = await terminal.gateway.read(terminal.context, claim.billing.executionId);
+      expect(settled.billing.billedUnits).toBe(outcomes[0].billing.executionStatus === 'completed' ? 3 : 0);
       expect(['completed', 'canceled']).toContain(outcomes[0].billing.executionStatus);
       const billed = outcomes[0].billing.executionStatus === 'completed' ? 3 : 0;
       charged += billed;
@@ -753,13 +678,11 @@ describe('transactional billing gateway', () => {
     expect(
       (await terminal.observer.execute('SELECT COUNT(*) AS count, SUM(units) AS units FROM billing_ledger')).rows,
     ).toEqual([{ count: 20n, units: BigInt(charged) }]);
-    expect((await totals(terminal)).events).toHaveLength(charged / 3);
+    expect((await totals(terminal)).events).toEqual([]);
     expect((await totals(terminal)).holds.every(hold => hold.active === 0n)).toBe(true);
 
-    const originalPayload = JSON.parse(String(event.payload));
-    expect((await f.provider.reportUsage(originalPayload)).status).toBe('accepted');
-    expect((await f.provider.reportUsage(originalPayload)).status).toBe('duplicate');
-    expect((await totals(f)).events.find(row => row.id === event.id)).toEqual(event);
+    expect((await totals(f)).events).toEqual([]);
+    expect((await totals(f)).ledger).toEqual([...ledger, { units: 3n, outcome: 'completed' }]);
     await expect(f.observer.execute('UPDATE billing_ledger SET units = 99')).rejects.toMatchObject({
       extendedCode: 'SQLITE_CONSTRAINT_TRIGGER',
     });
@@ -767,4 +690,120 @@ describe('transactional billing gateway', () => {
       extendedCode: 'SQLITE_CONSTRAINT_TRIGGER',
     });
   }, 60_000);
+  it('restart releases undispatched completed work after its confirmation cutoff without recompute', async () => {
+    let computes = 0;
+    const f = await fixture(charges[1], {
+      run: async () => {
+        computes++;
+        return succeeded;
+      },
+    });
+    // A real SQL fault simulates losing the process between result persistence
+    // and the financial dispatch claim. Nothing reaches the provider finalize.
+    await f.observer.execute(
+      "CREATE TRIGGER fail_financial_dispatch BEFORE UPDATE OF terminal_dispatched ON billing_remote_operations WHEN OLD.terminal_dispatched = 0 AND NEW.terminal_dispatched = 1 BEGIN SELECT RAISE(ABORT, 'Injected dispatch claim failure'); END",
+    );
+    await expect(f.gateway.execute(f.context, f.request('dispatch-crash'))).rejects.toMatchObject({
+      code: 'storage_unavailable',
+    });
+    const pending = await f.gateway.execute(f.context, f.request('dispatch-crash'));
+    expect(pending).toMatchObject({
+      result: { text: 'private result' },
+      billing: { executionStatus: 'completed', settlementStatus: 'pending', billedUnits: null, replayed: true },
+    });
+    const row = (await f.observer.execute('SELECT request FROM billing_remote_operations')).rows[0];
+    const request = JSON.parse(String(row.request));
+    const before = (await f.observer.execute('SELECT result FROM billing_executions')).rows[0].result;
+    expect((await f.observer.execute('SELECT state, terminal_payload FROM local_provider_reservations')).rows).toEqual([
+      { state: 'reserved', terminal_payload: null },
+    ]);
+    await f.observer.execute('DROP TRIGGER fail_financial_dispatch');
+    f.storage.close();
+    const restarted = await AccountingStorage.open({ url: f.database.url }, f.directory);
+    cleanups.push(() => restarted.close());
+    const gateway = new BillingGateway(f.organizations, restarted, f.provider, f.config, [f.registered]);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(request.confirmationCutoff + 1);
+    try {
+      await restarted.recoverFinancial();
+      const replay = await gateway.execute(f.context, f.request('dispatch-crash'));
+      expect(replay).toMatchObject({
+        result: { text: 'private result' },
+        billing: { executionStatus: 'failed', settlementStatus: 'released', billedUnits: 0, replayed: true },
+      });
+      expect(computes).toBe(1);
+      expect((await f.observer.execute('SELECT result FROM billing_executions')).rows[0].result).toBe(before);
+      expect((await f.observer.execute('SELECT units, outcome FROM billing_ledger')).rows).toEqual([
+        { units: 0n, outcome: 'failed' },
+      ]);
+      expect((await f.observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 0n }]);
+      const effect = (await f.observer.execute('SELECT state, terminal_payload FROM local_provider_reservations'))
+        .rows[0];
+      expect(effect.state).toBe('released');
+      expect(JSON.parse(String(effect.terminal_payload))).toMatchObject({ action: 'release', units: 0 });
+      const account = await f.provider.ensureAccount({ workspaceId: f.alice.workspaceId });
+      expect((await f.provider.getState(account)).meters.find(meter => meter.key === 'credits')).toMatchObject({
+        confirmedBalance: 100,
+        consumedUnits: 0,
+      });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('restart keeps a dispatched unknown confirmation immutable beyond its cutoff', async () => {
+    let computes = 0;
+    const f = await fixture(charges[1], {
+      run: async () => {
+        computes++;
+        return succeeded;
+      },
+    });
+    // The provider commits the debit, then the local acknowledgement transaction
+    // fails. Restart must reconcile that confirm and never send a release.
+    await f.observer.execute(
+      "CREATE TRIGGER fail_financial_ack BEFORE UPDATE OF terminal_state ON billing_remote_operations WHEN NEW.terminal_state = 'confirmed' BEGIN SELECT RAISE(ABORT, 'Injected acknowledgement persistence failure'); END",
+    );
+    await expect(f.gateway.execute(f.context, f.request('lost-confirm-ack'))).rejects.toMatchObject({
+      code: 'storage_unavailable',
+    });
+    expect((await f.gateway.execute(f.context, f.request('lost-confirm-ack'))).billing).toMatchObject({
+      settlementStatus: 'pending',
+      billedUnits: null,
+    });
+    const row = (
+      await f.observer.execute(
+        'SELECT request, terminal_request, terminal_payload, terminal_dispatched FROM billing_remote_operations',
+      )
+    ).rows[0];
+    expect(row.terminal_dispatched).toBe(1n);
+    expect(JSON.parse(String(row.terminal_request))).toMatchObject({ action: 'confirm', units: 3 });
+    await f.observer.execute('DROP TRIGGER fail_financial_ack');
+    f.storage.close();
+    const restarted = await AccountingStorage.open({ url: f.database.url }, f.directory);
+    cleanups.push(() => restarted.close());
+    const gateway = new BillingGateway(f.organizations, restarted, f.provider, f.config, [f.registered]);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(JSON.parse(String(row.request)).expiresAt + 1);
+    try {
+      await restarted.recoverFinancial();
+      const replay = await gateway.execute(f.context, f.request('lost-confirm-ack'));
+      expect(replay.billing).toMatchObject({
+        executionStatus: 'completed',
+        settlementStatus: 'settled',
+        billedUnits: 3,
+        replayed: true,
+      });
+      expect(computes).toBe(1);
+      expect(
+        (await f.observer.execute('SELECT terminal_payload FROM billing_remote_operations')).rows[0].terminal_payload,
+      ).toBe(row.terminal_payload);
+      const effect = (await f.observer.execute('SELECT state, terminal_payload FROM local_provider_reservations'))
+        .rows[0];
+      expect(effect.state).toBe('confirmed');
+      expect(JSON.parse(String(effect.terminal_payload))).toMatchObject({ action: 'confirm', units: 3 });
+      expect((await f.observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);
+      expect((await f.observer.execute('SELECT id FROM billing_outbox')).rows).toEqual([]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });

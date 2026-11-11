@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { finalizationRequestSchema, reservationRequestSchema } from '../reservations.js';
 import type { Transaction } from '@libsql/client/node';
 import { z } from 'zod';
 import {
@@ -130,7 +131,14 @@ export class LocalBillingStorage {
       sql: 'SELECT * FROM commercial_meters WHERE account_id = ? ORDER BY key',
       args: [account.id],
     });
+    const holds = (
+      await transaction.execute({
+        sql: "SELECT meter, units FROM local_provider_reservations WHERE account_id = ? AND state = 'reserved' AND expires_at > ?",
+        args: [account.id, Date.now()],
+      })
+    ).rows;
     return {
+      prepaidAuthority: 'provider-reservations',
       account,
       observedAt,
       validUntil: null,
@@ -139,7 +147,14 @@ export class LocalBillingStorage {
       meters: meters.rows.map(row => ({
         key: String(row.key),
         funding: row.funding as 'prepaid' | 'metered',
-        confirmedBalance: row.balance === null ? null : publicInteger(row.balance),
+        confirmedBalance:
+          row.balance === null
+            ? null
+            : Math.max(
+                0,
+                publicInteger(row.balance) -
+                  holds.filter(hold => hold.meter === row.key).reduce((sum, hold) => sum + Number(hold.units), 0),
+              ),
         consumedUnits: publicInteger(row.consumed),
         periodStart: row.period_start === null ? null : String(row.period_start),
         periodEnd: row.period_end === null ? null : String(row.period_end),
@@ -151,6 +166,86 @@ export class LocalBillingStorage {
   async getState(input: ProviderAccount): Promise<CommercialSnapshot> {
     const account = parseInput(accountSchema, input);
     return this.write(transaction => this.snapshot(transaction, account));
+  }
+
+  async reserve(payload: string) {
+    const request = parseInput(reservationRequestSchema, JSON.parse(payload));
+    return this.write(async tx => {
+      await this.requireAccount(tx, request.account);
+      const previous = (
+        await tx.execute({ sql: 'SELECT * FROM local_provider_reservations WHERE id = ?', args: [request.id] })
+      ).rows[0];
+      if (previous) return { status: 'uncertain' as const };
+      const meter = (
+        await tx.execute({
+          sql: "SELECT * FROM commercial_meters WHERE account_id = ? AND key = ? AND funding = 'prepaid'",
+          args: [request.account.id, request.meter],
+        })
+      ).rows[0];
+      const holds = (
+        await tx.execute({
+          sql: "SELECT units FROM local_provider_reservations WHERE account_id = ? AND meter = ? AND state = 'reserved' AND expires_at > ?",
+          args: [request.account.id, request.meter, Date.now()],
+        })
+      ).rows;
+      const held = holds.reduce((sum, row) => sum + BigInt(String(row.units)), 0n);
+      if (
+        !meter ||
+        request.executionCutoff <= Date.now() ||
+        BigInt(String(meter.balance)) - held < BigInt(request.units)
+      )
+        return { status: 'denied' as const, evidence: 'local:denied' };
+      await tx.execute({
+        sql: "INSERT INTO local_provider_reservations VALUES (?, ?, ?, ?, ?, ?, 'reserved', NULL)",
+        args: [request.id, request.account.id, request.meter, request.units, request.expiresAt, payload],
+      });
+      return { status: 'reserved' as const, evidence: payload };
+    });
+  }
+  async finalize(payload: string, lookup = false) {
+    const request = parseInput(finalizationRequestSchema, JSON.parse(payload));
+    return this.write(async tx => {
+      await this.requireAccount(tx, request.reservation.account);
+      const row = (
+        await tx.execute({
+          sql: 'SELECT * FROM local_provider_reservations WHERE id = ?',
+          args: [request.reservation.id],
+        })
+      ).rows[0];
+      if (!row || row.payload !== JSON.stringify(request.reservation)) return { status: 'uncertain' as const };
+      if (row.state !== 'reserved')
+        return row.terminal_payload === payload
+          ? { status: row.state === 'confirmed' ? ('confirmed' as const) : ('released' as const), evidence: payload }
+          : { status: 'uncertain' as const };
+      if (lookup || (request.action === 'confirm' && Date.now() >= request.reservation.confirmationCutoff))
+        return { status: 'uncertain' as const };
+      // Expiry is a release, never evidence that a dispatched confirm succeeded.
+      if (request.action === 'confirm' && Date.now() >= request.reservation.expiresAt)
+        return { status: 'uncertain' as const };
+      if (request.action === 'confirm') {
+        const changed = await tx.execute({
+          sql: "UPDATE commercial_meters SET balance = balance - ?, consumed = consumed + ? WHERE account_id = ? AND key = ? AND funding = 'prepaid' AND balance >= ?",
+          args: [
+            request.units,
+            request.units,
+            request.reservation.account.id,
+            request.reservation.meter,
+            request.units,
+          ],
+        });
+        if (changed.rowsAffected !== 1) throw new BillingError('state_unavailable');
+        await tx.execute({
+          sql: 'UPDATE commercial_state SET version = version + 1 WHERE account_id = ?',
+          args: [request.reservation.account.id],
+        });
+      }
+      const state = request.action === 'confirm' ? 'confirmed' : 'released';
+      await tx.execute({
+        sql: 'UPDATE local_provider_reservations SET state = ?, terminal_payload = ? WHERE id = ?',
+        args: [state, payload, request.reservation.id],
+      });
+      return { status: state as 'confirmed' | 'released', evidence: payload };
+    });
   }
 
   async reportUsage(input: UsageEvent): Promise<UsageDelivery> {
@@ -167,6 +262,15 @@ export class LocalBillingStorage {
         return { status: 'duplicate', eventId: event.id };
       }
       await this.requireAccount(transaction, event.account);
+      if (
+        (
+          await transaction.execute({
+            sql: 'SELECT execution_id FROM billing_remote_operations WHERE execution_id = ?',
+            args: [event.executionId],
+          })
+        ).rows.length
+      )
+        throw new BillingError('conflict');
       const meter = (
         await transaction.execute({
           sql: 'SELECT funding, balance FROM commercial_meters WHERE account_id = ? AND key = ?',

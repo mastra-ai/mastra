@@ -29,6 +29,7 @@ export class CommercialService {
         ? await this.storage.allowance(await this.organizations.accountingIdentity(context))
         : null;
     return {
+      pendingOperations: await this.storage.financialSummary(await this.organizations.accountingIdentity(context)),
       allowance,
       mode: this.provider.id,
       authority: snapshot.prepaidAuthority ?? 'provider-reflection',
@@ -61,7 +62,9 @@ export class CommercialService {
     const identity = await this.organizations.accountingIdentity(context);
     const account = await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
     const current = await this.organizations.accountingIdentity(context);
-    const claim = await this.storage.claim(current, operation, key, fingerprint(parsed));
+    const binding = this.provider.hostedBinding?.({ account, ...parsed });
+    const signature = binding === undefined ? fingerprint(parsed) : fingerprint({ input: parsed, binding });
+    const claim = await this.storage.claim(current, operation, key, signature);
     if (!claim.claimed) return { status: 'created', url: claim.url! };
     const prepared =
       operation === 'checkout'
@@ -76,7 +79,7 @@ export class CommercialService {
       await this.organizations.accountingIdentity(context),
       operation,
       key,
-      fingerprint(parsed),
+      signature,
     );
     if (!dispatch.claimed) return { status: 'created', url: dispatch.url! };
     const result = await prepared.dispatch();

@@ -2,6 +2,8 @@
 
 Charge for Mastra agents and workflows through subscriptions, prepaid credits, per-task charges, or measured usage. This template shows how to integrate billing with Polar, using a simple weather agent and an approval workflow as examples. Run billed actions in Mastra Studio without payment credentials, then connect Polar for purchases, subscriptions, and usage reporting.
 
+Autumn paid reservations and local simulation are described in the [Autumn integration guide](docs/autumn.md). It covers server bindings, bounded deadlines, pending receipts and explicit sandbox verification.
+
 ## Why we built this
 
 Structuring payment logic for agents and workflows takes more than adding a checkout. You need to decide who pays, when to reserve credits, and how to handle retries, failures, and workflows that pause for approval. Few examples show how to connect these pieces specifically to agents and workflows.

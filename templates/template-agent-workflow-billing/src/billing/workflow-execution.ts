@@ -20,10 +20,31 @@ import type { AgentRegistry, WorkflowRegistry, NativeWorkflow, WorkflowResponse 
 import { MeasurementCollector } from './measurement.js';
 import type { InvocationContext } from './invocation-context.js';
 
-const runtime = randomUUID();
+type NativeRunResult = NativeWorkflowResult<AnyWorkflow> | { status: 'canceled' };
+type NativeInvocation = {
+  version: number;
+  cancel: () => Promise<void>;
+  finished: Promise<NativeRunResult>;
+  result?: NativeRunResult;
+};
+type NativeTerminalResult = Extract<NativeRunResult, { status: 'success' | 'failed' | 'tripwire' }>;
+type StopEvidence = { kind: 'terminal'; result: NativeTerminalResult } | { kind: 'canceled' } | { kind: 'uncertain' };
+
+const isNativeTerminal = (status?: string) =>
+  status === 'success' || status === 'failed' || status === 'tripwire' || status === 'canceled';
+
 export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends WorkflowRegistry> {
-  private readonly immediateWorkflows = new Map<string, unknown>();
-  private readonly running = new Map<string, { cancel: () => Promise<void>; finished: Promise<unknown> }>();
+  private readonly runtime = randomUUID();
+  private readonly immediateWorkflows = new Map<
+    string,
+    {
+      version: number;
+      status: WorkflowRecord['status'];
+      result: NativeRunResult;
+    }
+  >();
+  private readonly running = new Map<string, NativeInvocation>();
+  private readonly preparing = new Map<string, { version: number; abort: () => void }>();
   constructor(
     private readonly options: {
       organizations: OrganizationService;
@@ -84,11 +105,11 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
     if (record.resourceId !== id) throw new BillingError('forbidden');
     return record;
   }
-  private async receipt(record: WorkflowRecord, billing: BillingContext) {
-    await this.options.organizations.accountingIdentity(billing);
-    if (record.status === 'created' || !(await this.options.accounting.hasExecution(record.id))) return null;
-    return (await this.options.accounting.read(await this.options.organizations.accountingIdentity(billing), record.id))
-      .billing;
+  private async state(id: string, executionId: string, billing: BillingContext) {
+    const identity = await this.options.organizations.accountingIdentity(billing);
+    const state = await this.options.workflowStorage.readState(identity, executionId);
+    if (state.record.resourceId !== id) throw new BillingError('forbidden');
+    return state;
   }
   private async project<W extends AnyWorkflow>(
     id: string,
@@ -123,8 +144,8 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
     executionId: string,
     billing: BillingContext,
   ): Promise<WorkflowResponse<W>> {
-    const record = await this.owned(id, executionId, billing);
-    return { kind: 'replay', result: await this.project(id, record), billing: await this.receipt(record, billing) };
+    const state = await this.state(id, executionId, billing);
+    return { kind: 'replay', result: await this.project(id, state.record), billing: state.billing };
   }
   private adapterVersion(id: string) {
     return this.options.workflows[id].definition(this.options.agents);
@@ -149,7 +170,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       'start',
       request.idempotencyKey,
       boundedJson(input),
-      runtime,
+      this.runtime,
     );
     if (!claim.claimed) return this.read(id, executionId, request.billing);
     try {
@@ -175,7 +196,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       );
       throw error;
     }
-    return this.workflowResponse(id, executionId, request.billing);
+    return this.workflowResponse(id, executionId, claim.record.version, request.billing);
   }
   async execute(id: string, input: Json, executionId: string): Promise<ExecutorOutcome> {
     const request = parseInput(
@@ -183,7 +204,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       input,
     );
     const record = await this.options.workflowStorage.current(executionId);
-    if (record.status !== 'running' || record.version !== request.version || record.owner !== runtime)
+    if (record.status !== 'running' || record.version !== request.version || record.owner !== this.runtime)
       return { status: 'uncertain', measurements: [], measurementComplete: false };
     const identity = this.context.identity.getStore();
     if (!identity) return { status: 'uncertain', measurements: [], measurementComplete: false };
@@ -198,78 +219,169 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
     const resource = this.options.workflows[id];
     if (resource.measurement === 'facade-calls' && resource.expectedCalls[record.version - 1] === undefined)
       return { status: 'uncertain', measurements: [], measurementComplete: false };
-    const run = await resource.native.createRun({ runId: record.id });
-    const previous = await this.options.accounting.read(identity, record.id);
-    const collector = new MeasurementCollector(
-      record.id,
-      record.version,
-      identity,
-      record.configuration,
-      this.options.accounting,
-      this.options.workflowStorage,
-      true,
-      () => run.cancel(),
-      previous.billing.observedUnits ?? 0,
-      resource.agentDependencies,
-    );
-    const abort = () => collector.controller.abort();
-    run.abortController.signal.addEventListener('abort', abort, { once: true });
-    const pending = this.context.parent.run(collector, () =>
-      'inputData' in operation ? run.start({ inputData: operation.inputData }) : run.resume(operation),
-    );
-    this.running.set(record.id, { cancel: () => run.cancel(), finished: pending });
+    let dispatched = false;
+    let signal: AbortSignal | undefined;
+    let abort: (() => void) | undefined;
     try {
-      const result = await pending;
-      this.immediateWorkflows.set(record.id, result);
-      if (resource.measurement !== 'facade-calls' || collector.callCount !== resource.expectedCalls[record.version - 1])
-        await collector.missing();
+      const run = await resource.native.createRun({ runId: record.id });
+      const previous = await this.options.accounting.read(identity, record.id);
+      const collector = new MeasurementCollector(
+        record.id,
+        record.version,
+        identity,
+        record.configuration,
+        this.options.accounting,
+        this.options.workflowStorage,
+        true,
+        () => {
+          run.abortController.abort();
+          return run.cancel();
+        },
+        previous.billing.observedUnits ?? 0,
+        resource.agentDependencies,
+      );
+      const nativeSignal: AbortSignal = run.abortController.signal;
+      signal = nativeSignal;
+      abort = () => collector.controller.abort();
+      nativeSignal.addEventListener('abort', abort, { once: true });
+      const deadline = await this.options.accounting.segmentDeadline(identity, record.id, record.version, 'dispatch');
+      if (deadline !== null) {
+        if (Date.now() >= deadline) return { status: 'failed', measurements: [], measurementComplete: false };
+        this.preparing.set(record.id, { version: record.version, abort: () => run.abortController.abort() });
+        await this.options.workflowStorage.beginNativeHandoff(identity, record, this.runtime);
+        const current = await this.options.workflowStorage.current(record.id);
+        if (current.version !== record.version || current.owner !== this.runtime) throw new BillingError('conflict');
+        if (current.status === 'canceling' || nativeSignal.aborted) {
+          if ('inputData' in operation) return { status: 'canceled', measurements: [], measurementComplete: false };
+          // This owner has not invoked the resumed segment. Hand cancellation
+          // to the same durable protocol used for suspended-run expiry.
+          const cancellation = await this.options.workflowStorage.prepareOwnerCancellation(record, this.runtime);
+          if (cancellation) await this.expireClaim(cancellation);
+          return { status: 'uncertain', measurements: [], measurementComplete: false };
+        }
+        if (current.status !== 'running') throw new BillingError('conflict');
+      }
+      const execution = await collector.runWithinDeadline(deadline, async () => {
+        dispatched = true;
+        const pending: Promise<NativeRunResult> = this.context.parent.run(collector, () =>
+          'inputData' in operation ? run.start({ inputData: operation.inputData }) : run.resume(operation),
+        );
+        // Publish the actual invocation before marking it active in SQL. A
+        // cancellation that is deferred by the handoff is handled by this owner.
+        const invocation: NativeInvocation = { version: record.version, cancel: () => run.cancel(), finished: pending };
+        this.running.set(record.id, invocation);
+        void pending.then(
+          result => {
+            invocation.result = result;
+          },
+          () => {},
+        );
+        if (deadline !== null) {
+          let cancel;
+          try {
+            cancel = await this.options.workflowStorage.completeNativeHandoff(record, this.runtime);
+          } catch (error) {
+            run.abortController.abort();
+            void run.cancel().catch(() => {});
+            throw error;
+          }
+          if (cancel) {
+            if (invocation.result?.status === 'suspended') {
+              const cancellation = await this.options.workflowStorage.prepareOwnerCancellation(record, this.runtime);
+              if (cancellation) await this.expireClaim(cancellation);
+              return { cancellation: false } as const;
+            }
+            const stopped = await this.stopNative(id, record.id, invocation, false);
+            // A deferred request keeps this version in charge of completion.
+            // Apply the usual measurement, version and cutoff checks to an
+            // actual terminal result; a superseding cancel cannot do this.
+            if (stopped.kind === 'terminal') return { native: stopped.result } as const;
+            return { cancellation: stopped.kind === 'canceled' } as const;
+          }
+        }
+        return { native: await pending } as const;
+      });
+      if (execution.status !== 'finished')
+        return {
+          status: execution.status === 'expired_before_dispatch' ? 'failed' : 'timed_out',
+          measurements: [],
+          measurementComplete: false,
+        };
+      if ('cancellation' in execution.value)
+        return {
+          status: execution.value.cancellation ? 'canceled' : 'uncertain',
+          measurements: [],
+          measurementComplete: false,
+        };
+      const result = execution.value.native;
+      const expectedCalls =
+        resource.measurement === 'facade-calls' && collector.callCount === resource.expectedCalls[record.version - 1];
+      if ((result.status === 'success' || result.status === 'suspended') && !expectedCalls) await collector.missing();
       const projection =
         result.status === 'success'
           ? { output: await resource.output(result.result) }
           : result.status === 'suspended'
             ? { suspendedSteps: [...new Set(result.suspended.flat())] }
             : {};
-      const status = collector.captureFailed
-        ? 'uncertain'
-        : collector.overflow
-          ? 'failed'
-          : result.status === 'success'
-            ? 'succeeded'
-            : result.status === 'suspended'
-              ? 'suspended'
-              : result.status === 'canceled'
-                ? 'canceled'
-                : 'failed';
+      const nativeStatus =
+        result.status === 'success'
+          ? 'completed'
+          : result.status === 'suspended'
+            ? 'suspended'
+            : result.status === 'canceled'
+              ? 'canceled'
+              : result.status === 'failed' || result.status === 'tripwire'
+                ? 'failed'
+                : 'uncertain';
+      const status =
+        nativeStatus === 'failed' || nativeStatus === 'canceled'
+          ? nativeStatus
+          : collector.captureFailed || nativeStatus === 'uncertain'
+            ? 'uncertain'
+            : collector.overflow
+              ? 'failed'
+              : nativeStatus === 'completed'
+                ? 'succeeded'
+                : nativeStatus;
+      this.immediateWorkflows.set(record.id, { version: record.version, status: nativeStatus, result });
       return {
         status,
         result: boundedJson({ definition: record.adapterVersion, ...projection }),
         measurements: [],
-        measurementComplete: collector.complete,
+        measurementComplete: expectedCalls && collector.complete,
       };
     } catch (error) {
       return {
-        status: error instanceof BillingError && error.code === 'invalid_input' ? 'failed' : 'uncertain',
+        status:
+          !dispatched || (error instanceof BillingError && error.code === 'invalid_input') ? 'failed' : 'uncertain',
         measurements: [],
         measurementComplete: false,
       };
     } finally {
-      run.abortController.signal.removeEventListener('abort', abort);
+      if (signal && abort) signal.removeEventListener('abort', abort);
       this.running.delete(record.id);
+      this.preparing.delete(record.id);
     }
   }
   private async workflowResponse<W extends AnyWorkflow>(
     id: string,
     executionId: string,
+    version: number,
     billing: BillingContext,
   ): Promise<WorkflowResponse<W>> {
-    const record = await this.owned(id, executionId, billing);
+    const { record, billing: receipt } = await this.state(id, executionId, billing);
     const full = this.immediateWorkflows.get(executionId);
-    this.immediateWorkflows.delete(executionId);
+    if (full?.version === version) this.immediateWorkflows.delete(executionId);
     const projection = await this.project<W>(id, record);
-    const receipt = await this.receipt(record, billing);
-    // This object is the actual SDK return retained for this invocation, never a persisted projection.
-    if (full && receipt)
-      return { kind: 'immediate', result: full as NativeWorkflowResult<W>, projection, billing: receipt };
+    if (
+      full?.version === version &&
+      full.status !== 'uncertain' &&
+      record.version === version &&
+      record.status === full.status &&
+      record.result !== null &&
+      receipt
+    )
+      return { kind: 'immediate', result: full.result as NativeWorkflowResult<W>, projection, billing: receipt };
     return { kind: 'replay', result: projection, billing: receipt };
   }
   async resume<W extends AnyWorkflow>(
@@ -292,7 +404,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       'resume',
       request.idempotencyKey,
       boundedJson(input),
-      runtime,
+      this.runtime,
     );
     if (!claim.claimed) return this.read(id, executionId, request.billing);
     const outcome = await this.runSegment(id, claim.record, identity, input);
@@ -302,7 +414,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       outcome.result === undefined ? null : boundedJson(outcome.result),
       { executionId, version: claim.record.version },
     );
-    return this.workflowResponse(id, executionId, request.billing);
+    return this.workflowResponse(id, executionId, claim.record.version, request.billing);
   }
   async cancel<W extends AnyWorkflow>(
     id: string,
@@ -317,50 +429,104 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       'cancel',
       request.idempotencyKey,
       null,
-      runtime,
+      this.runtime,
     );
-    if (!claim.claimed) return this.read(id, executionId, request.billing);
-    if (claim.previous.status === 'created') {
-      await this.options.workflowStorage.transition(executionId, claim.record.version, 'canceled');
+    if (!claim.claimed) {
+      if (['canceling', 'uncertain'].includes(claim.record.status)) {
+        const cancellation = await this.options.workflowStorage.claimExpiry(executionId, Date.now(), 60000, true);
+        if (cancellation) await this.expireClaim(cancellation);
+      }
+      await this.options.accounting.settleReservation(executionId);
       return this.read(id, executionId, request.billing);
     }
-    await this.terminate(id, claim.record, claim.previous.status === 'suspended');
+    if (claim.cancelDeferred) {
+      const pending = this.preparing.get(executionId);
+      if (pending?.version === claim.record.version) pending.abort();
+      return this.read(id, executionId, request.billing);
+    }
+    if (claim.record.status === 'canceled') {
+      await this.options.accounting.settleReservation(executionId);
+      return this.read(id, executionId, request.billing);
+    }
+    if (claim.cancellation) {
+      await this.expireClaim(claim.cancellation);
+      return this.read(id, executionId, request.billing);
+    }
+    const active = this.running.get(executionId);
+    const stopped = await this.stopNative(
+      id,
+      executionId,
+      claim.previous.owner === this.runtime && active?.version === claim.previous.version ? active : undefined,
+      claim.expectsSuspension,
+    );
+    // The cancel won the new version. The previous owner's corroborated
+    // terminal result can prove termination, but cannot authorize a charge.
+    const status =
+      stopped.kind === 'uncertain'
+        ? 'uncertain'
+        : stopped.kind === 'terminal' && stopped.result.status !== 'success'
+          ? 'failed'
+          : 'canceled';
+    await this.options.accounting.finish(executionId, { status, measurements: [], measurementComplete: false }, null, {
+      executionId,
+      version: claim.record.version,
+    });
     return this.read(id, executionId, request.billing);
   }
-  private async terminate(id: string, record: WorkflowRecord, confirmedSuspended: boolean) {
-    let confirmed = false;
+  private async stopNative(
+    id: string,
+    executionId: string,
+    invocation: NativeInvocation | undefined,
+    expectsSuspension: boolean,
+  ): Promise<StopEvidence> {
+    const workflow = this.options.workflows[id].native;
     try {
-      const active = this.running.get(record.id);
-      const before = await this.options.workflows[id].native.getWorkflowRunById(record.id);
-      const suspended = confirmedSuspended && before?.status === 'suspended';
-      const run = active ?? (await this.options.workflows[id].native.createRun({ runId: record.id }));
-      await run.cancel();
-      if (active) {
-        await active.finished;
-        confirmed = true;
-      } else confirmed = suspended;
-      const snapshot = await this.options.workflows[id].native.getWorkflowRunById(record.id);
-      confirmed &&= snapshot?.status === 'canceled';
+      const before = await workflow.getWorkflowRunById(executionId);
+      let snapshot = before;
+      let cancelAcknowledged = true;
+      if (!isNativeTerminal(before?.status)) {
+        try {
+          await (invocation ?? (await workflow.createRun({ runId: executionId }))).cancel();
+        } catch {
+          // The call may have thrown after writing a canceled snapshot.
+          cancelAcknowledged = false;
+        }
+      }
+      const result = cancelAcknowledged ? await invocation?.finished.catch(() => undefined) : invocation?.result;
+      if (!isNativeTerminal(snapshot?.status)) snapshot = await workflow.getWorkflowRunById(executionId);
+      if (
+        snapshot?.status === 'canceled' &&
+        ((expectsSuspension && before?.status === 'suspended') ||
+          (result && result.status !== 'success' && result.status !== 'paused'))
+      )
+        return { kind: 'canceled' };
+      if (
+        result &&
+        (result.status === 'success' || result.status === 'failed' || result.status === 'tripwire') &&
+        snapshot?.status === result.status
+      )
+        return { kind: 'terminal', result };
     } catch {
-      confirmed = false;
+      // A missing or conflicting native observation cannot settle a hold.
     }
-    await this.options.accounting.finish(
-      record.id,
-      { status: confirmed ? 'canceled' : 'uncertain', measurements: [], measurementComplete: false },
-      null,
-      { executionId: record.id, version: record.version },
-    );
+    return { kind: 'uncertain' };
   }
   private async expireClaim(record: ExpiryClaim) {
     let confirmed = false;
     try {
       try {
+        this.compatible(record.resourceId, record);
         const workflow = this.options.workflows[record.resourceId].native;
         const before = await workflow.getWorkflowRunById(record.id);
         if (before?.status === 'suspended') {
           if (!(await this.options.workflowStorage.confirmExpiredSuspension(record))) return;
           const run = await workflow.createRun({ runId: record.id });
-          await run.cancel();
+          try {
+            await run.cancel();
+          } catch {
+            // A lost local acknowledgement can still leave a corroborating
+            // native snapshot. The persisted suspension proof remains required.
+          }
           confirmed = (await workflow.getWorkflowRunById(record.id))?.status === 'canceled';
         } else confirmed = before?.status === 'canceled' && record.expiry.confirmedSuspended;
       } catch {

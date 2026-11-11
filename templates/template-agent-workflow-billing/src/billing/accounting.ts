@@ -69,7 +69,7 @@ export const executionRequestSchema = z.strictObject({
 const measurementSchema = z.strictObject({ id: identifierSchema, measure: identifierSchema, units: quantitySchema });
 export const outcomeSchema = z
   .strictObject({
-    status: z.enum(['succeeded', 'failed', 'canceled', 'uncertain', 'suspended']),
+    status: z.enum(['succeeded', 'failed', 'canceled', 'uncertain', 'suspended', 'timed_out']),
     result: boundedJsonSchema.optional(),
     measurements: z.array(measurementSchema).max(100).default([]),
     measurementComplete: z.boolean().default(false),
@@ -132,14 +132,15 @@ export const snapshotSchema = z
           key: identifierSchema,
           funding: z.enum(['prepaid', 'metered']),
           confirmedBalance: quantitySchema.nullable(),
-          consumedUnits: quantitySchema,
+          consumedUnits: quantitySchema.nullable(),
+          providerUsageIncludingHolds: quantitySchema.optional(),
           periodStart: timestampSchema.nullable(),
           periodEnd: timestampSchema.nullable(),
         }),
       )
       .max(100),
     evidence: z.strictObject({ version: identifierSchema }).nullable(),
-    prepaidAuthority: z.literal('application-ledger').optional(),
+    prepaidAuthority: z.enum(['application-ledger', 'provider-reservations']).optional(),
   })
   .superRefine(refineCommercialState);
 

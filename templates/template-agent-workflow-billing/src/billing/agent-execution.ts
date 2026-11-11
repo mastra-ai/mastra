@@ -43,7 +43,7 @@ export class AgentExecution<Agents extends AgentRegistry> {
             throw new BillingError('forbidden');
           return {
             kind: 'nested',
-            result: await this.generate(resource, input.prompt, parent, safe),
+            result: await this.generateNested(resource, input.prompt, parent, safe),
             parentExecutionId: parent.executionId,
           };
         }
@@ -91,11 +91,23 @@ export class AgentExecution<Agents extends AgentRegistry> {
           throw new BillingError('unsupported');
         parseInput(z.string().min(1).max(8192), prompt);
         const safe = parseInput(safeGenerateOptionsSchema, options);
-        // Recheck the existing admitted identity without persisting bearer credentials in snapshots.
-        await this.options.accounting.read(parent.identity, parent.executionId);
-        return this.generate(resource, prompt, parent, safe);
+        return this.generateNested(resource, prompt, parent, safe);
       },
     });
+  }
+  private async generateNested<Output>(
+    resource: AgentResource<Output>,
+    prompt: string,
+    parent: MeasurementCollector,
+    options: SafeGenerateOptions,
+  ) {
+    const deadline = await this.options.accounting.segmentDeadline(
+      parent.identity,
+      parent.executionId,
+      parent.workflowVersion,
+    );
+    if (deadline !== null && Date.now() >= deadline) throw new BillingError('state_unavailable');
+    return this.generate(resource, prompt, parent, options);
   }
   private async generate<Output>(
     resource: AgentResource<Output>,
@@ -106,6 +118,7 @@ export class AgentExecution<Agents extends AgentRegistry> {
     const charge = collector.resource.policy.charge;
     if (charge.type === 'usage' && charge.funding === 'prepaid' && !resource.enforceableCallBound)
       throw new BillingError('unsupported');
+    collector.controller.signal.throwIfAborted();
     const call = collector.nextCall(resource.limits.maxSteps);
     let step = 0;
     const signal = options.abortSignal
@@ -116,7 +129,7 @@ export class AgentExecution<Agents extends AgentRegistry> {
         abortSignal: signal,
         onStepFinish: async value => {
           await collector.capture(call, ++step, value.usage);
-          await options.onStepFinish?.(value);
+          if (!collector.deadlineExpired) await options.onStepFinish?.(value);
         },
       });
     } catch (error) {
@@ -142,9 +155,19 @@ export class AgentExecution<Agents extends AgentRegistry> {
       false,
     );
     try {
-      const result = await this.context.parent.run(collector, () =>
-        this.generate(resource, request.prompt, collector, this.context.agentOptions.getStore() ?? {}),
+      const deadline = await this.options.accounting.segmentDeadline(identity, executionId);
+      const execution = await collector.runWithinDeadline(deadline, () =>
+        this.context.parent.run(collector, () =>
+          this.generate(resource, request.prompt, collector, this.context.agentOptions.getStore() ?? {}),
+        ),
       );
+      if (execution.status !== 'finished')
+        return {
+          status: execution.status === 'expired_before_dispatch' ? 'failed' : 'timed_out',
+          measurements: [],
+          measurementComplete: false,
+        };
+      const result = execution.value;
       if (collector.stepCount === 0) await collector.missing();
       const projection = resource.storedProjection(result);
       this.immediateAgents.set(executionId, result);

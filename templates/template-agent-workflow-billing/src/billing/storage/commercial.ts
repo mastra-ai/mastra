@@ -14,6 +14,28 @@ export class CommercialStorage {
   close() {
     this.database.close();
   }
+  financialSummary(identity: AdmissionIdentity) {
+    return this.database.write(async tx => {
+      if (identity.validUntil !== null && identity.validUntil <= Date.now()) throw new BillingError('unauthenticated');
+      if (identity.credentialHash !== null) {
+        const credential = (
+          await tx.execute({
+            sql: 'SELECT active FROM local_credentials WHERE hash = ? AND identity_id = ?',
+            args: [identity.credentialHash, identity.actorId],
+          })
+        ).rows[0];
+        if (credential?.active !== 1n) throw new BillingError('unauthenticated');
+      }
+      await this.organizations.authorizeInTransaction(tx, identity.actorId, identity.workspaceId, 'manage-billing');
+      const rows = (
+        await tx.execute({
+          sql: "SELECT settlement, COUNT(*) AS count FROM billing_executions WHERE workspace_id = ? AND settlement IN ('pending', 'reserved', 'uncertain') GROUP BY settlement",
+          args: [identity.workspaceId],
+        })
+      ).rows;
+      return rows.map(row => ({ settlement: String(row.settlement), executions: Number(row.count) }));
+    });
+  }
   claim(identity: AdmissionIdentity, operation: 'checkout' | 'portal', key: string, fingerprint: string) {
     return this.transition(identity, operation, key, fingerprint, false);
   }

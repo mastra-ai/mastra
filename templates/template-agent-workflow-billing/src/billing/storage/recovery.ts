@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { BillingError, parseInput, usageEventSchema, identifierSchema, timestampSchema } from '../contracts.js';
 import type { BillingProvider, ProviderAccount, ProviderNotification, UsageDelivery } from '../contracts.js';
 import { BillingDatabase } from './database.js';
+import { finishUnstartedReservation } from './accounting.js';
 import { reactivateProvider } from './provider-lifecycle.js';
 import { accountFromRow } from './accounts.js';
 
@@ -31,6 +32,15 @@ export interface SynchronizationClaim {
 // Persist the schedule; jitter prevents all recovered records retrying in lockstep.
 export const retryDelay = (attempts: number) =>
   Math.min(3600000, 1000 * 2 ** Math.min(attempts - 1, 12)) + Math.floor(Math.random() * 250);
+
+function processHasExited(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ESRCH';
+  }
+}
 
 export class RecoveryStorage {
   private recoveryCursor = '';
@@ -226,8 +236,16 @@ export class RecoveryStorage {
       async tx =>
         (
           await tx.execute({
-            sql: `SELECT e.id, e.runtime_id, r.pid, 0 AS orphan FROM billing_executions e LEFT JOIN billing_runtimes r ON r.id = e.runtime_id WHERE e.status IN ('running', 'uncertain') AND e.recovery_fenced = 0 AND NOT EXISTS (SELECT 1 FROM billing_workflow_runs w WHERE w.id = e.id AND (w.status = 'suspended' OR EXISTS (SELECT 1 FROM billing_expiry_recovery x WHERE x.run_id = w.id))) AND e.id > ?
-              UNION ALL SELECT w.id, w.owner AS runtime_id, r.pid, 1 AS orphan FROM billing_workflow_runs w LEFT JOIN billing_runtimes r ON r.id = w.owner WHERE w.status IN ('running', 'canceling') AND NOT EXISTS (SELECT 1 FROM billing_executions e WHERE e.id = w.id) AND NOT EXISTS (SELECT 1 FROM billing_expiry_recovery x WHERE x.run_id = w.id) AND w.id > ? ORDER BY 1 LIMIT 100`,
+            sql: `SELECT e.id, e.runtime_id, r.pid, w.owner AS workflow_owner, w.version AS workflow_version, o.pid AS workflow_pid, 0 AS orphan
+              FROM billing_executions e LEFT JOIN billing_runtimes r ON r.id = e.runtime_id
+              LEFT JOIN billing_workflow_runs w ON w.id = e.id LEFT JOIN billing_runtimes o ON o.id = w.owner
+              WHERE e.status IN ('running', 'uncertain') AND e.recovery_fenced = 0
+              AND (w.status IS NULL OR (w.status <> 'suspended' AND NOT EXISTS (SELECT 1 FROM billing_expiry_recovery x WHERE x.run_id = w.id)))
+              AND e.id > ?
+              UNION ALL SELECT w.id, w.owner AS runtime_id, r.pid, w.owner, w.version, r.pid, 1 AS orphan
+              FROM billing_workflow_runs w LEFT JOIN billing_runtimes r ON r.id = w.owner
+              WHERE w.status IN ('running', 'canceling') AND NOT EXISTS (SELECT 1 FROM billing_executions e WHERE e.id = w.id)
+              AND NOT EXISTS (SELECT 1 FROM billing_expiry_recovery x WHERE x.run_id = w.id) AND w.id > ? ORDER BY 1 LIMIT 100`,
             args: [this.recoveryCursor, this.recoveryCursor],
           })
         ).rows,
@@ -237,13 +255,13 @@ export class RecoveryStorage {
     for (const candidate of candidates) {
       // PID liveness is deliberately conservative. Expired time is never proof
       // of termination; a reused/live PID retains the hold for manual review.
-      if (candidate.pid === null) continue;
-      try {
-        process.kill(Number(candidate.pid), 0);
+      if (candidate.pid === null || !processHasExited(Number(candidate.pid))) continue;
+      if (
+        candidate.workflow_pid !== null &&
+        candidate.workflow_pid !== candidate.pid &&
+        !processHasExited(Number(candidate.workflow_pid))
+      )
         continue;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue;
-      }
       recovered += await this.database.write(async tx => {
         if (candidate.orphan === 1n)
           return (
@@ -252,16 +270,35 @@ export class RecoveryStorage {
               args: [candidate.id, candidate.runtime_id],
             })
           ).rowsAffected;
-        const changed = await tx.execute({
-          sql: "UPDATE billing_executions SET status = 'uncertain', settlement = CASE WHEN settlement = 'reserved' THEN 'uncertain' ELSE settlement END, recovery_fenced = 1 WHERE id = ? AND runtime_id = ? AND status IN ('running', 'uncertain') AND recovery_fenced = 0 AND NOT EXISTS (SELECT 1 FROM billing_workflow_runs w WHERE w.id = billing_executions.id AND (w.status = 'suspended' OR EXISTS (SELECT 1 FROM billing_expiry_recovery x WHERE x.run_id = w.id)))",
-          args: [candidate.id, candidate.runtime_id],
-        });
-        if (changed.rowsAffected)
+        const current = (
           await tx.execute({
-            sql: "UPDATE billing_workflow_runs SET status = 'uncertain', version = version + 1, owner = NULL, expires_at = NULL WHERE id = ? AND status IN ('running', 'canceling')",
+            sql: `SELECT w.status, w.version, w.owner
+              FROM billing_executions e LEFT JOIN billing_workflow_runs w ON w.id = e.id
+              WHERE e.id = ? AND e.runtime_id = ? AND e.status IN ('running', 'uncertain') AND e.recovery_fenced = 0
+              AND (w.status IS NULL OR (w.status <> 'suspended' AND NOT EXISTS (SELECT 1 FROM billing_expiry_recovery x WHERE x.run_id = w.id)))`,
+            args: [candidate.id, candidate.runtime_id],
+          })
+        ).rows[0];
+        if (!current || current.owner !== candidate.workflow_owner || current.version !== candidate.workflow_version)
+          return 0;
+        // Positive reservation evidence and the absence of a native handoff
+        // prove this initial attempt can release. The original driver settles
+        // it through ordinary financial recovery outside this transaction.
+        const unstarted =
+          current.status === 'running' &&
+          current.version === 1n &&
+          candidate.workflow_pid !== null &&
+          (await finishUnstartedReservation(tx, String(candidate.id), 'failed'));
+        if (!unstarted)
+          await tx.execute({
+            sql: "UPDATE billing_executions SET status = 'uncertain', settlement = CASE WHEN settlement = 'reserved' THEN 'uncertain' ELSE settlement END, recovery_fenced = 1 WHERE id = ?",
             args: [candidate.id],
           });
-        return changed.rowsAffected;
+        await tx.execute({
+          sql: "UPDATE billing_workflow_runs SET status = ?, version = version + 1, owner = NULL, expires_at = NULL WHERE id = ? AND status IN ('running', 'canceling')",
+          args: [unstarted ? 'failed' : 'uncertain', candidate.id],
+        });
+        return 1;
       });
     }
     return recovered;

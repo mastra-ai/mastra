@@ -159,7 +159,7 @@ describe('billing policy configuration', () => {
     );
   });
 
-  it.each(['prepaid', 'replaySafeUsage', 'entitlements', 'subscriptions'] as const)(
+  it.each(['prepaid', 'entitlements', 'subscriptions'] as const)(
     'rejects missing provider capability %s',
     capability => {
       const input = configuration();
@@ -172,9 +172,52 @@ describe('billing policy configuration', () => {
 
   it('denies prepaid registration without reflected-event evidence', () => {
     expect(() =>
-      parseBillingConfiguration(configuration(), { ...localCapabilities, reconciliation: 'unverified' }),
+      parseBillingConfiguration(configuration(), {
+        ...localCapabilities,
+        prepaidAuthority: undefined,
+        reconciliation: 'unverified',
+      }),
     ).toThrow(expect.objectContaining({ code: 'invalid_configuration' }));
   });
+
+  it('accepts remote prepaid reservations without replayable usage and rejects postpaid without it', () => {
+    const capabilities = { ...localCapabilities, replaySafeUsage: false, reconciliation: 'unverified' as const };
+    expect(parseBillingConfiguration(configuration(), capabilities).resources[0].policy.charge.type).toBe('credits');
+    const input = configuration();
+    input.resources[0].policy.charge = {
+      type: 'usage',
+      meter: 'tokens',
+      measure: 'token-count',
+      maxUnits: 10,
+      funding: 'metered',
+    };
+    expect(() => parseBillingConfiguration(input, capabilities)).toThrow(
+      expect.objectContaining({ code: 'invalid_configuration' }),
+    );
+  });
+
+  it.each([
+    { executionMs: 1000, finalizationMs: 1000, expiryMarginMs: 1000, lifetimeMs: 2999 },
+    { executionMs: 1000, finalizationMs: 1000, expiryMarginMs: 0, lifetimeMs: 5000 },
+    { executionMs: 1000, finalizationMs: 1000, expiryMarginMs: 1000, lifetimeMs: 86400001 },
+  ])('rejects impossible finite reservation budgets', reservationBudget => {
+    const input = configuration();
+    input.resources[0].policy.reservationBudget = reservationBudget;
+    expect(() => parseBillingConfiguration(input, localCapabilities)).toThrow(
+      expect.objectContaining({ code: 'invalid_configuration' }),
+    );
+  });
+
+  it.each([{ type: 'none' }, { type: 'per-task', meter: 'tasks', units: 1, funding: 'metered' }] as const)(
+    'preserves a 24-hour suspension policy without a prepaid hold for $type',
+    charge => {
+      const input = configuration();
+      Object.assign(input.resources[1].policy, { charge, suspendedReservationTtlMs: 86_400_000 });
+      expect(parseBillingConfiguration(input, localCapabilities).resources[1].policy.suspendedReservationTtlMs).toBe(
+        86_400_000,
+      );
+    },
+  );
 
   it('keeps parsed policy and seed configuration immutable and detached from caller input', () => {
     const input = configuration();

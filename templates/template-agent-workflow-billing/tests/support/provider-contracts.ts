@@ -70,6 +70,7 @@ export async function providerContractFixture(provider: (typeof contractProvider
     return payloads.map(event => ({ id: event.id, units: event.units, account: event.account.externalReference }));
   };
   return {
+    account: () => billing.provider.ensureAccount({ workspaceId: f.owner.workspaceId }),
     initialBalance,
     configuration,
     initialize: open,

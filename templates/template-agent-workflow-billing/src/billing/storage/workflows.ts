@@ -5,6 +5,8 @@ import { BillingError, identifierSchema, parseInput } from '../contracts.js';
 import { boundedJson, fingerprint } from '../accounting.js';
 import type { AdmissionIdentity, Json, ResourceConfiguration } from '../accounting.js';
 import { BillingDatabase } from './database.js';
+import { finishUnstartedReservation, claimReservationSegment, workflowReceipt } from './accounting.js';
+import { prepaid } from '../reservations.js';
 import { OrganizationStorage } from './organizations.js';
 
 export type WorkflowStatus =
@@ -131,6 +133,15 @@ export class WorkflowStorage {
       return this.find(transaction, id, identity);
     });
   }
+  readState(identity: AdmissionIdentity, id: string) {
+    parseInput(identifierSchema, id);
+    return this.database.write(async tx => {
+      await this.authorize(tx, identity);
+      const record = await this.find(tx, id, identity);
+      const billing = record.status === 'created' ? null : await workflowReceipt(tx, identity, id);
+      return { record, billing };
+    });
+  }
   // Internal runtime lookup: public callers must pass through read/claim first.
   current(id: string) {
     return this.database.write(transaction => this.find(transaction, id));
@@ -182,6 +193,44 @@ export class WorkflowStorage {
           .safeParse({ suspended, step });
         if (!valid.success) throw new BillingError('invalid_input');
       }
+      let expectsSuspension = record.status === 'suspended';
+      if (operation === 'cancel' && record.status === 'running') {
+        const [native] = (
+          await transaction.execute({
+            sql: `SELECT
+              (SELECT state FROM billing_workflow_native_handoffs WHERE execution_id = ? AND version = ?) AS handoff,
+              EXISTS (SELECT 1 FROM billing_workflow_resume_preparations WHERE execution_id = ? AND version = ?) AS preparing_resume`,
+            args: [id, record.version, id, record.version],
+          })
+        ).rows;
+        if (native.handoff === 'handing_off') {
+          // The owner has permission to enter native execution. Keep its
+          // version and let it acknowledge this cancellation at the boundary.
+          await transaction.execute({
+            sql: 'INSERT INTO billing_workflow_operations (run_id, operation, key, fingerprint, version) VALUES (?, ?, ?, ?, ?)',
+            args: [id, operation, key, signature, record.version],
+          });
+          await transaction.execute({
+            sql: "UPDATE billing_workflow_runs SET status = 'canceling' WHERE id = ? AND version = ?",
+            args: [id, record.version],
+          });
+          await transaction.execute({
+            sql: "UPDATE billing_executions SET status = 'uncertain', settlement = 'uncertain' WHERE id = ? AND status = 'running'",
+            args: [id],
+          });
+          return {
+            claimed: true as const,
+            record: await this.find(transaction, id, identity),
+            previous: record,
+            cancelDeferred: true,
+            expectsSuspension: false,
+            cancellation: null,
+          };
+        }
+        // Absence of a handoff is usable only with a fresh preparation
+        // recorded in the same transaction as this resume's version claim.
+        expectsSuspension = native.handoff === null && native.preparing_resume === 1n;
+      }
       await transaction.execute({
         sql: 'INSERT INTO billing_runtimes VALUES (?, ?) ON CONFLICT DO NOTHING',
         args: [owner, process.pid],
@@ -191,6 +240,21 @@ export class WorkflowStorage {
         args: [owner, id],
       });
       const next = record.version + 1;
+      if (
+        operation === 'resume' &&
+        (await claimReservationSegment(transaction, id, record.configuration.policy, 'resume'))
+      )
+        await transaction.execute({
+          sql: 'INSERT INTO billing_workflow_resume_preparations VALUES (?, ?)',
+          args: [id, next],
+        });
+      const canceledBeforeDispatch =
+        operation === 'cancel' &&
+        (record.status === 'created' ||
+          (record.status === 'running' &&
+            record.version === 1 &&
+            prepaid(record.configuration.policy) &&
+            (await finishUnstartedReservation(transaction, id, 'canceled'))));
       await transaction.execute({
         sql: 'INSERT INTO billing_workflow_operations (run_id, operation, key, fingerprint, version) VALUES (?, ?, ?, ?, ?)',
         args: [id, operation, key, signature, next],
@@ -198,9 +262,9 @@ export class WorkflowStorage {
       await transaction.execute({
         sql: 'UPDATE billing_workflow_runs SET status = ?, version = ?, owner = ?, expires_at = NULL, input = CASE WHEN ? = ? THEN ? ELSE input END WHERE id = ? AND version = ?',
         args: [
-          operation === 'cancel' ? 'canceling' : 'running',
+          canceledBeforeDispatch ? 'canceled' : operation === 'cancel' ? 'canceling' : 'running',
           next,
-          owner,
+          canceledBeforeDispatch ? null : owner,
           operation,
           'start',
           JSON.stringify(input),
@@ -208,9 +272,79 @@ export class WorkflowStorage {
           record.version,
         ],
       });
-      return { claimed: true as const, record: await this.find(transaction, id, identity), previous: record };
+      const cancellation =
+        operation === 'cancel' && expectsSuspension && !canceledBeforeDispatch
+          ? await this.leaseCancellation(transaction, id)
+          : null;
+      return {
+        claimed: true as const,
+        record: await this.find(transaction, id, identity),
+        previous: record,
+        cancelDeferred: false,
+        expectsSuspension,
+        cancellation,
+      };
     });
   }
+
+  private async leaseCancellation(tx: Transaction, id: string): Promise<ExpiryClaim> {
+    const token = randomUUID();
+    // The run and its immutable cancel operation select the native target.
+    // No resume is allowed after this transaction wins.
+    await tx.execute({
+      sql: 'INSERT INTO billing_expiry_recovery (run_id, lease_token, lease_until) VALUES (?, ?, ?)',
+      args: [id, token, Date.now() + 60000],
+    });
+    await tx.execute({
+      sql: "UPDATE billing_workflow_runs SET owner = NULL, expires_at = NULL WHERE id = ? AND status = 'canceling'",
+      args: [id],
+    });
+    return { ...(await this.find(tx, id)), expiry: { token, confirmedSuspended: false } };
+  }
+
+  prepareOwnerCancellation(record: WorkflowRecord, owner: string): Promise<ExpiryClaim | null> {
+    return this.database.write(async tx => {
+      const current = await this.find(tx, record.id);
+      if (current.owner !== owner || current.version !== record.version || current.status !== 'canceling') return null;
+      return this.leaseCancellation(tx, record.id);
+    });
+  }
+
+  beginNativeHandoff(identity: AdmissionIdentity, record: WorkflowRecord, owner: string) {
+    return this.database.write(async tx => {
+      await this.authorize(tx, identity);
+      const current = await this.find(tx, record.id, identity);
+      if (current.owner !== owner || current.version !== record.version || current.status !== 'running')
+        throw new BillingError('conflict');
+      const handoff = await tx.execute({
+        sql: `INSERT INTO billing_workflow_native_handoffs
+          SELECT ?, ?, 'handing_off'
+          WHERE ? = 1 OR EXISTS (SELECT 1 FROM billing_workflow_resume_preparations WHERE execution_id = ? AND version = ?)
+          ON CONFLICT DO NOTHING`,
+        args: [record.id, record.version, record.version, record.id, record.version],
+      });
+      if (!handoff.rowsAffected) throw new BillingError('conflict');
+    });
+  }
+
+  completeNativeHandoff(record: WorkflowRecord, owner: string) {
+    return this.database.write(async tx => {
+      const current = await this.find(tx, record.id);
+      if (
+        current.owner !== owner ||
+        current.version !== record.version ||
+        !['running', 'canceling'].includes(current.status)
+      )
+        throw new BillingError('conflict');
+      const handoff = await tx.execute({
+        sql: "UPDATE billing_workflow_native_handoffs SET state = 'active' WHERE execution_id = ? AND version = ? AND state = 'handing_off'",
+        args: [record.id, record.version],
+      });
+      if (!handoff.rowsAffected) throw new BillingError('conflict');
+      return current.status === 'canceling';
+    });
+  }
+
   transition(id: string, version: number, status: WorkflowStatus, result: Json | null = null) {
     return this.database.write(async transaction => {
       await transaction.execute({
@@ -220,11 +354,11 @@ export class WorkflowStorage {
       return this.find(transaction, id);
     });
   }
-  incomplete(id: string) {
+  incomplete(id: string, version: number) {
     return this.database.write(async transaction => {
       await transaction.execute({
-        sql: 'UPDATE billing_workflow_runs SET measurement_complete = 0 WHERE id = ?',
-        args: [id],
+        sql: "UPDATE billing_workflow_runs SET measurement_complete = 0 WHERE id = ? AND version = ? AND status = 'running'",
+        args: [id, version],
       });
     });
   }
@@ -243,7 +377,7 @@ export class WorkflowStorage {
     this.expiryCursor = rows.length === 100 ? String(rows.at(-1)!.id) : '';
     return rows.map(decode);
   }
-  claimExpiry(id: string, now = Date.now(), leaseMs = 60000): Promise<ExpiryClaim | null> {
+  claimExpiry(id: string, now = Date.now(), leaseMs = 60000, retryNow = false): Promise<ExpiryClaim | null> {
     parseInput(z.number().int().min(100).max(300000), leaseMs);
     return this.database.write(async transaction => {
       const record = await this.find(transaction, id);
@@ -255,7 +389,7 @@ export class WorkflowStorage {
       if (
         intent &&
         (!['canceling', 'uncertain'].includes(record.status) ||
-          Number(intent.next_attempt) > Date.now() ||
+          (!retryNow && Number(intent.next_attempt) > Date.now()) ||
           (intent.lease_until !== null && Number(intent.lease_until) > Date.now()))
       )
         return null;

@@ -3,6 +3,10 @@ import { runtimeFixture } from './mastra.js';
 import { initializeBilling } from '../../src/billing/setup.js';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
 import { BillingRecovery } from '../../src/billing/recovery.js';
+import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
+import { JwtIdentityAdapter } from '../../src/billing/identity.js';
+import { OrganizationService } from '../../src/billing/organizations.js';
+import { OrganizationStorage } from '../../src/billing/storage/organizations.js';
 const [kind, serialized] = process.argv.slice(2);
 if (kind.startsWith('source-')) {
   const options = JSON.parse(serialized);
@@ -23,7 +27,19 @@ if (kind.startsWith('source-')) {
     setInterval(() => {}, 1000);
   });
 }
-const runtime = await runtimeFixture(JSON.parse(serialized));
+const options = JSON.parse(serialized);
+const directory = options.autumn ? await OrganizationStorage.open({ url: options.databaseUrl }) : undefined;
+const organizations = directory
+  ? new OrganizationService(directory, {
+      identity: new JwtIdentityAdapter(directory, options.jwtConfiguration),
+      mode: 'production',
+      provider: 'autumn',
+    })
+  : undefined;
+const provider = options.autumn
+  ? await AutumnBillingProvider.open({ url: options.databaseUrl }, options.autumn)
+  : undefined;
+const runtime = await runtimeFixture({ ...options, organizations, provider });
 if (kind.startsWith('expiry-')) {
   const handle = await runtime.billing
     .workflow('report')
@@ -105,6 +121,29 @@ if (kind === 'orphan') {
     setInterval(() => {}, 1000);
   });
 }
+function waitForInterruption(executionId: string): Promise<never> {
+  process.send?.({ executionId, boundary: kind });
+  return new Promise(() => setInterval(() => {}, 1000));
+}
+if (kind === 'initial-acknowledged') {
+  // The real gateway and provider have already persisted a positive ACK.
+  runtime.accounting.beginSegment = (_identity, executionId) => waitForInterruption(executionId);
+}
+if (kind === 'initial-handoff') {
+  const begin = runtime.workflowStorage.beginNativeHandoff.bind(runtime.workflowStorage);
+  runtime.workflowStorage.beginNativeHandoff = async (...args) => {
+    await begin(...args);
+    await waitForInterruption(args[1].id);
+  };
+}
+if (kind === 'initial-v16') {
+  const deadline = runtime.accounting.segmentDeadline.bind(runtime.accounting);
+  runtime.accounting.segmentDeadline = async (...args) => {
+    const value = await deadline(...args);
+    if (args[3] === 'dispatch') await waitForInterruption(args[1]);
+    return value;
+  };
+}
 if (kind === 'agent') {
   await runtime.billing
     .agent('assistant')
@@ -113,7 +152,10 @@ if (kind === 'agent') {
   const handle = await runtime.billing
     .workflow('report')
     .createRun({ billing: runtime.billingContext, idempotencyKey: 'interrupted-workflow' });
-  process.send?.({ executionId: handle.executionId });
+  if (!kind.startsWith('initial-')) process.send?.({ executionId: handle.executionId });
   await handle.start({ billing: runtime.billingContext, idempotencyKey: 'interrupted-start', inputData: { count: 0 } });
+  if (kind === 'initial-unknown') await waitForInterruption(handle.executionId);
 }
 await runtime.close();
+provider?.close();
+organizations?.close();

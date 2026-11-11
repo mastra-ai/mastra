@@ -1,3 +1,4 @@
+import { prepaid } from './reservations.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { BillingError, identifierSchema, parseInput } from './contracts.js';
@@ -31,6 +32,7 @@ export class BillingGateway {
   ) {
     if (provider.id !== 'local' && organizations.identity.kind !== 'jwt')
       throw new BillingError('invalid_configuration');
+    this.storage.useReservations(provider);
     this.configuration = parseBillingConfiguration(configuration, provider.capabilities);
     if (this.configuration.provider !== provider.id) throw new BillingError('invalid_configuration');
     for (const executor of executors) {
@@ -113,6 +115,60 @@ export class BillingGateway {
       lifecycle?.configuration ?? this.configuration.resources.find(resource => resource.id === request.resourceId);
     const executor = this.executors.get(`${request.resourceId}:${request.operation}`);
     if (!resource || !executor) throw new BillingError('unsupported');
+    if (this.provider.reservations && prepaid(resource.policy)) {
+      const admission = await this.storage.claimReservation(claim, resource, lifecycle);
+      if (admission.status === 'replayed') return admission.response;
+      if (admission.status !== 'admitted') throw new BillingError('state_unavailable');
+      const id = admission.executionId;
+      try {
+        const account = await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
+        const snapshot = parseInput(snapshotSchema, await this.provider.getState(account));
+        if (
+          account.provider !== this.provider.id ||
+          account.workspaceId !== identity.workspaceId ||
+          JSON.stringify(snapshot.account) !== JSON.stringify(account)
+        )
+          throw new BillingError('state_unavailable');
+        const current = await this.organizations.accountingIdentity(context);
+        const reserved = await this.storage.reserve(id, current, snapshot, lifecycle);
+        if (!reserved) {
+          const state = await this.storage.read(current, id);
+          if (state.billing.executionStatus === 'failed' && state.billing.settlementStatus === 'released')
+            throw new BillingError('insufficient_credits');
+          return state;
+        }
+        await this.storage.beginSegment(await this.organizations.accountingIdentity(context), id, lifecycle?.version);
+      } catch (error) {
+        const released = await this.storage.releaseAdmission(id, lifecycle);
+        if (!released) await this.storage.uncertainAdmission(id);
+        if (
+          error instanceof BillingError &&
+          ['forbidden', 'unauthenticated', 'insufficient_credits'].includes(error.code)
+        )
+          throw error;
+        return this.storage.read(await this.organizations.accountingIdentity(context), id);
+      }
+      let outcome;
+      let result = null;
+      try {
+        const charge = resource.policy.charge;
+        outcome = parseInput(
+          outcomeSchema,
+          await executor.execute(
+            projection,
+            Object.freeze({
+              executionId: id,
+              maxUnits: charge.type === 'usage' ? reservation(resource.policy) : null,
+              measure: charge.type === 'usage' ? charge.measure : null,
+            }),
+          ),
+        );
+        result = outcome.result ?? null;
+      } catch {
+        outcome = { status: 'uncertain' as const, measurements: [], measurementComplete: false };
+      }
+      return this.storage.finish(id, outcome, result, lifecycle);
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
       let snapshot: CommercialSnapshot | null = null;
       if (needsCommercialState(resource.policy)) {
@@ -150,7 +206,7 @@ export class BillingGateway {
         { ...claim, identity: current },
         resource,
         snapshot,
-        lifecycle?.executionId,
+        lifecycle,
         resource.policy.charge.type === 'none' ? undefined : this.provider.bindUsage(resource.policy.charge.meter),
       );
       if (admitted.status === 'stale') continue;
@@ -188,14 +244,17 @@ export class BillingGateway {
 
   async revalidate(context: BillingContext, resource: ReturnType<BillingGateway['resource']>, executionId: string) {
     const identity = await this.organizations.accountingIdentity(context);
+    if (this.provider.reservations && prepaid(resource.policy))
+      await this.storage.validateReservationBinding(identity, executionId);
     let commercial: { accountId: string; revision: string } | undefined;
     if (needsCommercialState(resource.policy)) {
       try {
         const charge = resource.policy.charge;
         const metered = (charge.type === 'per-task' || charge.type === 'usage') && charge.funding === 'metered';
-        const account = metered
-          ? await this.storage.admittedAccount(identity, executionId)
-          : await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
+        const account =
+          metered || (prepaid(resource.policy) && this.provider.reservations)
+            ? await this.storage.admittedAccount(identity, executionId)
+            : await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
         if (account.workspaceId !== identity.workspaceId || (!metered && account.provider !== this.provider.id))
           throw new BillingError('state_unavailable');
         const result = await this.provider.reconcile({ account, eventIds: await this.storage.eventIds(account.id) });
@@ -204,7 +263,10 @@ export class BillingGateway {
         if (Object.entries(snapshot.account).some(([key, value]) => account[key as keyof typeof account] !== value))
           throw new BillingError('state_unavailable');
         eligible(resource.policy, snapshot, Date.now());
-        commercial = { accountId: account.id, revision: snapshot.evidence!.version };
+        commercial =
+          snapshot.prepaidAuthority === 'provider-reservations'
+            ? undefined
+            : { accountId: account.id, revision: snapshot.evidence!.version };
       } catch (error) {
         if (error instanceof BillingError && error.code === 'forbidden') throw error;
         throw new BillingError('state_unavailable');

@@ -1,3 +1,4 @@
+import { reservationRequestSchema, finalizationRequestSchema } from '../reservations.js';
 import type {
   BillingProvider,
   CheckoutRequest,
@@ -25,6 +26,7 @@ export const localCapabilities: ProviderCapabilities = Object.freeze({
   entitlements: true,
   subscriptions: true,
   prepaid: true,
+  prepaidAuthority: 'provider-reservations',
   metered: true,
   replaySafeUsage: true,
   reconciliation: 'reflected-events',
@@ -35,6 +37,14 @@ export const localCapabilities: ProviderCapabilities = Object.freeze({
 
 export class LocalBillingProvider implements BillingProvider {
   readonly id = 'local';
+  readonly reservations = {
+    prepareReservation: (request: unknown) => JSON.stringify(reservationRequestSchema.parse(request)),
+    reserve: (payload: string) => this.storage.reserve(payload),
+    prepareFinalization: (request: unknown, _payload: string) =>
+      JSON.stringify(finalizationRequestSchema.parse(request)),
+    finalize: (payload: string) => this.storage.finalize(payload),
+    reconcileFinalization: (payload: string) => this.storage.finalize(payload, true),
+  };
   readonly capabilities = localCapabilities;
   private readonly seeds: ReadonlyMap<string, LocalAccountSeed>;
 

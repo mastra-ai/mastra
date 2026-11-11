@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ReservationProtocol } from './reservations.js';
 
 export const identifierSchema = z
   .string()
@@ -105,7 +106,7 @@ export interface ProviderCapabilities {
   readonly metered: boolean;
   readonly replaySafeUsage: boolean;
   readonly reconciliation: 'reflected-events' | 'unverified';
-  readonly prepaidAuthority?: 'application-ledger';
+  readonly prepaidAuthority?: 'application-ledger' | 'provider-reservations';
   readonly checkout: boolean;
   readonly portal: boolean;
   readonly webhooks: boolean;
@@ -127,12 +128,13 @@ export interface CommercialSnapshot {
     key: string;
     funding: 'prepaid' | 'metered';
     confirmedBalance: number | null;
-    consumedUnits: number;
+    consumedUnits: number | null;
+    providerUsageIncludingHolds?: number;
     periodStart: string | null;
     periodEnd: string | null;
   }[];
   readonly evidence: { readonly version: string } | null;
-  readonly prepaidAuthority?: 'application-ledger';
+  readonly prepaidAuthority?: 'application-ledger' | 'provider-reservations';
 }
 
 export type Unsupported = { readonly status: 'unsupported'; readonly reason: 'local_mode' };
@@ -196,6 +198,7 @@ export const usageBindingSchema = z
 export type UsageBinding = Readonly<z.infer<typeof usageBindingSchema>>;
 
 export interface BillingProvider {
+  readonly reservations?: ReservationProtocol;
   readonly id: string;
   readonly capabilities: ProviderCapabilities;
   ensureAccount(profile: OrganizationBillingProfile): Promise<ProviderAccount>;
@@ -205,6 +208,8 @@ export interface BillingProvider {
   // calls without an outbox may use the driver's current configuration.
   reportUsage(event: UsageEvent): Promise<UsageDelivery>;
   reconcile(request: ReconciliationRequest): Promise<ReconciliationResult>;
+  // Providers with a configured payer/plan mapping bind hosted replay to that target.
+  hostedBinding?(request: CheckoutRequest | PortalRequest): string;
   prepareCheckout(request: CheckoutRequest): Promise<PreparedHostedSession>;
   preparePortalSession(request: PortalRequest): Promise<PreparedHostedSession>;
   createCheckout(request: CheckoutRequest): Promise<HostedSession>;

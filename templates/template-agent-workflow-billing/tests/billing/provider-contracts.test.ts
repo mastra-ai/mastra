@@ -148,6 +148,27 @@ describe.each(contractProviders)('%s shared provider contracts', provider => {
       result: { answer: 'done' },
       billing: { executionStatus: 'completed', billedUnits: 3 },
     });
+    if (provider === 'local') {
+      expect(await f.events()).toEqual([]);
+      const account = await f.account();
+      expect((await f.provider().getState(account)).meters[0]).toMatchObject({
+        confirmedBalance: f.initialBalance - 3,
+        consumedUnits: 3,
+      });
+      const history = await f.history();
+      await f.restart();
+      expect(await f.execute('paid')).toMatchObject({ billing: { replayed: true, billedUnits: 3 } });
+      expect(await f.history()).toEqual(history);
+      expect(f.calls()).toBe(1);
+      expect(await f.execute('next')).toMatchObject({ billing: { billedUnits: 3 } });
+      expect((await f.provider().getState(account)).meters[0]).toMatchObject({
+        confirmedBalance: f.initialBalance - 6,
+        consumedUnits: 6,
+      });
+      expect(await f.events()).toEqual([]);
+      expect(await f.exported()).toEqual([]);
+      return;
+    }
     const [event] = await f.events();
     expect(await f.provider().reportUsage(event)).toEqual({ status: 'accepted', eventId: event.id });
     const history = await f.history();
@@ -186,6 +207,29 @@ describe.each(contractProviders)('%s shared provider contracts', provider => {
   it('rejects changed usage and forged account scope after restart without changing financial or export history', async () => {
     const f = await sharedFixture();
     await f.execute('paid');
+    if (provider === 'local') {
+      const account = await f.account();
+      const history = await f.history();
+      await f.restart();
+      const foreign = { ...account, workspaceId: 'foreign-workspace' };
+      await expect(f.provider().getState(foreign)).rejects.toMatchObject({ code: 'conflict' });
+      const row = (await f.observer.execute('SELECT payload, terminal_payload FROM billing_remote_operations')).rows[0];
+      const reservation = JSON.parse(String(row.payload));
+      expect(await f.provider().reservations!.reserve(JSON.stringify({ ...reservation, units: 4 }))).toMatchObject({
+        status: 'uncertain',
+      });
+      const terminal = JSON.parse(String(row.terminal_payload));
+      await expect(
+        f
+          .provider()
+          .reservations!.finalize(
+            JSON.stringify({ ...terminal, reservation: { ...terminal.reservation, account: foreign } }),
+          ),
+      ).rejects.toMatchObject({ code: 'conflict' });
+      expect(await f.history()).toEqual(history);
+      expect(await f.exported()).toEqual([]);
+      return;
+    }
     const [event] = await f.events();
     await f.provider().reportUsage(event);
     await f.restart();
@@ -200,7 +244,7 @@ describe.each(contractProviders)('%s shared provider contracts', provider => {
     ])
       await expect(f.provider().reportUsage(changed)).rejects.toMatchObject({ code: 'conflict' });
     await expect(f.provider().getState(foreign)).rejects.toMatchObject({
-      code: provider === 'local' ? 'conflict' : 'state_unavailable',
+      code: 'state_unavailable',
     });
     expect(await f.history()).toEqual(history);
     expect(await f.exported()).toEqual(exported);
@@ -213,7 +257,7 @@ describe.each(contractProviders)('%s shared provider contracts', provider => {
   it('rejects unsafe usage before persisting or exporting it', async () => {
     const f = await sharedFixture();
     await f.execute('paid');
-    const [event] = await f.events();
+    const event = provider === 'local' ? usage(await f.account()) : (await f.events())[0];
     const history = await f.history();
     for (const units of [-1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1])
       await expect(f.provider().reportUsage({ ...event, units })).rejects.toMatchObject({ code: 'invalid_input' });
@@ -244,7 +288,7 @@ describe.each(contractProviders)('%s shared provider contracts', provider => {
     const f = await sharedFixture();
     await f.execute('paid');
     const [event] = await f.events();
-    const account = event.account;
+    const account = provider === 'local' ? await f.account() : event.account;
     const returnUrl = 'https://app.example.test/billing';
     const history = await f.history();
     const checkout = await f.provider().prepareCheckout({ account, product: 'credit-pack', returnUrl });
@@ -289,7 +333,7 @@ describe.each(contractProviders)('%s shared provider contracts', provider => {
       }
     }
     expect(await f.history()).toEqual(history);
-    expect((await f.provider().getState(account)).meters[0].consumedUnits).toBe(provider === 'local' ? 0 : 3);
+    expect((await f.provider().getState(account)).meters[0].consumedUnits).toBe(3);
     expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);
   });
 });

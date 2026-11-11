@@ -451,6 +451,80 @@ const effectOwnershipStatements = [
   ]),
 ];
 
+const reservationStatements = [
+  `DROP TRIGGER billing_execution_terms_immutable`,
+  `CREATE TRIGGER billing_execution_terms_immutable BEFORE UPDATE OF actor_id, workspace_id, resource_id, operation, configuration, created_at ON billing_executions BEGIN SELECT RAISE(ABORT, 'Execution terms are immutable'); END`,
+  `CREATE TRIGGER billing_execution_account_immutable BEFORE UPDATE OF account_id ON billing_executions WHEN OLD.account_id IS NOT NULL OR NEW.account_id IS NULL BEGIN SELECT RAISE(ABORT, 'Execution account is immutable'); END`,
+  `CREATE TABLE billing_remote_operations (
+    execution_id TEXT PRIMARY KEY REFERENCES billing_executions(id),
+    request TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    reserve_state TEXT NOT NULL CHECK (reserve_state IN ('prepared', 'dispatched', 'reserved', 'denied', 'uncertain')),
+    reserve_evidence TEXT,
+    segment_deadline INTEGER,
+    outcome_units INTEGER CHECK (outcome_units BETWEEN 0 AND 9007199254740991),
+    terminal_request TEXT,
+    terminal_payload TEXT,
+    terminal_dispatched INTEGER NOT NULL DEFAULT 0 CHECK (terminal_dispatched IN (0, 1)),
+    terminal_state TEXT NOT NULL DEFAULT 'pending' CHECK (terminal_state IN ('pending', 'confirmed', 'released')),
+    terminal_evidence TEXT,
+    CHECK ((terminal_request IS NULL AND terminal_payload IS NULL AND terminal_dispatched = 0) OR (terminal_request IS NOT NULL AND terminal_payload IS NOT NULL AND terminal_dispatched = 1))
+  ) STRICT`,
+  `CREATE TRIGGER billing_remote_identity_immutable BEFORE UPDATE OF request, payload, execution_id ON billing_remote_operations BEGIN SELECT RAISE(ABORT, 'Reservation identity is immutable'); END`,
+  `CREATE TRIGGER billing_remote_outcome_immutable BEFORE UPDATE OF outcome_units ON billing_remote_operations WHEN OLD.outcome_units IS NOT NULL BEGIN SELECT RAISE(ABORT, 'Known execution outcome is immutable'); END`,
+  `CREATE TRIGGER billing_remote_dispatch_immutable BEFORE UPDATE OF terminal_dispatched ON billing_remote_operations WHEN OLD.terminal_dispatched = 1 BEGIN SELECT RAISE(ABORT, 'Financial dispatch claim is immutable'); END`,
+  `CREATE TRIGGER billing_remote_terminal_immutable BEFORE UPDATE OF terminal_request, terminal_payload ON billing_remote_operations WHEN OLD.terminal_request IS NOT NULL BEGIN SELECT RAISE(ABORT, 'Terminal intent is immutable'); END`,
+  `CREATE TRIGGER billing_remote_no_delete BEFORE DELETE ON billing_remote_operations BEGIN SELECT RAISE(ABORT, 'Financial operations are retained'); END`,
+  `CREATE TABLE local_provider_reservations (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    meter TEXT NOT NULL,
+    units INTEGER NOT NULL CHECK (units BETWEEN 1 AND 9007199254740991),
+    expires_at INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('reserved', 'confirmed', 'released')),
+    terminal_payload TEXT
+  ) STRICT`,
+  `CREATE TRIGGER local_reservation_identity_immutable BEFORE UPDATE OF id, account_id, meter, units, expires_at, payload ON local_provider_reservations BEGIN SELECT RAISE(ABORT, 'Reservation identity is immutable'); END`,
+  `CREATE TRIGGER local_reservation_terminal_immutable BEFORE UPDATE ON local_provider_reservations WHEN OLD.state != 'reserved' BEGIN SELECT RAISE(ABORT, 'Reservation is terminal'); END`,
+];
+
+const workflowDispatchStatements = [
+  `CREATE TABLE billing_workflow_dispatch_claims (
+    execution_id TEXT PRIMARY KEY REFERENCES billing_remote_operations(execution_id)
+  ) STRICT`,
+  `CREATE TRIGGER billing_workflow_dispatch_no_update BEFORE UPDATE ON billing_workflow_dispatch_claims BEGIN SELECT RAISE(ABORT, 'Workflow dispatch claims are immutable'); END`,
+  `CREATE TRIGGER billing_workflow_dispatch_no_delete BEFORE DELETE ON billing_workflow_dispatch_claims BEGIN SELECT RAISE(ABORT, 'Workflow dispatch claims are retained'); END`,
+  // Older rows with a segment deadline may already have entered native work.
+  `INSERT INTO billing_workflow_dispatch_claims SELECT r.execution_id FROM billing_remote_operations r JOIN billing_workflow_runs w ON w.id = r.execution_id WHERE r.segment_deadline IS NOT NULL`,
+];
+
+const workflowHandoffStatements = [
+  `CREATE TABLE billing_workflow_native_handoffs (
+    execution_id TEXT NOT NULL REFERENCES billing_remote_operations(execution_id),
+    version INTEGER NOT NULL CHECK (version BETWEEN 1 AND 9007199254740991),
+    state TEXT NOT NULL CHECK (state IN ('handing_off', 'active')),
+    PRIMARY KEY (execution_id, version)
+  ) STRICT`,
+  `CREATE TRIGGER billing_workflow_handoff_identity_immutable BEFORE UPDATE OF execution_id, version ON billing_workflow_native_handoffs BEGIN SELECT RAISE(ABORT, 'Workflow handoff identity is immutable'); END`,
+  `CREATE TRIGGER billing_workflow_handoff_active_immutable BEFORE UPDATE OF state ON billing_workflow_native_handoffs WHEN OLD.state = 'active' BEGIN SELECT RAISE(ABORT, 'Active workflow handoffs are retained'); END`,
+  `CREATE TRIGGER billing_workflow_handoff_no_delete BEFORE DELETE ON billing_workflow_native_handoffs BEGIN SELECT RAISE(ABORT, 'Workflow handoffs are retained'); END`,
+  // v16 used the initial claim itself as permission to dispatch. Preserve the
+  // possibility that those runs already entered native execution.
+  `INSERT INTO billing_workflow_native_handoffs SELECT execution_id, 1, 'active' FROM billing_workflow_dispatch_claims`,
+];
+
+const resumePreparationStatements = [
+  `CREATE TABLE billing_workflow_resume_preparations (
+    execution_id TEXT NOT NULL REFERENCES billing_remote_operations(execution_id),
+    version INTEGER NOT NULL CHECK (version BETWEEN 2 AND 9007199254740991),
+    PRIMARY KEY (execution_id, version)
+  ) STRICT`,
+  `CREATE TRIGGER billing_workflow_resume_preparation_no_update BEFORE UPDATE ON billing_workflow_resume_preparations BEGIN SELECT RAISE(ABORT, 'Workflow resume preparations are immutable'); END`,
+  `CREATE TRIGGER billing_workflow_resume_preparation_no_delete BEFORE DELETE ON billing_workflow_resume_preparations BEGIN SELECT RAISE(ABORT, 'Workflow resume preparations are retained'); END`,
+  // An older in-flight resume could already have entered native execution.
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -466,6 +540,10 @@ const migrations = [
   { version: 12, statements: webhookStatements },
   { version: 13, statements: lifecycleStatements },
   { version: 14, statements: effectOwnershipStatements },
+  { version: 15, statements: reservationStatements },
+  { version: 16, statements: workflowDispatchStatements },
+  { version: 17, statements: workflowHandoffStatements },
+  { version: 18, statements: resumePreparationStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -512,14 +590,16 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     accountSql,
     ...initialStatements.slice(1),
     ...organizationStatements,
-    ...accountingStatements.map(sql =>
-      sql.startsWith('CREATE TABLE billing_executions')
-        ? sql.replace(
-            'terminal_at TEXT,',
-            'terminal_at TEXT, recovery_fenced INTEGER NOT NULL DEFAULT 0 CHECK (recovery_fenced IN (0, 1)),',
-          )
-        : sql,
-    ),
+    ...accountingStatements
+      .filter(sql => !sql.startsWith('CREATE TRIGGER billing_execution_terms_immutable'))
+      .map(sql =>
+        sql.startsWith('CREATE TABLE billing_executions')
+          ? sql.replace(
+              'terminal_at TEXT,',
+              'terminal_at TEXT, recovery_fenced INTEGER NOT NULL DEFAULT 0 CHECK (recovery_fenced IN (0, 1)),',
+            )
+          : sql,
+      ),
     ...workflowStatements,
     ...providerStatements
       .slice(1)
@@ -539,6 +619,10 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     ...driverStatements.filter(sql => sql.startsWith('CREATE')),
     ...lifecycleStatements,
     ...effectOwnershipStatements,
+    ...reservationStatements.filter(sql => sql.startsWith('CREATE')),
+    ...workflowDispatchStatements.filter(sql => sql.startsWith('CREATE')),
+    ...workflowHandoffStatements.filter(sql => sql.startsWith('CREATE')),
+    ...resumePreparationStatements,
   ]
     .map(normalizedSql)
     .sort();

@@ -357,6 +357,12 @@ export async function polarFixture(
       input: { prompt: 'weather' },
     });
   return {
+    jwtConfiguration: {
+      issuer: 'https://identity.example.test',
+      audience: 'billing',
+      algorithms: ['EdDSA'],
+      jwks: { keys: [await exportJWK(keys.publicKey)] },
+    },
     database,
     wire,
     organizations,

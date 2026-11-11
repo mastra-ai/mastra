@@ -26,7 +26,7 @@ export function weatherConfiguration(workspaceId?: string, workflowPolicy: 'task
         measurements,
         policy: {
           version: workflowPolicy === 'task' ? 'weather-report-task-v1' : 'weather-report-tokens-v1',
-          suspendedReservationTtlMs: 86400000,
+          suspendedReservationTtlMs: 1800000,
           charge:
             workflowPolicy === 'task'
               ? { type: 'per-task', meter: 'weather-tasks', units: 1, funding: 'prepaid' }

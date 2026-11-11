@@ -89,6 +89,20 @@ export async function restoreLegacyProviderProjection(client: Awaited<ReturnType
   );
 }
 export async function removeEffectOwnershipMigration(client: Awaited<ReturnType<typeof independentClient>>) {
+  await client.execute('DROP TRIGGER IF EXISTS billing_execution_account_immutable');
+  await client.execute('DROP TRIGGER IF EXISTS billing_execution_terms_immutable');
+  await client.execute(
+    "CREATE TRIGGER billing_execution_terms_immutable BEFORE UPDATE OF actor_id, workspace_id, account_id, resource_id, operation, configuration, created_at ON billing_executions BEGIN SELECT RAISE(ABORT, 'Execution terms are immutable'); END",
+  );
+  await client.execute('DROP TABLE IF EXISTS billing_workflow_resume_preparations');
+  await client.execute('DELETE FROM billing_migrations WHERE version = 18');
+  await client.execute('DROP TABLE IF EXISTS billing_workflow_native_handoffs');
+  await client.execute('DELETE FROM billing_migrations WHERE version = 17');
+  await client.execute('DROP TABLE IF EXISTS billing_workflow_dispatch_claims');
+  await client.execute('DELETE FROM billing_migrations WHERE version = 16');
+  await client.execute('DROP TABLE IF EXISTS billing_remote_operations');
+  await client.execute('DROP TABLE IF EXISTS local_provider_reservations');
+  await client.execute('DELETE FROM billing_migrations WHERE version = 15');
   await client.execute('DROP TABLE IF EXISTS billing_external_effect_owners');
   await client.execute('DROP TRIGGER IF EXISTS billing_runtimes_no_update');
   await client.execute('DROP TRIGGER IF EXISTS billing_runtimes_no_delete');

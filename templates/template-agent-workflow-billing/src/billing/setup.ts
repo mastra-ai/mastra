@@ -1,3 +1,5 @@
+import { AutumnBillingProvider } from './providers/autumn.js';
+import type { AutumnProviderOptions } from './providers/autumn.js';
 import { BillingDatabase } from './storage/database.js';
 import { retainCatalog } from './storage/catalog.js';
 import { z } from 'zod';
@@ -31,6 +33,7 @@ export async function initializeBilling(options: {
   configuration: unknown;
   storage: { url: string };
   polar?: PolarProviderOptions;
+  autumn?: AutumnProviderOptions;
   drivers?: readonly BillingDriver[];
 }): Promise<{
   readonly configuration: BillingConfiguration;
@@ -39,6 +42,18 @@ export async function initializeBilling(options: {
 }> {
   const selection = z.object({ provider: identifierSchema }).safeParse(options.configuration);
   if (!selection.success) throw new BillingError('invalid_configuration');
+  if (selection.data.provider === 'autumn') {
+    if (!options.autumn || options.polar || options.drivers?.length) throw new BillingError('invalid_configuration');
+    const provider = await AutumnBillingProvider.open(options.storage, options.autumn);
+    try {
+      const configuration = parseBillingConfiguration(options.configuration, provider.capabilities);
+      for (const meter of configuration.mappings.meters) provider.bindUsage(meter.key);
+      return Object.freeze({ configuration, provider, close: () => provider.close() });
+    } catch (error) {
+      provider.close();
+      throw error;
+    }
+  }
   const drivers = [...(options.drivers ?? [])];
   // Built-in convenience factory lives solely at the composition boundary.
   if (options.polar) {

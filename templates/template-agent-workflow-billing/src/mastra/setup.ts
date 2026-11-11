@@ -1,3 +1,4 @@
+import type { AutumnProviderOptions } from '../billing/providers/autumn.js';
 import { createBillingStudio } from '../server/studio.js';
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
@@ -15,6 +16,7 @@ import { configuredOrganizations, billingDatabaseUrl } from './environment.js';
 export { configuredOrganizations } from './environment.js';
 
 export interface BillingApplicationOptions {
+  readonly autumn?: AutumnProviderOptions;
   readonly drivers?: readonly BillingDriver[];
 }
 export async function createWeatherApplication(
@@ -46,6 +48,13 @@ export async function createWeatherApplication(
       workflows: resources.workflows,
       databaseUrl: await billingDatabaseUrl(environment),
       drivers: options.drivers,
+      autumn:
+        provider === 'autumn'
+          ? (options.autumn ?? {
+              secretKey: environment.AUTUMN_SECRET_KEY ?? '',
+              bindings: JSON.parse(environment.AUTUMN_BINDINGS ?? 'null'),
+            })
+          : undefined,
       polar: usePolarEnvironment
         ? {
             token: environment.POLAR_ACCESS_TOKEN ?? '',

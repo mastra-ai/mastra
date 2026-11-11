@@ -1,15 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fork } from 'node:child_process';
 import { readFile, stat, chmod, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { modelBoundary, runtimeFixture, mastraConfiguration } from '../support/mastra.js';
+import { modelBoundary, runtimeFixture, mastraConfiguration, operationBarrier } from '../support/mastra.js';
 import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { agentResource, workflowResource } from '../../src/billing/mastra-resources.js';
 import { initializeMastraBilling } from '../../src/billing/mastra-setup.js';
 import { billingConfigurationSchema } from '../../src/billing/configuration.js';
 import { MastraBilling } from '../../src/billing/mastra.js';
+import { BillingRecovery } from '../../src/billing/recovery.js';
+import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
 import { boundedJson, fingerprint } from '../../src/billing/accounting.js';
 import { independentClient, temporaryDatabase } from '../support/billing.js';
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -133,7 +135,7 @@ describe('billed Mastra runtime', () => {
     expect(model.requests).toHaveLength(2);
     expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 2n }]);
     expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 0n }]);
-    expect((await observer.execute('SELECT id FROM billing_outbox')).rows).toHaveLength(1);
+    expect((await observer.execute('SELECT id FROM billing_outbox')).rows).toHaveLength(0);
     expect(
       (await observer.execute("SELECT SUM(units) AS units FROM billing_measurements WHERE measure = 'tokens'")).rows,
     ).toEqual([{ units: 10n }]);
@@ -794,6 +796,285 @@ describe('billed Mastra runtime', () => {
     expect(model.requests.filter(request => request.scenario === 'overflow')).toHaveLength(1);
   });
 
+  it('local cancel releases a hold acknowledged after the initial workflow was canceled', async () => {
+    const { runtime, model, observer } = await fixture();
+    const context = runtime.billingContext;
+    const protocol = runtime.provider.reservations!;
+    const reserve = protocol.reserve.bind(protocol);
+    const barrier = operationBarrier();
+    const delayAck = vi.spyOn(protocol, 'reserve').mockImplementation(async payload => {
+      const acknowledgement = await reserve(payload);
+      await barrier.pause();
+      return acknowledgement;
+    });
+    const run = await runtime.billing
+      .workflow('report')
+      .createRun({ billing: context, idempotencyKey: 'pending-local' });
+    const pending = run.start({ billing: context, idempotencyKey: 'start', inputData: { count: 0 } });
+    try {
+      await barrier.entered;
+      expect((await observer.execute('SELECT state FROM local_provider_reservations')).rows).toEqual([
+        { state: 'reserved' },
+      ]);
+      expect((await run.cancel({ billing: context, idempotencyKey: 'cancel' })).billing).toMatchObject({
+        executionStatus: 'canceled',
+        settlementStatus: 'uncertain',
+        billedUnits: null,
+      });
+      barrier.release();
+      expect((await pending).billing).toMatchObject({
+        executionStatus: 'canceled',
+        settlementStatus: 'released',
+        billedUnits: 0,
+      });
+      await runtime.accounting.recoverFinancial();
+      expect(model.requests).toHaveLength(0);
+      expect((await observer.execute('SELECT state FROM local_provider_reservations')).rows).toEqual([
+        { state: 'released' },
+      ]);
+      expect((await observer.execute('SELECT units, outcome FROM billing_ledger')).rows).toEqual([
+        { units: 0n, outcome: 'canceled' },
+      ]);
+    } finally {
+      barrier.release();
+      await pending.catch(() => {});
+      delayAck.mockRestore();
+    }
+  });
+
+  it.each(['same runtime', 'other runtime'] as const)(
+    'cancel from the %s wins after the preparation claim and before native start',
+    async location => {
+      const { runtime, model, observer, database } = await fixture();
+      const other =
+        location === 'same runtime'
+          ? runtime
+          : await runtimeFixture({
+              databaseUrl: database.url,
+              directory: database.directory,
+              modelUrl: model.url,
+              credential: runtime.credential,
+              workspaceId: runtime.billingContext.workspaceId,
+              configuration: runtime.configuration,
+            });
+      if (other !== runtime) cleanups.push(other.close);
+      const barrier = operationBarrier();
+      const segmentDeadline = runtime.accounting.segmentDeadline.bind(runtime.accounting);
+      const pause = vi.spyOn(runtime.accounting, 'segmentDeadline').mockImplementation(async (...args) => {
+        const deadline = await segmentDeadline(...args);
+        if (args[3] === 'dispatch') await barrier.pause();
+        return deadline;
+      });
+      const run = await runtime.billing
+        .workflow('report')
+        .createRun({ billing: runtime.billingContext, idempotencyKey: 'prepared-start' });
+      const start = { billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } };
+      const pending = run.start(start);
+      try {
+        await barrier.entered;
+        expect((await observer.execute('SELECT execution_id FROM billing_workflow_dispatch_claims')).rows).toEqual([
+          { execution_id: run.executionId },
+        ]);
+        const canceler = await other.billing
+          .workflow('report')
+          .getRun({ billing: other.billingContext, executionId: run.executionId });
+        const canceled = await canceler.cancel({ billing: other.billingContext, idempotencyKey: 'cancel' });
+        expect.soft(canceled.billing).toMatchObject({
+          executionStatus: 'canceled',
+          settlementStatus: 'released',
+          billedUnits: 0,
+        });
+        barrier.release();
+        expect.soft(await pending).toMatchObject({
+          kind: 'replay',
+          result: { status: 'canceled' },
+          billing: { billedUnits: 0 },
+        });
+        await expect(readFile(join(database.directory, 'workflow-events.jsonl'))).rejects.toMatchObject({
+          code: 'ENOENT',
+        });
+        expect(model.requests).toHaveLength(0);
+        expect((await observer.execute('SELECT state FROM local_provider_reservations')).rows).toEqual([
+          { state: 'released' },
+        ]);
+        expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 0n }]);
+      } finally {
+        barrier.release();
+        await pending.catch(() => {});
+        pause.mockRestore();
+      }
+    },
+  );
+
+  it.each(['same runtime', 'other runtime'] as const)(
+    'cancel during the committed native handoff returns pending until the %s owner acknowledges it',
+    async location => {
+      const { runtime, model, observer, database } = await fixture();
+      const other =
+        location === 'same runtime'
+          ? runtime
+          : await runtimeFixture({
+              databaseUrl: database.url,
+              directory: database.directory,
+              modelUrl: model.url,
+              credential: runtime.credential,
+              workspaceId: runtime.billingContext.workspaceId,
+              configuration: runtime.configuration,
+            });
+      if (other !== runtime) cleanups.push(other.close);
+      const barrier = operationBarrier();
+      const begin = runtime.workflowStorage.beginNativeHandoff.bind(runtime.workflowStorage);
+      const current = runtime.workflowStorage.current.bind(runtime.workflowStorage);
+      let handoffCommitted = false;
+      const observeHandoff = vi
+        .spyOn(runtime.workflowStorage, 'beginNativeHandoff')
+        .mockImplementation(async (...args) => {
+          await begin(...args);
+          handoffCommitted = true;
+          if (location === 'other runtime') await barrier.pause();
+        });
+      const observeRead = vi.spyOn(runtime.workflowStorage, 'current').mockImplementation(async id => {
+        const record = await current(id);
+        // A same-runtime cancel after the final read must still stop invocation.
+        if (handoffCommitted && location === 'same runtime') await barrier.pause();
+        return record;
+      });
+      const run = await runtime.billing
+        .workflow('report')
+        .createRun({ billing: runtime.billingContext, idempotencyKey: 'handoff-cancel' });
+      const start = { billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } };
+      const pending = run.start(start);
+      try {
+        await barrier.entered;
+        expect((await observer.execute('SELECT state, version FROM billing_workflow_native_handoffs')).rows).toEqual([
+          { state: 'handing_off', version: 1n },
+        ]);
+        const canceler = await other.billing
+          .workflow('report')
+          .getRun({ billing: other.billingContext, executionId: run.executionId });
+        const request = { billing: other.billingContext, idempotencyKey: 'cancel' };
+        expect(await canceler.cancel(request)).toMatchObject({
+          kind: 'replay',
+          result: { status: 'canceling' },
+          billing: { executionStatus: 'uncertain', settlementStatus: 'uncertain', billedUnits: null },
+        });
+        expect((await observer.execute('SELECT version FROM billing_workflow_runs')).rows).toEqual([{ version: 1n }]);
+        expect((await observer.execute('SELECT state FROM local_provider_reservations')).rows).toEqual([
+          { state: 'reserved' },
+        ]);
+        barrier.release();
+        expect(await pending).toMatchObject({
+          kind: 'replay',
+          result: { status: 'canceled' },
+          billing: { executionStatus: 'canceled', settlementStatus: 'released', billedUnits: 0 },
+        });
+        expect((await canceler.cancel(request)).result).toMatchObject({ status: 'canceled' });
+        await expect(readFile(join(database.directory, 'workflow-events.jsonl'))).rejects.toMatchObject({
+          code: 'ENOENT',
+        });
+        expect(model.requests).toHaveLength(0);
+        expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 0n }]);
+      } finally {
+        barrier.release();
+        await pending.catch(() => {});
+        observeHandoff.mockRestore();
+        observeRead.mockRestore();
+      }
+    },
+  );
+
+  it('the handoff owner aborts an invoked run whose activation has not yet committed', async () => {
+    const { runtime, model, observer } = await fixture({ workflowPrompt: '[abort] handoff active' });
+    const barrier = operationBarrier();
+    const complete = runtime.workflowStorage.completeNativeHandoff.bind(runtime.workflowStorage);
+    const observe = vi.spyOn(runtime.workflowStorage, 'completeNativeHandoff').mockImplementation(async (...args) => {
+      await barrier.pause();
+      return complete(...args);
+    });
+    const run = await runtime.billing
+      .workflow('report')
+      .createRun({ billing: runtime.billingContext, idempotencyKey: 'handoff-active' });
+    const pending = run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+    try {
+      await barrier.entered;
+      await model.stallStarted;
+      expect(await run.cancel({ billing: runtime.billingContext, idempotencyKey: 'cancel' })).toMatchObject({
+        result: { status: 'canceling' },
+        billing: { settlementStatus: 'uncertain', billedUnits: null },
+      });
+      barrier.release();
+      const aborted = await Promise.race([
+        model.stallAborted.then(() => true),
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1500).unref()),
+      ]);
+      expect(aborted).toBe(true);
+      expect(await pending).toMatchObject({
+        kind: 'replay',
+        result: { status: 'canceled' },
+        billing: { settlementStatus: 'released', billedUnits: 0 },
+      });
+      expect(model.requests).toHaveLength(1);
+      expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 0n }]);
+    } finally {
+      barrier.release();
+      model.release();
+      await pending.catch(() => {});
+      observe.mockRestore();
+    }
+  });
+
+  it('local cancel recovers after native cancellation commits and the billing write fails', async () => {
+    const { runtime, model, observer, database } = await fixture();
+    const run = await runtime.billing
+      .workflow('report')
+      .createRun({ billing: runtime.billingContext, idempotencyKey: 'recover-local-cancel' });
+    await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+    await observer.execute(
+      "CREATE TRIGGER interrupt_local_cancel BEFORE UPDATE OF status ON billing_executions WHEN NEW.status = 'canceled' BEGIN SELECT RAISE(ABORT, 'Interrupted local cancel billing'); END",
+    );
+    const request = { billing: runtime.billingContext, idempotencyKey: 'cancel' };
+    await expect(run.cancel(request)).rejects.toMatchObject({ code: 'storage_unavailable' });
+    expect((await runtime.workflows.report.native.getWorkflowRunById(run.executionId))?.status).toBe('canceled');
+    expect((await observer.execute('SELECT confirmed_suspended FROM billing_expiry_recovery')).rows).toEqual([
+      { confirmed_suspended: 1n },
+    ]);
+    await observer.execute('DROP TRIGGER interrupt_local_cancel');
+    await runtime.close();
+    const reopened = await runtimeFixture({
+      databaseUrl: database.url,
+      directory: database.directory,
+      modelUrl: model.url,
+      credential: runtime.credential,
+      workspaceId: runtime.billingContext.workspaceId,
+      configuration: runtime.configuration,
+    });
+    cleanups.push(reopened.close);
+    const records = await RecoveryStorage.open({ url: database.url });
+    cleanups.push(() => records.close());
+    const worker = new BillingRecovery(records, reopened.provider, async () => {
+      await reopened.billing.expireSuspensions();
+      await reopened.accounting.recoverFinancial();
+    });
+    cleanups.push(() => worker.stop());
+    await worker.runOnce();
+    const replay = await reopened.billing
+      .workflow('report')
+      .getRun({ billing: reopened.billingContext, executionId: run.executionId });
+    for (const key of ['cancel', 'cancel-again']) {
+      expect((await replay.cancel({ billing: reopened.billingContext, idempotencyKey: key })).billing).toMatchObject({
+        executionStatus: 'canceled',
+        settlementStatus: 'released',
+        billedUnits: 0,
+      });
+    }
+    await worker.runOnce();
+    expect(model.requests).toHaveLength(1);
+    expect((await observer.execute('SELECT state FROM local_provider_reservations')).rows).toEqual([
+      { state: 'released' },
+    ]);
+    expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 0n }]);
+  });
+
   it('foreign active cancellation retains its hold and fences the late owner', async () => {
     const { runtime, model, observer, database } = await fixture({ workflowPrompt: '[abort] wait for release' });
     const other = await runtimeFixture({
@@ -826,7 +1107,11 @@ describe('billed Mastra runtime', () => {
       billedUnits: null,
     });
     model.release();
-    await pending;
+    expect(await pending).toMatchObject({
+      kind: 'replay',
+      result: { status: 'uncertain' },
+      billing: { executionStatus: 'uncertain', billedUnits: null },
+    });
     expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([]);
     expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 1n }]);
     expect((await observer.execute('SELECT status FROM billing_workflow_runs')).rows).toEqual([
@@ -1190,5 +1475,76 @@ describe('billed Mastra runtime', () => {
     expect(recreated.modes).toEqual([0o600, 0o600, 0o600]);
     expect((await stat(directory)).mode & 0o777).toBe(0o755);
     expect(model.requests).toHaveLength(0);
+  });
+  it('financial recovery expires an undispatched completed workflow without rerunning its steps', async () => {
+    const { runtime, observer, model, database } = await fixture();
+    const context = runtime.billingContext;
+    const run = await runtime.billing
+      .workflow('report')
+      .createRun({ billing: context, idempotencyKey: 'dispatch-cutoff' });
+    await run.start({ billing: context, idempotencyKey: 'start', inputData: { count: 0 } });
+    await observer.execute(
+      "CREATE TRIGGER fail_workflow_dispatch BEFORE UPDATE OF terminal_dispatched ON billing_remote_operations WHEN OLD.terminal_dispatched = 0 AND NEW.terminal_dispatched = 1 BEGIN SELECT RAISE(ABORT, 'Injected dispatch claim failure'); END",
+    );
+    const approval = {
+      billing: context,
+      idempotencyKey: 'approve',
+      step: 'approval',
+      resumeData: { approved: true },
+    } as const;
+    await expect(run.resume(approval)).rejects.toMatchObject({ code: 'storage_unavailable' });
+    expect((await run.status(context)).billing).toMatchObject({
+      executionStatus: 'completed',
+      settlementStatus: 'pending',
+      billedUnits: null,
+    });
+    const saved = (
+      await observer.execute({ sql: 'SELECT result FROM billing_workflow_runs WHERE id = ?', args: [run.executionId] })
+    ).rows[0].result;
+    const request = JSON.parse(
+      String((await observer.execute('SELECT request FROM billing_remote_operations')).rows[0].request),
+    );
+    await observer.execute('DROP TRIGGER fail_workflow_dispatch');
+    const options = {
+      databaseUrl: database.url,
+      directory: database.directory,
+      modelUrl: model.url,
+      credential: runtime.credential,
+      workspaceId: context.workspaceId,
+    };
+    await runtime.close();
+    const restored = await runtimeFixture(options);
+    cleanups.push(restored.close);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(request.confirmationCutoff + 1);
+    try {
+      await restored.accounting.recoverFinancial();
+      const owned = await restored.billing
+        .workflow('report')
+        .getRun({ executionId: run.executionId, billing: restored.billingContext });
+      const receipt = await owned.status(restored.billingContext);
+      expect(receipt).toMatchObject({
+        result: { status: 'failed', output: { count: 2 } },
+        billing: { executionStatus: 'failed', settlementStatus: 'released', billedUnits: 0 },
+      });
+      const replay = await owned.resume({ ...approval, billing: restored.billingContext });
+      expect(replay).toMatchObject({ kind: 'replay', result: { status: 'failed' }, billing: { billedUnits: 0 } });
+      expect(
+        (
+          await observer.execute({
+            sql: 'SELECT result FROM billing_workflow_runs WHERE id = ?',
+            args: [run.executionId],
+          })
+        ).rows[0].result,
+      ).toBe(saved);
+      expect((await observer.execute('SELECT units, outcome FROM billing_ledger')).rows).toEqual([
+        { units: 0n, outcome: 'failed' },
+      ]);
+      expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 0n }]);
+      const effect = (await observer.execute('SELECT terminal_payload FROM local_provider_reservations')).rows[0];
+      expect(JSON.parse(String(effect.terminal_payload))).toMatchObject({ action: 'release', units: 0 });
+      expect(model.requests).toHaveLength(2);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

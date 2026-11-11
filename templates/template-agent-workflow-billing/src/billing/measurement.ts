@@ -10,6 +10,7 @@ export class MeasurementCollector {
   private steps = 0;
   private observed = 0;
   private reservedCalls = 0;
+  private expired = false;
   complete = true;
   overflow = false;
   captureFailed = false;
@@ -28,6 +29,39 @@ export class MeasurementCollector {
   ) {
     this.observed = initialUnits;
   }
+  async runWithinDeadline<T>(
+    deadline: number | null,
+    dispatch: () => Promise<T>,
+  ): Promise<{ status: 'finished'; value: T } | { status: 'expired_before_dispatch' | 'expired_during_execution' }> {
+    if (deadline === null) return { status: 'finished', value: await dispatch() };
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return { status: 'expired_before_dispatch' };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expiry = new Promise<{ status: 'expired_during_execution' }>(resolve => {
+      timer = setTimeout(() => {
+        // The native operation may ignore cancellation or have reached an
+        // external service. Preserve uncertainty until termination is known.
+        this.expired = true;
+        resolve({ status: 'expired_during_execution' });
+        this.controller.abort();
+        if (this.cancel) void this.cancel().catch(() => {});
+      }, remaining);
+    });
+    try {
+      return await Promise.race([dispatch().then(value => ({ status: 'finished' as const, value })), expiry]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  get deadlineExpired() {
+    return this.expired;
+  }
+
+  get workflowVersion() {
+    return this.workflow ? this.segment : undefined;
+  }
+
   nextCall(maxSteps: number) {
     const charge = this.resource.policy.charge;
     if (
@@ -49,10 +83,12 @@ export class MeasurementCollector {
     return this.steps;
   }
   async missing() {
+    if (this.expired) return;
     this.complete = false;
-    if (this.workflow) await this.workflows.incomplete(this.executionId);
+    if (this.workflow) await this.workflows.incomplete(this.executionId, this.segment);
   }
   async capture(call: number, step: number, usage: LanguageModelUsage) {
+    if (this.expired) return;
     this.steps++;
     const numeric = (value: unknown) => quantitySchema.safeParse(value);
     const input = numeric(usage.inputTokens),

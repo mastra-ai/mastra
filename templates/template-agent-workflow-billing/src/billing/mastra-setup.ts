@@ -1,3 +1,4 @@
+import type { AutumnProviderOptions } from './providers/autumn.js';
 import { BillingRecovery } from './recovery.js';
 import { RecoveryStorage } from './storage/recovery.js';
 import { dirname, resolve } from 'node:path';
@@ -44,6 +45,7 @@ export async function initializeMastraBilling<
   databaseUrl: string;
   workflowDatabaseUrl?: string;
   polar?: PolarProviderOptions;
+  autumn?: AutumnProviderOptions;
   drivers?: readonly BillingDriver[];
 }) {
   const files = parseInput(z.strictObject({ databaseUrl: localFile, workflowDatabaseUrl: localFile.optional() }), {
@@ -57,6 +59,7 @@ export async function initializeMastraBilling<
     storage: { url: files.databaseUrl },
     configuration: options.configuration,
     polar: options.polar,
+    autumn: options.autumn,
     drivers: options.drivers,
   });
   let commercialStorage: CommercialStorage | undefined;
@@ -93,7 +96,10 @@ export async function initializeMastraBilling<
     const ledger = accounting;
     const runs = workflowStorage;
     recoveryStorage = await RecoveryStorage.open({ url: files.databaseUrl });
-    recovery = new BillingRecovery(recoveryStorage, commercial.provider, () => billing.expireSuspensions());
+    recovery = new BillingRecovery(recoveryStorage, commercial.provider, async () => {
+      await billing.expireSuspensions();
+      await ledger.recoverFinancial();
+    });
     const worker = recovery;
     const recoveryRecords = recoveryStorage;
     let closed = false;

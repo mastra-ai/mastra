@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { ServerResponse } from 'node:http';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,6 +10,8 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
+import type { BillingProvider } from '../../src/billing/contracts.js';
+import type { BillingContext } from '../../src/billing/organizations.js';
 import { MastraBilling } from '../../src/billing/mastra.js';
 import { agentResource, workflowResource } from '../../src/billing/mastra-resources.js';
 import { billingConfigurationSchema } from '../../src/billing/configuration.js';
@@ -23,6 +25,9 @@ import { LocalBillingProvider } from '../../src/billing/providers/local.js';
 
 export async function modelBoundary() {
   const waiting: ServerResponse[] = [];
+  const stalls = new EventEmitter();
+  const stallStarted = once(stalls, 'started');
+  const stallAborted = once(stalls, 'aborted');
   const requests: { path: string; body: Record<string, any>; scenario: string }[] = [];
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
@@ -56,6 +61,10 @@ export async function modelBoundary() {
       : body.messages.some((message: { role: string }) => message.role === 'tool');
     if (scenario === 'abort') {
       waiting.push(response);
+      response.once('close', () => {
+        if (!response.writableEnded) stalls.emit('aborted');
+      });
+      stalls.emit('started');
       return;
     }
     if (
@@ -134,8 +143,11 @@ export async function modelBoundary() {
   return {
     url: `http://127.0.0.1:${address.port}/v1`,
     requests,
+    stallStarted,
+    stallAborted,
     release: () => {
       for (const response of waiting.splice(0)) {
+        if (response.destroyed) continue;
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end(
           JSON.stringify({
@@ -189,7 +201,7 @@ export function mastraConfiguration(
           charge: options.workflowUsage
             ? { type: 'usage', meter: 'tokens', measure: 'tokens', maxUnits: 40, funding: 'metered' }
             : { type: 'per-task', meter: 'tasks', units: options.taskUnits ?? 2, funding: 'prepaid' },
-          suspendedReservationTtlMs: options.ttl ?? 86400000,
+          suspendedReservationTtlMs: options.ttl ?? 1800000,
         },
       },
     ],
@@ -212,7 +224,29 @@ export function mastraConfiguration(
     ],
   });
 }
+export function operationBarrier() {
+  let enter!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>(resolve => {
+    enter = resolve;
+  });
+  const released = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  return {
+    entered,
+    release,
+    pause: async () => {
+      enter();
+      await released;
+    },
+  };
+}
+
 export async function runtimeFixture(options: {
+  organizations?: OrganizationService;
+  billingContext?: BillingContext;
+  provider?: BillingProvider;
   databaseUrl: string;
   directory: string;
   modelUrl: string;
@@ -222,6 +256,7 @@ export async function runtimeFixture(options: {
   configure?: (configuration: ReturnType<typeof mastraConfiguration>) => BillingConfiguration;
   workflowPrompt?: string;
   workflowAfterPrompt?: string;
+  workflowAfterBoundary?: (invoke: () => Promise<unknown>) => Promise<void>;
   workflowExpectedCalls?: readonly number[];
   workflowAgentDependencies?: readonly string[];
   workflowTransforms?: boolean;
@@ -230,18 +265,21 @@ export async function runtimeFixture(options: {
   structured?: boolean;
 }) {
   const directory = await OrganizationStorage.open({ url: options.databaseUrl });
-  const organizations = new OrganizationService(directory, { mode: 'local', provider: 'local' });
-  const owner = options.credential
-    ? null
-    : await organizations.provisionLocal({ profileId: 'owner', displayName: 'Owner' });
-  const credential = options.credential ?? owner!.credential!;
-  const billingContext = await organizations.context({ credential, workspaceId: options.workspaceId });
+  const organizations =
+    options.organizations ?? new OrganizationService(directory, { mode: 'local', provider: 'local' });
+  const owner =
+    options.credential || options.organizations
+      ? null
+      : await organizations.provisionLocal({ profileId: 'owner', displayName: 'Owner' });
+  const credential = options.credential ?? owner?.credential ?? '';
+  const billingContext =
+    options.billingContext ?? (await organizations.context({ credential, workspaceId: options.workspaceId }));
   const configuration =
     options.configuration ??
     options.configure?.(mastraConfiguration(billingContext.workspaceId)) ??
     mastraConfiguration(billingContext.workspaceId);
   const providerStorage = await LocalBillingStorage.open({ url: options.databaseUrl });
-  const provider = new LocalBillingProvider(providerStorage, configuration);
+  const provider = options.provider ?? new LocalBillingProvider(providerStorage, configuration);
   const accounting = await AccountingStorage.open({ url: options.databaseUrl }, directory);
   const workflowStorage = await WorkflowStorage.open({ url: options.databaseUrl }, directory);
   const agent = new Agent({
@@ -294,7 +332,9 @@ export async function runtimeFixture(options: {
     outputSchema: schema,
     execute: async ({ inputData }) => {
       await appendFile(join(options.directory, 'workflow-events.jsonl'), JSON.stringify({ step: 'after' }) + '\n');
-      await billing.nestedAgent('assistant').generate(options.workflowAfterPrompt ?? '[success] after');
+      const invoke = () => billing.nestedAgent('assistant').generate(options.workflowAfterPrompt ?? '[success] after');
+      if (options.workflowAfterBoundary) await options.workflowAfterBoundary(invoke);
+      else await invoke();
       return { count: inputData.count + 1 };
     },
   });
@@ -359,7 +399,8 @@ export async function runtimeFixture(options: {
       accounting.close();
       workflowStorage.close();
       providerStorage.close();
-      organizations.close();
+      if (!options.organizations) organizations.close();
+      else directory.close();
       await storage.close();
     },
   };

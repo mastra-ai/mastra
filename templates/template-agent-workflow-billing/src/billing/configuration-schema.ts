@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { prepaid, reservationBudgetSchema, workflowSuspensionTtlMs } from './reservations.js';
 import {
   BillingError,
   identifierSchema,
@@ -36,6 +37,7 @@ export const billingPolicySchema = z.strictObject({
     .optional(),
   charge: chargeSchema,
   suspendedReservationTtlMs: positiveQuantitySchema.optional(),
+  reservationBudget: reservationBudgetSchema.optional(),
 });
 
 const grantSchema = z
@@ -105,25 +107,34 @@ export const canonicalConfigurationSchema = z
     catalog: commercialCatalogSchema.default({ allowances: [], offers: [] }),
     resources: z
       .array(
-        z.strictObject({
-          id: identifierSchema,
-          kind: z.enum(['agent', 'workflow']),
-          operations: z
-            .array(z.enum(['generate', 'start', 'resume', 'cancel']))
-            .min(1)
-            .max(3),
-          measurements: z
-            .array(
-              z.strictObject({
-                key: identifierSchema,
-                unit: z.enum(['tokens', 'milliseconds', 'custom']),
-                enforceableBound: z.boolean(),
-              }),
-            )
-            .max(100)
-            .default([]),
-          policy: billingPolicySchema,
-        }),
+        z
+          .strictObject({
+            id: identifierSchema,
+            kind: z.enum(['agent', 'workflow']),
+            operations: z
+              .array(z.enum(['generate', 'start', 'resume', 'cancel']))
+              .min(1)
+              .max(3),
+            measurements: z
+              .array(
+                z.strictObject({
+                  key: identifierSchema,
+                  unit: z.enum(['tokens', 'milliseconds', 'custom']),
+                  enforceableBound: z.boolean(),
+                }),
+              )
+              .max(100)
+              .default([]),
+            policy: billingPolicySchema,
+          })
+          .transform(resource =>
+            resource.kind === 'workflow'
+              ? {
+                  ...resource,
+                  policy: { ...resource.policy, suspendedReservationTtlMs: workflowSuspensionTtlMs(resource.policy) },
+                }
+              : resource,
+          ),
       )
       .max(100),
     mappings: z.strictObject({
@@ -164,6 +175,16 @@ export const canonicalConfigurationSchema = z
         issue('Unsupported operation.');
       if (!unique(resource.measurements.map(measure => measure.key))) issue('Duplicate measurement.');
       const { access, charge } = resource.policy;
+      const budget = resource.policy.reservationBudget ?? reservationBudgetSchema.parse({});
+      if (
+        prepaid(resource.policy) &&
+        (resource.policy.suspendedReservationTtlMs ?? 0) +
+          budget.executionMs +
+          budget.finalizationMs +
+          budget.expiryMarginMs >
+          budget.lifetimeMs
+      )
+        issue('Suspension, execution, finalization and expiry margin must fit the reservation lifetime.');
       if (access?.entitlement && !config.mappings.entitlements.includes(access.entitlement))
         issue('Unknown entitlement.');
       if (access?.subscription && !config.mappings.subscriptions.includes(access.subscription))
@@ -226,16 +247,18 @@ export function validateConfiguration(
   const schema = canonicalConfigurationSchema.superRefine((configuration, ctx) => {
     for (const resource of configuration.resources) {
       const { access, charge } = resource.policy;
+
       if ((access?.entitlement && !capabilities.entitlements) || (access?.subscription && !capabilities.subscriptions))
         ctx.addIssue({ code: 'custom', message: 'Unsupported access capability.' });
       if (charge.type !== 'none') {
         const funding = charge.type === 'credits' ? 'prepaid' : charge.funding;
         if (
           !capabilities[funding] ||
-          !capabilities.replaySafeUsage ||
+          (funding === 'metered' && !capabilities.replaySafeUsage) ||
           (funding === 'prepaid' &&
             capabilities.reconciliation !== 'reflected-events' &&
-            capabilities.prepaidAuthority !== 'application-ledger')
+            capabilities.prepaidAuthority !== 'application-ledger' &&
+            capabilities.prepaidAuthority !== 'provider-reservations')
         )
           ctx.addIssue({ code: 'custom', message: 'Unsupported accounting capability.' });
       }
