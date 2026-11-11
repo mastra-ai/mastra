@@ -1357,7 +1357,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       let cursor = collection
         .find(query)
-        .sort({ [field]: sortOrder })
+        .sort({ [field]: sortOrder, id: sortOrder })
         .skip(offset);
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);

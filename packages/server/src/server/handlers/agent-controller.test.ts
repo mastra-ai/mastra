@@ -2120,11 +2120,20 @@ describe('agent-controller routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
-      // The newest page is read in storage, not every thread of the resource.
-      expect(listThreads).toHaveBeenCalled();
-      for (const [input] of listThreads.mock.calls) {
-        expect(input).toMatchObject({ perPage: 50, orderBy: { field: 'updatedAt', direction: 'DESC' } });
-      }
+      // In-memory storage scans once instead of materializing the whole map for each page.
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(listThreads.mock.calls[0]?.[0]).toMatchObject({
+        perPage: false,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      const fractional = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 1.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(fractional.threads.length).toBe(2);
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {

@@ -24,6 +24,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
 import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
@@ -163,6 +164,7 @@ export function buildFableFallbackProviderOptions(
 
 /** How much of the tail a rename reads: enough to say where the thread went, bounded so a long thread costs no more than a short one. */
 const TITLE_WINDOW_MESSAGES = 20;
+const THREAD_PAGE_FLOOR = 50;
 
 /**
  * The AgentController orchestrates multiple agent modes, shared state, memory, and storage.
@@ -190,8 +192,6 @@ const TITLE_WINDOW_MESSAGES = 20;
  * await controller.sendMessage({ content: "Hello!" })
  * ```
  */
-
-const THREAD_PAGE_FLOOR = 50;
 export class AgentController<TState = {}> {
   readonly id: string;
 
@@ -818,10 +818,14 @@ export class AgentController<TState = {}> {
       // to nobody here and must not be auto-resumed.
       const scopeEntries = Object.entries(session.getThreadScope());
 
-      const threads = await session.thread.list();
-      const candidates = threads.filter(t => {
-        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-        return scopeEntries.every(([key, value]) => metadata[key] === value);
+      const candidates = await this.queryThreads({
+        resourceId: session.identity.getResourceId(),
+        metadata: Object.fromEntries(scopeEntries),
+        limit: 1,
+        matchesScope: thread => {
+          const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+          return scopeEntries.every(([key, value]) => values[key] === value);
+        },
       });
 
       if (candidates.length === 0 && overrides?.createInitialThread !== false) {
@@ -864,13 +868,16 @@ export class AgentController<TState = {}> {
     } catch {
       filterable = false;
     }
-    // When storage can apply the scope, one matching thread answers the question.
-    const threads = await this.queryThreads(filterable ? { resourceId, metadata, limit: 1 } : { resourceId });
-    const recoverable = threads.some(thread => {
-      const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
-      return scopeEntries.every(([key, value]) => metadata[key] === value);
+    const threads = await this.queryThreads({
+      resourceId,
+      metadata: filterable ? metadata : undefined,
+      limit: 1,
+      matchesScope: thread => {
+        const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+        return scopeEntries.every(([key, value]) => values[key] === value);
+      },
     });
-    if (!recoverable) throw new SessionNotStartedError(resourceId);
+    if (threads.length === 0) throw new SessionNotStartedError(resourceId);
   }
 
   /**
@@ -1455,12 +1462,14 @@ export class AgentController<TState = {}> {
     includeForkedSubagents,
     metadata,
     limit,
+    matchesScope,
   }: {
     resourceId?: string;
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
     /** Return only the newest `limit` threads by `updatedAt`, read page by page instead of all at once. */
     limit?: number;
+    matchesScope?: (thread: StorageThreadType) => boolean;
   }): Promise<AgentControllerThread[]> {
     await this.initStorage();
     if (!this.#resolveStorage()) {
@@ -1477,28 +1486,37 @@ export class AgentController<TState = {}> {
           };
 
     const keep = (thread: StorageThreadType) =>
-      includeForkedSubagents || (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent !== true;
+      (includeForkedSubagents || (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent !== true) &&
+      (!matchesScope || matchesScope(thread));
 
+    const boundedLimit = limit === undefined ? undefined : Math.max(1, Math.ceil(limit));
     let threads: StorageThreadType[];
-    if (limit === undefined) {
-      threads = (await memoryStorage.listThreads({ filter, perPage: false })).threads.filter(keep);
+    if (boundedLimit === undefined || memoryStorage instanceof InMemoryMemory) {
+      // In-memory storage scans and sorts the entire map before slicing each page.
+      threads = (
+        await memoryStorage.listThreads({ filter, perPage: false, orderBy: { field: 'updatedAt', direction: 'DESC' } })
+      ).threads
+        .filter(keep)
+        .slice(0, boundedLimit);
     } else {
-      // Forked subagent threads are dropped after the read, so keep paging until
-      // `limit` threads remain or the resource runs out.
-      // Keyed by id: a thread updated between pages can move up and be read twice.
-      // Pages hold at least THREAD_PAGE_FLOOR rows so a run of newer forks costs one or two reads, not one each.
-      const byId = new Map<string, StorageThreadType>();
-      for (let page = 0; byId.size < limit; page++) {
+      // Re-read an expanding prefix: offset pagination can skip a thread that
+      // moves into a previously read page when its updatedAt changes mid-scan.
+      const pageSize = Math.max(boundedLimit, THREAD_PAGE_FLOOR);
+      let size = pageSize;
+      while (true) {
         const result = await memoryStorage.listThreads({
           filter,
-          perPage: Math.max(limit, THREAD_PAGE_FLOOR),
-          page,
+          perPage: size,
+          page: 0,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
-        for (const thread of result.threads) if (keep(thread) && !byId.has(thread.id)) byId.set(thread.id, thread);
-        if (!result.hasMore) break;
+        const candidates = result.threads.filter(keep);
+        if (candidates.length >= boundedLimit || !result.hasMore) {
+          threads = candidates.slice(0, boundedLimit);
+          break;
+        }
+        size += pageSize;
       }
-      threads = [...byId.values()].slice(0, limit);
     }
 
     return threads.map((thread: StorageThreadType) => ({

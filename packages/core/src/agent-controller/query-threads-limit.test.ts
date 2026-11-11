@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import type { StorageThreadType } from '../memory/types';
+import type { MemoryStorage } from '../storage/domains/memory/base';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { isSessionNotStartedError } from './errors';
@@ -52,7 +53,7 @@ describe('AgentController.queryThreads({ limit })', () => {
   it('returns the same threads as reading everything and slicing, for every limit', async () => {
     const storage = new InMemoryStore();
     // Shuffled update times, every third thread a forked subagent, a tag on half.
-    const order = [7, 2, 19, 11, 0, 15, 4, 23, 9, 13, 1, 21, 6, 17, 3, 10, 22, 5, 14, 8, 18, 12, 20, 16];
+    const order = Array.from({ length: 72 }, (_, i) => (i * 37) % 72);
     await seed(
       storage,
       order.map((minute, i) => ({
@@ -89,31 +90,66 @@ describe('AgentController.queryThreads({ limit })', () => {
     expect((await controller.queryThreads({ resourceId: 'r', limit: 2, includeForkedSubagents: true })).length).toBe(2);
   });
 
-  it('does not return a thread twice when it is updated between pages', async () => {
+  it('does not skip a thread updated into an earlier page during pagination', async () => {
     const storage = new InMemoryStore();
-    const memory = await seed(
-      storage,
-      Array.from({ length: 6 }, (_, i) => ({
+    const memory = await seed(storage, [
+      ...Array.from({ length: 60 }, (_, i) => ({
+        id: `fork${i}`,
+        updatedAt: new Date(Date.UTC(2026, 0, 2, 1, i)),
+        metadata: { forkedSubagent: true },
+      })),
+      ...Array.from({ length: 3 }, (_, i) => ({
         id: `t${i}`,
         updatedAt: new Date(Date.UTC(2026, 0, 2, 0, 10 - i)),
-        metadata: i < 3 ? { forkedSubagent: true } : {},
       })),
-    );
+    ]);
     const controller = await createController(storage);
     const list = memory.listThreads.bind(memory);
-    let pages = 0;
-    memory.listThreads = async input => {
-      const result = await list(input);
-      // After page 0 is read, t3 is touched and moves to the top.
-      if (pages++ === 0) {
-        const t3 = (await memory.getThreadById({ threadId: 't3' }))!;
-        await memory.saveThread({ thread: { ...t3, updatedAt: new Date(Date.UTC(2026, 0, 3)) } });
-      }
-      return result;
-    };
+    let reads = 0;
+    vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue({
+      listThreads: async (input: Parameters<typeof list>[0]) => {
+        const result = await list(input);
+        if (reads++ === 0) {
+          const thread = (await memory.getThreadById({ threadId: 't2' }))!;
+          await memory.saveThread({ thread: { ...thread, updatedAt: new Date(Date.UTC(2026, 0, 3)) } });
+        }
+        return result;
+      },
+    } as MemoryStorage);
 
     const ids = (await controller.queryThreads({ resourceId: 'r', limit: 3 })).map(t => t.id);
-    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(['t2', 't0', 't1']);
+    expect(reads).toBe(2);
+  });
+  it('continues past coercive scope matches to find an older exact match', async () => {
+    const storage = new InMemoryStore();
+    const memory = await seed(storage, [
+      ...Array.from({ length: 60 }, (_, i) => ({
+        id: `coercive${i}`,
+        updatedAt: new Date(Date.UTC(2026, 0, 2, 1, i)),
+        metadata: { projectPath: 1 },
+      })),
+      { id: 'exact', updatedAt: new Date(Date.UTC(2026, 0, 2)), metadata: { projectPath: '1' } },
+    ]);
+    const controller = await createController(storage);
+    const list = memory.listThreads.bind(memory);
+    let reads = 0;
+    // Model a storage backend whose metadata comparison coerces 1 and '1'.
+    vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue({
+      listThreads: async (input: Parameters<typeof list>[0]) => {
+        reads++;
+        return list({ ...input, filter: { resourceId: 'r' } });
+      },
+    } as MemoryStorage);
+
+    const threads = await controller.queryThreads({
+      resourceId: 'r',
+      metadata: { projectPath: '1' },
+      limit: 1,
+      matchesScope: thread => thread.metadata?.projectPath === '1',
+    });
+    expect(threads.map(thread => thread.id)).toEqual(['exact']);
+    expect(reads).toBe(2);
   });
 });
 
@@ -128,17 +164,22 @@ it('pages past a run of newer forks in one or two reads', async () => {
     { id: 'parent', updatedAt: new Date(Date.UTC(2026, 0, 2)), metadata: { projectPath: '/a' } },
   ]);
   const controller = await createController(storage);
+  const calls: unknown[] = [];
   const list = memory.listThreads.bind(memory);
-  let calls = 0;
-  memory.listThreads = async input => {
-    calls++;
-    return list(input);
-  };
+  vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue({
+    listThreads: async (input: Parameters<typeof list>[0]) => {
+      calls.push(input);
+      return list(input);
+    },
+  } as MemoryStorage);
 
   const threads = await controller.queryThreads({ resourceId: 'r', metadata: { projectPath: '/a' }, limit: 1 });
 
   expect(threads.map(t => t.id)).toEqual(['parent']);
-  expect(calls).toBeLessThanOrEqual(2);
+  expect(calls).toMatchObject([
+    { page: 0, perPage: 50 },
+    { page: 0, perPage: 100 },
+  ]);
 });
 
 describe('session recovery reads one thread when storage applies the scope', () => {
@@ -161,10 +202,12 @@ describe('session recovery reads one thread when storage applies the scope', () 
     const controller = await createController(storage);
     const calls: unknown[] = [];
     const list = memory.listThreads.bind(memory);
-    memory.listThreads = async input => {
-      calls.push(input);
-      return list(input);
-    };
+    vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue({
+      listThreads: async (input: Parameters<typeof list>[0]) => {
+        calls.push(input);
+        return list(input);
+      },
+    } as MemoryStorage);
 
     const result = await controller
       .createSession({ resourceId: 'r', id: 'r::/a', tags: { projectPath: '/a' }, resumeOnly: true })

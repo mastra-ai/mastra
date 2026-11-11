@@ -1235,7 +1235,14 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       const threads = await controller.queryThreads({
         resourceId,
         metadata: storageTags,
-        limit: capped && (tagEntries.length === 0 || storageTags) ? max : undefined,
+        limit: capped && (tagEntries.length === 0 || storageTags) ? Math.ceil(max) : undefined,
+        matchesScope:
+          tagEntries.length === 0
+            ? undefined
+            : thread => {
+                const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+                return tagEntries.every(([key, value]) => values[key] === value);
+              },
       });
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
@@ -1266,7 +1273,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
           : threads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
-      const limited = capped ? sorted.slice(0, max) : sorted;
+      const limited = capped ? sorted.slice(0, Math.ceil(max)) : sorted;
       // Thread run state comes from the controller-wide active-run registry,
       // which unions per-agent active thread runs across all backing agents.
       // Keyed by resourceId + threadId so it covers runs started by any session
