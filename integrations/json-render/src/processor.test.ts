@@ -275,6 +275,21 @@ describe('JsonRenderProcessor', () => {
     ]);
   });
 
+  it('shows the model an interface it wrote with no prose around it, within the same millisecond', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-11T10:00:00Z') });
+    try {
+      const { model, prompts } = modelWriting(specBlock(weatherCard), 'Renamed.');
+
+      await chat(model, 'Weather in Paris?', 'Call it Lyon');
+
+      expect(modelSaw(prompts[1]).filter(message => message.role === 'assistant')).toEqual([
+        { role: 'assistant', text: specBlock(weatherCard) },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('shows the model an interface a tool wrote, in the reply that followed it', async () => {
     const showWeather = createTool({
       id: 'showWeather',

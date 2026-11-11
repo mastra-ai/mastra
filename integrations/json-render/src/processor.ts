@@ -142,10 +142,12 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       !!message && message.role !== 'user' && writtenAt(message).some(createdAt => written.has(createdAt));
     let at = prompt.findIndex(wrote);
     if (at < 0) {
-      // A reply with no text or tool calls has no message in the prompt: the block goes before what came next.
-      const last = Math.max(...[...written].map(createdAt => createdAt ?? -Infinity));
-      const after = prompt.findIndex(message => writtenAt(message).some(createdAt => createdAt > last));
-      if (after < 0) return;
+      // A reply with no text or tool calls has no message in the prompt. Memory keeps messages in the order they were
+      // saved, so the block goes before the user message that followed it, counted from the end.
+      const later = messages.slice(messages.indexOf(reply) + 1).filter(message => message.role === 'user').length;
+      const users = prompt.flatMap((message, index) => (message.role === 'user' ? [index] : []));
+      const after = later > 0 ? users.at(-later) : undefined;
+      if (after === undefined) return;
       return { prompt: prompt.toSpliced(after, 0, { role: 'assistant', content: [{ type: 'text', text }] }) };
     }
     // A reply that calls tools spans several prompt messages; the block goes after its last one.
