@@ -48,7 +48,7 @@ export function useSessionListRows(
   if (!factoryId) return { rows: [], ...loadState };
 
   const workItemBySessionId = sessionWorkItemIndex(sessionCards.data?.workItems ?? []);
-  const parkedSessionIds = sessionCards.data?.parkedSessionIds ?? [];
+  const parkedSessions = new Set(sessionCards.data?.parkedSessionIds);
   const factoryRows = (query.data?.workspaces ?? []).flatMap(session => {
     const workItem = workItemBySessionId.get(session.sessionId);
     const running = runningById[session.sessionId] === true;
@@ -58,7 +58,7 @@ export function useSessionListRows(
     const boardStillUnknown = workItem ? !catalog.isFetched : cardsStillUnknown;
     if (boardStillUnknown && !active && !running) return [];
     const attention =
-      parkedSessionIds.includes(session.sessionId) ||
+      parkedSessions.has(session.sessionId) ||
       (workItem !== undefined &&
         itemAwaitsPerson(proposalByItem.get(workItem.item.id), effectByItem.get(workItem.item.id)));
     return [
