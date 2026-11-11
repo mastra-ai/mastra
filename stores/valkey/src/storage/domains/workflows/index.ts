@@ -30,6 +30,7 @@ import type { ValkeyClient } from '../../types';
 import {
   claimRunOwnership,
   getRunOwnership,
+  getRunOwnerships,
   releaseRunOwnership,
   renewRunOwnership,
   runClaimKey,
@@ -129,6 +130,23 @@ export class WorkflowsValkey extends WorkflowsStorage {
       return await getRunOwnership(this.client, runId);
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /** Reads the records with one script call per few hundred runs, all on the store's clock. */
+  public override async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    try {
+      return await getRunOwnerships(this.client, runIds);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('VALKEY', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: runIds.length },
+        },
+        error,
+      );
     }
   }
 

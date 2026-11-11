@@ -29,6 +29,7 @@ import {
   claimRunOwnership,
   evalFenced,
   getRunOwnership,
+  getRunOwnerships,
   releaseRunOwnership,
   renewRunOwnership,
   runClaimKey,
@@ -138,6 +139,23 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       return await getRunOwnership(this.client, runId);
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /** Reads the records with one pipeline request per hundred runs. */
+  override async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    try {
+      return await getRunOwnerships(this.client, runIds);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: runIds.length },
+        },
+        error,
+      );
     }
   }
 

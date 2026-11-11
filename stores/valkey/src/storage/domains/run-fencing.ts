@@ -107,6 +107,20 @@ const READ = `${LIB}
 return owner(1, now())
 `;
 
+// KEYS: the claim hashes to read. Replies one owner() entry per key, all on one clock reading.
+const READ_MANY = `${LIB}
+local t = now()
+local replies = {}
+for i, key in ipairs(KEYS) do
+  local r = redis.call('HMGET', key, 'generation', 'ownerId', 'leaseExpiresAt')
+  replies[i] = { 1, r[1], r[2], r[3], t }
+end
+return replies
+`;
+
+/** Claim hashes one READ_MANY call reads, so a large batch does not block the server for long. */
+const READ_MANY_BATCH_SIZE = 500;
+
 // ARGV: generation, ownerId
 const RAISE = `
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
@@ -213,6 +227,25 @@ export async function releaseRunOwnership(client: ValkeyClient, fence: RunFence)
 
 export async function getRunOwnership(client: ValkeyClient, runId: string): Promise<RunOwnershipRecord | null> {
   return (await evalOwner(client, READ, runId, [])).record;
+}
+
+/** The ownership records of `runIds`, with one script call per {@link READ_MANY_BATCH_SIZE} runs. */
+export async function getRunOwnerships(
+  client: ValkeyClient,
+  runIds: string[],
+): Promise<Map<string, RunOwnershipRecord>> {
+  const records = new Map<string, RunOwnershipRecord>();
+  const ids = [...new Set(runIds)];
+  for (let start = 0; start < ids.length; start += READ_MANY_BATCH_SIZE) {
+    const chunk = ids.slice(start, start + READ_MANY_BATCH_SIZE);
+    const keys = chunk.map(runId => runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, runId));
+    const replies = (await evalScript(client, READ_MANY, keys, [])) as OwnerReply[];
+    chunk.forEach((runId, i) => {
+      const record = toRunOwnershipRecord(runId, replies[i]!);
+      if (record) records.set(runId, record);
+    });
+  }
+  return records;
 }
 
 export async function raiseRunFence(client: ValkeyClient, fence: RunFence): Promise<boolean> {

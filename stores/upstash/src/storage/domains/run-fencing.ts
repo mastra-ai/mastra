@@ -252,6 +252,28 @@ export async function getRunOwnership(client: Redis, runId: string): Promise<Run
   return (await evalOwner(client, READ, runId, [], Date.now())).record;
 }
 
+/** Run reads one pipeline request carries, keeping its HTTP body small. */
+const READ_PIPELINE_BATCH_SIZE = 100;
+
+/** The ownership records of `runIds`, with one pipeline request per {@link READ_PIPELINE_BATCH_SIZE} runs. */
+export async function getRunOwnerships(client: Redis, runIds: string[]): Promise<Map<string, RunOwnershipRecord>> {
+  const records = new Map<string, RunOwnershipRecord>();
+  const ids = [...new Set(runIds)];
+  for (let start = 0; start < ids.length; start += READ_PIPELINE_BATCH_SIZE) {
+    const chunk = ids.slice(start, start + READ_PIPELINE_BATCH_SIZE);
+    const now = Date.now();
+    const pipeline = client.pipeline();
+    for (const runId of chunk) pipeline.eval(READ, [runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, runId)], []);
+    const replies = await pipeline.exec<unknown[]>();
+    chunk.forEach((runId, i) => {
+      const raw = replies[i];
+      const record = toRunOwnershipRecord(runId, (typeof raw === 'string' ? JSON.parse(raw) : raw) as OwnerReply, now);
+      if (record) records.set(runId, record);
+    });
+  }
+  return records;
+}
+
 export async function raiseRunFence(client: Redis, fence: RunFence): Promise<boolean> {
   const raised = await client.eval(
     RAISE,
