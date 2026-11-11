@@ -33,12 +33,33 @@ export interface CachingPubSubOptions {
    */
   shouldCache?: (topic: string) => boolean;
   /**
+   * Only append to topics whose log this cache already holds. A publish to a
+   * topic with no log is delivered live and unnumbered, and `onUnlogged` is
+   * called with the topic.
+   *
+   * A process-local cache can only number a topic's frames consistently in the
+   * process that started its log. Another process numbering the same topic
+   * from 0 in its own cache would produce indices that observers drop as
+   * duplicates.
+   *
+   * @internal
+   */
+  extendExistingLogsOnly?: boolean;
+  /**
+   * Called when `extendExistingLogsOnly` leaves a publish unnumbered.
+   *
+   * @internal
+   */
+  onUnlogged?: (topic: string) => void;
+  /**
    * @deprecated No longer used. Evented steps now cache their frames when they
    * publish, so nothing needs to be copied in from another PubSub. Accepted and
    * ignored for compatibility.
    */
   source?: PubSub;
 }
+
+const EMPTY_INDICES: ReadonlySet<number> = new Set();
 
 /**
  * A PubSub decorator that adds event caching and replay capabilities.
@@ -53,11 +74,24 @@ export interface CachingPubSubOptions {
  * ## One append path
  *
  * Every cached publish goes through {@link MastraServerCache.listPushIndexed},
- * which allocates the frame's index and appends it. The
- * cache list is therefore the run's log — position and index always agree —
- * and the transport only carries the live tail of that log. Subscribers hold a
- * single integer cursor and backfill any gap they observe from the log rather
- * than relying on transport replay.
+ * which allocates the frame's index and appends it. The cache list is
+ * therefore the run's log, and the transport only carries the
+ * live tail of that log. Subscribers hold a single integer cursor and backfill
+ * any gap they observe from the log rather than relying on transport replay.
+ *
+ * A list position is not necessarily its index: a cache whose append is not
+ * atomic can allocate an index and then fail to push the frame, leaving a hole
+ * that shifts every later frame to a lower position. Reads go through
+ * `readLogFrom`, which uses the counter minus the list length to find where
+ * index `from` can start, and returns entries in index order. A frame whose
+ * cache write failed is not recoverable.
+ *
+ * Limitation: a non-atomic append (the default
+ * {@link MastraServerCache.listPushIndexed}, or Redis after its CROSSSLOT
+ * fallback) can also let concurrent publishes store frames out of order. An
+ * entry that lands below the computed start position is then missed, e.g.
+ * the log `[0, 2, 1, 3]` read from index 2 loses index 2. Removing that needs
+ * an atomic append.
  *
  * If caching a frame fails, it is published without an index and delivered
  * live only.
@@ -89,8 +123,18 @@ export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
   private readonly shouldCache?: (topic: string) => boolean;
+  private readonly extendExistingLogsOnly: boolean;
+  private readonly onUnlogged?: (topic: string) => void;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
+
+  /**
+   * Log indices per topic that were appended to the cache but whose live
+   * publish threw. The frame stays in the log (late subscribers still replay
+   * it), but the transport never carried it, so readers must not wait for it
+   * to arrive.
+   */
+  private undeliveredIndices = new Map<string, Set<number>>();
 
   constructor(
     private readonly inner: PubSub,
@@ -101,6 +145,8 @@ export class CachingPubSub extends PubSub {
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
+    this.extendExistingLogsOnly = options.extendExistingLogsOnly ?? false;
+    this.onUnlogged = options.onUnlogged;
   }
 
   /**
@@ -120,6 +166,17 @@ export class CachingPubSub extends PubSub {
 
   get supportsOffsets(): boolean {
     return true;
+  }
+
+  /**
+   * Topics `shouldCache` leaves out only reach the inner transport. With
+   * `extendExistingLogsOnly`, a process that doesn't hold a run's log
+   * publishes it live only; that setup is already warned about (`onUnlogged`)
+   * and its replays miss those frames whatever they carry, so it still counts
+   * as kept.
+   */
+  override __replaysTopic(topic: string): boolean {
+    return this.shouldCache?.(topic) !== false || this.inner.__replaysTopic(topic);
   }
 
   /**
@@ -158,6 +215,43 @@ export class CachingPubSub extends PubSub {
     return `${this.keyPrefix}${topic}:counter`;
   }
 
+  /**
+   * Read the log entries for `topic` whose index is `from` or later.
+   *
+   * Each hole left by an allocated-but-unpushed index moves later entries one
+   * position below their index, so slicing at `from` would skip them. The
+   * counter minus the list length is the number of holes; start that many
+   * positions earlier and filter by index. When either value is unavailable
+   * (a failed read, or a cache whose `get` does not return counters), read
+   * the whole log instead.
+   *
+   * Numbered entries are returned in index order, followed by unnumbered
+   * ones, because a non-atomic append can store frames out of order.
+   */
+  private async readLogFrom(topic: string, from: number): Promise<Event[]> {
+    const cacheKey = this.getCacheKey(topic);
+    let start = 0;
+    if (from > 0) {
+      // Length before counter: an append landing between the two reads can
+      // only overstate the holes, which starts the slice early, never late.
+      const length = await this.cache.listLength(cacheKey).catch(() => undefined);
+      const counter =
+        length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+      if (typeof length === 'number' && typeof counter === 'number') {
+        start = Math.max(0, from - Math.max(0, counter - length));
+      }
+    }
+    const entries = (await this.cache.listFromTo(cacheKey, start)) as Event[];
+    const numbered: Event[] = [];
+    const unnumbered: Event[] = [];
+    for (const event of entries) {
+      if (typeof event.index !== 'number') unnumbered.push(event);
+      else if (event.index >= from) numbered.push(event);
+    }
+    numbered.sort((a, b) => a.index! - b.index!);
+    return [...numbered, ...unnumbered];
+  }
+
   async publish(
     topic: string,
     event: Omit<Event, 'id' | 'createdAt' | 'index'>,
@@ -174,9 +268,15 @@ export class CachingPubSub extends PubSub {
       return;
     }
 
+    if (this.extendExistingLogsOnly && !(await this.hasLog(topic))) {
+      this.onUnlogged?.(topic);
+      await this.inner.publish(topic, fullEvent, options);
+      return;
+    }
+
     // Cache BEFORE live publish so late-joining observers never miss events,
-    // and allocate the index as part of that append so list position and index
-    // cannot disagree.
+    // and allocate the index as part of that append so the log stays in index
+    // order.
     let index: number | undefined;
     try {
       index = await this.cache.listPushIndexed(
@@ -195,7 +295,39 @@ export class CachingPubSub extends PubSub {
     const numbered: Event = index !== undefined ? { ...fullEvent, index } : fullEvent;
 
     // Always publish to inner PubSub — cache failure must not block live delivery.
-    await this.inner.publish(topic, numbered, options);
+    try {
+      await this.inner.publish(topic, numbered, options);
+    } catch (error) {
+      if (index !== undefined) {
+        let indices = this.undeliveredIndices.get(topic);
+        if (!indices) this.undeliveredIndices.set(topic, (indices = new Set()));
+        indices.add(index);
+      }
+      throw error;
+    }
+  }
+
+  private async hasLog(topic: string): Promise<boolean> {
+    try {
+      return (await this.cache.listLength(this.getCacheKey(topic))) > 0;
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to read cached log length for ${topic}`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Log indices this instance cached for `topic` but failed to publish to the
+   * inner transport. Readers exclude them when waiting for the log to reach
+   * them: those frames are replayed to late subscribers, but the live
+   * subscription will never deliver them.
+   *
+   * Only the publishing process knows these indices. A reader in another
+   * process sharing the cache still waits out its pending-frame deadline for
+   * a frame a remote publisher could not send.
+   */
+  getUndeliveredIndices(topic: string): ReadonlySet<number> {
+    return this.undeliveredIndices.get(topic) ?? EMPTY_INDICES;
   }
 
   /**
@@ -245,7 +377,25 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
 
     let next = offset;
+    // The id the log stored for its frame 0 when this subscriber attached. With
+    // an offset past the log's end, the cursor sits above the counter, so the
+    // counter cannot tell the transport's retained frame 0 from the first frame
+    // of a new segment; a new segment writes a new entry 0 with a different id.
+    const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0)) as Event[])[0]?.id;
+    const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
+    // When the attach-time id read fails on an existing log, the counter
+    // fallback must compare against the log's end, not a cursor past it, or the
+    // intact log's retained frame 0 reads as a restart.
+    let attachLogEnd: number | undefined;
+    let firstId =
+      typeof logLength === 'number'
+        ? await readFirstId().catch(() => {
+            attachLogEnd = logLength;
+            return undefined;
+          })
+        : undefined;
     let closed = false;
+    let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
     // Frames delivered meanwhile must wait, or the cursor could advance past a
     // frame that has not been handed to the consumer yet. In the common case
@@ -256,14 +406,16 @@ export class CachingPubSub extends PubSub {
     let attaching = true;
 
     const emit = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
-      if (typeof event.index === 'number') next = event.index + 1;
+      if (typeof event.index === 'number') {
+        next = event.index + 1;
+      }
       return cb(event, ack, nack);
     };
 
     /** Deliver everything the log holds between the cursor and `target`. */
     const backfill = async (target: number) => {
       if (target <= next) return;
-      const entries = (await this.cache.listFromTo(cacheKey, next)) as Event[];
+      const entries = await this.readLogFrom(topic, next);
       for (const entry of entries) {
         if (closed) return;
         const seq = entry.index;
@@ -282,7 +434,17 @@ export class CachingPubSub extends PubSub {
 
       const seq = event.index;
       if (typeof seq !== 'number') {
-        // No numbering (the frame failed to cache): live-only delivery.
+        // No numbering (the frame failed to cache, or the publisher has no
+        // shared log): live-only delivery.
+        if (offset > 0 && !warnedUnnumbered) {
+          warnedUnnumbered = true;
+          this.logWarn(
+            `[CachingPubSub] Frames on ${topic} are not numbered, so resuming from offset ${offset} cannot ` +
+              `replay or skip them by position. Either the publisher failed to append them to the server cache ` +
+              `(check for cache errors), or it does not share a server cache with this process (configure one ` +
+              `shared by every process, for example RedisServerCache).`,
+          );
+        }
         return cb(event, ack, nack);
       }
 
@@ -291,25 +453,47 @@ export class CachingPubSub extends PubSub {
       if (seq < next) {
         if (seq !== 0) return ack?.();
 
-        // Index 0 while the cursor has already advanced means the log this
-        // subscriber was reading is gone: it expired (or was cleared) and the
-        // run resumed, restarting numbering at 0. Dropping it would swallow
-        // every frame of the new segment, since all of their indices sit below
-        // the stale cursor. Confirm against the counter — it restarts with the
-        // log, so in a continuous log it can never be below our cursor.
+        // Index 0 below the cursor can mean the log this subscriber was reading
+        // is gone: it expired (or was cleared) and the run resumed, restarting
+        // numbering at 0. Dropping it would swallow every frame of the new
+        // segment, since all of their indices sit below the stale cursor.
+        // Confirm by frame 0's id when one was captured on attach; otherwise by
+        // the counter, which restarts with the log and so cannot sit below the
+        // cursor in a continuous log.
         deferred = true;
         return (async () => {
           // A cache read failure must not turn a duplicate into a nack loop;
           // fall through to the drop path in that case.
           const allocated = await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+          // A failed id read is unknown, not unchanged: fall back to the
+          // counter, which risks re-sending frames rather than losing them.
+          let compareIds = firstId !== undefined;
+          let currentFirstId: string | undefined;
+          if (compareIds) {
+            try {
+              currentFirstId = await readFirstId();
+            } catch {
+              compareIds = false;
+            }
+          }
           if (closed) return ack?.();
 
-          if (typeof allocated === 'number' && allocated < next) {
+          const restarted = compareIds
+            ? currentFirstId !== undefined && currentFirstId !== firstId
+            : typeof allocated === 'number' && allocated < Math.min(next, attachLogEnd ?? next);
+          if (restarted) {
+            attachLogEnd = undefined;
+            firstId = compareIds ? currentFirstId : await readFirstId().catch(() => undefined);
             this.logWarn(
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
                 `the retained log expired or was cleared. Resyncing from the start of the new segment.`,
             );
+            // The frame in hand may be a delayed copy of the old log's frame 0,
+            // so deliver the new segment from the log rather than from it.
             next = 0;
+            await backfill(Number.POSITIVE_INFINITY);
+            if (closed) return ack?.();
+            if (next > 0) return ack?.();
             await emit(event, ack, nack);
             return;
           }
@@ -404,7 +588,7 @@ export class CachingPubSub extends PubSub {
       pending = historyGate;
       try {
         await inFlight;
-        const entries = (await this.cache.listFromTo(cacheKey, next)) as Event[];
+        const entries = await this.readLogFrom(topic, next);
         for (const entry of entries) {
           if (closed) return;
           const seq = entry.index;
@@ -436,14 +620,10 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
-   * Get historical events for a topic from cache.
-   *
-   * The list is the log: entry position and `index` are allocated together, so
-   * a slice from `offset` is the events from that index on.
+   * Get historical events for a topic from cache, from index `offset` on.
    */
   async getHistory(topic: string, offset: number = 0): Promise<Event[]> {
-    const events = (await this.cache.listFromTo(this.getCacheKey(topic), offset)) as Event[];
-    return events.filter(event => typeof event.index !== 'number' || event.index >= offset);
+    return this.readLogFrom(topic, offset);
   }
 
   /**
@@ -477,6 +657,7 @@ export class CachingPubSub extends PubSub {
    * no-op and the inner stream leaks forever.
    */
   override async clearTopic(topic: string): Promise<void> {
+    this.undeliveredIndices.delete(topic);
     try {
       await Promise.all([
         this.cache.delete(this.getCacheKey(topic)),
@@ -493,7 +674,10 @@ export class CachingPubSub extends PubSub {
   }
 
   /** Forward run trims to the inner transport; the per-process cache is left to its own bounds. */
-  override async trimTopic(topic: string, options: { runId: string; producedBefore?: number }): Promise<void> {
+  override async trimTopic(
+    topic: string,
+    options: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
+  ): Promise<void> {
     try {
       await this.inner.trimTopic(topic, options);
     } catch (error) {

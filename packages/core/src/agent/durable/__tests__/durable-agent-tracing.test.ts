@@ -289,7 +289,7 @@ describe('DurableAgent observability tracing', () => {
       const [original] = agentSpans;
       const resumedOpts = agentSpanOpts[1];
       expect(resumedOpts.name).toContain('(resumed)');
-      expect(resumedOpts.resumedFromSpanId).toBe(original.id);
+      expect(resumedOpts.resumeFrom).toMatchObject({ traceId: original.traceId, spanId: original.id });
       expect(resumedOpts.tracingOptions?.traceId).toBe(original.traceId);
       expect(resumedOpts.metadata?.resumedFromSpanId).toBe(original.id);
     } finally {
@@ -477,6 +477,9 @@ describe('DurableAgent observability tracing', () => {
             id: 'AGENT_INPUT_PROCESSOR_ERROR',
             message: '[Agent:Trace Agent (input error)] - Input processor error',
           }),
+          outcome: 'error',
+          stopReason: 'runtime_error',
+          stopReasonContext: null,
           endTree: true,
         });
 
@@ -617,6 +620,59 @@ describe('DurableAgent observability tracing', () => {
       }
       expect(outputStepProcessorSpan).toBeDefined();
       expect(outputStepProcessorSpan.findParent('agent_run')).toBe(agentSpans[0]);
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('parents the output processor spans of the total-deadline save to AGENT_RUN', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const processOutputStep = vi.fn(async () => undefined);
+      const processOutputResult = vi.fn(async ({ messageList }: any) => messageList);
+      const outputProcessor = { id: 'deadline-processor', processOutputStep, processOutputResult };
+      // The reply streams some text, then stalls past the total deadline.
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'PARTIAL ' });
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      });
+
+      const baseAgent = new Agent({
+        id: 'trace-agent-deadline',
+        name: 'Trace Agent (deadline)',
+        instructions: 'You are a test assistant',
+        model: model as LanguageModelV2,
+        outputProcessors: [outputProcessor as any],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi', { modelSettings: { timeout: { totalMs: 300 } } });
+      await output.consumeStream().catch(() => {});
+      await vi.waitFor(() => expect(processOutputResult).toHaveBeenCalled());
+
+      expect(agentSpans.length).toBe(1);
+      for (const name of ['output step processor: deadline-processor', 'output processor: deadline-processor']) {
+        let processorSpan: any;
+        for (const span of createdSpans) {
+          const callIndex = span.createChildSpan.mock.calls.findIndex(
+            (call: any[]) => call[0]?.type === 'processor_run' && call[0]?.name === name,
+          );
+          if (callIndex !== -1) processorSpan = span.createChildSpan.mock.results[callIndex]?.value;
+        }
+        expect(processorSpan, name).toBeDefined();
+        expect(processorSpan.findParent('agent_run'), name).toBe(agentSpans[0]);
+      }
 
       cleanup();
     } finally {

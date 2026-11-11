@@ -1,9 +1,16 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import {
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
+import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import {
   Composer as ComposerRoot,
   ComposerActions,
+  ComposerActionsEnd,
+  ComposerActionsStart,
+  ComposerAttachMenu,
   ComposerBox,
   ComposerHeader,
   ComposerInput,
@@ -14,8 +21,8 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ImagePlus } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
@@ -35,18 +42,38 @@ import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFrom
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
-import { commandRequiresReadySession } from '../services/commands';
+import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { mergeDictation } from '../services/dictation';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
+import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
+import { ModelPicker } from './StatusLine/ModelPicker';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
+import { useVoiceDictation } from './useVoiceDictation';
 
-type ComposerProps = Pick<ComposerInputProps, 'variant'>;
+type ComposerProps = Pick<ComposerInputProps, 'variant'> & {
+  /** Leads the status row above the composer, e.g. who is steering this session. */
+  statusLead?: ReactNode;
+};
 
-export function Composer({ variant = 'inline' }: ComposerProps) {
+function sendTitleFor(state: {
+  waitsOnConnection: boolean;
+  chatPreparing: boolean;
+  startingDraft: boolean;
+  dictating: boolean;
+}): string | undefined {
+  if (state.waitsOnConnection) return 'You can send once reconnected';
+  if (state.chatPreparing) return 'Initializing session…';
+  if (state.startingDraft) return 'Starting session…';
+  if (state.dictating) return 'Finish dictation to send';
+  return undefined;
+}
+
+export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
@@ -55,14 +82,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const connectionNotice = useComposerConnectionNotice(status);
-  const connectionLost = connectionNotice.open && connectionNotice.notice !== 'reconnected';
+  const connectionLost = connectionNotice !== undefined;
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
-  const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
+  const { isLoading: modelLoading, error: modelError } = useChatModels();
   const {
     commands,
     composerDraft: draft,
+    composerPreview: preview,
     composerInputRef: inputRef,
     setComposerDraft,
     runComposerCommand,
@@ -74,35 +102,56 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
-  const liveRun = phase === 'working' && !preparingThreadId;
-  const createDraftSessionMutation = useCreateUserSessionFromDraft();
+  const liveRun = phase === 'working' && !preparingThreadId && sessionEnabled;
+  const createSessionFromDraft = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
-  const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
-  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    disabled: chatPreparing || planFeedback.pending,
+  // A draft send waits for a model still loading, so only a model that failed to load holds it back.
+  const draftModelFailed = onUserDraft && modelError !== undefined;
+  const [heldDraftText, setHeldDraftText] = useState<string>();
+  const startingDraft = heldDraftText !== undefined;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
+  const { images, setImages, removeImage, onPaste, onDrop, addFiles } = useComposerImages({
+    disabled: chatPreparing || planFeedback.pending || startingDraft,
   });
-  const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
+  const updateDraft = setComposerDraft;
+  const insertTranscript = (transcript: string, replacing: string) => {
+    updateDraft(current => mergeDictation(current, replacing, transcript));
+    if (!replacing) inputRef.current?.focus();
+  };
+  const dictation = useVoiceDictation({
+    factoryId,
+    onTranscript: insertTranscript,
+    onError: message => pushNotice(message, 'error'),
+  });
+  const dictating = dictation.state !== 'idle';
+  const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading || dictating;
   const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
-  const hasSubmittableDraft = draft.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
-  const textareaDisabled = composerDisabled && !chatPreparing;
+  const shownText = preview?.text ?? draft;
+  const hasSubmittableDraft =
+    shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && draftImagesCanBeSent);
+  // Typing never waits on the connection: a reconnect only holds back sending.
+  const textareaDisabled = (startingDraft || planFeedback.isSubmitting || (onUserDraft && blocked)) && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
-    ? 'Give feedback on this plan…'
+    ? 'Give feedback on this plan'
     : liveRun
-      ? 'Steer the agent…'
-      : 'Ask Mastra Code…';
+      ? 'Steer the agent'
+      : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
-
-  const updateDraft = setComposerDraft;
+  const sendTitle = sendTitleFor({
+    waitsOnConnection: connectionLost && !onUserDraft && blocked,
+    chatPreparing,
+    startingDraft,
+    dictating,
+  });
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -172,23 +221,39 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
+    if (onUserDraft && modelLoading && !isSlashCommand(text)) {
+      setHeldDraftText(text);
+      return;
+    }
+    const runsCommand = !planFeedback.pending && isSlashCommand(text);
+    const sentAnnotations = runsCommand ? [] : takeAnnotations();
     updateDraft('');
-    void handleInput(text).catch(error => {
+    void handleInput(text, sentAnnotations).catch(error => {
+      restoreAnnotations(sentAnnotations);
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
   };
 
+  const sendHeldDraft = useEffectEvent((text: string) => {
+    setHeldDraftText(undefined);
+    if (modelError) pushNotice(modelError.message, 'error');
+    else submitInput(text);
+  });
+  useEffect(() => {
+    if (heldDraftText !== undefined && !modelLoading) sendHeldDraft(heldDraftText);
+  }, [heldDraftText, modelLoading]);
+
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     if (sendDisabled || !hasSubmittableDraft) return;
-    submitInput(draft.trim());
+    submitInput(shownText.trim());
   };
 
   const commandMenu = useComposerCommands({
     commands,
-    value: draft,
+    value: shownText,
     onValueChange: updateDraft,
     inputRef,
     enabled: !planFeedback.pending,
@@ -206,13 +271,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  async function handleInput(text: string) {
+  async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
+    const message = formatAnnotatedMessage(text, sentAnnotations);
     if (planFeedback.pending) {
-      await planFeedback.submitFeedback(text);
+      await planFeedback.submitFeedback(message);
       setImages([]);
       return;
     }
-    if (onUserDraft && text.startsWith('/')) {
+    if (onUserDraft && isSlashCommand(text)) {
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
@@ -223,77 +289,79 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await withPendingImages(files => createDraftSessionMutation.mutateAsync({ prompt: text, files }));
+        await withPendingImages(async files => createSessionFromDraft({ prompt: message, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
+    if (preparingThreadId && isSlashCommand(text) && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
     }
     if (await runComposerCommand(text)) return;
     if (liveRun) {
-      await steer(text);
+      await steer(message);
       return;
     }
-    await withPendingImages(files => send(text, files));
+    await withPendingImages(files => send(message, files));
   }
 
   return (
-    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerHeader open={connectionNotice.open}>
-        <ComposerConnectionNotice notice={connectionNotice.notice} />
-      </ComposerHeader>
-      <ComposerRing busy={(busy || chatPreparing) && !connectionLost}>
-        <ComposerBox>
-          <ComposerSuggestions {...commandMenu.suggestionsProps} />
-          <ComposerImageAttachments images={images} onRemove={removeImage} />
-          <ComposerInput
-            {...commandMenu.inputProps}
-            ref={inputRef}
-            onKeyDown={onComposerKeyDown}
-            onPaste={onPaste}
-            placeholder={placeholder}
-            disabled={textareaDisabled}
-            variant={variant}
-            aria-label="Message"
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={onFileInputChange}
-            className="hidden"
-            aria-label="Attach images"
-          />
-          <ComposerActions>
-            <StatusLine />
-            <ButtonsGroup size="sm" className="ml-auto" aria-label="Composer actions">
-              <Button
-                type="button"
-                size="icon-sm"
-                disabled={attachDisabled}
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Attach image"
-                tooltip="Images only"
-              >
-                <ImagePlus size={14} />
-              </Button>
-              <ComposerPrimaryAction
-                showAbort={liveRun && !hasSubmittableDraft}
-                sendDisabled={sendDisabled || !hasSubmittableDraft}
-                sendTitle={sendTitle}
-                onAbort={() => void abortMutation.mutateAsync()}
-              />
-            </ButtonsGroup>
-          </ComposerActions>
-        </ComposerBox>
-      </ComposerRing>
-    </ComposerRoot>
+    <>
+      <StatusLine>{statusLead}</StatusLine>
+      <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
+        <ComposerHeader placement="overlay" open={connectionNotice !== undefined}>
+          {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
+        </ComposerHeader>
+        <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
+          <ComposerBox>
+            <ComposerSuggestions {...commandMenu.suggestionsProps} />
+            <ComposerAnnotations />
+            <ComposerImageAttachments images={images} onRemove={removeImage} />
+            <ComposerInput
+              {...commandMenu.inputProps}
+              ref={inputRef}
+              onKeyDown={onComposerKeyDown}
+              onPaste={onPaste}
+              placeholder={placeholder}
+              disabled={textareaDisabled}
+              readOnly={preview !== undefined}
+              style={preview ? { height: preview.height } : undefined}
+              variant={variant}
+              aria-label="Message"
+            />
+            <ComposerActions>
+              <ComposerActionsStart>
+                <ComposerAttachMenu
+                  onFiles={addFiles}
+                  accept="image/*"
+                  disabled={attachDisabled}
+                  label="Attach images"
+                />
+              </ComposerActionsStart>
+              <ComposerActionsEnd role="group" aria-label="Composer actions">
+                <ModelPicker />
+                {factoryId && (
+                  <ComposerVoiceButton
+                    factoryId={factoryId}
+                    disabled={textareaDisabled || preview !== undefined}
+                    dictation={dictation}
+                  />
+                )}
+                <ComposerPrimaryAction
+                  showAbort={liveRun && !hasSubmittableDraft}
+                  sendDisabled={sendDisabled || !hasSubmittableDraft}
+                  sendTitle={sendTitle}
+                  onAbort={() => void abortMutation.mutateAsync()}
+                />
+              </ComposerActionsEnd>
+            </ComposerActions>
+          </ComposerBox>
+        </ComposerRing>
+      </ComposerRoot>
+    </>
   );
 }

@@ -32,6 +32,7 @@ import {
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.js';
+import type { SessionFsDeps } from './fs.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -230,6 +231,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     projectRepositoryId: 'pr-1',
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org',
     branch: 'main',
     title: null,
     baseBranch: 'main',
@@ -296,7 +298,14 @@ function seedSessionSandbox(
   return { executeCommand };
 }
 
-function makeSessionFs({ session = makeSession() }: { session?: SourceControlSession } = {}) {
+function makeSessionFs({
+  session = makeSession(),
+  ownThreadResourceId,
+}: {
+  session?: SourceControlSession;
+  /** The memory resource the session's own thread is on; no thread when omitted. */
+  ownThreadResourceId?: string;
+} = {}) {
   const ensureUser = vi.fn(async () => undefined);
   return {
     ensureUser,
@@ -308,6 +317,11 @@ function makeSessionFs({ session = makeSession() }: { session?: SourceControlSes
         isOrganizationAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => session) },
+      controller: {
+        queryThreadById: vi.fn(async () =>
+          ownThreadResourceId ? ({ id: session.sessionId, resourceId: ownThreadResourceId } as never) : null,
+        ),
+      },
     },
   };
 }
@@ -320,6 +334,101 @@ async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof ma
   app.get('/', context => route.handler(context as never, async () => {}));
   return (query: string) => app.request(`http://localhost/${query}`);
 }
+
+describe('local filesystem routes auth', () => {
+  const localRoutes = ['/web/fs/list', '/web/artifacts/list', '/web/codebase/resolve'];
+
+  async function requestLocalRoute({
+    path,
+    root,
+    sessionFs,
+  }: {
+    path: string;
+    root: string;
+    sessionFs?: SessionFsDeps;
+  }) {
+    const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+    if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+
+    const app = new Hono<any>();
+    app.get('/', context => route.handler(context as never, async () => {}));
+    return app.request(`http://localhost/?path=${encodeURIComponent(root)}`);
+  }
+
+  it('rejects anonymous callers when an auth provider is active', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-'));
+    await writeFile(join(root, 'secret.txt'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    for (const path of localRoutes) {
+      const response = await requestLocalRoute({ path, root, sessionFs });
+      expect(response.status, path).toBe(401);
+      expect(await response.json(), path).toEqual({ error: 'unauthorized' });
+    }
+  });
+
+  it('rejects anonymous callers on the workspace fallback routes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-fallback-'));
+    await mkdir(join(root, 'ws'));
+    await writeFile(join(root, 'ws', 'README.md'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      // An unresolved session must not fall through to the host workspace.
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const request = async (path: string, query: string) => {
+      const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+      if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+      const app = new Hono<any>();
+      app.get('/', context => route.handler(context as never, async () => {}));
+      return app.request(`http://localhost/?${query}`);
+    };
+
+    const file = await request('/web/workspace/file', 'workspacePath=ws&path=README.md');
+    expect(file.status).toBe(401);
+    expect(await file.json()).toEqual({ error: 'unauthorized' });
+
+    const rendered = await request('/web/workspace/rendered/list', 'workspacePath=ws&root=output');
+    expect(rendered.status).toBe(401);
+    expect(await rendered.json()).toEqual({ error: 'unauthorized' });
+  });
+
+  it('serves local roots when no auth provider is configured', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-off-'));
+    await mkdir(join(root, 'browsable'));
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => false,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const response = await requestLocalRoute({ path: '/web/fs/list', root, sessionFs });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        entries: [expect.objectContaining({ name: 'browsable' })],
+      }),
+    );
+  });
+});
 
 /**
  * Answers the tree's checks for a mocked sandbox with no symlinks and nothing
@@ -625,10 +734,48 @@ describe('live session file tree', () => {
     expect(ensureUser).toHaveBeenCalledTimes(5);
   });
 
-  it("refuses another user's session before touching its sandbox", async () => {
+  it("refuses another user's private session before touching its sandbox", async () => {
     const { executeCommand } = await seedHostCheckouts();
-    const { deps } = makeSessionFs();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'private' }) });
     deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("serves another org member's org-visible session on its Factory's memory", async () => {
+    await seedHostCheckouts();
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'fp-1',
+    });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+    const rendered = await requestSessionRoute('/web/workspace/rendered/list', deps);
+    const id = makeSession().sessionId;
+
+    expect((await tree(`?workspacePath=${id}&path=src`)).status).toBe(200);
+    expect((await rendered(`?workspacePath=${id}&root=.artifacts`)).status).toBe(200);
+  });
+
+  it("refuses another member an org-visible session still on its owner's memory", async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'user-1',
+    });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('refuses an org-visible session to a caller from another org', async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'org' }) });
+    deps.auth.tenant = () => ({ orgId: 'org-2', userId: 'user-1' });
     const tree = await requestSessionRoute('/web/workspace/tree', deps);
 
     expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
@@ -708,7 +855,8 @@ describe('readSessionWorkspaceFile', () => {
       const check = treeCheck(args);
       if (check) return check;
       if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
+      if (script.startsWith('stat -L -c'))
+        return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
@@ -745,7 +893,7 @@ describe('readSessionWorkspaceFile', () => {
       if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
         return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
       }
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
+      if (script.startsWith('stat -L -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };
     });
 
@@ -1056,10 +1204,9 @@ describe('workspace patches', () => {
           dir: repoDir!,
           branch: 'factory/issue-1',
           defaultBranch: 'main',
-          position: 1,
           setupStatus: 'ok',
         },
-        { slug: 'acme/docs', dir: docsDir!, branch: 'main', defaultBranch: 'main', position: 2, setupStatus: 'ok' },
+        { slug: 'acme/docs', dir: docsDir!, branch: 'main', defaultBranch: 'main', setupStatus: 'ok' },
       ],
     });
     for (const dir of [repoDir!, docsDir!]) {
@@ -1126,12 +1273,11 @@ describe('workspace changes across environment repositories', () => {
     const session = makeSession({ baseBranch: 'main' });
     recordSessionEnvironment(session.sessionId, {
       workingDirectory: ROOT,
-      repositories: recorded.map((slug, index) => ({
+      repositories: recorded.map(slug => ({
         slug,
         dir: DIRS[slug as keyof typeof DIRS],
         branch: slug === 'acme/repo' ? 'factory/issue-1' : 'develop',
         defaultBranch: 'develop',
-        position: index + 1,
         setupStatus: 'ok' as const,
       })),
     });
@@ -1281,7 +1427,7 @@ describe('workspace changes across environment repositories', () => {
       const abs = match?.[1];
       if (abs && files[abs] !== undefined && script.includes('readlink'))
         return { exitCode: 0, stdout: `${ROOT}\n${abs}` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
+      if (script.startsWith('stat -L -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
       const read = /base64 < '([^']+)'/.exec(script);
       if (read && files[read[1]!] !== undefined) {
         return { exitCode: 0, stdout: Buffer.from(files[read[1]!]!, 'utf8').toString('base64') };

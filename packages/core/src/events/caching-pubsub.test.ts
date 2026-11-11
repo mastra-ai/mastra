@@ -347,6 +347,88 @@ describe('CachingPubSub', () => {
         expect(await policyPubsub.getHistory(cachedTopic)).toHaveLength(0);
       });
     });
+
+    describe('extendExistingLogsOnly', () => {
+      const topic = 'agent.stream.run-1';
+      let onUnlogged: ReturnType<typeof vi.fn>;
+      let extendPubsub: CachingPubSub;
+
+      beforeEach(() => {
+        onUnlogged = vi.fn();
+        extendPubsub = new CachingPubSub(innerPubsub, cache, { extendExistingLogsOnly: true, onUnlogged });
+      });
+
+      it('should deliver live and unnumbered without caching when the topic has no log', async () => {
+        const receivedEvents: Event[] = [];
+        await extendPubsub.subscribe(topic, event => {
+          receivedEvents.push(event);
+        });
+
+        await extendPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+
+        expect(receivedEvents).toHaveLength(1);
+        expect(receivedEvents[0].index).toBeUndefined();
+        expect(await extendPubsub.getHistory(topic)).toHaveLength(0);
+        expect(await cache.get(`pubsub:${topic}:counter`)).toBeUndefined();
+        expect(onUnlogged).toHaveBeenCalledTimes(1);
+        expect(onUnlogged).toHaveBeenCalledWith(topic);
+      });
+
+      it('should append with the next index when the topic already has a log', async () => {
+        await cachingPubsub.publish(topic, { type: 'start', runId: 'run-1', data: {} });
+
+        const receivedEvents: Event[] = [];
+        await extendPubsub.subscribe(topic, event => {
+          receivedEvents.push(event);
+        });
+        await extendPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+
+        expect(receivedEvents.map(event => event.index)).toEqual([1]);
+        const history = await extendPubsub.getHistory(topic);
+        expect(history.map(event => [event.type, event.index])).toEqual([
+          ['start', 0],
+          ['chunk', 1],
+        ]);
+        expect(onUnlogged).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('publish failures', () => {
+    class RejectingPubSub extends EventEmitterPubSub {
+      override async publish(): Promise<void> {
+        throw new Error('Pubsub transport unavailable');
+      }
+    }
+
+    it('keeps the cached frame, records its index, and rethrows when the transport rejects the publish', async () => {
+      const pubsub = new CachingPubSub(new RejectingPubSub(), cache);
+      const topic = 'rejected-publish';
+
+      await expect(pubsub.publish(topic, { type: 'start', runId: 'run-1', data: {} })).rejects.toThrow(
+        'Pubsub transport unavailable',
+      );
+
+      // The frame stays in the run's log so late subscribers still replay it.
+      const history = await pubsub.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0].index).toBe(0);
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([0]);
+    });
+
+    it('drops recorded indices when the topic is cleared', async () => {
+      const pubsub = new CachingPubSub(new RejectingPubSub(), cache);
+      const topic = 'rejected-publish-clear';
+
+      await expect(pubsub.publish(topic, { type: 'start', runId: 'run-1', data: {} })).rejects.toThrow(
+        'Pubsub transport unavailable',
+      );
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([0]);
+
+      await pubsub.clearTopic(topic);
+
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([]);
+    });
   });
 
   describe('subscribe', () => {
@@ -841,6 +923,9 @@ describe('CachingPubSub', () => {
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
       expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
+      // No index means the failed append never numbered the frame, so the
+      // transport-rejection set must stay empty.
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([]);
     });
 
     it('numbers and caches frames through a cache that only has the default append', async () => {
@@ -863,6 +948,156 @@ describe('CachingPubSub', () => {
 
       expect(callback.mock.calls.map(call => call[0].index)).toEqual([0, 1]);
       expect(await cache.listLength(`pubsub:${topic}`)).toBe(2);
+    });
+
+    describe('after a partial append (index allocated, push failed)', () => {
+      const topic = 'partial-append-topic';
+
+      // The base increment + listPush composition (also Redis Cluster's
+      // fallback) can consume an index and then fail the push, leaving a hole:
+      // every later frame sits one list position below its index.
+      class PartialAppendCache extends InMemoryServerCache {
+        failNextPush = false;
+        override async listPush(key: string, value: unknown) {
+          if (this.failNextPush) {
+            this.failNextPush = false;
+            throw new Error('push failed after increment');
+          }
+          return super.listPush(key, value);
+        }
+        override listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>) {
+          return MastraServerCache.prototype.listPushIndexed.call(this, listKey, counterKey, value);
+        }
+      }
+
+      // Inner transport that can silently lose a frame, so the subscriber sees
+      // a gap and has to backfill it from the log.
+      class LossyPubSub extends EventEmitterPubSub {
+        dropNext = false;
+        override async publish(t: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
+          if (this.dropNext) {
+            this.dropNext = false;
+            return;
+          }
+          return super.publish(t, event, options);
+        }
+      }
+
+      const quietLogger = { error: vi.fn(), warn: vi.fn() } as unknown as IMastraLogger;
+
+      /** Publishes indices 0, 1, 2 (push fails), 3; the log holds [0, 1, 3]. */
+      async function setupWithHole() {
+        const cache = new PartialAppendCache();
+        const inner = new LossyPubSub();
+        const pubsub = new CachingPubSub(inner, cache, { logger: quietLogger });
+        await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 0 } });
+        await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 1 } });
+        cache.failNextPush = true;
+        await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 2 } });
+        await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 3 } });
+        const log = (await cache.listFromTo(`pubsub:${topic}`, 0)) as Event[];
+        expect(log.map(e => e.index)).toEqual([0, 1, 3]);
+        return { cache, inner, pubsub };
+      }
+
+      it.each([
+        { offset: 2, label: 'the lost index', expected: [3] },
+        { offset: 3, label: 'the first frame after the hole', expected: [3] },
+        { offset: 4, label: 'the log end', expected: [] },
+      ])('replays every retained frame from $label (offset $offset)', async ({ offset, expected }) => {
+        const { pubsub } = await setupWithHole();
+
+        expect((await pubsub.getHistory(topic, offset)).map(e => e.index)).toEqual(expected);
+
+        const seen: number[] = [];
+        await pubsub.subscribeFromOffset(topic, offset, event => {
+          seen.push(event.index!);
+        });
+        expect(seen).toEqual(expected);
+
+        // Live frames continue from the log end without gaps or duplicates.
+        await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 4 } });
+        expect(seen).toEqual([...expected, 4]);
+      });
+
+      it('backfills a live gap from the log past the hole', async () => {
+        const { inner, pubsub } = await setupWithHole();
+        const seen: number[] = [];
+        await pubsub.subscribeFromOffset(topic, 4, event => {
+          seen.push(event.index!);
+        });
+
+        // Index 4 is cached but never reaches the transport; index 5 arrives
+        // live, so the subscriber reads 4 back from the log.
+        inner.dropNext = true;
+        await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 4 } });
+        await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 5 } });
+        await vi.waitFor(() => expect(seen).toEqual([4, 5]));
+      });
+
+      it.each([
+        {
+          label: 'listLength throws',
+          breakMetadata: (cache: PartialAppendCache) =>
+            vi.spyOn(cache, 'listLength').mockRejectedValue(new Error('length unavailable')),
+        },
+        {
+          // Like ConvexServerCache, whose get() only returns plain values.
+          label: 'get does not return the counter',
+          breakMetadata: (cache: PartialAppendCache) => vi.spyOn(cache, 'get').mockResolvedValue(null),
+        },
+      ])('reads the whole log when hole metadata is unavailable ($label)', async ({ breakMetadata }) => {
+        const { cache, pubsub } = await setupWithHole();
+        breakMetadata(cache);
+
+        expect((await pubsub.getHistory(topic, 3)).map(e => e.index)).toEqual([3]);
+
+        const seen: number[] = [];
+        await pubsub.subscribeFromOffset(topic, 3, event => {
+          seen.push(event.index!);
+        });
+        expect(seen).toEqual([3]);
+      });
+    });
+
+    it('returns log entries in index order when concurrent appends store them out of order', async () => {
+      const topic = 'out-of-order-topic';
+      // Non-atomic append whose next push can be held back, so a later
+      // publish lands in the list first.
+      class DelayedPushCache extends InMemoryServerCache {
+        holdNextPush: Promise<void> | undefined;
+        override async listPush(key: string, value: unknown) {
+          const hold = this.holdNextPush;
+          this.holdNextPush = undefined;
+          if (hold) await hold;
+          return super.listPush(key, value);
+        }
+        override listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>) {
+          return MastraServerCache.prototype.listPushIndexed.call(this, listKey, counterKey, value);
+        }
+      }
+      const cache = new DelayedPushCache();
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 0 } });
+      let release!: () => void;
+      cache.holdNextPush = new Promise(resolve => (release = resolve));
+      const delayed = pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 1 } });
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 2 } });
+      release();
+      await delayed;
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 3 } });
+
+      const log = (await cache.listFromTo(`pubsub:${topic}`, 0)) as Event[];
+      expect(log.map(e => e.index)).toEqual([0, 2, 1, 3]);
+
+      expect((await pubsub.getHistory(topic, 0)).map(e => e.index)).toEqual([0, 1, 2, 3]);
+
+      const seen: number[] = [];
+      await pubsub.subscribeFromOffset(topic, 0, event => {
+        seen.push(event.index!);
+      });
+      expect(seen).toEqual([0, 1, 2, 3]);
     });
 
     it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
@@ -1283,12 +1518,12 @@ describe('CachingPubSub', () => {
     }
 
     /** Append a frame to the shared log and return it, index included. */
-    const append = async (target: InMemoryServerCache, n: number): Promise<Event> => {
+    const append = async (target: InMemoryServerCache, n: number, id = `frame-${n}`): Promise<Event> => {
       const frame = {
         type: 'chunk',
         runId: 'run-1',
         data: { n },
-        id: `frame-${n}`,
+        id,
         createdAt: new Date(),
       } as Event;
       frame.index = await target.listPushIndexed(
@@ -1552,6 +1787,222 @@ describe('CachingPubSub', () => {
       expect(inner.acked.map(event => event.index)).toEqual([0]);
     });
 
+    it('delivers nothing for an offset past the end of a finished log', async () => {
+      // The transport replays its whole backlog, frame 0 included, to the new subscriber.
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      inner.retained.set(topic, frames);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      // Retained frame 0 is not a log restart: the log is intact, the offset is just past its end.
+      expect(received).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+
+      // Live frames below the offset stay skipped; delivery starts once the log reaches it.
+      for (const n of [3, 4, 5, 6]) await inner.publish(topic, await append(shared, n));
+      await flush();
+      expect(received).toEqual([5, 6]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('delivers nothing past the end of an intact log when the attach-time frame 0 id read fails', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      inner.retained.set(topic, frames);
+      // The attach-time read of entry 0 fails once; the log itself stays intact.
+      vi.spyOn(shared, 'listFromTo').mockRejectedValueOnce(new Error('cache unavailable'));
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      expect(received).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('delivers the next run from the start when the log is empty at attach', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn: vi.fn() } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      for (const n of [0, 1]) await inner.publish(topic, await append(shared, n));
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+    });
+
+    it('resyncs when a short log past the offset expires and a new segment restarts at 0', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      inner.retained.set(topic, [await append(shared, 0)]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+      expect(received).toEqual([]);
+
+      // The log expires and the resumed run numbers a new segment from 0. The
+      // subscriber captured the old frame 0's id on attach, so the new frame 0's
+      // different id is what shows the restart.
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      for (const n of [0, 1]) await inner.publish(topic, await append(shared, n, `segment-2-${n}`));
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
+    });
+
+    it('falls back to the counter when reading the new frame 0 id fails', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      inner.retained.set(topic, [await append(shared, 0)]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      const frames = [];
+      for (const n of [0, 1]) frames.push(await append(shared, n, `segment-2-${n}`));
+      // The restart check's read of entry 0 fails once.
+      vi.spyOn(shared, 'listFromTo').mockRejectedValueOnce(new Error('cache unavailable'));
+      for (const frame of frames) await inner.publish(topic, frame);
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
+    });
+
+    it('detects a restart by frame 0 id when the counter read fails', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      inner.retained.set(topic, [await append(shared, 0)]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      const frames = [];
+      for (const n of [0, 1]) frames.push(await append(shared, n, `segment-2-${n}`));
+      // The restart check's read of the counter fails once.
+      vi.spyOn(shared, 'get').mockRejectedValueOnce(new Error('cache unavailable'));
+      for (const frame of frames) await inner.publish(topic, frame);
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
+    });
+
+    it('delivers the new segment from the log when a stale copy of the old frame 0 signals the restart', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const oldFrame0 = await append(shared, 0);
+      inner.retained.set(topic, [oldFrame0]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: Event[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event);
+      });
+      await flush();
+      expect(received).toEqual([]);
+
+      // The log expires and the new segment caches its frame 0, but a delayed
+      // transport copy of the old frame 0 arrives before the new one is published.
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      const newFrame0 = await append(shared, 0, 'segment-2-0');
+      await inner.publish(topic, oldFrame0);
+      await flush();
+
+      expect(received.map(event => [event.index, event.id])).toEqual([[0, 'segment-2-0']]);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      // The new frame 0's own transport copy is a duplicate; frame 1 continues the segment.
+      await inner.publish(topic, newFrame0);
+      await inner.publish(topic, await append(shared, 1, 'segment-2-1'));
+      await flush();
+      expect(received.map(event => event.index)).toEqual([0, 1]);
+    });
+
+    it('resumes from an offset inside a short log without resyncing from the start', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1)];
+      inner.retained.set(topic, frames);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 1, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      expect(received).toEqual([1]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('warns once when frames reaching an offset subscriber are not numbered', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: unknown[] = [];
+      await subscriber.subscribeFromOffset(topic, 2, event => {
+        received.push(event.data);
+      });
+
+      // Published straight on the transport, as a process without a shared log does.
+      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
+      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      await flush();
+
+      expect(received).toEqual([{ n: 0 }, { n: 1 }]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('not numbered');
+      expect(warn.mock.calls[0]![0]).toContain('RedisServerCache');
+    });
+
     it('backfills a gap the transport skipped from the log', async () => {
       const inner = new RetainingPubSub();
       const shared = new InMemoryServerCache();
@@ -1655,5 +2106,31 @@ describe('CachingPubSub', () => {
       expect(await shared.listFromTo(`pubsub:${runTopic}`, 0)).toHaveLength(1);
       expect(await shared.get(`pubsub:${runTopic}:counter`)).toBe(1);
     });
+  });
+});
+
+describe('CachingPubSub.__replaysTopic', () => {
+  // Producers that send changes against earlier events resend the whole state on topics a late
+  // subscriber can't read back; supportsOffsets is true here even for topics left out of the cache.
+  class ReplayingTransport extends EventEmitterPubSub {
+    override __replaysTopic(): boolean {
+      return true;
+    }
+  }
+
+  it('counts on the cache for the topics it keeps', () => {
+    const pubsub = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache(), {
+      shouldCache: topic => topic !== 'live-only',
+    });
+    expect(pubsub.__replaysTopic('kept')).toBe(true);
+    expect(pubsub.__replaysTopic('live-only')).toBe(false);
+  });
+
+  it('counts on the transport for the topics it leaves out', () => {
+    expect(
+      new CachingPubSub(new ReplayingTransport(), new InMemoryServerCache(), {
+        shouldCache: () => false,
+      }).__replaysTopic('t'),
+    ).toBe(true);
   });
 });

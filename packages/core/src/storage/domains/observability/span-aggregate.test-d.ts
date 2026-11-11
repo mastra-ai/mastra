@@ -20,7 +20,8 @@ describe('TrustedSpanAggregatePlan type', () => {
     expectTypeOf<'countDistinct.metadata.tenant'>().not.toMatchTypeOf<Name>();
     expectTypeOf<TrustedSpanAggregatePlan['dimensions'][number]>().toEqualTypeOf<SpanAggregateDimension>();
     expectTypeOf<'metadata.tenant'>().not.toMatchTypeOf<SpanAggregateDimension>();
-    expectTypeOf<'model' | 'provider'>().not.toMatchTypeOf<SpanAggregateDimension>();
+    expectTypeOf<'model' | 'provider'>().toMatchTypeOf<SpanAggregateDimension>();
+    expectTypeOf<'countDistinct.model' | 'countDistinct.provider'>().toMatchTypeOf<Name>();
     expectTypeOf<'parentEntityName' | 'rootEntityType'>().toMatchTypeOf<SpanAggregateDimension>();
   });
 
@@ -35,6 +36,7 @@ describe('TrustedSpanAggregatePlan type', () => {
 
   it('is a storage operation behind its own feature', () => {
     expectTypeOf<'span-aggregate'>().toMatchTypeOf<ObservabilityStorageFeature>();
+    expectTypeOf<'span-aggregate-model-dimensions'>().toMatchTypeOf<ObservabilityStorageFeature>();
     expectTypeOf<ObservabilityStorage['aggregateSpans']>().parameters.toEqualTypeOf<[TrustedSpanAggregatePlan]>();
     expectTypeOf<ObservabilityStorage['aggregateSpans']>().returns.resolves.toEqualTypeOf<SpanAggregateResponse>();
   });

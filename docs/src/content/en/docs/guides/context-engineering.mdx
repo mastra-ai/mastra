@@ -158,8 +158,8 @@ export const workspace = new Workspace({
   autoIndexPaths: ['**/*.md'],
 })
 
-// Agents receive tools including read_file, list_files, grep,
-// mastra_workspace_search, and mastra_workspace_index.
+// Agents receive tools including mastra_workspace_read_file, mastra_workspace_list_files,
+// mastra_workspace_grep, mastra_workspace_search, and mastra_workspace_index.
 await workspace.init()
 ```
 

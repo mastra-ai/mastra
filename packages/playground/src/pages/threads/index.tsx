@@ -11,7 +11,7 @@ import { traceScoreLink } from '@/lib/app-routing';
 export default function ThreadsPage() {
   const { enabled, isLoading } = useThreadQueryAvailable();
   const navigate = useNavigate();
-  // The open thread lives in the URL, so it survives a reload and can be shared.
+  // The open thread, time range, filters and sort live in the URL, so they survive a reload and can be shared.
   const [searchParams, setSearchParams] = useSearchParams();
 
   return (
@@ -23,6 +23,7 @@ export default function ThreadsPage() {
       description="Your observability storage does not support thread row queries. Switch to a store that declares the thread-query-rows capability to list threads."
     >
       <ThreadsExplorerBody
+        urlState={{ searchParams, setSearchParams }}
         selectedThreadId={readThreadSelection(searchParams)}
         onSelectedThreadChange={threadId =>
           setSearchParams(current => withThreadSelection(current, threadId), { replace: true })

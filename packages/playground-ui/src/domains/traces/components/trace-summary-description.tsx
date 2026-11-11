@@ -10,7 +10,6 @@ import { getSpanDurationMs } from '../utils/span-utils';
 import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
 import { DataPanel } from '@/ds/components/DataPanel';
-import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
@@ -122,9 +121,7 @@ export function TraceSummaryDescription({
       )}
       {duration && exactDuration && (
         <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${exactDuration}`}>
-          <Txt as="span" variant="label" font="mono">
-            {duration}
-          </Txt>
+          {duration}
         </DataPanel.Meta>
       )}
       {usage && (

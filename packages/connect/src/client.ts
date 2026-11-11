@@ -533,13 +533,28 @@ export async function proxyRequest(
   return (await proxyRequestWithResponse(client, connectionId, options)).data;
 }
 
+/** Decoded key of one raw `key=value` query pair. */
+function queryKey(pair: string): string {
+  const raw = pair.split('=', 1)[0]!.replace(/\+/g, ' ');
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 /** Preserves HTTP metadata for tools with status-dependent provider contracts. */
 export async function proxyRequestWithResponse(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
 ): Promise<ProxyResponse> {
-  const cleanPath = options.path.replace(/^\/+/, '');
+  // A path may carry its own query string (e.g. a provider next-page link).
+  // Its pairs are kept byte-for-byte (signed or oddly encoded links still
+  // work); a pair is dropped only when `options.query` sets the same key, so
+  // a parameter is never sent twice and the URL never gets a second `?`.
+  const [rawPath = '', ...rawQueryParts] = options.path.split('#', 1)[0]!.split('?');
+  const cleanPath = rawPath.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
       'invalid_options',
@@ -555,7 +570,12 @@ export async function proxyRequestWithResponse(
       search.set(key, String(value));
     }
   }
-  const queryString = search.size > 0 ? `?${search.toString()}` : '';
+  const pathPairs = rawQueryParts
+    .join('?')
+    .split('&')
+    .filter(pair => pair !== '' && !search.has(queryKey(pair)));
+  const queryParts = [...pathPairs, ...(search.size > 0 ? [search.toString()] : [])];
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
   // The platform authenticates proxy requests with the project token and
@@ -574,13 +594,21 @@ export async function proxyRequestWithResponse(
     headers['base-url-override'] = options.baseUrlOverride;
   }
   const init: RequestInit = { method: options.method, headers };
+  const hasContentType = () => Object.keys(headers).some(name => name.toLowerCase() === 'content-type');
   if (typeof options.body === 'string') {
     // Pre-encoded payloads (multipart, form-encoded) go out unchanged with
     // the caller's content type; only JSON encoding is applied automatically.
-    if (!Object.keys(headers).some(name => name.toLowerCase() === 'content-type')) {
+    if (!hasContentType()) {
       headers['content-type'] = 'text/plain';
     }
     init.body = options.body;
+  } else if (options.body instanceof ArrayBuffer || options.body instanceof Uint8Array) {
+    // Buffer extends Uint8Array, so provider file uploads reach the proxy as
+    // raw bytes instead of being JSON-encoded into an object of numeric keys.
+    if (!hasContentType()) {
+      headers['content-type'] = 'application/octet-stream';
+    }
+    init.body = options.body as RequestInit['body'];
   } else if (options.body !== undefined) {
     headers['content-type'] = 'application/json';
     init.body = JSON.stringify(options.body);

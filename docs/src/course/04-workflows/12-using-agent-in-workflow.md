@@ -53,24 +53,21 @@ Difficulty: ${metadata.difficulty}
 Please provide:
 1. A quality score from 1-10
 2. Brief feedback on strengths and areas for improvement
-
-Format as JSON: {"score": number, "feedback": "your feedback here"}
     `
 
-    // Get the contentAgent from the mastra instance.
-    const contentAgent = mastra.getAgent('contentAgent')
-    const { text } = await contentAgent.generate([{ role: 'user', content: prompt }])
+    // Define the shape the agent must return.
+    const analysisSchema = z.object({
+      score: z.number().min(1).max(10),
+      feedback: z.string(),
+    })
 
-    // Parse AI response (with fallback)
-    let aiAnalysis
-    try {
-      aiAnalysis = JSON.parse(text)
-    } catch {
-      aiAnalysis = {
-        score: 7,
-        feedback: 'AI analysis completed. ' + text,
-      }
-    }
+    // Get the contentAgent from the mastra instance.
+    // `structuredOutput` validates the response against the schema and returns
+    // the parsed value as `object`, so there is no JSON parsing or fallback.
+    const contentAgent = mastra.getAgent('contentAgent')
+    const { object: aiAnalysis } = await contentAgent.generate([{ role: 'user', content: prompt }], {
+      structuredOutput: { schema: analysisSchema },
+    })
 
     console.log(`🤖 AI Score: ${aiAnalysis.score}/10`)
 

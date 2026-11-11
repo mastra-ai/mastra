@@ -91,7 +91,6 @@ export const initProject = async (args: InitArgs) => {
         observability: args.observability,
         observabilityProject: args.observabilityProject,
       });
-      return;
     },
     origin,
   });

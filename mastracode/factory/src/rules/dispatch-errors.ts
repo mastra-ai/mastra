@@ -19,6 +19,7 @@ const FAILURE_METADATA = {
   skill_delivery_ambiguous: { canRetry: false, label: 'Factory skill delivery could not be confirmed' },
   run_overdue: { canRetry: false, label: 'Agent run is overdue' },
   repository_git_missing: { canRetry: false, label: 'Git is unavailable in the workspace' },
+  repository_sandbox_unresponsive: { canRetry: true, label: 'Workspace sandbox stopped responding' },
   repository_egress_blocked: { canRetry: false, label: 'Repository network access is blocked' },
   repository_clone_failed: { canRetry: true, label: 'Repository clone failed' },
   repository_pull_failed: { canRetry: true, label: 'Repository update failed' },

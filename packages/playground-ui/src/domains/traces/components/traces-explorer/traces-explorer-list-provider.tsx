@@ -1,19 +1,21 @@
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTracesListSource } from '../../hooks/use-traces-list-source';
-import { buildTracesLegacyFilters, buildTracesQueryRequest } from './traces-explorer-actions';
-import type { TracesSortDirection } from './traces-explorer-actions';
+import { hasTraceColumn } from '../../trace-list-columns';
+import { buildTracesLegacyFilters, buildTracesQueryRequest, DEFAULT_TRACES_SORT } from './traces-explorer-actions';
+import type { TracesSort } from './traces-explorer-actions';
 import {
   TracesListContext,
   TracesListFetchingContext,
+  useTraceUsageColumns,
   useTracesConfig,
   useTracesFilters,
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
 
 type TracesListProviderProps = {
-  sortDirection: TracesSortDirection;
-  onSortChange: (direction: TracesSortDirection) => void;
+  sort: TracesSort;
+  onSortChange: (next: TracesSort) => void;
   children: ReactNode;
 };
 
@@ -22,18 +24,54 @@ type TracesListProviderProps = {
  * only list consumers, and a selection change doesn't re-run the list query hooks.
  */
 export const TracesListProvider = memo(function TracesListProvider({
-  sortDirection,
+  sort: hostSort,
   onSortChange,
   children,
 }: TracesListProviderProps) {
-  const { withQueryTrace, withRootDuration, withDeltaPolling, isCapabilitiesLoading } = useTracesConfig();
+  const {
+    rootSource,
+    withQueryTrace,
+    withRootDuration,
+    withTimeToFirstChunk,
+    withTimeToFirstToken,
+    withTimeToFirstChunkSort,
+    withTimeToFirstTokenSort,
+    withOutcomeFields,
+    withDeltaPolling,
+    isCapabilitiesLoading,
+  } = useTracesConfig();
   const { filters, dateFrom, dateTo } = useTracesFilters();
+  const { displayedPreferences } = useTraceUsageColumns();
+  // A TTFC/TTFT sort the store can't run, or on a column that isn't shown, lists newest first instead.
+  // The host keeps its raw value, like filters the server can't query.
+  const sortable =
+    hostSort.field === 'startedAt' ||
+    (hostSort.field === 'timeToFirstChunkMs' &&
+      withTimeToFirstChunkSort &&
+      hasTraceColumn(displayedPreferences, 'timeToFirstChunk')) ||
+    (hostSort.field === 'timeToFirstTokenMs' &&
+      withTimeToFirstTokenSort &&
+      hasTraceColumn(displayedPreferences, 'timeToFirstToken'));
+  const sort = sortable ? hostSort : DEFAULT_TRACES_SORT;
   const list = useTracesListSource({
     rolling: !dateTo,
-    query: now => buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, now }),
-    orderBy: [{ field: 'startedAt', direction: sortDirection }],
-    withQueryTrace,
-    withDeltaPolling,
+    query: now => ({
+      ...buildTracesQueryRequest({
+        filters,
+        dateFrom,
+        dateTo,
+        withRootDuration,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+        withOutcomeFields,
+        now,
+      }),
+      ...(rootSource === 'aggregated' ? { rootSource } : {}),
+    }),
+    orderBy: [sort],
+    // An explicit projection must never fall back to the legacy list endpoint.
+    withQueryTrace: rootSource === 'aggregated' || withQueryTrace,
+    withDeltaPolling: rootSource !== 'aggregated' && withDeltaPolling,
     enabled: !isCapabilitiesLoading,
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
   });
@@ -59,7 +97,7 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
-      sortDirection,
+      sort,
       onSortChange,
     }),
     [
@@ -71,7 +109,7 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
-      sortDirection,
+      sort,
       onSortChange,
     ],
   );

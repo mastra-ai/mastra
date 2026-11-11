@@ -2,9 +2,11 @@ import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
+import { splitSpanName } from '../utils/span-timeline';
 import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_META_GAP, SPAN_TREE_PAD_Y, SpanTreeRail } from './span-tree-rail';
 import { SpanTypeBadge } from './span-type-badge';
 import { Badge } from '@/ds/components/Badge';
+import { SegmentedName } from '@/ds/components/SegmentedName';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -26,13 +28,6 @@ type TimelineNameColProps = {
   /** Secondary line rendered under the span name (duration, ...). */
   meta?: ReactNode;
 };
-
-/** `agent run: 'chef-agent'` → `['agent run', 'chef-agent']`; names without a `kind: ` prefix stay whole. */
-function splitSpanName(name: string): [kind: string | null, value: string] {
-  const index = name.indexOf(': ');
-  if (index < 0) return [null, name];
-  return [name.slice(0, index), name.slice(index + 2).replace(/^'(.*)'$/, '$1')];
-}
 
 export function TimelineNameCol({
   span,
@@ -111,17 +106,7 @@ export function TimelineNameCol({
                 title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
                 className="min-w-0 truncate font-[450]"
               >
-                {kind ? (
-                  <>
-                    {kind}
-                    <span aria-hidden className="px-1 text-foreground/70">
-                      ›
-                    </span>
-                    {value}
-                  </>
-                ) : (
-                  span.name
-                )}
+                {kind ? <SegmentedName parts={[kind, value]} /> : span.name}
               </Txt>
             </button>
             {span.signalLabel && (

@@ -897,6 +897,8 @@ Manages authentication for Mastra platform. Credentials are stored in `~/.mastra
 
 Opens a browser for login and stores the credentials locally.
 
+When browser sign-in is needed and there's no interactive terminal (in CI, when input or output is piped, or in an agent's shell), the command first prints how to authenticate headless shells, then still waits for browser sign-in. On the same machine, you can run `mastra auth login` once in your own terminal so later commands reuse the saved session. In CI or on another machine, set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` instead. Create the token from a signed-in terminal with [`mastra auth tokens create`](#mastra-auth-tokens-create) or in the dashboard. If the browser sign-in wait times out, the command exits with status 1. If `MASTRA_API_TOKEN` is already set in a non-interactive shell, the command skips browser sign-in: it verifies the token and checks that an organization is selected (from `MASTRA_ORG_ID` or saved credentials), then exits with status 0. If either check fails, it exits with status 1 and names what's missing.
+
 ### `mastra auth logout`
 
 Removes stored credentials. If `MASTRA_API_TOKEN` is still set in the environment, the CLI warns that it will continue to be used.
@@ -923,6 +925,14 @@ Creates a new API token. The secret is displayed once and can't be retrieved aga
 
 ```bash
 mastra auth tokens create <name>
+```
+
+Use `--permission` to grant the token extra access. The available permission is `databases:write`, which lets the token create and delete managed databases, for example from CI. Only organization admins can create tokens with permissions. Repeat the flag to grant more than one.
+
+If the platform creates the token without a requested permission, the command revokes that token and exits with an error. If the revoke also fails, the error shows the `mastra auth tokens revoke` command to run.
+
+```bash
+mastra auth tokens create ci --permission databases:write
 ```
 
 #### `mastra auth tokens revoke`
@@ -955,7 +965,7 @@ Connects a provider to the project. When the organization already has connection
 
 OAuth providers open the provider's consent screen in your browser and print its URL if you need to open it manually. API key and Basic auth providers prompt for credentials in the terminal and verify them before completing the connection. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
-Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. See [provider setup](/docs/mastra-platform/connect/providers) for API keys and required permissions.
+Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. Each provider's [integration page](/docs/mastra-platform/connect#providers) lists its API key and permission requirements.
 
 Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming. Setting a display name requires the organization admin role; if naming fails, the connection remains active.
 
@@ -1257,6 +1267,13 @@ Errors are written to `stderr` as JSON and return a non-zero exit code:
   }
 }
 ```
+
+The exit code reflects whether the request succeeded, not the contents of the response:
+
+- `0`: The server returned a successful response. This includes empty results and payloads that report existing state, such as a tool result saying a record already exists. A tool that returns an object with an `error` field still exits `0`, so check the `data` payload when the tool reports its own failures.
+- `1`: The request failed. This includes an unreachable server, invalid JSON input, a missing resource, or a tool that throws an error.
+
+If the command reading the output exits early, as with `| head`, the exit code still reflects whether the request succeeded.
 
 ### Target resolution
 
@@ -1695,7 +1712,7 @@ Omitting `after` establishes a cursor and returns no historical traces. Changing
 
 #### `mastra api trace aggregate`
 
-Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
 
 ```bash
 mastra api trace aggregate <input>
@@ -1730,7 +1747,7 @@ Servers whose observability store doesn't support trace aggregation return `501`
 
 #### `mastra api span query`
 
-Queries completed observability spans across traces, including agent runs and tool calls nested inside other traces. The inline JSON input is required and uses the same request as [`querySpans()`](/reference/client-js/observability#querying-spans). Its `where` predicate filters span fields directly. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Queries completed observability spans across traces, including agent runs and tool calls nested inside other traces. The inline JSON input is required and uses the same request as [`querySpans()`](/reference/observability/tracing/advanced-queries#query-spans). Its `where` predicate filters span fields directly. Like other observability commands, it targets `https://observability.mastra.ai` by default.
 
 ```bash
 mastra api span query <input>
@@ -1743,7 +1760,7 @@ Servers whose observability store doesn't support span queries return `501`. Fil
 
 #### `mastra api span aggregate`
 
-Groups the spans selected by a time range and optional `where` predicate, and returns one row of measures per group. It accepts the same measures, `interval`, `having`, `orderBy`, and `limit` as `trace aggregate`, but groups by span fields such as `spanType`, `entityName`, `status`, and `rootEntityName`.
+Groups the spans selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. It accepts the same fixed measures, `interval`, `having`, `orderBy`, and `limit` as `trace aggregate`. Its `where` filters spans directly, and its dimensions and `countDistinct` fields follow the span contract. It groups by span fields such as `spanType`, `entityName`, `status`, and `rootEntityName`.
 
 ```bash
 mastra api span aggregate <input>

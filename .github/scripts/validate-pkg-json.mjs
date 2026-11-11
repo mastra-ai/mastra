@@ -5,7 +5,6 @@ const IGNORE_LIST = [
   '@internal',
   '@mastra/memory-integration-tests',
   '@mastra/longmemeval',
-  '@mastra/mcp-configuration',
   '@mastra/server-adapters-test-suite',
   'mastra-docs',
 ];
@@ -80,7 +79,7 @@ async function main() {
     let pkg;
     try {
       pkg = JSON.parse(content);
-    } catch (e) {
+    } catch {
       console.error(`❌ Invalid JSON in ${file}`);
       hasError = true;
       continue;

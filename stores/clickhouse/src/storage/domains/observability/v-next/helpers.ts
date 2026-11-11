@@ -19,7 +19,7 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType, getStringAttribute } from '@mastra/core/storage';
 import { storedPreview as buildStoredPreview } from './preview-compat';
 import { resolveStoredPreviews } from './previews';
 import { coerceFeedbackReviewStatus } from './review-status';
@@ -60,6 +60,12 @@ const PROMOTED_KEYS = new Set([
   'executionSource',
   'serviceName',
 ]);
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
 
 function nullableString(value: unknown): string | null {
   return typeof value === 'string' ? (value === '' ? null : value) : value == null ? null : String(value);
@@ -153,6 +159,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
   const error = parseJson(row.error);
+  const attributes = parseJson(row.attributes) as Record<string, unknown> | null;
 
   return {
     traceId: row.traceId,
@@ -189,12 +196,21 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     tags: normalizeTags(row.tags),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parseJson(row.scope) as Record<string, unknown> | null) ?? undefined,
-    attributes: (parseJson(row.attributes) as Record<string, unknown> | null) ?? undefined,
+    attributes: attributes ?? undefined,
     links: (parseJson(row.links) as Record<string, unknown>[] | null) ?? undefined,
     input: parseJson(row.input) ?? undefined,
     output: parseJson(row.output) ?? undefined,
     error: error ?? undefined,
     requestContext: (parseJson(row.requestContext) as Record<string, unknown> | null) ?? undefined,
+    externalParentSpanId: nullableString(row.externalParentSpanId),
+    resumedFromSpanId: nullableString(row.resumedFromSpanId),
+    model: nullableString(row.model) ?? getStringAttribute(attributes, 'model'),
+    provider: nullableString(row.provider) ?? getStringAttribute(attributes, 'provider'),
+    outcome: nullableString(row.outcome),
+    stopReason: nullableString(row.stopReason),
+    stopReasonContext: (parseJson(row.stopReasonContext) as Record<string, unknown> | null) ?? null,
+    timeToFirstTokenMs: nullableNumber(row.timeToFirstTokenMs),
+    errorCount: nullableNumber(row.errorCount),
     createdAt: startedAt,
     updatedAt: null,
   };
@@ -276,6 +292,15 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     startedAt: toISOString(span.startedAt),
     endedAt: toISOString(endedAt),
     timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+    externalParentSpanId: span.externalParentSpanId ?? null,
+    resumedFromSpanId: span.resumedFromSpanId ?? null,
+    model: span.model ?? null,
+    provider: span.provider ?? null,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
+    stopReasonContext: jsonEncode(span.stopReasonContext),
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    errorCount: span.errorCount ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata),
     metadataRaw: jsonEncode(metadata),
@@ -547,7 +572,8 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
 export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const hasNumber = row.valueNumber != null;
   const feedbackSource = nullableString(row.feedbackSource);
-  const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
+  const feedbackUserId =
+    row.feedbackUserId !== undefined ? nullableString(row.feedbackUserId) : nullableString(row.userId);
   return {
     feedbackId: row.feedbackId,
     timestamp: toDate(row.timestamp),
@@ -595,7 +621,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
   const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';
-  const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
+  const feedbackUserId = feedback.feedbackUserId !== undefined ? feedback.feedbackUserId : (feedback.userId ?? null);
 
   return {
     feedbackId: feedback.feedbackId,
@@ -615,7 +641,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     rootEntityType: feedback.rootEntityType ?? null,
     rootEntityId: feedback.rootEntityId ?? null,
     rootEntityName: feedback.rootEntityName ?? null,
-    userId: feedbackUserId,
+    userId: feedback.userId ?? null,
     organizationId: feedback.organizationId ?? null,
     resourceId: feedback.resourceId ?? null,
     runId: feedback.runId ?? null,

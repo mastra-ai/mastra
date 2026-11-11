@@ -1,3 +1,5 @@
+import { boardOf } from '../../factory/boardFlow';
+import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../../factory/boardCandidates';
 import { isPersistedCandidate, persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
@@ -17,7 +19,7 @@ export interface SessionSearchResult {
   id: string;
   kind: 'work-session' | 'review-session' | 'user-session';
   title: string;
-  context: string;
+  context: readonly string[];
   identifier?: string;
   value: string;
   path: string;
@@ -29,7 +31,7 @@ export interface SessionSearchResult {
 export interface WorkItemSearchResult {
   id: string;
   title: string;
-  context: string;
+  context: readonly string[];
   identifier?: string;
   value: string;
   path: string;
@@ -74,7 +76,7 @@ function createFactorySessionResult(
   const factoryKind = getFactorySessionKind(session, item);
   const kind: SessionSearchResult['kind'] = factoryKind === 'review' ? 'review-session' : 'work-session';
   const title = item?.title ?? session.branch;
-  const context = `${factoryKind === 'review' ? 'Review' : 'Work'} session · ${session.branch}`;
+  const context = [`${factoryKind === 'review' ? 'Review' : 'Work'} session`, session.branch];
   const threadId = association?.ref.threadId ?? session.sessionId;
   // Work items carry the issue/PR number; when they fail to load the review branch is the only place it survives.
   const identifier = (item ? workItemIdentifier(item) : undefined) ?? getReviewBranchIdentifier(session.branch);
@@ -100,7 +102,7 @@ function createUserSessionResult(factoryId: string, session: FactoryUserSession)
     id: session.sessionId,
     kind,
     title,
-    context: isAutomaticUserSessionBranch(session) ? 'User session' : `User session · ${session.branch}`,
+    context: isAutomaticUserSessionBranch(session) ? ['User session'] : ['User session', session.branch],
     value: buildValue(session, kind, title, undefined, undefined),
     path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
     preserveOrigin: false,
@@ -154,15 +156,15 @@ export function createSessionSearchGroups(input: {
   };
 }
 
-function createWorkItemResult(factoryId: string, item: WorkItem): WorkItemSearchResult {
+function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
-  const stage = currentItemStageLabel(item);
+  const stage = currentItemStageLabel(item, board);
 
   return {
     id: item.id,
     title: item.title,
-    context: `${sourceLabel} · ${stage} · not started`,
+    context: [sourceLabel, stage, 'not started'],
     identifier,
     value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
     path: relationshipPath(item, factoryId),
@@ -179,7 +181,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
   return {
     id: candidate.sourceKey,
     title: candidate.title,
-    context: `${sourceLabel} · ${stage} · not filed`,
+    context: [sourceLabel, stage, 'not filed'],
     identifier,
     value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
     path: relationshipPath(candidate, factoryId),
@@ -193,6 +195,8 @@ export function createWorkItemSearchResults(input: {
   factoryId: string;
   workItems: WorkItem[];
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
+  /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
+  boards?: readonly BoardInfo[];
 }): WorkItemSearchResult[] {
   const filed = persistedSourceKeys(input.workItems);
   const candidates = input.candidates.filter(({ candidate }) => !isPersistedCandidate(filed, candidate));
@@ -200,7 +204,7 @@ export function createWorkItemSearchResults(input: {
   return [
     ...input.workItems
       .filter(item => Object.keys(item.sessions).length === 0)
-      .map(item => createWorkItemResult(input.factoryId, item)),
+      .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item))),
     ...candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
   ].sort(newestFirst);
 }

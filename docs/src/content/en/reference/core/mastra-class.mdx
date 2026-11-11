@@ -39,6 +39,8 @@ export const mastra = new Mastra({
 Enable scheduled notification dispatch when deferred notification records and notification summaries should be delivered automatically through the workflow scheduler:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   agents: { supportAgent },
   storage,
@@ -139,9 +141,9 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
   },
   {
     name: 'deployer',
-    type: 'MastraDeployer',
+    type: 'IDeployer',
     isOptional: true,
-    description: 'An instance of a MastraDeployer for managing deployments.',
+    description: 'A deployer for managing deployments, such as `VercelDeployer` from `@mastra/deployer-vercel`.',
   },
   {
     name: 'server',
@@ -335,6 +337,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             description: 'Max concurrent tasks per agent.',
           },
           {
+            name: 'perOwnerConcurrency',
+            type: 'Record<string, number>',
+            isOptional: true,
+            description:
+              'Per-owner overrides of `perAgentConcurrency`, keyed by `agentId`. Overridden owners still count toward `globalConcurrency`.',
+          },
+          {
             name: 'backpressure',
             type: "'queue' | 'reject' | 'fallback-sync'",
             isOptional: true,
@@ -395,7 +404,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'off'",
             description:
-              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
+              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery can run an interrupted tool call again and request a new model response in place of one that wasn't saved, so tools must be idempotent. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).",
           },
           {
             name: 'workflows',

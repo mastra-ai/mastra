@@ -66,7 +66,11 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
 export const TRACE_QUERY_NUMERIC_FIELD_IDS = new Set([
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'spans.durationMs',
+  'spans.timeToFirstChunkMs',
+  'spans.timeToFirstTokenMs',
   'scores.score',
   'feedback.value',
 ]);
@@ -80,11 +84,24 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'threadId',
   'resourceId',
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ]);
 
 /** Trace-level fields that may be unset. "is not X" on these must also keep traces
  *  where the field is missing, so the predicate is `or[ne, notExists]`. */
-export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment', 'durationMs']);
+export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set([
+  'threadId',
+  'resourceId',
+  'environment',
+  'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
+]);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */
 const NEGATIVE_TO_POSITIVE = {

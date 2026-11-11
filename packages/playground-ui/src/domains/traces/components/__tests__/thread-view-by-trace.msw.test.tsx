@@ -184,12 +184,14 @@ const installScore = () => {
 
 const renderView = ({
   withFeedback = true,
+  feedbackOptions,
   withQueryTrace = true,
   onOpenScore = () => {},
   paths,
   pageSize,
 }: {
   withFeedback?: boolean;
+  feedbackOptions?: ComponentProps<typeof ThreadViewByTrace>['feedbackOptions'];
   withQueryTrace?: boolean;
   onOpenScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
@@ -203,6 +205,7 @@ const renderView = ({
             threadId={THREAD_ID}
             withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
+            feedbackOptions={feedbackOptions}
             pageSize={pageSize}
             onOpenScore={onOpenScore}
           />
@@ -210,6 +213,13 @@ const renderView = ({
       </BrowserToolCallsProvider>
     </TestLinkProvider>,
   );
+
+/** A span row in the tree, not the open span panel's header that repeats its title. */
+const treeRow = (title: string) => {
+  const row = screen.getAllByText(title).find(element => !element.closest('[data-slot="span-data-panel"]'));
+  if (!row) throw new Error(`No tree row titled ${title}`);
+  return row;
+};
 
 describe('ThreadViewByTrace', () => {
   describe('when the thread contains historical traces', () => {
@@ -281,14 +291,14 @@ describe('ThreadViewByTrace', () => {
         });
       await refocus();
       expect(requested).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      fireEvent.click(treeRow('Chef agent run'));
+      await screen.findByRole('region', { name: 'Chef agent run' });
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(requested.mock.calls).toEqual([['trace-a']]);
       requested.mockClear();
       await refocus();
       expect(requested.mock.calls).toEqual([['trace-a']]);
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(treeRow('Chef agent run'));
       requested.mockClear();
       await refocus();
       expect(requested).not.toHaveBeenCalled();
@@ -429,15 +439,15 @@ describe('ThreadViewByTrace', () => {
 
     fireEvent.click(await screen.findByText('Chef agent run'));
 
-    await screen.findByRole('heading', { name: /^Span/ });
+    await screen.findByRole('region', { name: 'Chef agent run' });
     // The conversation column stays mounted while the span panel is open.
     expect(screen.getByTestId('thread-view-by-trace')).not.toBeNull();
     expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // Re-clicking the selected span toggles the span panel off.
-    fireEvent.click(screen.getByText('Chef agent run'));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+    fireEvent.click(treeRow('Chef agent run'));
+    await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
   });
 
   it('keeps the row of the selected span highlighted while its details are open', async () => {
@@ -448,13 +458,13 @@ describe('ThreadViewByTrace', () => {
       screen.getByTestId('thread-view-by-trace').querySelector(`[data-trace-id="${traceId}"]`);
 
     fireEvent.click(await screen.findByText('Chef agent run'));
-    await screen.findByRole('heading', { name: /^Span/ });
+    await screen.findByRole('region', { name: 'Chef agent run' });
 
     expect(rowOf('trace-a')?.getAttribute('data-active')).toBe('true');
     expect(rowOf('trace-b')?.getAttribute('data-active')).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByText('Chef agent run'));
+    fireEvent.click(treeRow('Chef agent run'));
     await waitFor(() => expect(rowOf('trace-a')?.getAttribute('data-active')).toBeNull());
   });
 
@@ -472,7 +482,7 @@ describe('ThreadViewByTrace', () => {
       fireEvent.click(within(toolBadge).getAllByRole('button')[0]);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
-      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
+      expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -495,7 +505,7 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
       // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
       // so opening a span remains the user's own click.
-      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
+      expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(spanLabel('Chef agent run').getAttribute('aria-selected')).toBe('false');
       // The most specific span behind the message (last id, deepest in the tree) is brought into
@@ -552,7 +562,7 @@ describe('ThreadViewByTrace', () => {
 
       // Highlighting does not open the panel, so open a span by hand and then close it.
       fireEvent.click(spanLabel('Recipe lookup'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).not.toBeNull());
       fireEvent.click(spanLabel('Recipe lookup'));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -632,7 +642,7 @@ describe('ThreadViewByTrace', () => {
 
       await screen.findAllByRole('button', { name: 'Expand' });
       fireEvent.click(await screen.findByText('Chef agent run'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      await screen.findByRole('region', { name: 'Chef agent run' });
 
       expect(
         timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
@@ -641,8 +651,8 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+      fireEvent.click(treeRow('Chef agent run'));
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
       expect(
         timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
       ).toBe('');
@@ -686,6 +696,35 @@ describe('ThreadViewByTrace', () => {
       });
     });
 
+    it('keeps host feedback configuration when opening a thread turn', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      const onPost = vi.fn<(body: unknown) => void>();
+      server.use(
+        http.post(FEEDBACK_URL, async ({ request }) => {
+          onPost(await request.json());
+          return HttpResponse.json({ success: true });
+        }),
+      );
+      renderView({
+        feedbackOptions: { contextMode: 'resolve', feedbackUserId: null, allowDelete: false, allowReview: false },
+      });
+      const element = (await screen.findByText('Chef agent run')).closest<HTMLElement>('[data-trace-id]');
+      if (!element) throw new Error('Expected trace row');
+      const row = within(element);
+      fireEvent.click(row.getByRole('tab', { name: /Feedback/ }));
+      await row.findByText('Needs review');
+      expect(row.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+      fireEvent.change(row.getByPlaceholderText('Leave feedback'), { target: { value: 'Thread note' } });
+      fireEvent.click(row.getByRole('button', { name: 'Send feedback' }));
+      await waitFor(() =>
+        expect(onPost).toHaveBeenCalledWith({
+          contextMode: 'resolve',
+          feedback: expect.objectContaining({ feedbackUserId: null, value: 'Thread note' }),
+        }),
+      );
+    });
+
     it('shows the messages by default and swaps them for the feedback thread on the Feedback tab, keeping the span tree', async () => {
       installHandlers();
       installFeedbackHandlers();
@@ -697,11 +736,11 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Toggle feedback' })).toBeNull();
       expect(firstRow.queryByRole('tab', { name: /Spans/ })).toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('true');
-      expect(firstRow.queryByPlaceholderText('Leave feedback...')).toBeNull();
+      expect(firstRow.queryByPlaceholderText('Leave feedback')).toBeNull();
 
       fireEvent.click(await firstRow.findByRole('tab', { name: /Feedback/ }));
 
-      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      expect(await firstRow.findByPlaceholderText('Leave feedback')).not.toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('false');
       expect(firstRow.getByText('Chef agent run')).not.toBeNull();
     });
@@ -774,7 +813,7 @@ describe('ThreadViewByTrace', () => {
 
       fireEvent.click(firstRow.getByRole('tab', { name: 'Feedback' }));
 
-      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      expect(await firstRow.findByPlaceholderText('Leave feedback')).not.toBeNull();
       await waitFor(() => expect(onFeedbackRequest).toHaveBeenCalled());
     });
 
@@ -794,7 +833,7 @@ describe('ThreadViewByTrace', () => {
       await screen.findByText('Chef agent run');
       fireEvent.click((await screen.findAllByRole('tab', { name: /Feedback/ }))[0]);
 
-      const input = await screen.findByPlaceholderText('Leave feedback...');
+      const input = await screen.findByPlaceholderText('Leave feedback');
       fireEvent.change(input, { target: { value: 'great turn' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
 

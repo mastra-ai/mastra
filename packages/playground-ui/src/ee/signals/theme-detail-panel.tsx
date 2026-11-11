@@ -17,6 +17,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
+import { Metadata } from '@/ds/components/Metadata';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -223,10 +224,24 @@ export function ThemeDetailPanel({
                           <Txt tone="ink" className="mt-3">
                             {/* A nextCursor means older points exist beyond the fetched window,
                                 so the oldest loaded point is a lower bound, not the true origin. */}
-                            {historyQuery.data?.nextCursor
-                              ? `Active since at least ${formatSnapshotDate(oldestHistoryPoint.startedAt)} · in ${historyPoints.length}+ snapshots`
-                              : `First seen ${formatSnapshotDate(oldestHistoryPoint.startedAt)} · in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}{' '}
-                            · {themeTrendDirection(historyPoints)}
+                            <Metadata>
+                              {historyQuery.data?.nextCursor ? (
+                                <>
+                                  <Metadata.Item>
+                                    {`Active since at least ${formatSnapshotDate(oldestHistoryPoint.startedAt)}`}
+                                  </Metadata.Item>
+                                  <Metadata.Item>{`in ${historyPoints.length}+ snapshots`}</Metadata.Item>
+                                </>
+                              ) : (
+                                <>
+                                  <Metadata.Item>{`First seen ${formatSnapshotDate(oldestHistoryPoint.startedAt)}`}</Metadata.Item>
+                                  <Metadata.Item>
+                                    {`in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}
+                                  </Metadata.Item>
+                                </>
+                              )}
+                              <Metadata.Item>{themeTrendDirection(historyPoints)}</Metadata.Item>
+                            </Metadata>
                           </Txt>
                           {historyPoints.length >= 2 && (
                             <ThemeTrendChart points={historyPoints} signalName={signalName ?? 'goal'} />

@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { classifyProviderError } from '@mastra/core/error';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { MemoryRunState } from '@mastra/core/memory';
 import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
@@ -15,8 +16,8 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
-import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
+import { getOmFailureMetadata } from './error';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
@@ -98,12 +99,15 @@ function injectObservationContextMessages({
   messageList,
   systemMessages,
   continuationMessage,
+  hasObservations,
   threadId,
   resourceId,
 }: {
   messageList: MessageList;
   systemMessages: string[] | undefined;
   continuationMessage: MastraDBMessage | undefined;
+  /** Whether observations have replaced earlier messages. The continuation hint only makes sense then. */
+  hasObservations: boolean;
   threadId: string;
   resourceId?: string;
 }): void {
@@ -114,6 +118,13 @@ function injectObservationContextMessages({
   messageList.clearSystemMessages('observational-memory');
   for (const msg of systemMessages) {
     messageList.addSystem(msg, 'observational-memory');
+  }
+
+  // Before the first observation the system messages are only retrieval guidance — no earlier
+  // context was summarized away, so the continuation hint would be an empty instruction (and an
+  // extra synthetic user message) on every turn of a fresh thread.
+  if (!continuationMessage && !hasObservations) {
+    return;
   }
 
   const contMsg = continuationMessage ?? {
@@ -264,6 +275,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           messageList,
           systemMessages,
           continuationMessage: ctx.continuationMessage,
+          hasObservations: Boolean(ctx.omRecord?.activeObservations),
           threadId,
           resourceId,
         });
@@ -306,6 +318,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           await this.turn.end().catch(() => {});
         }
         this.turn = this.engine.beginTurn({
+          abortSignal,
           threadId,
           resourceId,
           messageList,
@@ -408,8 +421,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         } catch (error) {
           // Map observation errors through abort (processor-specific concern)
           const err = error instanceof Error ? error : new Error(String(error));
+          // Name the abort's reason (e.g. a lost thread lease): the tripwire replaces the run's abort chunk.
+          const abortReason: unknown = abortSignal?.reason;
           const abortMessage = abortSignal?.aborted
-            ? 'Agent execution was aborted'
+            ? abortReason instanceof Error && abortReason.name !== 'AbortError'
+              ? `Agent execution was aborted: ${abortReason.message}`
+              : 'Agent execution was aborted'
             : `Encountered error during memory observation: ${err.message}`;
           // A tripwire skips output processors, so end the turn here to save the user message and
           // finished steps. The step that failed never reached the model, so nothing blocked is saved.
@@ -420,7 +437,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           }
           state.__omTurn = undefined;
           if (typeof abort === 'function') {
-            abort(abortMessage);
+            abort(abortMessage, { metadata: getOmFailureMetadata(error, 'abort') });
           }
           throw err;
         }
@@ -430,6 +447,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           messageList,
           systemMessages: ctx.systemMessage,
           continuationMessage: this.turn.context.continuation,
+          hasObservations: Boolean(this.turn.record.activeObservations),
           threadId,
           resourceId,
         });
@@ -452,8 +470,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
-            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          await runOMCommit(
+            this.engine.buffering.getLockKey(threadId, resourceId),
+            () => this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+            { abortSignal },
           );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
@@ -550,7 +570,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     if (state[GATEWAY_STATE_KEY]) return;
     // One recovery per step: if the retry overflows again, observing more won't help.
     if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
-    if (!isContextOverflowError(error)) return;
+    if (classifyProviderError(error) !== 'context_overflow') return;
 
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return;
@@ -563,9 +583,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     // threshold. Activate buffered observations and observe what's left regardless of it; the
     // retry's input step then drops the observed messages from the prompt.
     const { threadId, resourceId } = context;
-    await this.engine.waitForBuffering(threadId, resourceId);
+    await this.engine.waitForBuffering(threadId, resourceId, undefined, args.abortSignal);
     const messages = getObservableMessages(messageList);
     const { activated } = await this.engine.activate({
+      abortSignal: args.abortSignal,
       threadId,
       resourceId,
       messages,
@@ -576,6 +597,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       .getTokenCounter()
       .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, () =>
         this.engine.observe({
+          abortSignal: args.abortSignal,
           threadId,
           resourceId,
           messages: getObservableMessages(messageList),

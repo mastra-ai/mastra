@@ -2,11 +2,15 @@ import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
+import type { ServerConfig } from '../../../server/types';
+import type { ObservabilityEntrypoint, TracingOptions } from '../../../observability';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
+import type { MemoryConfigInternal } from '../../../memory/types';
 import type { RequestContext } from '../../../request-context';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
+import type { ToolHooks } from '../../../tools/types';
 import type { AnyWorkspace } from '../../../workspace/workspace';
 
 /**
@@ -117,6 +121,8 @@ export function isDurableEngineVariant(engine: EngineVariant | undefined): boole
 }
 
 export interface RunLoopScenarioOptions {
+  /** Wait for run-side effects after the consumer stream ends, before disposing its resources. */
+  afterStream?: () => Promise<void>;
   /** Active AIMock handle for the current suite (from {@link useLoopScenarioAimock}). */
   llm: LLMock;
   /**
@@ -130,6 +136,10 @@ export interface RunLoopScenarioOptions {
    * Runs once before the loop starts.
    */
   fixtures: (llm: LLMock) => void;
+  /** Real observability implementation for exported-span assertions. */
+  observability?: ObservabilityEntrypoint;
+  /** Server config for the Mastra instance, e.g. an FGA provider. Local engines only. */
+  server?: ServerConfig;
   /** The input that kicks off the loop: a user prompt, or messages (e.g. ending on an assistant prefill). */
   prompt: string | MessageListInput;
   /**
@@ -139,7 +149,10 @@ export interface RunLoopScenarioOptions {
   defaultOptions?: {
     autoResumeSuspendedTools?: boolean;
     inputProcessors?: any;
+    hooks?: ToolHooks;
   };
+  /** Per-call tool hooks forwarded to agent.stream(). */
+  hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
   /** Signal providers registered on the Agent constructor. */
@@ -354,6 +367,8 @@ export interface RunLoopScenarioOptions {
    * assert transform/redact behavior over the loop output.
    */
   outputProcessors?: any;
+  /** Output processors set on the Agent constructor (static array or a `({ requestContext }) => processors` function). */
+  agentOutputProcessors?: any;
   /** Forwarded to `agent.stream({ maxProcessorRetries })`. */
   maxProcessorRetries?: number;
   /**
@@ -382,7 +397,7 @@ export interface RunLoopScenarioOptions {
    * Controls recall behavior like `lastMessages` (number of messages to recall)
    * or `semanticRecall` (enable/disable semantic recall).
    */
-  memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory' | 'readOnly'>;
   /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
   onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
@@ -398,6 +413,8 @@ export interface RunLoopScenarioOptions {
   pubsub?: PubSub;
   /** Shared cache for durable/evented pubsub scenarios. */
   cache?: MastraServerCache;
+  /** Set to false to publish the agent's run events without a replay cache (`cache: false`). */
+  streamReplay?: false;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted
@@ -446,8 +463,19 @@ export interface RunLoopScenarioOptions {
  */
 export interface RunApprovalScenarioOptions extends Pick<
   RunLoopScenarioOptions,
-  'llm' | 'fixtures' | 'prompt' | 'tools' | 'instructions' | 'stopWhen' | 'requireToolApproval' | 'engine'
+  | 'llm'
+  | 'fixtures'
+  | 'prompt'
+  | 'tools'
+  | 'instructions'
+  | 'stopWhen'
+  | 'requireToolApproval'
+  | 'engine'
+  | 'observability'
+  | 'afterStream'
+  | 'agentOutputProcessors'
 > {
+  tracingOptions?: TracingOptions;
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based

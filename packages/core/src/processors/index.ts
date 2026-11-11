@@ -155,6 +155,10 @@ export interface OutputResult {
   finishReason: string;
   /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
   steps: LLMStepResult[];
+  /**
+   * @deprecated No longer set. `MessageHistory` no longer drops failed turns it receives; check `finishReason === 'error'` to detect failed runs.
+   */
+  inputAccepted?: boolean;
 }
 
 /**
@@ -1057,6 +1061,7 @@ export {
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
+export { REPROCESS_PART_KEY } from './stream-reprocess';
 export { createProcessorSendSignal } from './send-signal';
 export { createBackgroundWorkSignalProcessor } from './background-work-signals';
 export type {

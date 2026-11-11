@@ -18,11 +18,11 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 The onboarding Setup step offers three equal choices, one per existing `modelScope` creation value:
 
-| Choice                           | Scope     | Factory work                                  | Interactive sessions                             |
-| -------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------ |
-| Company account                  | `factory` | Organization credentials and Factory default  | Organization credentials and Factory default     |
-| Company work · personal sessions | `hybrid`  | Organization credentials and Factory default  | Session owner's personal credentials and default |
-| Personal accounts                | `user`    | Work owner's personal credentials and default | Session owner's personal credentials and default |
+| Choice                             | Scope     | Factory work                                  | Interactive sessions                             |
+| ---------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------ |
+| Company account                    | `factory` | Organization credentials and Factory default  | Organization credentials and Factory default     |
+| Company work and personal sessions | `hybrid`  | Organization credentials and Factory default  | Session owner's personal credentials and default |
+| Personal accounts                  | `user`    | Work owner's personal credentials and default | Session owner's personal credentials and default |
 
 There is no fallback between account scopes. Each teammate configures their own personal account. Onboarding asks for one connection in `factory` or `user`, and a separate connection for each scope in `hybrid`. Existing scoped connections can be reused. Only organization key admins can add shared credentials; members can use connections already configured by an admin. When no company connection exists and the member cannot add one, Setup only offers personal accounts. Scope changes happen only in Setup, never as a side effect of a later step. Local servers without web authentication skip Setup and create a `factory` Factory, so sessions and Factory work share the model chosen in their single connection step.
 
@@ -56,11 +56,11 @@ Slack sessions use the same automatic title generation as web sessions, includin
 
 Owners can choose **Regenerate title** from a web or Slack session's sidebar menu to name it from its stored conversation. Regeneration uses the existing title model and does not start a workspace. Automatic naming failures leave the conversation usable; an explicit regeneration reports its error.
 
-## User menu and settings
+## Settings
 
-The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, and **Connections**. **Settings** opens **Models**, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
+The sidebar footer shows your profile picture (or an initial) and name, and links straight to settings, opening **Preferences**. **Preferences** holds the theme control (system, light, or dark appearance); **My account** shows your profile and holds **Log out**.
 
-Settings navigation groups pages by topic: **Account**, **Agent** (Models, Memory, Skills, Behavior), and **Factory**. **Models** picks the Factory's routing (`user`, `hybrid`, or `factory`) and shows the personal and Factory defaults side by side; the defaults the routing leaves unused fold behind a **Settings** toggle, which `#personal-defaults` / `#factory-defaults` links open, because chats with no personal default still fall back to the Factory default. **Memory** holds personal and Factory observational memory. Retired `personal-models` and `factory-memory` URLs redirect to Models and Memory, and navigation stays searchable. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
+Settings navigation groups pages by topic: **Account**, **Agent** (Models, Memory, Skills, Behavior), and **Factory**. **Models** picks the Factory's routing (`user`, `hybrid`, or `factory`) and shows the personal and Factory defaults side by side; the defaults the routing leaves unused fold behind a **Settings** toggle, which `#personal-defaults` / `#factory-defaults` links open, so they can be set up before switching routing. Chats never borrow from the defaults their routing leaves unused. Without a chosen model, a session starts on the built-in default model its keys can run, which the empty model picker shows as **Built-in default**; the New session page asks for a provider or a model only when no key can run it. Without a personal thinking level, a personal chat starts at medium. **Memory** holds personal and Factory observational memory. Retired `personal-models`, `factory-memory` and `environment` URLs redirect to Models, Memory and Repositories, and navigation stays searchable. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections or reopening settings from the sidebar footer.
 
 ## Tests
 

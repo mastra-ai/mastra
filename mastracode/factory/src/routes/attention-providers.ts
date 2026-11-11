@@ -1,5 +1,7 @@
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 /**
  * Per-kind attention providers. Each kind owns its counts, its bounded page
@@ -9,24 +11,15 @@ import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-appli
 
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
-  WorkItemCommentRow,
-  WorkItemCommentsStorage,
-  WorkItemMentionRow,
-} from '../storage/domains/comments/base.js';
-import type {
   FactoryAttentionIdentity,
   FactoryAttentionKind,
   FactoryAttentionReceiptRecord,
   FactoryDeferredDecisionRecord,
   FactoryDispatchStatus,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import {
-  factoryAttentionKey,
-  factoryDecisionAttentionIdentity,
-  factoryMentionAttentionIdentity,
-} from '../storage/domains/work-items/base.js';
+import { factoryAttentionKey, factoryDecisionAttentionIdentity } from '../storage/domains/work-items/base.js';
 
 export type FactoryAttentionView = 'open' | 'unread' | 'archived';
 
@@ -156,7 +149,7 @@ export function matchesView(view: FactoryAttentionView, receipt: FactoryAttentio
   return receipt?.state !== 'archived';
 }
 
-function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined) {
+function attentionTarget(decision: FactoryDeferredDecisionRecord, item: Card | undefined) {
   if (!item) return { kind: 'rules' as const };
   const role = typeof decision.decision.role === 'string' ? decision.decision.role : undefined;
   const session = role ? item.sessions[role] : undefined;
@@ -180,24 +173,24 @@ export interface DecisionAttentionSpec {
   status: FactoryDispatchStatus;
   identity(decision: FactoryDeferredDecisionRecord): FactoryAttentionIdentity;
   occurredAt(decision: FactoryDeferredDecisionRecord): Date;
-  title(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
-  detail(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
+  title(decision: FactoryDeferredDecisionRecord, item: Card | undefined): string;
+  detail(decision: FactoryDeferredDecisionRecord, item: Card | undefined): string;
   extra?(decision: FactoryDeferredDecisionRecord, context: { overtaken: boolean }): Record<string, unknown>;
-  matches(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean;
+  matches(decision: FactoryDeferredDecisionRecord, item: Card | undefined, search: string): boolean;
 }
 
 export class DecisionAttentionProvider implements AttentionProvider {
   readonly kind: FactoryAttentionKind;
   readonly #workItems: WorkItemsStorage;
   readonly #spec: DecisionAttentionSpec;
-  readonly #boards: BoardRegistry;
+  readonly #boards: ProjectBoardSource;
 
   constructor(
-    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry },
+    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry | ProjectBoardSource },
     spec: DecisionAttentionSpec,
   ) {
     this.#workItems = workItems;
-    this.#boards = boards;
+    this.#boards = toBoardSource(boards);
     this.#spec = spec;
     this.kind = spec.kind;
   }
@@ -261,7 +254,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
       const [receiptByKey, itemById, overtaken] = await Promise.all([
         this.#receiptsFor(scope, decisions),
         this.#linkedItems(scope, decisions),
-        overtakenDecisionIds(this.#workItems, this.#boards, scope, decisions),
+        this.#boards.load(scope).then(boards => overtakenDecisionIds(this.#workItems, boards, scope, decisions)),
       ]);
       const entries: AttentionEntry[] = [];
       for (const decision of decisions) {
@@ -306,10 +299,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
     return new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]));
   }
 
-  async #linkedItems(
-    scope: AttentionScope,
-    decisions: FactoryDeferredDecisionRecord[],
-  ): Promise<Map<string, WorkItemRow>> {
+  async #linkedItems(scope: AttentionScope, decisions: FactoryDeferredDecisionRecord[]): Promise<Map<string, Card>> {
     const items = await this.#workItems.listByIds({
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
@@ -348,173 +338,6 @@ export const failedDecisionAttentionSpec: DecisionAttentionSpec = {
     decision.lastError?.toLowerCase().includes(search) === true ||
     factoryDecisionType(decision).toLowerCase().includes(search),
 };
-
-interface ResolvedMention {
-  mention: WorkItemMentionRow;
-  comment: WorkItemCommentRow;
-  item: WorkItemRow;
-  identity: FactoryAttentionIdentity;
-  receipt: FactoryAttentionReceiptRecord | undefined;
-}
-
-export class MentionAttentionProvider implements AttentionProvider {
-  readonly kind = 'mention' as const;
-  readonly #workItems: WorkItemsStorage;
-  readonly #comments: WorkItemCommentsStorage;
-
-  constructor({ workItems, comments }: { workItems: WorkItemsStorage; comments: WorkItemCommentsStorage }) {
-    this.#workItems = workItems;
-    this.#comments = comments;
-  }
-
-  #scan(scope: AttentionScope, before?: AttentionStreamPosition) {
-    return scanBatches<WorkItemMentionRow>(
-      async cursor => {
-        const rows = await this.#comments.listMentionsForUser({
-          ...receiptScope(scope),
-          ...(cursor ? { before: cursor } : {}),
-          limit: SCAN_PAGE_SIZE + 1,
-        });
-        return { rows: rows.slice(0, SCAN_PAGE_SIZE), hasMore: rows.length > SCAN_PAGE_SIZE };
-      },
-      mention => ({ occurredAt: mention.occurredAt, id: mention.id }),
-      before,
-    );
-  }
-
-  /**
-   * Mention rows joined to what the inbox needs to show one — dropping the
-   * ones it cannot: a deleted comment, or a work item gone from the project.
-   */
-  async #resolve(scope: AttentionScope, mentions: WorkItemMentionRow[]): Promise<ResolvedMention[]> {
-    const [receipts, comments, items] = await Promise.all([
-      this.#workItems.listAttentionReceipts({
-        ...receiptScope(scope),
-        identities: mentions.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
-      }),
-      this.#comments.listByIds({
-        orgId: scope.orgId,
-        ids: [...new Set(mentions.map(mention => mention.commentId))],
-      }),
-      this.#workItems.listByIds({
-        orgId: scope.orgId,
-        factoryProjectId: scope.factoryProjectId,
-        ids: [...new Set(mentions.map(mention => mention.workItemId))],
-      }),
-    ]);
-    const receiptByKey = new Map(
-      receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]),
-    );
-    const commentById = new Map(comments.map(comment => [comment.id, comment]));
-    const itemById = new Map(items.map(item => [item.id, item]));
-
-    const resolved: ResolvedMention[] = [];
-    for (const mention of mentions) {
-      const comment = commentById.get(mention.commentId);
-      const item = itemById.get(mention.workItemId);
-      if (!comment || comment.deletedAt || !item) continue;
-      const identity = factoryMentionAttentionIdentity(mention.commentId);
-      resolved.push({
-        mention,
-        comment,
-        item,
-        identity,
-        receipt: receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity)),
-      });
-    }
-    return resolved;
-  }
-
-  /**
-   * Derived from the same bounded scan as `page`, never from raw aggregates:
-   * the badge must count exactly what the views can show, down to stopping at
-   * the same scan budget. Aggregates would count orphan mention rows the list
-   * can never display or clear.
-   */
-  async counts(scope: AttentionScope): Promise<AttentionCounts> {
-    let open = 0;
-    let unread = 0;
-    for await (const batch of this.#scan(scope)) {
-      for (const { receipt } of await this.#resolve(scope, batch.rows)) {
-        if (receipt?.state !== 'archived') open += 1;
-        if (receipt === undefined) unread += 1;
-      }
-    }
-    return { open, unread };
-  }
-
-  async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
-    const mentions = await this.#comments.listMentionsForUser({ ...receiptScope(scope), limit: 10 });
-    const newest = (await this.#resolve(scope, mentions))[0];
-    if (!newest) return null;
-    return {
-      key: factoryAttentionKey(scope.factoryProjectId, newest.identity),
-      at: newest.mention.occurredAt,
-      unread: newest.receipt === undefined,
-    };
-  }
-
-  async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {
-    return collectPage(this.#scan(scope, before), limit, async mentions => {
-      const entries: AttentionEntry[] = [];
-      for (const resolved of await this.#resolve(scope, mentions)) {
-        if (!matchesView(view, resolved.receipt)) continue;
-        if (search && !matchesMentionSearch(resolved, search)) continue;
-        entries.push({
-          occurredAt: resolved.mention.occurredAt,
-          resumeCursor: { occurredAt: resolved.mention.occurredAt, id: resolved.mention.id },
-          item: toMentionItem(scope, resolved),
-        });
-      }
-      return entries;
-    });
-  }
-
-  async markAllRead(
-    scope: AttentionScope,
-    { before, now }: { before?: AttentionStreamPosition; now: Date },
-  ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
-    return markScanRead(this.#scan(scope, before), async mentions => {
-      await this.#workItems.markAttentionReceiptsRead({
-        ...receiptScope(scope),
-        identities: mentions.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
-        now,
-      });
-    });
-  }
-}
-
-function matchesMentionSearch({ item, comment }: ResolvedMention, search: string): boolean {
-  return (
-    item.title.toLowerCase().includes(search) ||
-    comment.body.toLowerCase().includes(search) ||
-    comment.author.displayName?.toLowerCase().includes(search) === true
-  );
-}
-
-function toMentionItem(scope: AttentionScope, { mention, comment, item, identity, receipt }: ResolvedMention) {
-  const authorName = comment.author.displayName;
-  return {
-    key: factoryAttentionKey(scope.factoryProjectId, identity),
-    kind: 'mention' as const,
-    commentId: mention.commentId,
-    occurrence: 0,
-    workItemId: mention.workItemId,
-    title: item.title,
-    detail: comment.body.slice(0, 512),
-    authorId: comment.author.id,
-    ...(authorName ? { authorName } : {}),
-    occurredAt: mention.occurredAt.toISOString(),
-    read: receipt !== undefined,
-    archived: receipt?.state === 'archived',
-    target: {
-      kind: 'work-item' as const,
-      workItemId: mention.workItemId,
-      board: boardForWorkItem(item),
-      commentId: mention.commentId,
-    },
-  };
-}
 
 export function receiptScope(scope: AttentionScope): { orgId: string; factoryProjectId: string; userId: string } {
   return { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId, userId: scope.userId };

@@ -35,7 +35,7 @@ export const mastra = new Mastra({
   },
   {
     name: 'level',
-    type: `"debug" | "info" | "warn" | "error"`,
+    type: `"debug" | "info" | "warn" | "error" | "silent"`,
     description: 'Sets the minimum log level. Messages below this level are ignored.',
   },
   {
@@ -70,7 +70,7 @@ export const mastra = new Mastra({
   },
   {
     name: 'mixin',
-    type: 'pino.MixinFn',
+    type: "pino.LoggerOptions['mixin']",
     isOptional: true,
     description:
       'Pino mixin function merged into every log object (for example request-scoped `traceId` or other shared metadata).',

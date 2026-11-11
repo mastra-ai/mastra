@@ -1,3 +1,4 @@
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
@@ -14,40 +15,19 @@ export const factoryProjects: FactoryProjectPayload[] = [
   { id: OTHER_FACTORY_ID, name: 'Docs Factory' },
 ];
 
-export const factoryConnections = {
+export const factoryRepositories = {
   [ACTIVE_FACTORY_ID]: [
-    {
-      id: 'connection-active',
-      installationId: 'installation-active',
-      repositories: [
-        {
-          id: FIRST_REPOSITORY_ID,
-          branch: 'main',
-          sandboxWorkdir: '/workspaces/mastra',
-          repository: { slug: 'mastra-ai/mastra', defaultBranch: 'main' },
-        },
-        {
-          id: SECOND_REPOSITORY_ID,
-          branch: 'main',
-          sandboxWorkdir: '/workspaces/mastra-docs',
-          repository: { slug: 'mastra-ai/docs', defaultBranch: 'main' },
-        },
-      ],
-    },
+    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/workspaces/mastra' }),
+    listedRepository(SECOND_REPOSITORY_ID, 'mastra-ai/docs', {
+      branch: 'main',
+      sandboxWorkdir: '/workspaces/mastra-docs',
+    }),
   ],
   [OTHER_FACTORY_ID]: [
-    {
-      id: 'connection-other',
-      installationId: 'installation-other',
-      repositories: [
-        {
-          id: OTHER_REPOSITORY_ID,
-          branch: 'main',
-          sandboxWorkdir: '/workspaces/other',
-          repository: { slug: 'other-org/other-repo', defaultBranch: 'main' },
-        },
-      ],
-    },
+    listedRepository(OTHER_REPOSITORY_ID, 'other-org/other-repo', {
+      branch: 'main',
+      sandboxWorkdir: '/workspaces/other',
+    }),
   ],
 };
 
@@ -112,8 +92,7 @@ export const workItems: WorkItem[] = [
     metadata: { number: 321 },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
+    description: null,
     revision: 2,
     createdAt: '2026-07-29T10:00:00.000Z',
     updatedAt: '2026-07-29T12:30:00.000Z',
@@ -141,8 +120,7 @@ export const workItems: WorkItem[] = [
     metadata: { number: 900 },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
+    description: null,
     revision: 1,
     createdAt: '2026-07-29T13:30:00.000Z',
     updatedAt: '2026-07-29T14:30:00.000Z',
@@ -163,8 +141,7 @@ export const workItems: WorkItem[] = [
     metadata: { number: 4242 },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
+    description: null,
     revision: 1,
     createdAt: '2026-07-29T09:00:00.000Z',
     updatedAt: '2026-07-29T09:30:00.000Z',
@@ -185,8 +162,7 @@ export const workItems: WorkItem[] = [
     metadata: { number: 777 },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
+    description: null,
     revision: 1,
     createdAt: '2026-07-29T08:00:00.000Z',
     updatedAt: '2026-07-29T08:30:00.000Z',

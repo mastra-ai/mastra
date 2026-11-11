@@ -6,9 +6,9 @@ import type { ReactNode } from 'react';
 import type { BoardCandidate } from '../boardCandidates';
 import type { BoardCardStatus } from '../boardCardState';
 import { candidatePayload } from '../boardDrag';
-import { externalLinkLabel, sourceCreatedAt, workItemKey } from '../boardItems';
+import { externalLinkLabel, sourceCreatedAt } from '../boardItems';
 import type { CardMorph } from '../hooks/useCardMorph';
-import { CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
+import { CardKey, CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { BoardListRow } from './BoardListRow';
 
@@ -37,7 +37,7 @@ export function CandidateListRow({
       createdAt={sourceCreatedAt(candidate.metadata)}
       cells={{
         icon: <SourceIcon source={candidate.source} />,
-        key: workItemKey(candidate),
+        key: <CardKey item={candidate} />,
         title: (
           <span className="flex min-w-0 items-center gap-1.5">
             <Txt as="span" variant="label" tone="ink" className="min-w-0 truncate font-[550] tracking-tight">

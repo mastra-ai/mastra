@@ -5,10 +5,12 @@ import {
   TracesExplorerFilterChips,
   TracesExplorerTimeRangeChip,
 } from './traces-explorer-filter-bar';
+import { TracesExplorerHistogram } from './traces-explorer-histogram';
 import { TracesExplorerLayout } from './traces-explorer-layout';
 import { TracesExplorerList } from './traces-explorer-list';
 import { TracesExplorerPanel } from './traces-explorer-panel';
 import { TracesExplorerRoot } from './traces-explorer-root';
+import { TracesExplorerSavedViews } from './traces-explorer-saved-views';
 
 export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   Layout: TracesExplorerLayout,
@@ -17,8 +19,10 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   FilterChips: TracesExplorerFilterChips,
   TimeRangeChip: TracesExplorerTimeRangeChip,
   ColumnsMenu: TracesExplorerColumnsMenu,
+  Histogram: TracesExplorerHistogram,
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
+  SavedViews: TracesExplorerSavedViews,
 });
 
 export type { TracesExplorerRootProps } from './traces-explorer-root';
@@ -30,12 +34,21 @@ export type {
   TracesExplorerTimeRangeChipProps,
 } from './traces-explorer-filter-bar';
 export type { TracesExplorerPanelProps } from './traces-explorer-panel';
-export { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION, resolveTracesDateWindow } from './traces-explorer-actions';
+export type { TracesExplorerSavedViewsProps } from './traces-explorer-saved-views';
+export {
+  DEFAULT_TRACES_FILTERS,
+  DEFAULT_TRACES_SORT,
+  EMPTY_TRACES_SELECTION,
+  TRACES_SORT_FIELDS,
+  resolveTracesDateWindow,
+} from './traces-explorer-actions';
 export type {
   TracesExplorerState,
   TracesFilters,
   TracesSelection,
+  TracesSort,
   TracesSortDirection,
+  TracesSortField,
 } from './traces-explorer-actions';
 export {
   useTraceUsageColumns,
@@ -49,3 +62,5 @@ export {
 export type { TracesExplorerFeatures, TracesExplorerScope, TracesMetricsSupport } from './traces-explorer-context';
 export { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 export { useTracesDiscovery } from './use-traces-discovery';
+
+export type { FeedbackOptions } from '../feedback-options';

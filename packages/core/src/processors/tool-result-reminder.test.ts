@@ -732,6 +732,35 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toEqual([]);
   });
 
+  it('loads the statically loaded instruction paths once per processor request', async () => {
+    const messageList = new TestMessageList();
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(
+            'move',
+            { path: '/repo/a/AGENTS.md', destination: '/repo/b/AGENTS.md' },
+            'result',
+            {},
+          ),
+        ],
+      }),
+    );
+    const getIgnoredInstructionPaths = vi.fn(() => ['/repo/a/AGENTS.md', '/repo/b/AGENTS.md']);
+    const testProcessor = new AgentsMDInjector({
+      pathExists: () => true,
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+      getIgnoredInstructionPaths,
+    });
+
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+    expect(getIgnoredInstructionPaths).toHaveBeenCalledOnce();
+  });
+
   it('falls back to configured reminder text when file cannot be read', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-fallback';

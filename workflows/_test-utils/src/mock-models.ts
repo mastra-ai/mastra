@@ -143,23 +143,22 @@ export function createToolCallThenTextModel(
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
         };
-      } else {
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: finalText },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        };
       }
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: finalText },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
     },
   }) as LanguageModelV2;
 }
@@ -201,23 +200,22 @@ export function createMultiToolCallThenTextModel(
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
         };
-      } else {
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: finalText },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        };
       }
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: finalText },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
     },
   }) as LanguageModelV2;
 }

@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -353,6 +355,60 @@ describe('proxyRequest', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('merges a query string carried by the path with query params instead of appending a second one', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await proxyRequest(client, 'c_1', {
+      method: 'GET',
+      path: '/v1.0/users?$top=5&$skiptoken=ABC',
+      query: { $top: 5, $select: 'id' },
+    });
+
+    const url = new URL(fetchMock.mock.calls[0]![0] as string);
+    expect(url.pathname).toBe('/v2/connections/c_1/proxy/v1.0/users');
+    expect(url.searchParams.getAll('$top')).toEqual(['5']);
+    expect(url.searchParams.get('$skiptoken')).toBe('ABC');
+    expect(url.searchParams.get('$select')).toBe('id');
+  });
+
+  it('keeps untouched path query pairs byte-for-byte when merging params', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await proxyRequest(client, 'c_1', {
+      method: 'GET',
+      path: 'v1.0/items?$skiptoken=a%2Bb,c&sig=x+y&%24top=9',
+      query: { $top: 5 },
+    });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      'https://example.test/v2/connections/c_1/proxy/v1.0/items?$skiptoken=a%2Bb,c&sig=x+y&%24top=5',
+    );
+  });
+
+  it('sends a path query verbatim when no query params are added', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/items?$skiptoken=a%2Bb,c&sig=x+y' });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      'https://example.test/v2/connections/c_1/proxy/v1.0/items?$skiptoken=a%2Bb,c&sig=x+y',
+    );
+  });
+
+  it('checks dot segments in the path only, not in its query string', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await proxyRequest(client, 'c_1', { method: 'GET', path: 'search?q=../notes' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: '../x?q=1' })).rejects.toMatchObject({
+      code: 'invalid_options',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('allows dots inside ordinary path segments', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -434,6 +490,26 @@ describe('proxyRequest', () => {
     expect(init.headers['content-type']).toBeUndefined();
   });
 
+  it.each([
+    ['Buffer', Buffer.from([0, 1, 2, 255])],
+    ['Uint8Array', new Uint8Array([0, 1, 2, 255])],
+    ['ArrayBuffer', new Uint8Array([0, 1, 2, 255]).buffer],
+  ])('sends a %s body unchanged with the caller content type', async (_type, body) => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await proxyRequest(client, 'c_1', {
+      method: 'PUT',
+      path: 'documents/report.docx/content',
+      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+      body,
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.body).toBe(body);
+    expect(new Headers(init.headers).get('content-type')).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+  });
+
   it('keeps a provider 404 as proxy_error (never connection_not_found)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'page not found' }, { status: 404 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -498,6 +574,24 @@ describe('proxyRequest', () => {
       code: 'proxy_error',
       status: 404,
       message: 'Provider request failed (404): No such batch: batch_abc123',
+    });
+  });
+
+  it('falls back to the nested Graph error.code when the provider message is empty', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: { code: 'UnknownError', message: '', innerError: { 'request-id': 'r-1' } } },
+          { status: 401 },
+        ),
+      );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/users' })).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 401,
+      detail: 'UnknownError',
+      message: 'Provider request failed (401): UnknownError',
     });
   });
 

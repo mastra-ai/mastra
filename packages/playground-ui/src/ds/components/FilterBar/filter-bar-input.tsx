@@ -64,7 +64,7 @@ export function FilterBarInput(props: FilterBarInputProps) {
 }
 
 function FilterBarInputImpl({
-  placeholder = 'Filter…',
+  placeholder = 'Filter',
   className,
   'aria-label': ariaLabel = 'Add filter',
   groupId,
@@ -84,8 +84,10 @@ function FilterBarInputImpl({
   const { draft, setDraft: setDraftState, commitDraft } = ctx;
   const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
-  const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
+  const operator = draft?.operatorId
+    ? (fieldOperators.find(o => o.id === draft.operatorId) ?? ctx.getOperator(draft.operatorId))
+    : undefined;
   // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
   const visibleFields = useMemo(() => {
@@ -283,12 +285,12 @@ function FilterBarInputImpl({
     step === 'field'
       ? placeholder
       : step === 'operator'
-        ? 'Operator…'
+        ? 'Operator'
         : valueStep.hasSuggestions && valueStep.allowFreeText
-          ? 'Search or type a value…'
+          ? 'Search or type a value'
           : field?.type === 'number'
-            ? 'Number…'
-            : 'Value…';
+            ? 'Number'
+            : 'Value';
 
   return (
     <>
@@ -338,13 +340,14 @@ function FilterBarInputImpl({
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
             comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
+            groupId === undefined && 'max-w-80 grow basis-32',
             'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
-            step === 'field' ? 'min-w-40' : 'min-w-28',
+            step === 'field' ? 'min-w-32' : 'min-w-24',
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="ml-[-.3em] shrink-0 text-muted-foreground" />
+          <ListFilterIcon aria-hidden className="shrink-0" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -360,7 +363,7 @@ function FilterBarInputImpl({
             placeholder={inputPlaceholder}
             className={cn(
               unstyledFormElementStyle,
-              'min-w-0 flex-1 bg-transparent',
+              'min-w-0 flex-1 bg-transparent zoom-safe-text',
               'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
@@ -415,7 +418,7 @@ function FilterBarInputImpl({
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}
                   emptyText={
-                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                    valueStep.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'
                   }
                 />
               )}

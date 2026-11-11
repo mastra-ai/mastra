@@ -2,7 +2,6 @@
 title: "Reference: MCPClient | Tools and MCP"
 description: "The MCPClient class provides a way to manage multiple MCP server connections and their tools in a Mastra application."
 packages:
-  - "@mastra/core"
   - "@mastra/mcp"
 ---
 
@@ -317,6 +316,13 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
       'Answers input requests from this server. When a tool, resource or prompt call ends as `input_required`, the handler is called with each embedded request and the client retries the call with the answers. Without a handler an `input_required` result surfaces as an error. See Answering input requests below.',
   },
   {
+    name: 'tasks',
+    type: 'boolean | MCPClientTasksOptions',
+    isOptional: true,
+    description:
+      'Experimental. Lets this server answer tool calls with an MCP task, which the client waits for. `pollIntervalMs` (default `5000`) is used when the server suggests no interval. The client waits at least 100 ms and at most 1 hour between polls, whatever the server suggests. Both values must be at most `2147483647` (about 24.8 days), the longest delay a timer allows. `maxWaitMs` stops waiting and cancels the task after that long; by default only the server TTL applies. See the `tasks` property below.',
+  },
+  {
     name: 'authProvider',
     type: 'OAuthClientProvider',
     isOptional: true,
@@ -550,6 +556,10 @@ Tool results returned by MCP servers flow into your agent's context as model inp
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
 
+App-only tools, whose `_meta.ui.visibility` omits `"model"`, are left out. `listToolsets()` and `listToolDefinitions()` leave them out too.
+
+Server names and tool names can both contain `_`, so two different pairs can produce the same key. For example, server `local` with tool `x_status` and server `local_x` with tool `status` both produce `local_x_status`. The tool from the server listed later in `servers` keeps the key, and the client logs a warning that names both pairs. Rename one of the servers to keep both tools.
+
 ```ts
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
@@ -575,12 +585,20 @@ When called without options, the method omits only `durations`; `tools`, `errors
 
 ### `listToolsets()`
 
-Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
+Returns an object that maps each server name to that server's tools. Tools keep their raw names, without a server prefix.
 Intended to be passed at runtime into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
   toolsets: await mcp.listToolsets(),
+})
+```
+
+The agent combines toolsets by tool name. When two servers expose a tool with the same name, such as `search`, only the tool from the server listed later in `servers` reaches the model, and the agent logs a warning. To keep both tools, pass the prefixed tools from `listTools()` as a single toolset:
+
+```typescript
+const res = await agent.stream(prompt, {
+  toolsets: { mcp: await mcp.listTools() }, // docs_search, tickets_search
 })
 ```
 
@@ -599,9 +617,48 @@ console.log(errors, errorDetails, durations)
 
 When called without options, the method omits only `durations`; `toolsets`, `errors`, and `errorDetails` are always returned.
 
+#### Report each server as it settles
+
+The returned promise resolves only after every server finishes, so one slow server delays the whole result. Pass `onServerSettled` to handle each server as soon as its discovery succeeds, fails, or times out. The callback receives the server name and either `value` (that server's tools, keyed by the server's own tool names) or `error`, plus `duration` in milliseconds. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+await mcp.listToolsetsWithErrors({
+  perServerTimeoutMs: 60_000,
+  onServerSettled: (serverName, { value, error, duration }) => {
+    if (error) {
+      console.error(`${serverName} failed after ${duration}ms: ${error.message}`)
+    } else {
+      console.log(`${serverName} ready with ${Object.keys(value).length} tools`)
+    }
+  },
+})
+```
+
+Errors thrown by the callback are logged and don't affect discovery. The same is true for an `async` callback that rejects: the rejection is logged and never becomes an unhandled rejection.
+
+#### Discover only some servers
+
+Pass `serverNames` to discover only the named servers, for example to retry the ones that timed out without starting every other server again. Names that aren't configured are ignored. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+const { errorDetails } = await mcp.listToolsetsWithErrors({ perServerTimeoutMs: 3_000 })
+
+// Only servers that timed out are worth retrying. A server that failed for
+// another reason (bad config, auth refused) will just fail again.
+const timedOut = Object.entries(errorDetails)
+  .filter(([, details]) => details.code === MCP_DISCOVERY_TIMEOUT_CODE)
+  .map(([serverName]) => serverName)
+
+const retry = await mcp.listToolsetsWithErrors({ serverNames: timedOut })
+```
+
+`MCP_DISCOVERY_TIMEOUT_CODE` is exported from `@mastra/mcp`. It marks the errors that `perServerTimeoutMs` produced, so you can tell a slow server apart from a broken one.
+
 ### `listToolDefinitions()`
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
+
+Like `listTools()`, it leaves out app-only tools, whose `_meta.ui.visibility` omits `"model"`. An MCP App calls those through its host, so they never reach an agent.
 
 Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, title, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
 
@@ -1435,6 +1492,98 @@ for await (const event of subscription) {
 }
 ```
 
+### `tasks` Property (experimental)
+
+Some tools take longer than one HTTP request can stay open. A server that implements the [MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.github.io/ext-tasks/specification/2026-07-28/tasks.html) can answer such a call with a task, and the client fetches the result later. Set `tasks` on a server to accept them:
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    reports: {
+      url: new URL('https://reports.example.com/mcp'),
+      tasks: { maxWaitMs: 30 * 60_000 },
+      inputRequests: async ({ params }) => askUser(params),
+    },
+  },
+})
+```
+
+:::warning
+This API may change in any release.
+:::
+
+With `tasks` set, the client tells the server it accepts tasks. The server decides per call whether to answer directly or with a task. Without `tasks`, the client never receives one and tool calls behave as before.
+
+When a tool call returns a task, the tool keeps its usual shape:
+
+- The client polls the task at the interval the server suggests until it finishes, then returns the tool result.
+- A task that needs input is answered through `inputRequests`, once per request key. The client sends the answers with `tasks/update` and keeps polling the same task. It never sends `tools/call` again. Without a handler, a tool call from an agent or workflow suspends so the user can answer (see [Answering task input from the agent chat](#answering-task-input-from-the-agent-chat)). A direct `tool.execute()` call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
+- Aborting the tool call sends `tasks/cancel`. Reaching `maxWaitMs` sends it too, and fails the call with `MCP_CLIENT_TOOL_TASK_TIMEOUT`. Both end the call right away, even while a poll or your input handler is still running. A late answer from either is dropped.
+- A disconnect while the client polls ends the call with `MCP_CLIENT_TOOL_TASK_POLL_FAILED` and doesn't reconnect.
+- If the server can't be reached while the client polls, for example during a restart or deploy, the client reconnects and keeps polling with growing delays of up to 30 seconds. Refused connections and HTTP 502, 503, and 504 from a proxy count as unreachable. After 5 minutes without an answer, or when `maxWaitMs` or the task's TTL ends first, the call fails with `MCP_CLIENT_TOOL_TASK_POLL_FAILED`. The task may still finish on the server. The TTL counts from the task's `createdAt`. If the client can't read that timestamp, it counts from when it started waiting.
+- The tool call span gets `mcpTaskKey` metadata: a SHA-256 hash of the task id. A Mastra server tags its spans for the task with the same key, so you can match both sides and the task id stays out of both traces.
+- A tool error inside a finished task is handled like a direct tool error, following `onToolError`. A task the server cancelled fails with `MCP_CLIENT_TOOL_TASK_CANCELLED`, and a task the server marked `failed` fails with `MCP_CLIENT_TOOL_TASK_FAILED`.
+- A call that returned a task is never retried, because a retry would start a second task.
+- When the call continues as a task, and whenever the task's status changes, the tool writes an `MCPTaskProgress` entry (`{ type: 'mcp-task', taskId, status, createdAt, serverName }`) to its output stream. Studio's tool-call card uses it to show the task's status, elapsed time and MCP task id while it runs. Tool output isn't saved with the thread. After a reload, the card shows only the result.
+
+On an agent with [background tasks](/docs/harness/background-tasks) enabled, tools from a server with `tasks` set run as deferred background tasks with no retries. The agent keeps working while the remote task runs, and cancelling the background task cancels the remote task. Override this per tool with the agent's `backgroundTasks.tools`.
+
+#### Answering task input from the agent chat
+
+When a task needs input, no `inputRequests` handler is configured, and the tool runs in an agent or workflow, the tool call suspends like any tool that calls `suspend()`. The remote task stays open on the server. The suspend payload (`MCPInputRequestSuspendPayload`) carries the requests still waiting for an answer:
+
+```typescript
+const payload: MCPInputRequestSuspendPayload = {
+  type: 'mcp-input-request',
+  serverName: 'reports',
+  toolName: 'approve_and_send',
+  taskId: 'Zx81…', // the MCP task the answers go to
+  createdAt: '2026-10-30T10:00:00.000Z', // when the task was created
+  requestedAt: '2026-10-30T10:00:04.000Z', // when the call suspended; new each time the task asks again
+  requests: {
+    approve: {
+      method: 'elicitation/create',
+      params: {
+        mode: 'form',
+        message: 'Send it?',
+        requestedSchema: {
+          type: 'object',
+          properties: { ok: { type: 'boolean' } },
+          required: ['ok'],
+        },
+      },
+    },
+  },
+}
+```
+
+Resume the tool call with one answer per request key (`MCPInputRequestResumeData`), for example through `agent.resumeStream()` in the foreground, or `backgroundTaskManager.resume()` for a deferred background task:
+
+```typescript
+await agent.resumeStream(
+  { inputResponses: { approve: { action: 'accept', content: { ok: true } } } },
+  { runId, toolCallId },
+)
+```
+
+On resume the client sends the answers to the same task with `tasks/update` and keeps polling it. It never sends `tools/call` again. If the server asks again, the call suspends again with the new requests. If the task ended meanwhile, the call fails with the usual task error, such as `MCP_CLIENT_TOOL_TASK_CANCELLED`, or `MCP_CLIENT_TOOL_TASK_POLL_FAILED` when the server no longer knows the task. Resume data that isn't `{ inputResponses: { [key]: { action: 'accept' | 'decline' | 'cancel', content? } } }`, or that leaves a request unanswered, fails with `MCP_CLIENT_TOOL_TASK_RESUME_INVALID` without contacting the server.
+
+A configured `inputRequests` handler takes precedence: the call then never suspends.
+
+The payload holds the MCP task id, which grants access to the task. It's stored with the suspended tool call, so treat it like the rest of the thread's data.
+
+#### `tasks.get(serverName: string, taskId: string)`
+
+Returns the task's current state (`MCPDetailedTask`), including `result` once it's `completed` and `inputRequests` while it's `input_required`. Fails with `MCP_CLIENT_GET_TASK_FAILED`; an unknown task, or one created by another caller, has `error.cause.code` `-32602`.
+
+#### `tasks.update(serverName: string, taskId: string, inputResponses: MCPTaskInputResponses)`
+
+Answers the `inputRequests` of an `input_required` task, keyed like the requests. The server ignores keys it didn't ask for or that are already answered. Fails with `MCP_CLIENT_UPDATE_TASK_FAILED`.
+
+#### `tasks.cancel(serverName: string, taskId: string)`
+
+Asks the server to stop the task. The server may still finish it. Fails with `MCP_CLIENT_CANCEL_TASK_FAILED`.
+
 ## Answering input requests
 
 A server tool, resource or prompt that needs something from the user ends its call with an `input_required` result instead of a value. The result carries one or more embedded requests, each with a server-chosen `key` and either a form (`requestedSchema`) or a URL the user must visit. Configure `inputRequests` on the server definition to answer them: the client calls the handler once per embedded request, retries the original call with the answers, and resolves the tool call with the final result. Without a handler an `input_required` result surfaces as an error.
@@ -1902,7 +2051,9 @@ With hooks disabled, your application is responsible for closing MCP connections
 
 For HTTP servers, you can provide a custom `fetch` function to handle runtime-defined authentication or request interception. It can also handle other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
-The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
+The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` for requests that no tool call sends, such as `listTools()` and the connection handshake it opens. When a tool call opens the connection, either because a tool rebuilt with `toolsFromDefinitions()` or `toolFromDefinition()` connects on its first execution or because the call reconnects, the handshake receives that call's `requestContext`. Streams the connection keeps open afterward, such as the server-to-client event stream, keep using that same `requestContext`, and so do the client's replies to server requests on them, such as an answer to an input request. A request your own code starts from a server log or notification on those streams gets `null`.
+
+A server that authenticates every request therefore needs a credential for discovery as well as for tool calls. The following example forwards the user's cookie when a tool call provides a `requestContext`, and sends the app's own token when there's none, as in `listTools()`. Any request without a `requestContext` gets that token, so have the server limit it to discovery, for example listing tools but not calling them.
 
 When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
 
@@ -1913,10 +2064,15 @@ const mcpClient = new MCPClient({
       url: new URL('https://api.example.com/mcp'),
       fetch: async (url, init, requestContext) => {
         const headers = new Headers(init?.headers)
-        // Forward auth cookie from the incoming request
-        const cookie = requestContext?.get('cookie')
-        if (cookie) {
-          headers.set('cookie', cookie)
+        if (requestContext) {
+          // A tool call: forward the auth cookie from the incoming request
+          const cookie = requestContext.get('cookie')
+          if (cookie) {
+            headers.set('cookie', cookie)
+          }
+        } else {
+          // No requestContext, as in listTools(): a token the server only accepts for discovery
+          headers.set('authorization', `Bearer ${process.env.MCP_DISCOVERY_TOKEN}`)
         }
         return fetch(url, { ...init, headers })
       },
@@ -1938,9 +2094,11 @@ await agent.generate('Hello!', {
 })
 ```
 
+If the server accepts only per-user credentials, skip `listTools()` at startup. Build the catalog with [`listToolDefinitions()`](#listtooldefinitions) from a client that has a credential of its own, for example in a build step with a static `requestInit` header, and store it. At runtime, rebuild the tools with [`toolsFromDefinitions()`](#toolsfromdefinitions). Each rebuilt tool opens the connection on its first call, so the handshake carries that call's `requestContext`.
+
 ## Handling auth failures inside custom fetch
 
-A custom `fetch` shouldn't `throw` when authentication is unavailable. Every MCP request is a `POST`, and the SDK surfaces a non-2xx response as an error to the caller of `listTools()`, `tools/call` and so on, which is the behavior you want. A thrown `fetch` is reported the same way but loses the server's status and body. The only long-lived request is the `subscriptions/listen` `POST` the client opens for `resources.subscribe()`, and it's retried after a failure, so an unauthenticated stream can loop. Wait for the token, then forward the request:
+A custom `fetch` shouldn't `throw` when authentication is unavailable. JSON-RPC requests such as `tools/call` are `POST`s, and the SDK surfaces a non-2xx response as an error to the caller of `listTools()`, `tools/call` and so on, which is the behavior you want. A thrown `fetch` is reported the same way but loses the server's status and body. On a 2025-11-25 server, the client also sends a `GET` with no body after the handshake to open the server-to-client event stream, so check `init.method` rather than assuming a `POST` body. Long-lived streams are reopened after a failure: the `subscriptions/listen` `POST` the client opens for `resources.subscribe()` and the `GET` event stream if it drops. An unauthenticated `subscriptions/listen` stream can loop. Wait for the token, then forward the request:
 
 ```typescript
 async function waitForToken(timeoutMs = 5000): Promise<string | null> {

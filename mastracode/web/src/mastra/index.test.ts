@@ -60,8 +60,10 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'MASTRA_GITLAB_CONNECTION_ID',
       'LINEAR_CLIENT_ID',
       'LINEAR_CLIENT_SECRET',
+      'JIRA_API_BASE_URL',
       'INCIDENT_IO_API_KEY',
       'SLACK_APP_SIGNING_SECRET',
+      'SLACK_APP_TOKEN',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');
@@ -235,6 +237,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'JIRA_API_TOKEN',
         'INCIDENT_IO_API_KEY',
         'SLACK_APP_SIGNING_SECRET',
+        'SLACK_APP_TOKEN',
       ]) {
         vi.stubEnv(name, '');
       }
@@ -359,6 +362,21 @@ describe('platform entry (src/mastra/index.ts)', () => {
       );
     });
 
+    it('forwards the optional Jira API base URL to the direct integration', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+      vi.stubEnv('JIRA_API_BASE_URL', 'https://api.atlassian.com/ex/jira/cloud-123');
+      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+      vi.stubEnv('JIRA_API_TOKEN', 'jira-token');
+      await import('./index.js');
+
+      const jira = factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira') as
+        | { api: { baseUrl: string } }
+        | undefined;
+      expect(jira?.api.baseUrl).toBe('https://api.atlassian.com/ex/jira/cloud-123');
+    });
+
     it('does not register Platform Jira without Platform credentials', { timeout: 60_000 }, async () => {
       vi.resetModules();
       const mod = await import('./index.js');
@@ -431,6 +449,15 @@ describe('platform entry (src/mastra/index.ts)', () => {
       const mod = await import('./index.js');
       const controller = mod.mastra.getAgentController('code');
       expect(controller?.getChannels()).toBeNull();
+    });
+
+    it('does not use a whitespace-only Slack app token to sign state', { timeout: 60_000 }, async () => {
+      vi.stubEnv('SLACK_APP_TOKEN', '   ');
+
+      await import('./index.js');
+
+      expect(factoryConfigs[0]?.stateSecret).toBeUndefined();
+      expect(factoryConfigs[0]?.integrations?.some(integration => integration.id === 'slack')).toBe(false);
     });
 
     it(

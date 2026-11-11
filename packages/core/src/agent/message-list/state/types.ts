@@ -1,5 +1,6 @@
 import type { UIMessage as UIMessageV4, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type * as AIV5 from '@internal/ai-sdk-v5';
+import type { ProviderErrorFacts } from '../../../error/provider-error';
 import type { AIV5Type } from '../types';
 
 export type MessageSource =
@@ -38,17 +39,19 @@ export type MastraStepStartPart = {
 // stack traces, causes and other custom properties stay on the runtime error
 // surfaces (stream chunk, onError, result.error) and are never written to
 // thread history. Provider HTTP failures (AI SDK `APICallError`) also keep the
-// status code, a bounded copy of the response body and the provider request id,
-// because their `message` is often just the HTTP status text.
+// status code, a bounded copy of the response body, the provider request id,
+// the model the request named and the provider facts a reload classifies by
+// (every code, the provider's own reason sentence), because their `message` is
+// often just the HTTP status text.
 export type MastraErrorPart = {
   type: 'error';
   error: {
     name: string;
     message: string;
-    statusCode?: number;
     responseBody?: string;
     requestId?: string;
-  };
+    modelId?: string;
+  } & ProviderErrorFacts;
 } & MastraPartExtensions;
 
 // Approval payload stored alongside tool invocations so v6 approval flows can

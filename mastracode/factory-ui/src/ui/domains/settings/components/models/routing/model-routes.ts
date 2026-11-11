@@ -14,15 +14,18 @@ export const MODEL_ROUTES: Record<FactoryModelScope, Record<ModelLane, ModelDefa
   factory: { chats: 'factory', runs: 'factory' },
 };
 
+export const MODEL_SCOPE_LABELS: Record<FactoryModelScope, string> = {
+  user: 'Personal',
+  hybrid: 'Hybrid',
+  factory: 'Factory',
+};
+
 export const MODEL_DEFAULTS_LABELS: Record<ModelDefaults, string> = {
   personal: 'Personal defaults',
   factory: 'Factory defaults',
 };
 
-export const MODEL_DEFAULTS_UNUSED_NOTES: Record<ModelDefaults, string> = {
-  personal: 'Not used in this scope',
-  factory: 'Used only when someone has no personal default',
-};
+export const MODEL_DEFAULTS_UNUSED_NOTE = 'Not used in this scope';
 
 export const MODEL_DEFAULTS_ICONS: Record<ModelDefaults, LucideIcon> = {
   personal: CircleUserRound,

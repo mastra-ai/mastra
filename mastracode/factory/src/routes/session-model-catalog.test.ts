@@ -132,6 +132,7 @@ describe('session-owner model catalog', () => {
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
       expect(body.personalThinkingLevel).toBe('high');
+      expect(body).not.toHaveProperty('fallbackModelId');
       expect(body.models).toEqual([
         expect.objectContaining({ id: 'anthropic/claude-opus-4-6', credentialLabel: 'Anthropic API key' }),
       ]);

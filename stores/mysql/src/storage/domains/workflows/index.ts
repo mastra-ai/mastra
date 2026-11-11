@@ -6,6 +6,7 @@ import {
   RUN_FENCING_TABLE_SCHEMAS,
   WorkflowsStorage,
   createStorageErrorId,
+  hasErrorCode,
   normalizePerPage,
   matchesExpectedWorkflowStatus,
   matchesRunFence,
@@ -33,13 +34,15 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { assertRunFence, claimTransaction, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
+
+const DUPLICATE_KEY_ERROR_CODES = new Set([1062, 'ER_DUP_ENTRY']);
 
 interface WorkflowRow {
   workflow_name: string;
@@ -159,6 +162,10 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     this.#indexes = indexes?.filter(idx => (WorkflowsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
   supportsConcurrentUpdates(): boolean {
     return true;
   }
@@ -175,6 +182,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
    * Currently no default indexes are defined for workflows.
    */
   async createDefaultIndexes(): Promise<void> {
+    // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
     if (this.#skipDefaultIndexes) return;
     // No default indexes for workflows domain
   }
@@ -508,6 +516,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -516,29 +525,75 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const now = new Date();
+    const expectedStatuses =
+      expectedStatus === undefined ? undefined : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatuses === undefined
+        ? ''
+        : expectedStatuses.length === 0
+          ? ' AND FALSE'
+          : ` AND JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('snapshot', 'column name')}, '$.status')) IN (${expectedStatuses.map(() => '?').join(', ')})`;
     const createdAtValue = createdAt ?? now;
     const updatedAtValue = updatedAt ?? now;
     const tableName = formatTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
-      await withRunFence(
+      return await withRunFence(
         this.pool,
         RUN_OWNERS_TABLE,
         resolveRunFence(this, fence, runId),
         'persistWorkflowSnapshot',
         async q => {
-          const [updateResult] = await q.execute<ResultSetHeader>(
-            `UPDATE ${tableName}
+          const update = () =>
+            q.execute<ResultSetHeader>(
+              `UPDATE ${tableName}
            SET ${quoteIdentifier('resourceId', 'column name')} = ?,
                ${quoteIdentifier('snapshot', 'column name')} = ?,
                ${quoteIdentifier('updatedAt', 'column name')} = ?
-           WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?`,
-            [resourceId ?? null, JSON.stringify(snapshot), transformToSqlValue(updatedAtValue), workflowName, runId],
-          );
+           WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?${guard}`,
+              [
+                resourceId ?? null,
+                JSON.stringify(snapshot),
+                transformToSqlValue(updatedAtValue),
+                workflowName,
+                runId,
+                ...(expectedStatuses ?? []),
+              ],
+            );
+          const [updateResult] = await update();
 
+          // mysql2 connects with CLIENT_FOUND_ROWS, so affectedRows counts matched rows.
           if (updateResult.affectedRows > 0) {
-            return;
+            return true;
+          }
+
+          if (expectedStatuses !== undefined) {
+            // The guard refused an existing row or there is no row yet. A plain insert tells the two
+            // apart: it fails with a duplicate key when the row exists.
+            try {
+              await q.execute(
+                `INSERT INTO ${tableName} (${quoteIdentifier('workflow_name', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('resourceId', 'column name')}, ${quoteIdentifier('snapshot', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('updatedAt', 'column name')})
+               VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                  workflowName,
+                  runId,
+                  resourceId ?? null,
+                  JSON.stringify(snapshot),
+                  transformToSqlValue(createdAtValue),
+                  transformToSqlValue(updatedAtValue),
+                ],
+              );
+              return true;
+            } catch (error) {
+              if (!hasErrorCode(error, DUPLICATE_KEY_ERROR_CODES)) throw error;
+              // A concurrent first write inserted the row between our update and insert. Its status may
+              // still be expected, so apply the guarded update to the row that now exists.
+              const [retryResult] = await update();
+              return retryResult.affectedRows > 0;
+            }
           }
 
           await q.execute(
@@ -554,6 +609,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
               transformToSqlValue(updatedAtValue),
             ],
           );
+          return true;
         },
       );
     } catch (error) {
@@ -561,6 +617,33 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       throw new MastraError(
         {
           id: 'MYSQL_WORKFLOWS_PERSIST_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('snapshot', 'column name')}, '$.status')) AS status FROM ${formatTableName(TABLE_WORKFLOW_SNAPSHOT)} WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ? LIMIT 1`,
+        [workflowName, runId],
+      );
+      const status: unknown = rows[0]?.status;
+      return (status ?? null) as WorkflowRunStatus | null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },

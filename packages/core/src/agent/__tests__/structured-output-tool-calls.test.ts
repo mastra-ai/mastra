@@ -89,23 +89,22 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
             ],
             warnings: [],
           };
-        } else {
-          // Step 2+: Model generates valid JSON but with finishReason: 'length'
-          // (hit max output tokens). This simulates the model generating excessive
-          // tokens that happen to form valid JSON.
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'length' as const,
-            usage: { inputTokens: 100, outputTokens: 64000, totalTokens: 64100 },
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(expectedOutput),
-              },
-            ],
-            warnings: [],
-          };
         }
+        // Step 2+: Model generates valid JSON but with finishReason: 'length'
+        // (hit max output tokens). This simulates the model generating excessive
+        // tokens that happen to form valid JSON.
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'length' as const,
+          usage: { inputTokens: 100, outputTokens: 64000, totalTokens: 64100 },
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(expectedOutput),
+            },
+          ],
+          warnings: [],
+        };
       },
       doStream: async ({ prompt }) => {
         callCount++;
@@ -137,30 +136,29 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
           };
-        } else {
-          // Step 2+: Model generates valid JSON but hits max output tokens
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: `id-${callCount}`,
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: `text-${callCount}` },
-              { type: 'text-delta', id: `text-${callCount}`, delta: JSON.stringify(expectedOutput) },
-              { type: 'text-end', id: `text-${callCount}` },
-              {
-                type: 'finish',
-                finishReason: 'length', // Hit max output tokens
-                usage: { inputTokens: 100, outputTokens: 64000, totalTokens: 64100 },
-              },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
         }
+        // Step 2+: Model generates valid JSON but hits max output tokens
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `id-${callCount}`,
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: `text-${callCount}` },
+            { type: 'text-delta', id: `text-${callCount}`, delta: JSON.stringify(expectedOutput) },
+            { type: 'text-end', id: `text-${callCount}` },
+            {
+              type: 'finish',
+              finishReason: 'length', // Hit max output tokens
+              usage: { inputTokens: 100, outputTokens: 64000, totalTokens: 64100 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
       },
     });
 
@@ -337,20 +335,19 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
             ],
             warnings: [],
           };
-        } else {
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(expectedOutput),
-              },
-            ],
-            warnings: [],
-          };
         }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(expectedOutput),
+            },
+          ],
+          warnings: [],
+        };
       },
       doStream: async ({ prompt }) => {
         const hasToolResults = prompt.some(
@@ -379,24 +376,23 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
           };
-        } else {
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-1' },
-              { type: 'text-delta', id: 'text-1', delta: JSON.stringify(expectedOutput) },
-              { type: 'text-end', id: 'text-1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
-              },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
         }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(expectedOutput) },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
       },
     });
 
@@ -449,24 +445,23 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
           };
-        } else {
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-1' },
-              { type: 'text-delta', id: 'text-1', delta: JSON.stringify(expectedOutput) },
-              { type: 'text-end', id: 'text-1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
-              },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
         }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(expectedOutput) },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
       },
     });
 

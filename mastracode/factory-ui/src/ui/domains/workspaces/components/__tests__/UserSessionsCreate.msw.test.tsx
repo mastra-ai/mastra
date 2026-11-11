@@ -1,10 +1,11 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
@@ -39,21 +40,16 @@ function userSession(overrides: Partial<FactoryUserSession> = {}): FactoryUserSe
 function stubFactoryWithRepository(sessions: FactoryUserSession[] = []) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
+            id: 'fp-1',
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
                 sandboxWorkdir: '/workspace/hello',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -148,6 +144,19 @@ describe('User sessions creation', () => {
       workspaces: [],
       userSessions: [],
     });
+  });
+
+  it('opens a new session draft from the + next to Sessions', async () => {
+    stubFactoryWithRepository([]);
+    const user = userEvent.setup();
+
+    renderSection();
+    const sessionsRegion = await screen.findByRole('region', { name: 'Sessions' });
+    await user.click(await within(sessionsRegion).findByRole('button', { name: 'New user session' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(/^\/factories\/fp-1\/user\/new\/[0-9a-f-]{36}$/i),
+    );
   });
 
   it('prefers titles, preserves legacy labels, and hides automatic UUID branches', async () => {

@@ -41,7 +41,7 @@ const results = await vectorStore.query({
 
 ## Documentation
 
-- [@mastra/pinecone documentation](https://mastra.ai/reference/vectors/pinecone)
+- [@mastra/pinecone documentation](https://mastra.ai/integrations/vectors/pinecone)
 
 ## Changelog
 

@@ -29,6 +29,23 @@
   --chart-share-5: oklch(0.66 0.12 265);
   --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
 
+  /* Series: one hue per model or lab, all at one lightness and chroma per theme so none shouts.
+     Labs keep a preferred hue (series-colors.ts); amber and lime sit a little lighter to stay clean. */
+  --chart-series-l: 0.76;
+  --chart-series-c: 0.13;
+  --chart-series-pink: oklch(var(--chart-series-l) var(--chart-series-c) 0);
+  --chart-series-orange: oklch(var(--chart-series-l) var(--chart-series-c) 50);
+  --chart-series-amber: oklch(calc(var(--chart-series-l) + 0.06) var(--chart-series-c) 82);
+  --chart-series-lime: oklch(calc(var(--chart-series-l) + 0.04) var(--chart-series-c) 122);
+  --chart-series-green: oklch(var(--chart-series-l) var(--chart-series-c) 152);
+  --chart-series-teal: oklch(var(--chart-series-l) var(--chart-series-c) 182);
+  --chart-series-cyan: oklch(var(--chart-series-l) var(--chart-series-c) 212);
+  --chart-series-blue: oklch(var(--chart-series-l) var(--chart-series-c) 248);
+  --chart-series-indigo: oklch(var(--chart-series-l) var(--chart-series-c) 276);
+  --chart-series-violet: oklch(var(--chart-series-l) var(--chart-series-c) 302);
+  --chart-series-magenta: oklch(var(--chart-series-l) var(--chart-series-c) 330);
+  --chart-series-neutral: oklch(calc(var(--chart-series-l) + 0.14) 0.006 260);
+
   --span-agent: oklch(0.75 0.133 250);
   --span-workflow: oklch(0.75 0.127 200);
   --span-model: oklch(0.75 0.15 320);
@@ -59,6 +76,10 @@ html.light {
   --chart-share-4: oklch(0.64 0.11 190);
   --chart-share-5: oklch(0.5 0.15 265);
   --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+
+  --chart-series-l: 0.62;
+  --chart-series-c: 0.15;
+  --chart-series-neutral: oklch(calc(var(--chart-series-l) - 0.3) 0.006 260);
 
   --span-agent: oklch(0.55 0.15 250);
   --span-workflow: oklch(0.55 0.093 200);
@@ -99,6 +120,18 @@ html.light {
   --color-chart-share-4: var(--chart-share-4);
   --color-chart-share-5: var(--chart-share-5);
   --color-chart-share-rest: var(--chart-share-rest);
+  --color-chart-series-pink: var(--chart-series-pink);
+  --color-chart-series-orange: var(--chart-series-orange);
+  --color-chart-series-amber: var(--chart-series-amber);
+  --color-chart-series-lime: var(--chart-series-lime);
+  --color-chart-series-green: var(--chart-series-green);
+  --color-chart-series-teal: var(--chart-series-teal);
+  --color-chart-series-cyan: var(--chart-series-cyan);
+  --color-chart-series-blue: var(--chart-series-blue);
+  --color-chart-series-indigo: var(--chart-series-indigo);
+  --color-chart-series-violet: var(--chart-series-violet);
+  --color-chart-series-magenta: var(--chart-series-magenta);
+  --color-chart-series-neutral: var(--chart-series-neutral);
   --color-span-agent: var(--span-agent);
   --color-span-workflow: var(--span-workflow);
   --color-span-model: var(--span-model);

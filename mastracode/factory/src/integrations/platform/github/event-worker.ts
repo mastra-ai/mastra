@@ -7,8 +7,13 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
+import { DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS } from '../../github/reconcile-worker.js';
 import type { GithubReconcileRepositorySource } from '../../github/reconcile-worker.js';
-import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
+import type {
+  GithubPullRequestDiscovery,
+  GithubPullRequestReconciler,
+  ReconcileRepository,
+} from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
 import { dispatchGithubWebhook, isFactoryAppSender, resolveAuthorizedBots } from '../../github/webhook.js';
 import type {
@@ -90,6 +95,7 @@ export interface PlatformGithubEventWorkerConfig {
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
+  discoverPullRequests?: GithubPullRequestDiscovery;
   /** When false the worker skips event tailing and only runs enabled reconciliation sweeps. */
   pollEventsEnabled?: boolean;
   intervalMs?: number;
@@ -97,6 +103,8 @@ export interface PlatformGithubEventWorkerConfig {
   reconcileIntervalMs?: number;
   pullRequestReconcileIntervalMs?: number;
   issueReconcileIntervalMs?: number;
+  /** Defaults to five minutes, or the pull request interval when that is shorter. */
+  pullRequestDiscoveryIntervalMs?: number;
   now?: () => number;
   dispatch?: typeof dispatchGithubWebhook;
 }
@@ -111,9 +119,11 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssuesFactoryState: GithubIssueReconciler | undefined;
+  readonly #discoverPullRequests: GithubPullRequestDiscovery | undefined;
   readonly #pollEventsEnabled: boolean;
   readonly #pullRequestReconcileIntervalMs: number;
   readonly #issueReconcileIntervalMs: number;
+  readonly #pullRequestDiscoveryIntervalMs: number;
   readonly #intervalMs: number;
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
@@ -131,6 +141,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   // Negative infinity so the first tick always sweeps, whatever the clock reads.
   #lastPullRequestReconcileAt = Number.NEGATIVE_INFINITY;
   #lastIssueReconcileAt = Number.NEGATIVE_INFINITY;
+  #lastPullRequestDiscoveryAt = Number.NEGATIVE_INFINITY;
   #settings: PlatformGithubEventWorkerSettings = { version: 1, repositories: {} };
 
   constructor(config: PlatformGithubEventWorkerConfig) {
@@ -142,10 +153,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#ingestFactoryEvent = config.ingestFactoryEvent;
     this.#reconcileFactoryState = config.reconcileFactoryState;
     this.#reconcileIssuesFactoryState = config.reconcileIssuesFactoryState;
+    this.#discoverPullRequests = config.discoverPullRequests;
     this.#pollEventsEnabled = config.pollEventsEnabled ?? true;
     const legacyReconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
     this.#pullRequestReconcileIntervalMs = config.pullRequestReconcileIntervalMs ?? legacyReconcileIntervalMs;
     this.#issueReconcileIntervalMs = config.issueReconcileIntervalMs ?? legacyReconcileIntervalMs;
+    this.#pullRequestDiscoveryIntervalMs =
+      config.pullRequestDiscoveryIntervalMs ??
+      Math.min(DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS, this.#pullRequestReconcileIntervalMs);
     this.#intervalMs = config.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
       throw new Error('Platform GitHub event polling interval must be a positive number.');
@@ -156,9 +171,17 @@ export class PlatformGithubEventWorker extends MastraWorker {
     if (!Number.isFinite(this.#issueReconcileIntervalMs) || this.#issueReconcileIntervalMs <= 0) {
       throw new Error('Platform GitHub issue reconcile interval must be a positive number.');
     }
+    if (!Number.isFinite(this.#pullRequestDiscoveryIntervalMs) || this.#pullRequestDiscoveryIntervalMs <= 0) {
+      throw new Error('Platform GitHub pull request discovery interval must be a positive number.');
+    }
     this.#leaseTtlMs = Math.max(
       MIN_LEASE_TTL_MS,
-      Math.min(this.#intervalMs, this.#pullRequestReconcileIntervalMs, this.#issueReconcileIntervalMs) * 3,
+      Math.min(
+        this.#intervalMs,
+        this.#pullRequestReconcileIntervalMs,
+        this.#issueReconcileIntervalMs,
+        this.#pullRequestDiscoveryIntervalMs,
+      ) * 3,
     );
     this.#now = config.now ?? Date.now;
     this.#dispatch = config.dispatch ?? dispatchGithubWebhook;
@@ -298,6 +321,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const cadences = [
       this.#reconcileFactoryState ? this.#pullRequestReconcileIntervalMs : undefined,
       this.#reconcileIssuesFactoryState ? this.#issueReconcileIntervalMs : undefined,
+      this.#discoverPullRequests ? this.#pullRequestDiscoveryIntervalMs : undefined,
     ].filter((interval): interval is number => interval !== undefined);
     return cadences.length > 0 ? Math.min(...cadences) : this.#intervalMs;
   }
@@ -311,9 +335,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const reconcileIssues = Boolean(
       this.#reconcileIssuesFactoryState && now - this.#lastIssueReconcileAt >= this.#issueReconcileIntervalMs,
     );
-    if (!reconcilePullRequests && !reconcileIssues) return;
+    const discoverPullRequests = Boolean(
+      this.#discoverPullRequests &&
+        now - this.#lastPullRequestDiscoveryAt >= this.#pullRequestDiscoveryIntervalMs,
+    );
+    if (!reconcilePullRequests && !reconcileIssues && !discoverPullRequests) return;
     if (reconcilePullRequests) this.#lastPullRequestReconcileAt = now;
     if (reconcileIssues) this.#lastIssueReconcileAt = now;
+    if (discoverPullRequests) this.#lastPullRequestDiscoveryAt = now;
 
     const targets: ReconcileRepository[] = repositories.flatMap(repository =>
       repository.fullName
@@ -342,6 +371,30 @@ export class PlatformGithubEventWorker extends MastraWorker {
         }
       } catch (error) {
         this.deps?.logger.error('Platform GitHub pull request reconcile failed', {
+          repositories: targets.length,
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (discoverPullRequests && this.#discoverPullRequests && this.#hasLease) {
+      const startedAt = Date.now();
+      try {
+        const { errors, ...counts } = await this.#discoverPullRequests(targets);
+        const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+        if (counts.failed > 0) {
+          this.deps?.logger.warn('Platform GitHub pull request discovery completed with failures', {
+            ...context,
+            errors,
+          });
+        } else if (counts.created > 0 || counts.repaired > 0) {
+          this.deps?.logger.info('Platform GitHub pull request discovery replayed missed opens', context);
+        } else {
+          this.deps?.logger.debug('Platform GitHub pull request discovery completed', context);
+        }
+      } catch (error) {
+        this.deps?.logger.error('Platform GitHub pull request discovery failed', {
           repositories: targets.length,
           durationMs: Date.now() - startedAt,
           error: error instanceof Error ? error.message : String(error),
@@ -600,6 +653,13 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if (event.event === 'issues' && ISSUE_INGESTED_ACTIONS.has(String(event.payload.action))) return true;
   if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
   if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
+  // `factory-review` edits its earlier verdict in place on a re-review. The rules
+  // engine only acts on edits that leave a request-changes verdict behind.
+  if (event.event === 'pull_request_review' && event.payload.action === 'edited') return true;
+  if (event.event === 'issue_comment' && event.payload.action === 'edited') {
+    const issue = event.payload.issue;
+    if (issue && typeof issue === 'object' && 'pull_request' in issue && issue.pull_request) return true;
+  }
   // Default-branch pushes drive base-checkpoint rebuilds
   // (`withBaseCheckpointWebhookTrigger` wraps the ingest callback).
   if (event.event === 'push') return true;

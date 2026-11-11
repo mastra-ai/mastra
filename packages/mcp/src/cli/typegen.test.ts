@@ -188,7 +188,7 @@ describe('concrete MCP schema generation', () => {
           name: 'get_value',
           inputSchema: { ...schema, properties: { payload: { title: 'Payload', type: 'number' } } },
         },
-        ['constructor']: { name: 'constructor', inputSchema: true },
+        constructor: { name: 'constructor', inputSchema: true },
       },
       '☁': { default: { name: 'default', inputSchema: schema } },
     });

@@ -1,4 +1,3 @@
-import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
 import type { ChatChannelRenderContext } from '@mastra/core/channels';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
@@ -7,10 +6,9 @@ import type { ChunkType } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { IntegrationTools } from '../base.js';
-import { SESSION_LINK_LABEL, sessionLink } from './channel-reply-processor.js';
-import { NEW_CHANNEL_SESSION_KEY } from './channel-session-link-processor.js';
+import { SESSION_LINK_LABEL } from './channel-reply-processor.js';
+import { NEW_CHANNEL_SESSION_KEY, sessionLinkFromRequest } from './channel-session-link-processor.js';
 import { postTarget, resolveRenderContext } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 
@@ -67,14 +65,7 @@ export function createReplyTool(requestContext: RequestContext, deps: ShareFileT
  */
 function firstReplyLink(requestContext: RequestContext): string | undefined {
   if (!requestContext.get(NEW_CHANNEL_SESSION_KEY) || requestContext.get(LINKED_KEY)) return undefined;
-  const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
-  if (!controller?.threadId) return undefined;
-  return sessionLink({
-    threadId: controller.threadId,
-    sessionId: controller.sessionId,
-    resourceId: controller.resourceId,
-    factoryProjectId: readFactorySessionScope(requestContext)?.factoryProjectId,
-  });
+  return sessionLinkFromRequest(requestContext);
 }
 
 /** Live posts of `reply_in_thread` calls whose text is still streaming in, by tool call id. */

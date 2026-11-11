@@ -522,7 +522,7 @@ const result = await agent.generate('message for agent')
             type: 'string[]',
             isOptional: true,
             description:
-              "Scopes the run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`). Memory reads its resource and thread from `resource:` and `thread:` scopes. Other scopes are passed to tools and processors. Combined with the agent's `scopes` and the `mastra__scopes` request context key. Throws if a `resource:` or `thread:` scope conflicts with another resource or thread value.",
+              "Scopes the run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`). Memory reads its resource and thread from `resource:` and `thread:` scopes. Other scopes are passed to tools and processors. Combined with `defaultOptions.scopes` and the `mastra__scopes` request context key, then passed through the agent's `scopes` option: a list adds to them, a function replaces them. Throws if a `resource:` or `thread:` scope conflicts with another resource or thread value.",
           },
           {
             name: 'memory',
@@ -587,55 +587,6 @@ const result = await agent.generate('message for agent')
             type: "LoopConfig['onStepFinish']",
             isOptional: true,
             description: 'Callback fired after each generation step.',
-          },
-          {
-            name: 'telemetry',
-            type: 'TelemetrySettings',
-            isOptional: true,
-            description: 'Settings for OTLP telemetry collection during generation (not Tracing).',
-            properties: [
-              {
-                type: 'TelemetrySettings',
-                parameters: [
-                  {
-                    name: 'isEnabled',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Whether telemetry collection is enabled.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordInputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Whether to record input data in telemetry.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordOutputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Whether to record output data in telemetry.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'functionId',
-                    type: 'string',
-                    isOptional: true,
-                    description: 'Identifier for the function being executed.',
-                  },
-                ],
-              },
-            ],
           },
           MODEL_SETTINGS_OBJECT,
           {
@@ -1418,6 +1369,9 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
 This example covers a tool that calls `suspend()`. The tool declares a `suspendSchema` for the data it passes to `suspend()` and a `resumeSchema` for the data it needs to continue:
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 const weatherTool = createTool({
   id: 'get-weather',
   inputSchema: z.object({ location: z.string().optional() }),

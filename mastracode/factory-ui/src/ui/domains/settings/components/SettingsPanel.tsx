@@ -11,15 +11,14 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { ConnectedAccountsSection } from './ConnectedAccountsSection';
-import { EnvironmentSection } from './EnvironmentSection';
+import { DebugSection } from './DebugSection';
+import { ConnectionsSection } from './ConnectionsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
+import { ConnectToolsSection } from './ConnectToolsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
-import { FactorySkillsSection } from './FactorySkillsSection';
+import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
-import { McpClientsSection } from './McpClientsSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
@@ -33,7 +32,7 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 export function SettingsPanel() {
   const section = useSettingsSection();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
+  const { sessionId: chatSessionId, sessionThreadId, resourceId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -60,24 +59,25 @@ export function SettingsPanel() {
       {section === 'account' && <AccountSettingsSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
-      {section === 'connections' && (
+      {section === 'connections' && <ConnectionsSection />}
+      {section === 'repositories' && <RepositoriesSection />}
+      {section === 'intake' && (
         <div className="flex flex-col gap-8">
-          <SettingsSubsection
-            scope="personal"
-            title="Connected accounts"
-            description="Connect your account to use Factory from Slack."
-          >
-            <ConnectedAccountsSection />
-          </SettingsSubsection>
-          <McpClientsSection />
+          <IntakeSection />
+          <IntakeRoutesSection factoryId={factoryId} />
         </div>
       )}
-      {section === 'repositories' && <RepositoriesSection />}
-      {section === 'environment' && <EnvironmentSection />}
-      {section === 'intake' && <IntakeSection />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
-      {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} sessionId={sessionId} />}
-      {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
+      {section === 'memory' && factoryId && (
+        <MemorySettings
+          factoryId={factoryId}
+          sessionId={sessionId}
+          threadId={sessionId ? (sessionThreadId ?? sessionId) : undefined}
+          resourceId={resourceId}
+        />
+      )}
+      {section === 'tools' && <ConnectToolsSection />}
+      {section === 'debug' && <DebugSection />}
       {section === 'behavior' && (
         <BehaviorSettings
           settings={settings}

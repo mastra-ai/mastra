@@ -1,7 +1,9 @@
 import { EntityType } from '@mastra/core/observability';
+import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
   applyDatePreset,
@@ -13,18 +15,14 @@ import {
   isSelectionEmpty,
   resolveTracesDateWindow,
   sanitizeTracesFilters,
+  selectsRunningStatus,
   selectScore,
   selectSpan,
   selectTrace,
   setSpanTab,
   setSpanView,
 } from './traces-explorer-actions';
-import type {
-  TracesExplorerState,
-  TracesFilters,
-  TracesSelection,
-  TracesSortDirection,
-} from './traces-explorer-actions';
+import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
 import { TracesColumnsProvider } from './traces-explorer-columns-provider';
 import { TracesConfigContext, TracesFiltersContext, TracesSelectionContext } from './traces-explorer-context';
 import type {
@@ -40,6 +38,7 @@ import type {
 import { TracesListProvider } from './traces-explorer-list-provider';
 import {
   useFeedbackAvailable,
+  useObservabilityCapabilities,
   useSpanQueryAvailable,
   useThreadQueryAvailable,
   useTraceQueryAvailable,
@@ -47,20 +46,26 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
+import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
 export type TracesExplorerRootProps = {
   selection: TracesSelection;
   filters: TracesFilters;
   /** Receives the full next state once per user action, so a filter edit and the selection it clears land together. */
   onChange: (next: TracesExplorerState) => void;
-  sortDirection: TracesSortDirection;
-  onSortDirectionChange: (next: TracesSortDirection) => void;
+  sort: TracesSort;
+  onSortChange: (next: TracesSort) => void;
   /** Pins the explorer to one entity: its fields stay in the filters but never surface as chips. */
   scope?: TracesExplorerScope;
   /** Resolved by the host, which may know better than the storage capabilities (e.g. hosted deployments). */
   metricsSupport: TracesMetricsSupport;
   /** Host switches combined with the server capabilities; a feature runs only when both allow it. */
   features?: TracesExplorerFeatures;
+  /** Host-selected root projection. Hosts should offer aggregated roots only when the server advertises support. */
+  rootSource?: TraceQueryArgs['rootSource'];
+  /** Write context and action support for feedback in trace, span and thread panels. */
+  feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
   children: ReactNode;
@@ -78,7 +83,7 @@ const listIdForScope = (scope?: TracesExplorerScope) =>
       ? 'workflows-traces'
       : 'all-traces';
 
-type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortDirectionChange'> & {
+type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortChange'> & {
   scopedFieldIds: ReadonlySet<string>;
 };
 
@@ -86,11 +91,13 @@ export function TracesExplorerRoot({
   selection,
   filters: rawFilters,
   onChange,
-  sortDirection,
-  onSortDirectionChange,
+  sort,
+  onSortChange: onHostSortChange,
   scope,
   metricsSupport,
   features,
+  rootSource,
+  feedbackOptions,
   initialFilters = DEFAULT_TRACES_FILTERS,
   children,
 }: TracesExplorerRootProps) {
@@ -105,9 +112,27 @@ export function TracesExplorerRoot({
   const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
   const { enabled: withDeltaPolling } = useTraceQueryDeltaPollingAvailable();
   const withDiscovery = useTraceQueryDiscoveryAvailable().enabled && withQueryTrace;
+  // `listTracesLight` rows never carry it, so it needs the trace query API as well.
+  const { data: capabilities } = useObservabilityCapabilities();
+  const withTimeToFirstChunk = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
+  const withTimeToFirstChunkSort =
+    withTimeToFirstChunk && (capabilities?.capabilities.traceQueryTimeToFirstChunkSort ?? false);
+  const withTimeToFirstToken = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstToken ?? false);
+  const withTimeToFirstTokenSort =
+    withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
+  const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(() => sanitizeTracesFilters(rawFilters, withRootDuration), [rawFilters, withRootDuration]);
+  const filters = useMemo(
+    () =>
+      sanitizeTracesFilters(rawFilters, {
+        withRootDuration,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+        withOutcomeFields,
+      }),
+    [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields],
+  );
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -129,9 +154,11 @@ export function TracesExplorerRoot({
   // Actions read the latest props when they run, so the host doesn't need stable callbacks.
   // `latest` is written as soon as a change is emitted, so a second action in the same tick
   // (the date picker fires a preset then its dates) builds on the first instead of the stale props.
-  const current: Latest = { selection, filters: rawFilters, onChange, onSortDirectionChange, scopedFieldIds };
+  const current: Latest = { selection, filters: rawFilters, onChange, onSortChange: onHostSortChange, scopedFieldIds };
   const latest = useRef(current);
   latest.current = current;
+  // Not part of the host's filters: a shared or reloaded link has no zoom to undo.
+  const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
 
   const actions = useMemo(() => {
     const emit = (next: TracesExplorerState) => {
@@ -162,6 +189,11 @@ export function TracesExplorerRoot({
       selectScore: scoreId => updateSelection(selectScore(latest.current.selection, scoreId)),
       highlightSpans: spanIds => updateSelection(highlightSpans(latest.current.selection, spanIds)),
     };
+    // A range picked by hand drops the zoom memory, even one that matches the zoomed bounds.
+    const pickRange = (next: TracesFilters) => {
+      zoomMemory.current = undefined;
+      updateFilters(next);
+    };
     const filtersActions: TracesFiltersActions = {
       // Re-inject the scope tokens so "Clear filters" (which drops every removable item) and any
       // other edit can never drop the scope.
@@ -170,11 +202,22 @@ export function TracesExplorerRoot({
         const scopeTokens = base.tokens.filter(token => scoped.has(token.fieldId));
         updateFilters(applyFilterTokens(base, [...scopeTokens, ...tokens], groups));
       },
-      setDatePreset: preset => updateFilters(applyDatePreset(latest.current.filters, preset)),
-      setDate: (value, end) => updateFilters(applyDate(latest.current.filters, value, end)),
-      setDateRange: (from, to) => updateFilters(applyDateRange(latest.current.filters, from, to)),
+      setDatePreset: preset => pickRange(applyDatePreset(latest.current.filters, preset)),
+      setDate: (value, end) => pickRange(applyDate(latest.current.filters, value, end)),
+      setDateRange: (from, to) => pickRange(applyDateRange(latest.current.filters, from, to)),
+      zoomDateRange: (from, to) => {
+        const base = latest.current.filters;
+        zoomMemory.current = rememberZoom(zoomMemory.current, base, from, to);
+        updateFilters({ ...base, datePreset: 'custom', dateFrom: from, dateTo: to });
+      },
+      resetDateRange: defaultPreset => {
+        const base = latest.current.filters;
+        const before = rangeBeforeZoom(zoomMemory.current, base);
+        zoomMemory.current = undefined;
+        updateFilters({ tokens: base.tokens, groups: base.groups, ...(before ?? { datePreset: defaultPreset }) });
+      },
     };
-    const onSortChange = (direction: TracesSortDirection) => latest.current.onSortDirectionChange(direction);
+    const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
     return { selectionActions, filtersActions, onSortChange };
   }, []);
   const { selectionActions, filtersActions, onSortChange } = actions;
@@ -188,16 +231,25 @@ export function TracesExplorerRoot({
   );
 
   const listId = listIdForScope(scope);
+  const hasFeedbackOptions = feedbackOptions !== undefined;
+  const { contextMode, feedbackUserId, allowDelete, allowReview } = feedbackOptions ?? {};
   const configValue = useMemo<TracesConfigContextValue>(
     () => ({
       listId,
+      rootSource,
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
+      withTimeToFirstChunk,
+      withTimeToFirstChunkSort,
+      withTimeToFirstToken,
+      withTimeToFirstTokenSort,
       withDeltaPolling,
       withDiscovery,
       isCapabilitiesLoading: traceQuery.isLoading,
@@ -206,13 +258,24 @@ export function TracesExplorerRoot({
     }),
     [
       listId,
+      rootSource,
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      hasFeedbackOptions,
+      contextMode,
+      feedbackUserId,
+      allowDelete,
+      allowReview,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
+      withTimeToFirstChunk,
+      withTimeToFirstChunkSort,
+      withTimeToFirstToken,
+      withTimeToFirstTokenSort,
       withDeltaPolling,
       withDiscovery,
       traceQuery.isLoading,
@@ -223,6 +286,7 @@ export function TracesExplorerRoot({
 
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
+  const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
     () => ({
       ...filtersActions,
@@ -231,8 +295,9 @@ export function TracesExplorerRoot({
       dateTo,
       filtersApplied,
       contentFiltersApplied,
+      runningSelected,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
+    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list
@@ -247,9 +312,11 @@ export function TracesExplorerRoot({
     <TracesConfigContext.Provider value={configValue}>
       <TracesFiltersContext.Provider value={filtersValue}>
         <TracesSelectionContext.Provider value={selectionValue}>
-          <TracesListProvider sortDirection={sortDirection} onSortChange={onSortChange}>
-            <TracesColumnsProvider>{children}</TracesColumnsProvider>
-          </TracesListProvider>
+          <TracesColumnsProvider>
+            <TracesListProvider key={rootSource ?? 'legacy'} sort={sort} onSortChange={onSortChange}>
+              {children}
+            </TracesListProvider>
+          </TracesColumnsProvider>
         </TracesSelectionContext.Provider>
       </TracesFiltersContext.Provider>
     </TracesConfigContext.Provider>

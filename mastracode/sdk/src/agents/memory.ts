@@ -1,22 +1,22 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { Knowledge } from '@mastra/core/knowledge';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { fastembed } from '@mastra/fastembed';
-import { Memory, Subconscious } from '@mastra/memory';
-import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
-import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import { Memory } from '@mastra/memory';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MIN_OBSERVATION_THRESHOLD } from '../constants.js';
+import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
 import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
+import { embedInSubprocess } from './fastembed-subprocess.js';
 import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /**
- * `fastembed.small`, loaded on the first embedding. Importing `@mastra/fastembed` up front loads ONNX
- * Runtime and a native tokenizer (~11 MB) into every session, including ones that never embed.
+ * `fastembed.small`, run in a reusable child process (see `FastembedWorker`) so ONNX Runtime and the model
+ * never load into the agent process.
  */
 const lazyFastembedSmall: typeof fastembed.small = {
   specificationVersion: 'v3',
@@ -24,10 +24,7 @@ const lazyFastembedSmall: typeof fastembed.small = {
   modelId: 'bge-small-en-v1.5',
   maxEmbeddingsPerCall: 256,
   supportsParallelCalls: true,
-  async doEmbed(options) {
-    const { fastembed } = await import('@mastra/fastembed');
-    return fastembed.small.doEmbed(options);
-  },
+  doEmbed: options => embedInSubprocess(options),
 };
 
 /** Route-backed OM fallback entry. */
@@ -215,54 +212,6 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
 
 export { LOCAL_KNOWLEDGE_ORG_ID };
 
-// One error per session, not per memory resolution. Keyed on the session id
-// rather than the controller object: the controller is read off the request
-// context on every resolution, so it is a fresh object per request and would
-// dedupe nothing. Bounded so a long-running Factory process cannot grow this
-// without limit — refusing sessions are rare, and losing the oldest ids only
-// costs one extra log line.
-const REPORTED_ORG_UNRESOLVED_LIMIT = 500;
-const reportedOrgUnresolved = new Set<string>();
-
-function reportOrgUnresolved(
-  controller: AgentControllerRequestContext<MastraCodeState> | undefined,
-  factoryProjectId: string | undefined,
-  reason?: string,
-) {
-  const sessionId = controller?.session?.id;
-  if (sessionId) {
-    if (reportedOrgUnresolved.has(sessionId)) return;
-    if (reportedOrgUnresolved.size >= REPORTED_ORG_UNRESOLVED_LIMIT) {
-      reportedOrgUnresolved.delete(reportedOrgUnresolved.values().next().value as string);
-    }
-    reportedOrgUnresolved.add(sessionId);
-  }
-  const session = controller?.session;
-  console.error(
-    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'})${reason ? `: ${reason}` : ''}. Knowledge is not written rather than written where it cannot be read.`,
-  );
-}
-
-/**
- * Whether the experimental subconscious (knowledge graph + reminder sidekick)
- * is switched on for this process: it needs a vector store and the opt-in flag.
- */
-export function isSubconsciousEnabled(vector: MastraVector | undefined): boolean {
-  return Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
-}
-
-/**
- * Whether the subconscious tools (`knowledge_*`, `ask_memory`) are registered
- * for a given session. Beyond the process-level switch, a Factory-owned
- * session that cannot resolve its org refuses the subconscious entirely (see
- * `getDynamicMemory`, which applies the same two checks inline because it also
- * needs the resolved identity). The system prompt's tool guidance calls here so
- * it never advertises tools that `getDynamicMemory` did not register.
- */
-export function hasSubconsciousTools(vector: MastraVector | undefined, state: MastraCodeState | undefined): boolean {
-  return isSubconsciousEnabled(vector) && resolveKnowledgeScopeIdentity(state).resolved;
-}
-
 /**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
@@ -273,7 +222,6 @@ export function getDynamicMemory(
   vector?: MastraVector,
   settingsPath?: string,
   options?: { disableSettingsOmSeed?: boolean },
-  knowledge?: Knowledge,
 ) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
@@ -298,29 +246,8 @@ export function getDynamicMemory(
   const resolveMemory = ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
-    const subconsciousEnabled = isSubconsciousEnabled(vector);
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
-
-    // A Factory-owned session that could not resolve its org refuses to curate:
-    // writing under a substituted identity produces knowledge the fail-closed
-    // read path can never see.
-    let orgUnresolvedRefusal = false;
-
-    if (subconsciousEnabled) {
-      const identity = resolveKnowledgeScopeIdentity(state);
-      if (identity.resolved) {
-        requestContext.set('organizationId', identity.organizationId);
-      } else {
-        orgUnresolvedRefusal = true;
-        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
-      }
-      if (identity.knowledgeResourceId) {
-        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
-      }
-    }
-
-    const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
     // Factory sessions share a memory resource across a Factory's runs and a
     // user's sessions, so their scope is fixed to thread: one shared record would
@@ -328,6 +255,7 @@ export function getDynamicMemory(
     // search still reaches the whole resource. Neither session state, the env
     // var, nor a repository's database.json can switch it.
     const omScope = isFactory ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
+    const isResourceScope = omScope === 'resource';
 
     // The Factory row is authoritative and read per invocation, so a stored
     // threshold/attachment change reaches the running Memory without a session.
@@ -335,10 +263,14 @@ export function getDynamicMemory(
     const factorySettingsUnavailable =
       isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory);
     const factorySettings = factorySettingsUnavailable ? null : factorySettingsContext;
-    const obsThreshold =
+    // Rows saved before validation can still hold a thread-scope threshold that
+    // @mastra/memory refuses because it does not exceed the activation buffer.
+    // Resource scope has no activation buffer and keeps its saved value.
+    const storedObsThreshold =
       factorySettings !== undefined
         ? (factorySettings?.observationThreshold ?? DEFAULT_OBS_THRESHOLD)
         : (state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD);
+    const obsThreshold = isResourceScope ? storedObsThreshold : Math.max(storedObsThreshold, MIN_OBSERVATION_THRESHOLD);
     const refThreshold =
       factorySettings !== undefined
         ? (factorySettings?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD)
@@ -351,16 +283,12 @@ export function getDynamicMemory(
     // capability.
     const observeAttachments =
       factorySettings !== undefined ? (factorySettings?.observeAttachments ?? 'auto') : state?.observeAttachments;
-    // Factory sessions get a factory-only Subconscious config, so the cache key
-    // carries Factory presence and settings availability to keep those configs
-    // from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
+    // Factory sessions get a factory-only config, so the cache key carries
+    // Factory presence to keep those configs from cross-serving.
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
-
-    // Async buffering is not supported with resource scope — disable it
-    const isResourceScope = omScope === 'resource';
 
     const observerInstruction = caveman
       ? `${DYNAMIC_AGENTS_MD_INSTRUCTION}\n\n${CAVEMAN_OM_INSTRUCTION}`
@@ -380,7 +308,6 @@ export function getDynamicMemory(
 
     cachedMemory = new Memory({
       storage,
-      ...(knowledge ? { knowledge } : {}),
       vector: vector || false,
       embedder: vector ? lazyFastembedSmall : undefined,
       options: {
@@ -415,13 +342,6 @@ export function getDynamicMemory(
                 resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
                 retrieval: vector ? { vector: true } : true,
-                experimental_subconscious: subconsciousAvailable
-                  ? new Subconscious({
-                      defaultScope: 'resource',
-                      pins: true,
-                      ...(isFactory ? { maxSteps: 25 } : {}),
-                    })
-                  : undefined,
                 scope: omScope,
                 // The main agent writes Anthropic cache entries with this TTL; 'auto' can't see it.
                 activateAfterIdle: { default: 'auto', anthropic: ANTHROPIC_PROMPT_CACHE_TTL },

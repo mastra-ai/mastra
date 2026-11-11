@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
+import { FACTORY_INCIDENTIO_EVENTS } from '../../rules/types.js';
+import type { FactoryIncidentioEventName, FactoryIncidentioRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { incidentioClaimKey } from './claim.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioRuleOverrides } from './default-rules.js';
 import { IncidentioRules } from './rules.js';
@@ -41,16 +42,7 @@ async function setup(overrides?: IncidentioRuleOverrides, boards = createBoardRe
 }
 
 describe('IncidentioRules', () => {
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: 'src-1', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: 'src-2', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: 'src-3',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed follow-up to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed follow-up on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -59,11 +51,10 @@ describe('IncidentioRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { 'src-1': 'release', 'src-3': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 
@@ -76,7 +67,6 @@ describe('IncidentioRules', () => {
           type: 'upsertLinkedWorkItem',
           source: 'incidentio-follow-up',
           sourceKey: issue.id,
-          claimKey: incidentioClaimKey(issue.id),
           title: issue.title,
           url: issue.url,
           metadata: {
@@ -97,7 +87,7 @@ describe('IncidentioRules', () => {
     ]);
   });
 
-  it('does not mint a second card while another Factory holds a live card for the follow-up', async () => {
+  it('files the same follow-up in a second project while the first still holds a live card', async () => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
@@ -119,10 +109,11 @@ describe('IncidentioRules', () => {
 
     await expect(
       service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
 
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
-    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { type: 'upsertLinkedWorkItem', sourceKey: issue.id } },
+    ]);
   });
 
   it('ingests a follow-up again once the other Factory finished its card', async () => {
@@ -154,37 +145,11 @@ describe('IncidentioRules', () => {
         decision: {
           type: 'upsertLinkedWorkItem',
           sourceKey: issue.id,
-          claimKey: incidentioClaimKey(issue.id),
         },
       },
     ]);
-  });
-
-  it('finds the held card by claim key when the stored source key drifted', async () => {
-    const { project, service, workItems } = await setup();
-    await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: 'other-factory',
-      input: {
-        externalSource: {
-          integrationId: 'incidentio',
-          type: 'issue',
-          externalId: 'incidentio:follow-up:old-ref',
-          url: issue.url,
-        },
-        claimKey: incidentioClaimKey(issue.id),
-        title: 'Old title',
-        stages: ['intake'],
-        sessions: {},
-        metadata: {},
-      },
-    });
-
-    await expect(
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    const [entry] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(entry?.decision).not.toHaveProperty('claimKey');
   });
 
   it.each(['completed', 'canceled'])(
@@ -256,7 +221,12 @@ describe('IncidentioRules', () => {
   it('reports missing when the Factory project does not exist', async () => {
     const { service } = await setup();
     await expect(
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: 'nope', issues: [issue] }),
+      service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: '00000000-0000-4000-8000-000000000000',
+        issues: [issue],
+      }),
     ).resolves.toEqual({ status: 'missing', ingested: 0 });
   });
 
@@ -286,5 +256,93 @@ describe('IncidentioRules', () => {
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+});
+
+describe('IncidentioRules and the shared board list', () => {
+  // The rules find a follow-up's card in the board list the storage caches for every reader in the
+  // process. A rule may write to the card it is handed, so a card leaked from that cache would
+  // corrupt every later read of the board.
+  it('hands every event kind its own copy of the card, leaving the cached board list untouched', async () => {
+    const seen = new Map<FactoryIncidentioEventName, FactoryRuleItemContext[]>();
+    const mutateItem = (event: FactoryIncidentioEventName) => (context: Readonly<FactoryIncidentioRuleContext>) => {
+      if (!context.item) return;
+      seen.set(event, [...(seen.get(event) ?? []), context.item]);
+      context.item.workItem.title = `mutated by ${event}`;
+      context.item.workItem.metadata = { ...context.item.workItem.metadata, mutatedBy: event };
+      if (context.item.metadata) context.item.metadata.mutatedBy = event;
+    };
+    const { project, service, workItems } = await setup(
+      Object.fromEntries(FACTORY_INCIDENTIO_EVENTS.map(event => [event, mutateItem(event)])),
+    );
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'incidentio', type: 'issue', externalId: issue.id, url: issue.url },
+        title: 'INC-42: Add database failover alert',
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const deliveries: Array<[FactoryIncidentioEventName, typeof issue]> = [
+      ['followUpObserved', issue],
+      ['followUpClosed', { ...issue, stateType: 'completed', updatedAt: '2026-12-01T00:00:00Z' }],
+    ];
+
+    for (const [event, delivery] of deliveries) {
+      const before = structuredClone(await workItems.listShared(scope));
+      await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [delivery] });
+      const after = await workItems.listShared(scope);
+      expect(after, `${event} wrote to the cached board list`).toEqual(before);
+      const cached = new Set<unknown>(after);
+      expect((seen.get(event) ?? []).some(item => cached.has(item.workItem))).toBe(false);
+    }
+    expect(seen.get('followUpObserved')).toHaveLength(1);
+    expect(seen.get('followUpClosed')).toHaveLength(1);
+  });
+});
+
+describe('incident.io board events', () => {
+  it('reports a first sighting as created and a completed or canceled incident.io follow-up as closed for that reason', async () => {
+    const seen: Array<{ event: string; boardEvent: unknown }> = [];
+    const record = (context: FactoryIncidentioRuleContext) => {
+      seen.push({ event: context.event, boardEvent: context.boardEvent });
+    };
+    const { project, service, workItems } = await setup({ followUpObserved: record, followUpClosed: record });
+    const ingest = (stateType: string, updatedAt: string) =>
+      service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType, updatedAt }],
+      });
+    await ingest('unstarted', '2026-07-02T00:00:00Z');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'incidentio', type: 'issue', externalId: issue.id, url: issue.url },
+        title: issue.title,
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await ingest('started', '2026-07-03T00:00:00Z');
+    await ingest('completed', '2026-07-04T00:00:00Z');
+    await ingest('canceled', '2026-07-05T00:00:00Z');
+
+    expect(seen).toEqual([
+      { event: 'followUpObserved', boardEvent: { type: 'work_item.created' } },
+      // A later sighting of an open incident.io follow-up is not a status change.
+      { event: 'followUpObserved', boardEvent: undefined },
+      { event: 'followUpClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'followUpClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
+    ]);
   });
 });

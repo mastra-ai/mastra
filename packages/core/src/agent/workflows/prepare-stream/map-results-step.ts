@@ -4,13 +4,17 @@ import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../../loop/run-scope-keys';
+import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
 import type { MastraMemory } from '../../../memory/memory';
+import { isObservationalMemoryEnabled, parseMemoryRequestContext } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
+import { compactStopReasonContext } from '../../../observability/outcome-schema';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { MastraOnFinishCallbackContext } from '../../../stream/types';
+import type { StepTripwireData, MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MastraDBMessage, MessageList } from '../../message-list';
@@ -89,6 +93,20 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // snapshotted for undoSavedResponseMessages, after client tool output mapping has enriched it.
     let earlierTurnSnapshot: MastraDBMessage | undefined;
 
+    const ensureThreadExists = async () => {
+      if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
+        await memory.createThread({
+          threadId: memoryData.thread?.id,
+          title: memoryData.thread?.title,
+          metadata: memoryData.thread?.metadata,
+          resourceId: memoryData.thread?.resourceId,
+          memoryConfig,
+        });
+
+        threadCreatedByStep = true;
+      }
+    };
+
     const result = {
       ...options,
       agentId,
@@ -105,22 +123,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
       messageList,
       onStepFinish: async (props: any) => {
         // When OM is enabled saving per step corrupts things because OM handles its own saving
-        const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
+        const shouldSavePerStep =
+          options.savePerStep && !isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
           if (memoryData.thread?.id) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
           }
-          if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
-            await memory.createThread({
-              threadId: memoryData.thread?.id,
-              title: memoryData.thread?.title,
-              metadata: memoryData.thread?.metadata,
-              resourceId: memoryData.thread?.resourceId,
-              memoryConfig,
-            });
-
-            threadCreatedByStep = true;
-          }
+          await ensureThreadExists();
 
           if (saveQueueManager && memoryData.thread?.id) {
             await saveQueueManager.flushMessages(messageList, memoryData.thread.id, memoryConfig);
@@ -160,6 +169,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         // End the whole tree with tripwire information; descendants close
         // without inheriting the terminal output
         agentSpan?.end({
+          ...agentLoopTermination({ tripwire: memoryData.tripwire }),
           endTree: true,
           output: { tripwire: memoryData.tripwire },
           attributes: {
@@ -191,6 +201,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 error,
               );
         agentSpan?.error({
+          ...executionFailureTermination(spanError),
           error: spanError,
           endTree: true,
           attributes: {
@@ -303,6 +314,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
     const loopOptions = {
+      tracingScope: runScope,
       methodType: modelMethodType,
       agentId,
       agentVersionId,
@@ -312,6 +324,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       agentRunSpan: agentSpan,
+      onTracingTerminalError: (error: Error) => {
+        agentSpan?.error({ error, ...executionFailureTermination(error), endTree: true });
+      },
+      onTracingTripwire: (tripwire: StepTripwireData, text: string) => {
+        agentSpan?.end({ ...agentLoopTermination({ tripwire }), output: { text }, endTree: true });
+      },
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
@@ -325,6 +343,37 @@ export function createMapResultsStep<OUTPUT = undefined>({
       hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
+        // The deadline pass saves the turn through MessageHistory, so it needs write access. Check the
+        // thread MessageHistory will write to: it reads the request context first, and can save
+        // without a Memory instance or a thread option.
+        beforeDeadlineSave: async () => {
+          const memoryContext = parseMemoryRequestContext(requestContext);
+          // A read-only run saves nothing at the deadline. MessageHistory only reads the request
+          // context's config, so a per-run readOnly has to stop the pass here.
+          if (memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly) return false;
+          // MessageHistory creates the request context's thread, but the saved rows keep the thread
+          // they were added under, so check every thread the pass can write. This is strict on purpose:
+          // a denial on any of them skips the whole save, even if another thread would have been allowed.
+          const threadIds = new Set(
+            [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter((id): id is string => !!id),
+          );
+          for (const threadId of threadIds) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
+          }
+        },
+        // Like the finish path, a tripwire at the deadline removes what was already saved. Undo from the
+        // deadline turn: it holds the streamed text a processor before the tripwire may have saved.
+        onDeadlineTripwire: (turn: MessageList) =>
+          undoSavedResponseMessages({
+            memory,
+            threadId: memoryData.thread?.id ?? threadIdFromArgs,
+            memoryConfig,
+            messageList: turn,
+            saveQueueManager,
+            earlierTurnSnapshot,
+            logger: capabilities.logger,
+            runId,
+          }),
         onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
@@ -370,13 +419,24 @@ export function createMapResultsStep<OUTPUT = undefined>({
             // Record the error, then end the whole span tree. Ending only the
             // root would orphan still-open descendants, and exporters that wait
             // for every span to finish (e.g. Datadog) retain the trace forever.
-            agentSpan?.error({ error, endTree: true });
+            agentSpan?.error({ error, ...executionFailureTermination(error), endTree: true });
             return;
           }
 
           if (payload.finishReason === 'suspended') {
+            capabilities.onRunSuspended?.();
             agentSpan?.end({
-              endTree: true,
+              outcome: 'suspend',
+              stopReason: payload.suspendReason === 'tool-call-approval' ? 'approval_required' : null,
+              stopReasonContext:
+                payload.suspendReason === 'tool-call-approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolName: payload.toolName,
+                      toolCallId: payload.toolCallId,
+                    })
+                  : null,
+              // The tool that requested suspension can still be executing. Its owner
+              // must record completion or a later error instead of generic tree cleanup.
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -391,12 +451,17 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (aborted) {
             if (payload.finishReason === 'aborted') {
-              agentSpan?.end({ endTree: true, output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.end({
+                outcome: 'abort',
+                stopReason: 'caller_cancelled',
+                endTree: true,
+                output: { status: 'aborted', reason: 'abort' },
+              });
               // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
 
-            agentSpan?.end({ endTree: true });
+            agentSpan?.end({ outcome: 'abort', stopReason: 'caller_cancelled', endTree: true });
           } else {
             if (context?.outputResultTripwire) {
               await undoSavedResponseMessages({
@@ -421,6 +486,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
               }
               await capabilities.executeOnFinish({
+                termination: agentLoopTermination({
+                  stopCause: runScope.get(CONTINUATION_STOP_CAUSE_KEY),
+                  delegationFailure: runScope.get(DELEGATION_FAILURE_KEY),
+                  finishReason: payload.finishReason,
+                  tripwire: context?.outputResultTripwire ?? payload.tripwire,
+                  maxSteps: options.maxSteps,
+                }),
                 result: payload,
                 outputText,
                 thread: result.thread,
@@ -460,7 +532,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                       e,
                     );
 
-              agentSpan?.error({ error: spanError, endTree: true });
+              agentSpan?.error({ error: spanError, ...executionFailureTermination(spanError), endTree: true });
             }
           }
 
@@ -474,9 +546,20 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: options.onError,
+        onError: async ({ error }: { error: Error | string }) => {
+          const spanError = error instanceof Error ? error : new Error(String(error));
+          // Record the failure without preempting model usage/output finalization.
+          // The stream owner notifies tracing separately if no finish will follow.
+          agentSpan?.error({
+            error: spanError,
+            ...executionFailureTermination(error),
+            endSpan: false,
+          });
+          await options.onError?.({ error });
+        },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
+        stepOwner: options.stepOwner,
       },
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
@@ -499,6 +582,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
       processorStates: runScope.get(PROCESSOR_STATES_KEY),
+      agent: capabilities.agent,
     };
 
     // Park the assembled (class-instance- and closure-laden) options on the

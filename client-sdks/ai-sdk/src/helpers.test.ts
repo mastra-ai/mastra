@@ -479,6 +479,37 @@ describe('tool-result provider metadata forwarding (issue #22012)', () => {
   });
 });
 
+// Issue #28817: partial provider results (e.g. OpenAI image_generation partial images)
+// must reach the UI stream as preliminary so the client doesn't treat them as final.
+describe('tool-result preliminary forwarding (issue #28817)', () => {
+  const toUIChunk = (preliminary?: boolean) => {
+    const chunk = {
+      type: 'tool-result',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: {
+        toolCallId: 'ig-1',
+        toolName: 'image_generation',
+        result: { result: 'partial' },
+        providerExecuted: true,
+        ...(preliminary ? { preliminary } : {}),
+      },
+    } as any;
+    return convertFullStreamChunkToUIMessageStream({
+      part: convertMastraChunkToAISDKv6({ chunk }) as any,
+      onError: String,
+    }) as any;
+  };
+
+  it('keeps preliminary on the tool-output-available ui chunk', () => {
+    expect(toUIChunk(true)).toMatchObject({ type: 'tool-output-available', toolCallId: 'ig-1', preliminary: true });
+  });
+
+  it('omits preliminary for final results', () => {
+    expect(toUIChunk()).not.toHaveProperty('preliminary');
+  });
+});
+
 describe('transient data chunks', () => {
   const convert = (part: unknown) => convertFullStreamChunkToUIMessageStream({ part: part as any, onError: String });
 

@@ -85,17 +85,15 @@ function parseObject(objectSchema: JsonSchemaObject & { type: 'object' }, refs: 
       } else {
         patternProperties += `.catchall(${Object.values(parsedPatternProperties)})`;
       }
+    } else if (additionalProperties) {
+      patternProperties += `z.record(z.string(), z.union([${[
+        ...Object.values(parsedPatternProperties),
+        additionalProperties,
+      ].join(', ')}]))`;
+    } else if (Object.keys(parsedPatternProperties).length > 1) {
+      patternProperties += `z.record(z.string(), z.union([${Object.values(parsedPatternProperties).join(', ')}]))`;
     } else {
-      if (additionalProperties) {
-        patternProperties += `z.record(z.string(), z.union([${[
-          ...Object.values(parsedPatternProperties),
-          additionalProperties,
-        ].join(', ')}]))`;
-      } else if (Object.keys(parsedPatternProperties).length > 1) {
-        patternProperties += `z.record(z.string(), z.union([${Object.values(parsedPatternProperties).join(', ')}]))`;
-      } else {
-        patternProperties += `z.record(z.string(), ${Object.values(parsedPatternProperties)})`;
-      }
+      patternProperties += `z.record(z.string(), ${Object.values(parsedPatternProperties)})`;
     }
 
     patternProperties += '.superRefine((value, ctx) => {\n';

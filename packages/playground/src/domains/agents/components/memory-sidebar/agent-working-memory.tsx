@@ -152,7 +152,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               language={editState.value.trim().startsWith('{') ? 'json' : 'markdown'}
               lineNumbers={false}
               showCopyButton={false}
-              placeholder="Enter working memory content..."
+              placeholder="Enter working memory content"
               value={editState.value}
               onChange={value => setEditState(state => ({ ...state, value }))}
               editable={!isUpdating}

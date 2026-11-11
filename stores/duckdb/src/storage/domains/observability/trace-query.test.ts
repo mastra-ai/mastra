@@ -46,23 +46,26 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain(5000);
   });
 
-  it('compiles time to first chunk predicates against the stored root and span columns', () => {
-    const compiled = compileDuckDBTraceQuery(
-      plan({
-        where: {
-          op: 'and',
-          args: [
-            { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
-            { spans: { some: { op: 'notExists', path: 'timeToFirstChunkMs' } } },
-          ],
-        },
-      }),
-    );
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'compiles %s predicates against the stored root and span columns',
+    field => {
+      const compiled = compileDuckDBTraceQuery(
+        plan({
+          where: {
+            op: 'and',
+            args: [
+              { op: 'gt', left: { path: field }, right: { literal: 500 } },
+              { spans: { some: { op: 'notExists', path: field } } },
+            ],
+          },
+        }),
+      );
 
-    expect(compiled.sql).toContain('r.timeToFirstChunkMs IS NOT NULL AND r.timeToFirstChunkMs > ?');
-    expect(compiled.sql).toContain('(s.timeToFirstChunkMs IS NULL)');
-    expect(compiled.values).toContain(500);
-  });
+      expect(compiled.sql).toContain(`r.${field} IS NOT NULL AND r.${field} > ?`);
+      expect(compiled.sql).toContain(`(s.${field} IS NULL)`);
+      expect(compiled.values).toContain(500);
+    },
+  );
 
   it('normalizes discovery resource exhaustion without exposing driver details', async () => {
     const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
@@ -121,7 +124,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
-  it('projects canonical span values with guarded JSON strings and typed timestamps', () => {
+  it('projects canonical span values from columns or guarded JSON strings with typed timestamps', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({
         where: {
@@ -147,9 +150,12 @@ describe('DuckDB advanced trace query', () => {
     );
 
     expect(compiled.sql.match(/FROM current_spans s/g)).toHaveLength(1);
+    // Model and provider read the column, falling back to string attributes for older spans.
     expect(compiled.sql).toContain(`json_type(attributes, '$.model') = 'VARCHAR'`);
-    expect(compiled.sql).toContain(`json_extract_string(attributes, '$.model')`);
     expect(compiled.sql).toContain(`json_type(attributes, '$.provider') = 'VARCHAR'`);
+    expect(compiled.sql).toMatch(/COALESCE\(\s*model,/);
+    expect(compiled.sql).toContain('s.model IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.provider IS NOT DISTINCT FROM ?');
     expect(compiled.sql).toContain(`date_diff('millisecond', startedAt, endedAt) AS durationMs`);
     expect(compiled.sql).toContain('s.startedAt IS NOT NULL AND s.startedAt >= CAST(? AS TIMESTAMP)');
     expect(compiled.sql).toContain('s.durationMs IS NOT NULL AND s.durationMs > ?');
@@ -577,9 +583,12 @@ describe('DuckDB advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(23);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
+      outcome: null,
+      stopReason: null,
+      stopReasonContext: null,
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',
@@ -608,6 +617,7 @@ describe('DuckDB advanced trace query', () => {
       metadata: null,
       inputPreview: null,
       timeToFirstChunkMs: null,
+      timeToFirstTokenMs: null,
     });
     expect(response.page.next).toBeNull();
   });
@@ -615,7 +625,9 @@ describe('DuckDB advanced trace query', () => {
   it('returns exact list-compatible pagination metadata from one statement', async () => {
     const query = vi
       .fn()
-      .mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), timeToFirstChunkMs: 0, total: 3n }]);
+      .mockResolvedValue([
+        { ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), timeToFirstChunkMs: 0, timeToFirstTokenMs: 0, total: 3n },
+      ]);
     const response = await queryTraces(
       { query } as unknown as DuckDBConnection,
       plan({ pagination: { page: 1, perPage: 2 } }),
@@ -623,7 +635,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(query).toHaveBeenCalledTimes(1);
     expect(response).toMatchObject({
-      traces: [{ traceId: 'trace-c', timeToFirstChunkMs: 0 }],
+      traces: [{ traceId: 'trace-c', timeToFirstChunkMs: 0, timeToFirstTokenMs: 0 }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
     expect(response).not.toHaveProperty('page');

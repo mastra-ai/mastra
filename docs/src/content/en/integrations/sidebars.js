@@ -40,6 +40,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'channels/ring',
+          label: 'Ring',
+          customProps: { icon: 'https://cdn.simpleicons.org/ring?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'channels/slack',
           label: 'Slack',
           customProps: { icon: 'https://svgl.app/library/slack.svg' },
@@ -60,9 +66,121 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Email / Calendar',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'email-calendar/google-mail',
+          label: 'Gmail',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/gmail?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'email-calendar/google-calendar',
+          label: 'Google Calendar',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googlecalendar?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'email-calendar/outlook',
+          label: 'Microsoft Outlook',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/outlook.svg',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Documents',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'documents/google-docs',
+          label: 'Google Docs',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googledocs?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/google-sheet',
+          label: 'Google Sheets',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googlesheets?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/microsoft-excel',
+          label: 'Microsoft Excel',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/microsoft-excel.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/microsoft-powerpoint',
+          label: 'Microsoft PowerPoint',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/microsoft-word',
+          label: 'Microsoft Word',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/microsoft-word.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/notion',
+          label: 'Notion',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/notion/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/notion/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/one-drive',
+          label: 'OneDrive',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/one-drive.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/sharepoint-online',
+          label: 'SharePoint Online',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/sharepoint-online.svg',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Frameworks',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'frameworks/angular',
+          label: 'Angular',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/angular/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/angular/white?viewbox=auto&size=28',
+          },
+        },
         {
           type: 'doc',
           id: 'frameworks/astro',
@@ -797,6 +915,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'auth/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'auth/okta',
           label: 'Okta',
           customProps: { icon: 'https://cdn.simpleicons.org/okta?viewbox=auto&size=28' },
@@ -912,6 +1036,295 @@ const sidebars = {
           customProps: {
             icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
             iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Vector stores',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'vectors/s3vectors',
+          label: 'Amazon S3 Vectors',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/astra',
+          label: 'Astra',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/datastax?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/azure-ai-search',
+          label: 'Azure AI Search',
+          customProps: {
+            icon: 'https://svgl.app/library/azure.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/chroma',
+          label: 'Chroma',
+          customProps: {
+            icon: 'https://api.iconify.design/logos/chroma.svg?height=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/vectorize',
+          label: 'Cloudflare Vectorize',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/convex',
+          label: 'Convex',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/convex?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/couchbase',
+          label: 'Couchbase',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/couchbase?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/duckdb',
+          label: 'DuckDB',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/duckdb?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/elasticsearch',
+          label: 'Elasticsearch',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/elasticsearch?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/lance',
+          label: 'LanceDB',
+          customProps: {
+            icon: '/img/integrations/lancedb.svg',
+            customCSS: 'dark:invert',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/libsql',
+          label: 'libSQL',
+          customProps: {
+            icon: '/img/integrations/libsql.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/mongodb',
+          label: 'MongoDB',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/mongodb?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/opensearch',
+          label: 'OpenSearch',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/opensearch?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/oracledb',
+          label: 'OracleDB',
+          customProps: {
+            icon: '/img/integrations/oracle.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/pg',
+          label: 'PG',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/postgresql?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/pinecone',
+          label: 'Pinecone',
+          customProps: {
+            icon: 'https://api.iconify.design/thesvg/pinecone.svg?height=28&color=%23201d1e',
+            iconDark: 'https://api.iconify.design/thesvg/pinecone.svg?height=28&color=%23ffffff',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/qdrant',
+          label: 'Qdrant',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/qdrant?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/turbopuffer',
+          label: 'Turbopuffer',
+          customProps: {
+            icon: 'https://turbopuffer.com/logo/logo_square_transparent@2x.png',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/upstash',
+          label: 'Upstash',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/upstash?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'vectors/weaviate',
+          label: 'Weaviate',
+          customProps: {
+            icon: 'https://api.iconify.design/logos/weaviate-icon.svg?height=28',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Project management',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'project-management/jira',
+          label: 'Jira',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/jira?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'project-management/linear',
+          label: 'Linear',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/linear?viewbox=auto&size=28',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'CRM',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'crm/attio',
+          label: 'Attio',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/attio.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'crm/clay',
+          label: 'Clay',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/clay-mcp.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'crm/hubspot',
+          label: 'HubSpot',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/hubspot?viewbox=auto&size=28',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Other providers',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'other/canva',
+          label: 'Canva',
+          customProps: {
+            icon: 'https://svgl.app/library/canva.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/fireflies',
+          label: 'Fireflies.ai',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/fireflies.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/incident-io',
+          label: 'incident.io',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/incident-io.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/resend',
+          label: 'Resend',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/resend/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/resend/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/robinhood',
+          label: 'Robinhood',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/robinhood?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/sanity',
+          label: 'Sanity',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/sanity/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/sanity/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/snowflake',
+          label: 'Snowflake',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/snowflake?viewbox=auto&size=28',
           },
         },
       ],

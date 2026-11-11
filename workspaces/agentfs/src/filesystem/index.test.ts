@@ -9,11 +9,14 @@
 import os from 'node:os';
 import nodePath from 'node:path';
 import {
+  createWorkspaceTools,
   FileNotFoundError,
   FileExistsError,
   IsDirectoryError,
   NotDirectoryError,
   DirectoryNotEmptyError,
+  Workspace,
+  WORKSPACE_TOOLS,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -23,6 +26,8 @@ import { AgentFSFilesystem } from './index';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
 
 function uniqueId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -473,6 +478,43 @@ describe('AgentFSFilesystem', () => {
       const st = await fs.stat('/stat-dir/nested.txt');
       expect(st.name).toBe('nested.txt');
       expect(st.path).toBe('/stat-dir/nested.txt');
+    });
+
+    // read_file picks media, binary or text from stat().mimeType, so without one
+    // a PNG or PDF came back as garbled UTF-8 (#28453).
+    it('reports a MIME type for files and none for directories', async () => {
+      await fs.writeFile('/stat-dir/page.png', png);
+      await fs.writeFile('/stat-dir/doc.pdf', '%PDF-1.4 test');
+      await fs.mkdir('/stat-dir/album.png');
+
+      expect(await fs.stat('/stat-dir/page.png')).toMatchObject({ type: 'file', mimeType: 'image/png' });
+      expect(await fs.stat('/stat-dir/doc.pdf')).toMatchObject({ type: 'file', mimeType: 'application/pdf' });
+      const dir = await fs.stat('/stat-dir/album.png');
+      expect(dir.type).toBe('directory');
+      expect(dir.mimeType).toBeUndefined();
+    });
+
+    it('takes the MIME type of a symlink from its own name, like LocalFilesystem', async () => {
+      await fs.writeFile('/stat-dir/pic.bin', png);
+      await fs.agent!.fs.symlink('/stat-dir/pic.bin', '/stat-dir/piclink.png');
+
+      expect(await fs.stat('/stat-dir/piclink.png')).toMatchObject({ type: 'file', mimeType: 'image/png' });
+    });
+
+    it('lets read_file return a PNG as native media the model can view', async () => {
+      await fs.writeFile('/stat-dir/view.png', png);
+      const workspace = new Workspace({ filesystem: fs });
+      const tool = (await createWorkspaceTools(workspace))[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+
+      const result = await tool.execute({ path: '/stat-dir/view.png' }, { workspace });
+
+      expect(tool.toModelOutput?.(result)).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: '/stat-dir/view.png (12 bytes, image/png)' },
+          { type: 'media', data: png.toString('base64'), mediaType: 'image/png' },
+        ],
+      });
     });
   });
 });

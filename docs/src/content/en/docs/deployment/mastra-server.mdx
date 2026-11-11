@@ -29,7 +29,7 @@ This creates a `.mastra` directory containing your production-ready server. Read
 
 After building, Mastra creates the following structure:
 
-```
+```text
 .mastra/
 ├── .build/                # Intermediate build artifacts (module maps, analysis)
 └── output/
@@ -40,11 +40,17 @@ After building, Mastra creates the following structure:
     ├── package.json       # Production dependencies
     ├── node_modules/      # Installed dependencies
     ├── .npmrc             # Copied from your project (if present)
-    ├── public/            # Static assets (if src/mastra/public exists)
+    ├── <static assets>     # Contents of src/mastra/public, merged into the output root
     └── playground/        # Studio UI (if --studio flag used)
 ```
 
 The `output` directory is self-contained. You can copy it to any server and run it directly.
+
+:::warning[Don't keep a database file in `src/mastra/public`]
+
+Build copies the contents of `src/mastra/public` into `.mastra/output` and overwrites files with the same name. A SQLite database stored in `public` therefore ends up inside the build, and a URL such as `file:./mastra.db` resolves against the directory the server runs from. If that's the output directory, the server opens the copied database instead of the one you edit, and changes to it are lost on the next build. Keep database files outside `public`.
+
+:::
 
 ## Running the server
 
@@ -92,6 +98,8 @@ export const mastra = new Mastra({
 The value of each option can come from a variable, import, or function call. The option itself must remain a direct property. Don't hide build-time options behind a factory call or an object spread:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
 const options = {
   bundler: {
     externals: ['sharp'],
@@ -152,7 +160,15 @@ To add your own endpoints, see [Custom API Routes](/docs/server/custom-api-route
 
 By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. Shutdown gives in-flight workflow runs (including durable agent runs) the same drain window to finish before workers and pub/sub subscriptions are torn down. A durable agent run still executing after the window stops and releases its claim on the run, so the next boot can recover it right away. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
 
-Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. The HTTP drain and the workflow drain run one after the other, so keep enough time for both plus shutdown cleanup.
+Shutdown then hands back the agent thread runs the process still holds:
+
+- A run still executing is aborted, so it starts no further steps. Clients watching the thread from other processes see it end, and its partial response isn't saved.
+- A run waiting on a tool approval or suspension stays suspended and can be resumed from another process. A tool call from the same step that's still executing is aborted first, like a run still executing.
+- The thread lease is released right away, so another process can start a run on the thread without waiting for the lease to expire. Release is best-effort: if an aborted run doesn't stop in time (for example, a tool call that ignores the abort), or the lease backend doesn't answer or fails the release, the lease is kept until it expires.
+
+Handing runs back can take up to about 1.5 seconds past the drain timeout.
+
+Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. The HTTP drain and the workflow drain run one after the other, so keep enough time for both, plus about 1.5 seconds to hand back thread runs, plus shutdown cleanup.
 
 If you call `mastra.shutdown()` yourself, pass `drainTimeout` to control how long it waits for in-flight workflow runs:
 
@@ -170,7 +186,7 @@ export const mastra = new Mastra({
 })
 ```
 
-A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and idempotent tools. Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Recovering from multiple replicas requires a storage adapter that supports run fencing or a PubSub backend whose lease every replica shares. See [multi-instance deployments](/docs/harness/durable-agents#multi-instance-deployments).
+A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and [idempotent tools](/docs/harness/durable-agents#make-tools-safe-to-repeat). Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Recovering from multiple replicas requires a storage adapter that supports run fencing or a PubSub backend whose lease every replica shares. See [multi-instance deployments](/docs/harness/durable-agents#multi-instance-deployments).
 
 ## Troubleshooting
 

@@ -25,7 +25,13 @@ import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import type { UserMessageCancelledChunk, UserMessagePendingChunk } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines, createSharedAgent } from '../aimock-scenario';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  createSharedAgent,
+  anyToolResult,
+} from '../aimock-scenario';
 
 const hasType = (part: unknown, type: string) =>
   !!part && typeof part === 'object' && 'type' in part && part.type === type;
@@ -138,16 +144,14 @@ describeForAllEngines('AIMock scenario: queueMessage waits for the active run', 
           llm.on(
             {
               endpoint: 'chat',
-              hasToolResult: false,
-              predicate: req => !JSON.stringify(req).includes(QUEUED),
+              predicate: req => !anyToolResult(req) && !JSON.stringify(req).includes(QUEUED),
             },
             { toolCalls: [{ id: 'call_work', name: 'do_work', arguments: {} }] },
           );
           llm.on(
             {
               endpoint: 'chat',
-              hasToolResult: true,
-              predicate: req => !JSON.stringify(req).includes(QUEUED),
+              predicate: req => anyToolResult(req) && !JSON.stringify(req).includes(QUEUED),
             },
             { content: 'first response' },
           );

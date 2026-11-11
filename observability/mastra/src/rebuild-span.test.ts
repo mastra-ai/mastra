@@ -168,6 +168,37 @@ describe('rebuildSpan internal status', () => {
     const exportedTool = tool.exportSpan();
     expect(exportedTool).toMatchObject({ parentEntityId: 'researcher', rootEntityVersionId: 'supervisor-v1' });
     expect(exportedTool?.parentEntityVersionId).toBeUndefined();
+    // The rebuilt sub-agent cannot tell whether the metadata version was its own
+    expect(rebuilt.getCorrelationContext().entityVersionId).toBeUndefined();
+  });
+
+  it('keeps a rebuilt span own version and no inherited one', () => {
+    const { tracing } = setup();
+    const agent = tracing.startSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'support',
+      entityType: EntityType.AGENT,
+      entityId: 'support',
+      entityName: 'Support',
+      metadata: { entityVersionId: 'v3' },
+    });
+    const tool = tracing.startSpan({
+      type: SpanType.TOOL_CALL,
+      name: 'lookup',
+      parent: agent,
+      entityType: EntityType.TOOL,
+      entityId: 'lookup',
+      entityName: 'lookup',
+    });
+
+    const rebuiltAgent = tracing.rebuildSpan(JSON.parse(JSON.stringify(agent.snapshot())));
+    const rebuiltTool = tracing.rebuildSpan(JSON.parse(JSON.stringify(tool.snapshot())));
+
+    expect(rebuiltAgent.getCorrelationContext().entityVersionId).toBe('v3');
+    expect(rebuiltAgent.exportSpan().entityVersionId).toBe('v3');
+    expect(rebuiltTool.metadata?.entityVersionId).toBe('v3');
+    expect(rebuiltTool.getCorrelationContext().entityVersionId).toBeUndefined();
+    expect(rebuiltTool.exportSpan()).not.toHaveProperty('entityVersionId');
   });
 
   it('falls back to the restored parent entity when the rebuilt ancestor is internal', async () => {

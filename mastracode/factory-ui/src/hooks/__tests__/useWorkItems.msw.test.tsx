@@ -6,7 +6,14 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
-import { useDeleteWorkItemMutation, useParkedSessions, useTransitionWorkItemMutation } from '../useWorkItems';
+import {
+  useDeleteWorkItemMutation,
+  useParkedSessions,
+  useSessionWorkItemsQuery,
+  useTransitionWorkItemMutation,
+  useUpsertWorkItemMutation,
+  useWorkItemsQuery,
+} from '../useWorkItems';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
 
@@ -30,13 +37,31 @@ function item(revision: number, stage: string): WorkItem {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
+    description: null,
     revision,
     createdAt: '2026-07-18T00:00:00.000Z',
     updatedAt: '2026-07-18T00:00:00.000Z',
   };
 }
+
+// Wire shape of item(): the server sends factoryProjectId/externalSource,
+// which listWorkItems maps back to the client fields.
+const wireItem = {
+  id: ITEM_ID,
+  orgId: 'org-1',
+  createdBy: 'user-1',
+  factoryProjectId: PROJECT_ID,
+  externalSource: null,
+  parentWorkItemId: null,
+  title: 'Running card',
+  stages: ['execute'],
+  stageHistory: [],
+  sessions: {},
+  metadata: {},
+  revision: 1,
+  createdAt: '2026-07-18T00:00:00.000Z',
+  updatedAt: '2026-07-18T00:00:00.000Z',
+};
 
 describe('useTransitionWorkItemMutation', () => {
   it('optimistically records the Factory stage entry used to order the destination column', async () => {
@@ -157,24 +182,6 @@ describe('useTransitionWorkItemMutation', () => {
 
 describe('useDeleteWorkItemMutation', () => {
   it('drops the deleted card and its session marker from the board read', async () => {
-    // Wire shape of item(): the server sends factoryProjectId/externalSource,
-    // which listWorkItems maps back to the client fields.
-    const wireItem = {
-      id: ITEM_ID,
-      orgId: 'org-1',
-      createdBy: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      externalSource: null,
-      parentWorkItemId: null,
-      title: 'Running card',
-      stages: ['execute'],
-      stageHistory: [],
-      sessions: {},
-      metadata: {},
-      revision: 1,
-      createdAt: '2026-07-18T00:00:00.000Z',
-      updatedAt: '2026-07-18T00:00:00.000Z',
-    };
     let deleted = false;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
@@ -202,5 +209,107 @@ describe('useDeleteWorkItemMutation', () => {
     await waitForMutationsIdle(client);
 
     await waitFor(() => expect(result.current.parked.has('session-1')).toBe(false));
+  });
+});
+
+describe('useSessionWorkItemsQuery', () => {
+  const SESSION_ID = 'session-1';
+
+  it('shows a card in the phase it is being moved to on the board', async () => {
+    let releaseResponse!: () => void;
+    const responseGate = new Promise<void>(resolve => {
+      releaseResponse = resolve;
+    });
+    let stage = 'triage';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [{ ...wireItem, stages: [stage] }] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/${ITEM_ID}/transition`, async () => {
+        await responseGate;
+        stage = 'planning';
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-1',
+            itemId: ITEM_ID,
+            revision: 2,
+            stage: 'planning',
+            decisions: [],
+          },
+        });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      cards: useSessionWorkItemsQuery(PROJECT_ID, SESSION_ID),
+      move: useTransitionWorkItemMutation(PROJECT_ID, 'user-1'),
+    }));
+    await waitFor(() => expect(result.current.cards.data?.[0]?.stages).toEqual(['triage']));
+
+    act(() => {
+      result.current.move.mutate({ item: item(1, 'triage'), board: 'work', stage: 'planning' });
+    });
+    await waitFor(() => expect(result.current.cards.data?.[0]?.stages).toEqual(['planning']));
+    expect(result.current.move.isPending).toBe(true);
+
+    releaseResponse();
+    await waitForMutationsIdle(client);
+  });
+
+  it('gets a card back when deleting it fails', async () => {
+    let releaseResponse!: () => void;
+    const responseGate = new Promise<void>(resolve => {
+      releaseResponse = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [wireItem] }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async () => {
+        await responseGate;
+        return HttpResponse.json({ error: 'conflict' }, { status: 409 });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      cards: useSessionWorkItemsQuery(PROJECT_ID, SESSION_ID),
+      remove: useDeleteWorkItemMutation(PROJECT_ID),
+    }));
+    await waitFor(() => expect(result.current.cards.data).toHaveLength(1));
+
+    act(() => {
+      result.current.remove.mutate(ITEM_ID);
+    });
+    await waitFor(() => expect(result.current.cards.data).toEqual([]));
+
+    releaseResponse();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(result.current.cards.data?.map(card => card.id)).toEqual([ITEM_ID]));
+  });
+
+  it('leaves out a card created on the board', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [wireItem] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
+        HttpResponse.json({ workItem: { ...wireItem, id: 'item-2', title: 'New card' } }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => ({
+      board: useWorkItemsQuery(PROJECT_ID),
+      session: useSessionWorkItemsQuery(PROJECT_ID, SESSION_ID),
+      create: useUpsertWorkItemMutation(PROJECT_ID),
+    }));
+    await waitFor(() => expect(result.current.board.data).toHaveLength(1));
+    await waitFor(() => expect(result.current.session.data).toHaveLength(1));
+
+    act(() => {
+      result.current.create.mutate({ source: 'github-issue', sourceKey: 'github-issue:2', title: 'New card' });
+    });
+    await waitFor(() => expect(result.current.board.data?.map(card => card.id)).toEqual(['item-2', ITEM_ID]));
+    expect(result.current.session.data?.map(card => card.id)).toEqual([ITEM_ID]);
   });
 });

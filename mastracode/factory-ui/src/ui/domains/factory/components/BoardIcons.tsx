@@ -62,27 +62,55 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
   terminal: 'success',
 };
 
-const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string }> = {
-  neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle', strongTint: 'bg-fill-strong' },
+const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string; gradientFrom: string }> = {
+  neutral: {
+    icon: 'text-muted-foreground',
+    tint: 'bg-fill-subtle',
+    strongTint: 'bg-fill-strong',
+    gradientFrom: 'from-fill-subtle',
+  },
   orange: {
     icon: 'text-(--orange-500) dark:text-(--orange-400)',
     tint: 'bg-badge-orange-subtle',
     strongTint: 'bg-badge-orange-strong',
+    gradientFrom: 'from-badge-orange-subtle',
   },
   cyan: {
     icon: 'text-(--cyan-500) dark:text-(--cyan-400)',
     tint: 'bg-badge-cyan-subtle',
     strongTint: 'bg-badge-cyan-strong',
+    gradientFrom: 'from-badge-cyan-subtle',
   },
-  info: { icon: 'text-info-indicator', tint: 'bg-info-subtle', strongTint: 'bg-badge-blue-strong' },
-  green: { icon: 'text-badge-green-indicator', tint: 'bg-badge-green-subtle', strongTint: 'bg-badge-green-strong' },
-  purple: { icon: 'text-badge-purple-indicator', tint: 'bg-badge-purple-subtle', strongTint: 'bg-badge-purple-strong' },
+  info: {
+    icon: 'text-info-indicator',
+    tint: 'bg-info-subtle',
+    strongTint: 'bg-badge-blue-strong',
+    gradientFrom: 'from-badge-blue-subtle',
+  },
+  green: {
+    icon: 'text-badge-green-indicator',
+    tint: 'bg-badge-green-subtle',
+    strongTint: 'bg-badge-green-strong',
+    gradientFrom: 'from-badge-green-subtle',
+  },
+  purple: {
+    icon: 'text-badge-purple-indicator',
+    tint: 'bg-badge-purple-subtle',
+    strongTint: 'bg-badge-purple-strong',
+    gradientFrom: 'from-badge-purple-subtle',
+  },
   success: {
     icon: 'text-(--green-500) dark:text-(--green-400)',
     tint: 'bg-success-subtle',
     strongTint: 'bg-badge-green-strong',
+    gradientFrom: 'from-badge-green-subtle',
   },
-  destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-subtle', strongTint: 'bg-badge-red-strong' },
+  destructive: {
+    icon: 'text-destructive-indicator',
+    tint: 'bg-destructive-subtle',
+    strongTint: 'bg-badge-red-strong',
+    gradientFrom: 'from-badge-red-subtle',
+  },
 };
 
 function MaskedArt({ source, className }: { source: string; className: string }) {
@@ -120,6 +148,11 @@ function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId |
   return kind ? undefined : boardStage(stage);
 }
 
+/** The `kind` to draw a phase with: built-in boards get each phase's own art, other boards are drawn by kind. */
+export function phaseIconKind(boardId: string, kind: BoardPhaseKind): BoardPhaseKind | undefined {
+  return boardId === 'work' || boardId === 'review' ? undefined : kind;
+}
+
 function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
   return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
@@ -138,6 +171,7 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
     case 'working':
       return <ProgressPieIcon progress={0.5} className={className} />;
     case 'review':
+    case 'pr-review':
       return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
     case 'done':
     case 'terminal':
@@ -151,6 +185,14 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
 
 export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].tint;
+}
+
+/** Lane headers fade a translucent status tint into a band: raised card in dark, a fill in light where card is white. */
+export function stageHeaderTintClass(stage: string, kind?: BoardPhaseKind): string {
+  return cn(
+    'bg-fill-subtle dark:bg-card bg-linear-to-r to-transparent',
+    TONE_CLASSES[stageToneFor(stage, kind)].gradientFrom,
+  );
 }
 
 export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): string {

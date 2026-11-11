@@ -9,6 +9,7 @@ import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout
 import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardContent } from './board/BoardContent';
+import { BoardLoadingSkeleton } from '../domains/factory/components/BoardLoadingSkeleton';
 
 /**
  * Factory › Board: an org-wide grouped list of the repository's work items. The
@@ -21,10 +22,6 @@ import { BoardContent } from './board/BoardContent';
  */
 export function WorkBoardPage() {
   return <BoardLayout kind="work" />;
-}
-
-export function ReviewBoardPage() {
-  return <BoardLayout kind="review" />;
 }
 
 export function CustomBoardPage() {
@@ -45,11 +42,7 @@ function BoardLayout({ kind }: { kind: string }) {
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
   const catalog = useBoardCatalog(factory.id);
   if (catalog.isPending) {
-    return (
-      <p role="status" className="p-4">
-        Loading boards…
-      </p>
-    );
+    return <BoardLoadingSkeleton />;
   }
   if (catalog.isError) {
     return <EmptyState variant="fill" titleSlot={<span role="alert">Unable to load boards.</span>} />;
@@ -69,7 +62,7 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
 function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
   const kind = definition.id;
   const repository = factory.repositories[0];
-  if (!repository) return <ConnectRepositoryEmptyState factoryId={factory.id} review={kind === 'review'} />;
+  if (!repository) return <ConnectRepositoryEmptyState factoryId={factory.id} />;
   return (
     <BoardContent
       key={`${factory.id}:${kind}`}

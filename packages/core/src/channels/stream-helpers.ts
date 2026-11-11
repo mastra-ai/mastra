@@ -244,7 +244,7 @@ export async function postStreamError(args: {
     describeProviderError(message, rawError, 1000) ?? (message.length > 1000 ? message.slice(0, 1000) + '…' : message);
   logger?.error?.(`[${platform}] Stream completed with error`, { error: display, statusCode, requestId });
   const postable = formatError
-    ? formatError(rawError instanceof Error ? rawError : new Error(display))
+    ? formatError(rawError instanceof Error ? rawError : new Error(display, { cause: rawError }))
     : `❌ Error: ${display}`;
   try {
     await chatThread.post(postable as Parameters<Thread['post']>[0]);

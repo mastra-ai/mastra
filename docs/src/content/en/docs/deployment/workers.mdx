@@ -3,11 +3,6 @@ title: 'Workers | Deploy'
 description: 'Run Mastra workflow orchestration, schedules, and long-running background tasks in dedicated workers to keep API processes responsive under load.'
 packages:
   - '@mastra/core'
-  - '@mastra/redis-streams'
-  - '@mastra/valkey-streams'
-  - '@mastra/google-cloud-pubsub'
-  - '@mastra/pg'
-  - '@mastra/libsql'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -401,7 +396,9 @@ Worker build artifacts expose `GET /health` on `PORT`, or port `4111` when `PORT
 
 ### Crash recovery
 
-A distributed PubSub backend persists unacknowledged events, which lets orchestration and background task workers resume after a restart. When the API is unavailable, a failed step-execution request causes the event to be delivered again. Because an event can be processed more than once, handlers should be idempotent when possible.
+A distributed PubSub backend persists unacknowledged events, which lets orchestration and background task workers resume after a restart. When the API is unavailable, a failed step-execution request causes the event to be delivered again.
+
+A step can run more than once. If a worker stops during a step, or after the step finishes but before it publishes the result, the step runs again when its event is redelivered. Make steps with side effects idempotent. See [restarting active workflow runs](/docs/workflows/overview#restarting-active-workflow-runs) for how to build an idempotency key for a step, and [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat) for agent tools.
 
 The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
 

@@ -4,7 +4,6 @@ import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
-import type { SpanTab } from '../../types';
 import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
@@ -34,7 +33,7 @@ export function TracesExplorerPanel({
   traceHref,
   withAddTraceToDataset = true,
 }: TracesExplorerPanelProps) {
-  const { withQueryTrace, withFeedback } = useTracesConfig();
+  const { withQueryTrace, withFeedback, feedbackOptions } = useTracesConfig();
   const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
   const { selection, selectTrace, closeTrace, selectSpan, setSpanTab, setSpanView, selectScore, highlightSpans } =
     useTracesSelection();
@@ -94,7 +93,8 @@ export function TracesExplorerPanel({
   // Only agent traces carry the Messages column, so other traces open the drawer one size
   // smaller, with or without a span open. The listed row knows the entity on click; the root
   // span covers deep-linked traces outside the list.
-  const entityType = rows.find(row => row.traceId === traceId)?.entityType ?? anchorSpan?.entityType;
+  const listedRow = rows.find(row => row.traceId === traceId);
+  const entityType = listedRow?.entityType ?? anchorSpan?.entityType;
   const isAgent = entityType === EntityType.AGENT;
   const panelSize = spanId ? (isAgent ? 'full' : 'wide') : isAgent ? 'wide' : 'half';
 
@@ -108,6 +108,7 @@ export function TracesExplorerPanel({
         anchorSpanId={anchorSpanId}
         entityType={entityType}
         usage={usage}
+        rootStreamingTimings={listedRow}
         isLoadingSpans={isLoadingSpans}
         selectedSpanId={spanId ?? null}
         onClose={() => {
@@ -117,6 +118,7 @@ export function TracesExplorerPanel({
         isFullThreadOpen={isFullThreadOpen}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
+        feedbackOptions={feedbackOptions}
         onOpenScore={onOpenScore}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
         onSpanSelect={id => selectSpan(id ?? null)}
@@ -128,7 +130,11 @@ export function TracesExplorerPanel({
         featuredSpanIds={selection.highlightSpanIds}
         onHighlightSpans={highlightSpans}
         feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
+        feedbackTabSlot={
+          withFeedback
+            ? ({ traceId: tid }) => <TraceFeedbackTab key={tid} traceId={tid} feedbackOptions={feedbackOptions} />
+            : undefined
+        }
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresList traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null
@@ -136,12 +142,14 @@ export function TracesExplorerPanel({
         spanView={selection.spanView}
         onSpanViewChange={setSpanView}
         spanActiveTab={selection.spanTab ?? 'details'}
-        onSpanTabChange={tab => setSpanTab(tab as SpanTab)}
+        onSpanTabChange={setSpanTab}
         spanFeedbackTabBadge={withFeedback ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
         spanFeedbackTabSlot={
           withFeedback
             ? ({ traceId: tid, spanId: sid }) =>
-                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+                tid && sid ? (
+                  <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} feedbackOptions={feedbackOptions} />
+                ) : null
             : undefined
         }
         headerActionsSlot={traceId && headerActionsSlot ? headerActionsSlot({ traceId, spans }) : undefined}

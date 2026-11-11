@@ -1,6 +1,5 @@
-import type { DefaultModelResponse } from '../../../../api/types';
+import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
 import type { FactoryModelScope } from '../../workspaces/services/github';
-import type { PersonalThinkingDefault } from '../services/thinkingLevels';
 
 interface ScopedDefaultModels {
   factory: string | null | undefined;
@@ -14,17 +13,9 @@ export function routedDefaultModelId(
   return (modelScope === 'factory' ? defaults.factory : defaults.personal) ?? undefined;
 }
 
-export function chatStartModelId(
-  modelScope: FactoryModelScope | undefined,
-  defaults: ScopedDefaultModels,
-): string | undefined {
-  return routedDefaultModelId(modelScope, defaults) ?? defaults.factory ?? undefined;
-}
-
-export function routedPersonalThinkingLevel(
-  modelScope: FactoryModelScope | undefined,
-  personalDefaults: DefaultModelResponse | undefined,
-): PersonalThinkingDefault {
-  if (modelScope === 'factory') return null;
-  return personalDefaults?.thinkingLevel;
+export function newChatCatalogTarget(
+  chatScope: FactoryModelScope | undefined,
+  factoryId: string | undefined,
+): AvailableModelsTarget {
+  return chatScope === 'user' ? { scope: 'user' } : { factoryProjectId: factoryId };
 }

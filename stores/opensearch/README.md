@@ -38,7 +38,7 @@ const results = await vectorStore.query({
 
 ## Documentation
 
-- [Reference: OpenSearch vector store](https://mastra.ai/reference/vectors/opensearch)
+- [Reference: OpenSearch vector store](https://mastra.ai/integrations/vectors/opensearch)
 
 ## Changelog
 

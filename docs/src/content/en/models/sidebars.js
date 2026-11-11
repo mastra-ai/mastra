@@ -60,6 +60,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/requesty',
+          label: 'Requesty',
+        },
+        {
+          type: 'doc',
           id: 'gateways/vercel',
           label: 'Vercel',
         },
@@ -481,6 +486,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hopper',
+          label: 'Hopper',
+        },
+        {
+          type: 'doc',
           id: 'providers/hpc-ai',
           label: 'HPC-AI',
         },
@@ -701,6 +711,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/modular',
+          label: 'Modular',
+        },
+        {
+          type: 'doc',
           id: 'providers/moonshotai',
           label: 'Moonshot AI',
         },
@@ -888,11 +903,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/regolo-ai',
           label: 'Regolo AI',
-        },
-        {
-          type: 'doc',
-          id: 'providers/requesty',
-          label: 'Requesty',
         },
         {
           type: 'doc',
@@ -1118,6 +1128,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/wallaby',
           label: 'Wallaby',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wally',
+          label: 'Wally',
         },
         {
           type: 'doc',

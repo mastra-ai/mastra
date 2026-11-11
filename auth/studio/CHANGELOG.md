@@ -1,5 +1,54 @@
 # @mastra/auth-studio
 
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- Added `fetchAsRequestUser(request, path, init)` to `MastraAuthStudio`. It calls the Mastra platform API as the signed-in user of an incoming request, so your server can act on the organization that user's session is on without its own platform token. It resolves to `null` when the request has no Mastra session, and gives up after 15 seconds unless you pass your own `signal`. ([#29183](https://github.com/mastra-ai/mastra/pull/29183))
+
+  ```ts
+  import { MastraAuthStudio } from '@mastra/auth-studio';
+
+  const auth = new MastraAuthStudio();
+
+  const response = await auth.fetchAsRequestUser(request, '/auth/me');
+  if (!response) {
+    // The request has no Mastra session: ask the user to sign in.
+  }
+  ```
+
+  When a call renews the user's session, later calls for the same request send the renewed session, so several platform calls can run in one request. Add the headers from `consumePendingResponseHeaders(request)` to your response so the browser keeps the renewed session.
+
+## 1.3.12-alpha.0
+
+### Patch Changes
+
+- Fixed sign-outs and extra platform calls when a page sends several requests at once. Requests that arrive together with the same session cookie now share one check with the Mastra platform. Before, each request checked the cookie on its own. When the session had expired, each one also tried to renew it with the same refresh token. The platform accepts a refresh token only once, so the other requests failed and could sign the user out. ([#29434](https://github.com/mastra-ai/mastra/pull/29434))
+
+## 1.3.11
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+- Studio session cookies are now host-only, so a session is never sent to other deployments on a shared domain. ([#28168](https://github.com/mastra-ai/mastra/pull/28168))
+
+  `@mastra/auth-studio`: on secure deployments `MastraAuthStudio` issues `__Host-wos-session` (`Secure`, `Path=/`, no `Domain`). `MASTRA_COOKIE_DOMAIN` is no longer used as the cookie `Domain`. A legacy `wos-session` cookie is still accepted on read, but only so it can be re-issued as `__Host-wos-session`. The new `getLegacySessionClearCookies()` expires the legacy `wos-session` on the current host, on `MASTRA_COOKIE_DOMAIN`, and on each domain in `MASTRA_LEGACY_COOKIE_DOMAINS` (or the `legacyCookieDomains` option). Plain-http `localhost` dev keeps an unprefixed host-only cookie; use `secureCookies` to override. An explicit `cookieDomain` option still issues a `wos-session` cookie with that `Domain`.
+
+  `@mastra/server`: the SSO callback, `POST /auth/refresh` and `POST /auth/logout` responses now also send the provider's `getLegacySessionClearCookies()`.
+
+  `@mastra/factory`: the default Studio provider no longer derives `Domain=.mastra.cloud` from `publicUrl`. Its sign-in and sign-out responses also expire legacy session cookies.
+
+  `@mastra/core`: `ISessionProvider` gains the optional `getLegacySessionClearCookies()`.
+
+## 1.3.11-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
 ## 1.3.11-alpha.0
 
 ### Patch Changes

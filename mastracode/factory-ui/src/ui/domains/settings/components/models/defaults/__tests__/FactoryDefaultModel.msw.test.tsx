@@ -26,6 +26,10 @@ const models: AvailableModelOption[] = [
   { id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true },
 ];
 
+const personalModels: AvailableModelOption[] = [
+  { id: 'google/gemini-2.5-pro', provider: 'google', modelName: 'gemini-2.5-pro', hasApiKey: true },
+];
+
 const project = (defaultModelId: FactoryProjectPayload['defaultModelId']): FactoryProjectPayload => ({
   id: 'fp-1',
   name: 'Mastra',
@@ -34,19 +38,19 @@ const project = (defaultModelId: FactoryProjectPayload['defaultModelId']): Facto
 
 const applyResult: ApplyFactoryDefaultModelResult = {
   modelId: 'openai/gpt-5',
-  applied: ['thread-1', 'thread-2'],
-  skipped: [{ threadId: 'thread-3', reason: 'apply-failed' }],
+  status: 'started',
 };
 
-function stubFactory(defaultModelId: string) {
+function stubFactory(defaultModelId: FactoryProjectPayload['defaultModelId']) {
   const patchedBodies: unknown[] = [];
   const applyRequests: string[] = [];
   let saved: FactoryProjectPayload['defaultModelId'] = defaultModelId;
   server.use(
-    http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
-      expect(new URL(request.url).searchParams.get('factoryId')).toBe('fp-1');
-      return HttpResponse.json({ models });
-    }),
+    http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) =>
+      new URL(request.url).searchParams.get('scope') === 'org'
+        ? HttpResponse.json({ models, fallbackModelId: 'openai/gpt-5' })
+        : HttpResponse.json({ models: personalModels, fallbackModelId: 'google/gemini-2.5-pro' }),
+    ),
     http.get(FACTORY_URL, () => HttpResponse.json({ project: project(saved) })),
     http.patch<PathParams, Pick<FactoryProjectPayload, 'defaultModelId'>>(FACTORY_URL, async ({ request }) => {
       const body = await request.json();
@@ -82,6 +86,13 @@ describe('FactoryDefaultModel', () => {
     ]);
   });
 
+  it("names the model the org's keys start chats on while no Factory default is chosen", async () => {
+    stubFactory(null);
+    renderInField();
+
+    expect(await screen.findByPlaceholderText('GPT-5 (Built-in default)')).toBeInTheDocument();
+  });
+
   it('saves the new default before asking whether to switch running sessions', async () => {
     const { patchedBodies, applyRequests } = stubFactory('anthropic/claude-sonnet-4-5');
     const user = userEvent.setup();
@@ -100,7 +111,7 @@ describe('FactoryDefaultModel', () => {
     expect(applyRequests).toEqual([]);
   });
 
-  it('keeps the dialog open while switching and reports the result', async () => {
+  it('keeps the dialog open until the background switch is accepted, then reports it started', async () => {
     let releaseApply = () => {};
     const applyGate = new Promise<void>(resolve => (releaseApply = resolve));
     const { applyRequests } = stubFactory('anthropic/claude-sonnet-4-5');
@@ -127,7 +138,9 @@ describe('FactoryDefaultModel', () => {
     await waitForMutationsIdle(client);
 
     expect(screen.queryByRole('dialog', { name: SWITCH_PROMPT })).not.toBeInTheDocument();
-    expect(screen.getByText(/Switched 2 sessions/)).toHaveTextContent('1 skipped: apply failed (1)');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Switch started in the background. Running sessions will pick up the new model on their next step.',
+    );
   });
 
   it('does not save or ask when the picked model is already the default', async () => {

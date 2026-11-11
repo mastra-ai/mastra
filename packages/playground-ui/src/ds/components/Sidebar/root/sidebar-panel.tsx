@@ -160,7 +160,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           expand();
           setWidth(maxWidth);
           commit();
-          return;
+          break;
         }
       }
     },
@@ -298,7 +298,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
       >
         <ResizeHandleIndicator
           className={cn(
-            'via-foreground/30 group-hover:opacity-100',
+            'via-foreground/30 transition-none group-hover:opacity-100',
             'group-focus-visible:via-border-focus group-focus-visible:opacity-100',
             'in-data-[sidebar-gesture=active]:via-foreground/45 in-data-[sidebar-gesture=active]:opacity-100',
           )}

@@ -127,7 +127,7 @@ export const SkillBuilderStarter = () => {
               testId="skill-builder-starter-input"
               size="md"
               variant="unstyled"
-              placeholder="Describe the skill you want to build…"
+              placeholder="Describe the skill you want to build"
               value={message}
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}

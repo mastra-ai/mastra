@@ -4,11 +4,6 @@ import { createTraceQueryValuesResolver, useEntityNames, useEnvironments } from 
 import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo } from 'react';
 import {
-  TRACE_TIME_RANGE_FIELD,
-  TRACE_TIME_RANGE_FIELD_ID,
-  TRACE_TIME_RANGE_ITEM,
-} from '../../traces/components/trace-time-range-chip';
-import {
   filterBarExpressionToTraceFilters,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
@@ -18,6 +13,11 @@ import type { TraceDatePreset } from '../../traces/types';
 import { createSpanFilterBarFields } from '../span-filters';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 
 /** The time range presets the spans filter bar offers. */
 export const SPAN_TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
@@ -38,12 +38,16 @@ export type UseSpansFilterBarFieldsOptions = {
 
 /**
  * The fields the spans filter bar offers: the time range plus the fields `querySpans()` accepts.
- * Context fields are only included when the store declares `spanQueryContextFields`.
+ * Context, model and outcome fields and streaming timings are only included when the store declares them.
  */
 export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOptions): FilterBarField[] {
   const client = useMastraClient();
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
+  const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
+  const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
+  const withModelFields = capabilities?.capabilities.spanQueryModelFields ?? false;
   const { data: entityNames = NO_SUGGESTIONS } = useEntityNames();
   const { data: environments = NO_SUGGESTIONS } = useEnvironments();
 
@@ -51,15 +55,29 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
   // `items`, which loops if handed a new array on every render.
   return useMemo(
     () => [
-      TRACE_TIME_RANGE_FIELD,
+      FILTER_BAR_TIME_RANGE_FIELD,
       ...createSpanFilterBarFields({
         withContextFields,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+        withOutcomeFields,
+        withModelFields,
         entityNames,
         environments,
         valueSuggestions: path => createTraceQueryValuesResolver(client, timeRange, 'spans', path),
       }),
     ],
-    [withContextFields, entityNames, environments, client, timeRange],
+    [
+      withContextFields,
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+      withOutcomeFields,
+      withModelFields,
+      entityNames,
+      environments,
+      client,
+      timeRange,
+    ],
   );
 }
 
@@ -71,7 +89,7 @@ export type UseSpansFilterBarOptions = {
 
 /**
  * The span filters as a filter bar value, and the handlers that write bar edits back.
- * The time-range chip is a synthetic, always-present item; it never round-trips to tokens.
+ * The time range is a synthetic, always-present item; it never round-trips to tokens.
  */
 export function useSpansFilterBar({ tokens, groups, onFiltersChange }: UseSpansFilterBarOptions): {
   filterBarValue: FilterBarExpression;
@@ -83,14 +101,16 @@ export function useSpansFilterBar({ tokens, groups, onFiltersChange }: UseSpansF
 
   const filterBarValue = useMemo<FilterBarExpression>(() => {
     const groupsExpression = traceFiltersToFilterBarExpression([], groups);
-    return { ...groupsExpression, nodes: [TRACE_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes] };
+    return { ...groupsExpression, nodes: [FILTER_BAR_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes] };
   }, [items, groups]);
 
   const onFilterBarChange = useCallback(
     (expression: FilterBarExpression) => {
       const next = filterBarExpressionToTraceFilters({
         ...expression,
-        nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+        nodes: expression.nodes.filter(
+          node => isFilterBarGroup(node) || node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID,
+        ),
       });
       onFiltersChange(next.tokens, next.groups);
     },

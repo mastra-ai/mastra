@@ -279,8 +279,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         toolName: 'findUserTool',
         toolCallId,
       });
-      expect(resumedCall.tracingOptions?.traceId).toBe('mock-trace-id');
-      expect(resumedCall.resumedFromSpanId).toBeTruthy();
+      expect(resumedCall.resumeFrom).toMatchObject({ traceId: 'mock-trace-id', spanId: expect.any(String) });
       expect(resumedCall.tracingOptions?.parentSpanId).toBeUndefined();
     } finally {
       spy.mockRestore();
@@ -601,8 +600,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         toolName: 'findUserTool',
         toolCallId: output.suspendPayload!.toolCallId,
       });
-      expect(resumedCall.tracingOptions?.traceId).toBe('mock-trace-id');
-      expect(resumedCall.resumedFromSpanId).toBeTruthy();
+      expect(resumedCall.resumeFrom).toMatchObject({ traceId: 'mock-trace-id', spanId: expect.any(String) });
       expect(resumedCall.tracingOptions?.parentSpanId).toBeUndefined();
     } finally {
       spy.mockRestore();

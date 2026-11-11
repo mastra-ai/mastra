@@ -89,7 +89,10 @@ export class ObservationTurn {
   /** Processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks: ObservationTurnHooks;
 
+  readonly abortSignal?: AbortSignal;
+
   constructor(opts: {
+    abortSignal?: AbortSignal;
     om: ObservationalMemory;
     threadId: string;
     resourceId?: string;
@@ -101,6 +104,7 @@ export class ObservationTurn {
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }) {
+    this.abortSignal = opts.abortSignal;
     this.om = opts.om;
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
@@ -239,7 +243,7 @@ export class ObservationTurn {
     // rather than waiting for the next turn's step.prepare() to trigger buffering.
     const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
     const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
-    if (asyncObservationEnabled && bufferOnIdle) {
+    if (!this.abortSignal?.aborted && asyncObservationEnabled && bufferOnIdle) {
       const allMessages = getObservableMessages(messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);

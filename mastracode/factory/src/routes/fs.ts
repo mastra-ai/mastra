@@ -14,8 +14,12 @@ import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
 import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 import { peekSessionEnvironment } from '../session/environment-state-processor.js';
+import { sessionMemoryResourceId } from '../session/session-threads.js';
+import type { SessionRunBindings, SessionThreadLookup } from '../session/session-threads.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
+import { canReadSessionResource, canViewSourceControlSession } from './session-access.js';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -213,11 +217,6 @@ exit "\${status:-1}"
 `;
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
 const APPROVED_RENDERED_ROOTS = new Set(['.artifacts']);
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
@@ -468,13 +467,16 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
 export interface SessionFsDeps {
   auth: RouteAuth;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
+  /** Resolves the memory resource a session runs on, so a session still on its owner's memory stays the owner's. */
+  controller?: SessionThreadLookup;
+  workItems?: SessionRunBindings;
 }
 
 /**
  * Resolve a `workspacePath` query param as a Factory session id. Returns the
- * session when one exists and the caller owns it, `null` when no session
- * matches (the caller should fall back to local-path handling), and throws
- * when a session exists but belongs to another tenant.
+ * session when one exists and the caller may read it (the same rule as the
+ * session conversation routes), `null` when no session matches (the caller
+ * should fall back to local-path handling), and throws otherwise.
  */
 async function resolveAuthorizedSession(
   c: Context,
@@ -487,7 +489,11 @@ async function resolveAuthorizedSession(
   if (deps.auth.enabled()) {
     await deps.auth.ensureUser(c);
     const tenant = deps.auth.tenant(c);
-    if (!tenant || tenant.orgId !== session.orgId || tenant.userId !== session.userId) {
+    if (!tenant || !canViewSourceControlSession(session, tenant)) {
+      throw new Error('Session is not available to the current user');
+    }
+    const resourceId = await sessionMemoryResourceId(deps.controller, session, deps.workItems);
+    if (!canReadSessionResource(session, resourceId, tenant)) {
       throw new Error('Session is not available to the current user');
     }
   }
@@ -1226,6 +1232,21 @@ export function resolveCodebase(projectPath: string): ResolvedCodebase {
 }
 
 /**
+ * Guard the routes that read the server's own filesystem root. They are
+ * registered with `requiresAuth: false` so local (auth-disabled) factories keep
+ * working, which means the gate never runs for them: in tenant mode they must
+ * authenticate the caller themselves, or an anonymous request could enumerate
+ * the server's directories. Returns a 401 response to send, or `null` to
+ * continue.
+ */
+async function requireSignedIn(c: Context, sessionFs: SessionFsDeps | undefined): Promise<Response | null> {
+  const auth = sessionFs?.auth;
+  if (!auth?.enabled()) return null;
+  await auth.ensureUser(c);
+  return auth.tenant(c) ? null : c.json({ error: 'unauthorized' }, 401);
+}
+
+/**
  * Build the web filesystem routes as Mastra `apiRoutes`:
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
  *   - `GET /web/codebase/resolve?path=...` — TUI-compatible codebase resourceId
@@ -1239,6 +1260,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
+        const unauthorized = await requireSignedIn(c, sessionFs);
+        if (unauthorized) return unauthorized;
         const path = c.req.query('path');
         try {
           const listing = await listDirectory(root, path);
@@ -1253,6 +1276,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
+        const unauthorized = await requireSignedIn(c, sessionFs);
+        if (unauthorized) return unauthorized;
         const path = c.req.query('path');
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
         try {
@@ -1277,6 +1302,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
           if (session && sessionFs) {
             return c.json(await listSessionRenderedPath(session, renderedRoot));
           }
+          const unauthorized = await requireSignedIn(loose(c), sessionFs);
+          if (unauthorized) return unauthorized;
           return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1359,6 +1386,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (session && sessionFs) return c.json(await readSessionWorkspaceFile(session, path));
+          const unauthorized = await requireSignedIn(loose(c), sessionFs);
+          if (unauthorized) return unauthorized;
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1382,6 +1411,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
+        const unauthorized = await requireSignedIn(c, sessionFs);
+        if (unauthorized) return unauthorized;
         const path = c.req.query('path');
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
         // Confine resolution to the browsable root (following symlinks), so this

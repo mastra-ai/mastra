@@ -283,7 +283,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
     getRegisteredGithubPatKind(requestContext),
   );
   if (pat) {
-    inject(pat);
+    inject(pat, true);
     return;
   }
   // The boot's own minter keeps the environment scope (and the agent's note

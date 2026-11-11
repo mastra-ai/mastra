@@ -57,7 +57,7 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
             defaults="personal"
             inUse={defaultsInUse(modelScope, 'personal')}
             anchorRef={anchors.personal}
-            model={<PersonalDefaultModel factoryId={factoryId} />}
+            model={<PersonalDefaultModel />}
             providers={<ProviderList credentialScope="user" />}
           />
           <DefaultsCard

@@ -7,7 +7,7 @@ function skippedReasonSummary(reasons: Array<{ reason: string }>) {
 }
 
 function switchedSessionsText(switched: number): string {
-  if (switched === 0) return 'No running sessions to switch';
+  if (switched === 0) return 'No sessions switched';
   return `Switched ${switched} ${switched === 1 ? 'session' : 'sessions'}`;
 }
 

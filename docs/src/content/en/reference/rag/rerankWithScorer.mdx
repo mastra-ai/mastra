@@ -74,7 +74,8 @@ const rerankedResults = await rerank({
           {
             name: 'weights',
             type: 'WeightConfig',
-            description: 'Weights for different scoring components (must add up to 1)',
+            description:
+              'Weights for different scoring components (must add up to 1; each weight must be between 0 and 1)',
             isOptional: true,
             properties: [
               {

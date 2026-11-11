@@ -29,6 +29,7 @@ import {
   StepContentExtractor,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
+import { isPersistedCopy } from './conversion/utils';
 import { TypeDetector } from './detection/TypeDetector';
 import type { StoredMessageLoader } from './memory-message-refs';
 import { MessageMerger } from './merge';
@@ -60,7 +61,11 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
-import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
+import {
+  advancesToolInvocationState,
+  isClientToolInvocationUpdate,
+  isTerminalToolInvocationState,
+} from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -292,6 +297,11 @@ export class MessageList {
   // are still part of the run's response — see getRunResponseMessages(). Keyed by id in pruning
   // order; the message is only held when pruned by this instance; a restored list has ids only.
   #prunedResponseMessages = new Map<string, MastraDBMessage | undefined>();
+
+  // Message id -> hash of the text this run already wrote to the semantic recall index. Both
+  // writers (the SemanticRecall output processor and Memory.saveMessages through the save queue)
+  // read and update it, so whichever runs second skips what the first one embedded.
+  #embeddedMessages = new Map<string, string>();
 
   // Legacy getters for backward compatibility - delegate to stateManager
   private get memoryMessages() {
@@ -593,7 +603,19 @@ export class MessageList {
       ...state,
       ...(lastStepBoundary ? { lastStepBoundary } : {}),
       ...(prunedResponseMessageIds.length > 0 ? { prunedResponseMessageIds } : {}),
+      ...(this.#embeddedMessages.size > 0 ? { embeddedMessages: Object.fromEntries(this.#embeddedMessages) } : {}),
     };
+  }
+
+  /**
+   * The run's record of messages already written to the semantic recall index, as
+   * message id -> hash of the embedded text. Returned live: embedding writers add to it after a
+   * successful write and skip messages recorded with the same text.
+   *
+   * @internal
+   */
+  public getEmbeddedMessages(): Map<string, string> {
+    return this.#embeddedMessages;
   }
 
   /**
@@ -638,6 +660,13 @@ export class MessageList {
       this.updateLastCreatedAt(message);
     }
     this.#prunedResponseMessages = new Map((state.prunedResponseMessageIds ?? []).map(id => [id, undefined]));
+    // Merged instead of replaced: durable runs restore older snapshots onto the live list at
+    // finalize, and the live list can hold entries the snapshot lacks (the input save writes
+    // them before the workflow starts). An entry only skips a message whose text still matches
+    // its hash, so keeping an older entry can at most cause one extra embedding.
+    for (const [messageId, textHash] of Object.entries(state.embeddedMessages ?? {})) {
+      this.#embeddedMessages.set(messageId, textHash);
+    }
     this.#lastStepBoundary = undefined;
     if (state.lastStepBoundary) {
       const { messageId, partIndex } = state.lastStepBoundary;
@@ -1036,11 +1065,21 @@ export class MessageList {
 
     // Drop the marker itself along with the step it opened, so the next iteration's
     // openStepBoundary() writes a fresh marker for the retry rather than reusing the rejected one.
-    parts.splice(boundaryIndex);
+    this.#truncateParts(message, boundaryIndex);
+    return true;
+  }
+
+  /**
+   * Cut a message back to its first `length` parts, removing it when none remain, and keep the
+   * mirrors `MessageMerger` maintains beside the parts in step with what survived.
+   */
+  #truncateParts(message: MastraDBMessage, length: number): void {
+    const parts = message.content.parts;
+    parts.splice(length);
 
     if (parts.length === 0) {
-      this.removeByIds([messageId]);
-      return true;
+      this.removeByIds([message.id]);
+      return;
     }
 
     // `content.toolInvocations` is the legacy AIV4 mirror of the tool-invocation parts, also
@@ -1087,8 +1126,81 @@ export class MessageList {
       this.stateManager.removeMessage(message);
       this.stateManager.addToSource(message, 'response');
     }
+  }
 
-    return true;
+  /** Response parts per message as of the last completed step; undefined until a step completes. */
+  #completedStepParts: Map<string, number> | undefined;
+  /** Structured output per message as of the last completed step. */
+  #completedStepStructuredOutput: Map<string, unknown> | undefined;
+
+  /**
+   * Record the response as it stands now as the end of a completed step. Called by the loop when a
+   * step finishes, before the next one can add to the response.
+   * @internal
+   */
+  public markStepCompleted(): void {
+    this.#completedStepParts = new Map(
+      this.get.response.db().map(message => [message.id, message.content.parts?.length ?? 0]),
+    );
+    this.#completedStepStructuredOutput = new Map(
+      this.get.response
+        .db()
+        .flatMap(message =>
+          message.content.metadata?.structuredOutput !== undefined
+            ? [[message.id, message.content.metadata.structuredOutput] as const]
+            : [],
+        ),
+    );
+  }
+
+  /**
+   * A copy of this list holding the input and only the response of completed steps: the parts and
+   * messages a step still in flight added since the last {@link markStepCompleted} are left out.
+   * A step whose tool calls all have results (an aborted call records a notice) counts as completed
+   * even though the loop never reached its step-finish, and is kept whole. When the step is cut,
+   * or kept whole without the text it already streamed, `inFlightText` is added as its own assistant message,
+   * returned as `inFlightMessageId` so the caller can run it through the step processors it never reached.
+   * @internal
+   */
+  public cloneWithCompletedSteps(inFlightText = ''): { turn: MessageList; inFlightMessageId?: string } {
+    const clone = this.clone();
+    const addInFlightText = () => {
+      clone.add({ role: 'assistant', content: [{ type: 'text', text: inFlightText }] }, 'response', { merge: false });
+      return clone.get.response.db().at(-1)!.id;
+    };
+    const completed = this.#completedStepParts;
+    const pending = clone.get.response
+      .db()
+      .flatMap(message => (message.content.parts ?? []).slice(completed?.get(message.id) ?? 0));
+    const toolCalls = pending.filter(part => part.type === 'tool-invocation');
+    if (toolCalls.length > 0 && toolCalls.every(part => isTerminalToolInvocationState(part.toolInvocation.state))) {
+      // Recovered eager work commits only the tool call and its result; the text streamed since is not in the list yet.
+      const keptText = pending.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
+      if (inFlightText.trim().length > 0 && !keptText.includes(inFlightText.trim())) {
+        return { turn: clone, inFlightMessageId: addInFlightText() };
+      }
+      return { turn: clone };
+    }
+    for (const message of clone.get.response.db()) {
+      const length = completed?.get(message.id);
+      if (length === undefined) clone.removeByIds([message.id]);
+      else if ((message.content.parts?.length ?? 0) > length) {
+        // clone() shares content with this list; truncating it in place would cut the live step too.
+        message.content = {
+          ...message.content,
+          parts: [...message.content.parts],
+          ...(message.content.metadata ? { metadata: { ...message.content.metadata } } : {}),
+        };
+        clone.#truncateParts(message, length);
+        // #truncateParts drops structuredOutput for rollback; a completed step keeps the object it produced.
+        const structuredOutput = this.#completedStepStructuredOutput?.get(message.id);
+        if (structuredOutput !== undefined) {
+          message.content.metadata = { ...message.content.metadata, structuredOutput };
+        }
+      }
+    }
+    if (inFlightText.trim().length > 0) return { turn: clone, inFlightMessageId: addInFlightText() };
+    return { turn: clone };
   }
 
   private all = {
@@ -1485,13 +1597,14 @@ export class MessageList {
           this.toAIV5UIMessages(this.response.db(), { transformToolPayloads: false }),
           this.messages,
         ).filter(m => m.role === `tool` || m.role === `assistant`),
-      modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
+      modelContent: (stepNumber?: number, stepToolCallIds?: string[]): AIV5Type.StepResult<any>['content'] => {
         if (typeof stepNumber === 'number') {
           // Delegate to StepContentExtractor for step-specific content extraction
           return StepContentExtractor.extractStepContent(
             this.response.aiV5.ui(),
             stepNumber,
             this.response.aiV5.stepContent,
+            stepToolCallIds,
           );
         }
 
@@ -2656,8 +2769,11 @@ export class MessageList {
     if (messageSource === `memory`) {
       // messagesAreEqual only matches stored messages that share the incoming id
       for (const existingMessage of this.getMessagesWithId(messageV2.id)) {
-        // don't double store any messages
-        if (messagesAreEqual(existingMessage, messageV2)) {
+        // don't double store any messages. Memory cleans messages when it saves them
+        // (trimmed text, working memory removed), so a stored copy can differ from the live
+        // message only by that cleanup. Treating it as new content would re-add a sealed
+        // message under a new id with the same provider item ids (#29380).
+        if (messagesAreEqual(existingMessage, messageV2) || isPersistedCopy(existingMessage, messageV2)) {
           return;
         }
       }

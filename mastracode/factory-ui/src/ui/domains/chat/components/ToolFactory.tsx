@@ -122,7 +122,7 @@ function ToolFactoryComponent({
   if (toolName === 'skill') {
     const name = stringValue(record(input)?.name);
     const instructions = stringValue(output);
-    if (name && instructions) return <SkillMessage activation={{ name, instructions }} />;
+    if (name && instructions) return <SkillMessage activation={{ name, instructions }} appearance="inline" />;
   }
 
   if (toolName === 'submit_plan') {

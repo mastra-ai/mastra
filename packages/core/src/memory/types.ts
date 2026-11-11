@@ -436,6 +436,27 @@ export type SemanticRecall = {
    * ```
    */
   indexName?: string;
+
+  /**
+   * Largest number of characters of message text sent to the embedder in one input. Longer
+   * messages are split into chunks, each stored as its own vector row.
+   *
+   * Measured in characters because no single tokenizer matches every embedder. The default of
+   * 16,384 is about 4096 English tokens. Chinese, Japanese and Korean text, and code, use more
+   * tokens per character, so lower it when your embedder's input limit is close. When unset and
+   * the embedder declares `maxInputTokens` (as `@mastra/fastembed` models do), the limit is
+   * derived from that instead.
+   *
+   * Only read from the options passed to the `Memory` constructor. Memory options given per
+   * request (for example through `agent.stream(..., { memory: { options } })`) don't change it.
+   *
+   * @default 16384
+   * @example
+   * ```typescript
+   * maxChunkChars: 6000 // Mostly Japanese text with an 8192-token embedder
+   * ```
+   */
+  maxChunkChars?: number;
 };
 
 /**
@@ -479,7 +500,10 @@ export interface ObservationalMemoryObservationConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default the top-level `model`, else `reflection.model`, else `'auto'` — Google's low-cost Gemini
+   * model when Google is usable (`canUseProvider('google')`, or `GOOGLE_GENERATIVE_AI_API_KEY`
+   * when no callback is configured), otherwise a low-cost model from the main model's provider,
+   * otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -685,13 +709,15 @@ export interface ObservationalMemoryObservationConfig {
 
   /**
    * Whether image/file attachment parts are forwarded to the Observer LLM.
-   * - `true` forwards attachments
+   * - `true` forwards every attachment
    * - `false` drops attachments and leaves placeholder text
    * - `'auto'` checks model capabilities to decide
+   * - a `string[]` forwards only attachments whose MIME type matches an entry; entries may be
+   *   exact (`'application/pdf'`) or a wildcard (`'image/*'`)
    *
-   * @default true
+   * @default ['image/*', 'application/pdf']
    */
-  observeAttachments?: 'auto' | boolean;
+  observeAttachments?: 'auto' | boolean | string[];
 }
 
 /**
@@ -706,7 +732,10 @@ export interface ObservationalMemoryReflectionConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default the top-level `model`, else `observation.model`, else `'auto'` — Google's low-cost Gemini
+   * model when Google is usable (`canUseProvider('google')`, or `GOOGLE_GENERATIVE_AI_API_KEY`
+   * when no callback is configured), otherwise a low-cost model from the main model's provider,
+   * otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -858,7 +887,9 @@ export interface ObservationalMemoryOptions {
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto' — Google's low-cost Gemini model when Google is usable (`canUseProvider('google')`,
+   * or `GOOGLE_GENERATIVE_AI_API_KEY` when no callback is configured), otherwise a low-cost model
+   * from the main model's provider, otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -1528,7 +1559,7 @@ export type SerializedObservationalMemoryObservationConfig = {
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
   /** Whether image/file attachment parts are forwarded to the Observer LLM */
-  observeAttachments?: 'auto' | boolean;
+  observeAttachments?: 'auto' | boolean | string[];
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

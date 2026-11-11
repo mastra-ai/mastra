@@ -1,16 +1,20 @@
 export {
   BoardDefinitionError,
   createBoardRegistry,
+  DEFAULT_PHASE_CONTEXT,
   defaultBoards,
   defineBoard,
-  reviewBoard,
+  FACTORY_AGENT_ID,
   workBoard,
 } from './boards/index.js';
 export type {
   BoardDefinition,
   BoardEventIntegration,
   BoardEventRules,
+  BoardPhase,
   BoardPhaseDefinition,
+  BoardPhaseExitTool,
+  BoardPhaseRunner,
   BoardRegistry,
   BoardSourceClosed,
   BoardTransition,
@@ -18,12 +22,17 @@ export type {
   BoardTransitionPolicyContext,
   BoardTransitionPolicyResult,
   InstalledBoard,
-  ReviewBoardPhase,
   WorkBoardPhase,
 } from './boards/index.js';
+export { BoardWriteError } from './boards/board-writes.js';
+export { boardDefinitionOf } from './boards/stored-board.js';
+export { workSeedWithTriage } from './boards/work-seeds.js';
+export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from './storage/domains/boards/base.js';
+export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
+  FactoryTools,
   MastraArgs,
   MastraFactoryConfig,
   MastraFactorySandboxConfig,
@@ -45,7 +54,13 @@ export type {
 export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 export type { FactoryProject } from './storage/domains/projects/base.js';
 export { WorkItemsStorage } from './storage/domains/work-items/base.js';
-export type { CreateWorkItemInput, WorkItemRow } from './storage/domains/work-items/base.js';
+export type { CreateWorkItemInput, Card, BoardItemRow } from './storage/domains/work-items/base.js';
+export { primarySource } from './storage/domains/work-items/work-item-schema.js';
+export type {
+  WorkItemRow,
+  WorkItemSourceRow,
+  WorkItemProvider,
+} from './storage/domains/work-items/work-item-schema.js';
 export { createStateSigner } from './state-signing.js';
 export type { StateSigner, StateTenant } from './state-signing.js';
 export { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from './secret-encryption.js';
@@ -66,3 +81,6 @@ export type {
   IntegrationHooks,
   IntegrationTools,
 } from './integrations/base.js';
+export type { ReviewedChangeRequest, PublishReviewedCommitCheckInput } from './session/source-control-tools.js';
+export type { CommitCheck, CommitCheckStatus } from './capabilities/version-control.js';
+export { platformConnectTools } from './integrations/platform/connect/session-tools.js';

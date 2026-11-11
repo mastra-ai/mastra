@@ -360,7 +360,7 @@ describe('SidebarNavLink — how a row names itself', () => {
 
     fireEvent.focus(screen.getByRole('link'));
 
-    expect(await tooltipText()).toBe('Agents | Your agents');
+    expect(await tooltipText()).toBe('Agents: Your agents');
   });
 });
 

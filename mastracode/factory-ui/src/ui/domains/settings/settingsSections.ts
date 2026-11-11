@@ -8,12 +8,12 @@ export type SettingsSection =
   | 'factory'
   | 'connections'
   | 'repositories'
-  | 'environment'
   | 'intake'
   | 'models'
   | 'memory'
-  | 'skills'
-  | 'behavior';
+  | 'tools'
+  | 'behavior'
+  | 'debug';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   account: 'My account',
@@ -21,12 +21,12 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   factory: 'Manage Factory',
   connections: 'Connections',
   repositories: 'Repositories',
-  environment: 'Environment',
   intake: 'Work Intake',
   models: 'Models',
   memory: 'Memory',
-  skills: 'Skills',
+  tools: 'Tools',
   behavior: 'Behavior',
+  debug: 'Debug',
 };
 
 export const MODEL_DEFAULTS_ANCHORS = {
@@ -41,11 +41,19 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
   return MODEL_DEFAULTS_ANCHORS[MODEL_ROUTES[modelScope].chats];
 }
 
+export const VOICE_INPUT_ANCHOR = 'voice-input';
+
+/** Work Intake's list of routes that decide where new cards land. */
+export const NEW_CARD_ROUTES_ANCHOR = 'new-cards';
+
+type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR | typeof NEW_CARD_ROUTES_ANCHOR;
+
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
   ['personal-models', { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.personal }],
   ['factory-memory', { section: 'memory' }],
+  ['environment', { section: 'repositories' }],
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {
@@ -59,7 +67,7 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
   return typeof value === 'string' && value in SETTINGS_SECTION_LABELS;
 }
 
-export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: ModelDefaultsAnchor): string {
+export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: SettingsAnchor): string {
   const path = `/factories/${factoryId}/settings/${section}`;
   return anchor ? `${path}#${anchor}` : path;
 }
