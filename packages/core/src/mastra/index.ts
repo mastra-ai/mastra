@@ -831,6 +831,18 @@ const DURABLE_RECOVERY_RECHECK_MAX_RETRIES = 5;
 const DURABLE_RECOVERY_ATTEMPT_TIMEOUT_MS = 30_000;
 
 /**
+ * Whether boot-time recovery restarts runs of `workflow`. Processor workflows only run inside an
+ * agent call, so a lone restart has nothing to resume.
+ */
+function isRecoveryRestartable(workflow: AnyWorkflow): boolean {
+  return (
+    (workflow.engineType === 'default' || workflow.engineType === 'evented') &&
+    workflow.options?.autoRestartActiveRuns !== false &&
+    workflow.type !== 'processor'
+  );
+}
+
+/**
  * Registers and coordinates agents, workflows, storage, and other Mastra services.
  *
  * @example
@@ -4341,14 +4353,8 @@ export class Mastra<
       return { runs: [], total: 0 };
     }
 
-    const restartableWorkflows = Object.values(this.#workflows).filter(
-      workflow =>
-        (workflow.engineType === 'default' || workflow.engineType === 'evented') &&
-        // Skip before listing: opted-out workflows shouldn't cost storage queries, and processor
-        // workflows only run inside an agent call, so a lone restart has nothing to resume.
-        workflow.options?.autoRestartActiveRuns !== false &&
-        workflow.type !== 'processor',
-    );
+    // Skip before listing: opted-out workflows shouldn't cost storage queries.
+    const restartableWorkflows = Object.values(this.#workflows).filter(workflow => isRecoveryRestartable(workflow));
 
     const activeRunsByWorkflow = await Promise.all(
       restartableWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
@@ -4436,7 +4442,14 @@ export class Mastra<
    */
   async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
     try {
-      const workflow = this.getWorkflowById(workflowName);
+      const workflow = this.#recoveryRestartableWorkflow(workflowName);
+      if (!workflow) {
+        this.#logger.debug('Skipped restarting a run of a workflow recovery does not restart', {
+          workflow: workflowName,
+          runId,
+        });
+        return;
+      }
       const run = await workflow.createRun({ runId });
       // A re-check can find the run already settled or suspended by its owner.
       if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
@@ -4490,13 +4503,29 @@ export class Mastra<
   }
 
   /**
+   * The registered workflow `workflowId` names when boot-time recovery restarts its runs, found
+   * without throwing. Internal workflows and unregistered ids give `undefined`, as do workflows
+   * recovery leaves alone (see {@link isRecoveryRestartable}).
+   */
+  #recoveryRestartableWorkflow(workflowId: string): AnyWorkflow | undefined {
+    if (this.__hasInternalWorkflow(workflowId)) return undefined;
+    const workflows = Object.values((this.#workflows ?? {}) as Record<string, AnyWorkflow>);
+    const workflow = workflows.find(w => w.id === workflowId);
+    return workflow && isRecoveryRestartable(workflow) ? workflow : undefined;
+  }
+
+  /**
    * Re-checks a workflow run for recovery at `retryAt`, as the boot-time sweep does for a run
    * another process still drove: the run is restarted then unless it settled or is still live,
-   * in which case the re-check is scheduled again. A no-op while shutting down.
+   * in which case the re-check is scheduled again. Returns `false` without scheduling when
+   * recovery would not restart runs of `workflowName` on this instance, and a no-op while
+   * shutting down.
    * @internal
    */
-  __scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number): void {
+  __scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number): boolean {
+    if (!this.#recoveryRestartableWorkflow(workflowName)) return false;
     this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, retryAt);
+    return true;
   }
 
   /**

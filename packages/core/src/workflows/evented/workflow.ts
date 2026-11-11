@@ -1969,20 +1969,17 @@ export class EventedRun<
   /**
    * Whether the recovery sweep restarts runs of the workflow this nested run
    * continues, the same rule `EventedWorkflow.createRun` applies to its own
-   * runs. `false` when that workflow is not registered here.
+   * runs. A parent that is itself nested is not registered on its own, so it
+   * falls back to this run's flag.
    */
   #parentRestartable(): boolean {
     const parent = this.parentWorkflow;
     if (!parent || !this.mastra) return false;
-    let workflow: { type?: string; options?: { autoRestartActiveRuns?: boolean } } | undefined;
-    try {
-      workflow = this.mastra.__hasInternalWorkflow(parent.workflowId, parent.runId)
-        ? this.mastra.__getInternalWorkflow(parent.workflowId, parent.runId)
-        : this.mastra.getWorkflowById(parent.workflowId);
-    } catch {
-      return false;
-    }
-    return workflow?.options?.autoRestartActiveRuns !== false && workflow?.type !== 'processor';
+    const workflow = this.mastra.__hasInternalWorkflow(parent.workflowId, parent.runId)
+      ? this.mastra.__getInternalWorkflow(parent.workflowId, parent.runId)
+      : Object.values(this.mastra.listWorkflows()).find(w => w.id === parent.workflowId);
+    if (!workflow) return this.#restartable;
+    return workflow.options?.autoRestartActiveRuns !== false && workflow.type !== 'processor';
   }
 
   /** `timeTravel()` makes the run `running` from the caller, so it is marked live first. */

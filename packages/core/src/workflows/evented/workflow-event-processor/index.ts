@@ -5154,14 +5154,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         // Deliveries a shutting-down process deferred while another worker ran the step count
         // toward the transport's attempt number, though no attempt ran. Failing the run here would
         // fail a step that is still running. The holder finishes it instead. This delivery was the
-        // run's way back if the holder dies, so the run is re-checked for recovery the way a
-        // refused boot-time restart is, until it settles or its liveness lapses.
+        // run's way back if the holder dies, so the top-level run is re-checked for recovery the
+        // way a refused boot-time restart is, until it settles or its liveness lapses. A workflow
+        // recovery does not restart, or one this instance cannot resolve, gets no re-check.
         const holder = event.type === 'workflow.step.run' ? await this.#liveStepLeaseElsewhere(event) : null;
         if (holder) {
           this.deliveryAttempts.delete(eventKey);
           let root = event.data as { workflowId: string; runId: string; parentWorkflow?: ParentWorkflow };
           while (root.parentWorkflow) root = root.parentWorkflow;
-          this.mastra.__scheduleWorkflowRecoveryRecheck(
+          const rechecked = this.mastra.__scheduleWorkflowRecoveryRecheck(
             root.workflowId,
             root.runId,
             holder.leaseExpiresAt?.getTime() ?? Date.now(),
@@ -5169,7 +5170,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           this.mastra.getLogger()?.warn('Dropped an exhausted delivery of a step another worker is running', {
             runId: event.runId,
             deliveryAttempt: event.deliveryAttempt,
-            recheckRunId: root.runId,
+            recheckRunId: rechecked ? root.runId : undefined,
           });
           return { ok: true };
         }
