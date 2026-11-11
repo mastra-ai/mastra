@@ -6,7 +6,8 @@
  * Everything is behind the `smooth-corners` variant, so Safari (no `corner-shape`) and Firefox
  * (parses it but paints round; drop that clause once it doesn't) keep today's corners. Its
  * `:not(._)` beats Tailwind's own `rounded-*`, emitted after these, so every side and corner is
- * redefined too (`rounded-xl rounded-t-none` must still flatten the top).
+ * redefined too (`rounded-xl rounded-t-none` must still flatten the top). Logical sides
+ * (`rounded-s-*`) aren't, so don't mix them with another `rounded-*`.
  *
  * Math: Figma starts the curve (1 + s)·R from the corner, so the radius becomes (1 + s)·R and
  * the curve a superellipse of exponent 2 + 2.823s − 0.451s² (≤1.3% of R off); CSS takes its
