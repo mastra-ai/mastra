@@ -1,19 +1,21 @@
 # COR-1527 — What a stream publish failure means during a long Redis outage
 
 Evidence report. **Evidence and options only — no runtime/contract change is implemented in this branch.**
-All raw logs are committed alongside this report under `.artifacts/cor-1527/`.
+Committed evidence lives under `.artifacts/cor-1527/`: the harness/analyzer scripts and, per run, `meta.json`,
+`summary.json`, `truth-table.csv` and `console.log`. The raw `timeline.jsonl` and `monitor.log` (~72 MB) are
+deliberately **not** committed and remain on the build sandbox — see §8 and `README.md`.
 
 ## 1. Environment
 
-|                |                                                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------------------------ |
-| Repo / head    | `mastra-ai/mastra` @ `a3c08844458bd5c1fc2148d3fb92190faa511aab` (dist built from this head)                  |
-| Node           | v22.23.3                                                                                                     |
-| Redis          | `redis:8`, server 8.10.3, image `sha256:1f88291b…dd53`, disposable container `cor1527-redis` on host `:6399` |
-| Redis client   | ioredis via `RedisStreamsPubSub`; `RedisServerCache` on ioredis (documented wiring)                          |
-| Cache arms     | `InMemoryServerCache` ("memory") vs `RedisServerCache` ("redis") — the only difference between paired arms   |
-| Outage         | `docker pause` for 300 s (TCP socket stays open; commands are parked, not rejected)                          |
-| Publish budget | default `publishRetryBudgetMs = 120000`                                                                      |
+|                |                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo / head    | `mastra-ai/mastra` @ `a3c08844458bd5c1fc2148d3fb92190faa511aab` (dist built from this head)                                                             |
+| Node           | v22.23.3                                                                                                                                                |
+| Redis          | `redis:8`, server 8.10.3, image `sha256:1f88291b…dd53`, disposable container `cor1527-redis` on host `:6399`                                            |
+| Redis client   | transport `RedisStreamsPubSub` uses **node-redis** (`redis` 5.12.1, `createClient`); the `RedisServerCache` client uses **ioredis** (documented wiring) |
+| Cache arms     | `InMemoryServerCache` ("memory") vs `RedisServerCache` ("redis") — the only difference between paired arms                                              |
+| Outage         | `docker pause` for 300 s (TCP socket stays open; commands are parked, not rejected)                                                                     |
+| Publish budget | default `publishRetryBudgetMs = 120000`                                                                                                                 |
 
 The harness (`scripts/harness.mjs`) runs a real `Mastra` with a `RedisStreamsPubSub`, streams deterministic 16-char
 chunks every 50 ms, and records three independent boundaries: every cache call (`listPushIndexed` + friends),
@@ -23,7 +25,7 @@ the container records when EVAL/XADD actually executed server-side. No package s
 ## 2. Verdict
 
 1. **The 120 s timeout is raised only by the transport**, in `RedisStreamsPubSub.#publishRemote()` (`pubsub/redis-streams/src/index.ts:619-661`) — a `Promise.race` between `#xaddEvent()` and a budget timer, rejecting with `PublishRetryBudgetExhaustedError`. Confirmed by `MONITOR` + client timing: no other layer throws it.
-2. **The timeout means "outcome unknown", not "lost".** In every arm where it fired, the frame's XADD still reached Redis from the client's offline queue after recovery and was delivered to the observer. Callers that treat the rejection as data loss are wrong.
+2. **The timeout means "outcome unknown", not "lost".** In every arm where it fired, the frame's XADD still reached Redis from node-redis's offline queue after recovery and was delivered to the observer. Callers that treat the rejection as data loss are wrong.
 3. **With `RedisServerCache` the budget never arms.** `CachingPubSub.publish()` awaits `cache.listPushIndexed()` _before_ calling the transport (`packages/core/src/events/caching-pubsub.ts:244-297`). The cache append has **no budget of its own**, so during the outage it simply blocks; `#publishRemote` (and its 120 s timer) is never entered. Result: **0 rejections**, and the run survives by hanging.
 4. **The retry budget is what breaks the durable run.** With `InMemoryServerCache` the cache append completes in-process, the budget arms, the publish rejects at +120 s, and the durable step fails — losing ~98 % of the run's output. The counter-intuitive consequence: the _deadline-less_ cache append "protects" the run; the _bounded_ publish is what kills it.
 5. **Durable failures are silent to the caller until Redis recovers.** The error frame is published over the same stalled bus, so the caller learns nothing for ~60–180 s, and then receives **two** error events for one failure.
@@ -94,16 +96,23 @@ no rejection, and the run completed normally with all 6 343 chunks and a `finish
 
 ## 5. Per-frame truth table
 
-`runs/<label>/truth-table.csv`, one row per published frame:
-`index, id, type, chunkSeq, class, cacheEnter, cacheExit, cacheOk, xaddEnter, xaddExit, xaddOk, budgetExhausted, redisXadd, deliver`.
-Times are seconds relative to outage start; `redisXadd`/`redisCache` come from `MONITOR` (server-side ground truth).
-Frame classes seen: `resolved-delivered`, `rejected-but-delivered`, `resolved-not-delivered`, `rejected-not-delivered`,
-`publish-never-settled`, `never-reached-transport`. Baselines (no outage) are uniformly `resolved-delivered`.
+`runs/<label>/truth-table.csv`, one row per published frame. The header has **17** columns:
+
+`key, id, type, chunkSeq, index, class, cacheEnter, cacheExit, cacheOk, redisCache, xaddEnter, xaddExit, xaddOk, budgetExhausted, redisXadd, deliver, deliveries`
+
+(`index` is column 5; `deliveries` counts duplicate deliveries of the same frame; `redisCache`/`redisXadd` are
+`MONITOR` timestamps). Times are seconds relative to outage start.
+
+`analyze.mjs` can assign seven frame classes: `resolved-delivered`, `resolved-not-delivered`,
+`rejected-but-delivered`, `rejected-but-reached-redis`, `rejected-not-delivered`, `publish-never-settled`,
+`never-reached-transport`. Only **`resolved-delivered`** and **`rejected-but-delivered`** occur in the committed
+tables — baselines (no outage) are uniformly `resolved-delivered`; the remaining classes are defined for
+completeness but did not occur here.
 
 ## 6. Contract options (design only — for approval, nothing implemented)
 
 1. **Name the outcome.** A publish rejection during an outage must be documented as "delivery outcome unknown", not
-   "lost". The frame may still be pushed from the client offline queue after recovery (observed here). `CachingPubSub`
+   "lost". The frame may still be pushed from node-redis's offline queue after recovery (observed here). `CachingPubSub`
    should not mark such indices `undelivered`, and the plain publisher should not log them as failures.
 2. **Bound the whole publish path, not just XADD.** Today the cache append (`listPushIndexed` / EVAL / INCR+RPUSH) has
    no deadline, while the XADD does. Decide which behaviour is intended:
@@ -126,14 +135,17 @@ Frame classes seen: `resolved-delivered`, `rejected-but-delivered`, `resolved-no
 - Redis Cluster / `CROSSSLOT` fallback path was not exercised (single-node Redis).
 - The exact provenance of the two caller error events (one error frame in the observer log vs two at the caller) is
   reported as observed; the mechanism was not traced further.
+- Which cache implementation the originally failing deployment ran is **not recorded** here, so these runs establish
+  the mechanism rather than reproduce that deployment exactly. A cache-off arm (a bare `RedisStreamsPubSub` without a
+  `CachingPubSub` wrapper) was not run; the plan lists it as open.
 
 ## 8. Evidence index
 
-| Path                                                                                                     | Contents                                    |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `runs/G1-{baseline-memory,baseline-redis}/`                                                              | no-outage baselines (both arms clean)       |
-| `runs/P2-plain-{memory,redis}/`                                                                          | plain-agent 300 s outage pair (§3)          |
-| `runs/P3-durable-{memory,redis}/`                                                                        | durable-agent 300 s outage pair (§4)        |
-| `runs/P2-plain.driver.log`, `runs/P3-durable.driver.log`                                                 | run driver logs                             |
-| each run: `timeline.jsonl`, `monitor.log`, `truth-table.csv`, `summary.json`, `meta.json`, `console.log` | raw evidence                                |
-| `scripts/`                                                                                               | `harness.mjs`, `run-pair.sh`, `analyze.mjs` |
+| Path                                                                                                     | Contents                                                                                                                                            |
+| -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runs/G1-{baseline-memory,baseline-redis}/`                                                              | no-outage baselines (both arms clean)                                                                                                               |
+| `runs/P2-plain-{memory,redis}/`                                                                          | plain-agent 300 s outage pair (§3)                                                                                                                  |
+| `runs/P3-durable-{memory,redis}/`                                                                        | durable-agent 300 s outage pair (§4)                                                                                                                |
+| `runs/P2-plain.driver.log`, `runs/P3-durable.driver.log`                                                 | run driver logs                                                                                                                                     |
+| each run: `timeline.jsonl`, `monitor.log`, `truth-table.csv`, `summary.json`, `meta.json`, `console.log` | raw evidence — only `truth-table.csv`, `summary.json`, `meta.json`, `console.log` are committed; `timeline.jsonl`/`monitor.log` stay on the sandbox |
+| `scripts/`                                                                                               | `harness.mjs`, `run-pair.sh`, `analyze.mjs`                                                                                                         |

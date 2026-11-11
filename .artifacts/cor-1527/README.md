@@ -23,7 +23,8 @@ for d in runs/P2-*/; do node scripts/analyze.mjs $d; done
 ```
 
 The harness refuses to run unless container `cor1527-redis` maps to host port 6399. Arms differ only in `--cache=memory|redis`
-(`InMemoryServerCache` vs `RedisServerCache` on an ioredis client, the documented wiring). Times in `truth-table.csv` / `summary.json`
+(`InMemoryServerCache` vs `RedisServerCache` on an ioredis client, the documented wiring; the transport
+`RedisStreamsPubSub` itself uses node-redis). Times in `truth-table.csv` / `summary.json`
 are seconds relative to `outage.start`.
 
 Environment: node v22.23.3, redis:8 (8.10.3, digest in `meta.json`), dist built from HEAD a3c08844.
