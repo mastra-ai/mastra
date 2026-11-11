@@ -371,51 +371,10 @@ async function ingestPolledEvents(
   if (!ingestFactoryEvent) return;
   const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  // Best-effort: one event's rule-ingress failure must not stop the rest of the pass.
+  // Best-effort: one event's rule-ingress failure must not stop the rest of the backlog import.
   if (rejected) {
     console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
   }
-}
-
-// Entries a page already ruled wait this long before the rules see them again; entries new to the
-// page are ruled on the first poll that lists them. Webhooks, the event poller and the reconcilers
-// carry the changes in between, so this pass only catches what they missed.
-const POLLED_PAGE_INGEST_REST_MS = 5 * 60_000;
-// Past this a pass is presumed stuck, and the next poll runs the rules again as if it were not there.
-const POLLED_PAGE_INGEST_ABANDON_MS = 120_000;
-
-/**
- * Runs the rules over a listed page in the background, one pass per page at a time whichever board
- * asked, then rests the page: every open board polls the same pages, and the list must not wait on
- * the rules. A resting page still rules the issues or pull requests its last pass did not list.
- * Keys name the feed as well as the page, so an issue page never joins a pull request pass.
- */
-function createPolledPageIngest() {
-  const running = new Map<string, { startedAt: number; done: Promise<void> }>();
-  const resting = new Map<string, { finishedAt: number; ingested: Set<number> }>();
-  return <T extends { number: number }>(
-    key: string,
-    listed: readonly T[],
-    ingest: (listed: readonly T[]) => Promise<void>,
-  ): void => {
-    const pending = running.get(key);
-    if (pending && Date.now() - pending.startedAt < POLLED_PAGE_INGEST_ABANDON_MS) return;
-    // Finish order: a key is only set again after it was pruned, so the oldest entries come first.
-    for (const [rested, { finishedAt }] of resting) {
-      if (Date.now() - finishedAt < POLLED_PAGE_INGEST_REST_MS) break;
-      resting.delete(rested);
-    }
-    const rest = resting.get(key);
-    const due = rest ? listed.filter(entry => !rest.ingested.has(entry.number)) : listed;
-    if (due.length === 0) return;
-    const done = ingest(due).finally(() => {
-      if (running.get(key)?.done !== done) return;
-      running.delete(key);
-      if (rest) for (const entry of due) rest.ingested.add(entry.number);
-      else resting.set(key, { finishedAt: Date.now(), ingested: new Set(due.map(entry => entry.number)) });
-    });
-    running.set(key, { startedAt: Date.now(), done });
-  };
 }
 
 const LINKED_BACKLOG_MAX_PAGES = 5;
@@ -452,8 +411,7 @@ function listedPullRequestOf(
 
 /**
  * Feed a just-linked repository's open issues and pull requests through the
- * same rules ingress the list routes use, so its backlog reaches the board
- * without anyone browsing it. Rows owned by another integration don't resolve
+ * rules ingress, so its backlog reaches the board without anyone browsing it. Rows owned by another integration don't resolve
  * through this integration's storage handle and are skipped.
  */
 export async function ingestLinkedRepositoryBacklog(args: {
@@ -516,7 +474,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, sandbox });
-  const ingestPolledPage = createPolledPageIngest();
 
   // The status route is always registered so the SPA can detect the disabled state.
   routes.push(
@@ -854,16 +811,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
-          // The label is part of the page: the triage feed polls a filtered page beside the unfiltered one.
-          ingestPolledPage(
-            `issues:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}:${label ?? ''}`,
-            responseIssues,
-            listed =>
-              ingestPolledEvents(
-                listed.map(issue => polledIssueEvent(loaded.project, issue)),
-                options.ingestFactoryEvent,
-              ),
-          );
           return c.json({
             issues: responseIssues,
             nextPage: nextCursor === null ? null : Number(nextCursor),
@@ -953,15 +900,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
-          ingestPolledPage(
-            `prs:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
-            responsePullRequests,
-            listed =>
-              ingestPolledEvents(
-                listed.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
-                options.ingestFactoryEvent,
-              ),
-          );
           return c.json({
             pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),
