@@ -1,6 +1,9 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { ProcessAPIErrorArgs, Processor, StreamErrorRetryProcessorOptions } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
@@ -1996,6 +1999,42 @@ describe('createMastraCode', () => {
     expect(options?.getBasePath?.({ requestContext: withProjectPath })).toBe('/work/target');
     expect(options?.getBasePath?.({ requestContext: undefined })).toBe(process.cwd());
   });
+
+  it('does not read literal sibling instructions outside the untrusted primary checkout', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mastracode-reminder-scope-'));
+    try {
+      const primary = join(root, 'primary');
+      const sibling = join(root, 'sibling');
+      mkdirSync(primary);
+      mkdirSync(sibling);
+      const siblingInstructions = join(sibling, 'AGENTS.md');
+      writeFileSync(siblingInstructions, 'untrusted sibling instructions');
+
+      const { createMastraCode } = await import('../index.js');
+      await createMastraCode();
+      const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+        getReader: (args: { requestContext: { get: (key: string) => unknown } }) => {
+          pathExists: (path: string) => Promise<boolean>;
+          readFile: (path: string) => Promise<string>;
+        };
+      };
+      const requestContext = {
+        get: () => ({
+          getState: () => ({
+            projectPath: root,
+            instructionRoots: ['primary'],
+            untrustedCheckout: true,
+            baseRef: 'main',
+          }),
+        }),
+      };
+      const reader = options.getReader({ requestContext });
+      expect(await reader.pathExists(siblingInstructions)).toBe(false);
+      await expect(reader.readFile(siblingInstructions)).rejects.toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it('configures a single StreamErrorRetryProcessor with per-matcher policies', async () => {
     const { createMastraCode } = await import('../index.js');

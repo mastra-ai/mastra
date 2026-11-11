@@ -268,7 +268,12 @@ function gitAsync(args: string[], input?: string): Promise<Buffer | null> {
       failed = true;
     });
     child.on('close', code => resolveOutput(!failed && code === 0 ? Buffer.concat(chunks) : null));
-    if (input !== undefined) child.stdin?.end(input);
+    if (input !== undefined) {
+      child.stdin?.on('error', () => {
+        failed = true;
+      });
+      child.stdin?.end(input);
+    }
   });
 }
 

@@ -1267,6 +1267,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ...reader,
           pathExists: async filePath => !outsidePrimary(filePath) && (await reader.pathExists(filePath)),
           isDirectory: async filePath => !outsidePrimary(filePath) && (await reader.isDirectory(filePath)),
+          readFile: async filePath => {
+            if (outsidePrimary(filePath)) throw new Error(`Not found at ref ${state.baseRef}: ${filePath}`);
+            return reader.readFile(filePath);
+          },
         };
       },
       getIgnoredInstructionPaths: async ({ requestContext }) => {
