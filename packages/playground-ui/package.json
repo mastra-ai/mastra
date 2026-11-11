@@ -171,7 +171,7 @@
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
-    "build-storybook": "pnpm turbo build --filter @mastra/core --filter @mastra/react --filter @mastra/ai-sdk && storybook build"
+    "build-storybook": "pnpm turbo build --filter @mastra/core --filter @mastra/react --filter @mastra/ai-sdk --filter @mastra/json-render && storybook build"
   },
   "keywords": [
     "mastra",
