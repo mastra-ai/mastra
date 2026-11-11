@@ -12,6 +12,7 @@ import { Agent, MessageList } from '../../agent';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
 import { Mastra } from '../../mastra';
 import type { MemoryRuntimeContext } from '../../memory';
+import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { MessageHistory } from './message-history';
@@ -89,6 +90,14 @@ function createMockModel() {
   });
 }
 
+/** Runs after MessageHistory in the same pass, so it trips on an already-saved turn. */
+function createTripwireProcessor(): Processor {
+  return {
+    id: 'tripwire',
+    processOutputResult: async ({ abort }) => abort('blocked by guardrail'),
+  };
+}
+
 describe('MessageHistory with a request-context thread and no Memory instance', () => {
   it('stores the turn under the request-context thread', async () => {
     const memoryStore = (await new InMemoryStore().getStore('memory'))!;
@@ -139,5 +148,29 @@ describe('MessageHistory with a request-context thread and no Memory instance', 
         permission: 'memory:write',
       }),
     );
+  });
+
+  it('rolls back the saved reply when a later output processor trips, with no Memory instance', async () => {
+    const memoryStore = (await new InMemoryStore().getStore('memory'))!;
+    const processor = new MessageHistory({ storage: memoryStore });
+
+    const agent = new Agent({
+      id: 'tripwire-request-context-agent',
+      name: 'tripwire-request-context-agent',
+      instructions: 'test',
+      model: createMockModel(),
+      // MessageHistory saves the turn first, then the guardrail rejects it — so the rollback has
+      // to remove what the processor wrote, with no Memory instance to fall back on.
+      outputProcessors: [processor, createTripwireProcessor()],
+    });
+
+    const result = await agent.generate('Hello', { requestContext: requestContextWithThread() as any });
+
+    expect(result.tripwire?.reason).toBe('blocked by guardrail');
+    const { messages } = await memoryStore.listMessages({ threadId: THREAD });
+    // The processor did save the turn (the user row, stamped from the request context)…
+    expect(messages.map(message => message.role)).toEqual(['user']);
+    // …and the blocked reply was rolled back rather than left in the thread.
+    expect(messages.some(message => message.role === 'assistant')).toBe(false);
   });
 });

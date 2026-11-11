@@ -965,6 +965,13 @@ export type ProcessorStepExecutor<TInput = ProcessorStepOutput> = (args: {
 export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any> & {
   /** @internal Processors in a combined workflow that compute state signals after input-step execution. */
   __stateSignalProcessors?: Processor[];
+  /**
+   * @internal Processors this framework-generated workflow wraps, in execution order.
+   *
+   * The wrapper is the only thing that still knows them once they are steps, and a caller that
+   * needs a processor instance (e.g. to undo what one saved) cannot reach it any other way.
+   */
+  __processors?: Processor[];
   /** @internal Whether a framework-generated workflow needs per-chunk execution. Unknown workflows always execute. */
   __processOutputStream?: boolean;
   /**

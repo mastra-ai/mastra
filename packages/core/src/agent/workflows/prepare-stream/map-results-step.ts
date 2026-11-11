@@ -19,7 +19,10 @@ import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
-import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
+import {
+  collectMessageHistoryStorages,
+  undoSavedResponseMessages,
+} from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
@@ -328,6 +331,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
+    // A tripwire has to undo whatever a saving processor already wrote. Without a Memory instance
+    // those processors are the only handle on the storage, and the thread can live solely in the
+    // request context, so resolve both the way MessageHistory does.
+    const outputProcessorStorages = collectMessageHistoryStorages(effectiveOutputProcessors ?? []);
+    const resolveUndoThreadId = () =>
+      parseMemoryRequestContext(requestContext)?.thread?.id ?? memoryData.thread?.id ?? threadIdFromArgs;
+
     const loopOptions = {
       tracingScope: runScope,
       methodType: modelMethodType,
@@ -379,7 +389,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
         onDeadlineTripwire: (turn: MessageList) =>
           undoSavedResponseMessages({
             memory,
-            threadId: memoryData.thread?.id ?? threadIdFromArgs,
+            storages: outputProcessorStorages,
+            threadId: resolveUndoThreadId(),
             memoryConfig,
             messageList: turn,
             saveQueueManager,
@@ -479,7 +490,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
             if (context?.outputResultTripwire) {
               await undoSavedResponseMessages({
                 memory,
-                threadId: memoryData.thread?.id ?? threadIdFromArgs,
+                storages: outputProcessorStorages,
+                threadId: resolveUndoThreadId(),
                 memoryConfig,
                 messageList,
                 saveQueueManager,

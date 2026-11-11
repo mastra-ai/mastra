@@ -75,6 +75,17 @@ export class MessageHistory implements Processor {
   }
 
   /**
+   * The storage this processor reads from and writes to.
+   *
+   * Exposed so a tripwire can undo a save that ran without a Memory instance: the processor is then
+   * the only handle on the storage the turn was written to.
+   * @internal
+   */
+  getStorage(): MemoryStorage {
+    return this.storage;
+  }
+
+  /**
    * Get threadId and resourceId from either RequestContext or MessageList's memoryInfo
    */
   private getMemoryContext(

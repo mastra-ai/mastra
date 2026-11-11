@@ -2633,6 +2633,12 @@ export class Agent<
     if (stateSignalProcessors.length > 0 && isProcessorWorkflow(committedWorkflow)) {
       committedWorkflow.__stateSignalProcessors = stateSignalProcessors;
     }
+    // Record the processors this workflow wraps. Wrapping a processor into a step loses the
+    // instance, and a caller that has to undo what one saved (the tripwire undo for a run with no
+    // Memory instance) cannot reach it any other way.
+    if (isProcessorWorkflow(committedWorkflow)) {
+      committedWorkflow.__processors = validProcessors as Processor[];
+    }
 
     // The resulting workflow is compatible with both Input and Output processor types
     return [committedWorkflow];
