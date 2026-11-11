@@ -46,7 +46,38 @@ export function rawRuleProblem<Rule>(schema: z.ZodType<Rule>, text: string): str
 }
 
 type Condition = { field?: unknown; operator?: unknown; value?: unknown };
-type Group = { conditions?: unknown };
+type Group = { operator?: unknown; conditions?: unknown };
+
+/** A condition another one is tested alongside: a provider limit, say. */
+export type Limit = { field: string; operator: string; value?: unknown };
+
+/**
+ * The conditions every card a group tests also meets: those of the AND groups around it, plus, in
+ * an AND group, its own conditions. An OR group adds none, since a card meets only one of them.
+ */
+export function andLimits<Row>(logic: unknown, limits: readonly Row[], rows: readonly Row[]): Row[] {
+  return logic === 'AND' ? [...limits, ...rows] : [...limits];
+}
+
+const PROVIDER_FIELDS = new Set(['source.provider', 'source.integration']);
+
+/** The providers a card meeting these conditions can come from, or `undefined` when none limits them. */
+export function limitedProviders(limits: readonly Limit[]): Set<string> | undefined {
+  let allowed: Set<string> | undefined;
+  for (const limit of limits) {
+    if (!PROVIDER_FIELDS.has(limit.field)) continue;
+    const values =
+      limit.operator === 'equals' && typeof limit.value === 'string'
+        ? [limit.value]
+        : limit.operator === 'in' && Array.isArray(limit.value)
+          ? limit.value.filter((value): value is string => typeof value === 'string')
+          : undefined;
+    if (!values) continue;
+    const these = new Set(values.map(value => value.trim().toLowerCase()));
+    allowed = allowed ? new Set([...allowed].filter(provider => these.has(provider))) : these;
+  }
+  return allowed;
+}
 
 const REPOSITORY_FORMATS = new Map([
   ['github', 'GitHub repositories are owner/repo, such as mastra-ai/mastra.'],
@@ -63,29 +94,41 @@ function requiredRepositories(condition: Condition): string[] {
   return [];
 }
 
-/**
- * A hint when a group requires `source.repository` to be a bare name while it also limits cards
- * to GitHub or GitLab, whose repositories always have an owner: that name never matches.
- */
-export function repositoryHint(rule: unknown): string | undefined {
-  if (!rule || typeof rule !== 'object') return undefined;
-  const entries: unknown = (rule as Group).conditions;
-  if (!Array.isArray(entries)) return undefined;
-  const conditions = entries.filter((entry): entry is Condition => !!entry && typeof entry === 'object');
-  const format = conditions
-    .filter(
-      condition =>
-        (condition.field === 'source.integration' || condition.field === 'source.provider') &&
-        condition.operator === 'equals' &&
-        typeof condition.value === 'string',
-    )
-    .map(condition => REPOSITORY_FORMATS.get(String(condition.value).trim().toLowerCase()))
-    .find(found => found !== undefined);
-  const bare = conditions.flatMap(requiredRepositories).some(value => value.trim() !== '' && !value.includes('/'));
-  if (format && bare) return format;
-  for (const entry of conditions) {
-    const hint = repositoryHint(entry);
+const isGroup = (entry: object): entry is Group => Array.isArray((entry as Group).conditions);
+
+const asLimit = (condition: Condition): Limit[] =>
+  typeof condition.field === 'string' && typeof condition.operator === 'string'
+    ? [{ field: condition.field, operator: condition.operator, value: condition.value }]
+    : [];
+
+/** The format a bare repository name breaks, when every provider the limits allow has an owner in its paths. */
+function formatFor(limits: readonly Limit[]): string | undefined {
+  const providers = [...(limitedProviders(limits) ?? [])];
+  if (providers.length === 0 || !providers.every(provider => REPOSITORY_FORMATS.has(provider))) return undefined;
+  return REPOSITORY_FORMATS.get(providers[0]);
+}
+
+function hintIn(group: Group, limits: readonly Condition[]): string | undefined {
+  const entries: unknown[] = Array.isArray(group.conditions) ? group.conditions : [];
+  const items = entries.filter((entry): entry is object => !!entry && typeof entry === 'object');
+  const rows = items.filter((item): item is Condition => !isGroup(item));
+  const here = andLimits(group.operator, limits, rows);
+  for (const item of items) {
+    const hint = isGroup(item)
+      ? hintIn(item, here)
+      : requiredRepositories(item).some(value => value.trim() !== '' && !value.includes('/'))
+        ? formatFor(here.filter(limit => limit !== item).flatMap(asLimit))
+        : undefined;
     if (hint) return hint;
   }
   return undefined;
+}
+
+/**
+ * A hint when a condition requires `source.repository` to be a bare name while every card it tests
+ * also comes from GitHub or GitLab, whose repositories always have an owner: that name never matches.
+ */
+export function repositoryHint(rule: unknown): string | undefined {
+  if (!rule || typeof rule !== 'object' || !isGroup(rule)) return undefined;
+  return hintIn(rule, []);
 }

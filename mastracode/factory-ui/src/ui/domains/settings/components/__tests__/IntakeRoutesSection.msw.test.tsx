@@ -289,6 +289,78 @@ describe('IntakeRoutesSection', () => {
     });
   });
 
+  it('keeps a repository being typed when the project\'s repositories arrive mid-way, the control staying put', async () => {
+    const state = serveRoutes();
+    let release!: () => void;
+    const arrived = new Promise<void>(resolve => (release = resolve));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await arrived;
+        return HttpResponse.json({
+          projects: [{ id: 'fp-1', name: 'Factory', repositories: [listedRepository('repo-1', 'acme/app')] }],
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'acme/next goes to Ship');
+    await addCondition(user, draft, 'Repository, team or project');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    const search = await screen.findByPlaceholderText('owner/repo, ENG, PLAT');
+    await user.type(search, 'acme/ne');
+    release();
+    await waitFor(async () => expect(await offered()).toContain('Use “acme/ne”'));
+    await user.type(search, 'xt{Enter}');
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]?.body).toMatchObject({
+      when: { operator: 'AND', conditions: [{ field: 'source.repository', operator: 'equals', value: 'acme/next' }] },
+    });
+  });
+
+  it('lists the repositories a typed name matches before using the name as typed, so Enter picks the repository', async () => {
+    const state = serveRoutes();
+    serveProjectSources();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: 'fp-1',
+              name: 'Factory',
+              repositories: [listedRepository('repo-1', 'mastra-ai/mastra'), listedRepository('repo-2', 'acme/app')],
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Mastra goes to Ship');
+    await addCondition(user, draft, 'Repository, team or project');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await user.type(await screen.findByPlaceholderText('owner/repo, ENG, PLAT'), 'mastra');
+    await waitFor(async () => expect(await offered()).toEqual(['mastra-ai/mastra', 'Use “mastra”']));
+    await user.keyboard('{Enter}');
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]?.body).toMatchObject({
+      when: {
+        operator: 'AND',
+        conditions: [{ field: 'source.repository', operator: 'equals', value: 'mastra-ai/mastra' }],
+      },
+    });
+  });
+
   it('suggests only the provider a condition beside it limits cards to', async () => {
     serveRoutes();
     serveProjectSources();
@@ -504,7 +576,8 @@ describe('IntakeRoutesSection', () => {
     expect(screen.queryByRole('option', { name: 'Close reason' })).toBeNull();
     await user.click(screen.getByRole('option', { name: 'Repository, team or project' }));
     expect(within(draft).getByRole('combobox', { name: 'Operator' })).toHaveTextContent('is');
-    await user.type(within(draft).getByRole('textbox', { name: 'Value' }), 'acme/app{Enter}');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await user.type(await screen.findByPlaceholderText('owner/repo, ENG, PLAT'), 'acme/app{Enter}');
     await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
     await user.click(await screen.findByRole('option', { name: 'Ship' }));
     await user.click(within(draft).getByRole('button', { name: 'Add route' }));

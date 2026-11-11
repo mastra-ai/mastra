@@ -4,12 +4,12 @@ import type { IntakeSourceBinding } from '../../factory/services/intake';
 import type { JiraProject } from '../../factory/services/jira';
 import type { LinearProject, LinearTeam } from '../../factory/services/linear';
 import { linearTeamSourceId } from '../../factory/services/linear';
+import type { Limit } from '../services/rules';
+import { limitedProviders } from '../services/rules';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 
 /** A value `source.repository` can take, and the provider whose items carry it. */
 export type SourceOption = FilterBarOption & { provider: string };
-
-const PROVIDER_FIELDS = new Set(['source.provider', 'source.integration']);
 
 /**
  * The values `source.repository` takes for the project's items: its linked GitHub repositories and
@@ -58,36 +58,25 @@ export function sourceSuggestions({
   });
 }
 
-type Limit = { field: string; operator: string; value?: unknown };
-
-/** The providers conditions ANDed with a row allow, or `undefined` when none limits them. */
-export function limitedProviders(limits: readonly Limit[]): Set<string> | undefined {
-  let allowed: Set<string> | undefined;
-  for (const limit of limits) {
-    if (!PROVIDER_FIELDS.has(limit.field)) continue;
-    const values =
-      limit.operator === 'equals' && typeof limit.value === 'string'
-        ? [limit.value]
-        : limit.operator === 'in' && Array.isArray(limit.value)
-          ? limit.value.filter((value): value is string => typeof value === 'string')
-          : undefined;
-    if (!values) continue;
-    const these = new Set(values.map(value => value.trim().toLowerCase()));
-    allowed = allowed ? new Set([...allowed].filter(provider => these.has(provider))) : these;
-  }
-  return allowed;
-}
-
 const hasProvider = (option: FilterBarOption): option is SourceOption =>
   'provider' in option && typeof option.provider === 'string';
 
-/** A field with its suggestions cut to the providers the conditions beside it allow. */
+/**
+ * A field with its suggestions cut to the providers the conditions beside it allow, each value once:
+ * the rule compares values regardless of provider or case, so Linear's ENG and Jira's ENG are one.
+ */
 export function narrowSuggestions(field: FilterBarField, limits: readonly Limit[]): FilterBarField {
   if (!Array.isArray(field.suggestions)) return field;
   const providers = limitedProviders(limits);
-  if (!providers) return field;
+  const seen = new Set<string>();
   return {
     ...field,
-    suggestions: field.suggestions.filter(option => !hasProvider(option) || providers.has(option.provider)),
+    suggestions: field.suggestions.filter(option => {
+      if (providers && hasProvider(option) && !providers.has(option.provider)) return false;
+      const key = option.value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
   };
 }

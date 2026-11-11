@@ -29,13 +29,28 @@ describe('repositoryHint', () => {
     ).toBeUndefined();
     expect(repositoryHint({ operator: 'AND', conditions: [integration('linear'), repository('ENG')] })).toBeUndefined();
     expect(repositoryHint({ operator: 'AND', conditions: [repository('mastra')] })).toBeUndefined();
+    expect(repositoryHint(null)).toBeUndefined();
+  });
+
+  it('pairs a provider and a repository only when a card must meet both, not when either will do', () => {
+    expect(repositoryHint({ operator: 'OR', conditions: [integration('github'), repository('ENG')] })).toBeUndefined();
     expect(
       repositoryHint({
         operator: 'AND',
-        conditions: [integration('github'), { operator: 'OR', conditions: [repository('mastra')] }],
+        conditions: [{ operator: 'OR', conditions: [integration('github'), integration('linear')] }, repository('ENG')],
       }),
     ).toBeUndefined();
-    expect(repositoryHint(null)).toBeUndefined();
+  });
+
+  it('carries a provider limit into the groups inside it, where every card still meets it', () => {
+    expect(
+      repositoryHint({
+        operator: 'AND',
+        conditions: [integration('github'), { operator: 'OR', conditions: [repository('mastra'), repository('api')] }],
+      }),
+    ).toMatch(/GitHub repositories are owner\/repo/);
+    const either = { field: 'source.provider', operator: 'in', value: ['github', 'linear'] };
+    expect(repositoryHint({ operator: 'AND', conditions: [either, repository('ENG')] })).toBeUndefined();
   });
 
   it('flags a bare name among the values of "is any of", but not a condition that can still match', () => {

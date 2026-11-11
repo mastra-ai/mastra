@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { limitedProviders, narrowSuggestions, sourceSuggestions } from './sourceSuggestions';
+import { limitedProviders } from '../services/rules';
+import { narrowSuggestions, sourceSuggestions } from './sourceSuggestions';
 
 describe('sourceSuggestions', () => {
   it("offers the project's repositories, then the keys of its own Linear and Jira sources, once each", () => {
@@ -76,7 +77,27 @@ describe('narrowSuggestions', () => {
     expect(narrowSuggestions(field, limits).suggestions).toEqual([{ value: 'ENG', provider: 'linear' }]);
   });
 
-  it('leaves the field alone with no provider limit', () => {
-    expect(narrowSuggestions(field, [])).toBe(field);
+  it('offers every provider\'s values with no provider limit', () => {
+    expect(narrowSuggestions(field, []).suggestions).toEqual(field.suggestions);
+  });
+
+  it('shows a key two providers share once, since the rule compares values regardless of provider or case', () => {
+    const shared = {
+      ...field,
+      suggestions: [
+        { value: 'ENG', provider: 'linear' },
+        { value: 'eng', provider: 'jira' },
+        { value: 'PLAT', provider: 'jira' },
+      ],
+    };
+    expect(narrowSuggestions(shared, []).suggestions).toEqual([
+      { value: 'ENG', provider: 'linear' },
+      { value: 'PLAT', provider: 'jira' },
+    ]);
+    const jiraOnly = [{ field: 'source.provider', operator: 'equals', value: 'jira' }];
+    expect(narrowSuggestions(shared, jiraOnly).suggestions).toEqual([
+      { value: 'eng', provider: 'jira' },
+      { value: 'PLAT', provider: 'jira' },
+    ]);
   });
 });

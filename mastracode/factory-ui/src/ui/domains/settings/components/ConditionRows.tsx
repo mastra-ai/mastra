@@ -47,7 +47,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { repositoryHint } from '../services/rules';
+import { andLimits, repositoryHint } from '../services/rules';
 import { CONDITION_OPERATORS, VALUE_PLACEHOLDERS, conditionFields } from './conditionFields';
 import type { Facts } from './conditionFields';
 import { MANY, VALUELESS, canNest, emptyRow, fromRule, isGroup, newKey, toRule, valueFor } from './conditionTree';
@@ -211,8 +211,11 @@ function GroupLines({
 
   const joiner = group.logic === 'AND' ? 'and' : 'or';
   // In an AND group, each row also holds for the others; an OR group's rows say nothing about each other.
-  const here =
-    group.logic === 'AND' ? [...limits, ...group.items.filter((item): item is Row => !isGroup(item))] : limits;
+  const here = andLimits(
+    group.logic,
+    limits,
+    group.items.filter((item): item is Row => !isGroup(item)),
+  );
   return (
     <RuleLines role={role} aria-label={label}>
       {group.items.map((item, index) => (
@@ -369,7 +372,8 @@ function ValueControl({ row, field, onChange }: { row: Row; field: FilterBarFiel
   const options = optionsOf(field);
   const many = MANY.has(row.operator);
   const typed = CONDITION_OPERATORS.find(operator => operator.id === row.operator)?.freeText === true;
-  if (options && field.strict === false && !typed) {
+  // An open field keeps one control while its suggestions load, so a value being typed isn't lost.
+  if (field.strict === false && !typed) {
     const values = Array.isArray(row.value)
       ? row.value.map(String)
       : row.value === undefined
@@ -377,7 +381,7 @@ function ValueControl({ row, field, onChange }: { row: Row; field: FilterBarFiel
         : [String(row.value)];
     return (
       <OpenValues
-        options={options.map(option => ({ value: option.value, label: option.label ?? option.value }))}
+        options={(options ?? []).map(option => ({ value: option.value, label: option.label ?? option.value }))}
         values={values}
         many={many}
         placeholder={VALUE_PLACEHOLDERS[field.id] ?? 'Search or type a value'}
@@ -475,7 +479,8 @@ function ManyValues({
 }
 
 /**
- * Picks from suggestions or takes any typed value: "Use “acme/next”" adds what was typed. One value, or
+ * Picks from suggestions or takes any typed value: "Use “acme/next”", listed after the suggestions it
+ * matches, adds what was typed. One value, or
  * several for "is any of"; values the suggestions don't list still show, and stay until removed.
  */
 function OpenValues({
@@ -495,10 +500,11 @@ function OpenValues({
   const typed = query.trim();
   const listed = (value: string) => options.some(option => option.value.toLowerCase() === value.toLowerCase());
   const chosen = values.map(value => options.find(option => option.value === value) ?? { value, label: value });
+  // What was typed goes last, so Enter picks a suggestion it matches; alone, it's the only choice.
   const items = [
-    ...(typed && !listed(typed) && !values.includes(typed) ? [{ value: typed, label: `Use “${typed}”` }] : []),
     ...options,
     ...chosen.filter(choice => !options.includes(choice)),
+    ...(typed && !listed(typed) && !values.includes(typed) ? [{ value: typed, label: `Use “${typed}”` }] : []),
   ];
   const labels = chosen.map(choice => choice.value);
   const shared = {
