@@ -143,6 +143,22 @@ export function applyResponseMessages(
 }
 
 /**
+ * A copy of a published step-finish payload with the run's full response
+ * message list in `_durableResponseMessages`, rebuilt into `replay`, as readers
+ * of the run (and its callers' public frames) see it.
+ */
+export function withRebuiltResponseMessages<T extends Parameters<typeof applyResponseMessages>[1]>(
+  replay: ResponseMessagesReplay,
+  payload: T,
+): Omit<T, '_durableResponseMessagesDiff'> & { _durableResponseMessages?: ResponseMessage[] } {
+  const { _durableResponseMessagesDiff, ...rest } = payload;
+  // A reader that can't rebuild the list (it missed an earlier part) reports none for this step
+  // rather than a list that may not match it.
+  const messages = applyResponseMessages(replay, payload);
+  return _durableResponseMessagesDiff || messages ? { ...rest, _durableResponseMessages: messages ?? [] } : rest;
+}
+
+/**
  * Fold the step-finish events of a run log, in order, into a reader's starting
  * state. Like a reader, it drops events of an execution that a newer claim
  * generation already superseded.

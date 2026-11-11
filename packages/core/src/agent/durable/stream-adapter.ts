@@ -25,7 +25,7 @@ import type {
 import type { Agent } from '../agent';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
-import { applyResponseMessages, replayResponseMessages } from '../streams/response-messages';
+import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
 import type { ResponseMessagesReplay } from '../streams/response-messages';
 import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import type { StructuredOutputOptions } from '../types';
@@ -625,6 +625,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || terminated || !isSubscribed || !controller) {
       return;
     }
+    // Events wait for the skipped history to be read; their silence until then isn't the run's.
+    if (skippedEventsReplayed) return;
     clearIdleTimer();
     const generation = idleGeneration;
     idleTimer = setTimeout(() => {
@@ -667,6 +669,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         clearTimeout(timer);
         timedOut = true;
         skippedEventsReplayed = undefined;
+        armIdleTimer();
       });
   }
 
@@ -753,18 +756,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           }
           if (chunk.type === 'step-finish' && chunk.payload) {
             // The event is shared with other readers and the replay cache: rewrite a copy.
-            const published = chunk.payload as unknown as AgentStreamStepFinishPayload;
-            const { _durableResponseMessagesDiff, ...payload } = published;
+            const payload = withRebuiltResponseMessages(
+              responseMessagesReplay,
+              chunk.payload as unknown as AgentStreamStepFinishPayload,
+            );
             const metadata = payload.metadata;
             // A JSON-serializing pubsub delivers the response timestamp as an ISO string.
             if (typeof metadata?.timestamp === 'string') {
               payload.metadata = { ...metadata, timestamp: new Date(metadata.timestamp) };
-            }
-            // Rebuild the run's response messages so far. A reader that can't (it missed an earlier
-            // part) reports none for this step rather than a list that may not match it.
-            const responseMessages = applyResponseMessages(responseMessagesReplay, published);
-            if (_durableResponseMessagesDiff || responseMessages) {
-              payload._durableResponseMessages = responseMessages ?? [];
             }
             (chunk as { payload: unknown }).payload = payload;
           }

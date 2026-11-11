@@ -149,8 +149,8 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
       const resentBeforeLast = stepFinishes
         .slice(1, TOOL_STEPS - 1)
         .filter(event => event.data.payload._durableResponseMessagesDiff?.from === 0).length;
-      if (isDurableEngineVariant(engine)) {
-        // Known gap: DurableAgent and EventedAgent still send the whole list on every step.
+      if (engine === 'inngest') {
+        // Known gap: the Inngest durable agent still sends the whole list on every step.
         expect(first).toBeGreaterThan(last + 2);
       } else {
         expect(resentBeforeLast).toBeLessThanOrEqual(3);
