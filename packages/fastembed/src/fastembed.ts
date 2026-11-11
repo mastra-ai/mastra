@@ -10,6 +10,7 @@
 
 import fs from 'node:fs';
 import type { PathLike } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -261,6 +262,22 @@ function getOutputDimensions(
   return tensor.dims as [number, number, number];
 }
 
+/**
+ * ONNX Runtime sizes its thread pool from the machine's cores and keeps threads busy-waiting between pieces of work.
+ * Under a CPU limit (a container quota or a restricted core set) both overrun the limit, and the kernel then pauses
+ * every thread in the process, the caller's included. So the pool is sized from the cores this process may use, and
+ * threads with nothing to do sleep.
+ */
+function sessionOptions(executionProviders: ExecutionProvider[]): ort.InferenceSession.SessionOptions {
+  const usableCores = os.availableParallelism();
+  return {
+    executionProviders,
+    graphOptimizationLevel: 'all',
+    ...(usableCores < os.cpus().length && { intraOpNumThreads: usableCores }),
+    extra: { session: { intra_op: { allow_spinning: '0' } } },
+  };
+}
+
 export class FlagEmbedding extends Embedding {
   private constructor(
     private tokenizer: Tokenizer,
@@ -305,10 +322,7 @@ export class FlagEmbedding extends Embedding {
     if (!fs.existsSync(modelPath)) {
       throw new Error(`Model file not found at ${modelPath}`);
     }
-    const session = await ort.InferenceSession.create(modelPath, {
-      executionProviders,
-      graphOptimizationLevel: 'all',
-    });
+    const session = await ort.InferenceSession.create(modelPath, sessionOptions(executionProviders));
     return new FlagEmbedding(tokenizer, session, model);
   }
 
@@ -511,10 +525,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
       throw new Error(`Model file not found at ${modelPath}`);
     }
 
-    const session = await ort.InferenceSession.create(modelPath, {
-      executionProviders,
-      graphOptimizationLevel: 'all',
-    });
+    const session = await ort.InferenceSession.create(modelPath, sessionOptions(executionProviders));
 
     return new SparseTextEmbedding(tokenizer, session);
   }
