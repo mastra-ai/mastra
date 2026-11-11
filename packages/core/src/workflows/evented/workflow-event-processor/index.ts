@@ -3117,10 +3117,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           recordedParent?.runId === runId &&
           recordedParent.executionPath?.length === executionPath.length &&
           recordedParent.executionPath.every((index, depth) => index === executionPath[depth]);
-        const finishedResult =
-          snapshot.status === 'success' &&
-          (snapshot.result as StepResult<any, any, any, any> | undefined)?.status === 'success'
-            ? (snapshot.result as StepResult<any, any, any, any>)
+        // The stored result is the workflow output. Runs stored before #29759 hold the last
+        // step's result record instead, so hand those up as they are.
+        const storedResult = snapshot.result as any;
+        const isLegacyStepRecord =
+          storedResult?.status === 'success' && typeof storedResult === 'object' && 'output' in storedResult;
+        const finishedResult: StepResult<any, any, any, any> | undefined =
+          snapshot.status === 'success'
+            ? isLegacyStepRecord
+              ? storedResult
+              : ({ status: 'success', output: storedResult } as StepResult<any, any, any, any>)
             : undefined;
         if (ranForThisStep && (finishedResult || snapshot.status === 'failed')) {
           const parentContext: ParentWorkflow = {
