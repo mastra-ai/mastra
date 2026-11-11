@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Added a GIN index on `mastra_threads.metadata` so listing or counting threads by metadata no longer scans the whole table. Existing databases build it concurrently on startup.
+Listing and counting threads filtered by metadata is now much faster on large thread tables, because `mastra_threads.metadata` gets an index by default. Existing databases build it on startup without blocking writes.
