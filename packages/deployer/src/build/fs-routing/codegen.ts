@@ -307,7 +307,6 @@ export async function generateFsAgentsModule(
   // the agents import (config, memory, tools, storage.ts, ...) stay shared.
   lines.push(``);
   lines.push(`function __registerFsPrimitives(__mastra) {`);
-  const bodyStart = lines.length;
   lines.push(`const __fsAgentEntries = [`);
   for (const expr of entryExprs) {
     lines.push(`  ${expr},`);
@@ -380,11 +379,6 @@ export async function generateFsAgentsModule(
 
   lines.push(``);
   lines.push(`return __mastra;`);
-  for (let i = bodyStart; i < lines.length; i++) {
-    if (lines[i]) {
-      lines[i] = `  ${lines[i]}`;
-    }
-  }
   lines.push(`}`);
   lines.push(``);
 
