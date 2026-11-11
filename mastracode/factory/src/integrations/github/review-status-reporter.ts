@@ -1,9 +1,11 @@
 import { pullRequestSourceNumber, reviewedPullRequest } from '../../boards/index.js';
 import type { PullRequestRef, VersionControl } from '../../capabilities/version-control.js';
+import { factorySessionUrl } from '../../links.js';
 import type { FactoryReviewStatusEvent, FactoryReviewStatusReporter } from '../../rules/dispatcher.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { Card } from '../../storage/domains/work-items/base.js';
 import { resolveRepository } from './acceptance-labels.js';
+import { isSessionUrl } from './review-status-comment.js';
 import type { ReviewStatusState, ReviewStatusStats } from './review-status-comment.js';
 import { publishReviewStatus } from './review-status.js';
 
@@ -74,6 +76,9 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
         pullRequestId: String(number),
       };
       const head = event.phase === 'reviewing' ? commitSha(item.metadata?.pullRequestHeadSha) : undefined;
+      const session = event.session
+        ? factorySessionUrl({ factoryProjectId: event.factoryProjectId, ...event.session })
+        : undefined;
       const state: ReviewStatusState = {
         run: event.run,
         requestedAt: event.requestedAt.toISOString(),
@@ -82,6 +87,7 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
         phase: event.phase,
         ...(event.startedAt ? { startedAt: event.startedAt.toISOString() } : {}),
         ...(head ? { head } : {}),
+        ...(isSessionUrl(session) ? { session } : {}),
       };
       const final = event.phase === 'completed' || event.phase === 'failed' || event.phase === 'cancelled';
       await publishReviewStatus(

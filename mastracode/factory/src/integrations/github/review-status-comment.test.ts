@@ -202,6 +202,37 @@ describe('renderReviewStatusComment', () => {
   });
 });
 
+describe('session link', () => {
+  const SESSION = 'https://factory.example.test/factories/fp-1/workspaces/session-1/threads/thread-1';
+
+  it('links the session while reviewing and keeps the link once the review ends', () => {
+    const reviewing = renderReviewStatusComment(
+      view({ state: state({ phase: 'reviewing', head: HEAD, session: SESSION }) }),
+    );
+    expect(reviewing).toContain(`<sub>[Factory session](${SESSION})</sub>`);
+    expect(parseReviewStatusState(reviewing)?.session).toBe(SESSION);
+
+    const done = renderReviewStatusComment(
+      view({
+        state: state({ phase: 'completed', head: HEAD, session: SESSION }),
+        repository: 'mastra-ai/mastra',
+        stats: { verdict: 'approve', reviewedHeadSha: HEAD },
+      }),
+    );
+    expect(done).toContain(`· [Factory session](${SESSION})</sub>`);
+  });
+
+  it('drops session links that could break out of the comment', () => {
+    const bad = (session: string) =>
+      parseReviewStatusState(`<!-- mastra-factory-review-status:state ${JSON.stringify({ ...state(), session })} -->`);
+    expect(bad('javascript:alert(1)')).toEqual(state());
+    expect(bad('https://x.test/a) [evil](https://y.test')).toEqual(state());
+    expect(bad('https://x.test/--><script>')).toEqual(state());
+    expect(bad(SESSION)).toEqual(state({ session: SESSION }));
+    expect(bad('http://[::1]:4111/factories/fp-1')).toEqual(state({ session: 'http://[::1]:4111/factories/fp-1' }));
+  });
+});
+
 describe('parseReviewStatusState', () => {
   it('reads malformed or hostile state as no state', () => {
     expect(parseReviewStatusState(undefined)).toBeUndefined();

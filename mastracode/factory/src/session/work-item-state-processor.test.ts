@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
@@ -142,6 +142,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
   }
 
   it("renders the bound card's board position, sources and Factory state", async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', '');
+    onTestFinished(() => vi.unstubAllEnvs());
     const { processor, context, item } = await setup({ trusted: true, storedWithSelfReview: true });
 
     const signal = await processor.computeStateSignal(stateArgs(context));
@@ -155,6 +157,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     expect(contents).toContain('Labels: bug, status: needs approval');
     expect(contents).toContain('Author: reporter (trusted)');
     expect(contents).toContain('Your branch: factory/issue-12');
+    expect(contents).toContain('Your session: no link (no public Factory URL is configured)');
     expect(contents).toContain('github issue, key acme/app#12, https://github.com/acme/app/issues/12');
     expect(contents).toContain(
       `github pull request #34, key acme/app#34, https://github.com/acme/app/pull/34, state open, head branch factory/issue-12, head ${HEAD}, details: gh pr view 34`,
@@ -186,6 +189,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     );
     expect(contents).not.toContain('evil');
     expect(contents).not.toContain('curl');
+  });
+
+  it('links the session when a public Factory URL is configured', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.test');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const { processor, context, project } = await setup({ trusted: true });
+
+    const contents = (await processor.computeStateSignal(stateArgs(context)))!.contents;
+
+    expect(contents).toContain(
+      `Your session: https://factory.example.test/factories/${encodeURIComponent(project.id)}/workspaces/resource-1/threads/thread-1`,
+    );
   });
 
   it("leaves self-review to the card's board, with no project switch in the signal", async () => {

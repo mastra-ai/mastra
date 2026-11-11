@@ -33,7 +33,7 @@ Gauge the people involved: the author's merged-PR/issue counts (`gh pr list --au
 
 If the issue is vague, do not stop to ask for clarification. Investigate the most plausible reading of it, record that reading as an assumption, and note what extra information from the reporter would firm it up as an open question.
 
-At the end of this phase, publish a small summary to the source issue as stated below. For GitHub issues, call `github_upsert_factory_triage_comment` with the issue number and the marker-prefixed pending summary; it updates Factory’s canonical marked comment or creates it when absent. For Linear issues, post the pending summary with `linear_create_comment`, leaving out the `<!-- mastra-factory-triage -->` marker line: Linear does not render HTML and would show it as text. For Jira issues, post a plain-text `Triage in progress: <one or two sentences>` with `jira_create_comment`; Jira renders comments as plain text, so omit the HTML marker. incident.io has no writeback tool and GitLab has no issue-comment tool, so skip the pending summary for those sources; the handoff lives in this conversation.
+At the end of this phase, publish a small summary to the source issue as stated below. For GitHub issues, call `github_upsert_factory_triage_comment` with the issue number and the marker-prefixed pending summary; it updates Factory’s canonical marked comment or creates it when absent. For Linear issues, post the pending summary with `linear_create_comment`, leaving out the `<!-- mastra-factory-triage -->` marker line: Linear does not render HTML and would show it as text. For Jira issues, post a plain-text `Triage in progress: <one or two sentences>` with `jira_create_comment`; Jira renders comments as plain text, so omit the HTML marker. incident.io has no writeback tool and GitLab has no issue-comment tool, so skip the pending summary for those sources; the handoff lives in this conversation. Every published summary links back to this session (see **Session link** below).
 
 ```markdown
 <!-- mastra-factory-triage -->
@@ -184,6 +184,8 @@ If you write the handoff to disk, use `.artifacts/factory-triage/issue-<number>.
 
 Publish the handoff only with `github_upsert_factory_triage_comment`, passing the issue number and `COMMENT_BODY`. Set `COMMENT_BODY` to the marker followed by the structured handoff. The tool updates the oldest marked comment authored by Factory, or creates one when no Factory-owned marker remains. Use its returned canonical comment identity to confirm publication.
 
+**Session link.** Every triage comment Factory publishes, pending or final, ends with a link to the session that wrote it, so a reader can always open the run. On GitHub, `github_upsert_factory_triage_comment` appends that footer itself and replaces any earlier one: never write your own. On Linear, which shows HTML as text, end the body with a plain `[Factory session](<url>)` line, using the `Your session` URL from the `factory-work-item` signal verbatim; on Jira, end it with the plain line `Factory session: <url>`. When the signal has no session URL, publish without one.
+
 Never use `gh issue comment`, `gh api user`, a raw comment POST/PATCH, or an `--edit-last` fallback for the Factory triage marker. If the tool reports an error, fix the underlying issue or stop; do not publish an alternate marker comment.
 
 After a GitHub comment is posted or updated, reconcile the labels before the terminal transition:
@@ -208,8 +210,8 @@ Apply only these label mutations. Do not remove `status: needs approval` merely 
 
 For non-GitHub sources, use the same structured handoff without attempting GitHub publication or label mutations:
 
-- Linear issues → post the handoff as a new comment with `linear_create_comment`, in the Linear form the output contract describes (no marker line, `+++ Details` … `+++` instead of `<details>`).
-- Jira issues → post a new plain-text comment with `jira_create_comment` (Jira has no marked-comment upsert and shows Markdown tables and HTML literally). The Jira audience may not have access to the target repository, so post only a reporter-safe summary: type, severity, route, and a few sentences on the conclusion and next step. Keep file paths, code, reproduction steps, and repository history out of it; the full handoff stays in this conversation.
+- Linear issues → post the handoff as a new comment with `linear_create_comment`, in the Linear form the output contract describes (no marker line, `+++ Details` … `+++` instead of `<details>`), ending with the session link.
+- Jira issues → post a new plain-text comment with `jira_create_comment` (Jira has no marked-comment upsert and shows Markdown tables and HTML literally). The Jira audience may not have access to the target repository, so post only a reporter-safe summary: type, severity, route, and a few sentences on the conclusion and next step. Keep file paths, code, reproduction steps, and repository history out of it; the full handoff stays in this conversation. End it with the `Factory session: <url>` line.
 - incident.io follow-ups and GitLab issues → no external publication; the final conversation message is the handoff.
 
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal. The `factory-phase` signal's `Board phases by part:` line names each phase this skill moves the card to, by its part in the loop (`rest`, `triage`, `build`, `self-review`, `pull request review`, `completed`, `canceled`); pass that phase's key as `stage`. The default Work board's keys are shown in brackets only as an example — never assume them on another board.

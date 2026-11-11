@@ -7,6 +7,7 @@ import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.js';
 import type { ReviewedChangeRequest } from '../boards/semantics.js';
+import { factorySessionUrl } from '../links.js';
 import { getFactorySessionCoordinates } from '../rules/binding-context.js';
 import { authorTrusted, SELF_REVIEW_ROUND_LIMIT } from '../rules/types.js';
 import type { Card, FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -186,6 +187,13 @@ function renderWorkItem(input: { item: Card; binding: FactoryRunBindingRecord; b
     `Labels: ${labels.length ? labels.join(', ') : 'none'}`,
     `Author: ${author ?? 'unknown'} (${trusted ? 'trusted' : 'untrusted'})`,
     `Your branch: ${binding.branch}`,
+    `Your session: ${
+      factorySessionUrl({
+        factoryProjectId: binding.factoryProjectId,
+        sessionId: binding.sessionId,
+        threadId: binding.threadId,
+      }) ?? 'no link (no public Factory URL is configured)'
+    }`,
   ].map(escapeText);
 
   const sources = item.workItem.sources ?? [];

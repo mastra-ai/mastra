@@ -384,7 +384,9 @@ describe('GitHub subscription entry points', () => {
         'explicit-tool',
         githubStub,
       ),
-    ).rejects.toThrow('Pull request https://github.com/other/repo/pull/123 is not in a repository linked to this Factory.');
+    ).rejects.toThrow(
+      'Pull request https://github.com/other/repo/pull/123 is not in a repository linked to this Factory.',
+    );
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(
@@ -557,6 +559,34 @@ describe('GitHub subscription entry points', () => {
       issueNumber: 7,
       body: '<!-- mastra-factory-triage -->\nPending',
     });
+  });
+
+  it('ends the triage comment with one link to the publishing session', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.test/');
+    try {
+      const footer =
+        '<!-- mastra-factory-session -->\n<sub>[Factory session](https://factory.example.test/factories/resource-1/workspaces/session-1/threads/thread-1)</sub>\n';
+      const stale = '<!-- mastra-factory-session -->\n<sub>[Factory session](https://old.example.test/x)</sub>\n';
+      for (const body of [
+        '<!-- mastra-factory-triage -->\nFinal',
+        `<!-- mastra-factory-triage -->\nFinal\n\n${stale}`,
+        `<!-- mastra-factory-triage -->\nFinal\n\n${footer}`,
+      ]) {
+        mocks.upsertTriageComment.mockClear();
+        await upsertFactoryTriageComment(authenticatedRequestContext(), { issueNumber: 7, body }, githubStub);
+        expect(mocks.upsertTriageComment).toHaveBeenCalledWith(
+          expect.objectContaining({ body: `<!-- mastra-factory-triage -->\nFinal\n\n${footer}` }),
+        );
+      }
+      const quoted =
+        '<!-- mastra-factory-triage -->\nThe footer marker is `<!-- mastra-factory-session -->`.\n\nDetails';
+      await upsertFactoryTriageComment(authenticatedRequestContext(), { issueNumber: 7, body: quoted }, githubStub);
+      expect(mocks.upsertTriageComment).toHaveBeenLastCalledWith(
+        expect.objectContaining({ body: `${quoted}\n\n${footer}` }),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('exposes the triage upsert only in authenticated repository sessions and rejects unmarked bodies', () => {
