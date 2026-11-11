@@ -36,7 +36,7 @@ export function AvatarBadge({ tone, className, children, ...props }: AvatarBadge
       {...props}
       data-slot="avatar-badge"
       className={cn(
-        'absolute right-0 bottom-0 z-10 inline-flex items-center justify-center rounded-full ring-2 ring-card select-none',
+        'absolute right-0 bottom-0 z-10 inline-flex aspect-square items-center justify-center rounded-full ring-2 ring-card select-none',
         '[&>[data-slot=avatar]]:border-0 [&>[data-slot=avatar]]:after:hidden',
         'after:pointer-events-none after:absolute after:inset-0 after:rounded-full after:shadow-inset',
         tone ? toneClasses[tone] : 'bg-card text-foreground',

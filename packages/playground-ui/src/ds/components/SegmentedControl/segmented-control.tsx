@@ -87,7 +87,7 @@ export function SegmentedControl<T extends string = string>({
       thumb.style.width = `${item.offsetWidth}px`;
       // Its size for `rounded-full`, so a square thumb is a circle (see `smooth-corners.css`).
       thumb.style.setProperty('--corner-w', `${item.offsetWidth}px`);
-      thumb.style.setProperty('--corner-box', `${item.offsetHeight}px`);
+      thumb.style.setProperty('--corner-h', `${item.offsetHeight}px`);
       thumb.style.transform = `translateX(${item.offsetLeft}px)`;
     };
     measure();

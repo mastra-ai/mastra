@@ -52,6 +52,7 @@
     /* The rung is the segment's short side, whatever height class it brought: corner
        smoothing caps from it (see `smooth-corners.css`). */
     --corner-box: var(--segment-height);
+    --corner-h: var(--segment-height);
   }
 
   /* Icon-mode is a circle, so its width moves with its height or it renders as a pill. */
