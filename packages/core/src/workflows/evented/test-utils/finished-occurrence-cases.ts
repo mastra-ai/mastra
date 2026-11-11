@@ -45,7 +45,12 @@ function work(id: string, report: Report) {
  * Workflow shapes. `block` is the occurrence replica A holds while the late
  * deliveries arrive, and `finished` are the execution paths of occurrences
  * that finished by then. For the loop they are its first two iterations.
+ * `saved` tells from the stored step results that those occurrences saved
+ * their results: a step's end is handled after its lease is released, and a
+ * delivery that arrives before that runs the step again.
  */
+type Context = Record<string, any>;
+const foreachOutput = (context: Context) => context.item?.suspendPayload?.__workflow_meta?.foreachOutput ?? [];
 const shapes = {
   step: {
     input: { n: 0 } as unknown,
@@ -57,6 +62,7 @@ const shapes = {
     labels: ['first', 'second'],
     block: 'second',
     finished: [[0]],
+    saved: (context: Context) => context.first?.status === 'success',
   },
   parallel: {
     input: { n: 0 } as unknown,
@@ -67,6 +73,7 @@ const shapes = {
     labels: ['a', 'b'],
     block: 'b',
     finished: [[0, 0]],
+    saved: (context: Context) => context.a?.status === 'success',
   },
   foreach: {
     input: [{ n: 1 }, { n: 2 }, { n: 3 }] as unknown,
@@ -91,6 +98,7 @@ const shapes = {
       [0, 0],
       [0, 1],
     ],
+    saved: (context: Context) => [0, 1].every(index => foreachOutput(context)[index]?.status === 'success'),
   },
   loop: {
     input: { n: 0 } as unknown,
@@ -112,6 +120,8 @@ const shapes = {
     labels: ['body:1', 'body:2', 'body:3'],
     block: 'body:3',
     finished: [[0], [0]],
+    // The third iteration's start replaces the body's record, so the first two ended.
+    saved: (context: Context) => (context.body?.metadata?.iterationCount ?? 0) >= 2,
   },
   nested: {
     input: { n: 0 } as unknown,
@@ -127,6 +137,7 @@ const shapes = {
     labels: ['inner', 'after'],
     block: 'after',
     finished: [[0]],
+    saved: (context: Context) => context['finished-child']?.status === 'success',
   },
 };
 
@@ -506,6 +517,7 @@ export function describeFinishedOccurrenceCases({
         const run = await a.workflow.createRun({ runId: uniqueRunId() });
         const result = run.start({ inputData: shape.input as any });
         await blocked.promise;
+        await expect.poll(async () => shape.saved((await storedRun(run.runId))?.context ?? {})).toBe(true);
 
         const stepRuns = a.published.filter(event => event.type === 'workflow.step.run');
         // The nth listing of a path is the nth message published for it (a loop's iterations share one path).
