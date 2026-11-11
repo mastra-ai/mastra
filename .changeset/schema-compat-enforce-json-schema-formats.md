@@ -14,10 +14,22 @@ schemas and structured output. Schemas written with Zod or another Standard Sche
 
 Two related changes come with it:
 
-- `format` is now checked, so values that used to be accepted are rejected. `date-time` requires a timezone
-  offset (`2026-11-05T10:00:00Z`, not `2026-11-05T10:00:00`).
+- `format` is now checked, so values that used to be accepted are rejected. For `date-time`, replace values
+  without a timezone (before: `2026-11-05T10:00:00`) with timezone-qualified values (after:
+  `2026-11-05T10:00:00Z` or `2026-11-05T10:00:00+00:00`).
 - `formatMinimum` / `formatMaximum` on `date` / `date-time` now take effect.
 
-Pass `ajvOptions: { validateFormats: false }` to validate without format checks.
+For direct `@mastra/schema-compat` callers, validate a timezone-qualified value:
+
+```ts
+import { toStandardSchema } from '@mastra/schema-compat/adapters/json-schema';
+
+const schema = { type: 'string', format: 'date-time' } as const;
+const result = toStandardSchema(schema)['~standard'].validate('2026-11-05T10:00:00Z');
+```
+
+If direct callers need the previous behavior, use
+`toStandardSchema(schema, { ajvOptions: { validateFormats: false } })`. MCP tool inputs, core tool schemas,
+and structured output do not expose this opt-out; supply format-valid values for those paths instead.
 
 Fixes [#29385](https://github.com/mastra-ai/mastra/issues/29385)
