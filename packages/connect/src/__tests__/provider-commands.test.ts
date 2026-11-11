@@ -104,6 +104,66 @@ const action = createAction({
 export default action;
 `;
 
+// The parts of NangoHQ/integration-templates' fireflies get-transcript (pinned
+// in templates-config.ts) that the #29401 generator override rewrites.
+const firefliesGetTranscriptTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ id: z.string() });
+
+const SummarySchema = z.object({
+    action_items: z.string().nullish(),
+    keywords: z.string().nullish()
+});
+
+const ProviderSummarySchema = SummarySchema.extend({
+    action_items: z.union([z.string(), z.array(z.string())]).nullish()
+});
+
+const SpeakerSchema = z.object({
+    id: z.string().nullish(),
+    name: z.string().nullish()
+});
+
+const TranscriptSchema = z.object({
+    summary: ProviderSummarySchema.nullable().optional(),
+    speakers: z.array(SpeakerSchema).nullish()
+});
+
+const OutputSchema = z.object({
+    summary: SummarySchema.optional(),
+    speakers: z.array(SpeakerSchema).optional()
+});
+
+function normalizeActionItems(actionItems: string | string[]): string {
+    return Array.isArray(actionItems) ? actionItems.join('\\n') : actionItems;
+}
+
+const action = createAction({
+    description: 'Retrieve a transcript.',
+    version: '1.0.0',
+    input: InputSchema,
+    output: OutputSchema,
+    scopes: [],
+    exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+        const response = await nango.post({ endpoint: '/graphql', data: { variables: { id: input.id } } });
+        const transcript = TranscriptSchema.parse(response.data);
+        return {
+            summary: transcript.summary
+                ? {
+                      ...transcript.summary,
+                      action_items:
+                          transcript.summary.action_items != null ? normalizeActionItems(transcript.summary.action_items) : transcript.summary.action_items
+                  }
+                : undefined,
+            speakers: transcript.speakers ?? undefined
+        };
+    }
+});
+
+export default action;
+`;
+
 const proxyConfigurationTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 import type { ProxyConfiguration } from 'nango';
@@ -498,6 +558,10 @@ describe('maintainer provider commands', () => {
     mkdirSync(openaiActionDir, { recursive: true });
     writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
 
+    const firefliesActionDir = resolve(integrationsDir, 'fireflies', 'actions');
+    mkdirSync(firefliesActionDir, { recursive: true });
+    writeFileSync(resolve(firefliesActionDir, 'get-transcript.ts'), firefliesGetTranscriptTemplate);
+
     execFileSync('git', ['init', '-q'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync('git', ['add', '.'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync(
@@ -741,6 +805,106 @@ export default action;
     );
     expect(generatedTool).toContain('toModelOutput: toImageGenerationModelOutput,');
   });
+
+  // #29401: Fireflies sends summary.keywords as a list and speakers[].id as a
+  // number; the template accepts only strings, so the generator widens both.
+  it('regenerates fireflies get-transcript so live keyword lists and numeric speaker ids are accepted', async () => {
+    await addProvider({ providerId: 'fireflies', localId: 'fireflies', yes: true, expectedTemplateSha: templateSha });
+
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/fireflies/tools/get-transcript.ts'), 'utf8');
+    expect(generatedTool).toMatch(
+      /const ProviderSummarySchema = SummarySchema\.extend\(\{[^}]*keywords: z\.union\(\[z\.string\(\), z\.array\(z\.string\(\)\)\]\)\.nullish\(\)/,
+    );
+    expect(generatedTool).toMatch(
+      /const ProviderSpeakerSchema = SpeakerSchema\.extend\(\{\s*id: z\.union\(\[z\.string\(\), z\.number\(\)\]\)\.nullish\(\)/,
+    );
+    expect(generatedTool).toMatch(
+      /const TranscriptSchema = z\.object\(\{[^}]*speakers: z\.array\(ProviderSpeakerSchema\)/,
+    );
+    // The tool's output contract stays string-typed.
+    expect(generatedTool).toMatch(
+      /export const getTranscriptOutputSchema = z\.object\(\{[^}]*speakers: z\.array\(SpeakerSchema\)/,
+    );
+    expect(generatedTool).toMatch(/keywords:\s*transcript\.summary\.keywords != null\s*\?\s*normalizeKeywords\(/);
+    expect(generatedTool).toMatch(
+      /speakers:\s*transcript\.speakers\s*\?\s*transcript\.speakers\.map\(normalizeSpeaker\)\s*:\s*undefined/,
+    );
+  });
+
+  // Each case changes one piece of the template the override rewrites; any of
+  // them must stop generation rather than ship a tool that still rejects
+  // live transcripts.
+  it.each([
+    {
+      what: 'ProviderSummarySchema declaration',
+      drift: (template: string) => template.replaceAll('ProviderSummarySchema', 'SummaryResponseSchema'),
+    },
+    {
+      what: 'summary keywords schema',
+      drift: (template: string) =>
+        template.replace(
+          'action_items: z.union([z.string(), z.array(z.string())]).nullish()',
+          'action_items: z.array(z.string()).nullish()',
+        ),
+    },
+    {
+      what: 'SpeakerSchema declaration',
+      drift: (template: string) => template.replace('const SpeakerSchema = ', 'const SpeakerFields = '),
+    },
+    {
+      what: 'provider speakers schema',
+      drift: (template: string) =>
+        template.replace('speakers: z.array(SpeakerSchema).nullish()', 'speakers: z.array(SpeakerSchema).optional()'),
+    },
+    {
+      what: 'normalizeActionItems declaration',
+      drift: (template: string) => template.replaceAll('normalizeActionItems', 'toActionItemText'),
+    },
+    {
+      what: 'summary keywords normalization',
+      drift: (template: string) =>
+        template.replace(
+          'transcript.summary.action_items != null ? normalizeActionItems(transcript.summary.action_items) : transcript.summary.action_items',
+          'normalizeActionItems(transcript.summary.action_items ?? [])',
+        ),
+    },
+    {
+      what: 'speaker normalization',
+      drift: (template: string) =>
+        template.replace(
+          'speakers: transcript.speakers ?? undefined',
+          'speakers: transcript.speakers?.map(speaker => speaker) ?? undefined',
+        ),
+    },
+  ])(
+    'refuses to regenerate fireflies get-transcript when the template drifts at the $what',
+    async ({ what, drift }) => {
+      const templatesDir = resolve(packageRoot, '.templates');
+      const templatePath = resolve(templatesDir, 'integrations', 'fireflies', 'actions', 'get-transcript.ts');
+      const git = (...args: string[]) =>
+        execFileSync('git', ['-c', 'user.name=Mastra Tests', '-c', 'user.email=tests@mastra.ai', ...args], {
+          cwd: templatesDir,
+          encoding: 'utf8',
+        }).trim();
+      const drifted = drift(firefliesGetTranscriptTemplate);
+      expect(drifted).not.toBe(firefliesGetTranscriptTemplate);
+      writeFileSync(templatePath, drifted);
+      git('commit', '-qam', `drift fireflies template: ${what}`);
+      try {
+        await expect(
+          addProvider({
+            providerId: 'fireflies',
+            localId: 'fireflies',
+            yes: true,
+            expectedTemplateSha: git('rev-parse', 'HEAD'),
+          }),
+        ).rejects.toThrow(`Unable to adapt fireflies/get-transcript (${what})`);
+        expect(existsSync(resolve(packageRoot, 'src/providers/fireflies'))).toBe(false);
+      } finally {
+        git('reset', '-q', '--hard', templateSha);
+      }
+    },
+  );
 
   it('lists available providers and searches by installed alias', async () => {
     await addProvider({ providerId: 'first-provider', localId: 'custom', yes: true, expectedTemplateSha: templateSha });

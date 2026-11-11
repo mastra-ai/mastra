@@ -190,9 +190,8 @@ describe('LiveSessions', () => {
 });
 
 describe('LiveSessions on a real controller', () => {
-  // The controller resets a session's run before it tells anyone the session is gone,
-  // so by then the registry can no longer ask the session whether it was running.
-  it('announces a session deleted while its run is in flight, so other boards drop its running marker', async () => {
+  /** A Factory session whose run never finishes on its own, with the feed frames its project has received. */
+  async function sessionMidRun() {
     let inFlight = false;
     const model = new MastraLanguageModelV2Mock({
       doStream: async () => ({
@@ -220,25 +219,52 @@ describe('LiveSessions on a real controller', () => {
     await controller.init();
     const eventBus = new EventEmitterPubSub();
     const registry = liveSessionsTouchingTheFeed(controller, eventBus, { getBySessionId: async () => null });
-    const frames: unknown[] = [];
-    await eventBus.subscribe(feedTopic('org-1', 'project-1'), event => frames.push(event));
+    // What a browser reads back for each frame. Its request is served on a later turn of the server's loop.
+    const frames: number[] = [];
+    await eventBus.subscribe(feedTopic('org-1', 'project-1'), () => {
+      setImmediate(() => frames.push(controller.listActiveThreadRuns().length));
+    });
     const session = await controller.createSession({
       id: 'session-1',
       resourceId: 'resource-1',
       tags: { factoryOrgId: 'org-1', factoryProjectId: 'project-1' },
     });
-    await session.thread.create();
+    const idleThread = await session.thread.create();
+    const runThread = await session.thread.create();
+    await new Promise(setImmediate);
+    frames.length = 0;
     void session.sendMessage({ content: 'go' }).catch(() => {});
     await vi.waitFor(() => expect(inFlight && registry.isRunning('session-1')).toBe(true));
-    // The run's own start frame has landed; only the deletion can add another.
-    await vi.waitFor(() => expect(frames.length).toBeGreaterThan(0));
-    const framesBeforeDeletion = frames.length;
+    // The run's own start frame has landed; only what the test does next can add another.
+    await vi.waitFor(() => expect(frames).toEqual([1]));
+    return { controller, registry, session, frames, idleThread, runThread };
+  }
+
+  // The controller resets a session's run before it tells anyone the session is gone,
+  // so by then the registry can no longer ask the session whether it was running.
+  it('announces a session deleted while its run is in flight, so other boards drop its running marker', async () => {
+    const { controller, registry, frames } = await sessionMidRun();
 
     await controller.deleteSession({ sessionId: 'session-1' });
 
     expect(registry.isRunning('session-1')).toBe(false);
-    await vi.waitFor(() => expect(frames).toHaveLength(framesBeforeDeletion + 1));
+    await vi.waitFor(() => expect(frames).toHaveLength(2));
   });
+
+  // Leaving a thread ends the run this session started on it, and no `agent_end` reaches a session that has left.
+  it.each(['moves to another thread', 'starts a new thread', 'deletes its thread'] as const)(
+    'announces a session that %s mid-run, so boards drop its running marker',
+    async leaves => {
+      const { registry, session, frames, idleThread, runThread } = await sessionMidRun();
+
+      if (leaves === 'moves to another thread') await session.thread.switch({ threadId: idleThread.id });
+      else if (leaves === 'starts a new thread') await session.thread.create();
+      else await session.thread.delete({ threadId: runThread.id });
+
+      expect(registry.isRunning('session-1')).toBe(false);
+      await vi.waitFor(() => expect(frames).toEqual([1, 0]));
+    },
+  );
 });
 
 describe('liveSessionsTouchingTheFeed', () => {

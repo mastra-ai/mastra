@@ -457,6 +457,12 @@ const sessionSchema = z.object({
   threadId: z.string().min(1).max(512),
 });
 
+/** Without `sessionId`, the list is the whole board. */
+const workItemListQuerySchema = z.object({
+  /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
+  sessionId: z.array(sessionSchema.shape.sessionId).optional(),
+});
+
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
   .union([z.record(z.string(), z.unknown()), z.null()])
@@ -1005,6 +1011,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/work-items',
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
