@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findProviderById } from '../utils';
+import { findProviderById, resolveProviderModel } from '../utils';
 
 describe('findProviderById', () => {
   const providers = [
@@ -63,6 +63,43 @@ describe('findProviderById', () => {
     it('should handle empty providers array', () => {
       const result = findProviderById([], 'openai');
       expect(result).toBeUndefined();
+    });
+  });
+});
+
+describe('resolveProviderModel', () => {
+  const providers = [
+    { id: 'openai', models: ['gpt-4o'] },
+    { id: 'mastra', models: ['openai/gpt-5-mini'] },
+    { id: 'acme/custom', models: ['custom-small'] },
+    { id: 'private/ollama', models: ['gpt-oss:20b'] },
+  ];
+
+  it('moves the provider segment of a prefixed gateway model onto the provider', () => {
+    expect(resolveProviderModel(providers, 'private', 'ollama/gpt-oss:20b')).toEqual({
+      provider: 'private/ollama',
+      model: 'gpt-oss:20b',
+    });
+  });
+
+  it('keeps models whose ids contain a slash on a unified gateway', () => {
+    expect(resolveProviderModel(providers, 'mastra', 'openai/gpt-5-mini')).toEqual({
+      provider: 'mastra',
+      model: 'openai/gpt-5-mini',
+    });
+  });
+
+  it('keeps the gateway prefix fallback for providers reported without it', () => {
+    expect(resolveProviderModel(providers, 'custom', 'custom-small')).toEqual({
+      provider: 'acme/custom',
+      model: 'custom-small',
+    });
+  });
+
+  it('leaves unknown providers and models unchanged', () => {
+    expect(resolveProviderModel(providers, 'other', 'vendor/model')).toEqual({
+      provider: 'other',
+      model: 'vendor/model',
     });
   });
 });

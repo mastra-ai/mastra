@@ -3,12 +3,14 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SectionRoot, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { useLLMProviders } from '@mastra/react/hooks/llm';
+import { useEffect } from 'react';
 import { Controller } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { LLMProviders, LLMModels } from '@/domains/llm';
+import { LLMProviders, LLMModels, resolveProviderModel } from '@/domains/llm';
 
 export function InformationPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -17,6 +19,19 @@ export function InformationPage() {
     control,
     formState: { errors },
   } = form;
+  const { data: dataProviders } = useLLMProviders();
+
+  // Match the providers list ids, e.g. 'acme' + 'custom/gpt-4o' -> 'acme/custom' + 'gpt-4o'
+  useEffect(() => {
+    const providers = dataProviders?.providers;
+    const { provider, name } = form.getValues('model') ?? {};
+    if (!providers || !provider || !name) return;
+    const resolved = resolveProviderModel(providers, provider, name);
+    if (resolved.model !== name) {
+      form.setValue('model.provider', resolved.provider);
+      form.setValue('model.name', resolved.model);
+    }
+  }, [dataProviders, form]);
 
   return (
     <ScrollArea className="h-full">
