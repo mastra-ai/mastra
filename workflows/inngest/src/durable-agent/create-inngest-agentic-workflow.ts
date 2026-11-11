@@ -770,12 +770,19 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
           const initData = getInitData() as DurableAgenticWorkflowInput;
+          // This step's span is internal and has no live parent, so a score read from it
+          // would name a span that is never stored.
+          const agentSpan = initData.agentSpanData
+            ? mastra?.observability
+                ?.getSelectedInstance({})
+                ?.rebuildSpan(initData.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
+            : undefined;
           void executeDurableAgentScorers({
             initData,
             finalOutput: inputData,
             mastra,
             requestContext,
-            tracingContext,
+            tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
             loadStoredMessages: loadRunStoredMessages(params),
             // Call-time and defaultOptions scorers are parked in-process by instance; name
             // resolution alone misses any scorer Mastra never registered (#27579).
