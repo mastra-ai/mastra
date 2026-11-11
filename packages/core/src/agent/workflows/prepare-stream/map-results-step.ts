@@ -8,7 +8,7 @@ import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../../lo
 import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
 import type { MastraMemory } from '../../../memory/memory';
 import { isObservationalMemoryEnabled, parseMemoryRequestContext } from '../../../memory/types';
-import type { MemoryConfigInternal } from '../../../memory/types';
+import type { MemoryConfigInternal, MemoryRequestContext } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { compactStopReasonContext } from '../../../observability/outcome-schema';
@@ -33,6 +33,21 @@ import {
   PROCESSOR_STATES_KEY,
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
+
+/**
+ * Every thread a memory save on this run can write, in resolution order: the request context's
+ * thread first (MessageHistory reads it first and can save without a Memory instance or a
+ * `memory.thread` option), then the Memory-backed thread, then the run's own thread.
+ *
+ * Both the finish-path and deadline-path `memory:write` checks use this so they cannot drift.
+ */
+function resolveMemoryWriteThreadIds(
+  memoryContext: MemoryRequestContext | null,
+  memoryThreadId: string | undefined,
+  resultThreadId: string | undefined,
+): string[] {
+  return [...new Set([memoryContext?.thread?.id, memoryThreadId, resultThreadId].filter((id): id is string => !!id))];
+}
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
@@ -354,9 +369,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           // MessageHistory creates the request context's thread, but the saved rows keep the thread
           // they were added under, so check every thread the pass can write. This is strict on purpose:
           // a denial on any of them skips the whole save, even if another thread would have been allowed.
-          const threadIds = new Set(
-            [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter((id): id is string => !!id),
-          );
+          const threadIds = resolveMemoryWriteThreadIds(memoryContext, memoryData.thread?.id, result.threadId);
           for (const threadId of threadIds) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
           }
@@ -482,8 +495,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
                   ? JSON.stringify(payload.object)
                   : payload.text || '';
 
-              if (!memoryConfig?.readOnly && result.threadId) {
-                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+              // The finish-path save goes through MessageHistory, which reads the request context's
+              // thread first and can write without a Memory instance or a `memory.thread` option.
+              // Resolve the same thread set as the deadline check: guarding on `result.threadId`
+              // alone skipped the check entirely for a request-context-only thread.
+              const memoryContext = parseMemoryRequestContext(requestContext);
+              if (!memoryConfig?.readOnly && !memoryContext?.memoryConfig?.readOnly) {
+                const threadIds = resolveMemoryWriteThreadIds(memoryContext, memoryData.thread?.id, result.threadId);
+                for (const threadId of threadIds) {
+                  await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
+                }
               }
               await capabilities.executeOnFinish({
                 termination: agentLoopTermination({

@@ -4,10 +4,13 @@
  * `threadId` argument. The processor resolves that thread itself, so the run must write it to
  * storage, authorize a memory write for it, and undo the save when a later processor trips.
  */
-import { describe, expect, it } from 'vitest';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, expect, it, vi } from 'vitest';
 import type { OutputResult } from '..';
 import type { MastraDBMessage } from '../../agent';
-import { MessageList } from '../../agent';
+import { Agent, MessageList } from '../../agent';
+import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import { Mastra } from '../../mastra';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
@@ -66,6 +69,26 @@ function runOutputResult(
   });
 }
 
+function createMockFGAProvider(): IFGAProvider {
+  return {
+    check: vi.fn().mockResolvedValue(true),
+    require: vi.fn().mockResolvedValue(undefined),
+    filterAccessible: vi.fn(),
+  };
+}
+
+function createMockModel() {
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      finishReason: 'stop',
+      usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+      content: [{ type: 'text', text: 'ok' }],
+    }),
+  });
+}
+
 describe('MessageHistory with a request-context thread and no Memory instance', () => {
   it('stores the turn under the request-context thread', async () => {
     const memoryStore = (await new InMemoryStore().getStore('memory'))!;
@@ -85,5 +108,36 @@ describe('MessageHistory with a request-context thread and no Memory instance', 
     ]);
     expect(messages.map(message => message.threadId)).toEqual([THREAD, THREAD]);
     expect(messages.map(message => message.resourceId)).toEqual([RESOURCE, RESOURCE]);
+  });
+
+  it('authorizes a memory:write check for the request-context thread on finish', async () => {
+    const memoryStore = (await new InMemoryStore().getStore('memory'))!;
+    const processor = new MessageHistory({ storage: memoryStore });
+    const fgaProvider = createMockFGAProvider();
+
+    const agent = new Agent({
+      id: 'request-context-agent',
+      name: 'request-context-agent',
+      instructions: 'test',
+      model: createMockModel(),
+      outputProcessors: [processor],
+    });
+    // Registering the agent with a Mastra that carries an FGA provider makes the framework's
+    // `memory:write` checks actually reach the provider.
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore(), server: { fga: fgaProvider } });
+
+    // No `memory.thread` and no `threadId` argument: the request context is the only thread source.
+    const requestContext = requestContextWithThread();
+    requestContext.set('user', { id: 'user-1' });
+
+    await agent.generate('Hello', { requestContext: requestContext as any });
+
+    expect(fgaProvider.require).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({
+        resource: { type: 'thread', id: THREAD },
+        permission: 'memory:write',
+      }),
+    );
   });
 });
