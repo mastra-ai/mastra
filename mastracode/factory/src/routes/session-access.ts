@@ -5,6 +5,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import { UUID_PATTERN } from './contracts.js';
 import type { RouteAuth } from './route.js';
 
 /**
@@ -43,6 +44,8 @@ export interface SessionResourceLookup {
 }
 
 type Viewer = { orgId?: string; userId: string };
+
+const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
 const SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/([^/]+)/;
 const CREATE_SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/?$/;
@@ -173,7 +176,8 @@ export function createSessionAccessGuard({
     if (resourceId === viewer.userId) return true;
     const session = await sessions.getBySessionId(resourceId);
     if (session) return canViewSourceControlSession(session, viewer);
-    if (!viewer.orgId) return false;
+    // What is left is a Factory id or another person's user id, and only a Factory id is a uuid.
+    if (!viewer.orgId || !FACTORY_PROJECT_ID.test(resourceId)) return false;
     return (await projects.get({ orgId: viewer.orgId, id: resourceId })) !== null;
   };
 
@@ -245,8 +249,12 @@ async function filterActiveRuns(c: Context, canReach: (resourceId: string) => Pr
   const resourceIds = [
     ...new Set(body.runs.flatMap(run => (typeof run.resourceId === 'string' ? [run.resourceId] : []))),
   ];
-  const reachable = new Map(await Promise.all(resourceIds.map(async id => [id, await canReach(id)] as const)));
-  const runs = body.runs.filter(run => typeof run.resourceId !== 'string' || reachable.get(run.resourceId));
+  // A resource whose check fails is treated as unreachable, so one run cannot fail the whole list.
+  const checks = await Promise.allSettled(resourceIds.map(id => canReach(id)));
+  const reachable = new Set(
+    resourceIds.filter((_, index) => checks[index]!.status === 'fulfilled' && checks[index]!.value),
+  );
+  const runs = body.runs.filter(run => typeof run.resourceId !== 'string' || reachable.has(run.resourceId));
   if (runs.length === body.runs.length) return;
   const headers = new Headers(c.res.headers);
   headers.delete('content-length');
