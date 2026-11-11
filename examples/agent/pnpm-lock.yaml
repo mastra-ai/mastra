@@ -29,6 +29,7 @@ overrides:
   '@mastra/server': link:../../packages/server
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
+  '@mastra/json-render': link:../../integrations/json-render
   '@mastra/auth-studio': link:../../auth/studio
   mastra: link:../../packages/cli
   proxy-addr: 2.0.8
@@ -129,6 +130,9 @@ importers:
       '@mastra/evals':
         specifier: link:../../packages/evals
         version: link:../../packages/evals
+      '@mastra/json-render':
+        specifier: link:../../integrations/json-render
+        version: link:../../integrations/json-render
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
