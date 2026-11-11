@@ -456,7 +456,7 @@ export interface FactoryReviewStatusEvent {
   phase: FactoryReviewStatusPhase;
   /** When the agent was handed the review; set on the 'reviewing' step. */
   startedAt?: Date;
-  /** The session running the review; set on the 'reviewing' step so the status can link to it. */
+  /** The session running the review, on every step after it was delivered, so the status can link to it. */
   session?: { sessionId: string; threadId: string };
   /** When the run ended; set on final steps. */
   endedAt?: Date;
@@ -702,6 +702,8 @@ export class FactoryDecisionDispatcher {
   readonly #reviewWatched = new WeakSet<FactoryDeferredDecisionRecord>();
   /** Re-claims that found an earlier attempt's kickoff landed and its run already over. */
   readonly #reviewReplayed = new WeakSet<FactoryDeferredDecisionRecord>();
+  /** The session a review run was delivered to, so every later status step can link it. */
+  readonly #reviewSessions = new WeakMap<FactoryDeferredDecisionRecord, { sessionId: string; threadId: string }>();
   /** Last pending status-comment write per run, so writes stay ordered. */
   /**
    * Per review run: the write chain, the newest step issued, and how many
@@ -1095,6 +1097,7 @@ export class FactoryDecisionDispatcher {
           phase: terminal ? 'failed' : 'retrying',
           endedAt: new Date(),
           reason: factoryDispatchFailureMetadata(failureCode).label,
+          session: this.#reviewSessions.get(record),
         });
       }
     }
@@ -1270,6 +1273,8 @@ export class FactoryDecisionDispatcher {
       attempt: record.attempts,
       ...step,
     };
+    const session = step.session ?? this.#reviewSessions.get(record);
+    if (session) event.session = session;
     // Writes for one run go out in order even when the run stops waiting on a
     // slow one, so an earlier step can never land on top of a later one.
     const run = this.#reviewStatusRuns.get(record.id) ?? {
@@ -1441,6 +1446,7 @@ export class FactoryDecisionDispatcher {
                     arguments: decision.arguments,
                   });
           await this.#switchThread(session, binding);
+          this.#reviewSessions.set(record, { sessionId: binding.sessionId, threadId: binding.threadId });
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
@@ -1598,7 +1604,6 @@ export class FactoryDecisionDispatcher {
             await this.#reviewStatus(record, decision, {
               phase: 'reviewing',
               startedAt: since,
-              session: { sessionId: binding.sessionId, threadId: binding.threadId },
             });
             // A landed `deliver` still runs on the in-flight session, so the run's
             // terminal outcome matters as much as a fresh wake's: a run that ends

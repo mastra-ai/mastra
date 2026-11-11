@@ -259,9 +259,8 @@ function createSession(
   const controller = {
     createSession: vi.fn(async () => session),
     // Bindings run under the Factory resource; the session is found by its own id only.
-    getSession: vi.fn(
-      async (sessionId: string): Promise<typeof session | undefined> =>
-        sessionId === 'session-1' ? session : undefined,
+    getSession: vi.fn(async (sessionId: string): Promise<typeof session | undefined> =>
+      sessionId === 'session-1' ? session : undefined,
     ),
     // Empty registry by default: the level-triggered timeout check sees no run.
     listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
@@ -7714,6 +7713,8 @@ describe('review status comment lifecycle', () => {
     await storage.markPendingStart(prepared.binding.id, 'sent');
   }
 
+  const SESSION_REF = { sessionId: 'session-1', threadId: 'thread-1' };
+
   async function reviewRun(key: string, sessionOptions: Parameters<typeof createSession>[1] = {}) {
     const storage = (await createFactoryStorageForTests()).workItems;
     const queued = await queueDecision(
@@ -7749,6 +7750,8 @@ describe('review status comment lifecycle', () => {
     expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
     expect(events[0]).not.toHaveProperty('startedAt');
     expect(events[1]!.startedAt).toBeInstanceOf(Date);
+    // Every step after delivery names the session, so a missed 'reviewing' write cannot lose the link.
+    expect(events.map(event => event.session)).toEqual([undefined, SESSION_REF, SESSION_REF]);
     expect(writes).toEqual({ created: 1, updated: 2 });
     expect(comments()).toHaveLength(1);
     const body = comments()[0]!.body;
@@ -7765,6 +7768,7 @@ describe('review status comment lifecycle', () => {
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
     expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'failed']);
+    expect(events[2]!.session).toEqual(SESSION_REF);
     expect(comments()).toHaveLength(1);
     expect(comments()[0]!.body).toContain('Review failed');
     expect(comments()[0]!.body).not.toContain('ChatGPT account');
