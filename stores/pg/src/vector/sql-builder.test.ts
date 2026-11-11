@@ -133,6 +133,68 @@ describe('$elemMatch with multiple operators on one field', () => {
       '$elemMatch field score requires at least one operator',
     );
   });
+
+  it('compares scalar array elements directly in search and delete', () => {
+    const filter = { scores: { $elemMatch: { $gte: 4, $lte: 5 } } };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    expect(search.values).toEqual([0, 10, 4, 5]);
+    expect(search.sql).toContain("jsonb_typeof(elem) = 'number'");
+    expect(search.sql).toContain(`(elem #>> '{}')::numeric >= $3::numeric`);
+    expect(search.sql).toContain(`(elem #>> '{}')::numeric <= $4::numeric`);
+    expect(del.values).toEqual([4, 5]);
+    expect(del.sql).toContain(`(elem #>> '{}')::numeric >= $1::numeric`);
+    expect(del.sql).toContain(`(elem #>> '{}')::numeric <= $2::numeric`);
+  });
+
+  it('negates a nested range while keeping subsequent placeholders', () => {
+    const filter = { reviews: { $elemMatch: { score: { $gte: 4, $not: { $gt: 5 } }, author: 'user4' } } };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    expect(search.values).toEqual([0, 10, 4, 5, 'user4']);
+    expect(search.sql).toContain(`NOT (`);
+    expect(search.sql).toContain(`(elem->>'score')::numeric > $4::numeric`);
+    expect(search.sql).toContain(`elem->>'author' = $5`);
+    expect(del.values).toEqual([4, 5, 'user4']);
+    expect(del.sql).toContain(`(elem->>'score')::numeric > $2::numeric`);
+    expect(del.sql).toContain(`elem->>'author' = $3`);
+  });
+
+  it('negates missing and non-numeric nested fields as non-matches', () => {
+    const filter = { reviews: { $elemMatch: { score: { $not: { $gt: 5 } } } } };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    // The numeric guard returns NULL for missing/non-numeric scores; negation must treat NULL as false.
+    expect(search.sql).toContain(`NOT (COALESCE((CASE WHEN jsonb_typeof(elem->'score') = 'number'`);
+    expect(search.sql).toContain(`> $3::numeric ELSE NULL END), FALSE))`);
+    expect(search.values).toEqual([0, 10, 5]);
+    expect(del.sql).toContain(`NOT (COALESCE((CASE WHEN jsonb_typeof(elem->'score') = 'number'`);
+    expect(del.sql).toContain(`> $1::numeric ELSE NULL END), FALSE))`);
+    expect(del.values).toEqual([5]);
+  });
+
+  it('escapes wildcard characters in nested contains values', () => {
+    const filter = { reviews: { $elemMatch: { author: { $ne: 'blocked', $contains: 'user_' } } } };
+    expect(buildFilterQuery(filter, 0, 10).values).toEqual([0, 10, 'blocked', 'user\\_']);
+    expect(buildDeleteFilterQuery(filter).values).toEqual(['blocked', 'user\\_']);
+  });
+
+  it('binds every value from nested elemMatch before the following field', () => {
+    const filter = {
+      groups: { $elemMatch: { reviews: { $elemMatch: { score: { $gte: 4, $lte: 5 } } }, label: 'x' } },
+    };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    expect(search.values).toEqual([0, 10, 4, 5, 'x']);
+    expect(search.sql).toContain(`(elem->>'score')::numeric <= $4::numeric`);
+    expect(search.sql).toContain(`elem->>'label' = $5`);
+    expect(del.values).toEqual([4, 5, 'x']);
+    expect(del.sql).toContain(`elem->>'label' = $3`);
+  });
 });
 
 describe('buildFilterQuery - multi-key branches inside logical operators', () => {
