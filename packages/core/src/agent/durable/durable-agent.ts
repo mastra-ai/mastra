@@ -3765,7 +3765,8 @@ export class DurableAgent<
       : undefined;
     // Tools built for the starting request are bound to its context, so they are rebuilt below.
     const droppedStartingUser = carriedEntries !== undefined && carriedEntries.length < entry.requestContext!.size();
-    let resumeRequestContext = carriedEntries ? new RequestContext<unknown>(carriedEntries) : undefined;
+    // Copy only when user keys were removed; otherwise keep the run's own instance.
+    let resumeRequestContext = droppedStartingUser ? new RequestContext<unknown>(carriedEntries) : entry.requestContext;
     if (options?.requestContext) {
       // Keep the caller's instance so schema-transformed contexts retain their
       // input source. Caller values win except for framework-managed memory.
