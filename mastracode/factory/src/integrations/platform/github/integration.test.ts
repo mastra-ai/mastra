@@ -1062,6 +1062,64 @@ describe('PlatformGithubIntegration', () => {
     }
   });
 
+  it('mints one repository token for concurrent requests instead of one per caller', async () => {
+    const { sourceControl } = await createPlatformStorageForTests();
+    const mints: Array<(response: Response) => void> = [];
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(
+      () =>
+        new Promise<Response>(resolve => {
+          mints.push(resolve);
+        }),
+    );
+    const integration = createIntegration(fetchImpl);
+    integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
+    const installation = await integration.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+    });
+    const [repository] = await integration.versionControl.registerRepositories({
+      orgId: 'org-1',
+      installationId: installation.id,
+      repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+    });
+
+    const input = { orgId: 'org-1', repositoryId: repository!.id };
+    const pending = Array.from({ length: 5 }, () => integration.versionControl.getRepositoryAccess(input));
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 20));
+    for (const mint of mints) mint(json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
+    const grants = await Promise.all(pending);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(new Set(grants).size).toBe(1);
+  });
+
+  it('lets the next request mint again after a concurrent mint fails', async () => {
+    const { sourceControl } = await createPlatformStorageForTests();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ error: 'Per-installation token mint rate limit exceeded.' }, 429))
+      .mockResolvedValueOnce(json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
+    const integration = createIntegration(fetchImpl);
+    integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
+    const installation = await integration.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+    });
+    const [repository] = await integration.versionControl.registerRepositories({
+      orgId: 'org-1',
+      installationId: installation.id,
+      repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+    });
+
+    const input = { orgId: 'org-1', repositoryId: repository!.id };
+    await expect(integration.versionControl.getRepositoryAccess(input)).rejects.toThrow();
+    await expect(integration.versionControl.getRepositoryAccess(input)).resolves.toBeDefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
     const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
