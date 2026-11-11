@@ -104,7 +104,12 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       state.requests.push({ method: 'DELETE', path: params.id, body: expected });
       const current = find(params.id);
       if (!current || current.revision !== expected) return stale();
-      state.routes = state.routes.filter(route => route.id !== current.id);
+      // The routes below move up a slot; each move is a write, so its revision goes up, as in storage.
+      state.routes = state.routes
+        .filter(route => route.id !== current.id)
+        .map((route, position) =>
+          route.position === position ? route : { ...route, position, revision: route.revision + 1 },
+        );
       return new HttpResponse(null, { status: 204 });
     }),
     http.post(`${ROUTES_URL}/reorder`, async ({ request }) => {
@@ -486,7 +491,7 @@ describe('IntakeRoutesSection', () => {
     expect(state.routes.find(route => route.id === 'everything-else')?.target.boardKey).toBe('work');
   });
 
-  it('takes back sending new cards elsewhere from the toast, removing the routes it copied', async () => {
+  it('takes back sending new cards elsewhere from the toast, removing every route it copied', async () => {
     const state = serveRoutes();
     const user = userEvent.setup();
     renderSection();
@@ -496,8 +501,9 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() =>
       expect(state.routes.find(route => route.id === 'everything-else')?.target.boardKey).toBe('ship'),
     );
+    // Several copies, so each delete renumbers routes another delete still has to name.
     const copies = state.routes.filter(route => route.createdBy === 'admin').map(route => route.id);
-    expect(copies.length).toBeGreaterThan(0);
+    expect(copies.length).toBeGreaterThan(1);
 
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
     await waitFor(() =>
@@ -507,6 +513,7 @@ describe('IntakeRoutesSection', () => {
       }),
     );
     expect(state.routes.map(route => route.id)).toEqual(seededRoutes().map(route => route.id));
+    expect(screen.queryByText(/Someone else changed these routes first/)).not.toBeInTheDocument();
   });
 
   it('says where cards land when no route takes every new card, and lets admins pick that board', async () => {

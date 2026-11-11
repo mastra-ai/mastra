@@ -814,11 +814,18 @@ function RouteList({
       );
     });
 
-  /** Points the catch-all back where it was and deletes the routes sending new cards elsewhere created. */
+  /**
+   * Points the catch-all back where it was and deletes the routes sending new cards elsewhere
+   * created. Deleting a route renumbers every route below it, so the copies go last-first: removing
+   * the lowest one moves nothing, and the revisions read up front stay current.
+   */
   const unsendTo = (before: IntakeRouteInfo | undefined, created: IntakeRouteInfo[]) =>
     save(async send => {
+      const current = latest();
       const revisionOf = (route: IntakeRouteInfo) =>
-        latest().find(entry => entry.id === route.id)?.revision ?? route.revision;
+        current.find(entry => entry.id === route.id)?.revision ?? route.revision;
+      const positionOf = (route: IntakeRouteInfo) => current.findIndex(entry => entry.id === route.id);
+      const lastFirst = created.toSorted((a, b) => positionOf(b) - positionOf(a));
       await send([
         ...(before
           ? [
@@ -829,7 +836,7 @@ function RouteList({
               },
             ]
           : []),
-        ...created.map(route => ({ kind: 'delete' as const, id: route.id, expectedRevision: revisionOf(route) })),
+        ...lastFirst.map(route => ({ kind: 'delete' as const, id: route.id, expectedRevision: revisionOf(route) })),
       ]);
       announce('catch-all', 'Change undone');
     });

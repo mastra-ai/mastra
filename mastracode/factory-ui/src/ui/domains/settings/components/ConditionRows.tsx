@@ -459,15 +459,18 @@ function TextValue({
     if (draft === undefined) return;
     setDraft(undefined);
     if (draft === textOf(row.value)) return;
-    const parse = (part: string): string | number => (field.type === 'number' ? Number(part) : part.trim());
-    const value = many
-      ? draft
-          .split(',')
-          .map(part => part.trim())
-          .filter(part => part !== '')
-          .map(parse)
-      : parse(draft);
-    onChange({ ...row, value });
+    if (many) {
+      const parts = draft.split(',').map(part => part.trim());
+      onChange({ ...row, value: parts.filter(part => part !== '') });
+      return;
+    }
+    if (field.type !== 'number') {
+      onChange({ ...row, value: draft.trim() });
+      return;
+    }
+    // A number left empty or unreadable stays unfinished rather than saving 0 or NaN.
+    const number = Number(draft.trim());
+    onChange({ ...row, value: draft.trim() !== '' && Number.isFinite(number) ? number : undefined });
   };
   return (
     <Input
