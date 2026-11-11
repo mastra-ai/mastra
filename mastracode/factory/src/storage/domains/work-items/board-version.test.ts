@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../../test-utils.js';
 import { WorkItemsStorage } from './base.js';
+import { BoardScopes, MAX_TRACKED_CARDS } from './board-version.js';
 
 const ORG = 'org-1';
 const PROJECT = 'project-1';
@@ -73,6 +74,34 @@ function nextVersionRead(seed: Seed) {
   });
   return read.promise;
 }
+
+type Replica = { backend: LibSQLFactoryStorage; workItems: WorkItemsStorage };
+
+/** Two API replicas: separate processes' storage (and caches) over one database file. */
+async function withReplicas(run: (a: Replica, b: Replica) => Promise<void>) {
+  const dir = await mkdtemp(join(tmpdir(), 'board-cache-'));
+  const url = `file:${join(dir, 'factory.db')}`;
+  const replica = async (id: string) => {
+    const backend = new LibSQLFactoryStorage({ id, url });
+    const workItems = backend.registerDomain(new WorkItemsStorage());
+    await backend.init();
+    return { backend, workItems };
+  };
+  const a = await replica('replica-a');
+  const b = await replica('replica-b');
+  try {
+    await run(a, b);
+  } finally {
+    await a.backend.close();
+    await b.backend.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+const edit = (workItems: WorkItemsStorage, id: string, title: string) =>
+  workItems.update({ orgId: ORG, id, userId: 'user-alice', patch: { title } });
+
+const titles = (cards: readonly { title: string }[]) => cards.map(card => card.title).sort();
 
 /** The project's cards read straight from the database, in the order a full read returns them. */
 const uncached = (seed: Seed) => seed.workItems.listWith(seed.storage.ops, { orgId: ORG, factoryProjectId: PROJECT });
@@ -227,34 +256,106 @@ describe('board list cache', () => {
   });
 
   it('shows a write made through another replica on the next poll', async () => {
-    // Two API replicas: separate processes' storage (and caches) over one database file.
-    const dir = await mkdtemp(join(tmpdir(), 'board-cache-'));
-    const url = `file:${join(dir, 'factory.db')}`;
-    const replica = async (id: string) => {
-      const backend = new LibSQLFactoryStorage({ id, url });
-      const workItems = backend.registerDomain(new WorkItemsStorage());
-      await backend.init();
-      return { backend, workItems };
-    };
-    const a = await replica('replica-a');
-    const b = await replica('replica-b');
-    try {
+    await withReplicas(async (a, b) => {
       const card = await seedCard(a.workItems);
-      expect((await poll(b.workItems)).map(item => item.title)).toEqual(['Fix login']);
+      expect(titles(await poll(b.workItems))).toEqual(['Fix login']);
 
-      await a.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: 'Edited on A' } });
+      await edit(a.workItems, card.id, 'Edited on A');
+      expect(titles(await poll(b.workItems))).toEqual(['Edited on A']);
 
-      expect((await poll(b.workItems)).map(item => item.title)).toEqual(['Edited on A']);
-
-      // B's own edit chains from a version A wrote: A must not catch up past A's bump it never saw.
       await poll(a.workItems);
-      await b.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: 'Edited on B' } });
-      expect((await poll(a.workItems)).map(item => item.title)).toEqual(['Edited on B']);
-    } finally {
-      await a.backend.close();
-      await b.backend.close();
-      await rm(dir, { recursive: true, force: true });
+      await edit(b.workItems, card.id, 'Edited on B');
+      expect(titles(await poll(a.workItems))).toEqual(['Edited on B']);
+    });
+  });
+
+  it("re-reads the board when another replica's write lands while this one bumps the version", async () => {
+    await withReplicas(async (a, b) => {
+      const one = await seedCard(a.workItems, { title: 'One' });
+      const two = await seedCard(a.workItems, { title: 'Two' });
+      await poll(a.workItems);
+      // B's edit commits and bumps after A's edit commits, just before A's own bump lands.
+      const updateMany = a.backend.ops.updateMany.bind(a.backend.ops);
+      let slippedIn = false;
+      vi.spyOn(a.backend.ops, 'updateMany').mockImplementation(async (...args: Parameters<typeof updateMany>) => {
+        if (args[0] === 'factory_board_versions' && !slippedIn) {
+          slippedIn = true;
+          await edit(b.workItems, two.id, 'Two, edited on B');
+        }
+        return updateMany(...args);
+      });
+
+      await edit(a.workItems, one.id, 'One, edited on A');
+
+      expect(slippedIn).toBe(true);
+      expect(titles(await poll(a.workItems))).toEqual(['One, edited on A', 'Two, edited on B']);
+    });
+  });
+
+  it('re-reads the board after a write whose version bump failed', async () => {
+    const seed = await createFactoryStorageForTests();
+    const one = await seedCard(seed.workItems, { title: 'One' });
+    const two = await seedCard(seed.workItems, { title: 'Two' });
+    await poll(seed.workItems);
+    const updateMany = seed.storage.ops.updateMany.bind(seed.storage.ops);
+    let failed = false;
+    vi.spyOn(seed.storage.ops, 'updateMany').mockImplementation(async (...args: Parameters<typeof updateMany>) => {
+      if (args[0] === 'factory_board_versions' && !failed) {
+        failed = true;
+        throw new Error('connection lost');
+      }
+      return updateMany(...args);
+    });
+
+    // The edit commits, then its bump fails: nothing tells the cached list about it.
+    await expect(edit(seed.workItems, one.id, 'One, edited')).rejects.toThrow('connection lost');
+    await edit(seed.workItems, two.id, 'Two, edited');
+
+    expect(titles(await poll(seed.workItems))).toEqual(['One, edited', 'Two, edited']);
+  });
+
+  it('re-reads the board when closing the last open Review card moves the others to Work', async () => {
+    const seed = await createFactoryStorageForTests();
+    const open = await seedCard(seed.workItems, { title: 'Open' });
+    const done = await seedCard(seed.workItems, { title: 'Done' });
+    // Rows as the retired Review board left them.
+    for (const [id, stage] of [
+      [open.id, 'review'],
+      [done.id, 'done'],
+    ] as const) {
+      await seed.storage.ops.updateMany(
+        'factory_board_items',
+        { id },
+        {
+          board: 'review',
+          stages: [stage],
+          stage_history: [{ stage, enteredAt: new Date(0).toISOString(), by: 'user' }],
+        },
+      );
     }
+    expect((await poll(seed.workItems)).map(card => card.board)).toEqual(['review', 'review']);
+
+    await seed.workItems.update({ orgId: ORG, id: open.id, userId: 'user-alice', patch: { stages: ['done'] } });
+    const after = await poll(seed.workItems);
+
+    expect(after.map(card => card.board)).toEqual(['work', 'work']);
+    expect(after).toEqual(await uncached(seed));
+  });
+
+  it('bumps a board this replica wrote last in one statement', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    const versionWrites = (method: 'updateMany' | 'upsertOne') => {
+      const spy = vi.spyOn(seed.storage.ops, method);
+      return () => spy.mock.calls.filter(([collection]) => collection === 'factory_board_versions').length;
+    };
+    const replaced = versionWrites('updateMany');
+    const overwritten = versionWrites('upsertOne');
+
+    await edit(seed.workItems, card.id, 'Fix login on Safari');
+
+    expect(replaced()).toBe(1);
+    expect(overwritten()).toBe(0);
   });
 
   it('keeps other projects cached when one project changes', async () => {
@@ -375,5 +476,20 @@ describe('board list cache', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('BoardScopes', () => {
+  it('stops naming cards once a transaction wrote more than a cached list can follow', () => {
+    const scopes = new BoardScopes();
+    for (let card = 0; card <= MAX_TRACKED_CARDS; card++) {
+      scopes.add({
+        orgId: ORG,
+        factoryProjectId: PROJECT,
+        cards: { boardItemIds: new Set([`card-${card}`]), workItemIds: new Set() },
+      });
+    }
+
+    expect(scopes.values()).toEqual([{ orgId: ORG, factoryProjectId: PROJECT, cards: undefined }]);
   });
 });

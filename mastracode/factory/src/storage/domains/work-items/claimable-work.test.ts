@@ -152,7 +152,8 @@ describe('claimable-work wakes', () => {
     visibleAtWake.length = 0;
     vi.mocked(boardVersion.bumpBoardVersions).mockRejectedValueOnce(new Error('transient'));
 
-    await expect(queueDecision(storage, workItemId, 'bump-fails')).rejects.toThrow('transient');
+    // A run start moves its card, so its commit has a board to bump.
+    await expect(prepareStart(storage, workItemId)).rejects.toThrow('transient');
     expect(woken).toEqual([SCOPE]);
     expect(await Promise.all(visibleAtWake)).toEqual([1]);
   });

@@ -41,11 +41,19 @@ export interface BoardWrite extends BoardScope {
   cards?: CardIds;
 }
 
-/** A version bump: `previous` is the version it replaced, absent when the project had none. */
+/** A version bump. `previous` is the version it replaced, set only when the bump proved no other write came between the two. */
 export interface BoardBump extends BoardWrite {
   version: string;
   previous?: string;
 }
+
+/**
+ * Past this many cards, re-reading the board is cheaper than following a write, so the write
+ * stops naming its cards. Also bounds what a tracked write holds in memory.
+ */
+export const MAX_TRACKED_CARDS = 200;
+
+export const cardCount = (cards: CardIds): number => cards.boardItemIds.size + cards.workItemIds.size;
 
 /** The tables a card is stored in: a write to one changes the card list, so it bumps the version. */
 export const CARD_TABLES: ReadonlySet<string> = new Set([
@@ -84,12 +92,12 @@ function idsOf(value: unknown): string[] | undefined {
 
 /** The cards a written row or a write's filter names, read from the column that identifies the card in `collection`. */
 function cardsOf(collection: string, fields: Record<string, unknown>): CardIds | undefined {
-  if (PLACEMENT_TABLES.has(collection)) {
-    const ids = idsOf(fields.id);
-    return ids && { boardItemIds: new Set(ids), workItemIds: new Set() };
-  }
-  const ids = idsOf(collection === FACTORY_WORK_ITEMS_SCHEMA.name ? fields.id : fields.work_item_id);
-  return ids && { boardItemIds: new Set(), workItemIds: new Set(ids) };
+  const placement = PLACEMENT_TABLES.has(collection);
+  const ids = idsOf(placement || collection === FACTORY_WORK_ITEMS_SCHEMA.name ? fields.id : fields.work_item_id);
+  if (!ids || ids.length > MAX_TRACKED_CARDS) return undefined;
+  return placement
+    ? { boardItemIds: new Set(ids), workItemIds: new Set() }
+    : { boardItemIds: new Set(), workItemIds: new Set(ids) };
 }
 
 function writeOf(collection: string, fields: Record<string, unknown> | null): BoardWrite | undefined {
@@ -181,6 +189,7 @@ export class BoardScopes {
     }
     for (const id of write.cards.boardItemIds) seen.cards.boardItemIds.add(id);
     for (const id of write.cards.workItemIds) seen.cards.workItemIds.add(id);
+    if (cardCount(seen.cards) > MAX_TRACKED_CARDS) seen.cards = undefined;
   };
 
   values(): BoardWrite[] {
@@ -188,34 +197,41 @@ export class BoardScopes {
   }
 }
 
-export async function bumpBoardVersions(ops: FactoryStorageOps, writes: readonly BoardWrite[]): Promise<BoardBump[]> {
+/**
+ * Replace the version of every board in `writes`. `expected` names the version this replica last
+ * knew a project's board to have. While that is still the stored version, one statement replaces
+ * it and the bump reports it as `previous`: no write came between the two, so a list cached at
+ * `previous` can catch up on this write's cards alone. Otherwise the bump overwrites whatever is
+ * stored and reports no `previous`. Either way it costs one statement, two when `expected` was stale.
+ */
+export async function bumpBoardVersions(
+  ops: FactoryStorageOps,
+  writes: readonly BoardWrite[],
+  expected: (write: BoardWrite) => string | undefined = () => undefined,
+): Promise<BoardBump[]> {
   const bumps: BoardBump[] = [];
   for (const write of writes) {
     const version = randomUUID();
     const updated_at = new Date();
-    if (write.factoryProjectId) {
-      const where = { org_id: write.orgId, factory_project_id: write.factoryProjectId };
-      // Atomic, so `previous` is the version this bump replaced: a reader that holds it can
-      // catch up on just this write's cards.
-      let previous: string | undefined;
-      const row = await ops.updateAtomic<{ version: string }>(FACTORY_BOARD_VERSIONS_SCHEMA.name, where, current => {
-        previous = current.version;
-        return { version, updated_at };
-      });
-      if (!row) {
-        previous = undefined;
-        await ops.upsertOne(FACTORY_BOARD_VERSIONS_SCHEMA.name, ['org_id', 'factory_project_id'], {
-          ...where,
-          version,
-          updated_at,
-        });
-      }
-      bumps.push({ ...write, version, previous });
-    } else {
+    if (!write.factoryProjectId) {
       // Projects without a row yet have no version, which never matches a snapshot.
       await ops.updateMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, { org_id: write.orgId }, { version, updated_at });
       bumps.push({ ...write, version });
+      continue;
     }
+    const where = { org_id: write.orgId, factory_project_id: write.factoryProjectId };
+    const set = { version, updated_at };
+    const previous = expected(write);
+    // One UPDATE filtered on the version: atomic on every backend, which a read followed by a
+    // write is not once two replicas share the database.
+    const replaced =
+      previous !== undefined &&
+      (await ops.updateMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, { ...where, version: previous }, set)) > 0;
+    // Otherwise overwrite whatever is stored. Only a project's first bump finds no row.
+    if (!replaced && (await ops.updateMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, where, set)) === 0) {
+      await ops.upsertOne(FACTORY_BOARD_VERSIONS_SCHEMA.name, ['org_id', 'factory_project_id'], { ...where, ...set });
+    }
+    bumps.push({ ...write, version, previous: replaced ? previous : undefined });
   }
   return bumps;
 }

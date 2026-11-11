@@ -28,16 +28,24 @@ import {
   BoardScopes,
   bumpBoardVersions,
   CARD_TABLES,
+  cardCount,
   DECISION_TABLES,
   FACTORY_BOARD_VERSIONS_SCHEMA,
+  MAX_TRACKED_CARDS,
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
-import type { BoardBump, BoardScope, CardIds } from './board-version.js';
+import type { BoardScope, BoardWrite, CardIds } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
-import { LEGACY_REST_PHASE, LEGACY_TRIAGE_PHASE, LEGACY_WORK_BOARD, readReviewBoardInUse } from './legacy-review.js';
+import {
+  LEGACY_REST_PHASE,
+  LEGACY_REVIEW_BOARD,
+  LEGACY_TRIAGE_PHASE,
+  LEGACY_WORK_BOARD,
+  readReviewBoardInUse,
+} from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
@@ -954,16 +962,20 @@ const ATTENTION_RECEIPT_WRITE_BATCH_SIZE = 25;
 
 const projectRelationLocks = new Map<string, Promise<unknown>>();
 
-function withInProcessProjectLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const previous = projectRelationLocks.get(key) ?? Promise.resolve();
+function withInProcessProjectLock<T>(
+  key: string,
+  fn: () => Promise<T>,
+  locks: Map<string, Promise<unknown>> = projectRelationLocks,
+): Promise<T> {
+  const previous = locks.get(key) ?? Promise.resolve();
   const result = previous.then(fn, fn);
   const tail = result.then(
     () => undefined,
     () => undefined,
   );
-  projectRelationLocks.set(key, tail);
+  locks.set(key, tail);
   void tail.then(() => {
-    if (projectRelationLocks.get(key) === tail) projectRelationLocks.delete(key);
+    if (locks.get(key) === tail) locks.delete(key);
   });
   return result;
 }
@@ -1302,16 +1314,46 @@ export type FactoryBoardScope = Required<BoardScope>;
 /** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
 const LIST_CACHE_MAX_PROJECTS = 100;
-/** How many of this replica's own bumps a cached list can catch up on before a full re-read. */
-const BOARD_BUMPS_KEPT = 1_000;
+/** How many of its own bumps, and how many projects' latest versions, a replica remembers. */
+const BOARD_HISTORY_KEPT = 1_000;
+/** A cached list further behind than this is re-read whole. */
 const CATCH_UP_MAX_BUMPS = 50;
-const CATCH_UP_MAX_CARDS = 200;
+
+const boardKey = (orgId: string, factoryProjectId: string) => `${orgId}\u0000${factoryProjectId}`;
+
+/** `map.set`, keeping only the `max` most recently set keys. */
+function setBounded<K, V>(map: Map<K, V>, key: K, value: V, max: number): void {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size > max) map.delete(map.keys().next().value!);
+}
 
 /** The order {@link WorkItemsStorage.list} reads cards in: newest first, id breaking ties. */
 function newestFirst(left: Card, right: Card): number {
   const age = right.createdAt.getTime() - left.createdAt.getTime();
   if (age) return age;
   return left.id < right.id ? 1 : left.id > right.id ? -1 : 0;
+}
+
+/**
+ * `cached` with the `changed` cards replaced by `fresh`, their current rows. An edited card
+ * keeps its place, since nothing it is ordered by moved. A new card is placed by
+ * {@link newestFirst}, and a changed card with no current row is gone.
+ */
+function mergeCards(cached: readonly Card[], changed: ReadonlySet<string>, fresh: readonly Card[]): Card[] {
+  const unplaced = new Map(fresh.map(card => [card.id, card]));
+  const merged: Card[] = [];
+  for (const card of cached) {
+    const next = changed.has(card.id) ? unplaced.get(card.id) : card;
+    if (!next || next.createdAt.getTime() !== card.createdAt.getTime()) continue;
+    merged.push(next);
+    unplaced.delete(card.id);
+  }
+  for (const card of unplaced.values()) {
+    const before = merged.findIndex(other => newestFirst(card, other) < 0);
+    merged.splice(before < 0 ? merged.length : before, 0, card);
+  }
+  return merged;
 }
 
 type WorkItemSourceSyncPatch = Partial<
@@ -1324,11 +1366,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
   /**
-   * The board versions this replica wrote, each with the version it replaced and the cards it
-   * changed. A cached list whose version chains to the current one through these refetches only
-   * those cards; a version another replica wrote breaks the chain and forces a full re-read.
+   * The board versions this replica wrote straight over a version it knew, each with that
+   * version and the cards the write changed. A cached list whose version chains to the current
+   * one through these re-reads only those cards. A version another replica wrote is not here,
+   * so it breaks the chain and forces a full re-read.
    */
   readonly #boardBumps = new Map<string, { previous: string; cards: CardIds }>();
+  /** The version this replica last knew each project's board to have: the one its next bump expects to replace. */
+  readonly #boardTips = new Map<string, string>();
+  /** One bump at a time per project, on this replica only: another replica's bumps are told apart by the database. */
+  readonly #boardBumpLocks = new Map<string, Promise<unknown>>();
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
@@ -1774,6 +1821,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
     this.#listCache.clear();
     this.#boardBumps.clear();
+    this.#boardTips.clear();
   }
 
   get #db(): FactoryStorageOps {
@@ -1784,7 +1832,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const ops = super.ops;
     // Outside a transaction a resolved write has committed, so its wake can go out at once.
     const cards = trackBoardWrites(ops, CARD_TABLES, async write => {
-      this.#recordBumps(await bumpBoardVersions(ops, [write]));
+      await this.#bumpBoards([write]);
       this.#announceBoard(write);
     });
     return trackClaimableWrites(
@@ -1793,48 +1841,82 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
   }
 
-  #recordBumps(bumps: readonly BoardBump[]): void {
-    for (const { factoryProjectId, previous, cards, version } of bumps) {
-      if (!factoryProjectId || !previous || !cards) continue;
-      this.#boardBumps.set(version, { previous, cards });
-      if (this.#boardBumps.size > BOARD_BUMPS_KEPT) this.#boardBumps.delete(this.#boardBumps.keys().next().value!);
+  /**
+   * Bump the boards `writes` changed, once they have committed. One bump at a time per project:
+   * each replaces the version the one before it left, which is what lets a cached list follow
+   * this replica's writes.
+   */
+  async #bumpBoards(writes: readonly BoardWrite[]): Promise<void> {
+    try {
+      for (const write of writes) {
+        const { orgId, factoryProjectId } = write;
+        if (!factoryProjectId) {
+          await bumpBoardVersions(super.ops, [write]);
+          continue;
+        }
+        const key = boardKey(orgId, factoryProjectId);
+        const bumped = async () => {
+          const [bump] = await bumpBoardVersions(super.ops, [write], () => this.#boardTips.get(key));
+          if (!bump) return;
+          setBounded(this.#boardTips, key, bump.version, BOARD_HISTORY_KEPT);
+          if (bump.previous && bump.cards) {
+            setBounded(
+              this.#boardBumps,
+              bump.version,
+              { previous: bump.previous, cards: bump.cards },
+              BOARD_HISTORY_KEPT,
+            );
+          }
+        };
+        await withInProcessProjectLock(key, bumped, this.#boardBumpLocks);
+      }
+    } catch (error) {
+      // A write committed without its bump. With no known version, the next bump overwrites
+      // instead of chaining, so no cached list catches up past the write it would miss.
+      this.#boardTips.clear();
+      throw error;
     }
   }
 
-  /** The cards changed between two versions, when every bump between them is one of this replica's own. */
-  #cardsChangedBetween(from: string, to: string): CardIds | undefined {
+  /**
+   * The cards to re-read to bring a cached list up to `version`: those this replica's own
+   * bumps changed since the list was read, when its version chains to `version` through them
+   * alone. No answer when re-reading the board is the only safe path, or the cheaper one.
+   */
+  #changedSince(
+    hit: { version: string; takenAt: number; items: readonly Card[] },
+    version: string,
+  ): CardIds | undefined {
+    if (Date.now() - hit.takenAt >= LIST_CACHE_TTL_MS) return undefined;
+    // Closing a project's last open Review card moves its other Review cards to Work: a write
+    // that changes cards it never touched.
+    if (hit.items.some(card => card.board === LEGACY_REVIEW_BOARD)) return undefined;
     const changed: CardIds = { boardItemIds: new Set(), workItemIds: new Set() };
-    for (let version = to, steps = 0; version !== from; steps++) {
-      const bump = this.#boardBumps.get(version);
-      if (!bump || steps >= CATCH_UP_MAX_BUMPS) return undefined;
+    for (let at = version, bumps = 0; at !== hit.version; bumps++) {
+      const bump = this.#boardBumps.get(at);
+      if (!bump || bumps >= CATCH_UP_MAX_BUMPS) return undefined;
       for (const id of bump.cards.boardItemIds) changed.boardItemIds.add(id);
       for (const id of bump.cards.workItemIds) changed.workItemIds.add(id);
-      version = bump.previous;
+      at = bump.previous;
     }
-    if (changed.boardItemIds.size + changed.workItemIds.size > CATCH_UP_MAX_CARDS) return undefined;
-    return changed;
+    return cardCount(changed) > MAX_TRACKED_CARDS ? undefined : changed;
   }
 
   /** `cached` with the `changed` cards re-read: edits replaced, new cards added, deleted ones gone. */
   async #catchUp(orgId: string, factoryProjectId: string, cached: readonly Card[], changed: CardIds): Promise<Card[]> {
+    const scope = { org_id: orgId, factory_project_id: factoryProjectId };
     const ids = new Set(changed.boardItemIds);
     if (changed.workItemIds.size && !this.#legacyMode) {
       const placements = await super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEMS_SCHEMA.name, {
-        org_id: orgId,
-        factory_project_id: factoryProjectId,
+        ...scope,
         work_item_id: { in: [...changed.workItemIds] },
       });
       for (const { id } of placements) ids.add(id);
     }
-    const fresh = ids.size
-      ? await this.#cards(super.ops, { transaction: false }).findMany({
-          org_id: orgId,
-          factory_project_id: factoryProjectId,
-          id: { in: [...ids] },
-        })
+    const rows = ids.size
+      ? await this.#cards(super.ops, { transaction: false }).findMany({ ...scope, id: { in: [...ids] } })
       : [];
-    const kept = cached.filter(card => !ids.has(card.id));
-    return deepFreeze([...kept, ...fresh.map(toWorkItem)].sort(newestFirst));
+    return deepFreeze(mergeCards(cached, ids, rows.map(toWorkItem)));
   }
 
   /** Only legacy dry-run writes name no project, and no feed is keyed by org alone. */
@@ -1879,7 +1961,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       result = await run();
     }
     try {
-      this.#recordBumps(await bumpBoardVersions(super.ops, changed.values()));
+      await this.#bumpBoards(changed.values());
     } finally {
       // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
       for (const scope of queued.values()) this.#claimableWork(scope);
@@ -2088,7 +2170,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
   async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: Card[]; cached: boolean }> {
-    const key = `${orgId}\u0000${factoryProjectId}`;
+    const key = boardKey(orgId, factoryProjectId);
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
     // so the next call refetches instead of trusting a snapshot taken before that write.
     const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
@@ -2107,20 +2189,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
     // A list cached before this replica's own writes catches up on just their cards. It keeps
     // its `takenAt`, so the safety window still forces a full re-read.
-    const fresh = hit && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS;
-    const changed = fresh ? this.#cardsChangedBetween(hit.version, version) : undefined;
-    const read = changed
-      ? this.#catchUp(orgId, factoryProjectId, hit!.items, changed)
-      : this.#listWithOps(super.ops, orgId, factoryProjectId).then(deepFreeze);
+    const changed = hit && this.#changedSince(hit, version);
+    const caughtUp = hit && changed && this.#catchUp(orgId, factoryProjectId, hit.items, changed);
+    // A version this replica did not chain to itself: the one its next bump expects to replace.
+    if (!caughtUp) setBounded(this.#boardTips, key, version, BOARD_HISTORY_KEPT);
+    const read = caughtUp || this.#listWithOps(super.ops, orgId, factoryProjectId).then(deepFreeze);
     this.#listInFlight.set(key, { version, startedAt: Date.now(), items: read });
     try {
       const items = await read;
       if (this.#listInFlight.get(key)?.items === read) {
-        this.#listCache.delete(key);
-        this.#listCache.set(key, { version, takenAt: changed ? hit!.takenAt : Date.now(), items });
-        if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
-          this.#listCache.delete(this.#listCache.keys().next().value!);
-        }
+        const takenAt = hit && caughtUp ? hit.takenAt : Date.now();
+        setBounded(this.#listCache, key, { version, takenAt, items }, LIST_CACHE_MAX_PROJECTS);
       }
       return { items, cached: true };
     } finally {
