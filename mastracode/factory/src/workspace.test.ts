@@ -4621,6 +4621,68 @@ describe('factory environment sandbox context', () => {
       expect(env().GH_TOKEN_2).toBe(`env-token-${second.join('+')}`);
     });
 
+    it('installs every group token before setup runs and keeps them current across resolutions', async () => {
+      const links = Array.from({ length: 11 }, (_, index) => ({
+        id: index === 0 ? 'project-1' : `link-${index + 1}`,
+        repositoryId: `repository-${index + 1}`,
+        slug: index === 0 ? 'octocat/hello' : `octocat/repo-${index + 1}`,
+        position: index + 1,
+        inEnvironment: true,
+        ...(index === 10 ? { setupCommand: 'git fetch' } : {}),
+      }));
+      const { resolver, github } = environmentFixture({ links });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const applied = (index: number) =>
+        (
+          mocks.setEnv.mock.calls[index]![0] as (
+            env: Record<string, string | undefined>,
+          ) => Record<string, string | undefined>
+        )({});
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await workspace.sandbox.getInfo();
+
+      // Setup commands may fetch through repository 11's helper, so GH_TOKEN_2 is there first.
+      expect(mocks.runSetupCommand).toHaveBeenCalled();
+      const firstSetup = Math.min(...mocks.runSetupCommand.mock.invocationCallOrder);
+      const installedBeforeSetup = mocks.setEnv.mock.calls.some(
+        (_, index) => mocks.setEnv.mock.invocationCallOrder[index]! < firstSetup && applied(index).GH_TOKEN_2,
+      );
+      expect(installedBeforeSetup).toBe(true);
+      // Recording the environment during setup must not lose the coverage note.
+      expect(peekSessionEnvironment('session-a')?.note).toContain('GH_TOKEN_2 covers octocat/repo-11');
+
+      // A later resolution reuses the first one's injector; its refresh must
+      // still install the group tokens it just minted.
+      const laterContext = createGithubRequestContext('project-1', 'session-a');
+      await resolver({ requestContext: laterContext });
+      mocks.getRepositoriesAccess.mockImplementation(async ({ repositoryIds }: { repositoryIds: string[] }) => ({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `fresh-${repositoryIds.join('+')}` },
+      }));
+      mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => ({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `fresh-${repositoryId}` },
+      }));
+      const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+      const refresh = createGithubSubscriptionTools(laterContext, integration).github_refresh_token!;
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(applied(mocks.setEnv.mock.calls.length - 1)).toEqual({
+        GH_TOKEN: `fresh-${links
+          .slice(0, 10)
+          .map(link => link.repositoryId)
+          .join('+')}`,
+        GH_TOKEN_2: 'fresh-repository-11',
+      });
+
+      // An org PAT replaces the group tokens, so the note naming them goes too.
+      mocks.githubPat = 'ghp_org_pat';
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(applied(mocks.setEnv.mock.calls.length - 1)).toEqual({ GH_TOKEN: 'ghp_org_pat' });
+      expect(peekSessionEnvironment('session-a')?.note).toBeUndefined();
+    });
+
     it('skips setup where the template marker matches and runs it where the marker is missing', async () => {
       const { resolver } = environmentFixture({
         links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
