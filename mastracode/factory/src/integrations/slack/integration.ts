@@ -95,8 +95,11 @@ export interface SlackIntegrationConfig {
   tools?: Partial<SlackToolSettings>;
 }
 
-/** Slack renders the status inline next to the app name; keep it to one short line. */
-const MAX_STATUS_LENGTH = 80;
+/**
+ * Slack renders the status inline next to the app name, and rejects a status
+ * (sent as its loading message) of 51 characters or more.
+ */
+const MAX_STATUS_LENGTH = 50;
 
 /**
  * Turns a tool's `description` arg ("Listing the repo root") into a status
@@ -112,10 +115,10 @@ function describeToolCall(args: unknown): string | undefined {
     .map(part => part.replace(/\s+/g, ' ').trim())
     .find(Boolean);
   if (!line) return undefined;
-  const text = line.length > MAX_STATUS_LENGTH ? `${line.slice(0, MAX_STATUS_LENGTH - 1)}…` : line;
   // Drop the sentence-case capital ("Listing" → "listing") but leave acronyms
   // and identifiers ("PR lookup", "CI status") alone.
-  return `is ${/^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text}`;
+  const status = `is ${/^[A-Z][a-z]/.test(line) ? line.charAt(0).toLowerCase() + line.slice(1) : line}`;
+  return status.length > MAX_STATUS_LENGTH ? `${status.slice(0, MAX_STATUS_LENGTH - 1)}…` : status;
 }
 
 /**

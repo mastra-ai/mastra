@@ -31,7 +31,7 @@
     "@mastra/libsql": "1.25.1",
     "@mastra/observability": "1.19.0",
     "csv-parse": "7.0.3",
-    "fast-xml-parser": "5.11.2",
+    "fast-xml-parser": "5.12.0",
     "fflate": "0.8.3",
     "pdfjs-dist": "6.4.299",
     "zod": "^4.6.7"

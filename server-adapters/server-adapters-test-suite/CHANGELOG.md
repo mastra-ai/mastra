@@ -1,5 +1,47 @@
 # @mastra/server-adapters-test-suite
 
+## 0.3.0-alpha.4
+
+### Patch Changes
+
+- Add `PUT /api/observability/feedback/:feedbackId` for complete feedback replacement. Preserve the original ID, trace ID, and timestamp, and include every field to retain. Delayed POST retries keep existing feedback. Unsupported storage versions return 501. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```json
+  {
+    "feedback": {
+      "feedbackId": "feedback-1",
+      "traceId": "trace-123",
+      "timestamp": "2026-11-11T12:00:00.123Z",
+      "feedbackType": "thumbs",
+      "value": -1
+    }
+  }
+  ```
+
+- Cover feedback and score export delivery in the shared HTTP adapter tests. ([#30052](https://github.com/mastra-ai/mastra/pull/30052))
+
+  Declare `@mastra/observability` as a peer dependency for these tests.
+
+- Added shared tests for server adapters. They check that when a client disconnects, a custom route's agent run stops, even after garbage collection, and that a custom route's request is freed once its streamed response ends or fails. ([#29617](https://github.com/mastra-ai/mastra/pull/29617))
+
+  ```ts
+  import { createCustomRouteDisconnectTestSuite } from '@mastra/server-adapters-test-suite';
+
+  createCustomRouteDisconnectTestSuite({
+    suiteName: 'My adapter: custom route disconnect',
+    startServer: async mastra => {
+      const { baseUrl, close } = await serveMyAdapter(mastra);
+      return { baseUrl, close };
+    },
+  });
+  ```
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`4473677`](https://github.com/mastra-ai/mastra/commit/447367781ce5127a4945dcce95b6372d54d728ff), [`8896651`](https://github.com/mastra-ai/mastra/commit/8896651bd1191a30f0b4247ad8f865d31ed7cc2c)]:
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/observability@1.24.0-alpha.5
+  - @mastra/server@1.83.0-alpha.8
+  - @mastra/mcp@2.9.0-alpha.3
+
 ## 0.3.0-alpha.3
 
 ### Patch Changes

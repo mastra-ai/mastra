@@ -9,7 +9,9 @@ import type {
   ConfigSelector,
   ConfigSelectorOptions,
   FeedbackInput,
+  FeedbackReplacementInput,
   FeedbackEvent,
+  FeedbackReplacementEvent,
   ObservabilityEntrypoint,
   ObservabilityDropEvent,
   ObservabilityInstance,
@@ -321,8 +323,27 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     await this.#emitRecordedEvent(buildFeedbackEvent({ ...args, traceId, spanId }));
   }
 
+  async replaceFeedback(args: FeedbackReplacementInput): Promise<void> {
+    if (
+      !args.traceId?.trim() ||
+      !args.feedback.feedbackId?.trim() ||
+      !Number.isFinite(args.feedback.timestamp?.getTime())
+    ) {
+      throw new Error('Feedback replacement requires traceId, feedbackId, and the original timestamp');
+    }
+    await this.#emitRecordedEvent({
+      type: 'feedback_replacement',
+      feedback: {
+        ...args.feedback,
+        traceId: args.traceId,
+        spanId: args.spanId,
+        correlationContext: args.correlationContext,
+      },
+    });
+  }
+
   /** @internal Queue an HTTP-created record; flush/shutdown await delivery without holding the HTTP response open. */
-  async __exportPersistedEvent(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  async __exportPersistedEvent(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void> {
     const storageExporters = new Set<ObservabilityHandler>(
       this.#getRecordedTraceInstance()?.getExporters().filter(isMastraBuiltInStorageExporter),
     );
@@ -437,7 +458,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
   /** Dispatch independently; the standard bus tracks delivery, while custom instances return handler promises. */
   async #emitRecordedEvent(
-    event: ScoreEvent | FeedbackEvent,
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent,
     shouldHandle?: (handler: ObservabilityHandler) => boolean,
   ): Promise<void> {
     const instance = this.#getRecordedTraceInstance();

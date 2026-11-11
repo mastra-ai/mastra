@@ -7,6 +7,7 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
   ObservabilityDropEvent,
   ObservabilityDropReason,
   ObservabilityDropSignal,
@@ -502,7 +503,10 @@ export class DefaultExporter extends BaseExporter {
     // Flush all creates in parallel — signals are independent
     const flushResults = await Promise.all([
       this.flushCreates('feedback', createFeedbackEvents, events =>
-        this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
+        this.#observabilityStorage!.batchCreateFeedback({
+          feedbacks: events.map(f => buildFeedbackRecord(f)),
+          onConflict: 'ignore',
+        }),
       ),
       this.flushCreates('log', createLogEvents, events =>
         this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
@@ -607,11 +611,15 @@ export class DefaultExporter extends BaseExporter {
     return this.enqueueAnnotation(event);
   }
 
+  onFeedbackReplacementEvent(event: FeedbackReplacementEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
   onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     return this.enqueueAnnotation(event);
   }
 
-  private enqueueAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  private enqueueAnnotation(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void> {
     const pending = this.storeAnnotation(event);
     this.#pendingAnnotations.add(pending);
     void pending.then(
@@ -621,7 +629,7 @@ export class DefaultExporter extends BaseExporter {
     return pending;
   }
 
-  private async storeAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  private async storeAnnotation(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void> {
     await this.waitForInit();
     if (!this.#observabilityStorage) return;
     const resolved = await resolveStorageAnnotation(event, this.#observabilityStorage, async () => {
@@ -636,6 +644,17 @@ export class DefaultExporter extends BaseExporter {
         traceId: record.traceId,
         spanId: record.spanId,
       });
+      return;
+    }
+    if (resolved.type === 'feedback_replacement') {
+      if (
+        typeof this.#observabilityStorage.replaceFeedback !== 'function' ||
+        !this.#observabilityStorage.getFeatures?.()?.includes('feedback-replacement')
+      ) {
+        this.logger.warn('Storage exporter skipped feedback replacement: upgrade the storage adapter and @mastra/core');
+        return;
+      }
+      await this.#observabilityStorage.replaceFeedback({ feedback: buildFeedbackRecord(resolved) });
       return;
     }
     this.#eventBuffer.addEvent(resolved);

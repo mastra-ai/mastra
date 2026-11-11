@@ -62,7 +62,7 @@
     "@segment/analytics-node": {
       "jose": "6.2.12"
     },
-    "@whatwg-node/fetch@<0.12.1": "0.12.1",
+    "@whatwg-node/fetch": "0.12.1",
     "dompurify@<3.4.17": "3.4.17",
     "graphql-scalars": "2.0.1",
     "katex": "0.18.2",

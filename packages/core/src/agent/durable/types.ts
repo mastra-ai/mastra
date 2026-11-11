@@ -522,6 +522,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   processorDataParts?: Array<{
     type: string;
     data?: unknown;
+    id?: string;
     messageId?: string;
   }>;
   /**

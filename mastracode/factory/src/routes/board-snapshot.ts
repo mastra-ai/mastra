@@ -43,11 +43,33 @@ export function boardSnapshot(
   const etag = `W/"${cards.id}.${createHash('sha1').update(activity).digest('base64url')}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 
-  const json = `{"workItems":${cards.json},"runningSessionIds":${JSON.stringify(runningSessionIds)},"parkedSessionIds":${JSON.stringify(parkedSessionIds)}}`;
+  const json = listingJson(cards.json, runningSessionIds, parkedSessionIds);
   let gzipped: Promise<Buffer> | undefined;
   // zlib runs on the libuv pool, off the event loop.
   cards.latest = { etag, json, gzipped: () => (gzipped ??= gzip(json)) };
   return cards.latest;
+}
+
+/**
+ * The wire body for the cards a scoped listing picked. Its ETag is a hash of the body, not the
+ * board version: a write to a card outside the scope leaves it unchanged, so the tab gets a 304.
+ */
+export function scopedSnapshot(
+  items: readonly Card[],
+  toWire: (item: Card) => unknown,
+  runningSessionIds: readonly string[],
+  parkedSessionIds: readonly string[],
+): BoardSnapshot {
+  const json = listingJson(JSON.stringify(items.map(toWire)), runningSessionIds, parkedSessionIds);
+  return {
+    etag: `W/"${createHash('sha1').update(json).digest('base64url')}"`,
+    json,
+    gzipped: () => gzip(json),
+  };
+}
+
+function listingJson(cards: string, runningSessionIds: readonly string[], parkedSessionIds: readonly string[]): string {
+  return `{"workItems":${cards},"runningSessionIds":${JSON.stringify(runningSessionIds)},"parkedSessionIds":${JSON.stringify(parkedSessionIds)}}`;
 }
 
 /** Whether an `If-None-Match` header names this ETag (weak comparison, as for GET). */

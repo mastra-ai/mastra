@@ -1,10 +1,15 @@
 /** Deliver one feedback or score record whose span context must be resolved by Platform. */
-export async function publishResolvedRecord(url: URL, body: string, headers: Record<string, string>): Promise<void> {
+export async function publishResolvedRecord(
+  url: URL,
+  body: string,
+  headers: Record<string, string>,
+  method: 'POST' | 'PUT' = 'POST',
+): Promise<void> {
   // This deadline includes response bodies and backoff, so flush/shutdown cannot
   // wait indefinitely for an anchor that never arrives.
   const deadline = AbortSignal.timeout(30_000);
   for (let attempt = 0; attempt < 6; attempt++) {
-    const response = await fetch(url, { method: 'POST', headers, body, signal: deadline });
+    const response = await fetch(url, { method, headers, body, signal: deadline });
     if (response.ok) {
       await response.body?.cancel();
       return;
