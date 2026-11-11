@@ -2492,8 +2492,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       return 'run';
     }
 
+    // An exhausted delivery is never dispatched to the step guards, which would otherwise reject a
+    // finished occurrence, so this decides from the records they stamped as well. A saved result the
+    // run still has to continue from comes back as 'continue', and the dispatch then hands it to the
+    // guards like any delivery.
     const { stepLeaseHandoff: _handoff, ...args } = data;
-    const decision = await this.#finishedOccurrence({ ...args, workflow, eventId: event.id }, leaf);
+    const decision = await this.#finishedOccurrence({ ...args, workflow, eventId: event.id }, leaf, {
+      deferToGuards: false,
+    });
     return typeof decision === 'string' ? decision : 'continue';
   }
 
@@ -2524,11 +2530,13 @@ export class WorkflowEventProcessor extends EventProcessor {
    * saved result. See {@link finishedOccurrence}.
    *
    * A resume of the step and time travel run it again on purpose and skip the
-   * check.
+   * check. With `deferToGuards` (the default), records the store's step guards
+   * stamped are left to those guards on the deliveries they arbitrate.
    */
   async #finishedOccurrence(
     args: Omit<ProcessorArgs, 'stepLeaseHandoff'>,
     step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
+    { deferToGuards = true }: { deferToGuards?: boolean } = {},
   ): Promise<'run' | 'drop' | ProcessorArgs> {
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
     if (args.timeTravel || args.resumeSteps?.[0] === leafId) {
@@ -2548,7 +2556,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       restart: args.restart,
       snapshot,
       stepGuards: store.supportsWorkflowStepGuards(),
-      guarded: this.#guardsStepStart(store, args, step),
+      guarded: deferToGuards && this.#guardsStepStart(store, args, step),
     });
     if (outcome === 'run' || outcome === 'drop') {
       return outcome;
