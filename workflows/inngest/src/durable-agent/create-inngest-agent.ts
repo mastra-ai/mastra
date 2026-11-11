@@ -47,6 +47,7 @@ import {
   createDurableAgentStream,
   AgentStreamBus,
   createRunAbortController,
+  detachFullStreamOnEnd,
   emitChunkEvent,
   emitErrorEvent,
   emitAbortEvent,
@@ -2299,36 +2300,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // As in core `DurableAgent.observe()`: this output belongs to this
       // observer alone, so a consumer that stops reading fullStream detaches
       // the pubsub subscription instead of leaving it open.
-      const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
-      Object.defineProperty(output, 'fullStream', {
-        configurable: true,
-        get(this: typeof output) {
-          // `this` is the real instance (the destructurable proxy reads getters
-          // with its target as receiver); the proxy itself can't reach private fields.
-          const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
-          return new ReadableStream<ChunkType<TOutput>>({
-            async pull(controller) {
-              let result: Awaited<ReturnType<typeof reader.read>>;
-              try {
-                result = await reader.read();
-              } catch (error) {
-                detach();
-                throw error;
-              }
-              if (result.done) {
-                detach();
-                controller.close();
-              } else {
-                controller.enqueue(result.value);
-              }
-            },
-            cancel(reason) {
-              detach();
-              return reader.cancel(reason);
-            },
-          });
-        },
-      });
+      detachFullStreamOnEnd(output, detach);
 
       // Reconcile only after subscribing, so a completion racing attachment is
       // not lost: close at once when nothing will publish to the run again.

@@ -215,6 +215,7 @@ import type {
   DurableAgentStreamOptions,
   DurableAgentStreamResult,
 } from './durable/durable-agent';
+import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
@@ -12422,36 +12423,7 @@ export class Agent<
     // This output belongs to this observer alone: a consumer that stops reading
     // fullStream detaches the subscription (MastraModelOutput only drops the
     // cancelled reader's listeners).
-    const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      get(this: typeof output) {
-        // `this` is the real instance (the destructurable proxy reads getters
-        // with its target as receiver); the proxy itself can't reach private fields.
-        const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
-        return new ReadableStream<ChunkType<TOutput>>({
-          async pull(controller) {
-            let result: ReadableStreamReadResult<ChunkType<TOutput>>;
-            try {
-              result = await reader.read();
-            } catch (error) {
-              detach();
-              throw error;
-            }
-            if (result.done) {
-              detach();
-              controller.close();
-            } else {
-              controller.enqueue(result.value);
-            }
-          },
-          cancel(reason) {
-            detach();
-            return reader.cancel(reason);
-          },
-        });
-      },
-    });
+    detachFullStreamOnEnd(output, detach);
 
     try {
       await stream.ready;
