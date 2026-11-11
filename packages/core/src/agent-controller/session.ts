@@ -2146,14 +2146,23 @@ export class SessionApproval {
   respond({
     decision,
     toolCallId,
+    threadId,
+    runId,
     requestContext,
     declineContext,
     onAlwaysAllow,
   }: ApprovalResponse & {
     toolCallId: string;
+    /** Narrow to one owner when the same call id is parked on several threads or runs. */
+    threadId?: string;
+    runId?: string;
     onAlwaysAllow?: (toolName: string, threadId?: string) => void;
   }): SessionCommandResult {
-    const matches = this.#matching({ toolCallId });
+    const matches = this.#matching({
+      toolCallId,
+      ...(threadId !== undefined && { threadId }),
+      ...(runId !== undefined && { runId }),
+    });
     if (matches.length !== 1) {
       return { accepted: false, reason: this.#gates.size > 0 ? 'stale_tool_call' : 'not_pending' };
     }
@@ -2948,20 +2957,25 @@ class SessionPermissions {
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
   setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    return this.#write({ ...rules, categories: { ...rules.categories, [category]: policy } });
+    return this.#write(rules => ({ ...rules, categories: { ...rules.categories, [category]: policy } }));
   }
 
   /** Set the approval policy for an individual tool. Resolves once persisted. */
   setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    return this.#write({ ...rules, tools: { ...rules.tools, [toolName]: policy } });
+    return this.#write(rules => ({ ...rules, tools: { ...rules.tools, [toolName]: policy } }));
   }
 
-  // A fresh object, so state persistence sees the change instead of the same reference.
-  async #write(rules: PermissionRules): Promise<void> {
-    await this.#setState?.({ permissionRules: rules });
-    await this.#onChange?.();
+  #writes: Promise<void> = Promise.resolve();
+
+  // Writes are serialized and read the rules inside the queue, so two setters
+  // called back to back both land. `edit` returns a fresh object, so state
+  // persistence sees the change instead of the same reference.
+  #write(edit: (rules: PermissionRules) => PermissionRules): Promise<void> {
+    const write = this.#writes.then(async () => {
+      await this.#setState?.({ permissionRules: edit(this.getRules()) });
+    });
+    this.#writes = write.catch(() => {});
+    return write.then(() => this.#onChange?.());
   }
 }
 
@@ -4934,17 +4948,50 @@ export class Session<TState = unknown> {
    * a click. Covers gates parked on this session and approvals stored with the
    * current thread's suspended runs. Calls still resolving to `ask` stay parked.
    */
-  async applyToolPolicyToParkedApprovals(): Promise<void> {
-    const handled = new Set<string>();
-    for (const gate of this.approval.list()) {
-      handled.add(gate.toolCallId);
-      const policy = this.resolveToolApproval(gate.toolName, gate.threadId);
-      if (policy === 'ask') continue;
-      this.respondToToolApproval({ decision: policy === 'allow' ? 'approve' : 'decline', toolCallId: gate.toolCallId });
-    }
+  #parkedApprovalsCheck: Promise<void> = Promise.resolve();
+  // Persisted calls this session already answered, so a later re-check (another
+  // rule write, or the post-create pass) does not resume the same call again
+  // while storage still lists its run as suspended.
+  readonly #answeredParkedApprovals = new Set<string>();
 
+  applyToolPolicyToParkedApprovals(): Promise<void> {
+    const check = this.#parkedApprovalsCheck.then(() => this.#applyToolPolicyToParkedApprovalsSafely());
+    this.#parkedApprovalsCheck = check;
+    return check;
+  }
+
+  async #applyToolPolicyToParkedApprovalsSafely(): Promise<void> {
+    try {
+      await this.#applyToolPolicyToParkedApprovals();
+    } catch (error) {
+      // Best-effort: a parked call left waiting is no worse than before, and
+      // must not fail session creation or a rule write that already landed.
+      console.error('Re-checking parked tool approvals against the current policy failed:', error);
+    }
+  }
+
+  async #applyToolPolicyToParkedApprovals(): Promise<void> {
+    // Rules live on the active thread's state, so only that thread's calls
+    // can be judged against them.
     const threadId = this.thread.getId();
     if (!threadId) return;
+    const address = (runId: string | undefined, toolCallId: string) => `${runId ?? ''}:${toolCallId}`;
+    const handled = new Set<string>();
+    for (const gate of this.approval.list()) {
+      if (gate.threadId !== undefined && gate.threadId !== threadId) continue;
+      handled.add(address(gate.runId, gate.toolCallId));
+      const policy = this.resolveToolApproval(gate.toolName, threadId);
+      if (policy === 'ask') continue;
+      if (this.run.isAbortRequested()) continue;
+      this.approval.respond({
+        decision: policy === 'allow' ? 'approve' : 'decline',
+        toolCallId: gate.toolCallId,
+        threadId: gate.threadId,
+        runId: gate.runId,
+      });
+      this.displayState.clearPendingApprovals([gate.toolCallId]);
+    }
+
     const agent = this.machinery.getAgent();
     if (typeof agent.listSuspendedRuns !== 'function') return;
     let runs: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'];
@@ -4957,11 +5004,16 @@ export class Session<TState = unknown> {
     for (const run of runs) {
       for (const call of run.toolCalls) {
         const { toolCallId, toolName } = call;
-        if (!call.requiresApproval || !toolCallId || !toolName || handled.has(toolCallId)) continue;
+        if (!call.requiresApproval || !toolCallId || !toolName) continue;
+        const key = address(run.runId, toolCallId);
+        if (handled.has(key) || this.#answeredParkedApprovals.has(key)) continue;
         const policy = this.resolveToolApproval(toolName, threadId);
         if (policy === 'ask') continue;
-        handled.add(toolCallId);
-        await this.respondToPersistedToolApproval({ toolCallId, approved: policy === 'allow' });
+        handled.add(key);
+        this.#answeredParkedApprovals.add(key);
+        const identity = { toolCallId, runId: run.runId, threadId, resourceId: this.identity.getResourceId() };
+        if (policy === 'allow') await this.approveToolCall(identity);
+        else await this.declineToolCall(identity);
       }
     }
   }
