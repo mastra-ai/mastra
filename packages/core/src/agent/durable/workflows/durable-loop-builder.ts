@@ -25,7 +25,7 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { diffResponseMessages } from '../../streams/response-messages';
 import type { ResponseMessagesCursor } from '../../streams/response-messages';
-import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
+import { AGENT_STREAM_TOPIC, DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import {
   getExecutionClaim,
   isExecutionFenceError,
@@ -218,6 +218,21 @@ interface DurableLoopRuntime extends LoopRuntime {
   maxSteps: number;
   /** Present when the run streams through a pubsub transport. */
   pubsub?: PubSub;
+}
+
+/**
+ * Whether a reader that attaches mid-run can read the run's earlier events. Steps publish on the
+ * engine's bus, but `observe()` reads through the agent's own stream bus, which has no replay
+ * when the agent was created with `cache: false`; both have to keep the topic.
+ */
+function runTopicReplays(rt: DurableLoopRuntime): boolean {
+  const topic = AGENT_STREAM_TOPIC(rt.runId);
+  if (!rt.pubsub?.__replaysTopic(topic)) return false;
+  // Not `getAgentById`, which reports a missing agent as an error; this runs on every step.
+  const agent = Object.values(rt.mastra?.listAgents() ?? {}).find(registered => registered.id === rt.agentId);
+  // An agent not registered here leaves the engine's bus to go by.
+  const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub;
+  return agentBus?.__replaysTopic?.(topic) ?? true;
 }
 
 /**
@@ -711,8 +726,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           const producer =
             getExecutionClaim(params.requestContext, state.runId)?.executionId ??
             `${state.runId}:${currentRunGeneration(state.runId) ?? 0}`;
-          const cursor =
+          let cursor: ResponseMessagesCursor | { producer: string } =
             state.responseMessagesCursor?.producer === producer ? state.responseMessagesCursor : { producer };
+          // A reader that attaches mid-run on a bus that keeps no history can only place whole lists.
+          if ('fingerprints' in cursor && !runTopicReplays(rt)) {
+            cursor = { ...cursor, fingerprints: [] };
+          }
           const { diff, cursor: next } = diffResponseMessages(cursor, list.get.response.aiV5.model());
           deferredChunk.payload._durableResponseMessagesDiff = diff;
           nextCursor = next;
