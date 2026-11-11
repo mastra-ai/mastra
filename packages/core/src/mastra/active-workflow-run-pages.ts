@@ -14,6 +14,10 @@ const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'waiting'];
  * Each status is listed in one call. Paged reads cost more on the SQL and
  * document stores, whose paged `listWorkflowRuns` also counts the matches,
  * and offset pages skip runs that leave the status filter mid-sweep.
+ *
+ * Both statuses are listed before the first batch is yielded. Listing
+ * `waiting` only after every `running` batch was restarted would miss a run
+ * that moved from `waiting` to `running` in between.
  */
 export async function* activeWorkflowRunPages({
   store,
@@ -22,11 +26,14 @@ export async function* activeWorkflowRunPages({
   store: WorkflowsStorage;
   workflowName: string;
 }): AsyncGenerator<WorkflowRun[]> {
-  // Shared by both statuses: a run that moves between them while the sweep runs is listed under each.
+  const listings = await Promise.all(
+    ACTIVE_STATUSES.map(status => store.listWorkflowRuns({ workflowName, status, perPage: false })),
+  );
+
+  // Shared by both statuses: a run that moved between them while they were listed is listed under each.
   const seen = new Set<string>();
 
-  for (const status of ACTIVE_STATUSES) {
-    const { runs } = await store.listWorkflowRuns({ workflowName, status, perPage: false });
+  for (const { runs } of listings) {
     const unseen: WorkflowRun[] = [];
     for (const run of runs) {
       if (!seen.has(run.runId)) {

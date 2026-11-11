@@ -148,7 +148,7 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
     expect(ownershipReads.mock.calls.map(([args]) => args.runIds.length)).toEqual([100, 100, 40, 60]);
   });
 
-  it('restarts a run once when it moves from running to waiting while the sweep runs', async () => {
+  it('restarts a run once when it moves from running to waiting between the two listings', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const mastra = startReplica(storage, 'default', () => {});
@@ -158,18 +158,28 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
     }
 
     const list = store.listWorkflowRuns.bind(store);
+    let markSuspended!: () => void;
+    const suspended = new Promise<void>(resolve => (markSuspended = resolve));
     vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async (args = {}) => {
-      const listed = await list(args);
-      // A sleep step suspends every run right after the sweep listed them as running.
-      if (args.workflowName === 'recovered-wf' && args.status === 'running') {
-        for (const run of listed.runs) {
-          await persistActiveRun(storage, run.runId, { status: 'waiting' });
-        }
+      if (args.workflowName !== 'recovered-wf') {
+        return list(args);
       }
 
+      // The `waiting` listing reads only after a sleep step suspended every run the `running` one returned.
+      if (args.status === 'waiting') {
+        await suspended;
+        return list(args);
+      }
+
+      const listed = await list(args);
+      for (const run of listed.runs) {
+        await persistActiveRun(storage, run.runId, { status: 'waiting' });
+      }
+
+      markSuspended();
       return listed;
     });
-    // The restarts never finish the runs, so every run is still waiting when the sweep lists that status.
+    // The restarts never finish the runs, so every run is still waiting when that status is listed.
     const restarted: string[] = [];
     vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun').mockImplementation(async ({ runId } = {}) => {
       restarted.push(runId!);
@@ -179,6 +189,33 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
     await mastra.restartAllActiveWorkflowRuns();
 
     expect([...restarted].sort()).toEqual([...runIds].sort());
+  });
+
+  it('restarts a waiting run that becomes running while the sweep restarts the running runs', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = startReplica(storage, 'default', () => {});
+    await persistActiveRun(storage, 'running-run');
+    await persistActiveRun(storage, 'woken-run', { status: 'waiting' });
+
+    // The sleeping run wakes, and its process dies, while the sweep handles the running runs.
+    const readOwners = store.getRunOwnerships.bind(store);
+    vi.spyOn(store, 'getRunOwnerships').mockImplementation(async args => {
+      if (args.runIds.includes('running-run')) {
+        await persistActiveRun(storage, 'woken-run', { status: 'running' });
+      }
+
+      return readOwners(args);
+    });
+    const restarted: string[] = [];
+    vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun').mockImplementation(async ({ runId } = {}) => {
+      restarted.push(runId!);
+      return { restart: async () => {} } as any;
+    });
+
+    await mastra.restartAllActiveWorkflowRuns();
+
+    expect([...restarted].sort()).toEqual(['running-run', 'woken-run']);
   });
 
   it('hands evented restarts to the workers without waiting for the runs to finish', async () => {
