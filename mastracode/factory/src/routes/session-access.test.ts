@@ -1,7 +1,7 @@
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { canViewSourceControlSession, createSessionAccessGuard } from './session-access.js';
@@ -104,6 +104,9 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
         { runId: 'run-factory', resourceId: FACTORY_ID, threadId: SHARED_ID },
         { runId: 'run-legacy', resourceId: LEGACY_PRIVATE_ID, threadId: LEGACY_PRIVATE_ID },
         { runId: 'run-teammate', resourceId: 'teammate', threadId: 'thread-teammate' },
+        // Slack runs: a DM runs on the sender's user id, a chat-only channel on a `channel:` resource.
+        { runId: 'run-slack-dm', resourceId: 'user_01KN7GDHE5MMQ23SRB1XHFX2EJ', threadId: 'thread-slack-dm' },
+        { runId: 'run-slack-channel', resourceId: 'channel:slack:C0123456789', threadId: 'thread-slack-channel' },
         ...(c.req.query('broken')
           ? [{ runId: 'run-broken', resourceId: BROKEN_FACTORY_ID, threadId: 'thread-broken' }]
           : []),
@@ -304,15 +307,37 @@ describe('createSessionAccessGuard', () => {
     expect(await runIds(outsider)).toEqual([]);
   });
 
+  it("hides other people's Slack DM and channel runs, and still shows the sender their own DM run", async () => {
+    const path = '/api/agent-controller/code/active-runs';
+    const res = await teammate.request(path);
+    expect(res.status).toBe(200);
+    const { runs } = (await res.json()) as { runs: { runId: string }[] };
+    expect(runs.map(run => run.runId)).toEqual(['run-factory', 'run-teammate']);
+
+    const sender = buildApp({ workosId: 'user_01KN7GDHE5MMQ23SRB1XHFX2EJ', organizationId: 'org-1' });
+    const own = (await (await sender.request(path)).json()) as { runs: { runId: string }[] };
+    expect(own.runs.map(run => run.runId)).toEqual(['run-factory', 'run-slack-dm']);
+  });
+
   it("answers 404 for another person's user id without asking the Factory store about it", async () => {
     expect((await teammate.request('/api/memory/threads?resourceId=owner')).status).toBe(404);
     expect((await post(teammate, '/api/agent-controller/code/sessions', { resourceId: 'owner' })).status).toBe(404);
   });
 
   it('drops a run whose resource cannot be checked instead of failing the whole active-runs list', async () => {
-    const res = await owner.request('/api/agent-controller/code/active-runs?broken=1');
-    expect(res.status).toBe(200);
-    const { runs } = (await res.json()) as { runs: { runId: string }[] };
-    expect(runs.map(run => run.runId)).toEqual(['run-owner', 'run-factory', 'run-legacy']);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await owner.request('/api/agent-controller/code/active-runs?broken=1');
+      expect(res.status).toBe(200);
+      const { runs } = (await res.json()) as { runs: { runId: string }[] };
+      expect(runs.map(run => run.runId)).toEqual(['run-owner', 'run-factory', 'run-legacy']);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[Factory Sessions]'),
+        expect.objectContaining({ resourceId: BROKEN_FACTORY_ID, error: expect.any(Error) }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

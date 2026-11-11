@@ -251,6 +251,14 @@ async function filterActiveRuns(c: Context, canReach: (resourceId: string) => Pr
   ];
   // A resource whose check fails is treated as unreachable, so one run cannot fail the whole list.
   const checks = await Promise.allSettled(resourceIds.map(id => canReach(id)));
+  checks.forEach((check, index) => {
+    if (check.status === 'rejected') {
+      console.warn('[Factory Sessions] Could not check access to an active run resource; hiding its runs', {
+        resourceId: resourceIds[index],
+        error: check.reason,
+      });
+    }
+  });
   const reachable = new Set(
     resourceIds.filter((_, index) => checks[index]!.status === 'fulfilled' && checks[index]!.value),
   );
