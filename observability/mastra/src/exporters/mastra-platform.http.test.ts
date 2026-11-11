@@ -1,10 +1,17 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
+import { Mastra } from '@mastra/core';
+import { noopLogger } from '@mastra/core/logger';
+import { SpanType } from '@mastra/core/observability';
 import type { FeedbackEvent, ScoreEvent, LogEvent, TracingEvent } from '@mastra/core/observability';
-import { afterEach, describe, expect, it } from 'vitest';
+import { InMemoryStore } from '@mastra/core/storage';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Observability } from '../default';
+import { DefaultExporter } from './default';
 import { MastraPlatformExporter } from './mastra-platform';
 import type { MastraPlatformExporterConfig } from './mastra-platform';
+import { MastraStorageExporter } from './mastra-storage';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -581,5 +588,317 @@ describe('Resolved record delivery boundaries', () => {
     expect(receivedAt).toHaveLength(2);
     expect(receivedAt[1]! - receivedAt[0]!).toBeGreaterThanOrEqual(990);
     expect(receiver.bodies[0]!.raw).toBe(receiver.bodies[1]!.raw);
+  });
+});
+
+describe('SDK feedback and score delivery', () => {
+  it.each([
+    { StorageExporter: MastraStorageExporter, orphan: false },
+    { StorageExporter: DefaultExporter, orphan: false },
+    { StorageExporter: MastraStorageExporter, orphan: true },
+    { StorageExporter: DefaultExporter, orphan: true },
+  ])(
+    'exports remote-only anchors independently of $StorageExporter (orphan: $orphan)',
+    async ({ StorageExporter, orphan }) => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      if (orphan) {
+        const store = (await storage.getStore('observability'))!;
+        for (const [spanId, parentSpanId] of [
+          ['unrelated-root', null],
+          ['remote-span', 'missing-parent'],
+        ] as const)
+          await store.createSpan({
+            span: {
+              traceId: 'remote-trace',
+              spanId,
+              parentSpanId,
+              name: spanId,
+              spanType: SpanType.GENERIC,
+              isEvent: false,
+              startedAt: new Date(),
+              endedAt: new Date(),
+              tags: ['unrelated-tags'],
+            },
+          });
+      }
+      const platform = exporter(receiver.endpoint);
+      const localExporter = new StorageExporter();
+      const observability = new Observability({
+        configs: { default: { serviceName: 'producer-test', exporters: [localExporter, platform] } },
+      });
+      const mastra = new Mastra({ logger: false, storage, observability });
+      const warn = vi.fn();
+      localExporter.__setLogger({ ...noopLogger, warn });
+      cleanup.push(() => observability.shutdown());
+      const submitted = Promise.all([
+        mastra.observability.addFeedback({
+          traceId: 'remote-trace',
+          spanId: 'remote-span',
+          feedback: { feedbackType: 'comment', value: 'actionable' },
+        }),
+        mastra.observability.addScore({
+          traceId: 'remote-trace',
+          spanId: orphan ? 'remote-span' : undefined,
+          score: { scorerId: 'quality', score: 1 },
+        }),
+      ]);
+      // Remote delivery must start while local anchor lookup is still retrying.
+      await expect.poll(() => receiver.bodies.length, { timeout: 1000 }).toBe(2);
+      await submitted;
+      await observability.flush();
+      expect(receiver.bodies.map(body => body.path).sort()).toEqual([
+        '/api/observability/feedback',
+        '/api/observability/scores',
+      ]);
+      expect(receiver.bodies.find(body => body.data.feedback)?.data.feedback).toMatchObject({
+        traceId: 'remote-trace',
+        spanId: 'remote-span',
+        value: 'actionable',
+      });
+      expect(receiver.bodies.find(body => body.data.score)?.data.score).toMatchObject({
+        traceId: 'remote-trace',
+        scorerId: 'quality',
+        score: 1,
+      });
+      const store = (await storage.getStore('observability'))!;
+      expect((await store.listFeedback({})).feedback).toHaveLength(0);
+      expect((await store.listScores({})).scores).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith('Storage export dropped because the target trace/span was not found', {
+        eventType: 'feedback',
+        traceId: 'remote-trace',
+        spanId: 'remote-span',
+      });
+      expect(warn).toHaveBeenCalledWith('Storage export dropped because the target trace/span was not found', {
+        eventType: 'score',
+        traceId: 'remote-trace',
+        spanId: orphan ? 'remote-span' : undefined,
+      });
+    },
+    15_000,
+  );
+  it.each([
+    { StorageExporter: MastraStorageExporter, recovers: true },
+    { StorageExporter: DefaultExporter, recovers: true },
+    { StorageExporter: MastraStorageExporter, recovers: false },
+    { StorageExporter: DefaultExporter, recovers: false },
+  ])(
+    'retries failed local reads without delaying remote delivery ($StorageExporter, recovers: $recovers)',
+    async ({ StorageExporter, recovers }) => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      await store.createSpan({
+        span: {
+          traceId: 'read-failure',
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'root',
+          spanType: SpanType.GENERIC,
+          isEvent: false,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          tags: ['stored-tags'],
+        },
+      });
+      const readTrace = store.getTrace.bind(store);
+      let attempts = 0;
+      const failure = new Error('Storage temporarily unavailable');
+      // Inject read failures into real storage; successful reads and all writes remain real.
+      store.getTrace = async args => {
+        attempts++;
+        if (!recovers || attempts <= 2) throw failure;
+        return readTrace(args);
+      };
+      const localExporter = new StorageExporter();
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'read-failure-test',
+            exporters: [localExporter, exporter(receiver.endpoint)],
+          },
+        },
+      });
+      const mastra = new Mastra({ storage, observability, logger: false });
+      const error = vi.spyOn(console, 'error');
+      cleanup.push(async () => {
+        error.mockRestore();
+      });
+      cleanup.push(() => observability.shutdown());
+      await mastra.observability.addFeedback({
+        traceId: 'read-failure',
+        feedback: { feedbackType: 'comment', value: 'useful' },
+      });
+      await mastra.observability.addScore({ traceId: 'read-failure', score: { scorerId: 'quality', score: 1 } });
+      await expect.poll(() => receiver.bodies.length, { timeout: 1000 }).toBe(2);
+      await observability.flush();
+      const feedbackRows = (await store.listFeedback({})).feedback;
+      const scoreRows = (await store.listScores({})).scores;
+      if (recovers) {
+        expect(feedbackRows).toEqual([expect.objectContaining({ value: 'useful', tags: ['stored-tags'] })]);
+        expect(scoreRows).toEqual([expect.objectContaining({ score: 1, tags: ['stored-tags'] })]);
+        expect(error).not.toHaveBeenCalled();
+      } else {
+        expect(attempts).toBe(14); // Seven bounded attempts for each record.
+        expect(feedbackRows).toHaveLength(0);
+        expect(scoreRows).toHaveLength(0);
+        expect(error).toHaveBeenCalledWith(expect.stringContaining(localExporter.name), failure);
+      }
+    },
+    15_000,
+  );
+
+  it('delivers to Platform and custom exporters without attached storage', async () => {
+    const receiver = await collector();
+    const webhook = await collector();
+    const observability = new Observability({
+      configs: {
+        default: {
+          serviceName: 'remote-only',
+          exporters: [
+            exporter(receiver.endpoint),
+            {
+              name: 'webhook',
+              exportTracingEvent: async () => {},
+              onScoreEvent: async (event: ScoreEvent) => {
+                await fetch(webhook.endpoint, { method: 'POST', body: JSON.stringify(event) });
+              },
+              onFeedbackEvent: async (event: FeedbackEvent) => {
+                await fetch(webhook.endpoint, { method: 'POST', body: JSON.stringify(event) });
+              },
+              flush: async () => {},
+              shutdown: async () => {},
+            },
+          ],
+        },
+      },
+    });
+    const mastra = new Mastra({ observability, logger: false });
+    cleanup.push(() => observability.shutdown());
+    await mastra.observability.addScore({ traceId: 'remote-only', score: { scorerId: 'quality', score: 0.8 } });
+    await mastra.observability.addFeedback({
+      traceId: 'remote-only',
+      feedback: { feedbackType: 'comment', value: 'useful' },
+    });
+    await observability.shutdown();
+    expect(receiver.bodies.filter(body => body.path.startsWith('/api/observability/'))).toHaveLength(2);
+    expect(webhook.bodies).toHaveLength(2);
+    for (const kind of ['score', 'feedback']) {
+      expect(webhook.bodies.find(b => b.data[kind])!.data[kind]).toEqual(
+        receiver.bodies.find(b => b.data[kind])!.data[kind],
+      );
+    }
+  });
+
+  it.each([
+    { mode: 'provided', StorageExporter: MastraStorageExporter },
+    { mode: 'resolve', StorageExporter: MastraStorageExporter },
+    { mode: 'provided', StorageExporter: DefaultExporter },
+    { mode: 'resolve', StorageExporter: DefaultExporter },
+  ])(
+    'keeps identity across local storage and remote $mode delivery ($StorageExporter)',
+    async ({ mode, StorageExporter }) => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      if (mode === 'resolve') {
+        for (const [spanId, parentSpanId, tags] of [
+          ['unrelated-root', null, ['wrong']],
+          ['root', null, ['correct']],
+          ['child', 'root', ['child-tag']],
+        ] as const)
+          await store.createSpan({
+            span: {
+              traceId: 'local-trace',
+              spanId,
+              parentSpanId,
+              name: spanId,
+              tags: [...tags],
+              startedAt: new Date(),
+              endedAt: new Date(),
+              isEvent: false,
+              spanType: SpanType.GENERIC,
+              userId: 'span-user',
+              metadata: { inherited: true },
+            },
+          });
+      }
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'identity-test',
+            exporters: [new StorageExporter(), exporter(receiver.endpoint)],
+          },
+        },
+      });
+      const mastra = new Mastra({ observability, storage, logger: false });
+      cleanup.push(() => observability.shutdown());
+      const context = mode === 'provided' ? { correlationContext: { tags: ['provided'], userId: 'span-user' } } : {};
+      await mastra.observability.addFeedback({
+        traceId: 'local-trace',
+        spanId: 'child',
+        ...context,
+        feedback: {
+          feedbackType: 'comment',
+          value: 'actionable',
+          feedbackUserId: 'reviewer',
+          metadata: { explicit: true },
+        },
+      });
+      await mastra.observability.addScore({
+        traceId: 'local-trace',
+        spanId: 'child',
+        ...context,
+        score: { scorerId: 'quality', score: 0.7, metadata: { explicit: true } },
+      });
+      await observability.flush();
+      for (const [collection, field, idField] of [
+        ['feedback', 'feedback', 'feedbackId'],
+        ['scores', 'score', 'scoreId'],
+      ] as const) {
+        const rows =
+          collection === 'feedback' ? (await store.listFeedback({})).feedback : (await store.listScores({})).scores;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ tags: mode === 'provided' ? ['provided'] : ['correct'], userId: 'span-user' });
+        const body = receiver.bodies.find(b =>
+          b.path.endsWith(mode === 'provided' ? `/ai/${collection}/publish` : `/api/observability/${collection}`),
+        )!;
+        const remote = mode === 'provided' ? body.data[collection][0] : body.data[field];
+        expect(remote[idField]).toBe((rows[0] as any)[idField]);
+        expect(remote.timestamp).toBe(rows[0]!.timestamp.toISOString());
+        if (mode === 'resolve') {
+          expect(remote).not.toHaveProperty('correlationContext');
+          expect(remote.metadata).toEqual({ explicit: true });
+          expect(rows[0]!.metadata).toEqual({ inherited: true, explicit: true });
+        }
+      }
+    },
+  );
+
+  it('persists annotations for buffered spans during shutdown', async () => {
+    const storage = new InMemoryStore();
+    const observability = new Observability({
+      configs: {
+        default: {
+          serviceName: 'buffered-trace',
+          exporters: [new MastraStorageExporter({ maxBatchWaitMs: 60_000 })],
+        },
+      },
+    });
+    const mastra = new Mastra({ observability, storage, logger: false });
+    cleanup.push(() => observability.shutdown());
+    const root = observability.getDefaultInstance()!.startSpan({ type: SpanType.GENERIC, name: 'buffered' });
+    root.end();
+    await mastra.observability.addScore({ traceId: root.traceId, score: { scorerId: 'quality', score: 1 } });
+    await mastra.observability.addFeedback({
+      traceId: root.traceId,
+      feedback: { feedbackType: 'comment', value: 'useful' },
+    });
+    await observability.shutdown();
+    const store = (await storage.getStore('observability'))!;
+    expect((await store.listScores({})).scores).toEqual([expect.objectContaining({ traceId: root.traceId, score: 1 })]);
+    expect((await store.listFeedback({})).feedback).toEqual([
+      expect.objectContaining({ traceId: root.traceId, value: 'useful' }),
+    ]);
   });
 });

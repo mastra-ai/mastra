@@ -86,6 +86,7 @@ import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-ada
 import { prepareAuthorEnrichment } from './author-enrichment';
 import { getCallerPermissions } from './authorship';
 import { handleError } from './error';
+import { exportPersistedEvent, persistedFeedbackEvent, persistedScoreEvent } from './observability-export';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
@@ -1226,7 +1227,9 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
     const context = await resolveSignalContext(observabilityStore, requestContext, score, contextMode);
     const scoreId = score.scoreId ?? generateSignalId();
     const timestamp = score.timestamp === undefined ? new Date() : new Date(score.timestamp);
-    await observabilityStore.createScore({ score: { ...score, ...context, scoreId, timestamp } });
+    const record = { ...score, ...context, scoreId, timestamp };
+    await observabilityStore.createScore({ score: record });
+    await exportPersistedEvent(mastra, persistedScoreEvent(record));
     return {
       success: true,
       data: { scoreId, traceId: score.traceId, spanId: score.spanId ?? null, timestamp: timestamp.toISOString() },
@@ -1373,19 +1376,19 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
     const context = await resolveSignalContext(observabilityStore, requestContext, feedback, contextMode);
     const feedbackId = feedback.feedbackId ?? generateSignalId();
     const timestamp = feedback.timestamp === undefined ? new Date() : new Date(feedback.timestamp);
-    await observabilityStore.createFeedback({
-      feedback: {
-        ...feedback,
-        ...context,
-        feedbackUserId:
-          typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
-            ? authenticatedId
-            : (feedback.feedbackUserId ?? null),
-        feedbackId,
-        timestamp,
-        reviewStatus: feedback.reviewStatus ?? 'needs-review',
-      },
-    });
+    const record = {
+      ...feedback,
+      ...context,
+      feedbackUserId:
+        typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+          ? authenticatedId
+          : (feedback.feedbackUserId ?? null),
+      feedbackId,
+      timestamp,
+      reviewStatus: feedback.reviewStatus ?? 'needs-review',
+    };
+    await observabilityStore.createFeedback({ feedback: record });
+    await exportPersistedEvent(mastra, persistedFeedbackEvent(record));
     return {
       success: true,
       data: {

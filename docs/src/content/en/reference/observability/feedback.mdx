@@ -39,7 +39,7 @@ await mastra.observability.addFeedback({
 
 ### `addFeedback(args)`
 
-Adds feedback to a persisted trace or span through the observability entrypoint.
+Sends feedback about a trace or span to configured exporters.
 
 ```typescript
 await mastra.observability.addFeedback?.({
@@ -68,7 +68,9 @@ await mastra.observability.addFeedback?.({
 ]}
 />
 
-Without `correlationContext`, the method looks up `traceId` in configured observability storage. If the trace or requested span isn't found, Mastra logs a warning and drops the feedback event. Configure `MastraStorageExporter` when adding feedback by ID after execution, including when `MastraPlatformExporter` handles remote export.
+Without `correlationContext`, each exporter handles the target trace or span at its own destination. `MastraStorageExporter` resolves it from local storage. A failed local lookup doesn't block other exporters. `MastraPlatformExporter` doesn't require local storage. Use `flush()` or `shutdown()` to drain pending deliveries.
+
+Local lookup requires the target span's parent chain through its root so feedback inherits the correct root tags. If any ancestor remains missing after retries, the storage exporter logs a warning and skips the local write. Other exporters still receive the feedback.
 
 ### `createFeedback(args)`
 
