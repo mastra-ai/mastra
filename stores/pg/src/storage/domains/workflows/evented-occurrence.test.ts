@@ -6,6 +6,8 @@ import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../../../../packages/core/src/request-context';
 import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
+import { runLivenessKey, stepOccurrenceKey } from '../../../../../../packages/core/src/workflows/evented/step-lease';
+import { abandonLease } from '../../../../../../packages/core/src/workflows/evented/test-utils/abandon-lease';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
 import { connectionString, TEST_CONFIG } from '../../test-utils';
 
@@ -299,6 +301,9 @@ describe('Postgres evented occurrence replay', () => {
       const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
       const key = `workflow-step-run:${run.runId}:${original.id}`;
       await driver.pubsub.releaseLease(key, (await driver.pubsub.getLeaseOwner(key))!);
+      // A duplicate only runs beside the first delivery once the first one's step lease
+      // lapsed, as it does when that worker stalls past the lease TTL.
+      await abandonLease(storage, stepOccurrenceKey(run.runId, [0], 0));
       await driver.redeliverEvent(original);
       expect(swallowed).toBe(true);
       release();
@@ -772,6 +777,8 @@ describe('Postgres evented occurrence replay', () => {
       void run.start({ inputData: { n: 0 } });
       await saved;
       interrupted.mockRestore();
+      // The worker that lost the next step's message stops, and the run's liveness lapses.
+      await abandonLease(storage, runLivenessKey(run.runId));
       const restarted = await workflow.createRun({ runId: run.runId });
       const result = restarted.restart();
       await expect.poll(() => calls, { timeout: 1_500 }).toEqual([0, 1]);
