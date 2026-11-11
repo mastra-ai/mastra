@@ -2450,19 +2450,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     const store = await this.mastra.getStorage()?.getStore('workflows');
     if (!store) return 'run';
     const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+    const stepGuards = store.supportsWorkflowStepGuards();
     // Mirrors the `guardStart` condition in runLeafStep.
     const guarded =
-      store.supportsWorkflowStepGuards() &&
-      !!args.eventId &&
-      !args.restart &&
-      !args.resumeSteps?.length &&
-      step.type !== 'foreach';
+      stepGuards && !!args.eventId && !args.restart && !args.resumeSteps?.length && step.type !== 'foreach';
     const outcome = finishedOccurrence({
       step,
       executionPath: args.executionPath,
       stepResults: args.stepResults,
       restart: args.restart,
       snapshot,
+      stepGuards,
       guarded,
     });
     if (outcome === 'run' || outcome === 'drop') return outcome;
