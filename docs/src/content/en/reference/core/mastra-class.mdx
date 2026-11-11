@@ -420,7 +420,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '5',
             description:
-              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. Workflow and durable agent recovery run in parallel.',
+              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. A default-engine run counts until it finishes, an evented run until its restart is handed to the workers. Workflow and durable agent recovery run in parallel.',
           },
         ],
       },
