@@ -413,6 +413,8 @@ export interface RunLoopScenarioOptions {
   pubsub?: PubSub;
   /** Shared cache for durable/evented pubsub scenarios. */
   cache?: MastraServerCache;
+  /** Set to false to publish the agent's run events without a replay cache (`cache: false`). */
+  streamReplay?: false;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted

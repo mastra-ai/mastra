@@ -12,6 +12,8 @@ import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
+import { diffResponseMessages } from './response-messages';
+import type { ResponseMessagesCursor, ResponseMessagesDiff } from './response-messages';
 import type { AgentRunRecordTarget } from './run-records';
 import { deleteAgentRunRecord, readAgentRunRecord, writeAgentRunRecord } from './run-records';
 import { toStreamFinish, toStreamStepFinish, toStreamStepStart } from './wire';
@@ -148,6 +150,32 @@ export function createAgentStreamPublisher({
   let finished = false;
   /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
   let stepToolCallIds: string[] = [];
+  /**
+   * The response messages published so far. Each step-finish sends only what changed; a run
+   * resumed in a new publisher starts over with the full list.
+   */
+  let responseMessagesCursor: ResponseMessagesCursor | { producer: string } = { producer: publisherId };
+  /** The next diff holds the whole list; its `seq` still follows on, so readers don't take it for a late copy. */
+  const forgetSentResponseMessages = () => {
+    if ('fingerprints' in responseMessagesCursor)
+      responseMessagesCursor = { ...responseMessagesCursor, fingerprints: [] };
+  };
+  /** A reader that attaches mid-run on a bus that keeps no history can only place whole lists. */
+  const sendWholeLists = !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(runId));
+  const diffStepResponseMessages = (messages: ResponseMessagesDiff['messages'] | undefined) => {
+    if (!messages) return undefined;
+    if (sendWholeLists) forgetSentResponseMessages();
+    try {
+      const { diff, cursor } = diffResponseMessages(responseMessagesCursor, messages);
+      responseMessagesCursor = cursor;
+      return diff;
+    } catch (error) {
+      // Readers report no messages for this step; publishing must not fail the run.
+      logger?.warn?.(`[AgentStream:${runId}] failed to diff response messages`, { error });
+      forgetSentResponseMessages();
+      return undefined;
+    }
+  };
   const readStepContent = (messageList: MessageList | undefined, toolCallIds: string[]) => {
     try {
       return messageList?.get.response.aiV5.modelContent(-1, toolCallIds);
@@ -243,8 +271,17 @@ export function createAgentStreamPublisher({
               ? undefined
               : readStepContent(messageList, stepToolCallIds);
           stepToolCallIds = [];
-          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content));
-          void enqueue(() => emitChunkEvent(pubsub, runId, published));
+          const responseMessages = diffStepResponseMessages(chunk.payload?.messages?.nonUser);
+          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content, responseMessages));
+          void enqueue(async () => {
+            try {
+              await emitChunkEvent(pubsub, runId, published);
+            } catch (error) {
+              // Readers that missed this diff can't place the next ones: resend the whole list.
+              if (responseMessages) forgetSentResponseMessages();
+              throw error;
+            }
+          });
           return;
         }
         case 'tool-output':
