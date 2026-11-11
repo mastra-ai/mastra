@@ -101,7 +101,7 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
       if (nested.length === 0) {
         throw new Error('$not requires at least one operator');
       }
-      return `NOT (${nested.map(([nestedOp, nestedValue]) => buildFieldCondition(field, nestedOp, nestedValue)).join(' AND ')})`;
+      return `NOT (COALESCE(${nested.map(([nestedOp, nestedValue]) => buildFieldCondition(field, nestedOp, nestedValue)).join(' AND ')}, FALSE))`;
     }
 
     const operatorFn = FILTER_OPERATORS[operator as OperatorType];

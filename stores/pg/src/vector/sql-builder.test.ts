@@ -162,6 +162,20 @@ describe('$elemMatch with multiple operators on one field', () => {
     expect(del.sql).toContain(`elem->>'author' = $3`);
   });
 
+  it('negates missing and non-numeric nested fields as non-matches', () => {
+    const filter = { reviews: { $elemMatch: { score: { $not: { $gt: 5 } } } } };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    // The numeric guard returns NULL for missing/non-numeric scores; negation must treat NULL as false.
+    expect(search.sql).toContain(`NOT (COALESCE((CASE WHEN jsonb_typeof(elem->'score') = 'number'`);
+    expect(search.sql).toContain(`> $3::numeric ELSE NULL END), FALSE))`);
+    expect(search.values).toEqual([0, 10, 5]);
+    expect(del.sql).toContain(`NOT (COALESCE((CASE WHEN jsonb_typeof(elem->'score') = 'number'`);
+    expect(del.sql).toContain(`> $1::numeric ELSE NULL END), FALSE))`);
+    expect(del.values).toEqual([5]);
+  });
+
   it('escapes wildcard characters in nested contains values', () => {
     const filter = { reviews: { $elemMatch: { author: { $ne: 'blocked', $contains: 'user_' } } } };
     expect(buildFilterQuery(filter, 0, 10).values).toEqual([0, 10, 'blocked', 'user\\_']);
