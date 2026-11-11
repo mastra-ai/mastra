@@ -1940,6 +1940,8 @@ export class EventedRun<
      * Whether the recovery sweep restarts this run, so its steps are leased and `restart()`
      * checks its liveness. Separate from `recoverable`, which makes `Run` hold a run lease for
      * the whole execution: an evented run is executed by workers, not by this caller.
+     *
+     * @internal
      */
     restartable?: boolean;
   }) {
