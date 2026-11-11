@@ -292,6 +292,34 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       expect(updatedAtAfter).toBeGreaterThan(updatedAtBefore);
     });
 
+    // The workflow recovery loop restarts a run nothing keeps alive once it has gone unwritten
+    // for `recovery.workflowStallThresholdMs`, so every write an engine makes between steps must
+    // count as activity, not only a full re-persist.
+    it.each(['updateWorkflowResults', 'updateWorkflowState'] as const)(
+      'should advance updatedAt on %s',
+      async method => {
+        if (!supportsConcurrentUpdates) return;
+        const updatedAt = async () =>
+          new Date((await workflowsStorage.getWorkflowRunById({ runId, workflowName }))!.updatedAt).getTime();
+        const before = await updatedAt();
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        if (method === 'updateWorkflowResults') {
+          await workflowsStorage.updateWorkflowResults({
+            workflowName,
+            runId,
+            stepId: 'later-step',
+            result: { status: 'success', output: {}, payload: {}, startedAt: Date.now(), endedAt: Date.now() } as any,
+            requestContext: {},
+          });
+        } else {
+          await workflowsStorage.updateWorkflowState({ workflowName, runId, opts: { status: 'running' } });
+        }
+
+        expect(await updatedAt()).toBeGreaterThan(before);
+      },
+    );
+
     it('should delete a workflow run by ID', async () => {
       const found = await workflowsStorage.getWorkflowRunById({
         runId,
