@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { sessionCardsWhileBoardLoads } from '../../../../e2e/ui/session-cards';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
@@ -290,6 +291,32 @@ describe('ThreadPage pull request link placement', () => {
       expect(
         within(factorySession).queryByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('while the board is still loading', () => {
+    it('shows a review session its pull request in the header', async () => {
+      const reviewCard = createWireWorkItem('pull-request');
+      stubThreadRoute(reviewCard, []);
+      server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [reviewCard]));
+      renderThreadRoute();
+
+      const factorySession = await findPageHeader();
+      const link = await within(factorySession).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+
+      expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
+    });
+
+    it('shows an ordinary session its pull request in the composer', async () => {
+      const issueCard = createWireWorkItem('issue');
+      stubThreadRoute(issueCard, [pullRequestSubscription]);
+      server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [issueCard]));
+      renderThreadRoute();
+
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      const link = await within(composer).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+
+      expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
     });
   });
 });
