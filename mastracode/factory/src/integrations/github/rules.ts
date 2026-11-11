@@ -21,6 +21,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { cardLabels } from '../../boards/relocate.js';
+import type { VersionControl } from '../../capabilities/version-control.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
@@ -1458,6 +1459,53 @@ export interface PolledPullRequestState extends ReconcilePullRequestState {
   createdAt: string;
 }
 
+export type GithubOpenPullRequestLister = (input: {
+  installationId: number;
+  repository: string;
+}) => Promise<Array<PolledPullRequestState & { number: number }>>;
+
+/** Pages read per repository when a sweep lists open pull requests. */
+const OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES = 5;
+
+/**
+ * Lists a repository's open, non-draft pull requests for the reconcile sweep's missed-open
+ * discovery, through the integration's own version-control client.
+ */
+export function openPullRequestLister(versionControl: Pick<VersionControl, 'listPullRequests'>): GithubOpenPullRequestLister {
+  return async ({ installationId, repository }) => {
+    const open: Array<PolledPullRequestState & { number: number }> = [];
+    let cursor: string | null = '1';
+    for (let page = 0; cursor !== null && page < OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES; page += 1) {
+      const result = await versionControl.listPullRequests({
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository,
+        includeDrafts: false,
+        cursor,
+      });
+      for (const pullRequest of result.pullRequests) {
+        if (!pullRequest.createdAt) continue;
+        open.push({
+          number: Number(pullRequest.id),
+          title: pullRequest.title,
+          url: pullRequest.url,
+          state: 'open',
+          draft: false,
+          merged: false,
+          assignees: pullRequest.assignees ?? [],
+          requestedReviewers: pullRequest.requestedReviewers ?? [],
+          labels: pullRequest.labels ?? [],
+          headBranch: pullRequest.headBranch,
+          baseBranch: pullRequest.baseBranch,
+          ...(pullRequest.author ? { author: pullRequest.author } : {}),
+          createdAt: pullRequest.createdAt,
+        });
+      }
+      cursor = result.nextCursor;
+    }
+    return open;
+  };
+}
+
 export type GithubPullRequestFetcher = (input: {
   installationId: number;
   repository: string;
@@ -1504,6 +1552,8 @@ export interface ReconcileSweepSummary {
   merged: number;
   /** Missed closes-without-merge replayed through the rules ingress. */
   closed: number;
+  /** Open PRs with no card replayed as `opened`; set when the sweep lists open PRs. */
+  created?: number;
   /** PRs/issues (or whole repositories) skipped because of an error. */
   failed: number;
   /** Error samples with context, capped at {@link RECONCILE_ERROR_SAMPLE_LIMIT}. */
@@ -1804,6 +1854,7 @@ async function retireReconciledSubscriptions(
 export function createGithubPullRequestReconciler(
   options: GithubRulesOptions,
   fetchPullRequest: GithubPullRequestFetcher,
+  listOpenPullRequests?: GithubOpenPullRequestLister,
 ): GithubPullRequestReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
@@ -1812,6 +1863,7 @@ export function createGithubPullRequestReconciler(
       checked: 0,
       merged: 0,
       closed: 0,
+      ...(listOpenPullRequests ? { created: 0 } : {}),
       failed: 0,
       errors: [],
     };
@@ -1845,6 +1897,9 @@ export function createGithubPullRequestReconciler(
       // the sweep only replays a missed close; the rules settle the source and the card.
       let attachedOpen: Set<number>;
       let unanswered: Array<{ item: Card; author: string }>;
+      // Every pull request a card names, finished cards included, so discovery never re-opens one.
+      let carded: Set<number>;
+      let linkedAt: number;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
@@ -1854,6 +1909,8 @@ export function createGithubPullRequestReconciler(
         cardsByNumber = new Map<number, Card[]>();
         attachedOpen = new Set<number>();
         unanswered = [];
+        carded = new Set<number>();
+        linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
         for (const project of projects) {
           await rules.loadBoards(project);
           const items = await options.storage.list({
@@ -1861,6 +1918,12 @@ export function createGithubPullRequestReconciler(
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
+            const ownNumber = reconcilablePullRequestNumber(item, repository);
+            if (ownNumber !== undefined) carded.add(ownNumber);
+            for (const source of pullRequestSources(item)) {
+              const number = attachedPullRequestNumber(source, repository);
+              if (number !== undefined) carded.add(number);
+            }
             const unansweredAuthor = authorAwaitingTrust(item, repository);
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
             if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)) {
@@ -1889,6 +1952,30 @@ export function createGithubPullRequestReconciler(
       } catch (error) {
         recordFailure(repository, error);
         continue;
+      }
+      // Missed-open discovery: an `opened` delivery that never reached the ingress leaves no card
+      // for the sweep above to repair. Only pull requests opened after the repository was linked
+      // are replayed, so linking a repository never backfills its open pull requests.
+      if (listOpenPullRequests) {
+        try {
+          const open = await listOpenPullRequests({
+            installationId: repository.installationId,
+            repository: repository.fullName,
+          });
+          for (const pullRequest of open) {
+            if (carded.has(pullRequest.number)) continue;
+            const createdAt = Date.parse(pullRequest.createdAt);
+            if (!Number.isFinite(createdAt) || createdAt < linkedAt) continue;
+            try {
+              const result = await rules.ingest(polledPullRequestEvent(repository, pullRequest.number, pullRequest));
+              if (result.status === 'committed') summary.created = (summary.created ?? 0) + 1;
+            } catch (error) {
+              recordFailure(repository, error, pullRequest.number);
+            }
+          }
+        } catch (error) {
+          recordFailure(repository, error);
+        }
       }
       const authorTrust = sweepTrustLookup(options.github, repository);
       for (const { item, author } of unanswered) {
@@ -2047,8 +2134,9 @@ export function attachGithubReconciler(
   github: GithubRulesIntegration,
   context: IntegrationContext,
   fetchPullRequest: GithubPullRequestFetcher,
+  listOpenPullRequests?: GithubOpenPullRequestLister,
 ): GithubPullRequestReconciler | undefined {
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
-  return createGithubPullRequestReconciler(options, fetchPullRequest);
+  return createGithubPullRequestReconciler(options, fetchPullRequest, listOpenPullRequests);
 }

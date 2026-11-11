@@ -1182,11 +1182,13 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration({ rules: { unknown: null } })).toThrow();
   });
 
-  it('attaches GitHub rules to polled issue ingress', async () => {
+  it("attaches GitHub rules to a linked repository's backlog import, and lists issues without them", async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/issues?')) return json({ issues: [issue] });
+      if (url.includes('/issues?')) return json({ issues: new URL(url).searchParams.get('page') === '1' ? [issue] : [] });
+      if (url.includes('/pulls?')) return json({ pullRequests: [] });
+      if (url.includes('/collaborators/')) return json({ permission: 'write' });
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchImpl);
@@ -1249,8 +1251,10 @@ describe('PlatformGithubIntegration', () => {
     mountApiRoutes(app as never, integration.routes(context));
 
     const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
-
     expect(response.status).toBe(200);
+    expect(onEvent).not.toHaveBeenCalled();
+
+    await integration.ingestLinkedRepositoryBacklog({ orgId: 'org-1', projectRepositoryId: projectRepository.id });
     expect(onEvent).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({

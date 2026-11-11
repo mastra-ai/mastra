@@ -17,6 +17,7 @@ import type { GithubRuleOverrides } from './default-rules.js';
 import {
   createGithubPullRequestReconciler,
   GithubRules,
+  openPullRequestLister,
   polledPullRequestEvent,
   reconciledClosedEvent,
   reconciledIssueRelabeledEvent,
@@ -4446,8 +4447,9 @@ describe('createGithubPullRequestReconciler', () => {
   function createReconciler(
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
-    fetchIssue?: ReturnType<typeof vi.fn>,
+    _fetchIssue?: ReturnType<typeof vi.fn>,
     boards = createTriageWorkRegistry(),
+    listOpenPullRequests?: ReturnType<typeof vi.fn>,
   ) {
     return createGithubPullRequestReconciler(
       {
@@ -4460,7 +4462,7 @@ describe('createGithubPullRequestReconciler', () => {
         boards,
       },
       fetchPullRequest as never,
-      fetchIssue as never,
+      listOpenPullRequests as never,
     );
   }
 
@@ -5238,6 +5240,126 @@ describe('createGithubPullRequestReconciler', () => {
     });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
+  });
+
+  describe('missed-open discovery', () => {
+    function openPullRequest(number: number, createdAt = '2999-01-01T00:00:00Z') {
+      return {
+        number,
+        title: `PR ${number}`,
+        url: `https://github.com/acme/repo/pull/${number}`,
+        state: 'open' as const,
+        draft: false,
+        merged: false,
+        assignees: [],
+        requestedReviewers: [],
+        labels: [],
+        headBranch: `feature-${number}`,
+        baseBranch: 'main',
+        author: 'maintainer',
+        createdAt,
+      };
+    }
+
+    it('replays an open pull request whose opened delivery never arrived, exactly once', async () => {
+      const context = await setup('write');
+      const listOpen = vi.fn(async () => [openPullRequest(21)]);
+      const reconcile = createReconciler(context, vi.fn(), undefined, undefined, listOpen);
+
+      await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ created: 1, failed: 0 });
+      expect(listOpen).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo' });
+      const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+      expect(decisions.length).toBeGreaterThan(0);
+
+      // A later sweep lists it again, but the ingress replays the same delivery: nothing new is committed.
+      await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ created: 0 });
+      expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(
+        decisions.length,
+      );
+    });
+
+    it('leaves pull requests opened before the repository was linked to the backlog import', async () => {
+      const context = await setup('write');
+      const listOpen = vi.fn(async () => [openPullRequest(21, '2000-01-01T00:00:00Z')]);
+      const reconcile = createReconciler(context, vi.fn(), undefined, undefined, listOpen);
+
+      await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ created: 0, failed: 0 });
+      expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toEqual([]);
+    });
+
+    it('never re-files a pull request whose card already finished', async () => {
+      const context = await setup('write');
+      await createCard(context, { number: 21, stages: ['done'] });
+      const listOpen = vi.fn(async () => [openPullRequest(21)]);
+      const reconcile = createReconciler(context, vi.fn(), undefined, undefined, listOpen);
+
+      await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ created: 0 });
+      expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toEqual([]);
+    });
+
+    it('reports a listing failure and keeps sweeping', async () => {
+      const context = await setup('write');
+      await createCard(context, { number: 17 });
+      const fetchPullRequest = vi.fn(async () => mergedState(17));
+      const listOpen = vi.fn(async () => {
+        throw new Error('GitHub is down');
+      });
+      const reconcile = createReconciler(context, fetchPullRequest, undefined, undefined, listOpen);
+
+      await expect(reconcile([repositoryTarget])).resolves.toMatchObject({
+        merged: 1,
+        created: 0,
+        failed: 1,
+        errors: [expect.objectContaining({ repository: 'acme/repo', error: expect.stringContaining('GitHub is down') })],
+      });
+    });
+  });
+
+  describe('openPullRequestLister', () => {
+    function listed(id: number, createdAt?: string) {
+      return {
+        id: String(id),
+        title: `PR ${id}`,
+        url: `https://github.com/acme/repo/pull/${id}`,
+        headBranch: `feature-${id}`,
+        baseBranch: 'main',
+        author: 'maintainer',
+        ...(createdAt ? { createdAt } : {}),
+      };
+    }
+
+    it('reads every page of open non-draft pull requests as numbered open states, up to five pages', async () => {
+      const listPullRequests = vi.fn(async ({ cursor }: { cursor?: string }) => ({
+        pullRequests: [listed(Number(cursor), '2030-01-01T00:00:00Z')],
+        nextCursor: String(Number(cursor) + 1),
+      }));
+      const list = openPullRequestLister({ listPullRequests } as never);
+
+      const open = await list({ installationId: 7, repository: 'acme/repo' });
+
+      expect(open.map(pullRequest => pullRequest.number)).toEqual([1, 2, 3, 4, 5]);
+      expect(open[0]).toMatchObject({ state: 'open', merged: false, labels: [], createdAt: '2030-01-01T00:00:00Z' });
+      expect(listPullRequests).toHaveBeenCalledWith({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/repo',
+        includeDrafts: false,
+        cursor: '1',
+      });
+    });
+
+    it('stops at the last page and skips pull requests with no creation time', async () => {
+      const listPullRequests = vi.fn(async () => ({
+        pullRequests: [listed(3, '2030-01-01T00:00:00Z'), listed(4)],
+        nextCursor: null,
+      }));
+      const open = await openPullRequestLister({ listPullRequests } as never)({
+        installationId: 7,
+        repository: 'acme/repo',
+      });
+
+      expect(open.map(pullRequest => pullRequest.number)).toEqual([3]);
+      expect(listPullRequests).toHaveBeenCalledTimes(1);
+    });
   });
 
   // TODO: Rewrite issue close tests for dedicated GithubIssueReconciler
