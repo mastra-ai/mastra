@@ -22,6 +22,7 @@ import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
+import { groupedRepositoryAccess } from './environment/repository-access.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -75,9 +76,9 @@ import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './wor
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 // GitHub installation tokens live 60 minutes and minted access is cached for
-// up to 5, so replace an installed token well before it can expire. An
+// up to 25, so replace an installed token well before it can expire. An
 // installed org PAT does not expire this way and is never age-refreshed.
-const GITHUB_TOKEN_REFRESH_AFTER_MS = 45 * 60_000;
+const GITHUB_TOKEN_REFRESH_AFTER_MS = 30 * 60_000;
 const isGithubTokenStale = (registration: { tokenIssuedAt: number; patInstalled: boolean }): boolean =>
   !registration.patInstalled && Date.now() - registration.tokenIssuedAt >= GITHUB_TOKEN_REFRESH_AFTER_MS;
 /** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
@@ -828,6 +829,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const tokenRepositoryIds = environment
       ? [repository.id, ...environment.repos.map(repo => repo.repositoryId).filter(id => id !== repository.id)]
       : [repository.id];
+    // Every environment repository's access, minted in groups of ten.
+    const repositoryAccess = groupedRepositoryAccess(sourceControl.versionControl, session.orgId, tokenRepositoryIds);
     if (githubProvider) {
       registerGithubRefreshTarget(requestContext, {
         orgId: session.orgId,
@@ -1029,18 +1032,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 ...(environment
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
-                      getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                      getRepositoryAccess: args => repositoryAccess(args.repositoryId),
                     })
                   : {
                       // Stored nullable; the context speaks `undefined` for absent.
                       setupCommand: projectRepository.setupCommand ?? undefined,
                       // Deferred call, only dereferenced when a provider needs the repo
                       // outside the VM (template build time).
-                      getRepositoryAccess: () =>
-                        sourceControl.versionControl.getRepositoryAccess({
-                          orgId: session.orgId,
-                          repositoryId: repository.id,
-                        }),
+                      getRepositoryAccess: () => repositoryAccess(repository.id),
                     }),
               },
               sandboxSettings,
@@ -1238,11 +1237,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const loadedOverrideRevision = async () => (await skillOverrideStates.get(workspaceId))?.revision;
     const configDir = DEFAULT_CONFIG_DIR;
 
-    const getRepositoryAccess = () =>
-      sourceControl.versionControl.getRepositoryAccess({
-        orgId: session.orgId,
-        repositoryId: repository.id,
-      });
+    const getRepositoryAccess = () => repositoryAccess(repository.id);
     // Resolve the minted token `GH_TOKEN` carries. With several environment
     // repositories the provider may mint one credential for all of them; when
     // it cannot (no such capability, several installations, too many
@@ -1663,10 +1658,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         await forEachConcurrently(secondaries, ENVIRONMENT_SYNC_CONCURRENCY, async secondary => {
           const { repo, entry, state } = secondary;
           try {
-            const access = await sourceControl.versionControl.getRepositoryAccess({
-              orgId: session.orgId,
-              repositoryId: repo.repositoryId,
-            });
+            const access = await repositoryAccess(repo.repositoryId);
             const token = access.authorization?.token;
             if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
             await materializeRepo({

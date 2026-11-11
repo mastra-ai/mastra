@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
 
+import { groupedRepositoryAccess } from '../../../environment/repository-access.js';
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
@@ -884,6 +885,27 @@ describe('PlatformGithubIntegration', () => {
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 
+    it("serves each repository's own access from the group token", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }));
+      const { integration, repositories } = await seed(fetchImpl);
+
+      await integration.versionControl.getRepositoriesAccess!({
+        orgId: 'org-1',
+        repositoryIds: repositories.map(repository => repository.id),
+      });
+      const docs = await integration.versionControl.getRepositoryAccess({
+        orgId: 'org-1',
+        repositoryId: repositories[1]!.id,
+      });
+      expect(docs).toEqual({
+        cloneUrl: 'https://github.com/acme/docs.git',
+        authorization: { scheme: 'bearer', token: 'ghs_environment' },
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
     it('declines a set spanning two installations without minting', async () => {
       const fetchImpl = vi.fn<typeof fetch>();
       const { integration, repositories, register } = await seed(fetchImpl);
@@ -923,6 +945,34 @@ describe('PlatformGithubIntegration', () => {
         }),
       ).resolves.toBeUndefined();
       expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('serves an eleven-repository environment from two tokens', async () => {
+      let minted = 0;
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockImplementation(async () => json({ token: `ghs_${++minted}`, expiresAt: '2026-07-21T18:00:00Z' }));
+      const { integration, acme } = await seed(fetchImpl);
+      const many = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: acme.id,
+        repositories: Array.from({ length: 11 }, (_, index) => ({
+          externalId: String(300 + index),
+          slug: `acme/repo-${index}`,
+          defaultBranch: 'main',
+        })),
+      });
+      const access = groupedRepositoryAccess(
+        integration.versionControl,
+        'org-1',
+        many.map(repository => repository.id),
+      );
+
+      const results = await Promise.all(many.map(repository => access(repository.id)));
+
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(results.map(result => result.cloneUrl)).toEqual(many.map(r => `https://github.com/${r.slug}.git`));
+      expect(new Set(results.slice(0, 10).map(result => result.authorization?.token)).size).toBe(1);
     });
   });
 
@@ -1054,7 +1104,7 @@ describe('PlatformGithubIntegration', () => {
       expect(fetchImpl).toHaveBeenCalledTimes(1);
 
       // Expired grants re-mint through the platform.
-      vi.advanceTimersByTime(5 * 60_000 + 1_000);
+      vi.advanceTimersByTime(25 * 60_000 + 1_000);
       await integration.versionControl.getRepositoryAccess(input);
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     } finally {
