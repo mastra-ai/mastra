@@ -1,6 +1,6 @@
 import { buildSpecFromParts } from '@json-render/react';
 import { createTool } from '@mastra/core/tools';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { chat, modelSaw, modelWriting, specBlock, weatherCard } from './__tests__/test-utils';
 
@@ -204,6 +204,36 @@ describe('JsonRenderProcessor', () => {
       { role: 'user', text: 'Call it Lyon' },
     ]);
     expect(textOf(messages.filter(message => message.role === 'assistant')[0]!.content.parts)).toBe('Here.\n');
+  });
+
+  it('shows the model the interface it wrote when every message is saved within the same millisecond', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-11T10:00:00Z') });
+    try {
+      const { model, prompts } = modelWriting(`Here.\n${specBlock(weatherCard)}`, 'Renamed.');
+
+      await chat(model, 'Weather in Paris?', 'Call it Lyon');
+
+      // Memory orders messages saved in the same millisecond its own way, so only the reply is checked.
+      expect(modelSaw(prompts[1]).filter(message => message.role === 'assistant')).toEqual([
+        { role: 'assistant', text: `Here.\n${specBlock(weatherCard)}` },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    { problem: 'a path that is not a string', line: '{"op":"add","path":42,"value":"x"}' },
+    { problem: 'a test operation that fails', line: '{"op":"test","path":"/root","value":"other"}' },
+  ])('sends back an interface with $problem, so the model writes it again', async ({ line }) => {
+    const broken = specBlock(weatherCard).replace('\n```', `\n${line}\n\`\`\``);
+    const { model, prompts } = modelWriting(`Here.\n${broken}`, `Here.\n${specBlock(weatherCard)}`);
+
+    const { messages } = await chat(model, 'Weather in Paris?');
+
+    expect(prompts).toHaveLength(2);
+    const reply = messages.find(message => message.role === 'assistant')!;
+    expect(buildSpecFromParts(reply.content.parts as any)).toEqual(weatherCard);
   });
 
   it('shows the model an interface it wrote with no prose around it', async () => {

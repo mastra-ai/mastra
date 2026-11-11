@@ -103,21 +103,27 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
     const text = specBlock(uiState ? { ...spec, state: uiState } : spec);
 
     // The prompt does not say which message each one comes from, but its parts keep the time they were written.
+    // Parts can share a millisecond with the next user message, so only the model's own messages are matched.
     const written = new Set(reply.content.parts.map(part => (part as { createdAt?: number }).createdAt));
-    const last = Math.max(...[...written].map(at => at ?? -Infinity));
-    const after = prompt.findIndex(message => writtenAt(message).some(at => at > last));
-    if (after < 0) return;
-    const previous = prompt[after - 1];
-    if (
-      previous?.role === 'assistant' &&
-      writtenAt(previous).some(at => written.has(at)) &&
-      !previous.content.some(part => part.type === 'tool-call')
-    ) {
-      const prose = previous.content.findLast(part => part.type === 'text')?.text ?? '';
-      const block = { type: 'text' as const, text: prose && !prose.endsWith('\n') ? `\n${text}` : text };
-      return { prompt: prompt.with(after - 1, { ...previous, content: [...previous.content, block] }) };
+    const wrote = (message: (typeof prompt)[number] | undefined) =>
+      !!message && message.role !== 'user' && writtenAt(message).some(createdAt => written.has(createdAt));
+    let at = prompt.findIndex(wrote);
+    if (at < 0) {
+      // A reply with no text or tool calls has no message in the prompt: the block goes before what came next.
+      const last = Math.max(...[...written].map(createdAt => createdAt ?? -Infinity));
+      const after = prompt.findIndex(message => writtenAt(message).some(createdAt => createdAt > last));
+      if (after < 0) return;
+      return { prompt: prompt.toSpliced(after, 0, { role: 'assistant', content: [{ type: 'text', text }] }) };
     }
-    return { prompt: prompt.toSpliced(after, 0, { role: 'assistant', content: [{ type: 'text', text }] }) };
+    // A reply that calls tools spans several prompt messages; the block goes after its last one.
+    while (wrote(prompt[at + 1])) at++;
+    const message = prompt[at]!;
+    if (message.role === 'assistant' && !message.content.some(part => part.type === 'tool-call')) {
+      const prose = message.content.findLast(part => part.type === 'text')?.text ?? '';
+      const block = { type: 'text' as const, text: prose && !prose.endsWith('\n') ? `\n${text}` : text };
+      return { prompt: prompt.with(at, { ...message, content: [...message.content, block] }) };
+    }
+    return { prompt: prompt.toSpliced(at + 1, 0, { role: 'assistant', content: [{ type: 'text', text }] }) };
   }
 
   async processOutputStream({
@@ -203,8 +209,13 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
   async processOutputStep({ messages, abort }: ProcessOutputStepArgs): Promise<ProcessOutputStepArgs['messages']> {
     const reply = messages.at(-1);
     if (reply?.role !== 'assistant') return messages;
-    const spec = specOf(reply.content.parts);
-    const problems = spec && problemsIn(spec, this.options.catalog);
+    let problems: string | undefined;
+    try {
+      const spec = buildSpec(reply.content.parts);
+      problems = spec && problemsIn(spec, this.options.catalog);
+    } catch (error) {
+      problems = (error as Error).message;
+    }
     if (problems) {
       abort(
         `The interface in your \`\`\`spec block cannot be shown. Write it again without these problems:\n${problems}`,
@@ -236,16 +247,33 @@ function writtenAt(message: ProcessLLMRequestArgs['prompt'][number]): number[] {
  * The spec a message's `data-spec` parts build, the way the client renders it.
  * Patches are cloned first: `applySpecPatch` inserts into the arrays a patch
  * holds, so applying the saved parts themselves would change what gets saved.
+ * Throws when a patch cannot be applied, naming it.
  */
-function specOf(parts: ReadonlyArray<{ type: string }>): Spec | undefined {
+function buildSpec(parts: ReadonlyArray<{ type: string }>): Spec | undefined {
   let spec: Spec | undefined;
   for (const part of parts) {
     if (part.type !== SPEC_DATA_PART_TYPE) continue;
     const data = (part as unknown as { data: SpecDataPart }).data;
     if (data.type === 'flat') spec = structuredClone(data.spec);
-    else if (data.type === 'patch') applySpecPatch((spec ??= { root: '', elements: {} }), structuredClone(data.patch));
+    else if (data.type === 'patch') {
+      try {
+        if (typeof data.patch.path !== 'string') throw new Error('its path is not a string');
+        applySpecPatch((spec ??= { root: '', elements: {} }), structuredClone(data.patch));
+      } catch (error) {
+        throw new Error(`- ${JSON.stringify(data.patch)} cannot be applied: ${(error as Error).message}`);
+      }
+    }
   }
   return spec;
+}
+
+/** The spec a message's `data-spec` parts build, or none when they cannot build one. */
+function specOf(parts: ReadonlyArray<{ type: string }>): Spec | undefined {
+  try {
+    return buildSpec(parts);
+  } catch {
+    return undefined;
+  }
 }
 
 /** What keeps a spec from rendering: broken structure, unknown components, or props a component does not take. */
