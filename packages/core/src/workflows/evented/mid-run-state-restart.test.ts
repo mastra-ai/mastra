@@ -10,7 +10,7 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
-import { stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './step-lease';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
@@ -92,7 +92,7 @@ describe('evented mid-run state recording', () => {
     const runA = await workflowA.createRun({ runId });
     runA.start({ inputData: {}, initialState }).catch(() => {});
     await step2Started.promise;
-    await abandonLease(storage, stepOccurrenceKey(runId, [1]));
+    await abandonLease(storage, stepOccurrenceKey(runId, [1]), runLivenessKey(runId));
 
     const snapshot = await loadSnapshot(storage, workflowId, runId);
     expect((snapshot!.context as any).__state).toEqual({ first: 1, second: 0 });
@@ -151,7 +151,7 @@ describe('evented mid-run state recording', () => {
     const runA = await workflowA.createRun({ runId });
     runA.start({ inputData: {}, initialState }).catch(() => {});
     await nextStarted.promise;
-    await abandonLease(storage, stepOccurrenceKey(runId, [1]));
+    await abandonLease(storage, stepOccurrenceKey(runId, [1]), runLivenessKey(runId));
 
     const snapshot = await loadSnapshot(storage, workflowId, runId);
     expect((snapshot!.context as any).__state).toEqual({ first: 1, second: 1 });
@@ -222,7 +222,7 @@ describe('evented mid-run state recording', () => {
     const runA = await workflowA.createRun({ runId });
     runA.start({ inputData: {}, initialState }).catch(() => {});
     await afterStarted.promise;
-    await abandonLease(storage, stepOccurrenceKey(runId, [2]));
+    await abandonLease(storage, stepOccurrenceKey(runId, [2]), runLivenessKey(runId));
 
     const snapshot = await loadSnapshot(storage, workflowId, runId);
     expect((snapshot!.context as any).__state).toEqual({ first: 6, second: 0 });

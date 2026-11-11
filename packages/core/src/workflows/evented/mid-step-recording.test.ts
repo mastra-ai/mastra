@@ -23,7 +23,7 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
-import { stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './step-lease';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
@@ -149,7 +149,7 @@ describe('evented mid-step recording (issue #22636)', () => {
     // Abandoned on purpose — host A is "killed" while step2 is executing.
     runA.start({ inputData: { value: 'go' } }).catch(() => {});
     await step2Started;
-    await abandonLease(storage, stepOccurrenceKey(runId, [1]));
+    await abandonLease(storage, stepOccurrenceKey(runId, [1]), runLivenessKey(runId));
 
     // ---- Host B: fresh instances over the SAME storage ----
     const step1B = vi.fn(async () => ({ seed: 'should-not-run' }));

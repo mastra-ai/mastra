@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
-import { stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './step-lease';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
@@ -85,7 +85,7 @@ describe('evented restart before workers have started', () => {
     // really is parked inside generation 1.
     await vi.waitFor(() => expect(log).toEqual([{ generation: 1, event: 'start' }]));
     // Generation 1 stands in for a process that died mid-step, so its step lease lapses.
-    await abandonLease(storage, stepOccurrenceKey(RUN_ID, [0]));
+    await abandonLease(storage, stepOccurrenceKey(RUN_ID, [0]), runLivenessKey(RUN_ID));
 
     const secondProcess = new Mastra({
       logger: false,

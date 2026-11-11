@@ -13,7 +13,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { assertWorkflowStepGuard } from '../../storage/workflow-step-guard';
-import { stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './step-lease';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
@@ -114,7 +114,13 @@ describe('evented restart of a nested loop body', () => {
     const crashedLeaf = crashedSnapshot?.context['restart-loop-body'];
     expect(crashedLeaf?.status).toBe('running');
     expect(crashedLeaf?.metadata?.startedBy).toEqual(expect.any(String));
-    await abandonLease(storage, stepOccurrenceKey(crashedLeaf!.metadata!.nestedRunId, [0]));
+    const nestedRunId = crashedLeaf!.metadata!.nestedRunId;
+    await abandonLease(
+      storage,
+      stepOccurrenceKey(nestedRunId, [0]),
+      runLivenessKey(nestedRunId),
+      runLivenessKey(runId),
+    );
 
     // Host B: fresh instances over the same storage restart the run.
     const seen: number[] = [];
