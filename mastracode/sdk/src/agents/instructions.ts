@@ -12,6 +12,7 @@ export async function getDynamicInstructions({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  planApprovalStartsGoal,
   plansDir,
   disabledTools,
 }: {
@@ -20,6 +21,7 @@ export async function getDynamicInstructions({
   coAuthor?: { name?: string; email?: string };
   hasSubagents?: boolean;
   disabledBuiltinTools?: readonly string[];
+  planApprovalStartsGoal?: boolean;
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
   disabledTools?: readonly string[];
@@ -31,6 +33,7 @@ export async function getDynamicInstructions({
       coAuthor,
       hasSubagents,
       disabledBuiltinTools,
+      planApprovalStartsGoal,
       plansDir,
       disabledTools,
     }),
@@ -48,6 +51,7 @@ export async function getDynamicInstructionSections({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  planApprovalStartsGoal,
   plansDir,
   disabledTools,
 }: {
@@ -57,6 +61,8 @@ export async function getDynamicInstructionSections({
   hasSubagents?: boolean;
   /** Controller built-in tools removed via `disableBuiltinTools`; their prompt guidance is omitted. */
   disabledBuiltinTools?: readonly string[];
+  /** False when the host does not start a goal on plan approval; omits that promise from the prompt. */
+  planApprovalStartsGoal?: boolean;
   /** Host-configured workspace-relative plans directory; overrides the per-session default. */
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
@@ -94,6 +100,7 @@ export async function getDynamicInstructionSections({
     hostInstructions,
     hasSubagents,
     disabledBuiltinTools,
+    planApprovalStartsGoal,
     plansDir,
     disabledTools,
     requestContext,

@@ -396,6 +396,8 @@ export interface MastraCodeConfig {
   hostInstructions?:
     | string
     | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+  /** Whether approving a plan starts it as a goal in this host's clients. Set false when plan approval does not start a goal (Factory). Default: true */
+  planApprovalStartsGoal?: boolean;
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
@@ -1377,6 +1379,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         coAuthor: config?.coAuthor,
         hasSubagents: subagents.length > 0,
         disabledBuiltinTools: config?.disableBuiltinTools,
+        planApprovalStartsGoal: config?.planApprovalStartsGoal,
         plansDir: config?.plansDir,
         disabledTools: config?.disabledTools,
       });
