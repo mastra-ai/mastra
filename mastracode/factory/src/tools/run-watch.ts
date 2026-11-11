@@ -16,6 +16,15 @@ export interface ParkedTool {
 
 export interface RunReportSession {
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
+  /** The tools the session still waits on; a run parked on one already answered is not reported as waiting. */
+  readonly displayState?: {
+    get(): {
+      pendingSuspensions: ReadonlyMap<string, { toolCallId: string }>;
+      pendingApprovals: ReadonlyMap<string, unknown>;
+    };
+  };
+  /** True from the moment an answer to the call is claimed, before the parked prompt clears. */
+  isAnsweringToolCall?(toolCallId: string): boolean;
 }
 
 /** Reports one run's end; `since` is when the run's window opened. Should not throw. */
@@ -69,6 +78,19 @@ export function observeSessionRunReports(
     }
     if (event.type !== 'agent_end') return;
     const outcome = runOutcome(event.reason, parked, lastError);
+    // A parked tool can be answered (a plan approved, say) before the report goes out.
+    const parkedCallId = parked?.toolCallId;
+    if (outcome?.status === 'blocked' && parkedCallId && session.displayState) {
+      const { displayState } = session;
+      outcome.stillWaiting = () => {
+        if (session.isAnsweringToolCall?.(parkedCallId)) return false;
+        const { pendingSuspensions, pendingApprovals } = displayState.get();
+        return (
+          pendingApprovals.has(parkedCallId) ||
+          [...pendingSuspensions.values()].some(suspension => suspension.toolCallId === parkedCallId)
+        );
+      };
+    }
     parked = undefined;
     lastError = undefined;
     if (!outcome) return;

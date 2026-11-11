@@ -100,6 +100,7 @@ function createSession(
   let threadId = 'thread-1';
   const settings: Record<string, unknown> = {};
   const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: unknown }) => void>();
+  const claimedAnswers = new Set<string>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
     if (reason === 'error' && options?.runError) {
       for (const listener of agentEndListeners) {
@@ -254,6 +255,12 @@ function createSession(
       }
       emitAgentEnd('complete');
     }),
+    claimToolSuspension: vi.fn((toolCallId: string) => {
+      if (claimedAnswers.has(toolCallId)) return { accepted: false as const };
+      claimedAnswers.add(toolCallId);
+      return { accepted: true as const, claimKey: toolCallId };
+    }),
+    releaseToolResponse: vi.fn((claimKey: string) => claimedAnswers.delete(claimKey)),
     sendNotificationSignal,
   };
   const controller = {
@@ -4233,6 +4240,42 @@ describe('FactoryDecisionDispatcher', () => {
       toolCallId: 'call-plan',
       requestContext: expect.any(RequestContext),
     });
+    // Claimed when the run parks, so its run-end report never says the plan waits for an answer.
+    const [claimOrder] = session.claimToolSuspension.mock.invocationCallOrder;
+    const [answerOrder] = session.respondToToolSuspension.mock.invocationCallOrder;
+    const [releaseOrder] = session.releaseToolResponse.mock.invocationCallOrder;
+    expect(session.claimToolSuspension).toHaveBeenCalledWith('call-plan');
+    expect(claimOrder).toBeLessThan(answerOrder!);
+    expect(releaseOrder).toBeGreaterThan(answerOrder!);
+    expect(session.releaseToolResponse).toHaveBeenCalledWith('call-plan');
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+  });
+
+  it('leaves a plan to whoever already claimed the answer to it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-plan-claimed-elsewhere',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
+    session.claimToolSuspension.mockReturnValue({ accepted: false as const });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      boards: plansAutoApprovedBoards(),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.claimToolSuspension).toHaveBeenCalledWith('call-plan');
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    expect(session.releaseToolResponse).not.toHaveBeenCalled();
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 

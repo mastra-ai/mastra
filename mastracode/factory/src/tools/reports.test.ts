@@ -167,6 +167,19 @@ describe('sendRunEndReport', () => {
     expect(await env.notifications.listNotifications({ threadId: PARENT.threadId })).toHaveLength(1);
   });
 
+  it('tells no one a session is waiting once its parked tool was answered', async () => {
+    const env = reporting();
+    const result = await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: { status: 'blocked', toolName: 'submit_plan', stillWaiting: () => false },
+      subject: 'The side session "x"',
+    });
+    expect(env.deliveries).toHaveLength(0);
+    expect(result.waiting).toBe(false);
+  });
+
   it('treats the agent’s own blocked report as final for blocked and done, but not for failed', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);

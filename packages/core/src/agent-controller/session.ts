@@ -19,7 +19,7 @@ import type {
   SendAgentSignalAccepted,
   ToolsetsInput,
 } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -1770,6 +1770,14 @@ export interface SuspensionAddress {
 export interface PendingSuspension extends SuspensionAddress {
   /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
   toolName: string;
+}
+
+/**
+ * The error a resume throws when another answer already claimed the suspended
+ * run in storage. Other resume failures (the run is gone, say) stay errors.
+ */
+function isResumeAlreadyClaimedError(error: unknown): boolean {
+  return error instanceof MastraError && error.id === 'AGENT_RESUME_ALREADY_CLAIMED';
 }
 
 export function getSuspensionAddressKey({ resourceId, threadId, runId, toolCallId }: SuspensionAddress): string {
@@ -5863,6 +5871,8 @@ export class Session<TState = unknown> {
 
   /** Tool call ids whose response has been claimed and is still being applied. */
   #claimedToolResponses = new Set<string>();
+  /** Suspension address keys a {@link respondToToolSuspension} call is resuming. */
+  #answeringSuspensions = new Set<string>();
   #suspensionAgents = new WeakMap<PendingSuspension, Agent>();
   #threadOwnerIdsByRunId = new Map<string, string>();
 
@@ -5990,6 +6000,18 @@ export class Session<TState = unknown> {
   }
 
   /**
+   * Whether an answer to `toolCallId` was claimed or is being applied. True from
+   * the synchronous claim on, before the parked prompt is cleared.
+   */
+  isAnsweringToolCall(toolCallId: string): boolean {
+    if (this.#claimedToolResponses.has(toolCallId)) return true;
+    const address = this.suspensions.resolveAddress({ toolCallId });
+    if (!address) return false;
+    const key = getSuspensionAddressKey(address);
+    return this.#claimedToolResponses.has(key) || this.#answeringSuspensions.has(key);
+  }
+
+  /**
    * Claim the parked suspension a {@link respondToToolSuspension} call would
    * resume. Returns the resolved tool call id, or a rejection when nothing is
    * pending or another response already claimed it.
@@ -6003,7 +6025,10 @@ export class Session<TState = unknown> {
     const address = this.suspensions.resolveAddress({ toolCallId, runId });
     if (!address) return { accepted: false, reason: 'no_pending_suspension' };
     const claimKey = getSuspensionAddressKey(address);
-    if (!this.claimToolResponse(claimKey)) return { accepted: false, reason: 'not_pending' };
+    // An answer already being applied would make the claimant's own answer a silent no-op.
+    if (this.#answeringSuspensions.has(claimKey) || !this.claimToolResponse(claimKey)) {
+      return { accepted: false, reason: 'not_pending' };
+    }
     return { accepted: true, toolCallId: address.toolCallId, address, claimKey };
   }
 
@@ -6029,6 +6054,10 @@ export class Session<TState = unknown> {
   }): Promise<void> {
     const address = inputAddress ?? this.suspensions.resolveAddress({ toolCallId, runId });
     if (!address) return;
+    // Claim synchronously so a concurrent answer to the same suspension is a no-op.
+    const answerKey = getSuspensionAddressKey(address);
+    if (this.#answeringSuspensions.has(answerKey)) return;
+    this.#answeringSuspensions.add(answerKey);
 
     try {
       if (!this.suspensions.has(address) && inputAddress) await this.resolveSuspensionAgent(address);
@@ -6045,6 +6074,8 @@ export class Session<TState = unknown> {
 
       await this.resumeToolCall({ resumeData, address, requestContext });
     } catch (error) {
+      // Another answer (possibly from another session) already resumed the run.
+      if (isResumeAlreadyClaimedError(error)) return;
       const err = getErrorFromUnknown(error);
       const sourceIsActive =
         address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
@@ -6052,6 +6083,8 @@ export class Session<TState = unknown> {
       this.emit({ type: 'error', error: err });
       if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
         await this.finishAgentRun('error');
+    } finally {
+      this.#answeringSuspensions.delete(answerKey);
     }
   }
 
@@ -6719,7 +6752,8 @@ export class Session<TState = unknown> {
     } catch (error) {
       // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
       restoreAbortedRun?.();
-      if (!observer?.dispatched()) {
+      // A lost resume claim means another answer resumed the call: it is no longer parked.
+      if (!observer?.dispatched() && !isResumeAlreadyClaimedError(error)) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
         if (prompt && sourceIsActive()) this.displayState.apply({ type: 'tool_suspended', ...prompt });

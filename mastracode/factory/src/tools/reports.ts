@@ -229,7 +229,14 @@ export async function workItemReportAttributes(
 export type FactoryRunOutcome =
   | { status: 'done' }
   | { status: 'failed'; reason: string; failureCode?: string }
-  | { status: 'blocked'; toolName?: string; toolCallId?: string; approval?: boolean };
+  | {
+      status: 'blocked';
+      toolName?: string;
+      toolCallId?: string;
+      approval?: boolean;
+      /** Asked just before delivery: `false` once the tool was answered, so no one is told it waits. */
+      stillWaiting?: () => boolean;
+    };
 
 /** `waiting`: the session is waiting for an answer, so a later run owes the final report. */
 export interface FactoryRunEndResult {
@@ -328,6 +335,7 @@ export async function sendRunEndReport(
     ) {
       continue;
     }
+    if (outcome.status === 'blocked' && outcome.stillWaiting?.() === false) return { waiting: false, deliveries };
     deliveries.push(await reporting.deliver(recipient, notification));
   }
   return { waiting, deliveries };

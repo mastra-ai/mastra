@@ -215,7 +215,10 @@ function isPermanentProviderRejection(error: string): boolean {
 }
 
 function watchRun(
-  session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
+  session: Pick<
+    DispatcherSession,
+    'subscribe' | 'respondToToolSuspension' | 'claimToolSuspension' | 'releaseToolResponse'
+  >,
   {
     timeoutMs,
     approvePlans,
@@ -239,6 +242,14 @@ function watchRun(
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
+  let planApprovals = 0;
+  // Claimed at the suspended `agent_end`, before the run-end report can say the plan waits for an answer.
+  let planClaim: { key: string } | undefined;
+  const releasePlanClaim = (claim = planClaim) => {
+    if (!claim || claim !== planClaim) return;
+    session.releaseToolResponse(claim.key);
+    planClaim = undefined;
+  };
   // Latest observational-memory failure seen on this run. The stream aborts the
   // run when observation/reflection fails, but the abort itself carries no
   // reason — so without this the true cause (e.g. a provider rejecting the OM
@@ -261,6 +272,16 @@ function watchRun(
   const unsubscribe = session.subscribe(event => {
     if (event.type === 'agent_end') {
       endReason = event.reason;
+      if (
+        approvePlans &&
+        event.reason === 'suspended' &&
+        parked?.toolName === 'submit_plan' &&
+        planApprovals < MAX_PLAN_APPROVALS
+      ) {
+        releasePlanClaim();
+        const claim = session.claimToolSuspension(parked.toolCallId);
+        if (claim.accepted) planClaim = { key: claim.claimKey };
+      }
       supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
       return;
@@ -302,17 +323,28 @@ function watchRun(
     endReason: () => endReason,
     /** The tool the run is parked on, when it ended suspended. */
     parked: () => parked,
-    close: unsubscribe,
+    close: () => {
+      unsubscribe();
+      releasePlanClaim();
+    },
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
       let observed = await wait();
       // Past the cap the plan stays parked: the person it waits for sees it in the inbox.
+      // Without the claim someone else is already answering the plan, so their answer stands.
       if (approvePlans) {
-        for (let approvals = 0; parked?.toolName === 'submit_plan' && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
+        while (parked?.toolName === 'submit_plan' && planClaim && planApprovals < MAX_PLAN_APPROVALS) {
+          planApprovals += 1;
           const { toolCallId } = parked;
           parked = undefined;
+          // A run that re-plans before the answer returns claims its new plan; that claim must outlive this answer.
+          const answered = planClaim;
           arm();
-          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
+          try {
+            await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
+          } finally {
+            releasePlanClaim(answered);
+          }
           observed = await wait();
         }
       }
@@ -406,6 +438,8 @@ interface DispatcherSession extends SkillSession {
     toolCallId?: string;
     requestContext?: RequestContext;
   }): Promise<void>;
+  claimToolSuspension(toolCallId?: string): { accepted: true; claimKey: string } | { accepted: false };
+  releaseToolResponse(claimKey: string): void;
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSession' | 'listActiveThreadRuns'>;
@@ -1107,7 +1141,10 @@ export class FactoryDecisionDispatcher {
   async #replayLanded(
     record: FactoryDeferredDecisionRecord,
     decision: unknown,
-    session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
+    session: Pick<
+      DispatcherSession,
+      'subscribe' | 'respondToToolSuspension' | 'claimToolSuspension' | 'releaseToolResponse'
+    >,
     runStillActive: () => boolean,
   ): Promise<void> {
     if (!(await this.#isReviewRun(record, decision))) return;
