@@ -129,6 +129,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { buildConstraintName } from '../../db/constraint-utils';
 import { assertRunFence, DB_NOW_MS, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { toPgJson } from '../../db/sanitize-json';
@@ -163,6 +164,39 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
  */
 function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
+}
+
+/**
+ * Expression listThreads() filters thread metadata on (`<expr> @> $n::jsonb`). The GIN index
+ * below is built on this exact expression; the planner only uses an expression index when the
+ * query repeats the indexed expression, so both must keep using this constant. On the default
+ * jsonb column the cast is a no-op; on a legacy text column it parses the stored JSON.
+ */
+const THREAD_METADATA_EXPR = 'metadata::jsonb';
+
+/**
+ * Schema-prefixed name of the thread metadata GIN index. New index, so long schema prefixes
+ * get a collision hash instead of plain truncation (see buildConstraintName).
+ * Exported for tests.
+ */
+export function threadMetadataIndexName(schemaName?: string): string {
+  const prefix = schemaName && schemaName !== 'public' ? `${schemaNamePrefix(schemaName)}_` : '';
+  return buildConstraintName({ baseName: `${prefix}mastra_threads_metadata_gin_idx`, hashWhenTruncated: true });
+}
+
+/**
+ * GIN index backing listThreads() metadata filters, used on every incoming channel message
+ * (channel thread lookup by external id) and by Factory session lookups. `jsonb_path_ops`
+ * only supports `@>`, which is the only operator listThreads() uses, and is smaller and faster
+ * than the default jsonb opclass.
+ *
+ * `concurrently` is set by init, which may build the index on a large existing table while
+ * other processes keep writing to it. The exported DDL stays plain because migration tooling
+ * often wraps statements in a transaction, where CONCURRENTLY is rejected.
+ */
+function threadMetadataIndexSQL(indexName: string, schemaName?: string, concurrently = false): string {
+  const tableName = dbGetTableName({ indexName: TABLE_THREADS, schemaName: dbGetSchemaName(schemaName) });
+  return `CREATE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}IF NOT EXISTS "${indexName}" ON ${tableName} USING gin ((${THREAD_METADATA_EXPR}) jsonb_path_ops)`;
 }
 
 /**
@@ -394,6 +428,7 @@ export class MemoryPG extends MemoryStorage {
     for (const idx of MemoryPG.getDefaultIndexDefs(schemaPrefix)) {
       statements.push(generateIndexSQL(idx, schemaName));
     }
+    statements.push(`${threadMetadataIndexSQL(threadMetadataIndexName(parsedSchema), schemaName)};`);
 
     statements.push(
       generateTableSQL({
@@ -430,6 +465,52 @@ export class MemoryPG extends MemoryStorage {
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
+    }
+
+    await this.#createThreadMetadataIndex();
+  }
+
+  /**
+   * Builds the thread metadata GIN index. Best-effort like the other default indexes: a
+   * failure only means metadata filters keep scanning the table, as they did before.
+   *
+   * On a legacy `text` metadata column, one row that is not valid JSON makes the
+   * `metadata::jsonb` cast, and so the build, fail. A failed CREATE INDEX CONCURRENTLY leaves
+   * an INVALID index behind that is never used for reads but is still maintained on every
+   * write, so it is dropped here (concurrently, so writers are not blocked).
+   */
+  async #createThreadMetadataIndex(): Promise<void> {
+    const indexName = threadMetadataIndexName(this.#schema);
+    const concurrently = !this.#db.isTableCreatedInThisInit(TABLE_THREADS);
+    try {
+      await this.#db.createIndexFromStatement(indexName, threadMetadataIndexSQL(indexName, this.#schema, concurrently));
+      return;
+    } catch (error) {
+      this.logger?.warn?.(
+        `Failed to create index ${indexName}; thread metadata filters will scan the threads table until it exists. ` +
+          `On a text metadata column, a thread whose metadata is not valid JSON causes this.`,
+        error,
+      );
+    }
+
+    try {
+      const leftover = await this.#db.client.oneOrNone<{ oid: number }>(
+        `SELECT c.oid FROM pg_index i
+           JOIN pg_class c ON c.oid = i.indexrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = $1 AND c.relname = $2 AND NOT i.indisvalid
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_stat_progress_create_index p
+               WHERE p.index_relid = c.oid
+                 AND p.datid = (SELECT oid FROM pg_database WHERE datname = current_database())
+            )`,
+        [this.#schema, indexName],
+      );
+      if (leftover) {
+        await this.#db.client.none(`DROP INDEX CONCURRENTLY IF EXISTS ${dbGetSchemaName(this.#schema)}."${indexName}"`);
+      }
+    } catch (error) {
+      this.logger?.warn?.(`Failed to drop invalid index ${indexName}:`, error);
     }
   }
 
@@ -788,11 +869,11 @@ export class MemoryPG extends MemoryStorage {
 
       // Add metadata filters if provided (AND logic)
       // Uses JSONB containment (@>) to avoid SQL injection and correctly match all value types including null
-      // metadata column is TEXT type storing JSON, so we need to cast to jsonb first
+      // THREAD_METADATA_EXPR casts legacy TEXT columns to jsonb and must match the GIN index expression
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
           // Use JSONB containment operator - no key interpolation needed
-          whereClauses.push(`metadata::jsonb @> $${paramIndex}::jsonb`);
+          whereClauses.push(`${THREAD_METADATA_EXPR} @> $${paramIndex}::jsonb`);
           // Build a small JSON object for each key-value pair
           queryParams.push(toPgJson({ [key]: value }));
           paramIndex++;
