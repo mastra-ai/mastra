@@ -72,12 +72,14 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
           {search ? (
             <div data-slot="tabbed-container-search">
               <SearchInput
-                debounceMs={300}
-                className="max-w-120"
-                {...search}
+                label={search.label}
+                placeholder={search.placeholder}
+                value={search.value}
                 onValueChange={search.onSearch}
+                debounceMs={search.debounceMs ?? 300}
                 size="md"
                 shortcut={active}
+                className="max-w-120"
               />
             </div>
           ) : null}
