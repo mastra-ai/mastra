@@ -1,5 +1,5 @@
 /**
- * The boot-time sweep reads active runs a page at a time and skips the runs
+ * The boot-time sweep handles active runs in batches and skips the runs
  * another process keeps alive before loading them (#28712). Each replica is a
  * Mastra instance sharing one store, the way pods share one database.
  */
@@ -58,13 +58,12 @@ function startReplica(
 async function persistActiveRun(
   storage: InMemoryStore,
   runId: string,
-  { createdAt, status = 'running' }: { createdAt?: Date; status?: WorkflowRunStatus } = {},
+  { status = 'running' }: { status?: WorkflowRunStatus } = {},
 ) {
   const store = (await storage.getStore('workflows'))!;
   await store.persistWorkflowSnapshot({
     workflowName: 'recovered-wf',
     runId,
-    createdAt,
     snapshot: { ...createEmptyWorkflowSnapshot(runId), status, activePaths: [], context: { input: {} } as any },
   });
 }
@@ -97,7 +96,7 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
       const executions: string[] = [];
       const mastra = startReplica(storage, engine, runId => void executions.push(runId));
 
-      // More live runs than the sweep reads per page (a hundred). The process driving them keeps
+      // More live runs than the sweep handles per batch (a hundred). The process driving them keeps
       // their lease fresh: evented workers through the run's liveness key, a default-engine run
       // through its run lease.
       const liveRunIds = Array.from({ length: 250 }, (_, i) => `live-${i}`);
@@ -117,55 +116,61 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
     },
   );
 
-  it.each([
-    ['each run was created at its own time', (i: number) => new Date(Date.now() - 60_000 + i * 7)],
-    [
-      'more runs were created in one millisecond than fit in a page',
-      (i: number) => new Date(1_700_000_000_000 + Math.floor(i / 150)),
-    ],
-    ['the store does not page by createdAt', (i: number) => new Date(Date.now() - 60_000 + i * 7)],
-  ])('restarts each orphaned run once among many active runs when %s', async (scenario, createdAt) => {
+  it('restarts each orphaned run once among many active runs, reading ownership once per hundred runs', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
     const mastra = startReplica(storage, 'default', runId => void executions.push(runId));
-    // Orphaned runs finish while the sweep still reads later pages, so they leave the status
-    // filter an offset-paged read counts from.
-    // Runs another process drives stay in it.
+    // Orphaned runs finish while the sweep still works through later batches. Runs another
+    // process drives stay active.
     const runIds = Array.from({ length: 300 }, (_, i) => `run-${i}`);
     const orphaned = runIds.filter((_, i) => i % 2 === 0);
     for (const [i, runId] of runIds.entries()) {
-      await persistActiveRun(storage, runId, {
-        createdAt: createdAt(i),
-        status: i % 10 < 2 ? 'waiting' : 'running',
-      });
+      await persistActiveRun(storage, runId, { status: i % 10 < 2 ? 'waiting' : 'running' });
       if (!orphaned.includes(runId)) {
         await store.claimRunOwnership({ runId, ownerId: 'other-process', leaseMs: 60_000 });
       }
     }
-    const list = store.listWorkflowRuns.bind(store);
     const listCalls = vi.spyOn(store, 'listWorkflowRuns');
-    const pagesByRunId = scenario === 'the store does not page by createdAt';
-    if (pagesByRunId) {
-      // Pages by run id, the way DynamoDB lists a workflow's runs by its sort key.
-      vi.spyOn(store, 'listsWorkflowRunsByCreatedAt').mockReturnValue(false);
-      listCalls.mockImplementation(async ({ perPage, page, ...args } = {}) => {
-        const { runs } = await list(args);
-        runs.sort((a, b) => a.runId.localeCompare(b.runId));
-        const size = typeof perPage === 'number' ? perPage : runs.length;
-        const paged = typeof page === 'number' ? runs.slice(page * size, (page + 1) * size) : runs;
-        return { runs: paged, total: runs.length };
-      });
-    }
+    const ownershipReads = vi.spyOn(store, 'getRunOwnerships');
 
     await mastra.restartAllActiveWorkflowRuns();
 
     expect([...executions].sort()).toEqual([...orphaned].sort());
-    // Such a store is read once per status in full rather than once per page.
-    if (pagesByRunId) {
-      const reads = listCalls.mock.calls.filter(([args]) => args?.workflowName === 'recovered-wf');
-      expect(reads.map(([args]) => args?.perPage)).toEqual([false, false]);
-    }
+    const reads = listCalls.mock.calls.filter(([args]) => args?.workflowName === 'recovered-wf');
+    expect(reads.map(([args]) => [args?.status, args?.perPage])).toEqual([
+      ['running', false],
+      ['waiting', false],
+    ]);
+    // 240 running runs and 60 waiting ones.
+    expect(ownershipReads.mock.calls.map(([args]) => args.runIds.length)).toEqual([100, 100, 40, 60]);
+  });
+
+  it('restarts a run once when it moves from running to waiting while the sweep runs', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = startReplica(storage, 'default', () => {});
+    const runIds = Array.from({ length: 150 }, (_, i) => `run-${i}`);
+    for (const runId of runIds) await persistActiveRun(storage, runId);
+    const list = store.listWorkflowRuns.bind(store);
+    vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async (args = {}) => {
+      const listed = await list(args);
+      // A sleep step suspends every run right after the sweep listed them as running.
+      if (args.workflowName === 'recovered-wf' && args.status === 'running') {
+        for (const run of listed.runs) await persistActiveRun(storage, run.runId, { status: 'waiting' });
+      }
+      return listed;
+    });
+    // The restarts never finish the runs, so every run is still waiting when the sweep lists that status.
+    const restarted: string[] = [];
+    vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun').mockImplementation(async ({ runId } = {}) => {
+      restarted.push(runId!);
+      return { restart: async () => {} } as any;
+    });
+
+    await mastra.restartAllActiveWorkflowRuns();
+
+    expect([...restarted].sort()).toEqual([...runIds].sort());
   });
 
   it('hands evented restarts to the workers without waiting for the runs to finish', async () => {

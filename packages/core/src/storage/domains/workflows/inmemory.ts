@@ -315,14 +315,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return true;
   }
 
-  /**
-   * `listWorkflowRuns` filters, sorts and pages the in-process map in one call, which meets the
-   * contract. Each page sorts the whole map, which stays cheap at the sizes this store holds.
-   */
-  listsWorkflowRunsByCreatedAt(): boolean {
-    return true;
-  }
-
   private ownershipRecord(runId: string): RunOwnershipRecord | null {
     const owner = this.db.runOwners.get(runId);
     if (!owner) return null;
