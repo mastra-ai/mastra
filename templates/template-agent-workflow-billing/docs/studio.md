@@ -10,7 +10,7 @@ The Studio shell and authentication capabilities are public so Settings remains 
 
 Autumn mode requires `BILLING_MODE=production`, `BILLING_PROVIDER=autumn`, `BILLING_JWT_CONFIGURATION`, `BILLING_CONFIGURATION`, `AUTUMN_SECRET_KEY` and trusted `AUTUMN_BINDINGS`. See the [Autumn guide](autumn.md). Provision trusted JWT principals and personal/shared workspace membership before accepting requests. Customer IDs come from server bindings, never from Studio request context.
 
-Local setup creates John (`profiles.owner`), Mary (`profiles.member`), and Alex (`profiles.outsider`) with separate personal organizations and balances. Use each person's own credential and workspace ID. To share an allowance, explicitly convert the owner's workspace and invite the other person through the organization APIs. Setup never creates shared membership automatically.
+Local setup creates John (`profiles.owner`), Emma (`profiles.member`), and Alex (`profiles.outsider`) with separate personal organizations and balances. Use each person's own credential and workspace ID. To share an allowance, explicitly convert the owner's workspace and invite the other person through the organization APIs. Setup never creates shared membership automatically or renames existing profiles, including previously saved Mary profiles. It preserves credentials and spent balances.
 
 ## Run billed actions
 
@@ -45,7 +45,7 @@ The integration uses **Tools**, not native agent chat or native workflow runs. T
 
 ## Balances and receipts
 
-Use `billing-account` before and after execution. `mode` identifies local simulation or Autumn; `authority` identifies provider reservations. Meters show the provider's balance and consumption at `observedAt`, with `pendingOperations` separately identifying unresolved work. `allowance` is `null`; there is no application-owned paid grant ledger.
+Use `billing-account` before and after execution. Read the initial available balance as B, even on an existing account. A new successful image leaves B − 1. Starting the kit then shows B − 4 available while three credits are held and only one credit has been confirmed; completing it keeps B − 4 available and confirms four credits in total. Replay changes neither figure. In local mode `consumedUnits` shows the one- and four-credit totals. In Autumn mode `consumedUnits` remains null and `providerUsageIncludingHolds` includes holds; use settled receipts and matching provider evidence for confirmation, rather than treating that meter as confirmed consumption. Fresh local accounts start at 30; existing balances are never reset for a demo. `mode` identifies local simulation or Autumn; `authority` identifies provider reservations. Meters show the provider's balance and consumption at `observedAt`, with `pendingOperations` separately identifying unresolved work. `allowance` is `null`; there is no application-owned paid grant ledger.
 
 A suspended kit holds its reservation without a confirmed charge. Successful completion confirms that same reservation; cancellation releases it. Unknown finalization stays pending or uncertain until positive matching evidence arrives. Replaying a receipt never creates another financial operation. Metered local policies use the separate outbox and may reflect consumption after background delivery.
 

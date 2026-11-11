@@ -34,7 +34,7 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         profiles: {},
       };
       if (manifest.databaseUrl !== databaseUrl) throw new BillingError('conflict');
-      const people = { owner: 'John', member: 'Mary', outsider: 'Alex' } as const;
+      const people = { owner: 'John', member: 'Emma', outsider: 'Alex' } as const;
       for (const name of ['owner', 'member', 'outsider'] as const) {
         if (!manifest.profiles[name]) {
           if (manifest.ready) throw new BillingError('state_unavailable');

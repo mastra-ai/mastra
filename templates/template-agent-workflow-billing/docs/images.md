@@ -4,7 +4,7 @@ The `image-agent` generates one private PNG for one credit. The `image-kit` prep
 
 ## Generate and approve
 
-Run `npm run setup`, configure `OPENAI_API_KEY` in `.env`, then start `npm run dev`. Local billing requires no payment credentials. OpenAI model access and generation costs belong to the operator.
+Run `npm run setup` to create fresh John/Emma/Alex personal profiles (or preserve existing profiles), configure `OPENAI_API_KEY` in `.env`, then start `npm run dev`. Local billing requires no payment credentials. OpenAI model access and generation costs belong to the operator.
 
 ```sh
 npm run images -- generate --json '{"brief":"A blue bird in a quiet forest"}' --key bird-one
@@ -14,6 +14,8 @@ npm run images -- resume EXECUTION_ID --json '{"approved":true}' --key approve-k
 npm run images -- cancel EXECUTION_ID --key cancel-kit
 npm run images -- account
 ```
+
+Read `npm run images -- account` before a take and call its current available balance B. A successful image leaves B − 1. Starting the kit then holds three credits, leaving B − 4 available while confirmed consumption remains one. Full approval keeps B − 4 available and confirms a total of four; replay adds zero. Fresh local accounts start at 30; repeated setup preserves existing spending.
 
 The agent accepts at most 2,000 characters; the kit brief accepts 1,800. The fixed server profile is `gpt-image-2.5-flare`, one image per call, `1024x1024`, low quality, PNG. The text model remains `openai/gpt-6-luna`. Image requests have a 120-second timeout, an 8 MiB PNG limit and a 12 MiB response limit. The persisted application deadline can stop work earlier. The kit's suspension budget is 30 minutes. Review `result.pending.approval.prompts` before resuming. A restart preserves these exact prompts, and approval sends them unchanged to the image model in the saved order. The text Agent only orchestrates the image tool. The three styles preserve the subject and content, without guaranteeing identical composition or pixels.
 

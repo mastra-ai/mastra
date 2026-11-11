@@ -69,6 +69,7 @@ For example, the included agent definition keeps its charge next to its factory:
   kind: 'agent',
   create: () => createImageAgent(environment, images),
   adapter: {
+    promptSchema: briefSchema,
     version: 'image-agent-v1', maxSteps: 2, maxOutputTokens: 200, artifactSlots: 1,
     outputSchema: imageOutputSchema,
     completion: async scope => ({ text: 'Image generated.', finishReason: 'stop', object: { artifacts: [await images.completed(scope)] } }),
@@ -85,6 +86,8 @@ For example, the included agent definition keeps its charge next to its factory:
 Keep meter/access mappings and local allowances in the catalog configuration. `BILLING_CONFIGURATION` can configure the bundled resources and commercial/provider bindings; it cannot introduce a factory or action. Invalid IDs, dependencies, cycles, operations, mappings and unsupported policy capabilities reject before factories or provider work. Custom Studio action IDs use letters, digits and hyphens.
 
 The application attaches persistent snapshots and authenticated HTTP/Studio boundaries before enabling the dependency resolver and recovery. Call `await application.close()` during shutdown; repeat and concurrent calls share cleanup, including when a disposer fails.
+
+## Invoke billed resources
 
 From trusted server code, invoke an agent through the billing facade. Use `runtime` and `organizations` from the application above. The `credential`, `workspaceId`, and `prompt` come from your authenticated request:
 

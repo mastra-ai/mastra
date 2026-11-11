@@ -4,7 +4,54 @@ Autumn owns paid credit balances and reservations. Local mode simulates the same
 
 ## Configuration
 
-Set `BILLING_PROVIDER=autumn`, provide `AUTUMN_SECRET_KEY`, configure JWT identity with `BILLING_JWT_CONFIGURATION`, and supply a complete `BILLING_CONFIGURATION`. Server-owned `AUTUMN_BINDINGS` maps each trusted workspace to an existing Autumn customer and each logical billing meter to a consumable metered feature and its credit pool:
+Autumn startup is separate from `npm run setup`, which only prepares local simulated profiles. Use an existing sandbox customer with available test credits, a consumable metered image feature, and a credit pool with flat 1:1 conversion. Startup does not create remote products, attach plans or refill balances. The template does not provide a payment dashboard. Provision these resources through your own trusted Autumn administration flow before starting the app.
+
+Set these server environment variables:
+
+- `BILLING_MODE=production` and `BILLING_PROVIDER=autumn`, including when using an Autumn sandbox key. Production here selects verified JWT identity; it does not change a sandbox key into a live key.
+- `OPENAI_API_KEY` for generation, independently of billing, and optionally `BILLING_STUDIO_ENABLED=true` for Studio Tools.
+- `AUTUMN_SECRET_KEY` from your Autumn environment, never a browser header.
+- `BILLING_JWT_CONFIGURATION` with your trusted issuer, audience, allowed asymmetric algorithms and public JWKS. See [identity provisioning](#identity-provisioning).
+- `BILLING_CONFIGURATION` containing the complete JSON below, matching the bundled definitions in `src/images/resources.ts`. `localAccounts` must be empty. This is a full configuration override, not a partial patch. The bundled catalog applies the configured policies, operations and measurements to its existing image definitions; it cannot add factories or actions. Keep both bundled resource IDs and kinds. When supplying your own typed catalog, its resource definitions and the override must agree. The example below retains the bundled one-credit image and three-credit kit policies.
+
+```json
+{
+  "provider": "autumn",
+  "hosted": { "returnUrls": [] },
+  "catalog": { "allowances": [], "offers": [] },
+  "resources": [
+    {
+      "id": "image-agent",
+      "kind": "agent",
+      "operations": ["generate"],
+      "measurements": [],
+      "policy": {
+        "version": "image-agent-v1",
+        "charge": { "type": "credits", "meter": "image-credits", "units": 1 }
+      }
+    },
+    {
+      "id": "image-kit",
+      "kind": "workflow",
+      "operations": ["start", "resume", "cancel"],
+      "measurements": [],
+      "policy": {
+        "version": "image-kit-v2",
+        "suspendedReservationTtlMs": 1800000,
+        "charge": { "type": "credits", "meter": "image-credits", "units": 3 }
+      }
+    }
+  ],
+  "mappings": {
+    "entitlements": [],
+    "subscriptions": [],
+    "meters": [{ "key": "image-credits", "unit": "credits", "funding": ["prepaid"] }]
+  },
+  "localAccounts": []
+}
+```
+
+Set `AUTUMN_BINDINGS` to this server-owned JSON. Replace `TRUSTED_WORKSPACE_ID` with the personal workspace returned by trusted provisioning of John below. `johns-org`, `generated_images` and `image_credits` must be the IDs of your existing sandbox resources, not IDs supplied by the browser. The sandbox proof uses the same logical `image-credits` mapping with its isolated `johns-org-sandbox-proof` workspace.
 
 ```json
 {
@@ -16,6 +63,34 @@ Set `BILLING_PROVIDER=autumn`, provide `AUTUMN_SECRET_KEY`, configure JWT identi
   "returnUrls": []
 }
 ```
+
+For `.env`, serialize each JSON object on one line with the quoting supported by your environment loader, or inject the JSON directly through your process environment. Since the customer name contains an apostrophe, avoid wrapping that JSON in unescaped single quotes. Do not place secret keys inside `BILLING_CONFIGURATION` or `AUTUMN_BINDINGS`.
+
+### Identity provisioning
+
+`BILLING_JWT_CONFIGURATION` has this shape: `{ issuer, audience, algorithms, jwks: { keys: [...] } }`. Supply the actual issuer URL and audience used by your identity provider, an explicit list such as `["RS256"]`, and its matching public asymmetric JWKs. Empty keys, private key material and symmetric algorithms are rejected. Tokens need valid `iss`, `aud`, `sub` and `exp` claims. The app verifies tokens but does not issue them or provide login.
+
+Provision John once in trusted server-side TypeScript against the same configured database and environment used by the app:
+
+```ts
+import { configuredOrganizations } from './src/mastra/environment.js';
+
+const organizations = await configuredOrganizations(process.env);
+try {
+  const john = await organizations.provisionJwt({
+    issuer: trustedIssuer,
+    subject: trustedJohnSubject,
+    displayName: 'John',
+  });
+  // Bind john.workspaceId to the existing johns-org customer on the server.
+  // John's signed token must carry the same issuer and subject.
+  console.log(john.workspaceId);
+} finally {
+  organizations.close();
+}
+```
+
+`trustedIssuer` and `trustedJohnSubject` come from your identity administration, not a client request. Provisioning creates a personal organization owned by John. Provision other people separately; shared membership requires explicit conversion and invitations. No local credential from `data/local-profiles.json` is accepted in Autumn mode. Save John's issued JWT in Studio's **Settings → Mastra Connection → Headers** as `Authorization: Bearer <token>`, or use it on the authenticated HTTP routes. Keep token entry off camera. Once the environment, identity and remote allowance are ready, run `npm run dev`; use `npm run build` then `npm start` for built serving.
 
 Customers are selected by authenticated workspace ID, never a client-supplied customer ID. Optional configured names/emails are trusted provisioning data. Each customer ID must map to one workspace. The driver verifies that the feature is consumable and that the credit pool has a flat 1:1 conversion with no dimensions or multipliers. Unlimited balances, overage and unsupported mappings fail closed.
 
@@ -67,4 +142,4 @@ Controlled HTTP tests run the actual SDK, JWT organizations, SQL, gateway and Ma
 node --env-file=.env scripts/test-autumn-sandbox.mjs --live
 ```
 
-It requires `AUTUMN_SECRET_KEY`, `AUTUMN_TEST_CUSTOMER_ID=johns-org` and `AUTUMN_TEST_FEATURE_ID=generated_images`; `AUTUMN_TEST_CREDIT_POOL_ID` defaults to `image_credits`. It checks the customer's sandbox environment before mutations, requires at least six available test credits, consumes at most two, and never invokes OpenAI or purchases a plan. It measures fresh opening/closing balances, atomic contention, duplicate requests, partial confirm, release, eventual expiry and lost finalization acknowledgement through a real socket. Missing evidence fails the proof. This command does not certify real payments or image generation.
+It requires `AUTUMN_SECRET_KEY`, `AUTUMN_TEST_CUSTOMER_ID=johns-org` and `AUTUMN_TEST_FEATURE_ID=generated_images`; `AUTUMN_TEST_CREDIT_POOL_ID` defaults to `image_credits`. It checks the customer's sandbox environment before mutations, requires at least six available test credits, consumes at most two, and never invokes OpenAI or purchases a plan. It measures fresh opening/closing balances, atomic contention, duplicate requests, partial confirm, release, eventual expiry and lost finalization acknowledgement through a real socket. The named personal-customer configuration proof shares the existing reserve/partial-confirm lifecycle through a memoized result, so selecting the whole file still consumes at most two credits. It proves the documented logical image meter and trusted personal customer mapping, not a separate image-generation scenario. Missing evidence fails the proof. This command does not certify real payments or image generation.

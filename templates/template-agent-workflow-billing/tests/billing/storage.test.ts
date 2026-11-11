@@ -409,7 +409,7 @@ it('fresh development state starts without Polar and setup preserves spent credi
   const f = await developmentFixture();
   expect(Object.values(f.manifest.profiles).map(profile => [profile!.name, profile!.organizationName])).toEqual([
     ['John', "John's Org"],
-    ['Mary', "Mary's Org"],
+    ['Emma', "Emma's Org"],
     ['Alex', "Alex's Org"],
   ]);
   expect((await f.observer.execute('SELECT kind FROM workspaces ORDER BY id')).rows.map(row => row.kind)).toEqual([

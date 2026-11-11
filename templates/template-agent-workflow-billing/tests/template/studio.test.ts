@@ -319,12 +319,12 @@ it('Studio forged identity native routes and private image bypasses are denied',
     executionId,
     billing: { workspaceId, actorId: owner!.actorId, accountId: artifact.accountId },
   };
-  // A real invitation grants membership; Mary's own personal payer remains separate.
+  // A real invitation grants membership; Emma's own personal payer remains separate.
   expect((await server.call(`/billing/workspaces/${workspaceId}`, undefined, 'member')).status).toBe(200);
   const memberGenerated = await tool(
     server,
     'billing-image-generate',
-    { workspaceId, idempotencyKey: 'shared-member-image', brief: 'Mary owns this shared image' },
+    { workspaceId, idempotencyKey: 'shared-member-image', brief: 'Emma owns this shared image' },
     'member',
     forged,
   );

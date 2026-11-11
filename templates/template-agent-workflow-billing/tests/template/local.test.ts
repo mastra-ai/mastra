@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -19,7 +20,7 @@ afterEach(async () => {
 });
 const semanticOnly = process.env.TEMPLATE_RUNTIME_ONLY === '1';
 
-it('local setup is repeatable and image generation needs no payment credentials', async () => {
+it('personal image quickstart is repeatable and shared billing remains isolated', async () => {
   const copy = await templateCopy(!semanticOnly);
   cleanups.push(copy.cleanup);
   const model = await imageBoundary();
@@ -34,10 +35,29 @@ it('local setup is repeatable and image generation needs no payment credentials'
   expect((await stat(join(copy.root, '.env'))).mode & 0o777).toBe(0o600);
   expect((await stat(join(copy.root, 'data/local-profiles.json'))).mode & 0o777).toBe(0o600);
   expect(manifest.ready).toBe(true);
+  expect(Object.values(manifest.profiles).map(profile => [profile!.name, profile!.organizationName])).toEqual([
+    ['John', "John's Org"],
+    ['Emma', "Emma's Org"],
+    ['Alex', "Alex's Org"],
+  ]);
+  expect(new Set(Object.values(manifest.profiles).map(profile => profile!.workspaceId)).size).toBe(3);
   expect(new Set(Object.values(manifest.profiles).map(profile => profile!.actorId)).size).toBe(3);
   const server = await serve(copy.root, env);
   cleanups.push(server.close);
   const base = `/billing/workspaces/${manifest.profiles.owner!.workspaceId}`;
+  const opening = (await server.call(`${base}/usage`)).body.meters[0].confirmedBalance;
+  expect(opening).toBe(30);
+  for (const profile of ['member', 'outsider'] as const) {
+    expect((await server.call(`${base}/agents/image-agent/generate`, { prompt: 'A blue bird' }, profile)).status).toBe(
+      403,
+    );
+    const own = `/billing/workspaces/${manifest.profiles[profile]!.workspaceId}/usage`;
+    expect((await server.call(own, undefined, profile)).body.meters[0]).toMatchObject({
+      confirmedBalance: opening,
+      consumedUnits: 0,
+    });
+  }
+  expect(await query(copy.root, 'SELECT COUNT(*) AS count FROM memberships')).toMatchObject([{ count: 3 }]);
   const generated = await server.call(
     `${base}/agents/image-agent/generate`,
     { prompt: 'A blue bird' },
@@ -89,10 +109,24 @@ it('local setup is repeatable and image generation needs no payment credentials'
         ),
       { timeout: 45000, interval: 100 },
     )
-    .toBe(29);
+    .toBe(opening - 1);
   const history = await query(copy.root, 'SELECT * FROM billing_ledger ORDER BY execution_id');
   const membership = await query(copy.root, 'SELECT * FROM memberships ORDER BY workspace_id, identity_id');
   expect(history.map(row => Number(row.units))).toEqual([1]);
+  expect(history[0].account_id).toBe(
+    (
+      await query(copy.root, 'SELECT id FROM billing_accounts WHERE workspace_id = ?', [
+        manifest.profiles.owner!.workspaceId,
+      ])
+    )[0].id,
+  );
+  for (const profile of ['member', 'outsider'] as const) {
+    const own = `/billing/workspaces/${manifest.profiles[profile]!.workspaceId}/usage`;
+    expect((await server.call(own, undefined, profile)).body.meters[0]).toMatchObject({
+      confirmedBalance: opening,
+      consumedUnits: 0,
+    });
+  }
   await server.close();
   await command(copy.root, ['run', 'setup'], env);
   expect(await readFile(join(copy.root, 'data/local-profiles.json'))).toEqual(privateBytes);
@@ -105,7 +139,7 @@ it('local setup is repeatable and image generation needs no payment credentials'
       'SELECT key, balance FROM commercial_meters WHERE key = ? AND account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?)',
       ['image-credits', manifest.profiles.owner!.workspaceId],
     ),
-  ).toMatchObject([{ balance: 29 }]);
+  ).toMatchObject([{ balance: opening - 1 }]);
   expect(await query(copy.root, 'SELECT COUNT(*) AS count FROM billing_accounts')).toMatchObject([{ count: 3 }]);
   if (!semanticOnly) await command(copy.root, ['run', 'build'], env);
   const restarted = await serve(copy.root, env, semanticOnly ? 'dev' : 'start');
@@ -139,6 +173,21 @@ it('local setup is repeatable and image generation needs no payment credentials'
     (await command(copy.root, ['run', 'setup'], { ...env, BILLING_PROVIDER: 'unsupported-provider' }, false)).code,
   ).not.toBe(0);
   expect((await command(copy.root, ['run', 'setup'], { ...env, BILLING_MODE: 'production' }, false)).code).not.toBe(0);
+  const legacy = structuredClone(manifest);
+  legacy.profiles.member!.name = 'Mary';
+  legacy.profiles.member!.organizationName = "Mary's Org";
+  await writeFile(path, JSON.stringify(legacy), { mode: 0o600 });
+  await query(copy.root, 'UPDATE identities SET display_name = ? WHERE id = ?', [
+    'Mary',
+    legacy.profiles.member!.actorId,
+  ]);
+  const legacyBytes = await readFile(path);
+  const identities = await query(copy.root, 'SELECT * FROM identities ORDER BY id');
+  await command(copy.root, ['run', 'setup'], env);
+  expect(await readFile(path)).toEqual(legacyBytes);
+  expect(await query(copy.root, 'SELECT * FROM identities ORDER BY id')).toEqual(identities);
+  expect(await query(copy.root, 'SELECT * FROM billing_ledger ORDER BY execution_id')).toEqual(history);
+  await writeFile(path, privateBytes);
   await query(copy.root, 'UPDATE local_credentials SET active = 0 WHERE identity_id = ?', [
     manifest.profiles.member!.actorId,
   ]);
@@ -147,6 +196,143 @@ it('local setup is repeatable and image generation needs no payment credentials'
   expect(await query(copy.root, 'SELECT * FROM billing_ledger ORDER BY execution_id')).toEqual(history);
   expect(model.models).toHaveLength(2);
 }, 1200000);
+
+it('personal demo image and kit receipts match observed one and three credit changes', async () => {
+  const copy = await templateCopy();
+  cleanups.push(copy.cleanup);
+  const boundary = await imageBoundary();
+  cleanups.push(boundary.close);
+  const env = { ...sanitizedEnvironment(), OPENAI_API_KEY: 'controlled-not-live', OPENAI_BASE_URL: boundary.url };
+  await command(copy.root, ['run', 'setup'], env);
+  let server = await serve(copy.root, env);
+  cleanups.push(() => server.close());
+  const owner = server.manifest.profiles.owner!;
+  const base = `/billing/workspaces/${owner.workspaceId}`;
+  const account = async () => {
+    const response = await server.call(`${base}/usage`);
+    expect(response).toMatchObject({ status: 200, body: { mode: 'local', authority: 'provider-reservations' } });
+    return response.body.meters.find((meter: { key: string }) => meter.key === 'image-credits');
+  };
+  const download = async (artifact: any) => {
+    const url = `${server.url}${base}/artifacts/${artifact.id}`;
+    expect((await fetch(url)).status).toBe(401);
+    expect(
+      (await fetch(url, { headers: { authorization: `Bearer ${server.manifest.profiles.member!.credential}` } }))
+        .status,
+    ).toBe(403);
+    const response = await fetch(url, { headers: { authorization: `Bearer ${owner.credential}` }, redirect: 'error' });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    const bytes = Buffer.from(await response.arrayBuffer());
+    expect(bytes).toEqual(boundary.png);
+    expect(bytes.length).toBe(artifact.bytes);
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(artifact.sha256);
+    const file = join(copy.root, 'data/private-images', `${artifact.id}.png`);
+    expect(await readFile(file)).toEqual(bytes);
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
+  };
+  const initial = await account();
+  const balance = initial.confirmedBalance;
+  expect(balance).toBe(30);
+  expect(initial.consumedUnits).toBe(0);
+  const brief = 'A small blue bird perched on a branch in a quiet forest';
+  const image = await server.call(`${base}/agents/image-agent/generate`, { prompt: brief }, 'owner', 'demo-image');
+  expect(image).toMatchObject({
+    status: 200,
+    body: { billing: { billedUnits: 1, executionStatus: 'completed', replayed: false } },
+  });
+  expect(image.body.result.object.artifacts).toHaveLength(1);
+  await download(image.body.result.object.artifacts[0]);
+  const afterImage = await account();
+  expect(afterImage).toMatchObject({ confirmedBalance: balance - 1, consumedUnits: 1 });
+  const imageCalls = { images: boundary.images.length, models: boundary.models.length };
+  const replay = await server.call(`${base}/agents/image-agent/generate`, { prompt: brief }, 'owner', 'demo-image');
+  expect(replay.body.result).toEqual(image.body.result);
+  expect(replay.body.billing).toMatchObject({ billedUnits: 1, replayed: true });
+  expect(boundary.images).toHaveLength(imageCalls.images);
+  expect(boundary.models).toHaveLength(imageCalls.models);
+  expect(await account()).toMatchObject({ confirmedBalance: balance - 1, consumedUnits: 1 });
+
+  const created = await server.call(`${base}/workflows/image-kit/runs`, {}, 'owner', 'demo-kit');
+  const id = created.body.executionId;
+  const path = `${base}/workflows/image-kit/runs/${id}`;
+  const started = await server.call(`${path}/start`, { inputData: { brief } }, 'owner', 'demo-kit-start');
+  expect(started).toMatchObject({
+    status: 200,
+    body: { result: { status: 'suspended' }, billing: { billedUnits: null, settlementStatus: 'reserved' } },
+  });
+  const prompts = started.body.result.pending.approval.prompts;
+  expect(prompts).toHaveLength(3);
+  for (const [index, style] of ['Notion-inspired style:', '3D style:', 'Vector illustration style:'].entries()) {
+    expect(prompts[index]).toContain(brief);
+    expect(prompts[index]).toContain(style);
+  }
+  const whileHeld = await account();
+  expect(whileHeld).toMatchObject({ confirmedBalance: balance - 4, consumedUnits: 1 });
+  expect(
+    await query(copy.root, 'SELECT units, active FROM billing_reservations WHERE execution_id = ?', [id]),
+  ).toMatchObject([{ units: 3, active: 1 }]);
+  expect(boundary.images).toHaveLength(imageCalls.images);
+  expect(boundary.models).toHaveLength(imageCalls.models);
+  await server.close();
+  server = await serve(copy.root, env);
+  expect((await server.call(path)).body.result).toEqual(started.body.result);
+  expect(await account()).toMatchObject({ confirmedBalance: balance - 4, consumedUnits: 1 });
+  const approval = { step: 'approval', resumeData: { approved: true } };
+  const completed = await server.call(`${path}/resume`, approval, 'owner', 'demo-approve');
+  expect(completed).toMatchObject({
+    status: 200,
+    body: {
+      result: { status: 'completed' },
+      billing: { billedUnits: 3, executionStatus: 'completed' },
+    },
+  });
+  expect(completed.body.result.output.prompts).toEqual(prompts);
+  const artifacts = completed.body.result.output.artifacts;
+  expect(artifacts).toHaveLength(3);
+  for (const artifact of artifacts) await download(artifact);
+  expect(boundary.images.slice(1).map(request => request.prompt)).toEqual(prompts);
+  expect(boundary.images).toHaveLength(4);
+  expect(boundary.models).toHaveLength(8);
+  const afterKit = await account();
+  expect(afterKit).toMatchObject({ confirmedBalance: balance - 4, consumedUnits: 4 });
+  const completedCalls = { images: boundary.images.length, models: boundary.models.length };
+  const ledger = await query(copy.root, 'SELECT execution_id, meter, units FROM billing_ledger ORDER BY units');
+  expect(ledger.map(row => Number(row.units))).toEqual([1, 3]);
+  expect(ledger[1]).toMatchObject({ execution_id: id, meter: 'image-credits', units: 3 });
+  expect(
+    await query(copy.root, 'SELECT units, active FROM billing_reservations WHERE execution_id = ?', [id]),
+  ).toMatchObject([{ units: 3, active: 0 }]);
+  const finalReplay = await server.call(`${path}/resume`, approval, 'owner', 'demo-approve');
+  expect(finalReplay.body.result).toEqual(completed.body.result);
+  expect(finalReplay.body.billing).toMatchObject({ billedUnits: 3, replayed: true });
+  expect(boundary.images).toHaveLength(4);
+  expect(boundary.models).toHaveLength(8);
+  expect(await query(copy.root, 'SELECT execution_id, meter, units FROM billing_ledger ORDER BY units')).toEqual(
+    ledger,
+  );
+  expect(await account()).toMatchObject({ confirmedBalance: balance - 4, consumedUnits: 4 });
+  process.stdout.write(
+    JSON.stringify({
+      evidence: 'personal-demo-controlled',
+      opening: balance,
+      image: afterImage.confirmedBalance,
+      held: whileHeld.confirmedBalance,
+      heldUnits: 3,
+      consumedWhileHeld: whileHeld.consumedUnits,
+      final: afterKit.confirmedBalance,
+      consumed: afterKit.consumedUnits,
+      ledgerUnits: ledger.map(row => Number(row.units)),
+      initialApprovalReceiptReplayed: completed.body.billing.replayed,
+      approvalReplayReceiptReplayed: finalReplay.body.billing.replayed,
+      imageRequests: boundary.images.length,
+      modelRequests: boundary.models.length,
+      approvalReplayAdditionalImageRequests: boundary.images.length - completedCalls.images,
+      approvalReplayAdditionalModelRequests: boundary.models.length - completedCalls.models,
+    }) + '\n',
+  );
+}, 600000);
 
 it('image examples demonstrate shared billing suspension and organization isolation', async () => {
   const copy = await templateCopy();

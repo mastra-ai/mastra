@@ -8,7 +8,7 @@ import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
 import type { ReservationRequest } from '../../src/billing/reservations.js';
 import { temporaryDatabase } from '../support/billing.js';
 
-// This gate consumes at most three sandbox credits; it never refunds, purchases,
+// This gate consumes at most two sandbox credits; it never refunds, purchases,
 // creates customers or invokes an image/model. Missing opt-in is a failure.
 async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
   assert.equal(process.env.AUTUMN_VERIFY_SANDBOX, '1', 'Run scripts/test-autumn-sandbox.mjs --live explicitly.');
@@ -32,8 +32,8 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
   assert.equal(customer.env, 'sandbox');
   const database = await temporaryDatabase();
   const bindings = {
-    customers: [{ workspaceId: 'johns-org-sandbox-proof', customerId }],
-    meters: [{ key: 'credits', featureId, creditPoolId }],
+    customers: [{ workspaceId: 'johns-org-sandbox-proof', customerId, name: "John's Org" }],
+    meters: [{ key: 'image-credits', featureId, creditPoolId }],
   };
   const provider = await AutumnBillingProvider.open({ url: database.url }, { secretKey, bindings });
   const active: { request: ReservationRequest; payload: string }[] = [];
@@ -41,6 +41,8 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
   const account = await provider.ensureAccount({ workspaceId: 'johns-org-sandbox-proof' });
   const read = async (label: string) => {
     const snapshot = await provider.getState(account);
+    assert.equal(snapshot.prepaidAuthority, 'provider-reservations');
+    assert.equal(snapshot.meters[0].key, 'image-credits');
     const remaining = snapshot.meters[0].confirmedBalance!;
     assert.equal(snapshot.meters[0].consumedUnits, null);
     balances.push({ label, remaining });
@@ -51,7 +53,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
     const request: ReservationRequest = {
       id: `johns-org-proof:${randomUUID()}`,
       account,
-      meter: 'credits',
+      meter: 'image-credits',
       units,
       executionCutoff: now + Math.floor(lifetime / 3),
       confirmationCutoff: now + Math.floor((2 * lifetime) / 3),
@@ -113,7 +115,17 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
           consumedTestCredits: 1,
         }),
       );
-      return;
+      return {
+        customerId,
+        workspaceId: account.workspaceId,
+        featureId,
+        creditPoolId,
+        meter: 'image-credits',
+        opening,
+        reserved: opening - 3,
+        closing: await read('documented personal configuration'),
+        confirmedUnits: 1,
+      };
     }
     const budget = await reserve(opening - 1);
     assert.equal(budget.result.status, 'reserved');
@@ -212,9 +224,24 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
     await database.cleanup();
   }
 }
-it(
-  'Autumn sandbox proves atomic reserve confirm release and feature conversion',
-  () => proveSandbox('lifecycle'),
-  360000,
-);
+// Both named proofs share one consuming lifecycle, including failures. Selecting
+// either proof runs the actual driver; the full file still consumes at most two credits.
+let lifecycle: ReturnType<typeof proveSandbox> | undefined;
+const documentedLifecycle = () => (lifecycle ??= proveSandbox('lifecycle'));
+it('Autumn sandbox proves atomic reserve confirm release and feature conversion', async () => {
+  await documentedLifecycle();
+}, 360000);
 it('Autumn duplicate locks finalization and expiry preserve one charge', () => proveSandbox('recovery'), 360000);
+
+it('Autumn sandbox proves the documented personal customer billing configuration', async () => {
+  const proof = await documentedLifecycle();
+  assert.ok(proof);
+  assert.equal(proof.customerId, 'johns-org');
+  assert.equal(proof.workspaceId, 'johns-org-sandbox-proof');
+  assert.equal(proof.meter, 'image-credits');
+  assert.equal(proof.featureId, 'generated_images');
+  assert.equal(proof.creditPoolId, process.env.AUTUMN_TEST_CREDIT_POOL_ID ?? 'image_credits');
+  assert.equal(proof.reserved, proof.opening - 3);
+  assert.equal(proof.closing, proof.opening - 1);
+  assert.equal(proof.confirmedUnits, 1);
+}, 360000);

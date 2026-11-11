@@ -2,7 +2,7 @@
 
 Charge for Mastra agents and workflows through subscriptions, prepaid credits, per-task charges, or measured usage. Generate private images with an image agent and an approval workflow through billed actions in Mastra Studio. Start with local simulated balances, or connect Autumn for provider-owned prepaid reservations and deductions.
 
-Autumn paid reservations and local simulation are described in the [Autumn integration guide](docs/autumn.md). It covers server bindings, bounded deadlines, pending receipts and explicit sandbox verification.
+Start with the [provider and policy catalog setup](docs/billing.md#connect-your-own-agents-and-workflows), copy the [billed agent and workflow calls](docs/billing.md#invoke-billed-resources), or configure [Autumn customer bindings and the bundled image catalog](docs/autumn.md#configuration).
 
 ## Why we built this
 
@@ -25,13 +25,13 @@ We built this template to provide a straightforward starting point for billing i
 2. **Configure the local Studio demo**
    - Run `cp .env.example .env`, add `OPENAI_API_KEY`, and set `BILLING_STUDIO_ENABLED=true` as described under Prerequisites.
 3. **Prepare local billing**
-   - Run `npm run setup` to create John, Mary, and Alex with separate personal organizations. Each starts with 30 simulated image credits.
+   - Run `npm run setup` to create John, Emma, and Alex with separate personal organizations. A fresh account starts with 30 simulated image credits. Existing profiles, credentials and spent balances are preserved.
 4. **Open Mastra Studio**
    - Run `npm run dev`, then open [Studio Tools](http://127.0.0.1:4111/tools).
-   - In **Settings → Headers**, add `Authorization` with value `Bearer <credential>`, replacing `<credential>` with `profiles.owner.credential` from the private `data/local-profiles.json`. Save the headers and return to **Tools**. Keep credentials out of recordings.
+   - In **Settings → Mastra Connection → Headers**, add `Authorization` with value `Bearer <credential>`, replacing `<credential>` with `profiles.owner.credential` from the private `data/local-profiles.json`. Select **Save configuration** and return to **Tools**. Keep credentials out of recordings.
 5. **Run the image agent through billing**
    - Open **billing-image-generate → Playground → JSON** and paste the input below. Replace `OWNER_WORKSPACE_ID` with `profiles.owner.workspaceId` from the same file.
-   - Run the tool. Expect a private image reference in `result.object.artifacts` and a receipt with `billing.billedUnits: 1` and `billing.executionStatus: "completed"`. A tool result containing `error` means the action failed, even if Studio shows a successful HTTP request.
+   - First run **billing-account** with the same `workspaceId` and note its current balance B. Then run the image tool. Expect a private image reference in `result.object.artifacts` and a receipt with `billing.billedUnits: 1` and `billing.executionStatus: "completed"`. A tool result containing `error` means the action failed, even if Studio shows a successful HTTP request.
 
 ```json
 {
@@ -45,16 +45,16 @@ The Studio demo runs through **Tools → Playground**. These tools call the imag
 
 ## Try it out
 
-- Run **billing-account** with `{"workspaceId":"OWNER_WORKSPACE_ID"}`, replacing the placeholder with the owner's workspace ID. For a fresh local setup, the first image leaves 29 of 30 credits. Local confirmation updates the balance immediately. Setup preserves the balance on subsequent runs.
+- Read **billing-account** before a new image and call its observed balance **B**. One successful image leaves **B − 1**; the full kit then leaves **B − 4**. A fresh local account starts at 30, so these values are 29 and 26. Existing accounts start at their current balance; setup never refills them.
 - Run **billing-image-generate** again with the exact same input and key. The receipt sets `replayed: true` and keeps its original `billedUnits: 1`, without another charge. Change the key for a new image.
-- John uses `profiles.owner`; Mary uses `profiles.member`; Alex uses `profiles.outsider`. Switch to Mary's credential in **Settings → Headers** and use her own `workspaceId` for an independent balance. John's workspace denies her access until John explicitly converts it to shared and invites her.
-- Open **billing-image-kit-start** and use the brief input with a new key, such as `first-kit`. The workflow saves three prompts for the same subject as book and website illustrations, in order: Notion-inspired, 3D, and vector illustration. Review `result.pending.approval.prompts` before generating images. Copy `result.executionId` into **billing-image-kit-approve**, together with the same `workspaceId`, a new `idempotencyKey`, and `"approval": {"approved": true}`. Successful completion produces three private artifacts and confirms one three-credit parent charge.
+- John uses `profiles.owner`; Emma uses `profiles.member`; Alex uses `profiles.outsider`. Switch to Emma's credential in **Settings → Mastra Connection → Headers** and use her own `workspaceId` for an independent balance. John's workspace denies her access until John explicitly converts it to shared and invites her.
+- Open **billing-image-kit-start** and use the brief input with a new key, such as `first-kit`. The workflow holds three credits without a confirmed charge and saves three prompts for the same subject as book and website illustrations, in order: Notion-inspired, 3D, and vector illustration. Review `result.pending.approval.prompts` before generating images. Copy `result.executionId` into **billing-image-kit-approve**, together with the same `workspaceId`, a new `idempotencyKey`, and `"approval": {"approved": true}`. Successful completion produces three private artifacts and confirms one three-credit parent charge.
 - Use **billing-image-kit-status** with `workspaceId` and `executionId` to inspect your kit, including after restarting the server. For a suspended kit, use **billing-image-kit-cancel** with those fields and a new `idempotencyKey` to release its reservation without charging. Other members cannot read or resume your kit.
 
 ## Customization
 
 - Open the project in your coding agent and ask: “Add a product illustration use case, keeping shared workspace billing and charging only for successful work. Explore the code and propose a plan before making changes.”
-- Adjust the [billing policies](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/images/resources.ts). See the [billing guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/billing.md) for policy options and integration details.
+- Adjust policies in [src/images/resources.ts](src/images/resources.ts), the typed catalog in [src/resources.ts](src/resources.ts), and provider setup in [src/billing/setup.ts](src/billing/setup.ts). Use the [billing facade snippets](docs/billing.md#invoke-billed-resources) to keep execution on the billed path.
 
 ## About Mastra templates
 
