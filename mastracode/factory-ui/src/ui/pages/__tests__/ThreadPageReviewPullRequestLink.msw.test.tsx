@@ -152,10 +152,8 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
   );
 }
 
-function renderThreadRoute() {
-  const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`],
-  });
+function renderThreadRoute(path = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`) {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
@@ -291,6 +289,18 @@ describe('ThreadPage pull request link placement', () => {
       expect(
         within(factorySession).queryByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when the session is a personal one, held by no card', () => {
+    it('shows its pull request in the composer', async () => {
+      stubThreadRoute(createWireWorkItem('issue'), [pullRequestSubscription]);
+      renderThreadRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
+
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      const link = await within(composer).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+
+      expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
     });
   });
 
