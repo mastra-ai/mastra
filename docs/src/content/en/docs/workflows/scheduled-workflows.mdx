@@ -167,7 +167,7 @@ In Studio, open the schedule detail page and select **Pause** or **Resume** in t
 A few rules to know:
 
 - Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status, even when you change `cron`, `timezone`, `runAt`, `endAt`, or other fields.
-- Resuming a cron schedule recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs; it fires on the next regular cron tick.
+- Resuming a cron schedule recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs. It fires on the next regular cron tick.
 - Resuming a one-off keeps its configured `runAt`. If that time passed while the schedule was paused, it fires on the next scheduler tick.
 - Unpause with `resumeSchedule` or the **Resume** button in Studio. Editing the workflow's `schedule` config doesn't unpause a paused row.
 - Pause and resume are idempotent. Calling pause on an already-paused schedule is a no-op.
@@ -180,7 +180,7 @@ The underlying HTTP routes are `POST /api/schedules/:scheduleId/pause` and `POST
 When you change the `schedule` config and redeploy, Mastra diffs the existing schedule row against the new config:
 
 - If `cron`, `timezone`, or `endAt` changes on a recurring schedule, `nextFireAt` is recomputed. A cadence with no future occurrence completes the schedule. A recomputed cadence that can still fire reactivates a completed schedule.
-- If `runAt` changes on a one-off schedule, `nextFireAt` is updated to that time. A future `runAt` reactivates a completed one-off; a past `runAt` leaves it completed.
+- If `runAt` changes on a one-off schedule, `nextFireAt` is updated to that time. A future `runAt` reactivates a completed one-off. A past `runAt` leaves it completed.
 - If an active one-off's unchanged `runAt` passed while the app was offline, it remains due and fires on the next scheduler tick. A one-off first registered with a past `runAt` is instead created as `completed` and doesn't fire.
 - If only `inputData`, `initialState`, or `metadata` changed, the row is patched in place and the next fire time is preserved.
 - User-set status (for example, paused via `client.pauseSchedule`) and fire history are never overwritten, unless a timing change above requires a status update.
