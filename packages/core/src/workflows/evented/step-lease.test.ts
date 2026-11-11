@@ -171,12 +171,22 @@ function interceptWorkflowEvents(
       if (prop === 'publish') {
         return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
           const picked = topic === 'workflows' ? pick(event) : undefined;
-          if (picked?.reject) throw picked.reject;
-          if (picked?.divert) return picked.divert(structuredClone(event));
-          if (picked?.hold) await picked.hold;
+          if (picked?.reject) {
+            throw picked.reject;
+          }
+
+          if (picked?.divert) {
+            return picked.divert(structuredClone(event));
+          }
+
+          if (picked?.hold) {
+            await picked.hold;
+          }
+
           return target.publish(topic, event, options);
         };
       }
+
       const value = Reflect.get(target, prop, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
@@ -196,6 +206,7 @@ async function recordLeases(storage: Store) {
   const claims: { key: string; acquired: boolean }[] = [];
   const reads: string[] = [];
   let notify = () => {};
+
   vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
     const result = await claim(args);
     claims.push({ key: args.runId, acquired: result.acquired });
@@ -208,9 +219,14 @@ async function recordLeases(storage: Store) {
     notify();
     return result;
   });
+
+  // Re-checks `done` after every recorded claim or read.
   const until = async (done: () => boolean) => {
-    while (!done()) await new Promise<void>(resolve => (notify = resolve));
+    while (!done()) {
+      await new Promise<void>(resolve => (notify = resolve));
+    }
   };
+
   return { claims, reads, until };
 }
 
@@ -236,16 +252,31 @@ function track(shape: Pick<Shape, 'blocks'>, { hangForever = false } = {}) {
   const allBlocked = Promise.withResolvers<void>();
   const otherReplicaRan = Promise.withResolvers<void>();
   let blocked = 0;
+
   const reporter =
     (replica: string): Report =>
     async label => {
       executions.push(`${replica}:${label}`);
       at[`${replica}:${label}`] = Date.now();
-      if (replica !== 'A') return otherReplicaRan.resolve();
-      if (!shape.blocks.includes(label)) return;
-      if (++blocked === shape.blocks.length) allBlocked.resolve();
+
+      // Only replica A blocks; any other replica running a step is what the tests watch for.
+      if (replica !== 'A') {
+        return otherReplicaRan.resolve();
+      }
+
+      if (!shape.blocks.includes(label)) {
+        return;
+      }
+
+      blocked++;
+      if (blocked === shape.blocks.length) {
+        allBlocked.resolve();
+      }
+
+      // A hanging step stands for a crashed replica: it never finishes.
       await (hangForever ? new Promise<never>(() => {}) : gate.promise);
     };
+
   return { executions, at, reporter, release: gate.resolve, allBlocked: allBlocked.promise, otherReplicaRan };
 }
 

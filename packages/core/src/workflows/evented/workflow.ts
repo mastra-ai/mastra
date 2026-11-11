@@ -1960,9 +1960,15 @@ export class EventedRun<
    * restarts runs of `runId`'s workflow; nothing is written when it does not.
    */
   async #markLive(runId = this.runId, restartable = this.#restartable): Promise<void> {
-    if (!restartable || !this.mastra) return;
+    if (!restartable || !this.mastra) {
+      return;
+    }
+
     const store = await this.mastra.getStorage()?.getStore('workflows');
-    if (!store || !(await store.supportsRunFencing())) return;
+    if (!store || !(await store.supportsRunFencing())) {
+      return;
+    }
+
     await markRunLive({ scope: this.mastra, store, runId, logger: this.mastra.getLogger() });
   }
 
@@ -1974,11 +1980,17 @@ export class EventedRun<
    */
   #parentRestartable(): boolean {
     const parent = this.parentWorkflow;
-    if (!parent || !this.mastra) return false;
+    if (!parent || !this.mastra) {
+      return false;
+    }
+
     const workflow = this.mastra.__hasInternalWorkflow(parent.workflowId, parent.runId)
       ? this.mastra.__getInternalWorkflow(parent.workflowId, parent.runId)
       : Object.values(this.mastra.listWorkflows()).find(w => w.id === parent.workflowId);
-    if (!workflow) return this.#restartable;
+    if (!workflow) {
+      return this.#restartable;
+    }
+
     return workflow.options?.autoRestartActiveRuns !== false && workflow.type !== 'processor';
   }
 
@@ -1998,7 +2010,11 @@ export class EventedRun<
   protected override async claimRestartOwnership(
     snapshot: WorkflowRunState,
   ): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
-    if (!this.#restartable) return { release: async () => {} };
+    // The run's steps take no leases, so there is no liveness to check.
+    if (!this.#restartable) {
+      return { release: async () => {} };
+    }
+
     return claimEventedRestart({
       store: await this.mastra?.getStorage()?.getStore('workflows'),
       runId: this.runId,

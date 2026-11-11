@@ -56,12 +56,18 @@ const LIVENESS_RENEW_INTERVAL_MS = Math.max(
 /** Runs `task` over `items`, at most `concurrency` at a time. */
 async function forEachBounded<T>(items: T[], concurrency: number, task: (item: T) => Promise<void>): Promise<void> {
   const queue = [...items];
+
+  // Each worker takes the next item once its previous one settles, until the queue is empty.
   const next = async (): Promise<void> => {
     const item = queue.shift();
-    if (item === undefined) return;
+    if (item === undefined) {
+      return;
+    }
+
     await task(item);
     return next();
   };
+
   await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, next));
 }
 
@@ -96,7 +102,10 @@ class ProcessRunLiveness {
    */
   async markLive(runId: string, store: WorkflowsStorage): Promise<void> {
     this.#ensureTimer();
-    if (this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) await this.#writeOrWarn(runId, store);
+
+    if (this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) {
+      await this.#write(runId, store);
+    }
   }
 
   /**
@@ -115,30 +124,35 @@ class ProcessRunLiveness {
     const active = this.#active.get(runId);
     this.#active.set(runId, { count: (active?.count ?? 0) + 1, store });
     this.#ensureTimer();
+
     const inFlight = this.#writing.get(runId);
-    if (inFlight) await inFlight.catch(() => {});
-    else if (!this.#lastWriteAt.has(runId)) await this.#writeOrWarn(runId, store);
-    else if (this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) void this.#writeOrWarn(runId, store);
+    if (inFlight) {
+      // Another leaf of this run is writing: wait so this one does not start ahead of it.
+      await inFlight;
+    } else if (!this.#lastWriteAt.has(runId)) {
+      // This process never vouched for the run: the step must not start before the key is written.
+      await this.#write(runId, store);
+    } else if (this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) {
+      // The key is still live from the last write, so the step need not wait for this one.
+      // `#write` logs its own failure and never rejects.
+      void this.#write(runId, store);
+    }
+
     let left = false;
     return () => {
-      if (left) return;
+      // Leaving twice must not count out another leaf of the run.
+      if (left) {
+        return;
+      }
+
       left = true;
       const current = this.#active.get(runId);
-      if (current && current.count > 1) current.count--;
-      else this.#active.delete(runId);
+      if (current && current.count > 1) {
+        current.count--;
+      } else {
+        this.#active.delete(runId);
+      }
     };
-  }
-
-  /**
-   * Writes the run's liveness key, logging instead of rejecting when the write
-   * fails. Skipped once the process is shutting down: it stops vouching for
-   * its runs then, so they can be recovered once their keys lapse.
-   */
-  async #writeOrWarn(runId: string, store: WorkflowsStorage): Promise<void> {
-    if (this.scope.__shuttingDown) return;
-    return this.#write(runId, store).catch(error =>
-      this.logger?.warn('Failed to mark a workflow run live', { runId, error }),
-    );
   }
 
   /** Milliseconds since this process last wrote the run's liveness key; infinite when it never did. */
@@ -148,7 +162,10 @@ class ProcessRunLiveness {
 
   /** Starts the renewal timer unless it runs. */
   #ensureTimer() {
-    if (this.#stopTimer) return;
+    if (this.#stopTimer) {
+      return;
+    }
+
     // Not setInterval: it fires on schedule while the previous tick's writes are still pending, so a
     // slow store would get a new round of writes on top of the old ones. The next tick starts one
     // interval after this one settles.
@@ -159,25 +176,43 @@ class ProcessRunLiveness {
   }
 
   /**
-   * Marks the run live for one more lease TTL. Every process force-claims the
-   * key and nobody releases it, so its generation only orders the writes: no
-   * write is fenced on it and losing it to another process's write changes
-   * nothing. A failed write leaves the last write time alone, so the next
-   * leaf start or tick tries again.
+   * Marks the run live for one more lease TTL, or joins the write already in
+   * flight for it. Every process force-claims the key and nobody releases it,
+   * so its generation only orders the writes: no write is fenced on it and
+   * losing it to another process's write changes nothing.
+   *
+   * Never rejects: a failed write is logged here and leaves the last write
+   * time alone, so the next leaf start or tick tries again. Skipped once the
+   * process is shutting down: it stops vouching for its runs then, so they can
+   * be recovered once their keys lapse.
    */
   #write(runId: string, store: WorkflowsStorage): Promise<void> {
+    if (this.scope.__shuttingDown) {
+      return Promise.resolve();
+    }
+
     const inFlight = this.#writing.get(runId);
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      return inFlight;
+    }
+
     const startedAt = Date.now();
-    const write = store
-      .claimRunOwnership({
-        runId: runLivenessKey(runId),
-        ownerId: this.#ownerId,
-        leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
-        force: true,
-      })
-      .then(() => void this.#lastWriteAt.set(runId, startedAt))
-      .finally(() => this.#writing.delete(runId));
+    const write = (async () => {
+      try {
+        await store.claimRunOwnership({
+          runId: runLivenessKey(runId),
+          ownerId: this.#ownerId,
+          leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+          force: true,
+        });
+        this.#lastWriteAt.set(runId, startedAt);
+      } catch (error) {
+        this.logger?.warn('Failed to mark a workflow run live', { runId, error });
+      } finally {
+        this.#writing.delete(runId);
+      }
+    })();
+
     this.#writing.set(runId, write);
     return write;
   }
@@ -193,16 +228,25 @@ class ProcessRunLiveness {
       this.#active.clear();
       this.#lastWriteAt.clear();
     }
+
+    // A finished run's last write time is kept for one interval so its next quick step skips the write.
     for (const runId of this.#lastWriteAt.keys()) {
-      if (!this.#active.has(runId) && this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) this.#lastWriteAt.delete(runId);
+      const idle = !this.#active.has(runId);
+      if (idle && this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) {
+        this.#lastWriteAt.delete(runId);
+      }
     }
+
     if (this.#active.size === 0 && this.#lastWriteAt.size === 0) {
+      // `#ensureTimer` starts a new chain if a leaf of any run starts later.
       this.#stopTimer?.();
       this.#stopTimer = undefined;
       return;
     }
+
+    // Half an interval old is due: waiting a full interval could let the key lapse between ticks.
     const due = [...this.#active].filter(([runId]) => this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS / 2);
-    await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, ([runId, { store }]) => this.#writeOrWarn(runId, store));
+    await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, ([runId, { store }]) => this.#write(runId, store));
   }
 }
 
@@ -217,7 +261,11 @@ const livenessByProcess = new WeakMap<LivenessScope, ProcessRunLiveness>();
 /** The liveness bookkeeping of the process `scope` stands for. */
 function processLiveness(scope: LivenessScope, logger?: IMastraLogger): ProcessRunLiveness {
   let liveness = livenessByProcess.get(scope);
-  if (!liveness) livenessByProcess.set(scope, (liveness = new ProcessRunLiveness(scope, logger)));
+  if (!liveness) {
+    liveness = new ProcessRunLiveness(scope, logger);
+    livenessByProcess.set(scope, liveness);
+  }
+
   return liveness;
 }
 
@@ -334,15 +382,24 @@ export async function acquireStepLease({
     store.claimRunOwnership({ runId: key, ownerId, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS, ...options });
 
   if (handoff && handoff.key !== key) {
+    // A hand-off for another occurrence must not take over this one; claim it like any delivery.
     logger?.warn('Ignoring a workflow step lease hand-off made for another step occurrence', {
       key,
       handoffKey: handoff.key,
     });
   } else if (handoff) {
+    // Forced but fenced on the publisher's generation, so only the first receiver of the hand-off wins.
     const adopted = await claim({ force: true, expectedGeneration: handoff.generation });
-    if (adopted.acquired) return holdStepLease({ scope, store, runId, record: adopted.record, logger });
-    // An expired lease means the worker that adopted it crashed: claim it below like any redelivery.
-    if (adopted.record && (adopted.record.live || !adopted.record.leaseExpiresAt)) return 'drop';
+    if (adopted.acquired) {
+      return holdStepLease({ scope, store, runId, record: adopted.record, logger });
+    }
+
+    // A live or released lease means another receiver adopted it. An expired one means that
+    // receiver crashed: claim it below like any redelivery.
+    const adoptedElsewhere = adopted.record && (adopted.record.live || !adopted.record.leaseExpiresAt);
+    if (adoptedElsewhere) {
+      return 'drop';
+    }
   }
 
   let result: ClaimRunOwnershipResult = await claim({ force: false });
@@ -353,15 +410,28 @@ export async function acquireStepLease({
       leaseExpiresAt: result.record?.leaseExpiresAt,
     });
   }
+
   while (!result.acquired) {
-    if (scope.__shuttingDown) return 'defer';
+    // Checked before and after the wait: a process shutting down hands the delivery back at once.
+    if (scope.__shuttingDown) {
+      return 'defer';
+    }
+
     await sleep(holdDelay(result.record));
-    if (scope.__shuttingDown) return 'defer';
+    if (scope.__shuttingDown) {
+      return 'defer';
+    }
+
+    // A released lease (no expiry) means the holder ran the occurrence to the end.
     const current = await store.getRunOwnership({ runId: key });
-    if (current && !current.leaseExpiresAt && !claimAfterRelease) return 'drop';
+    if (current && !current.leaseExpiresAt && !claimAfterRelease) {
+      return 'drop';
+    }
+
     // Racing waiters that read the same record resolve to one winner.
     result = await claim({ force: false, expectedGeneration: current?.generation ?? 0 });
   }
+
   return holdStepLease({ scope, store, runId, record: result.record, logger });
 }
 
@@ -398,18 +468,26 @@ async function holdStepLease({
       }),
     onError: error => logger?.warn('Failed to renew workflow step lease', { key: fence.runId, error }),
   });
+
   let leaveRun: () => void;
   try {
     leaveRun = await processLiveness(scope, logger).enter(runId, store);
   } catch (error) {
+    // The caller never gets a handle, so nothing else would release this lease before it expires.
     stopRenewing();
-    await store.releaseRunOwnership(fence).catch(() => {});
+    try {
+      await store.releaseRunOwnership(fence);
+    } catch (releaseError) {
+      logger?.warn('Failed to release workflow step lease', { key: fence.runId, error: releaseError });
+    }
     throw error;
   }
+
   let handedOff = false;
   let released = false;
   return {
     handOff() {
+      // Renewal stops here, before the follow-up is published, so the receiver's claim can win.
       stopRenewing();
       return { key: fence.runId, generation: fence.generation };
     },
@@ -419,7 +497,12 @@ async function holdStepLease({
     async release() {
       stopRenewing();
       leaveRun();
-      if (handedOff || released) return;
+
+      // A handed-off lease belongs to the follow-up's receiver now.
+      if (handedOff || released) {
+        return;
+      }
+
       released = true;
       try {
         await store.releaseRunOwnership(fence);
@@ -438,12 +521,19 @@ const MAX_NESTED_RUN_DEPTH = 16;
  * the nested runs of the foreach items that have not finished.
  */
 function runningNestedRunIds(result: { status?: unknown; metadata?: unknown; output?: unknown } | undefined): string[] {
-  if (result?.status !== 'running') return [];
+  if (result?.status !== 'running') {
+    return [];
+  }
+
   const metadata = result.metadata as
     | { nestedRunId?: string; foreachNestedRunIds?: Record<string, string> }
     | undefined;
   const items = metadata?.foreachNestedRunIds;
-  if (!items) return metadata?.nestedRunId ? [metadata.nestedRunId] : [];
+  if (!items) {
+    return metadata?.nestedRunId ? [metadata.nestedRunId] : [];
+  }
+
+  // A foreach item whose output slot is filled finished; an empty or queued slot still runs.
   const output = result.output;
   return Object.entries(items)
     .filter(([index]) => {
@@ -465,18 +555,28 @@ async function findLiveRun(
   context: WorkflowRunState['context'] | undefined,
 ): Promise<RunOwnershipRecord | null> {
   let earliest: RunOwnershipRecord | null = null;
+
   const visit = async (runId: string, context: WorkflowRunState['context'] | undefined, depth: number) => {
+    // The earliest expiry is reported, so a refused restart is retried as soon as any key could lapse.
     const record = await store.getRunOwnership({ runId: runLivenessKey(runId) });
-    if (record?.live && (!earliest || record.leaseExpiresAt! < earliest.leaseExpiresAt!)) earliest = record;
-    if (depth >= MAX_NESTED_RUN_DEPTH) return;
+    if (record?.live && (!earliest || record.leaseExpiresAt! < earliest.leaseExpiresAt!)) {
+      earliest = record;
+    }
+
+    if (depth >= MAX_NESTED_RUN_DEPTH) {
+      return;
+    }
+
     const nested = Object.entries(context ?? {}).flatMap(([stepId, result]) =>
       runningNestedRunIds(result).map(nestedRunId => ({ stepId, nestedRunId })),
     );
+    // Nested runs are stored under the id of the step that runs them.
     await forEachBounded(nested, NESTED_RUN_READ_CONCURRENCY, async ({ stepId, nestedRunId }) => {
       const snapshot = await store.loadWorkflowSnapshot({ workflowName: stepId, runId: nestedRunId });
       await visit(nestedRunId, snapshot?.context, depth + 1);
     });
   };
+
   await visit(runId, context, 0);
   return earliest;
 }
@@ -502,9 +602,15 @@ export async function claimEventedRestart({
   snapshot: WorkflowRunState;
 }): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
   const unfenced: WorkflowRunOwnership = { release: async () => {} };
-  if (!store || !(await store.supportsRunFencing())) return unfenced;
+  if (!store || !(await store.supportsRunFencing())) {
+    return unfenced;
+  }
+
   const live = await findLiveRun(store, runId, snapshot.context);
-  if (live) return { owner: live };
+  if (live) {
+    return { owner: live };
+  }
+
   const claim = await store.claimRunOwnership({
     runId: restartLeaseKey(runId),
     ownerId: globalThis.crypto.randomUUID(),

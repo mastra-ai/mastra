@@ -1237,8 +1237,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // published. Marking it live first keeps a booting instance from restarting it in the gap
     // before that step takes its lease, also when the start message sat in the queue for long.
     const leaseStore = await this.#leaseStore(workflow);
-    if (leaseStore)
+    if (leaseStore) {
       await markRunLive({ scope: this.mastra, store: leaseStore, runId, logger: this.mastra.getLogger() });
+    }
 
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
     const requiresGuardedSnapshot =
@@ -2247,8 +2248,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     const { stepLeaseHandoff, ...leafArgs } = args;
     const leaf = step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
     const lease = await this.#acquireStepLease(leafArgs, leaf, stepLeaseHandoff);
-    if (lease === 'drop') return;
-    if (lease === 'defer') throw new DeferredDelivery();
+    if (lease === 'drop') {
+      return;
+    }
+
+    if (lease === 'defer') {
+      throw new DeferredDelivery();
+    }
+
     try {
       return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease);
     } finally {
@@ -2262,7 +2269,10 @@ export class WorkflowEventProcessor extends EventProcessor {
    * workflow's runs. Otherwise `undefined`, and its steps run unleased.
    */
   async #leaseStore(workflow: Workflow | undefined): Promise<WorkflowsStorage | undefined> {
-    if (!workflow || workflow.type === 'processor' || workflow.options?.autoRestartActiveRuns === false) return;
+    if (!workflow || workflow.type === 'processor' || workflow.options?.autoRestartActiveRuns === false) {
+      return;
+    }
+
     const store = await this.mastra.getStorage()?.getStore('workflows');
     return store && (await store.supportsRunFencing()) ? store : undefined;
   }
@@ -2279,8 +2289,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     handoff: StepLeaseHandoff | undefined,
   ): Promise<StepLeaseClaim> {
     const store = await this.#leaseStore(args.workflow);
-    if (!store) return UNLEASED_STEP;
+    if (!store) {
+      return UNLEASED_STEP;
+    }
+
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
+    // A resume of the step its holder suspended is a new attempt, so it claims even after a release.
     return acquireStepLease({
       scope: this.mastra,
       store,
@@ -2309,27 +2323,45 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   async #liveStepLeaseElsewhere(event: Event): Promise<RunOwnershipRecord | null> {
     const data = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
-    if (!data?.workflowId || !data.executionPath?.length) return null;
+    if (!data?.workflowId || !data.executionPath?.length) {
+      return null;
+    }
+
     const workflow = this.#resolveLiveWorkflow(data) ?? undefined;
     const store = await this.#leaseStore(workflow);
-    if (!store || !workflow) return null;
+    if (!store || !workflow) {
+      return null;
+    }
+
     const { restart } = data;
     const [index, branch] = data.executionPath;
     let leaf: StepFlowEntry | undefined = workflow.stepGraph[index!];
     // A restart's dispatcher event carries the path of the branch or item it publishes.
     if (leaf?.type === 'parallel' || leaf?.type === 'conditional') {
-      if (branch === undefined || (restart && !restart.isParallelOrConditionalRestarted)) return null;
+      if (branch === undefined || (restart && !restart.isParallelOrConditionalRestarted)) {
+        return null;
+      }
       leaf = leaf.steps[branch];
     } else if (leaf?.type === 'foreach') {
-      if (branch === undefined || (restart && !restart.isForeachRestarted)) return null;
+      if (branch === undefined || (restart && !restart.isForeachRestarted)) {
+        return null;
+      }
     } else if (leaf?.type === 'sleep' || leaf?.type === 'sleepUntil') {
       return null;
     }
-    if (!leaf) return null;
+
+    if (!leaf) {
+      return null;
+    }
+
     const record = await store.getRunOwnership({ runId: this.#stepLeaseKey(data, leaf) });
-    if (!record?.live) return null;
+    if (!record?.live) {
+      return null;
+    }
+
     const handoff = data.stepLeaseHandoff;
-    return handoff && handoff.key === record.runId && handoff.generation === record.generation ? null : record;
+    const handedToThisDelivery = handoff && handoff.key === record.runId && handoff.generation === record.generation;
+    return handedToThisDelivery ? null : record;
   }
 
   /** Evaluates the loop condition after an iteration, then starts the next one or leaves the loop. */
@@ -3759,6 +3791,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           outputOptions,
         },
       });
+
+      // Confirmed only after the publish: if it throws, release() still frees the lease for the redelivery.
       stepLease.confirmHandOff();
       return;
     }
@@ -5160,8 +5194,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         const holder = event.type === 'workflow.step.run' ? await this.#liveStepLeaseElsewhere(event) : null;
         if (holder) {
           this.deliveryAttempts.delete(eventKey);
+          // Recovery restarts top-level runs; a nested run is driven again through its root.
           let root = event.data as { workflowId: string; runId: string; parentWorkflow?: ParentWorkflow };
-          while (root.parentWorkflow) root = root.parentWorkflow;
+          while (root.parentWorkflow) {
+            root = root.parentWorkflow;
+          }
+
           const rechecked = this.mastra.__scheduleWorkflowRecoveryRecheck(
             root.workflowId,
             root.runId,
@@ -5184,7 +5222,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
-      if (err instanceof DeferredDelivery) return { ok: false, retry: true };
+      // Handed back without counting as a failed attempt: no attempt ran here.
+      if (err instanceof DeferredDelivery) {
+        return { ok: false, retry: true };
+      }
+
       if (isWorkflowStepConflictError(err) && (err.reason === 'stale' || err.reason === 'completed')) {
         this.deliveryAttempts.delete(eventKey);
         return { ok: true };

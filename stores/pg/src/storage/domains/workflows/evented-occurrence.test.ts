@@ -344,7 +344,10 @@ describe('Postgres evented occurrence replay', () => {
     const refused = Promise.withResolvers<void>();
     const claims = vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
       const result = await claim(args);
-      if (args.runId.includes('::step:') && !result.acquired) refused.resolve();
+      if (args.runId.includes('::step:') && !result.acquired) {
+        refused.resolve();
+      }
+
       return result;
     });
     try {

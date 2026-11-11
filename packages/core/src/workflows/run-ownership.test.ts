@@ -21,7 +21,10 @@ describe('renewWorkflowLease', () => {
     const slow = Promise.withResolvers<void>();
     // The store stalls on the first renewal for several intervals.
     const renewals = vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
-      if (renewals.mock.calls.length === 1) await slow.promise;
+      if (renewals.mock.calls.length === 1) {
+        await slow.promise;
+      }
+
       return renew(args);
     });
     const onError = vi.fn();

@@ -17,29 +17,39 @@ const UNFENCED: WorkflowRunOwnership = { release: async () => {} };
  * each run of it settles, until the returned function is called. A tick that
  * is running when the chain is stopped finishes, and nothing runs after it.
  * The timer is unref'd and stays the one created here, so every tick runs in
- * the async context this function was called in.
+ * the async context this function was called in. `tick` reports its own
+ * failures and must not reject.
  */
 export function repeatAfterSettled(tick: () => Promise<void>, intervalMs: number): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout>;
+
   const arm = () => {
+    // `run` never rejects: `tick` handles its own errors.
     timer = setTimeout(() => void run(), intervalMs);
     timer.unref?.();
   };
+
   const run = async () => {
     try {
       await tick();
     } finally {
-      // Runtimes whose timers are plain numbers (Workers, browsers) have no refresh(); a new
-      // timer created here inherits this callback's context, which is the first timer's.
+      // Checked after the tick: stopping while a tick runs must keep it from re-arming.
       if (!stopped) {
+        // Runtimes whose timers are plain numbers (Workers, browsers) have no refresh(); a new
+        // timer created here inherits this callback's context, which is the first timer's.
         const { refresh } = timer as { refresh?: () => unknown };
-        if (refresh) refresh.call(timer);
-        else arm();
+        if (refresh) {
+          refresh.call(timer);
+        } else {
+          arm();
+        }
       }
     }
   };
+
   arm();
+
   return () => {
     stopped = true;
     clearTimeout(timer);
@@ -70,13 +80,19 @@ export function renewWorkflowLease({
   const stop = repeatAfterSettled(async () => {
     try {
       const result = await store.renewRunOwnership({ ...fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
-      if (result.renewed) return;
+      if (result.renewed) {
+        return;
+      }
+
+      // Another claim superseded this one; renewing again could only fail the same way.
       stop();
       onLost(result.record);
     } catch (error) {
+      // A failed write may be transient, so the next tick tries again.
       onError(error);
     }
   }, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS);
+
   return stop;
 }
 
