@@ -143,6 +143,29 @@ describe('generated fs-agents module — executed, not just emitted', () => {
     await expect(runGeneratedModule('invalid')).rejects.toThrow(/agents\/support\/schedules\/broken/);
   });
 
+  // The Cloudflare deployer turns `export const mastra = new Mastra(...)` into a
+  // per-request factory, so the wrapper must register file-based agents onto
+  // every instance that factory returns. (#29996)
+  it('gives each Mastra built by a factory export its own file-based agents (#29996)', async () => {
+    await writeAgent('support');
+    const userEntry = join(dir, 'index.js');
+    await writeFile(
+      userEntry,
+      `import { Mastra } from '@mastra/core/mastra';\nexport const mastra = () => new Mastra({});\n`,
+    );
+
+    const source = await generateFsAgentsModule(userEntry.replaceAll('\\', '/'), await discoverFsAgents(dir));
+    const modPath = join(dir, 'entry-factory.mjs');
+    await writeFile(modPath, source);
+    const mod = await import(pathToFileURL(modPath).href);
+
+    const first = mod.mastra();
+    const second = mod.mastra();
+    expect(first.getAgentById('support').name).toBe('support');
+    expect(second.getAgentById('support').name).toBe('support');
+    expect(first.getAgentById('support')).not.toBe(second.getAgentById('support'));
+  });
+
   it('fails at module evaluation when a subagent declares schedules', async () => {
     await writeAgent('support', {
       subagents: { researcher: { 'heartbeat.js': scheduleModule(`{ cron: '0 3 * * *', prompt: 'hi' }`) } },

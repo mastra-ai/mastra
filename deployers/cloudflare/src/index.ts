@@ -334,7 +334,7 @@ try {
       `,
         }),
         ...inputOptions.plugins,
-        mastraInstanceWrapper(mastraEntryFile),
+        mastraInstanceWrapper(this.configEntryFile ?? mastraEntryFile),
       ];
 
       if (hasPostgresStore) {

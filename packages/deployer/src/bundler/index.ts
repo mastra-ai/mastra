@@ -294,7 +294,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
   protected defaultExternalsPreset = false;
-  private configEntryFile?: string;
+  protected configEntryFile?: string;
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
@@ -302,8 +302,9 @@ export abstract class Bundler extends MastraBase implements IBundler {
 
   /**
    * The CLI bundles a generated wrapper when the project has file-based agents. The
-   * wrapper only re-exports `mastra`, so option extraction can't find the
-   * `new Mastra({...})` call there and must read the user's entry instead.
+   * wrapper only re-exports `mastra`, so anything that reads or rewrites the
+   * `new Mastra({...})` call (option extraction, deployer removal, the public
+   * directory) must use the user's entry instead.
    */
   setConfigEntryFile(entryFile: string | undefined): void {
     this.configEntryFile = entryFile;
@@ -514,6 +515,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
         externalsPreset: externals === true || !!externalsPreset,
         explicitExternals: Array.isArray(externals) ? externals : [],
         alias,
+        configEntryFile: this.configEntryFile,
       },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, projectRoot);
@@ -664,6 +666,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
           projectRoot: entryProjectRoot,
           platform: this.platform,
           bundlerOptions: internalBundlerOptions,
+          configEntryFile: this.configEntryFile,
         },
         this.logger,
       );
@@ -815,7 +818,7 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Bundling Mastra done');
 
       this.logger.info('Copying public files');
-      await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
+      await this.copyPublic(dirname(this.configEntryFile ?? mastraEntryFile), outputDirectory);
       this.logger.info('Done copying public files');
 
       // For Software Factory projects, write a deterministic deployment marker

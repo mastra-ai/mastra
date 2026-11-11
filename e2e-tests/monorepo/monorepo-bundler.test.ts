@@ -157,6 +157,84 @@ class AliasDeployer extends Deployer {
       },
       timeout,
     );
+
+    // The wrapper only imports index.ts, so the build stripped the deployer from the wrapper
+    // and left it, with its build-time dependencies, in the server bundle (#29996).
+    it(
+      'strips the deployer from index.ts when the project has file-based agents (#29996)',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-fs-agents-deployer-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const mastraDir = join(appDir, 'src', 'mastra');
+          const agentDir = join(mastraDir, 'agents', 'fs-helper');
+          await mkdir(agentDir, { recursive: true });
+          await mkdir(join(mastraDir, 'public'), { recursive: true });
+          await Promise.all([
+            writeFile(join(agentDir, 'config.ts'), `export default { model: 'openai/gpt-5-mini' };\n`),
+            writeFile(join(agentDir, 'instructions.md'), 'You are a helper.\n'),
+            writeFile(join(mastraDir, 'public', 'fs-agents-public.txt'), 'public\n'),
+          ]);
+
+          const mastraConfigPath = join(mastraDir, 'index.ts');
+          const originalConfig = await readFile(mastraConfigPath, 'utf-8');
+          const deployerSource = `
+import { Deployer } from '@mastra/deployer';
+
+class FsAgentsDeployer extends Deployer {
+  constructor() { super({ name: 'fs-agents-deployer' }); }
+
+  async bundle(entryFile: string, outputDirectory: string, { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string }) {
+    await this._bundle(\`
+      import { mastra } from '#mastra';
+      import { createNodeServer, getToolExports } from '#server';
+      import { tools } from '#tools';
+      await createNodeServer(mastra, { tools: getToolExports(tools), studio: false });
+    \`, entryFile, { outputDirectory, projectRoot }, toolsPaths);
+  }
+
+  async deploy(_outputDirectory: string) {}
+}
+`;
+          await writeFile(
+            mastraConfigPath,
+            `${deployerSource}\n${originalConfig
+              .replace(
+                'export const mastra = new Mastra({',
+                'export const mastra = new Mastra({\n  deployer: new FsAgentsDeployer(),',
+              )
+              .replace(
+                "externals: ['bcrypt', '@inner/subpath-only']",
+                "externals: ['bcrypt', '@inner/subpath-only', '@mastra/deployer']",
+              )}`,
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+          });
+          const buildOutput = `${buildResult.stdout}\n${buildResult.stderr}`;
+          expect(buildResult.exitCode, buildOutput).toBe(0);
+          expect(buildOutput).not.toContain('Invalid Mastra config');
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          const outputFiles = await readdir(outputDir);
+          const output = (
+            await Promise.all(
+              outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+            )
+          ).join('\n');
+          expect(output).not.toContain('fs-agents-deployer');
+          expect(outputFiles).toContain('fs-agents-public.txt');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
   });
 
   describe('workspace subpath externals', { concurrent: false }, () => {
