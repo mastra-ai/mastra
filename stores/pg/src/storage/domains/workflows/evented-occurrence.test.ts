@@ -6,7 +6,7 @@ import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../../../../packages/core/src/request-context';
 import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
-import { runLivenessKey } from '../../../../../../packages/core/src/workflows/evented/leases';
+import { runLivenessKey, stepOccurrenceKey } from '../../../../../../packages/core/src/workflows/evented/leases';
 import { abandonLease } from '../../../../../../packages/core/src/workflows/evented/test-utils/abandon-lease';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
 import { connectionString, TEST_CONFIG } from '../../test-utils';
@@ -179,6 +179,9 @@ describe('Postgres evented occurrence replay', () => {
             ? driver.events.find(event => event.type === 'workflow.step.end' && event.data.workflowId === body.id)!
             : driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
         interrupted.mockRestore();
+        // The worker died: the body's step lease lapses. This live process could still be releasing
+        // it, and a release makes a delivery waiting on it drop the occurrence as handled.
+        await abandonLease(storage, stepOccurrenceKey(run.runId, [0], 0));
         const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
         await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
         await driver.redeliverEvent(original);
