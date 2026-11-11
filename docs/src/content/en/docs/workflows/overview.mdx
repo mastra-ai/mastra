@@ -522,7 +522,7 @@ On the evented engine, an instance that boots or calls `restart()` leaves a run 
 
 The evented engine stores one `workflows.runOwnership` record per step it runs, including each loop iteration and `foreach` item. Set a `workflows.runOwnership` retention policy and schedule `prune()` as described in [storage retention](/reference/storage/retention), or the table keeps growing.
 
-A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step can also run again when its event arrives after the step finished. Make steps with side effects idempotent, so a repeated step has no additional effect.
+A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step that already saved its result doesn't run again when its event arrives late, for example after a broker redelivery or a `restart()` that raced the step. The run continues from the saved result instead. This applies to workflows that don't set `autoRestartActiveRuns: false`, on a storage adapter with run-ownership support. Other evented workflows, including durable agent workflows, run the step again. Make steps with side effects idempotent, so a repeated step has no additional effect.
 
 A step's `execute` function receives `runId` and `workflowId`. Combine them with the `id` you gave the step in `createStep()`, plus a name for each side effect when the step performs more than one, to build an idempotency key.
 
