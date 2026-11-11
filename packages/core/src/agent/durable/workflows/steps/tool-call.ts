@@ -759,10 +759,40 @@ export function createDurableToolCallStep() {
       let threadExists = state?.threadExists ?? false;
 
       const toolsForTransform = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools ?? rebuiltTools;
-      const messageList: MessageList | undefined = getRunRegistryEntry(
-        runId,
-        mastra as Mastra | undefined,
-      )?.messageList;
+      const hasInvocation = (msg: MastraDBMessage) =>
+        msg.role === 'assistant' &&
+        (msg.content?.parts ?? []).some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+        );
+      let messageList: MessageList | undefined = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.messageList;
+      // The LLM step only refreshes the run registry of the process it ran in. When this
+      // step runs in another process (step-guarded store + shared PubSub), the registry
+      // list is missing or stale, without the assistant message carrying this call (#30123).
+      // Take that message from the transcript the LLM step stored, so the pre-suspension
+      // flush and the suspension metadata reach memory. Only the invocation is added as a
+      // response: earlier context stays out of the flush (#25978). Resumes recover from
+      // memory below.
+      if (workflowResumeData === undefined && !messageList?.get.all.db().some(hasInvocation)) {
+        const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        const messageListState = await readMessageListState(params, llmOutput ?? {});
+        const invocation = messageListState
+          ? createRunMessageList({ mastra, threadId: state?.threadId, resourceId: state?.resourceId })
+              .deserialize(messageListState)
+              .get.all.db()
+              .findLast(hasInvocation)
+          : undefined;
+        const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+        if (entry?.messageList?.get.all.db().some(hasInvocation)) {
+          // A parallel sibling call already added the invocation while we read the
+          // transcript; share its list so neither call's suspension metadata is overwritten.
+          messageList = entry.messageList;
+        } else if (invocation) {
+          // Add to a stale list in place: the caller's MastraModelOutput holds that instance.
+          messageList ??= createRunMessageList({ mastra, threadId: state?.threadId, resourceId: state?.resourceId });
+          messageList.add(invocation, 'response');
+          if (entry) entry.messageList ??= messageList;
+        }
+      }
       // Hold suspension chunks/events until the engine has saved the suspended
       // snapshot, when the running engine supports that (#26435).
       const publishAfterPersist = async (publish: () => Promise<void>) => {
@@ -782,11 +812,6 @@ export function createDurableToolCallStep() {
       let resumeMessageList = messageList;
       // Observational memory loads history in the LLM step, which a cold resume skips.
       // Recover the persisted invocation before clearing or replacing its metadata.
-      const hasInvocation = (msg: MastraDBMessage) =>
-        msg.role === 'assistant' &&
-        (msg.content?.parts ?? []).some(
-          part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
-        );
       if (
         workflowResumeData !== undefined &&
         memory &&
@@ -809,7 +834,7 @@ export function createDurableToolCallStep() {
           }).add(messages, 'memory');
         }
       }
-      // Replayed step transcripts supply context only, not messages to persist.
+      // On resume, replayed step transcripts supply context only, not messages to persist.
       let contextMessageList = messageList;
       if (!contextMessageList) {
         const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
