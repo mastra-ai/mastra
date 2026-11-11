@@ -420,7 +420,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-`afterToolCall` must return `void` (or `Promise<void>`). Await your storage call, but don't return its result. If the storage call throws, the tool call fails with that error, so catch it inside the hook if audit logging should be best-effort. `afterToolCall` doesn't run for calls skipped by `beforeToolCall` or for declined [tool approvals](/docs/agents/human-in-the-loop), so record those decisions where you handle them.
+`afterToolCall` must return `void` (or `Promise<void>`). Await your storage call, but don't return its result. If the storage call throws, the tool call fails with that error, so catch it inside the hook if audit logging should be best-effort. `afterToolCall` doesn't run for calls skipped by `beforeToolCall` or for declined [pre-execution approvals](/docs/agents/human-in-the-loop#pre-execution-approval), so record those decisions where you handle them.
 
 `beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely, the agent receives `output` as the tool result:
 
