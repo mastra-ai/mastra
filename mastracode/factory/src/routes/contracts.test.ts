@@ -26,6 +26,7 @@ import {
 } from './contracts.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { ProjectRoutes } from './projects.js';
+import { SandboxEnvRoutes } from './sandbox-envs.js';
 import { SkillRoutes } from './skills.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -78,7 +79,13 @@ function registeredFactoryRoutes() {
     storage: {},
     boards: {},
   } as never).routes();
-  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes];
+  const sandboxEnvs = new SandboxEnvRoutes({
+    auth: {},
+    projects: {},
+    sandboxEnvs: {},
+    writable: true,
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes, ...sandboxEnvs];
 }
 
 describe('Factory route contracts', () => {

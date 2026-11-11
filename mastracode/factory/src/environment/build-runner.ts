@@ -13,7 +13,7 @@ import type { ScheduleService } from './build-schedule.js';
 import { createEnvironmentBuildWorkflow, ENVIRONMENT_BUILD_WORKFLOW_ID } from './build-workflow.js';
 import type { EnvironmentBuildWorkflowOptions } from './build-workflow.js';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome, EnvironmentBuildTrigger } from './build.js';
-import { environmentBuildContext, errorReason, resolveEnvironmentHeads } from './build.js';
+import { environmentBuildContextWithEnv, errorReason, resolveEnvironmentHeads } from './build.js';
 
 export type StartEnvironmentBuild = (
   projectId: string,
@@ -88,7 +88,15 @@ export class EnvironmentBuildRunner {
       project.activeTemplateHeads ??
       (await resolveEnvironmentHeads(sourceControl, project, environment));
     return {
-      ctx: environmentBuildContext(project, environment, heads, sourceControl.versionControl),
+      ctx: (
+        await environmentBuildContextWithEnv(
+          project,
+          environment,
+          heads,
+          sourceControl.versionControl,
+          this.#deps.sandboxEnvs,
+        )
+      ).ctx,
       settings: environment.settings,
     };
   }

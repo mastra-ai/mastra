@@ -953,6 +953,7 @@ describe('MastraFactory.prepare', () => {
       'memory-settings',
       'boards',
       'custom-providers',
+      'sandbox-envs',
       'queue-health',
       'integrations',
       'projects',
