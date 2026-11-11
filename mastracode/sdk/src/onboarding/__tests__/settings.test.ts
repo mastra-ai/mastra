@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +7,7 @@ import { resolveExperimentalAgent } from '../../experimental-agent.js';
 import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
+  expandHome,
   getCustomProviderId,
   loadSettings,
   migrateAccountPreferences,
@@ -1453,6 +1454,64 @@ describe('createBrowserFromSettings — stagehand model', () => {
     const settings = stagehandSettings({ env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' });
     const browser = await createBrowserFromSettings({ ...settings, cdpUrl: 'ws://localhost:9222/devtools/browser/x' });
     expect(configuredModel(browser)).toBe('anthropic/claude-sonnet-4-5');
+  });
+});
+
+describe('expandHome', () => {
+  it.each([
+    ['~', homedir()],
+    ['~/profile', `${homedir()}/profile`],
+    ['~\\profile', `${homedir()}\\profile`],
+    ['~another-user/profile', '~another-user/profile'],
+    ['/tmp/~profile', '/tmp/~profile'],
+  ])('expands only the current user home in %s', (path, expected) => {
+    expect(expandHome(path)).toBe(expected);
+  });
+});
+
+describe('createBrowserFromSettings — saved browser paths', () => {
+  it('expands persisted Stagehand profile and executable paths before browser creation', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-paths-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        browser: { enabled: true, provider: 'stagehand', profile: '~/profile', executablePath: '~/chrome' },
+      }),
+    );
+    try {
+      const browser = await createBrowserFromSettings(loadSettings(file).browser);
+      const config = (browser as unknown as { stagehandConfig: { profile: string; executablePath: string } })
+        .stagehandConfig;
+      expect(config.profile).toBe(`${homedir()}/profile`);
+      expect(config.executablePath).toBe(`${homedir()}/chrome`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('expands persisted AgentBrowser storage state and profile paths before browser creation', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-paths-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        browser: {
+          enabled: true,
+          provider: 'agent-browser',
+          profile: '~/profile',
+          agentBrowser: { storageState: '~/state.json' },
+        },
+      }),
+    );
+    try {
+      const browser = await createBrowserFromSettings(loadSettings(file).browser);
+      const config = (browser as unknown as { browserConfig: { profile: string; storageState: string } }).browserConfig;
+      expect(config.profile).toBe(`${homedir()}/profile`);
+      expect(config.storageState).toBe(`${homedir()}/state.json`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

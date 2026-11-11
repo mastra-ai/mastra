@@ -5,6 +5,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { OMModel } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -1727,6 +1728,10 @@ export interface CreateBrowserOptions {
   chatModelId?: string;
 }
 
+export function expandHome(path: string): string {
+  return path.replace(/^~(?=$|[\\/])/, homedir());
+}
+
 /**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
@@ -1740,7 +1745,9 @@ export async function createBrowserFromSettings(
     return undefined;
   }
 
-  const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
+  const { provider, headless, viewport, cdpUrl, stagehand, agentBrowser } = settings;
+  const profile = settings.profile ? expandHome(settings.profile) : undefined;
+  const executablePath = settings.executablePath ? expandHome(settings.executablePath) : undefined;
 
   // Chrome only allows one process per profile directory, so force 'shared' scope
   // when a profile is set. Otherwise use the user's setting (or provider default).
@@ -1799,7 +1806,7 @@ export async function createBrowserFromSettings(
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
     const agentBrowserOpts = {
-      storageState: agentBrowser?.storageState,
+      storageState: agentBrowser?.storageState ? expandHome(agentBrowser.storageState) : undefined,
       recording: browserRecordingOptions(),
     };
     return cdpUrl

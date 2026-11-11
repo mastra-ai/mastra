@@ -1,4 +1,3 @@
-import { homedir } from 'node:os';
 import type {
   BrowserProvider,
   BrowserSettings,
@@ -10,6 +9,7 @@ import type {
 import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
+  expandHome,
   loadSettings,
   parseViewportInput,
   resolveStagehandModel,
@@ -453,7 +453,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       return;
     }
 
-    const expandedValue = value.trim().replace(/^~/, homedir());
+    const expandedValue = expandHome(value.trim());
 
     switch (key) {
       case 'profile':
@@ -811,7 +811,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
     const exportableBrowser = browserInstance as StorageStateExportBrowser;
 
-    const expandedPath = exportPath.replace(/^~/, homedir());
+    const expandedPath = expandHome(exportPath);
 
     try {
       await exportableBrowser.exportStorageState(expandedPath);
@@ -958,7 +958,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         ctx.showInfo('Browser setup cancelled.');
         return;
       }
-      executablePath = execPath.replace(/^~/, homedir());
+      executablePath = expandHome(execPath);
     } else if (launchMode === 'Connect via CDP') {
       const cdpUrlInput = await askText(ctx, 'CDP WebSocket URL (e.g., ws://localhost:9222):', cdpUrl);
       if (cdpUrlInput === null) {
@@ -995,7 +995,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           ctx.showInfo('Browser setup cancelled.');
           return;
         }
-        profile = profilePath.replace(/^~/, homedir());
+        profile = expandHome(profilePath);
       } else {
         profile = undefined;
       }
