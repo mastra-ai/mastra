@@ -343,7 +343,15 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    const filtered = filterMessagesForPersistence(messages);
+    // Stamp the thread on every row before it reaches storage: `saveMessages` takes no thread
+    // argument, so adapters either coerce the missing thread (in-memory stores the row under ''
+    // and it becomes unreadable) or reject the save outright (pg/libsql throw). Messages that
+    // already carry a thread (earlier-turn merges, callers that stamp explicitly) are left alone.
+    const filtered = filterMessagesForPersistence(messages).map(message => ({
+      ...message,
+      threadId: message.threadId || threadId,
+      resourceId: message.resourceId || resourceId,
+    }));
 
     if (filtered.length === 0) {
       return;
