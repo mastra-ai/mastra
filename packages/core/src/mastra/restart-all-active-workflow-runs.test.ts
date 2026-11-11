@@ -122,7 +122,10 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     const storage = new MockStore();
     const mastra = new Mastra({ logger: false, storage, workflows: { workflow }, recovery });
 
-    for (let i = 0; i < runCount; i++) await persistActiveRun(storage, workflow.id, `run-${i}`);
+    for (let i = 0; i < runCount; i++) {
+      await persistActiveRun(storage, workflow.id, `run-${i}`);
+    }
+
     // Counts the restarts blocked at once. run-0 fails before it blocks, so the peak does not
     // depend on where the store lists it.
     let inFlight = 0;
@@ -133,7 +136,10 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     vi.spyOn(workflow, 'createRun').mockImplementation(async ({ runId } = {}) => {
       return {
         restart: async () => {
-          if (runId === 'run-0') throw new Error('boom');
+          if (runId === 'run-0') {
+            throw new Error('boom');
+          }
+
           inFlight++;
           peak = Math.max(peak, inFlight);
           peakWaiters.filter(waiter => peak >= waiter.peak).forEach(waiter => waiter.resolve());
@@ -148,9 +154,11 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     });
 
     let settled = false;
+    // Awaited by every test through `sweep`, which reports a rejection there.
     const sweep = mastra.restartAllActiveWorkflowRuns().then(() => {
       settled = true;
     });
+
     return {
       sweep,
       isSettled: () => settled,

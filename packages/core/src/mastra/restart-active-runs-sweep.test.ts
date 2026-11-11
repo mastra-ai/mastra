@@ -105,6 +105,7 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
         await persistActiveRun(storage, runId);
         await store.claimRunOwnership({ runId: liveKeys[i]!, ownerId: 'other-process', leaseMs: 60_000 });
       }
+
       await persistActiveRun(storage, 'orphaned');
       const loads = await countLoads(storage);
 
@@ -131,6 +132,7 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
         await store.claimRunOwnership({ runId, ownerId: 'other-process', leaseMs: 60_000 });
       }
     }
+
     const listCalls = vi.spyOn(store, 'listWorkflowRuns');
     const ownershipReads = vi.spyOn(store, 'getRunOwnerships');
 
@@ -151,14 +153,20 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
     const store = (await storage.getStore('workflows'))!;
     const mastra = startReplica(storage, 'default', () => {});
     const runIds = Array.from({ length: 150 }, (_, i) => `run-${i}`);
-    for (const runId of runIds) await persistActiveRun(storage, runId);
+    for (const runId of runIds) {
+      await persistActiveRun(storage, runId);
+    }
+
     const list = store.listWorkflowRuns.bind(store);
     vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async (args = {}) => {
       const listed = await list(args);
       // A sleep step suspends every run right after the sweep listed them as running.
       if (args.workflowName === 'recovered-wf' && args.status === 'running') {
-        for (const run of listed.runs) await persistActiveRun(storage, run.runId, { status: 'waiting' });
+        for (const run of listed.runs) {
+          await persistActiveRun(storage, run.runId, { status: 'waiting' });
+        }
       }
+
       return listed;
     });
     // The restarts never finish the runs, so every run is still waiting when the sweep lists that status.
@@ -188,7 +196,9 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
       { workflowConcurrency: 1 },
     );
     const runIds = ['orphaned-a', 'orphaned-b', 'orphaned-c'];
-    for (const runId of runIds) await persistActiveRun(storage, runId);
+    for (const runId of runIds) {
+      await persistActiveRun(storage, runId);
+    }
 
     const sweep = mastra.restartAllActiveWorkflowRuns();
 

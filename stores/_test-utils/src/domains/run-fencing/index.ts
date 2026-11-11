@@ -245,7 +245,10 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('reads many runs at once: live, released and expired records, and nothing for unclaimed runs', async ctx => {
-        if (!(await workflows.supportsRunFencing())) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) {
+          return ctx.skip();
+        }
+
         const prefix = `run-${randomUUID()}`;
         const live = await claimed(`${prefix}-live`, 'owner-live');
         const released = await claimed(`${prefix}-released`, 'owner-released');

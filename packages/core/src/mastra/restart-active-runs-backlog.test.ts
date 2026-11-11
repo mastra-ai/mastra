@@ -36,10 +36,17 @@ function backloggedPubSub(delayMs: number | 'never'): PubSub {
     get(target, prop) {
       if (prop === 'publish') {
         return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
-          if (topic !== 'workflows' || event.type !== 'workflow.start') return target.publish(topic, event, options);
-          if (delayMs !== 'never') setTimeout(() => void target.publish(topic, event, options), delayMs);
+          if (topic !== 'workflows' || event.type !== 'workflow.start') {
+            return target.publish(topic, event, options);
+          }
+
+          if (delayMs !== 'never') {
+            // The in-process emitter's publish does not reject, so the late delivery needs no handler.
+            setTimeout(() => void target.publish(topic, event, options), delayMs);
+          }
         };
       }
+
       const value = Reflect.get(target, prop, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
@@ -89,7 +96,10 @@ describe('boot-time recovery of evented runs behind a worker backlog (#28712)', 
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const runIds = ['orphaned-a', 'orphaned-b', 'orphaned-c', 'orphaned-d'];
-    for (const runId of runIds) await persistActiveRun(storage, runId);
+    for (const runId of runIds) {
+      await persistActiveRun(storage, runId);
+    }
+
     const executions: string[] = [];
     // B's workers only get to the restarts three lease TTLs after B published them.
     const b = await startReplica(storage, 'B', executions, backloggedPubSub(WORKFLOW_RUN_LEASE_TTL_MS * 3));
