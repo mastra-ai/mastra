@@ -262,7 +262,7 @@ If no access token is provided via config or environment variable, the exporter:
 
 ### Batching
 
-Tracing spans, logs, and metrics use collector batches. Scores and feedback also use batches when they include `correlationContext`:
+The exporter batches traces, logs, and metrics, along with feedback and scores that already include their trace details:
 
 - Flushes when total buffered event count reaches `maxBatchSize`
 - Flushes when `maxBatchWaitMs` elapsed since the first buffered signal in the batch
@@ -270,17 +270,11 @@ Tracing spans, logs, and metrics use collector batches. Scores and feedback also
 
 ### Feedback and score delivery
 
-Feedback and score events with supplied `correlationContext` use the collector batch endpoints. An empty context object also selects this path.
+Feedback and scores received by the exporter can reference a trace stored in Platform using its trace ID and an optional span ID. If the record needs details from that trace, the exporter sends it immediately instead of waiting for a batch.
 
-When context is absent, the exporter sends each record immediately to `POST /api/observability/feedback` or `POST /api/observability/scores`. These requests require a `traceId`. Records without either context or a trace ID are logged and dropped.
+When the trace or span hasn't arrived yet, or its lookup is temporarily unavailable, the exporter retries for up to six attempts or 30 seconds. It preserves the record's ID and timestamp across attempts. Other failures are logged and the record is dropped. These individual requests continue during a telemetry quota pause; the batch retry setting, `maxRetries`, doesn't apply to them.
 
-Each request uses the origin of its configured feedback or score endpoint and the exporter's bearer token. The exporter sends `X-Mastra-Project-Id` when the project is configured or included in the collector URL. IDs, timestamps, and payloads stay unchanged across attempts.
-
-The exporter retries `404 TRACE_NOT_FOUND`, `404 SPAN_NOT_FOUND`, and `503 ANCHOR_LOOKUP_UNAVAILABLE` responses. Delivery stops after six attempts or 30 seconds, whichever comes first. Backoff starts at 500 milliseconds, doubles up to four seconds, and honors longer `Retry-After` delays within the deadline. Other HTTP errors, network failures, and timeouts are logged and dropped. `maxRetries` applies only to collector batches.
-
-Any successful HTTP response completes delivery without waiting for the record to become readable. `flush()` and `shutdown()` wait for pending requests and retries alongside buffered telemetry. When a record needs context resolution, the exporter flushes buffered telemetry to help its trace reach Platform and sends the individual request even if collector uploads are paused by quota exhaustion.
-
-This behavior applies to events received by the exporter. It doesn't change whether other APIs resolve context locally or notify exporters.
+Call `flush()` before ending a short-lived process, or `shutdown()` when stopping the exporter, to wait for pending deliveries and retries. These methods finish when records have been accepted or dropped after a failure. Accepted feedback and scores may take time to appear in Platform.
 
 ### Byte batching
 
@@ -341,7 +335,7 @@ Every collector request (batch uploads and the traces recovery probe) includes t
 
 - `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
 - `onLogEvent()` and `onMetricEvent()` buffer events
-- `onScoreEvent()` and `onFeedbackEvent()` select batch or individual delivery based on supplied context
+- `onScoreEvent()` and `onFeedbackEvent()` deliver records as described in [Feedback and score delivery](#feedback-and-score-delivery)
 - All supported signal batches are uploaded to their matching publish endpoints during `flush()` and `shutdown()`
 
 ## Span wire format

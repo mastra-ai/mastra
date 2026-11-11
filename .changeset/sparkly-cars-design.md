@@ -2,8 +2,7 @@
 '@mastra/observability': minor
 ---
 
-Added Platform context resolution for feedback and score events without supplied correlation context. MastraPlatformExporter sends these records individually, retries temporary anchor lookup failures, and drains pending deliveries during flush and shutdown. Records with supplied context retain collector batching.
-
+Added support for exporting feedback and scores that need trace details from Platform. The exporter retries while waiting for a trace to arrive, and `flush()` and `shutdown()` wait for pending deliveries to finish.
 
 ```typescript
 import { MastraPlatformExporter } from '@mastra/observability';
