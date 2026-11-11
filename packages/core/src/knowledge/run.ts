@@ -1,4 +1,4 @@
-import { getRunAgentScopes } from '../agent/scopes';
+import { getRunAgentScopes, withoutIdentityAgentScopes } from '../agent/scopes';
 import type {
   KnowledgePage,
   KnowledgeProvenance,
@@ -209,7 +209,9 @@ export function knowledgeRunPrincipals(
   runtime: KnowledgeScopeRuntime,
   context: KnowledgeRunContext | undefined,
 ): string[] {
-  const raw = getRunAgentScopes(context?.requestContext);
+  // Identity comes only from the resolved Memory ids below. Core already strips resource:/thread: from
+  // the run's scopes; one written there anyway is raw Memory syntax, not a canonical address.
+  const raw = withoutIdentityAgentScopes(getRunAgentScopes(context?.requestContext));
   // Memory ids are app-chosen and may contain colons (`slack:U123`), so they're bound encoded rather
   // than parsed back out of a raw `resource:<id>` string.
   const memory: string[] = [];
