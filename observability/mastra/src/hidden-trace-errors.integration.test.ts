@@ -85,7 +85,7 @@ const validateIban = createTool({
   description: 'Checks an IBAN',
   inputSchema: z.object({ iban: z.string() }),
   execute: async ({ iban }) => {
-    throw new Error(`Invalid IBAN: ${iban}`);
+    throw new Error(`Invalid IBAN\n    at ${iban}`);
   },
 });
 
@@ -193,14 +193,15 @@ describe('span errors on a trace that is not hidden', () => {
 });
 
 describe('redactErrorInfo', () => {
-  it('keeps the error identity and replaces a multi-line message in the stack header', () => {
+  it('keeps identity and real frames after a frame-shaped line in a multi-line message', () => {
+    const message = `line one\n    at ${SECRET}`;
     const redacted = redactErrorInfo({
       id: 'TOOL_EXECUTION_FAILED',
       name: 'MastraError',
       domain: 'TOOL',
       category: 'USER',
-      message: `line one ${SECRET}\nline two ${SECRET}`,
-      stack: `MastraError: line one ${SECRET}\nline two ${SECRET}\n    at run (tool.ts:1:1)\n    at next (loop.ts:2:2)`,
+      message,
+      stack: `MastraError: ${message}\n    at run (tool.ts:1:1)\n    at next (loop.ts:2:2)`,
       details: { toolId: 'validateIban', input: SECRET },
     });
 
@@ -211,6 +212,46 @@ describe('redactErrorInfo', () => {
       category: 'USER',
       message: REDACTED_ERROR_MESSAGE,
       stack: 'MastraError: [REDACTED]\n    at run (tool.ts:1:1)\n    at next (loop.ts:2:2)',
+    });
+  });
+
+  it("keeps a wrapped cause's frames when its stack name differs from the exported identity", () => {
+    expect(
+      redactErrorInfo({
+        name: 'MastraError',
+        message: 'Tool execution failed',
+        stack: 'Error: Tool execution failed\n    at execute (tool.ts:1:1)',
+      }),
+    ).toEqual({
+      name: 'MastraError',
+      message: REDACTED_ERROR_MESSAGE,
+      stack: 'MastraError: [REDACTED]\n    at execute (tool.ts:1:1)',
+    });
+  });
+
+  it('drops a stack body that cannot be correlated with the captured message', () => {
+    expect(
+      redactErrorInfo({
+        name: 'Error',
+        message: 'captured message',
+        stack: `Error: different message\n    at ${SECRET}\n    at execute (tool.ts:1:1)`,
+      }),
+    ).toEqual({
+      name: 'Error',
+      message: REDACTED_ERROR_MESSAGE,
+      stack: 'Error: [REDACTED]',
+    });
+
+    expect(
+      redactErrorInfo({
+        name: 'Error',
+        message: 'captured message',
+        stack: 'Error: captured message and untrusted continuation',
+      }),
+    ).toEqual({
+      name: 'Error',
+      message: REDACTED_ERROR_MESSAGE,
+      stack: 'Error: [REDACTED]',
     });
   });
 

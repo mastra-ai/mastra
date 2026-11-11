@@ -54,15 +54,23 @@ export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo:
   return {
     ...identity,
     message: REDACTED_ERROR_MESSAGE,
-    ...(stack !== undefined ? { stack: redactStackHeader(stack, errorInfo.name) } : {}),
+    ...(stack !== undefined ? { stack: redactStackHeader(stack, errorInfo.message, errorInfo.name) } : {}),
     ...(safeDetails && Object.keys(safeDetails).length > 0 ? { details: safeDetails } : {}),
   } as T;
 }
 
-/** A stack starts with `<name>: <message>`, which can span lines; the frames after it are code locations. */
-function redactStackHeader(stack: string, name = 'Error'): string {
-  const firstFrame = stack.search(/\n\s+at /);
-  return `${name}: ${REDACTED_ERROR_MESSAGE}${firstFrame === -1 ? '' : stack.slice(firstFrame)}`;
+/** Preserve stack frames only when they follow the complete captured message. */
+function redactStackHeader(stack: string, message: string, name = 'Error'): string {
+  const redactedHeader = `${name}: ${REDACTED_ERROR_MESSAGE}`;
+  const separator = `: ${message}`;
+  const separatorIndex = stack.indexOf(separator);
+
+  if (separatorIndex <= 0 || stack.slice(0, separatorIndex).includes('\n')) {
+    return redactedHeader;
+  }
+
+  const suffix = stack.slice(separatorIndex + separator.length);
+  return suffix === '' || suffix.startsWith('\n') ? `${redactedHeader}${suffix}` : redactedHeader;
 }
 
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
