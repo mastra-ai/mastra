@@ -139,9 +139,18 @@ export class ProcessorState<OUTPUT = undefined> {
       processor?: Pick<Processor, 'id' | 'spanType' | 'spanName' | 'spanAttributes'>;
     } & Partial<ObservabilityContext>,
   ) {
+    this.startSpan(options);
+  }
+
+  /**
+   * Opens the output stream span. A state can be created before there is a
+   * span to parent it (a data chunk sent before the first model step), so the
+   * runner calls this again once the stream has one.
+   */
+  startSpan(options?: ConstructorParameters<typeof ProcessorState>[0]): void {
     // Only create span if explicitly requested (legacy processors)
     // Workflow processors handle span creation in workflow.ts
-    if (!options?.createSpan || !options.processorName) {
+    if (this.span || !options?.createSpan || !options.processorName) {
       return;
     }
 
@@ -1063,14 +1072,17 @@ export class ProcessorRunner {
             // Get or create state for this processor
             let state = processorStates.get(processor.id);
             if (!state) {
-              state = new ProcessorState<OUTPUT>({
+              state = new ProcessorState<OUTPUT>();
+              processorStates.set(processor.id, state);
+            }
+            if (!state.span && observabilityContext?.tracingContext?.currentSpan) {
+              state.startSpan({
                 processorName: processor.name ?? processor.id,
                 ...observabilityContext,
                 processorIndex: index,
                 createSpan: true,
                 processor,
               });
-              processorStates.set(processor.id, state);
             }
 
             // Track input chunk (before processor transformation)

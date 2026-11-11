@@ -1562,6 +1562,53 @@ describe('Processor Tracing Tests', () => {
 
       await testExporter.finalExpectations();
     });
+
+    it("keeps the structuring model's usage on the agent's trace when a data chunk is sent before the first model step", async () => {
+      const structuringModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: JSON.stringify({ answer: 'Mock response' }) },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 7, totalTokens: 107 } },
+          ]),
+        }),
+      });
+      // Technical: the data chunk reaches the output processors before any model
+      // step, so their stream state is created with no span to parent it.
+      const dataChunkProcessor: Processor = {
+        id: 'data-chunk',
+        processInputStep: async ({ writer, messageList }) => {
+          await writer?.custom({ type: 'data-note', data: {}, transient: true });
+          return messageList;
+        },
+      };
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+        inputProcessors: [dataChunkProcessor],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const stream = await mastra.getAgent('agent').stream('Hello', {
+        structuredOutput: { schema: z.object({ answer: z.string() }), model: structuringModel },
+      });
+      expect(await stream.object).toEqual({ answer: 'Mock response' });
+
+      const structuredOutputSpan = testExporter
+        .getProcessorSpans()
+        .find(span => span.name === 'output stream processor: Structured Output');
+      expect(structuredOutputSpan?.attributes?.internalUsage).toMatchObject({ inputTokens: 100, outputTokens: 7 });
+
+      // Also fails if the structuring agent starts a trace of its own.
+      await testExporter.finalExpectations();
+    });
   });
 
   // ==========================================================================
