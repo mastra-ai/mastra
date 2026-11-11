@@ -56,6 +56,8 @@ export const server = setupServer(
   http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
+  // Ambient sandbox environment variables (Manage Factory); variable tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/sandbox-envs', () => HttpResponse.json({ envs: [], writable: true })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
