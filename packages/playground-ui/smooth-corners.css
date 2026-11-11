@@ -227,9 +227,9 @@
 /* Sizes a class fixes. A minimum stands in for the size: menu rows are `h-auto min-h-*`, count
  * badges `h-5 min-w-5`. */
 @utility h-* {
-  --corner-box: --value(--spacing-*, [length]);
+  --corner-box: --value(--spacing-*, [length], [*]);
   --corner-box: calc(var(--spacing) * --value(number));
-  --corner-h: --value(--spacing-*, [length]);
+  --corner-h: --value(--spacing-*, [length], [*]);
   --corner-h: calc(var(--spacing) * --value(number));
 }
 @utility min-h-* {
@@ -237,24 +237,22 @@
   --corner-box: calc(var(--spacing) * --value(number));
 }
 @utility w-* {
-  --corner-w: --value(--spacing-*, [length]);
+  --corner-w: --value(--spacing-*, [length], [*]);
   --corner-w: calc(var(--spacing) * --value(number));
 }
 @utility min-w-* {
   --corner-w: --value(--spacing-*, [length]);
   --corner-w: calc(var(--spacing) * --value(number));
 }
+/* Width = height by definition, whatever the value (`size-(--cell-size)` included). */
 @utility size-* {
-  --corner-box: --value(--spacing-*, [length]);
-  --corner-box: calc(var(--spacing) * --value(number));
-  --corner-h: --value(--spacing-*, [length]);
-  --corner-h: calc(var(--spacing) * --value(number));
-  --corner-w: --value(--spacing-*, [length]);
-  --corner-w: calc(var(--spacing) * --value(number));
-}
-@utility aspect-square {
   --corner-square: 1;
+  --corner-box: --value(--spacing-*, [length], [*]);
+  --corner-box: calc(var(--spacing) * --value(number));
 }
 @utility size-full {
+  --corner-square: 1;
+}
+@utility aspect-square {
   --corner-square: 1;
 }

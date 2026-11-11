@@ -68,6 +68,7 @@ describe('smooth corners', () => {
       'h-5',
       'h-control-md',
       'size-6',
+      'size-(--cell)',
       'w-4',
       'aspect-square',
     ]);
@@ -124,7 +125,8 @@ describe('smooth corners', () => {
     expect(rulesFor(css, '.h-5')).toContain('--corner-box: calc(var(--spacing) * 5)');
     expect(rulesFor(css, '.h-control-md')).toContain('--corner-box: var(--spacing-control-md)');
     expect(rulesFor(css, '.size-6')).toContain('--corner-box: calc(var(--spacing) * 6)');
-    expect(rulesFor(css, '.size-6')).toContain('--corner-w: calc(var(--spacing) * 6)');
+    expect(rulesFor(css, '.size-6')).toContain('--corner-square: 1');
+    expect(rulesFor(css, '.size-\\(--cell\\)')).toContain('--corner-square: 1');
     expect(rulesFor(css, '.w-4')).toContain('--corner-w: calc(var(--spacing) * 4)');
     expect(rulesFor(css, '.aspect-square')).toContain('--corner-square: 1');
   });
