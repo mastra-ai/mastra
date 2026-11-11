@@ -6100,6 +6100,49 @@ export class Session<TState = unknown> {
   }
 
   /**
+   * Register a suspension that lives only in storage, so {@link claimToolSuspension}
+   * can find it. A run parked by a process that has since gone away stays
+   * suspended in storage, but this session never saw it park. Only an exact
+   * `toolCallId` on the active thread is looked up, and only when exactly one
+   * stored, non-approval suspension matches.
+   */
+  async restoreStoredToolSuspension(toolCallId?: string, runId?: string): Promise<void> {
+    if (!toolCallId || this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const threadId = this.thread.getId();
+    if (!threadId) return;
+    const resourceId = this.identity.getResourceId();
+    const matches: Array<{ agent: Agent; runId: string; toolName: string }> = [];
+    for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
+      if (typeof agent.listSuspendedRuns !== 'function') continue;
+      const perPage = 100;
+      for (let page = 0; ; page++) {
+        let result: Awaited<ReturnType<typeof agent.listSuspendedRuns>>;
+        try {
+          result = await agent.listSuspendedRuns({ threadId, resourceId, page, perPage });
+        } catch (error) {
+          if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') break;
+          throw error;
+        }
+        for (const run of result.runs) {
+          if (runId !== undefined && run.runId !== runId) continue;
+          for (const call of run.toolCalls) {
+            if (call.toolCallId !== toolCallId || !call.toolName || call.requiresApproval) continue;
+            matches.push({ agent, runId: run.runId, toolName: call.toolName });
+          }
+        }
+        if ((page + 1) * perPage >= result.total) break;
+      }
+    }
+    if (matches.length !== 1) return;
+    // Another request may have restored it while this one was reading storage.
+    if (this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const match = matches[0]!;
+    const address = { threadId, resourceId, runId: match.runId, toolCallId };
+    this.suspensions.register({ ...address, toolName: match.toolName });
+    this.#suspensionAgents.set(this.suspensions.get(address)!, match.agent);
+  }
+
+  /**
    * Claim the parked suspension a {@link respondToToolSuspension} call would
    * resume. Returns the resolved tool call id, or a rejection when nothing is
    * pending or another response already claimed it.

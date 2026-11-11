@@ -122,11 +122,29 @@ describe('a suspension stored by a process that is gone', () => {
     });
     expect(runs.flatMap(run => run.toolCalls.map(call => call.toolCallId))).toContain('call-1');
 
+    // What the tool-suspension route does before claiming.
+    await reopened.restoreStoredToolSuspension('call-1');
     const claim = reopened.claimToolSuspension('call-1');
     expect(claim).toMatchObject({ accepted: true, toolCallId: 'call-1' });
     if (!claim.accepted) return;
 
-    await reopened.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'Yes', address: claim.address } as any);
+    await reopened.respondToToolSuspension({ resumeData: 'Yes', address: claim.address });
     await vi.waitFor(() => expect(resumed).toEqual(['Yes']));
+  });
+
+  it('still refuses a call that nothing in storage is waiting on', async () => {
+    const { makeController } = await setup();
+    const first = await makeController('code');
+    const parked = await first.createSession({ id: 'session-1', ownerId: 'owner-1' });
+    await parked.thread.create();
+    const threadId = parked.thread.getId()!;
+    await parked.sendMessage({ content: 'Read /x' });
+
+    const second = await makeController('code');
+    const reopened = await second.createSession({ id: 'session-1', ownerId: 'owner-1', threadId } as never);
+    await reopened.restoreStoredToolSuspension('call-unknown');
+    expect(reopened.claimToolSuspension('call-unknown')).toEqual({ accepted: false, reason: 'no_pending_suspension' });
+    await reopened.restoreStoredToolSuspension('call-1', 'other-run');
+    expect(reopened.claimToolSuspension('call-1', 'other-run')).toMatchObject({ accepted: false });
   });
 });

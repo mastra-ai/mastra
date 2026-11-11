@@ -29,5 +29,6 @@ describe('useRespondAgentControllerSuspensionMutation', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toMatch(/no longer waiting/);
   });
 });

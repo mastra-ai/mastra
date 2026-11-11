@@ -64,15 +64,23 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
   // Pinned: these reach every entry, and a fresh pair each token would redraw the lot.
   const onApprove = useCallback(
     async (toolCallId: string, approved: boolean, promptId: string) => {
-      await approve({ toolCallId, approved });
-      resolvePrompt(promptId);
+      const delivered = await approve({ toolCallId, approved }).then(
+        () => true,
+        // The mutation already reported it; keep the prompt so the card stays truthful.
+        () => false,
+      );
+      if (delivered) resolvePrompt(promptId);
     },
     [approve, resolvePrompt],
   );
   const onRespond = useCallback(
     async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
-      await respond({ toolCallId, resumeData });
-      resolvePrompt(promptId);
+      const delivered = await respond({ toolCallId, resumeData }).then(
+        () => true,
+        // The mutation already reported it; keep the prompt so the card stays truthful.
+        () => false,
+      );
+      if (delivered) resolvePrompt(promptId);
     },
     [respond, resolvePrompt],
   );
