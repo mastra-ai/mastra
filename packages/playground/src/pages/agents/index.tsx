@@ -1,11 +1,18 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useListSearch } from '@mastra/playground-ui/hooks/use-list-search';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useAgents } from '@mastra/react/hooks/agents';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
@@ -24,6 +31,7 @@ const crumbs = [navCrumb('/agents')];
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
   const [search, setSearch] = useState('');
+  const searchField = useListSearch({ onSearch: setSearch });
   const [view, setView] = useState<AgentsView>('list');
   const [sort, setSort] = useState<AgentsSort>('default');
 
@@ -91,7 +99,23 @@ function Agents() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+              <InputGroup size="sm" className="w-full max-w-120">
+                <InputGroupAddon>
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  {...searchField.inputProps}
+                  aria-label="Search agents"
+                  placeholder="Search by name or instructions"
+                />
+                {searchField.value && (
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
+                      <XIcon />
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                )}
+              </InputGroup>
             </div>
           </ActionRow.Start>
           <ActionRow.End>

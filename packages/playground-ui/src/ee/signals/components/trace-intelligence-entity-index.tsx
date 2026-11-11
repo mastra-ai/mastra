@@ -1,5 +1,5 @@
 import type { SignalCatalogEntry, ThemeLearningEntity } from '@mastra/client-js';
-import { Columns2, List } from 'lucide-react';
+import { Columns2, List, SearchIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -17,8 +17,9 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ListSearch } from '@/ds/components/ListSearch';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { useListSearch } from '@/hooks/use-list-search';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
 export type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
@@ -72,15 +73,27 @@ function EntityIndexControls({
   TraceIntelligenceEntityIndexProps,
   'search' | 'sort' | 'view' | 'onSearchChange' | 'onSortChange' | 'onViewChange' | 'headerAction'
 > & { signalCatalog: readonly SignalCatalogEntry[] }) {
+  const searchField = useListSearch({ value: search, onSearch: onSearchChange });
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="max-w-120 flex-1">
-        <ListSearch
-          value={search}
-          onSearch={onSearchChange}
-          label="Filter agents"
-          placeholder="Filter by agent identifier"
-        />
+        <InputGroup size="sm" className="w-full max-w-120">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            {...searchField.inputProps}
+            aria-label="Search agents"
+            placeholder="Search by agent identifier"
+          />
+          {searchField.value && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
       </div>
       <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
         <TraceIntelligenceExplainer signalCatalog={signalCatalog} />

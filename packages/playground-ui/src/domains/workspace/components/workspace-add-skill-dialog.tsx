@@ -5,7 +5,17 @@ import {
   parseSkillSource,
 } from '@mastra/react/hooks/workspace';
 import type { SkillsShSkill } from '@mastra/react/hooks/workspace';
-import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
+import {
+  Download,
+  ExternalLink,
+  Loader2,
+  CircleSlashIcon,
+  Package,
+  Check,
+  Folder,
+  SearchIcon,
+  XIcon,
+} from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import {
@@ -20,9 +30,9 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { Field, FieldLabel } from '@/ds/components/Field';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
 import { GithubIcon } from '@/ds/icons/GithubIcon';
@@ -199,12 +209,25 @@ export function WorkspaceAddSkillDialog({
         </DialogHeader>
 
         <DialogBody layout="fill">
-          <SearchInput
-            label="Search skills"
-            placeholder="Search skills"
-            value={searchQuery}
-            onValueChange={handleSearch}
-          />
+          <InputGroup>
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search skills"
+              placeholder="Search skills"
+              value={searchQuery}
+              onChange={event => handleSearch(event.target.value)}
+            />
+            {searchQuery && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => handleSearch('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">

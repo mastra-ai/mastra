@@ -1,9 +1,14 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { SavedViewEditor, SavedViewTabs } from '@mastra/playground-ui/components/SavedViews';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Kanban, List } from 'lucide-react';
+import { Kanban, List, SearchIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
@@ -84,20 +89,31 @@ export function BoardViewControls({
         </>
       }
       search={
-        <SearchInput
-          label="Search cards"
-          placeholder={savedViews.applied ? 'Search this view' : 'Search cards'}
-          value={view.search}
-          onValueChange={view.setSearch}
-          size="sm"
-          className="w-48 max-w-full max-sm:min-w-0 max-sm:flex-1"
-          onKeyDown={event => {
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              view.setSearch('');
-            }
-          }}
-        />
+        <InputGroup size="sm" className="w-48 max-w-full max-sm:min-w-0 max-sm:flex-1">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Search cards"
+            placeholder={savedViews.applied ? 'Search this view' : 'Search cards'}
+            onKeyDown={event => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                view.setSearch('');
+              }
+            }}
+            value={view.search}
+            onChange={event => view.setSearch(event.target.value)}
+          />
+          {view.search && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton aria-label="Clear search" onClick={() => view.setSearch('')}>
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
       }
       aside={aside}
       editor={savedViews.draft && <SavedViewEditor views={savedViews} />}

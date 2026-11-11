@@ -20,9 +20,7 @@ import { FilterBar } from '@/ds/components/FilterBar';
 import { Input } from '@/ds/components/Input';
 import { InputGroup, InputGroupInput, InputGroupTextarea } from '@/ds/components/InputGroup';
 import { InputNumber, InputNumberGroup, InputNumberInput } from '@/ds/components/InputNumber';
-import { ListSearch } from '@/ds/components/ListSearch';
 import { SavedViewNameInput } from '@/ds/components/SavedViews/saved-view-name-input';
-import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Textarea } from '@/ds/components/Textarea';
 import { TreeInput } from '@/ds/components/Tree/tree-input';
@@ -49,8 +47,6 @@ const textEntryFields = {
       </InputNumberGroup>
     </InputNumber>
   ),
-  SearchInput: <SearchInput label="Search" value="" onValueChange={ignore} />,
-  ListSearch: <ListSearch label="Search agents" placeholder="Search agents" onSearch={ignore} />,
   ComboboxInput: (
     <ComboboxRoot items={['OpenAI']}>
       <ComboboxInput aria-label="Provider" />

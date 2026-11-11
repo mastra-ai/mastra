@@ -1,4 +1,9 @@
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
@@ -14,6 +19,8 @@ import {
   Palette,
   SlidersHorizontal,
   Wrench,
+  SearchIcon,
+  XIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -155,7 +162,25 @@ export function SettingsNavigation() {
       </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <SearchInput label="Search settings" placeholder="Search settings" value={query} onValueChange={setQuery} />
+          <InputGroup>
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search settings"
+              placeholder="Search settings"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+            />
+            {query && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => setQuery('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
         </div>
       )}
       {filteredGroups.length > 0 ? (

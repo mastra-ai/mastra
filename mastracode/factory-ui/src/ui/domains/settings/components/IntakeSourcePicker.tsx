@@ -10,12 +10,17 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@mastra/playground-ui/components/Drawer';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { Check, Plus, RotateCcw, Trash2, X, SearchIcon } from 'lucide-react';
 import { Fragment, useId, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
@@ -261,14 +266,32 @@ function SourcePickerDrawer({
       <DrawerHeader className="shrink-0">
         <DrawerTitle>{addLabel}</DrawerTitle>
         <div className="mt-3">
-          <SearchInput
-            ref={searchInput}
-            label={`Search ${label}`}
-            placeholder="Search"
-            value={query}
-            onValueChange={setQuery}
-            className="w-full"
-          />
+          <InputGroup className="w-full">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              ref={searchInput}
+              aria-label={`Search ${label}`}
+              placeholder="Search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+            />
+            {query && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  aria-label="Clear search"
+                  onClick={() => {
+                    setQuery('');
+                    searchInput.current?.focus();
+                  }}
+                >
+                  <X />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
         </div>
       </DrawerHeader>
       <DrawerBody className="min-h-0 overflow-x-hidden overflow-y-auto">

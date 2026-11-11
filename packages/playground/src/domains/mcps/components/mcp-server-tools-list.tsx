@@ -1,11 +1,18 @@
 import type { McpServerInfo, McpServerTaskSurface, McpToolInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useListSearch } from '@mastra/playground-ui/hooks/use-list-search';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useMCPServerTools } from '@mastra/react/hooks/mcps';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
 import { useMcpServerTaskSurfaces } from '../hooks/use-mcp-server-tasks';
@@ -84,6 +91,7 @@ function TaskModeBadge({ surface }: { surface: TaskSurface }) {
 
 export function McpServerToolsList({ server }: { server: McpServerInfo }) {
   const [search, setSearch] = useState('');
+  const searchField = useListSearch({ onSearch: setSearch, shortcut: false });
   const { data: tools = {}, isLoading } = useMCPServerTools({ selectedServer: server });
   const { Link, paths } = useLinkComponent();
   const { data: taskSurfaces } = useMcpServerTaskSurfaces(server.id, { enabled: Boolean(server.tasks_capability) });
@@ -107,7 +115,19 @@ export function McpServerToolsList({ server }: { server: McpServerInfo }) {
           Available tools
         </Txt>
         <div className="max-w-120 flex-1">
-          <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" shortcutDisabled />
+          <InputGroup size="sm" className="w-full max-w-120">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput {...searchField.inputProps} aria-label="Search tools" placeholder="Search by name" />
+            {searchField.value && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
         </div>
       </div>
 

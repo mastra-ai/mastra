@@ -1,13 +1,19 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useToolkits } from '@mastra/react/hooks/tool-providers';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { ToolkitConnectionControl } from './toolkit-connection-control';
@@ -220,15 +226,26 @@ export const ToolkitFilterPane = ({
       className="flex h-full min-h-0 flex-col gap-3 border-r border-border px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <SearchInput
-        label="Filter toolkits"
-        size="md"
-        className="flex-none"
-        data-testid={`${TEST_ID_PREFIX}-filter-search`}
-        placeholder="Filter toolkits"
-        value={search}
-        onValueChange={setSearch}
-      />
+      <InputGroup className="flex-none">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Search toolkits"
+          data-testid={`${TEST_ID_PREFIX}-filter-search`}
+          placeholder="Search toolkits"
+          value={search}
+          onChange={event => setSearch(event.target.value)}
+        />
+        {search && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
+              <XIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
 
       <div className="flex shrink-0 items-center gap-2">
         <button

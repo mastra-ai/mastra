@@ -1,11 +1,17 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useProviderTools } from '@mastra/react/hooks/tool-providers';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -25,6 +31,11 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    debouncedSearch(value);
+  };
+
   const { data, isLoading } = useProviderTools({
     providerId: providerId,
     params: {
@@ -38,16 +49,25 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
   return (
     <div className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
       <div className="border-b border-border px-3 py-2.5">
-        <SearchInput
-          label="Search tools"
-          size="sm"
-          placeholder="Search tools"
-          value={query}
-          onValueChange={value => {
-            setQuery(value);
-            debouncedSearch(value);
-          }}
-        />
+        <InputGroup size="sm">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Search tools"
+            placeholder="Search tools"
+            value={query}
+            onChange={event => changeQuery(event.target.value)}
+          />
+          {query && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton aria-label="Clear search" onClick={() => changeQuery('')}>
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
       </div>
 
       <ScrollArea className="h-full">

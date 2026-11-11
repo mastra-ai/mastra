@@ -1,8 +1,14 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ClearFiltersButton } from '@mastra/playground-ui/components/ClearFiltersButton';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { useState } from 'react';
+import { useListSearch } from '@mastra/playground-ui/hooks/use-list-search';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { SCORER_SOURCE_OPTIONS } from './constants';
 
 export interface ScorersToolbarProps {
@@ -22,12 +28,12 @@ export function ScorersToolbar({
   onReset,
   hasActiveFilters,
 }: ScorersToolbarProps) {
-  // Remount the search on Reset so a typed-but-uncommitted term is dropped even when the
-  // controlled `search` value is already '' (ListSearch only resyncs on value change).
-  const [searchKey, setSearchKey] = useState(0);
+  const searchField = useListSearch({ value: search, onSearch: onSearchChange });
 
+  // Clear the field too, so a typed-but-uncommitted term is dropped even when the controlled
+  // `search` value is already '' (the field only resyncs when `search` changes).
   const handleReset = () => {
-    setSearchKey(k => k + 1);
+    searchField.clear();
     onReset?.();
   };
 
@@ -35,13 +41,23 @@ export function ScorersToolbar({
     <ActionRow>
       <ActionRow.Start>
         <div className="max-w-120 flex-1">
-          <ListSearch
-            key={searchKey}
-            label="Search scorers"
-            placeholder="Filter by scorer name"
-            value={search}
-            onSearch={onSearchChange}
-          />
+          <InputGroup size="sm" className="w-full max-w-120">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              {...searchField.inputProps}
+              aria-label="Search scorers"
+              placeholder="Search by scorer name"
+            />
+            {searchField.value && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
         </div>
         <Select value={sourceFilter} onValueChange={onSourceFilterChange}>
           <SelectTrigger aria-label="Source" size="sm" className="w-auto whitespace-nowrap">

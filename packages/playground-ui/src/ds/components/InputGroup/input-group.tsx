@@ -125,8 +125,11 @@ const inputGroupAddonVariants = cva(
         flush: '',
       },
       align: {
-        'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
-        'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
+        // Inset like a Button's icon (the group's `--control-px`, less the ink inset of a
+        // 24px glyph) and spaced from the text by `--control-gap`, so a leading icon in a field
+        // lines up with the icons of the pills beside it.
+        'inline-start': 'order-first pr-(--control-gap) pl-[calc(var(--control-px)-2px)] has-[>button]:pl-1',
+        'inline-end': 'order-last pr-[calc(var(--control-px)-2px)] pl-(--control-gap) has-[>button]:pr-1',
         'block-start': 'order-first w-full justify-start border-b border-border px-3 pt-2 pb-1',
         'block-end': 'order-last w-full justify-start border-t border-border px-3 pt-1 pb-2',
       },

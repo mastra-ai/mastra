@@ -10,7 +10,6 @@ import { Input } from '@/ds/components/Input';
 import { InputGroup, InputGroupInput, InputGroupTextarea } from '@/ds/components/InputGroup';
 import { InputNumber, InputNumberGroup, InputNumberInput } from '@/ds/components/InputNumber';
 import { SavedViewNameInput } from '@/ds/components/SavedViews/saved-view-name-input';
-import { SearchInput } from '@/ds/components/SearchInput';
 import { Textarea } from '@/ds/components/Textarea';
 import { Tree } from '@/ds/components/Tree';
 
@@ -82,11 +81,6 @@ const fields: Array<{
         <InputGroupTextarea aria-label="field" autoComplete={ac} />
       </InputGroup>
     ),
-    explicit: true,
-  },
-  {
-    name: 'SearchInput',
-    render: ac => <SearchInput label="field" value="" onValueChange={() => {}} autoComplete={ac} />,
     explicit: true,
   },
   { name: 'Textarea', render: ac => <Textarea aria-label="field" autoComplete={ac} />, explicit: true },

@@ -1,10 +1,15 @@
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
-import { LockIcon, TriangleAlertIcon } from 'lucide-react';
+import { LockIcon, TriangleAlertIcon, SearchIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -139,15 +144,26 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
         )}
 
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
-          <SearchInput
-            label="Search models"
-            size="md"
-            className="max-w-[30ch] shrink-0"
-            data-testid="model-card-picker-search"
-            placeholder="Search models or providers"
-            value={search}
-            onValueChange={setSearch}
-          />
+          <InputGroup className="max-w-[30ch] shrink-0">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search models"
+              data-testid="model-card-picker-search"
+              placeholder="Search models or providers"
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+            />
+            {search && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
 
           {groups.length === 0 ? (
             <div className="flex min-h-0 items-center justify-center">

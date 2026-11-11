@@ -2,19 +2,25 @@ import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useListSearch } from '@mastra/playground-ui/hooks/use-list-search';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
-import { PlusIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
 
+import { PlusIcon, SearchIcon, XIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
@@ -26,6 +32,7 @@ export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const { canWrite, canUseFavorites } = useBuilderAgentAccess();
   const [search, setSearch] = useState('');
+  const searchField = useListSearch({ onSearch: setSearch });
   // Prefetch and seed the ['builder-available-models'] cache (return value
   // ignored) from the agent list — the entry point users pass through before
   // creating/opening an agent — so the model picker is already warm by the time
@@ -127,7 +134,23 @@ export default function AgentBuilderAgentsPage() {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+                <InputGroup size="sm" className="w-full max-w-120">
+                  <InputGroupAddon>
+                    <SearchIcon />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    {...searchField.inputProps}
+                    aria-label="Search agents"
+                    placeholder="Search by name or description"
+                  />
+                  {searchField.value && (
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
+                        <XIcon />
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  )}
+                </InputGroup>
               </div>
             </ActionRow.Start>
           </ActionRow>

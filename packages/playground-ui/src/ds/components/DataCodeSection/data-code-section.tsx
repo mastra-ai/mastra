@@ -2,7 +2,7 @@ import { Chunk } from '@codemirror/merge';
 import { RangeSetBuilder, Text } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon } from 'lucide-react';
+import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -10,7 +10,7 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
-import { SearchInput } from '@/ds/components/SearchInput';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -166,15 +166,30 @@ export function DataCodeSection({
                 <SearchIcon />
               </Button>
             ) : (
-              <SearchInput
-                label="Search code"
-                placeholder="Search"
-                size="sm"
-                value={searchQuery}
-                onValueChange={setSearchQuery}
-                onClose={() => setSearchMinimized(true)}
-                autoFocus
-              />
+              <InputGroup size="sm">
+                <InputGroupAddon>
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  aria-label="Search code"
+                  placeholder="Search"
+                  autoFocus
+                  value={searchQuery}
+                  onChange={event => setSearchQuery(event.target.value)}
+                />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    aria-label="Close search"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSearchMinimized(true);
+                    }}
+                  >
+                    <XIcon />
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
             ))}
           <ButtonsGroup size="sm">
             <CopyButton content={codeStr || 'No content'} />
@@ -224,13 +239,25 @@ export function DataCodeSection({
               </DialogTitle>
               <div className="flex shrink-0 items-center gap-2">
                 {!expandedMultiline && (
-                  <SearchInput
-                    label="Search code"
-                    placeholder="Search"
-                    size="sm"
-                    value={expandedSearchQuery}
-                    onValueChange={setExpandedSearchQuery}
-                  />
+                  <InputGroup size="sm">
+                    <InputGroupAddon>
+                      <SearchIcon />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      type="search"
+                      aria-label="Search code"
+                      placeholder="Search"
+                      value={expandedSearchQuery}
+                      onChange={event => setExpandedSearchQuery(event.target.value)}
+                    />
+                    {expandedSearchQuery && (
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupButton aria-label="Clear search" onClick={() => setExpandedSearchQuery('')}>
+                          <XIcon />
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    )}
+                  </InputGroup>
                 )}
                 <ButtonsGroup size="sm">
                   <CopyButton content={codeStr || 'No content'} />

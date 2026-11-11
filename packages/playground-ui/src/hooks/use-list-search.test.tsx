@@ -1,8 +1,31 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ListSearch } from './list-search';
+import { useListSearch } from './use-list-search';
+import type { UseListSearchOptions } from './use-list-search';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+
+// A list page's search field, composed the way pages compose it.
+function ListSearchField({ label, ...options }: UseListSearchOptions & { label: string }) {
+  const search = useListSearch(options);
+  return (
+    <InputGroup size="sm">
+      <InputGroupAddon>
+        <SearchIcon />
+      </InputGroupAddon>
+      <InputGroupInput {...search.inputProps} aria-label={label} placeholder="Search by name" />
+      {search.value && (
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton aria-label="Clear search" onClick={search.clear}>
+            <XIcon />
+          </InputGroupButton>
+        </InputGroupAddon>
+      )}
+    </InputGroup>
+  );
+}
 
 const setPlatform = (value: string) => {
   Object.defineProperty(navigator, 'platform', { value, configurable: true });
@@ -19,17 +42,17 @@ afterEach(() => {
   setPlatform(originalPlatform);
 });
 
-const renderListSearch = (props: Partial<React.ComponentProps<typeof ListSearch>> = {}) =>
-  render(<ListSearch onSearch={vi.fn()} label="Filter agents" placeholder="Filter by name" {...props} />);
+const renderListSearch = (props: Partial<React.ComponentProps<typeof ListSearchField>> = {}) =>
+  render(<ListSearchField onSearch={vi.fn()} label="Search agents" {...props} />);
 
-describe('ListSearch keyboard shortcut', () => {
+describe('useListSearch keyboard shortcut', () => {
   it('focuses the search field on Cmd+Shift+F on mac', () => {
     setPlatform('MacIntel');
     renderListSearch();
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search agents' }));
   });
 
   it('focuses the search field on Ctrl+Shift+F off mac', () => {
@@ -38,7 +61,7 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', ctrlKey: true, shiftKey: true });
 
-    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search agents' }));
   });
 
   it('ignores Cmd+F without shift so the browser find bar keeps working', () => {
@@ -47,7 +70,7 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true });
 
-    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Search agents' }));
   });
 
   it('selects the existing value so the next keystroke replaces it', () => {
@@ -56,33 +79,33 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Filter agents' });
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
     expect(input.selectionStart).toBe(0);
     expect(input.selectionEnd).toBe('agent'.length);
   });
 
   it('does not react to the shortcut when it is disabled', () => {
     setPlatform('MacIntel');
-    renderListSearch({ shortcutDisabled: true });
+    renderListSearch({ shortcut: false });
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Search agents' }));
   });
 
   it('leaves the disabled instance alone when two are mounted', () => {
     setPlatform('MacIntel');
     render(
       <>
-        <ListSearch onSearch={vi.fn()} label="Filter agents" placeholder="Filter by name" />
-        <ListSearch onSearch={vi.fn()} label="Filter skills" placeholder="Filter by name" shortcutDisabled />
+        <ListSearchField onSearch={vi.fn()} label="Search agents" />
+        <ListSearchField onSearch={vi.fn()} label="Search skills" shortcut={false} />
       </>,
     );
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
-    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Filter skills' }));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search agents' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Search skills' }));
   });
 
   it('still debounces search input', async () => {
@@ -90,7 +113,7 @@ describe('ListSearch keyboard shortcut', () => {
     const onSearch = vi.fn();
     renderListSearch({ onSearch });
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter agents' }), { target: { value: 'abc' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search agents' }), { target: { value: 'abc' } });
     expect(onSearch).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(300);
@@ -99,7 +122,7 @@ describe('ListSearch keyboard shortcut', () => {
   });
 });
 
-describe('ListSearch clearing', () => {
+describe('useListSearch clearing', () => {
   it('offers no clear button until there is something to clear', () => {
     renderListSearch();
 
@@ -110,7 +133,7 @@ describe('ListSearch clearing', () => {
     vi.useFakeTimers();
     const onSearch = vi.fn();
     renderListSearch({ onSearch });
-    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Filter agents' });
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
 
     fireEvent.change(input, { target: { value: 'abc' } });
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));

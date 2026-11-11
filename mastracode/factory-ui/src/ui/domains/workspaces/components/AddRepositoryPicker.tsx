@@ -9,11 +9,16 @@ import {
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Plus, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { Plus, RefreshCw, RotateCcw, X, SearchIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
@@ -91,15 +96,33 @@ export function AddRepositoryPicker({
       <DrawerHeader className="shrink-0">
         <DrawerTitle>Add repository</DrawerTitle>
         <div className="mt-3 flex items-center gap-2">
-          <SearchInput
-            label="Search repositories"
-            placeholder="Search repositories"
-            value={query}
-            onValueChange={setQuery}
-            ref={searchInput}
-            disabled={Boolean(addingRepository)}
-            className="min-w-0 flex-1"
-          />
+          <InputGroup className="min-w-0 flex-1">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search repositories"
+              placeholder="Search repositories"
+              ref={searchInput}
+              disabled={Boolean(addingRepository)}
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+            />
+            {query && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  aria-label="Clear search"
+                  onClick={() => {
+                    setQuery('');
+                    searchInput.current?.focus();
+                  }}
+                >
+                  <X />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
           {githubConnected && (
             <Button
               variant="ghost"

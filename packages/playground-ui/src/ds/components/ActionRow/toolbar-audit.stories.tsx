@@ -9,6 +9,7 @@ import {
   ListFilterPlusIcon,
   ListIcon,
   NetworkIcon,
+  SearchIcon,
   TagIcon,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -30,8 +31,7 @@ import {
   FILTER_BAR_TIME_RANGE_ITEM,
 } from '@/ds/components/FilterBar/filter-bar-time-range';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
-import { ListSearch } from '@/ds/components/ListSearch';
-import { SearchInput } from '@/ds/components/SearchInput';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
 
@@ -99,6 +99,18 @@ function useRangeFixture(initial: DateRangePreset) {
 
 function TimeRange({ initial, withReset }: { initial: DateRangePreset; withReset?: boolean }) {
   return <FilterBar.TimeRange {...useRangeFixture(initial)} defaultPreset={withReset ? 'last-7d' : undefined} />;
+}
+
+/** A page's search field as the page composes it: an `InputGroup` with a leading search icon. */
+function SearchField({ label, placeholder, className }: { label: string; placeholder: string; className?: string }) {
+  return (
+    <InputGroup size="sm" className={className}>
+      <InputGroupAddon>
+        <SearchIcon />
+      </InputGroupAddon>
+      <InputGroupInput type="search" aria-label={label} placeholder={placeholder} />
+    </InputGroup>
+  );
 }
 
 /** A FilterBar whose time item renders the time range; everything else is a regular chip. */
@@ -290,7 +302,11 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={() => {}} label="Filter agents" placeholder="Filter by name or instructions" />
+                <SearchField
+                  label="Search agents"
+                  placeholder="Search by name or instructions"
+                  className="w-full max-w-120"
+                />
               </div>
             </ActionRow.Start>
             <ActionRow.End>
@@ -309,7 +325,7 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={() => {}} label="Search scorers" placeholder="Filter by scorer name" />
+                <SearchField label="Search scorers" placeholder="Search by scorer name" className="w-full max-w-120" />
               </div>
               <SourceSelect />
               <ClearFiltersButton onClick={() => {}} />
@@ -318,13 +334,7 @@ export const AllToolbars: StoryObj = {
         </Case>
         <Case name="Templates" source="templates-tools.tsx:49">
           <div className="flex flex-wrap gap-1.5">
-            <SearchInput
-              label="Search templates"
-              placeholder="Search templates"
-              size="sm"
-              value=""
-              onValueChange={() => {}}
-            />
+            <SearchField label="Search templates" placeholder="Search templates" />
             <SourceSelect />
             <SourceSelect />
             <ClearFiltersButton onClick={() => {}} />
@@ -399,23 +409,17 @@ export const AllToolbars: StoryObj = {
         </Case>
         <Case name="Projects" source="SearchSortBar.tsx:36">
           <div className="flex items-center gap-1.5">
-            <SearchInput
-              label="Search projects"
-              placeholder="Search projects"
-              size="sm"
-              value=""
-              onValueChange={() => {}}
-            />
+            <SearchField label="Search projects" placeholder="Search projects" />
             <SourceSelect />
           </div>
         </Case>
       </Group>
 
       <Group title="Search icon inset">
-        <Case name="FilterBar input vs SearchInput" source="filter-bar-input.tsx:347, search-input.tsx:45">
+        <Case name="FilterBar input vs search field" source="filter-bar-input.tsx:347, input-group.tsx">
           <div className="flex items-center gap-2">
             <Bar items={[]} placeholder="Filter datasets" />
-            <SearchInput label="Search" placeholder="Search" value="" onValueChange={() => {}} size="sm" />
+            <SearchField label="Search" placeholder="Search" />
           </div>
         </Case>
       </Group>

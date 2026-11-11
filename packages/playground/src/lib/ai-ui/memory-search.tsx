@@ -1,11 +1,16 @@
 import type { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, SearchIcon, XIcon } from 'lucide-react';
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface MemorySearchProps {
@@ -193,14 +198,26 @@ export const MemorySearch = ({
 
   return (
     <div className={cn('flex h-full flex-col', className)} ref={dropdownRef}>
-      <SearchInput
-        label="Search memory"
-        className="shrink-0"
-        placeholder="Search memory"
-        value={query}
-        onValueChange={handleInputChange}
-        onKeyDown={handleKeyDown}
-      />
+      <InputGroup className="shrink-0">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Search memory"
+          placeholder="Search memory"
+          onKeyDown={handleKeyDown}
+          value={query}
+          onChange={event => handleInputChange(event.target.value)}
+        />
+        {query && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton aria-label="Clear search" onClick={() => handleInputChange('')}>
+              <XIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
 
       {(isOpen || (query && (isSearching || results.length === 0))) && (
         <div className={cn(raisedSurfaceStyle, 'mt-2 flex-1 overflow-y-auto rounded-lg')}>

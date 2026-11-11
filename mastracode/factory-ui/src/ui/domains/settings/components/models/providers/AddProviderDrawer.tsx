@@ -7,9 +7,15 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
@@ -128,12 +134,25 @@ export function AddProviderDrawer({
           </DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="flex min-h-0 flex-col gap-3">
-          <SearchInput
-            label="Search providers"
-            placeholder={`Search ${providers.length} providers`}
-            value={search}
-            onValueChange={setSearch}
-          />
+          <InputGroup>
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search providers"
+              placeholder={`Search ${providers.length} providers`}
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+            />
+            {search && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
           {gateway && (
             <>
               <Txt as="p" variant="caption" tone="muted">

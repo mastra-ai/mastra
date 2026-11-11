@@ -1,11 +1,11 @@
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, SearchIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { TopicTraceSummary } from '../types';
 import { getVisibleTraceSummaries } from '../utils';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
 import { useDataListKeyboard } from '@/ds/components/DataList/use-data-list-keyboard';
-import { SearchInput } from '@/ds/components/SearchInput';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 
 export interface TopicTraceSummaryListProps {
   traces: TopicTraceSummary[];
@@ -23,6 +23,11 @@ export function TopicTraceSummaryList({
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
   const visible = useMemo(
     () => getVisibleTraceSummaries(traces, { search, sort: 'newest', page, pageSize }),
     [page, pageSize, search, traces],
@@ -32,15 +37,25 @@ export function TopicTraceSummaryList({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Topic trace summaries">
-      <SearchInput
-        label="Search traces"
-        placeholder="Search traces"
-        value={search}
-        onValueChange={value => {
-          setSearch(value);
-          setPage(1);
-        }}
-      />
+      <InputGroup>
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Search traces"
+          placeholder="Search traces"
+          value={search}
+          onChange={event => changeSearch(event.target.value)}
+        />
+        {search && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton aria-label="Clear search" onClick={() => changeSearch('')}>
+              <XIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
 
       <DataList columns="minmax(12rem,1fr)" className="min-h-0 flex-1" scrollRef={containerRef}>
         <DataList.Top>

@@ -2,8 +2,13 @@ import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight, Check, RefreshCw } from 'lucide-react';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { ArrowRight, Check, RefreshCw, SearchIcon, XIcon } from 'lucide-react';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -106,6 +111,11 @@ export function VcsFactoryStep({
     setChosenRepository(repository);
     onPreviewRepository?.(repository);
   };
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    setChosenRepository(undefined);
+    onPreviewRepository?.(undefined);
+  };
 
   return (
     <section aria-label="Source control repository" className="w-full text-left">
@@ -151,16 +161,25 @@ export function VcsFactoryStep({
               Change provider
             </Button>
           </div>
-          <SearchInput
-            label="Search repositories"
-            placeholder="Find a repository"
-            value={query}
-            onValueChange={value => {
-              setQuery(value);
-              setChosenRepository(undefined);
-              onPreviewRepository?.(undefined);
-            }}
-          />
+          <InputGroup>
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search repositories"
+              placeholder="Find a repository"
+              value={query}
+              onChange={event => changeQuery(event.target.value)}
+            />
+            {query && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => changeQuery('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
           {repositoryQuery.isError && (
             <RepositoryError message={repositoryQuery.error.message} onRetry={() => void repositoryQuery.refetch()} />
           )}

@@ -7,13 +7,18 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui/components/Dialog';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FileText } from 'lucide-react';
-import { useState } from 'react';
+import { FileText, SearchIcon, XIcon } from 'lucide-react';
 
+import { useState } from 'react';
 import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 
 const PROMPT_BLOCKS_PER_PAGE = 50;
@@ -76,13 +81,25 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         <DialogHeader>
           <DialogTitle>Select a prompt block</DialogTitle>
           <DialogDescription>Choose a saved prompt block to reference</DialogDescription>
-          <SearchInput
-            label="Search prompt blocks"
-            className="mt-2"
-            placeholder="Search prompt blocks"
-            value={search}
-            onValueChange={handleSearchChange}
-          />
+          <InputGroup className="mt-2">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search prompt blocks"
+              placeholder="Search prompt blocks"
+              value={search}
+              onChange={event => handleSearchChange(event.target.value)}
+            />
+            {search && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => handleSearchChange('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
         </DialogHeader>
         <DialogBody>
           {isLoading ? (

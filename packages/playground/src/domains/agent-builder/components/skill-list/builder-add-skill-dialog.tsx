@@ -10,20 +10,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Download, ExternalLink, Loader2, Package } from 'lucide-react';
+import { Check, Download, ExternalLink, Loader2, Package, SearchIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import { useDebouncedCallback } from 'use-debounce';
 
+import { useDebouncedCallback } from 'use-debounce';
 import {
   useBuilderRegistryPreview,
   useInstallBuilderRegistrySkill,
@@ -181,13 +186,26 @@ export function BuilderAddSkillDialog({
         </DialogHeader>
 
         <DialogBody layout="fill">
-          <SearchInput
-            label={`Search ${registryLabel}`}
-            placeholder={`Search ${registryLabel}`}
-            value={searchQuery}
-            onValueChange={handleSearch}
-            data-testid="builder-add-skill-search"
-          />
+          <InputGroup>
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label={`Search ${registryLabel}`}
+              placeholder={`Search ${registryLabel}`}
+              data-testid="builder-add-skill-search"
+              value={searchQuery}
+              onChange={event => handleSearch(event.target.value)}
+            />
+            {searchQuery && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => handleSearch('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">

@@ -11,6 +11,8 @@ import {
   PanelLeftOpen,
   SquareArrowOutUpRight,
   X,
+  SearchIcon,
+  XIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -43,8 +45,8 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { SearchInput } from '@/ds/components/SearchInput';
 import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Tree } from '@/ds/components/Tree';
@@ -745,13 +747,25 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
     .slice(0, 10);
   return (
     <div className="relative w-64 min-w-0">
-      <SearchInput
-        label="Search knowledge"
-        placeholder="Search pages and notes"
-        size="sm"
-        value={query}
-        onValueChange={setQuery}
-      />
+      <InputGroup size="sm">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Search knowledge"
+          placeholder="Search pages and notes"
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+        />
+        {query && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton aria-label="Clear search" onClick={() => setQuery('')}>
+              <XIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
       {pages.length > 0 ? (
         <div className={`absolute z-20 mt-1 w-full overflow-hidden rounded-xl ${overlaySurfaceStyle}`}>
           <ScrollArea maxHeight="18rem">

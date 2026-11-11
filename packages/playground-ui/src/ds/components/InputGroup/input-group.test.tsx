@@ -50,7 +50,9 @@ describe('InputGroupAddon variants', () => {
     const flushClasses = flushAddon.className.split(/\s+/);
 
     expect(defaultAddon.getAttribute('data-variant')).toBe('default');
-    expect(defaultClasses).toEqual(expect.arrayContaining(['gap-2', `${padding}-3`, `has-[>button]:${padding}-1`]));
+    expect(defaultClasses).toEqual(
+      expect.arrayContaining(['gap-2', `${padding}-[calc(var(--control-px)-2px)]`, `has-[>button]:${padding}-1`]),
+    );
     expect(defaultClasses).not.toContain('[&>button]:mx-0');
 
     expect(flushAddon.getAttribute('data-variant')).toBe('flush');
@@ -58,7 +60,7 @@ describe('InputGroupAddon variants', () => {
       expect.arrayContaining(['gap-0', `${padding}-0`, `has-[>button]:${padding}-0`, '[&>button]:mx-0']),
     );
     expect(flushClasses).not.toContain('gap-2');
-    expect(flushClasses).not.toContain(`${padding}-3`);
+    expect(flushClasses).not.toContain(`${padding}-[calc(var(--control-px)-2px)]`);
     expect(flushClasses).not.toContain(`has-[>button]:${padding}-1`);
   });
 
