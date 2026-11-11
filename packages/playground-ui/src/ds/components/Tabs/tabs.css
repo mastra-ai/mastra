@@ -265,6 +265,7 @@
       [data-slot='tabs-indicator'] {
         height: var(--active-tab-height);
         border-radius: calc(var(--tab-inner-radius) * var(--corner-scale, 1));
+        corner-shape: var(--corner-shape, round);
       }
 
       [data-slot='tabs-indicator']::before,

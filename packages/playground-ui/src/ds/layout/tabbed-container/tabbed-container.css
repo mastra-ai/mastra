@@ -188,6 +188,7 @@
     margin: 0;
     padding: var(--tab-inset);
     border-radius: 0 calc(var(--tab-frame-radius) * var(--corner-scale, 1)) 0 0;
+    corner-shape: var(--corner-shape, round);
     background: var(--muted);
   }
 
@@ -198,6 +199,7 @@
   [data-slot='tabbed-container-query'] {
     width: 100%;
     border-radius: calc(var(--tab-inner-radius) * var(--corner-scale, 1));
+    corner-shape: var(--corner-shape, round);
   }
 
   [data-slot='tabbed-container-search'] {

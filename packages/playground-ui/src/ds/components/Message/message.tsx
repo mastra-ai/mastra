@@ -40,7 +40,8 @@ export function Message({ from, avatar, footer, attachments, pending, children, 
             data-slot="message-content"
             className={cn(
               'max-w-full min-w-0 text-body break-words',
-              isUser && cn(messageSurfaceStyle, 'px-4 py-2'),
+              // A one-line bubble is 40px tall: the short side caps its corner smoothing.
+              isUser && cn(messageSurfaceStyle, 'px-4 py-2 [--corner-box:2.5rem]'),
               isUser && pending && 'border border-dashed border-border',
               !isUser && footer && '[&>:last-child]:mb-0',
             )}

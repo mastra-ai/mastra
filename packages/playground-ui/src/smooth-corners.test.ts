@@ -7,7 +7,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
 const require = createRequire(resolve(pkgRoot, 'package.json'));
-const GATE = '@supports (corner-shape: superellipse(2)) and (width: calc(1px * (10px / 5px)))';
+const GATE =
+  '@supports (corner-shape: superellipse(2)) and (width: calc(1px * (10px / 5px))) and (not (-moz-orient: inline))';
 
 // How an app with its own Tailwind consumes it: tokens, then the smoothed utilities.
 const compileForApp = (candidates: string[]) =>

@@ -129,7 +129,7 @@ function CommandPaletteScope({
         as="span"
         variant="meta"
         tone="muted"
-        className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 leading-none"
+        className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 leading-none [--corner-box:1rem]"
       >
         {count}
       </Txt>
@@ -210,7 +210,7 @@ function CommandPaletteItem({
               as="span"
               variant="meta"
               tone="muted"
-              className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 leading-none uppercase"
+              className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 leading-none uppercase [--corner-box:1rem]"
             >
               {badge}
             </Txt>
@@ -225,7 +225,7 @@ function CommandPaletteItem({
                 variant="meta"
                 tone="muted"
                 font="mono"
-                className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 leading-none"
+                className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 leading-none [--corner-box:1rem]"
               >
                 {path}
               </Txt>
