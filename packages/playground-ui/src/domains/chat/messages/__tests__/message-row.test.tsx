@@ -1059,5 +1059,24 @@ describe('MessageRow', () => {
       expect(screen.getByText('Working on it.')).toBeTruthy();
       expect(screen.queryByText('Launch')).toBeNull();
     });
+
+    it('shows nothing for an interface built from another catalog, so Studio does not render part of it', () => {
+      renderRow(
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is your chart.' },
+              patch('add', '/root', 'main'),
+              patch('add', '/elements/main', { type: 'Card', props: { title: 'Revenue' }, children: ['chart'] }),
+              patch('add', '/elements/chart', { type: 'LineChart', props: { points: [1, 2, 3] }, children: [] }),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getByText('Here is your chart.')).toBeTruthy();
+      expect(screen.queryByText('Revenue')).toBeNull();
+    });
   });
 });

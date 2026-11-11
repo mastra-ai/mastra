@@ -4,12 +4,12 @@
 
 Studio now shows interfaces from agents that use `@mastra/json-render`. Replies render their interface below the prose with Studio's own cards, metrics, badges and notices, both while streaming and after a thread is reopened.
 
-Use `studioCatalog` to let an agent compose interfaces from those components. It has no React imports, so a server can load it:
+To let an agent compose interfaces from those components, give it `studioCatalog` from `@mastra/json-render/studio`. Studio renders only interfaces built from that catalog; other interfaces keep their current display.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
 import { JsonRenderProcessor } from '@mastra/json-render';
-import { studioCatalog } from '@mastra/playground-ui/domains/json-render/catalog';
+import { studioCatalog } from '@mastra/json-render/studio';
 
 const jsonRender = new JsonRenderProcessor({ catalog: studioCatalog });
 
@@ -22,3 +22,5 @@ export const uiAgent = new Agent({
   outputProcessors: [jsonRender],
 });
 ```
+
+`@mastra/playground-ui` now requires `@mastra/core` 1.83.0 or later.
