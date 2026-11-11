@@ -94,6 +94,47 @@ describe('buildFilterQuery - numeric range operators', () => {
   });
 });
 
+describe('$elemMatch with multiple operators on one field', () => {
+  const filter = { reviews: { $elemMatch: { score: { $gte: 4, $lte: 4 } } } };
+
+  it('keeps both range bounds on the same array element when querying', () => {
+    const { sql, values } = buildFilterQuery(filter, 0, 10);
+
+    expect(values).toEqual([0, 10, 4, 4]);
+    expect(sql).toContain(`(elem->>'score')::numeric >= $3::numeric`);
+    expect(sql).toContain(`(elem->>'score')::numeric <= $4::numeric`);
+    expect(sql).toMatch(/>= \$3::numeric.*AND.*<= \$4::numeric/s);
+  });
+
+  it('keeps both range bounds on the same array element when deleting', () => {
+    const { sql, values } = buildDeleteFilterQuery(filter);
+
+    expect(values).toEqual([4, 4]);
+    expect(sql).toContain(`(elem->>'score')::numeric >= $1::numeric`);
+    expect(sql).toContain(`(elem->>'score')::numeric <= $2::numeric`);
+  });
+
+  it('advances placeholders only for operators that bind values', () => {
+    const { sql, values } = buildFilterQuery(
+      { reviews: { $elemMatch: { score: { $exists: true, $gte: 4, $lte: 5 }, author: 'user4' } } },
+      0,
+      10,
+    );
+
+    expect(values).toEqual([0, 10, 4, 5, 'user4']);
+    expect(sql).toContain(`elem ? 'score'`);
+    expect(sql).toContain(`(elem->>'score')::numeric >= $3::numeric`);
+    expect(sql).toContain(`(elem->>'score')::numeric <= $4::numeric`);
+    expect(sql).toContain(`elem->>'author' = $5`);
+  });
+
+  it('rejects a nested field with no operators instead of matching every element', () => {
+    expect(() => buildDeleteFilterQuery({ reviews: { $elemMatch: { score: {} } } })).toThrow(
+      '$elemMatch field score requires at least one operator',
+    );
+  });
+});
+
 describe('buildFilterQuery - multi-key branches inside logical operators', () => {
   // Each object in an $or/$nor array is one branch, and the keys of a branch
   // are an implicit AND (same as at the top level of a filter).
