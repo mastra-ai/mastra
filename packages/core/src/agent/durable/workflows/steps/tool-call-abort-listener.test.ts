@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { MastraTimeoutError } from '../../../../loop/timeout';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { ensureRemoteAbortListener, publishAbortRequest } from '../../abort-transport';
 import { globalRunRegistry } from '../../run-registry';
@@ -81,5 +82,50 @@ describe('durable tool-call remote abort listener', () => {
     } finally {
       await pubsub.close();
     }
+  });
+
+  it('marks a call whose toModelOutput throws after the deadline stopped it', async () => {
+    const controller = new AbortController();
+    const entry = {
+      tools: {
+        wait: {
+          id: 'wait',
+          execute: async (_args: unknown, { abortSignal }: { abortSignal?: AbortSignal }) => {
+            // The deadline lands while the tool is still running; it resolves anyway.
+            controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 100 }));
+            expect(abortSignal?.aborted).toBe(true);
+            return 'done';
+          },
+          toModelOutput: () => {
+            throw new Error('tool output mapping failed');
+          },
+        },
+      },
+      model: {},
+      saveQueueManager: {},
+      outputProcessors: [],
+      processorStates: new Map(),
+      abortController: controller,
+      abortSignal: controller.signal,
+    } as unknown as RunRegistryEntry;
+    globalRunRegistry.set(RUN_ID, entry);
+
+    const step = createDurableToolCallStep();
+    const output = await (step as any).execute({
+      inputData: { toolCallId: 'call-wait', toolName: 'wait', args: {} },
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => ({
+        runId: RUN_ID,
+        agentId: 'waiter',
+        options: { requireToolApproval: false },
+        state: { threadId: 'thread-1', resourceId: 'user-1', memoryConfig: undefined, threadExists: false },
+      }),
+    });
+
+    expect(output.mappingError?.message).toBe('tool output mapping failed');
+    expect(output.deadlineTimeout).toEqual({ timeoutType: 'total', timeoutMs: 100 });
   });
 });

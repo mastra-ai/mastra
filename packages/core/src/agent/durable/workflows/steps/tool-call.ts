@@ -2331,6 +2331,7 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             mappingError: serializeError(error),
+            ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           };
         }
         // Output processor failures and authorization denials must fail the run

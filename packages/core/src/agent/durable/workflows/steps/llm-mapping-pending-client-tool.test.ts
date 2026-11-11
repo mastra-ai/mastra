@@ -266,3 +266,25 @@ describe('durable step outcomes at a cancellation boundary', () => {
     ]);
   });
 });
+
+describe('durable mapping step when the run stopped while a call settled', () => {
+  const mappingError = { name: 'Error', message: 'tool output mapping failed' };
+
+  it.each([
+    ['the total deadline', { deadlineTimeout: { timeoutType: 'total' as const, timeoutMs: 100 } }],
+    ['abort()', { runAborted: true as const }],
+  ])('ends the run as %s instead of the mapping failure', async (_stop, stop) => {
+    const { output, stored } = await runMappingStep([
+      { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS, mappingError, ...stop },
+    ]);
+
+    expect(output).toMatchObject(stop);
+    expect(stored(TOOL_CALL_ID)?.state).toBe('call');
+  });
+
+  it('still fails the run on a mapping failure the run was not stopped during', async () => {
+    await expect(
+      runMappingStep([{ toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS, mappingError }]),
+    ).rejects.toThrow('tool output mapping failed');
+  });
+});
