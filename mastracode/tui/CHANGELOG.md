@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.50.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`2fe9969`](https://github.com/mastra-ai/mastra/commit/2fe996990088c76ea9db7d1959ab3c09015176f3)]:
+  - @mastra/observability@1.24.0-alpha.4
+  - @mastra/code-sdk@1.19.0-alpha.8
+  - @mastra/mcp@2.9.0-alpha.3
+
 ## 0.50.0-alpha.7
 
 ### Minor Changes
