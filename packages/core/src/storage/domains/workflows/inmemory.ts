@@ -449,9 +449,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
     const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
+    // Like the persistent stores, every write moves `updatedAt`: recovery reads it to tell a stalled run.
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
+      updatedAt: new Date(),
     });
 
     return cloneRunData(context);
@@ -480,6 +482,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         return;
       }
       record.header = { ...record.header, ...cloneRunData(patch) };
+      record.updatedAt = new Date();
       return cloneRunData(this.materializedRow(key)!.snapshot);
     }
     if (storageVersion === 2) {
@@ -517,6 +520,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
+      updatedAt: new Date(),
     });
 
     return snapshot;
@@ -623,6 +627,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const { expectedStatus, ...patch } = opts;
     if (!matchesExpectedWorkflowStatus(record.header.status, expectedStatus)) return;
     record.header = { ...record.header, ...cloneRunData(patch) };
+    record.updatedAt = new Date();
     return {
       header: cloneRunData(record.header),
       lastSeq: record.lastSeq,
