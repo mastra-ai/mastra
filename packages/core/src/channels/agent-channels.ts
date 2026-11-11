@@ -744,6 +744,13 @@ export class AgentChannels {
               // metadata for cases where the bot restarted between card post and
               // click (the metadata path is lossy for parallel same-tool calls
               // since core keys those by toolName — only the latest survives).
+              //
+              // The persisted scan must cover the whole thread: the approval's
+              // metadata can sit arbitrarily far behind the newest messages once
+              // the channel thread keeps moving, and the same read is what
+              // recovers the card's requester below. Bounding it would both
+              // strand the approval ("No pending approval found") and silently
+              // drop the ownership check, letting any channel member answer.
               let runId: string | undefined;
               let toolName: string | undefined;
               let toolArgs: Record<string, unknown> | undefined;
@@ -763,7 +770,12 @@ export class AgentChannels {
 
                 const { messages } = await memoryStore.listMessages({
                   threadId: mastraThread.id,
-                  perPage: 50,
+                  // Whole thread, newest-first: approval metadata can sit
+                  // arbitrarily far back, and the requester recovery below reads
+                  // the same list. `includeTotal: false` skips the COUNT(*) since
+                  // only `messages` is used.
+                  perPage: false,
+                  includeTotal: false,
                   orderBy: { field: 'createdAt', direction: 'DESC' },
                 });
 

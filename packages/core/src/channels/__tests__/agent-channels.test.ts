@@ -861,6 +861,67 @@ describe('AgentChannels', () => {
         return { adapter, channels, logger, dispatchApproval, dispatchDecline, click };
       }
 
+      // Seeds a real store with a thread where the persisted approval sits behind
+      // more messages than the old lookup window held: the trigger user turn, the
+      // assistant row carrying the approval metadata, then `fillerCount` newer
+      // messages.
+      async function seedThreadWithStrandedApproval(fillerCount = 60) {
+        const db = new InMemoryDB();
+        const memoryStore = new InMemoryMemory({ db });
+        const base = Date.UTC(2025, 0, 1);
+        const at = (offsetMs: number) => new Date(base + offsetMs);
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'requester-turn',
+            role: 'user',
+            threadId: 'mastra-thread-1',
+            resourceId: 'resource-1',
+            createdAt: at(0),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'please look this up' }],
+              providerMetadata: { mastra: { channels: { discord: { author: { userId: 'alice' } } } } },
+            },
+          },
+          {
+            id: 'approval',
+            role: 'assistant',
+            threadId: 'mastra-thread-1',
+            resourceId: 'resource-1',
+            createdAt: at(1_000),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'approve?' }],
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          ...Array.from(
+            { length: fillerCount },
+            (_, i): MastraDBMessage => ({
+              id: `filler-${i}`,
+              role: 'user',
+              threadId: 'mastra-thread-1',
+              resourceId: 'resource-1',
+              createdAt: at(2_000 + i * 1_000),
+              content: { format: 2, parts: [{ type: 'text', text: `filler ${i}` }] },
+            }),
+          ),
+        ];
+        await memoryStore.saveMessages({ messages });
+        return {
+          memoryStore,
+          mastra: {
+            getStorage: () => ({ getStore: () => memoryStore }),
+            getServer: () => null,
+            getLogger: () => noopLogger,
+          } as any,
+        };
+      }
+
       it('ignores approve and decline clicks from a user other than the requester', async () => {
         const { adapter, logger, dispatchApproval, dispatchDecline, click } = await setup({ requesterId: 'alice' });
 
@@ -1061,6 +1122,41 @@ describe('AgentChannels', () => {
         expect(dispatchApproval).not.toHaveBeenCalled();
         await click('tool_approve:tool-call-1', 'alice');
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('recovers an approval that sits behind more messages than the old lookup window', async () => {
+        const { memoryStore, mastra } = await seedThreadWithStrandedApproval();
+        const listMessages = vi.spyOn(memoryStore, 'listMessages');
+
+        // A rebuilt instance starts with an empty in-memory map, so the approval
+        // can only come from the persisted thread.
+        const { channels, dispatchApproval, logger, click } = await setup({}, mastra);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'alice');
+
+        expect(listMessages).toHaveBeenCalledWith(
+          expect.objectContaining({ threadId: 'mastra-thread-1', perPage: false }),
+        );
+        expect(logger.info).not.toHaveBeenCalledWith(
+          expect.stringContaining('No pending approval found'),
+          expect.anything(),
+        );
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps the requester check when the trigger turn is behind more messages than the old window', async () => {
+        // 49 newer messages put the approval just inside the old 50-message window
+        // and the trigger turn just outside it, so the run is resumed but its owner
+        // cannot be recovered unless the whole thread is read.
+        const { mastra } = await seedThreadWithStrandedApproval(49);
+        const { channels, dispatchApproval, logger, click } = await setup({}, mastra);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'mallory');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('only alice may answer'), expect.anything());
       });
 
       it('keeps the permissive behavior when no requester was recorded', async () => {
