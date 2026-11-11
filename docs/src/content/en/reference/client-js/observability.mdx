@@ -503,9 +503,9 @@ Create responses contain `success` and optional `data` with the generated or sup
 
 Explicit modes require server support. Older servers may ignore `contextMode`. Deploy Platform's supplied-context support before sending `"provided"` there.
 
-### Replacing feedback on Platform
+### Replacing feedback
 
-`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. This method targets Platform. OSS server doesn't implement this replacement endpoint.
+`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. Platform and OSS servers with feedback replacement support accept this method. OSS returns `501` when its storage adapter doesn't support replacement. For OSS, check `capabilities.feedbackReplacement` before offering edits; a missing capability means unavailable.
 
 ```typescript
 await mastraClient.replaceFeedback({
@@ -520,7 +520,7 @@ await mastraClient.replaceFeedback({
 })
 ```
 
-Use the normalized timestamp from the create response's `data` when available. A changed timestamp identifies a different Platform record. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
+Use the normalized timestamp from the create response's `data` when available. OSS rejects changes to the original trace or timestamp with `409`. Platform uses the timestamp as part of record identity, so preserve it there too. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
 
 ### Deleting feedback and scores
 

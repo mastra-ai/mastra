@@ -30,6 +30,7 @@ import {
   feedbackRecordSchema,
   feedbackReviewStatusSchema,
   createFeedbackBodySchema,
+  replaceFeedbackBodySchema,
   createFeedbackResponseSchema,
   deleteFeedbackArgsSchema,
   deleteFeedbackResponseSchema,
@@ -1387,8 +1388,69 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
       timestamp,
       reviewStatus: feedback.reviewStatus ?? 'needs-review',
     };
-    await observabilityStore.createFeedback({ feedback: record });
+    await observabilityStore.createFeedback({ feedback: record, onConflict: 'ignore' });
     await exportPersistedEvent(mastra, persistedFeedbackEvent(record));
+    return {
+      success: true,
+      data: {
+        feedbackId,
+        traceId: feedback.traceId,
+        spanId: feedback.spanId ?? null,
+        timestamp: timestamp.toISOString(),
+      },
+    };
+  },
+});
+
+export const REPLACE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.REPLACE_FEEDBACK, {
+  pathParamSchema: z.object({ feedbackId: z.string() }),
+  bodySchema: replaceFeedbackBodySchema,
+  responseSchema: createFeedbackResponseSchema,
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedbackId: pathId, feedback, contextMode }) => {
+    if (pathId !== feedback.feedbackId) throw new HTTPException(400, { message: 'URL and body feedbackId must match' });
+    const user = requestContext.get(MASTRA_USER_KEY);
+    const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
+    const observabilityStore = await getObservabilityStore(mastra);
+    if (!getObservabilityStorageCapabilities(observabilityStore).feedbackReplacement) {
+      throw new HTTPException(501, {
+        message: 'Feedback replacement requires a supported storage adapter and @mastra/core version',
+      });
+    }
+    const context = await resolveSignalContext(observabilityStore, requestContext, feedback, contextMode);
+    const feedbackId = feedback.feedbackId;
+    const timestamp = new Date(feedback.timestamp);
+    const record = {
+      ...feedback,
+      ...context,
+      feedbackUserId:
+        typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+          ? authenticatedId
+          : (feedback.feedbackUserId ?? null),
+      feedbackId,
+      timestamp,
+      reviewStatus: feedback.reviewStatus ?? 'needs-review',
+    };
+    const existing = await observabilityStore.getFeedbackById(feedbackId);
+    if (existing) {
+      if (
+        (existing.organizationId ?? null) !== (record.organizationId ?? null) ||
+        (existing.resourceId ?? null) !== (record.resourceId ?? null)
+      ) {
+        throw new HTTPException(404, { message: 'Feedback not found' });
+      }
+      if (existing.traceId !== record.traceId || existing.timestamp.getTime() !== timestamp.getTime()) {
+        throw new HTTPException(409, {
+          message: 'Feedback replacement must preserve the original traceId and timestamp',
+        });
+      }
+    }
+    await observabilityStore.replaceFeedback({ feedback: record });
+    const event = persistedFeedbackEvent(record);
+    await exportPersistedEvent(mastra, {
+      type: 'feedback_replacement',
+      feedback: { ...event.feedback, traceId: record.traceId },
+    });
     return {
       success: true,
       data: {
@@ -1666,6 +1728,7 @@ export const NEW_ROUTES = {
   LIST_FEEDBACK,
   GET_FEEDBACK,
   CREATE_FEEDBACK,
+  REPLACE_FEEDBACK,
   DELETE_FEEDBACK,
   UPDATE_FEEDBACK_REVIEW_STATUS,
   GET_FEEDBACK_AGGREGATE,

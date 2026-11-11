@@ -4,6 +4,7 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
 } from '../../../observability/index.js';
 import type { CorrelationContext } from '../../../observability/types/core.js';
 import { EntityType } from '../../../observability/types/tracing.js';
@@ -384,7 +385,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
 }
 
 /** Convert a FeedbackEvent to a CreateFeedbackRecord */
-export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord {
+export function buildFeedbackRecord(event: FeedbackEvent | FeedbackReplacementEvent): CreateFeedbackRecord {
   const fb = event.feedback;
   const correlationFields = buildCorrelationRecordFields(fb.correlationContext);
   return {

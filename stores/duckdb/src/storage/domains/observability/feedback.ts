@@ -358,7 +358,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        jsonV(f.metadata),
        jsonV(f.scope ?? null),
      ].join(', ')})
-     ${FEEDBACK_UPSERT_CLAUSE}`,
+     ${args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE}`,
   );
 }
 
@@ -366,7 +366,12 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
 export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
-  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const currentFeedback = new Map(
+    (args.onConflict === 'ignore' ? [...args.feedbacks].reverse() : args.feedbacks).map(feedback => [
+      feedback.feedbackId,
+      feedback,
+    ]),
+  );
   const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
@@ -424,7 +429,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, valueString, valueNumber, comment, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
-     ${FEEDBACK_UPSERT_CLAUSE}`,
+     ${args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE}`,
   );
 }
 

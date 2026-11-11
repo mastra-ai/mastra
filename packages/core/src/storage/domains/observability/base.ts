@@ -146,6 +146,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
  * - `feedback`: the feedback CRUD, review-status and analytics methods
+ * - `feedback-replacement`: full replacement and create-with-ignore-conflicts support
  */
 export type ObservabilityStorageFeature =
   | 'delta-polling'
@@ -172,6 +173,7 @@ export type ObservabilityStorageFeature =
   | 'thread-query-rows'
   | 'trace-query-tenant-scope'
   | 'feedback'
+  | 'feedback-replacement'
   | 'trace-query-context-ids'
   | 'trace-query-context-fields'
   | 'trace-query-time-to-first-chunk'
@@ -903,9 +905,29 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
-  /**
-   * Creates multiple feedback observations in a single batch.
-   */
+  /** Replace a complete feedback record, preserving its identity. Missing records are created. */
+  async replaceFeedback(args: CreateFeedbackArgs): Promise<void> {
+    if (!this.getFeatures()?.includes('feedback-replacement')) {
+      throw new Error('This storage provider does not support feedback replacement');
+    }
+    const { feedback } = args;
+    if (!feedback.feedbackId?.trim() || !feedback.traceId?.trim() || !Number.isFinite(feedback.timestamp?.getTime())) {
+      throw new Error('Feedback replacement requires feedbackId, traceId, and the original timestamp');
+    }
+    const existing = await this.getFeedbackById(feedback.feedbackId);
+    if (
+      existing &&
+      (existing.traceId !== feedback.traceId ||
+        existing.timestamp.getTime() !== feedback.timestamp.getTime() ||
+        (existing.organizationId ?? null) !== (feedback.organizationId ?? null) ||
+        (existing.resourceId ?? null) !== (feedback.resourceId ?? null))
+    ) {
+      throw new Error('Feedback replacement must preserve its trace, timestamp, and tenant');
+    }
+    await this.createFeedback({ feedback, onConflict: 'replace' });
+  }
+
+  /** Creates multiple feedback observations in a single batch. */
   async batchCreateFeedback(_args: BatchCreateFeedbackArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_FEEDBACK_NOT_IMPLEMENTED',

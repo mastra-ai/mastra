@@ -83,6 +83,90 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       return body[collection];
     };
 
+    if (collection === 'feedback') {
+      const original = {
+        feedbackId: 'edit',
+        traceId: 'trace-123',
+        timestamp: '2026-11-11T12:00:00.123Z',
+        feedbackType: 'thumbs',
+        value: 1,
+      };
+      const put = (feedback: Record<string, unknown>, contextMode?: string) =>
+        server.request(`${path}/edit`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-token' },
+          body: JSON.stringify({ feedback, contextMode }),
+        });
+      it.each([{ feedbackId: 'other' }, { timestamp: undefined }, { traceId: ' ' }])(
+        'rejects malformed replacements: %j',
+        async change => {
+          expect((await put({ ...original, ...change })).status).toBe(400);
+          expect(await list()).toHaveLength(0);
+        },
+      );
+      it.each([{ traceId: 'different' }, { timestamp: '2026-11-12T12:00:00.123Z' }])(
+        'rejects changing feedback identity: %j',
+        async change => {
+          await post(original);
+          expect((await put({ ...original, ...change })).status).toBe(409);
+          expect(await list()).toEqual([
+            expect.objectContaining({ value: 1, traceId: original.traceId, timestamp: original.timestamp }),
+          ]);
+        },
+      );
+      it('returns 404 instead of overwriting feedback from another tenant', async () => {
+        await post({ ...original, organizationId: 'other' });
+        trustedScope.organizationId = 'trusted';
+        expect((await put({ ...original, organizationId: 'other', value: -1 })).status).toBe(404);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+      });
+      it('uses the authenticated feedback author and clears omitted replacement fields', async () => {
+        await post({ ...original, comment: 'old', feedbackUserId: 'old-author' });
+        trustedScope.mastra__user = { id: 'reviewer' };
+        expect((await put({ ...original, value: -1, feedbackUserId: 'spoofed' })).status).toBe(200);
+        const saved = await store.getFeedbackById(original.feedbackId);
+        expect(saved).toMatchObject({ value: -1, feedbackUserId: 'reviewer' });
+        expect(saved?.comment ?? null).toBeNull();
+      });
+      it('returns 501 with an older storage package and keeps existing feedback', async () => {
+        await post(original);
+        Object.defineProperty(store, 'replaceFeedback', { value: undefined });
+        expect((await put({ ...original, value: -1 })).status).toBe(501);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+      });
+      it('allows replacement before create and requires the local anchor in resolve mode', async () => {
+        expect((await put({ ...original, value: -1 }, 'resolve')).status).toBe(404);
+        expect((await put({ ...original, value: -1 }, 'provided')).status).toBe(200);
+        expect((await post(original)).status).toBe(200);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(-1);
+      });
+      it('replaces feedback without allowing a delayed create to undo the edit', async () => {
+        const original = {
+          feedbackId: 'replace-me',
+          traceId: 'trace-123',
+          timestamp: '2026-11-11T12:00:00.123Z',
+          feedbackType: 'comment',
+          value: 'original',
+          comment: 'old comment',
+        };
+        expect((await post(original)).status).toBe(200);
+        const response = await server.request('/api/observability/feedback/replace-me', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-token' },
+          body: JSON.stringify({ feedback: { ...original, value: 'edited', comment: null } }),
+        });
+        expect(response.status, await response.clone().text()).toBe(200);
+        expect(await response.json()).toMatchObject({
+          success: true,
+          data: { feedbackId: 'replace-me', timestamp: original.timestamp },
+        });
+        expect((await post(original)).status).toBe(200);
+        expect(await list()).toEqual([
+          expect.objectContaining({ feedbackId: 'replace-me', value: 'edited', comment: null }),
+        ]);
+      });
+    }
+
     describe('single-record reads', () => {
       it('returns the persisted record with its identity and timestamp', async () => {
         const id = 'single-record';
@@ -532,19 +616,23 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       },
     );
 
-    it.each([
-      { contextMode: 'provided', authenticated: true, emptyContext: false },
-      { contextMode: 'resolve', authenticated: true, emptyContext: false },
-      { contextMode: 'provided', authenticated: false, emptyContext: false },
-      { contextMode: 'provided', authenticated: false, emptyContext: true },
-    ] as const)(
-      'persists and exports the same $contextMode record (authenticated: $authenticated, empty context: $emptyContext) without a second storage write',
-      async ({ contextMode, authenticated, emptyContext }) => {
-        const received: { path: string; body: Record<string, Record<string, any>[]> }[] = [];
+    it.each(
+      [
+        { contextMode: 'provided', authenticated: true, emptyContext: false },
+        { contextMode: 'resolve', authenticated: true, emptyContext: false },
+        { contextMode: 'provided', authenticated: false, emptyContext: false },
+        { contextMode: 'provided', authenticated: false, emptyContext: true },
+      ].flatMap(testCase =>
+        (collection === 'feedback' ? ['POST', 'PUT'] : ['POST']).map(method => ({ ...testCase, method })),
+      ),
+    )(
+      'persists and exports the same $method $contextMode record (authenticated: $authenticated, empty context: $emptyContext) without a second storage write',
+      async ({ contextMode, authenticated, emptyContext, method }) => {
+        const received: { path: string; method: string; body: Record<string, any> }[] = [];
         const receiver = createServer(async (req, res) => {
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(Buffer.from(chunk));
-          received.push({ path: req.url!, body: JSON.parse(Buffer.concat(chunks).toString()) });
+          received.push({ path: req.url!, method: req.method!, body: JSON.parse(Buffer.concat(chunks).toString()) });
           res.writeHead(204).end();
         });
         receiver.listen(0, '127.0.0.1');
@@ -607,30 +695,33 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
               },
             });
           const timestamp = '2026-11-11T10:00:00.123Z';
-          const response = await server.request(`/api/observability/${collection}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', authorization: 'Bearer test' },
-            body: JSON.stringify({
-              contextMode,
-              [field]: {
-                [idField]: 'http-record',
-                timestamp,
-                traceId: 'http-trace',
-                ...(!emptyContext
-                  ? { organizationId: 'untrusted-org', userId: 'span-user', tags: ['provided-tag'] }
-                  : {}),
-                metadata: { explicit: true, userId: 'metadata-user' },
-                ...(isFeedback
-                  ? {
-                      feedbackType: 'comment',
-                      value: 'actionable',
-                      feedbackUserId: authenticated ? 'spoofed' : null,
-                      reviewStatus: 'reviewed',
-                    }
-                  : { scorerId: 'quality', score: 0.9 }),
-              },
-            }),
-          });
+          const response = await server.request(
+            `/api/observability/${collection}${method === 'PUT' ? '/http-record' : ''}`,
+            {
+              method,
+              headers: { 'Content-Type': 'application/json', authorization: 'Bearer test' },
+              body: JSON.stringify({
+                contextMode,
+                [field]: {
+                  [idField]: 'http-record',
+                  timestamp,
+                  traceId: 'http-trace',
+                  ...(!emptyContext
+                    ? { organizationId: 'untrusted-org', userId: 'span-user', tags: ['provided-tag'] }
+                    : {}),
+                  metadata: { explicit: true, userId: 'metadata-user' },
+                  ...(isFeedback
+                    ? {
+                        feedbackType: 'comment',
+                        value: 'actionable',
+                        feedbackUserId: authenticated ? 'spoofed' : null,
+                        reviewStatus: 'reviewed',
+                      }
+                    : { scorerId: 'quality', score: 0.9 }),
+                },
+              }),
+            },
+          );
           expect(response.status, await response.clone().text()).toBe(200);
           expect(await response.json()).toMatchObject({ success: true, data: { [idField]: 'http-record', timestamp } });
           await observability.shutdown();
@@ -649,11 +740,13 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
             timestamp: new Date(timestamp),
             ...expectedContext,
           });
-          const writes = received.filter(item => item.path === `/ai/${collection}/publish`);
+          const expectedPath =
+            method === 'PUT' ? '/api/observability/feedback/http-record' : `/ai/${collection}/publish`;
+          const writes = received.filter(item => item.path === expectedPath);
           expect(writes).toHaveLength(1);
-          expect(writes[0]!.path).toBe(`/ai/${collection}/publish`);
-          expect(writes[0]!.body[collection]!).toHaveLength(1);
-          const exported = writes[0]!.body[collection]![0]!;
+          expect(writes[0]!.method).toBe(method);
+          if (method === 'POST') expect(writes[0]!.body[collection]).toHaveLength(1);
+          const exported = method === 'PUT' ? writes[0]!.body.feedback : writes[0]!.body[collection][0];
           expect(exported).toMatchObject({
             [idField]: 'http-record',
             timestamp,

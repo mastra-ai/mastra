@@ -7,6 +7,7 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
   ObservabilityDropEvent,
   ObservabilityDropReason,
   ObservabilityDropSignal,
@@ -628,7 +629,10 @@ export class MastraStorageExporter extends BaseExporter {
       const createTasks = [
         () =>
           this.flushCreates('feedback', createFeedbackEvents, events =>
-            this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
+            this.#observabilityStorage!.batchCreateFeedback({
+              feedbacks: events.map(f => buildFeedbackRecord(f)),
+              onConflict: 'ignore',
+            }),
           ),
         () =>
           this.flushCreates('log', createLogEvents, events =>
@@ -739,11 +743,15 @@ export class MastraStorageExporter extends BaseExporter {
     return this.enqueueAnnotation(event);
   }
 
+  onFeedbackReplacementEvent(event: FeedbackReplacementEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
   onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     return this.enqueueAnnotation(event);
   }
 
-  private enqueueAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  private enqueueAnnotation(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void> {
     const pending = this.storeAnnotation(event);
     this.#pendingAnnotations.add(pending);
     void pending.then(
@@ -753,7 +761,7 @@ export class MastraStorageExporter extends BaseExporter {
     return pending;
   }
 
-  private async storeAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  private async storeAnnotation(event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent): Promise<void> {
     await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
     const resolved = await resolveStorageAnnotation(event, this.#observabilityStorage, async () => {
@@ -768,6 +776,17 @@ export class MastraStorageExporter extends BaseExporter {
         traceId: record.traceId,
         spanId: record.spanId,
       });
+      return;
+    }
+    if (resolved.type === 'feedback_replacement') {
+      if (
+        typeof this.#observabilityStorage.replaceFeedback !== 'function' ||
+        !this.#observabilityStorage.getFeatures?.()?.includes('feedback-replacement')
+      ) {
+        this.logger.warn('Storage exporter skipped feedback replacement: upgrade the storage adapter and @mastra/core');
+        return;
+      }
+      await this.#observabilityStorage.replaceFeedback({ feedback: buildFeedbackRecord(resolved) });
       return;
     }
     this.#eventBuffer.addEvent(resolved);

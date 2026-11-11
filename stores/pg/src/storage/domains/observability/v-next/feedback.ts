@@ -113,7 +113,14 @@ export async function createFeedback(
   partitioning: PartitioningOptions,
 ): Promise<void> {
   const row = feedbackRecordToRow(args.feedback);
-  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, [row], partitioning, FEEDBACK_UPSERT_CLAUSE);
+  await insertRows(
+    client,
+    schema,
+    TABLE_FEEDBACK_EVENTS,
+    [row],
+    partitioning,
+    args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE,
+  );
 }
 
 export async function batchCreateFeedback(
@@ -123,9 +130,21 @@ export async function batchCreateFeedback(
   partitioning: PartitioningOptions,
 ): Promise<void> {
   if (args.feedbacks.length === 0) return;
-  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const currentFeedback = new Map(
+    (args.onConflict === 'ignore' ? [...args.feedbacks].reverse() : args.feedbacks).map(feedback => [
+      feedback.feedbackId,
+      feedback,
+    ]),
+  );
   const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
-  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, rows, partitioning, FEEDBACK_UPSERT_CLAUSE);
+  await insertRows(
+    client,
+    schema,
+    TABLE_FEEDBACK_EVENTS,
+    rows,
+    partitioning,
+    args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE,
+  );
 }
 
 export async function getFeedbackById(

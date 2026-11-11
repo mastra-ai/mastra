@@ -8,6 +8,7 @@ import type {
   MetricEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
 } from '@mastra/core/observability';
 import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
@@ -468,9 +469,19 @@ export class MastraPlatformExporter extends BaseExporter {
     await this.handleBufferedEvent();
   }
 
+  onFeedbackReplacementEvent(event: FeedbackReplacementEvent): void {
+    if (this.isDisabled || this.shuttingDown) return;
+    if (!event.feedback.feedbackId?.trim()) {
+      this.logger.warn('Dropping feedback replacement: feedbackId is required');
+      return;
+    }
+    this.enqueueResolvedRecord('feedback', event.feedback, event.feedback.feedbackId);
+  }
+
   private enqueueResolvedRecord(
     kind: 'score' | 'feedback',
     record: MastraPlatformScoreRecord | MastraPlatformFeedbackRecord,
+    replacementId?: string,
   ): void {
     if (!record.traceId?.trim()) {
       this.logger.warn(`Dropping ${kind}: context resolution requires traceId`);
@@ -488,6 +499,7 @@ export class MastraPlatformExporter extends BaseExporter {
     const collectorEndpoint =
       kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
     const url = new URL(`/api/observability/${kind === 'score' ? 'scores' : 'feedback'}`, collectorEndpoint);
+    if (replacementId !== undefined) url.pathname += `/${encodeURIComponent(replacementId)}`;
     // Full endpoint overrides take precedence over projectId for collector batches too.
     const projectId =
       new URL(collectorEndpoint).pathname.match(/\/projects\/([^/]+)\/ai\//)?.[1] ?? this.platformConfig.projectId;
@@ -500,7 +512,7 @@ export class MastraPlatformExporter extends BaseExporter {
     // Send buffered traces promptly, without making this request wait for collector
     // uploads or recursively waiting for itself through public flush().
     void this.flushBatches().catch(error => this.logger.warn('Failed to flush buffered telemetry', { error }));
-    const pending = publishResolvedRecord(url, body, headers)
+    const pending = publishResolvedRecord(url, body, headers, replacementId !== undefined ? 'PUT' : 'POST')
       .catch(error => this.logger.warn(`Dropping ${kind} after Platform delivery failed`, { error }))
       .finally(() => this.pendingRecords.delete(pending));
     this.pendingRecords.add(pending);

@@ -131,3 +131,16 @@ export interface FeedbackEvent {
   type: 'feedback';
   feedback: ExportedFeedback;
 }
+
+/** Full replacement. Exporters must opt in; never replay this as a create. */
+export interface FeedbackReplacementEvent {
+  type: 'feedback_replacement';
+  feedback: ExportedFeedback & { traceId: string };
+}
+
+export interface FeedbackReplacementInput {
+  traceId: string;
+  spanId?: string;
+  correlationContext?: CorrelationContext;
+  feedback: Omit<ExportedFeedback, 'traceId' | 'spanId' | 'correlationContext'>;
+}
