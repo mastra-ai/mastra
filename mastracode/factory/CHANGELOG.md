@@ -1,5 +1,14 @@
 # @mastra/factory
 
+## 0.28.0-alpha.9
+
+### Patch Changes
+
+- Factory servers no longer wait for a pass over every active run binding before they finish booting. The decision dispatcher already runs that catch-up in the background on its first tick, so boot stops being held for it. With a few hundred active bindings this took over a minute, which pushed deploys past their health check and left new instances unauthenticated for longer. ([#30025](https://github.com/mastra-ai/mastra/pull/30025))
+
+- Updated dependencies [[`13b4728`](https://github.com/mastra-ai/mastra/commit/13b47281ca4e91df1d5eda1dda55b14576529509)]:
+  - @mastra/code-sdk@1.19.0-alpha.9
+
 ## 0.28.0-alpha.8
 
 ### Patch Changes
