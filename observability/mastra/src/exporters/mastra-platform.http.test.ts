@@ -5,7 +5,7 @@ import { Mastra } from '@mastra/core';
 import { noopLogger } from '@mastra/core/logger';
 import { SpanType } from '@mastra/core/observability';
 import type { FeedbackEvent, ScoreEvent, LogEvent, TracingEvent } from '@mastra/core/observability';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, ObservabilityStorage } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from '../default';
 import { DefaultExporter } from './default';
@@ -92,6 +92,36 @@ function exporter(endpoint: string, overrides: Partial<MastraPlatformExporterCon
 }
 
 describe('Platform uploads over HTTP', () => {
+  it.each([MastraStorageExporter, DefaultExporter])(
+    'skips inherited unsupported review updates in %s',
+    async StorageExporter => {
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      const update = store.updateFeedbackReviewStatus.bind(store);
+      store.updateFeedbackReviewStatus = ObservabilityStorage.prototype.updateFeedbackReviewStatus;
+      const instance = new StorageExporter();
+      const observability = new Observability({
+        configs: { default: { serviceName: 'unsupported-review', exporters: [instance] } },
+      });
+      new Mastra({ storage, observability, logger: false });
+      cleanup.push(() => observability.shutdown());
+      await expect(
+        instance.onFeedbackReviewStatusEvent({
+          type: 'feedback_review_status',
+          feedback: { feedbackId: 'review', reviewStatus: 'reviewed' },
+        }),
+      ).resolves.toBeUndefined();
+      expect((await store.listFeedback({})).feedback).toEqual([]);
+      store.updateFeedbackReviewStatus = update;
+      await expect(
+        instance.onFeedbackReviewStatusEvent({
+          type: 'feedback_review_status',
+          feedback: { feedbackId: 'missing', reviewStatus: 'reviewed' },
+        }),
+      ).rejects.toThrow('Feedback record not found');
+    },
+  );
+
   it.each([MastraStorageExporter, DefaultExporter])(
     'sends review updates while %s is waiting on local storage',
     async StorageExporter => {

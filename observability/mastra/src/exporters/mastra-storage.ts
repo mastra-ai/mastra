@@ -28,7 +28,7 @@ import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
 import { withSpanPreviews } from './span-previews';
-import { resolveStorageAnnotation } from './storage-annotation';
+import { resolveStorageAnnotation, updateStorageFeedbackReviewStatus } from './storage-annotation';
 import { StorageByteTracker, resolveStorageByteBatching } from './storage-byte-tracker';
 import type { StorageByteBatchingConfig, StorageByteBatchingStats } from './storage-byte-tracker';
 import { skipLocalStorageOnPlatform } from './storage-platform-policy';
@@ -774,13 +774,7 @@ export class MastraStorageExporter extends BaseExporter {
     await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
     if (event.type === 'feedback_review_status') {
-      if (typeof this.#observabilityStorage.updateFeedbackReviewStatus !== 'function') {
-        this.logger.warn(
-          'Storage exporter skipped feedback review update: upgrade the storage adapter and @mastra/core',
-        );
-        return;
-      }
-      await this.#observabilityStorage.updateFeedbackReviewStatus(event.feedback);
+      await updateStorageFeedbackReviewStatus(this.#observabilityStorage, event.feedback, this.logger);
       return;
     }
     const resolved = await resolveStorageAnnotation(event, this.#observabilityStorage, async () => {

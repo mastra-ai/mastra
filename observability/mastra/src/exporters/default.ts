@@ -27,7 +27,7 @@ import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
-import { resolveStorageAnnotation } from './storage-annotation';
+import { resolveStorageAnnotation, updateStorageFeedbackReviewStatus } from './storage-annotation';
 
 /**
  * Configuration for the DefaultExporter's batching, retry, and strategy behavior.
@@ -642,13 +642,7 @@ export class DefaultExporter extends BaseExporter {
     await this.waitForInit();
     if (!this.#observabilityStorage) return;
     if (event.type === 'feedback_review_status') {
-      if (typeof this.#observabilityStorage.updateFeedbackReviewStatus !== 'function') {
-        this.logger.warn(
-          'Storage exporter skipped feedback review update: upgrade the storage adapter and @mastra/core',
-        );
-        return;
-      }
-      await this.#observabilityStorage.updateFeedbackReviewStatus(event.feedback);
+      await updateStorageFeedbackReviewStatus(this.#observabilityStorage, event.feedback, this.logger);
       return;
     }
     const resolved = await resolveStorageAnnotation(event, this.#observabilityStorage, async () => {
