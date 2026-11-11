@@ -21,6 +21,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { cardLabels } from '../../boards/relocate.js';
+import type { PullRequest, PullRequestPage, VersionControl } from '../../capabilities/version-control.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
@@ -1459,6 +1460,9 @@ export interface ReconcilePullRequestState {
 
 export interface PolledPullRequestState extends ReconcilePullRequestState {
   createdAt: string;
+  /** Carried so a replayed opening records the head it opens with, as the webhook does. */
+  headSha?: string;
+  updatedAt?: string;
 }
 
 export type GithubPullRequestFetcher = (input: {
@@ -1492,6 +1496,75 @@ export type GithubOpenIssueLister = (input: {
   repository: string;
 }) => Promise<Array<ReconcileIssueState & { number: number }>>;
 
+/**
+ * Lists a repository's open, non-draft pull requests opened at or after
+ * `createdSince` (epoch ms) for missed-open discovery.
+ */
+export type GithubOpenPullRequestLister = (input: {
+  installationId: number;
+  repository: string;
+  createdSince: number;
+}) => Promise<Array<PolledPullRequestState & { number: number }>>;
+
+/** The facts of an open, non-draft pull request as a version-control listing reports them. */
+export function listedPullRequestState(pullRequest: PullRequest): PolledPullRequestState & { number: number } {
+  return {
+    number: Number(pullRequest.id),
+    title: pullRequest.title,
+    url: pullRequest.url,
+    state: 'open',
+    draft: false,
+    merged: false,
+    assignees: pullRequest.assignees ?? [],
+    requestedReviewers: pullRequest.requestedReviewers ?? [],
+    labels: pullRequest.labels ?? [],
+    headBranch: pullRequest.headBranch,
+    baseBranch: pullRequest.baseBranch,
+    ...(pullRequest.author ? { author: pullRequest.author } : {}),
+    createdAt: pullRequest.createdAt,
+    headSha: pullRequest.headSha,
+    updatedAt: pullRequest.updatedAt,
+  };
+}
+
+/**
+ * Missed-open discovery reads at most this many pages per repository per sweep,
+ * so a repository flooded with pull requests (or a listing whose cursor never
+ * ends) cannot grow a sweep's API cost without limit. A missed open is among
+ * the newest, and thirty per page keeps the 600 newest in reach.
+ */
+const OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES = 20;
+
+/**
+ * Missed-open discovery over an integration's version-control capability.
+ * GitHub lists open pull requests newest first, so paging stops at the first
+ * page opened entirely before `createdSince`, or at the page cap.
+ */
+export function openPullRequestLister(
+  versionControl: Pick<VersionControl, 'listPullRequests'>,
+): GithubOpenPullRequestLister {
+  return async ({ installationId, repository, createdSince }) => {
+    const states: Array<PolledPullRequestState & { number: number }> = [];
+    let cursor: string | null = '1';
+    for (let page = 0; cursor !== null && page < OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES; page += 1) {
+      // Drafts are listed too: a page of drafts still tells how far back the listing has reached.
+      const listed: PullRequestPage = await versionControl.listPullRequests({
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository,
+        state: 'open',
+        includeDrafts: true,
+        cursor,
+      });
+      // A pull request without a parseable creation time counts as recent rather than ending the scan.
+      const recent = listed.pullRequests.filter(pullRequest => !(Date.parse(pullRequest.createdAt) < createdSince));
+      states.push(...recent.filter(pullRequest => !pullRequest.draft).map(listedPullRequestState));
+      if (recent.length === 0) break;
+      cursor = listed.nextCursor;
+    }
+    return states;
+  };
+}
+
 export interface ReconcileRepository {
   id: number;
   fullName: string;
@@ -1514,6 +1587,25 @@ export interface ReconcileSweepSummary {
 }
 
 export type GithubPullRequestReconciler = (repositories: ReconcileRepository[]) => Promise<ReconcileSweepSummary>;
+
+export interface GithubPullRequestDiscoverySummary {
+  /** Factory-configured repositories included in the sweep. */
+  repositories: number;
+  /** Open pull requests listed, opened since their repository was linked. */
+  listed: number;
+  /** Open pull requests with no card, replayed as missed opens. */
+  created: number;
+  /** Open pull requests whose authoring card had lost its open mark, restored by replaying the opening. */
+  repaired: number;
+  /** Repositories or pull requests skipped because of an error. */
+  failed: number;
+  /** Error samples with context, capped at {@link RECONCILE_ERROR_SAMPLE_LIMIT}. */
+  errors: Array<{ repository: string; pullRequestNumber?: number; error: string }>;
+}
+
+export type GithubPullRequestDiscovery = (
+  repositories: ReconcileRepository[],
+) => Promise<GithubPullRequestDiscoverySummary>;
 
 export const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
 
@@ -1698,6 +1790,22 @@ export function polledPullRequestEvent(
   };
 }
 
+/**
+ * Replays an open pull request that has no card as the `opened` delivery
+ * GitHub never sent. The delivery id is stable per pull request so repeat
+ * sweeps dedupe at the ingress.
+ */
+export function reconciledPullRequestOpenedEvent(
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  state: PolledPullRequestState,
+): ParsedGithubWebhook {
+  return {
+    ...polledPullRequestEvent(repository, pullRequestNumber, state),
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:opened`,
+  };
+}
+
 export function reconciledClosedEvent(
   repository: ReconcileRepository,
   pullRequestNumber: number,
@@ -1719,7 +1827,10 @@ export function reconciledClosedEvent(
   };
 }
 
-function pullRequestPayload(pullRequestNumber: number, state: ReconcilePullRequestState): Record<string, unknown> {
+function pullRequestPayload(
+  pullRequestNumber: number,
+  state: ReconcilePullRequestState & Pick<Partial<PolledPullRequestState>, 'headSha' | 'updatedAt'>,
+): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     number: pullRequestNumber,
     title: state.title,
@@ -1730,10 +1841,11 @@ function pullRequestPayload(pullRequestNumber: number, state: ReconcilePullReque
     assignees: githubUsers(state.assignees),
     requested_reviewers: githubUsers(state.requestedReviewers),
     labels: githubLabels(state.labels),
-    head: { ref: state.headBranch },
+    head: { ref: state.headBranch, ...(state.headSha ? { sha: state.headSha } : {}) },
     base: { ref: state.baseBranch },
   };
   if (state.createdAt) payload.created_at = state.createdAt;
+  if (state.updatedAt) payload.updated_at = state.updatedAt;
   if (state.author) payload.user = { login: state.author };
   return payload;
 }
@@ -1803,6 +1915,7 @@ async function retireReconciledSubscriptions(
  * can miss a merge (cursor gaps, downtime, terminally failed decisions), so
  * this sweep compares still-open PR cards against actual GitHub state and
  * replays the merge through the normal rules ingress when they disagree.
+ * Missed opens are {@link createGithubPullRequestDiscovery}'s, on its own cadence.
  */
 export function createGithubPullRequestReconciler(
   options: GithubRulesOptions,
@@ -1828,17 +1941,7 @@ export function createGithubPullRequestReconciler(
         });
       }
     };
-    // An installation can expose hundreds of repositories; only the ones
-    // actually linked to a factory project can have cards to reconcile, so
-    // scope the sweep to those up front instead of probing each repository.
-    const configured = new Set(
-      (await options.sourceControl.projectRepositories.listConfiguredExternalKeys()).map(
-        key => `${key.installationExternalId}\u0000${key.repositoryExternalId}`,
-      ),
-    );
-    const scoped = repositories.filter(repository =>
-      configured.has(`${repository.installationId}\u0000${repository.id}`),
-    );
+    const scoped = await linkedRepositories(options, repositories);
     summary.repositories = scoped.length;
     for (const repository of scoped) {
       // One broken repository (or a failing token exchange for its
@@ -2017,6 +2120,191 @@ export function createGithubPullRequestReconciler(
     }
     return summary;
   };
+}
+
+/**
+ * An installation can expose hundreds of repositories; only the ones actually
+ * linked to a factory project can have cards, so sweeps scope to those up
+ * front instead of probing each repository.
+ */
+async function linkedRepositories(
+  options: GithubRulesOptions,
+  repositories: ReconcileRepository[],
+): Promise<ReconcileRepository[]> {
+  const configured = new Set(
+    (await options.sourceControl.projectRepositories.listConfiguredExternalKeys()).map(
+      key => `${key.installationExternalId}\u0000${key.repositoryExternalId}`,
+    ),
+  );
+  return repositories.filter(repository => configured.has(`${repository.installationId}\u0000${repository.id}`));
+}
+
+/** A non-terminal card that holds an open pull request but no longer records it as the one it has out. */
+
+/**
+ * Catches what the opened webhook (or its follow-up writes) missed, from the
+ * open pull request list alone, so its GitHub cost is the listing's and does
+ * not grow with the cards on the board:
+ *
+ * - an open pull request filed since the repository was linked that no card
+ *   holds is replayed as its `opened` delivery, which files it;
+ * - an open pull request whose authoring card lost its open mark (the write
+ *   after the opening failed) is replayed the same way, which restores it.
+ *
+ * Both replays use one stable delivery id per pull request, so repeats in
+ * later sweeps are absorbed by the ingress instead of filing a second card.
+ */
+export function createGithubPullRequestDiscovery(
+  options: GithubRulesOptions,
+  listOpenPullRequests: GithubOpenPullRequestLister,
+): GithubPullRequestDiscovery {
+  const rules = new GithubRules(options);
+  const boards = toBoardSource(options.boards);
+  return async repositories => {
+    const summary: GithubPullRequestDiscoverySummary = {
+      repositories: 0,
+      listed: 0,
+      created: 0,
+      repaired: 0,
+      failed: 0,
+      errors: [],
+    };
+    const recordFailure = (repository: ReconcileRepository, error: unknown, pullRequestNumber?: number) => {
+      summary.failed += 1;
+      if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
+        summary.errors.push({
+          repository: repository.fullName,
+          ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+    const scoped = await linkedRepositories(options, repositories);
+    summary.repositories = scoped.length;
+    for (const repository of scoped) {
+      // Every pull request some card holds, terminal cards included, so discovery never re-mints one.
+      const carded = new Set<number>();
+      const unmarked = new Map<number, Card[]>();
+      let linkedAt: number;
+      try {
+        const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
+          installationExternalId: String(repository.installationId),
+          repositoryExternalId: String(repository.id),
+        });
+        if (projects.length === 0) continue;
+        linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
+        const items: Readonly<Card>[] = [];
+        for (const project of projects) {
+          await rules.loadBoards(project);
+          items.push(...(await options.storage.listShared({ orgId: project.orgId, factoryProjectId: project.factoryProjectId })));
+        }
+        const authoring = (item: Card | undefined) =>
+          item !== undefined &&
+          item.externalSource?.type !== 'pull-request' &&
+          typeof item.metadata?.openPullRequestNumber !== 'number' &&
+          !isTerminalWorkItem(boards.forProject(item), item);
+        const byId = new Map(items.map(item => [item.id, item]));
+        for (const item of items) {
+          for (const source of pullRequestSources(item)) {
+            const number = attachedPullRequestNumber(source, repository);
+            if (number === undefined) continue;
+            carded.add(number);
+            if (authoring(item) && !['closed', 'merged'].includes(source.state ?? '')) {
+              unmarked.set(number, [...(unmarked.get(number) ?? []), item]);
+            }
+          }
+          const number = reconcilablePullRequestNumber(item, repository);
+          if (number === undefined) continue;
+          carded.add(number);
+          const parent = item.parentWorkItemId ? byId.get(item.parentWorkItemId) : undefined;
+          if (parent && authoring(parent) && !['closed', 'merged'].includes(item.workItem.state ?? '')) {
+            unmarked.set(number, [...(unmarked.get(number) ?? []), parent]);
+          }
+        }
+      } catch (error) {
+        recordFailure(repository, error);
+        continue;
+      }
+      let open: Array<PolledPullRequestState & { number: number }>;
+      try {
+        open = await listOpenPullRequests({
+          installationId: repository.installationId,
+          repository: repository.fullName,
+          // Linking never backfills: the link-time import owns the backlog filed before it.
+          createdSince: linkedAt,
+        });
+      } catch (error) {
+        recordFailure(repository, error);
+        continue;
+      }
+      summary.listed += open.length;
+      // Listed newest first, so a card holding several open pull requests is
+      // restored to its newest, the one it would have out next.
+      const restored = new Set<string>();
+      for (const pullRequest of open) {
+        try {
+          if (!carded.has(pullRequest.number)) {
+            const result = await rules.ingest(
+              reconciledPullRequestOpenedEvent(repository, pullRequest.number, pullRequest),
+            );
+            if (result.status === 'committed') summary.created += 1;
+            continue;
+          }
+          const candidate = await ownedUnmarkedCard(
+            options,
+            repository,
+            pullRequest,
+            (unmarked.get(pullRequest.number) ?? []).filter(card => !restored.has(card.id)),
+          );
+          if (!candidate) continue;
+          restored.add(candidate.id);
+          await rules.ingest(reconciledPullRequestOpenedEvent(repository, pullRequest.number, pullRequest));
+          const after = await options.storage.get({ orgId: candidate.orgId, id: candidate.id });
+          if (after?.metadata?.openPullRequestNumber === pullRequest.number) summary.repaired += 1;
+        } catch (error) {
+          recordFailure(repository, error, pullRequest.number);
+        }
+      }
+    }
+    return summary;
+  };
+}
+
+/**
+ * The unmarked card an open pull request's replayed opening would mark: the
+ * one Factory's provenance names, which is the only link a replay resolves
+ * back to the authoring card once the pull request has its own Review card.
+ * Decided from storage, so a card holding someone else's pull request (or one
+ * a replay cannot restore) costs no replay, and no permission lookup, per sweep.
+ */
+async function ownedUnmarkedCard(
+  options: GithubRulesOptions,
+  repository: ReconcileRepository,
+  pullRequest: PolledPullRequestState & { number: number },
+  candidates: Card[],
+): Promise<Card | undefined> {
+  if (candidates.length === 0) return undefined;
+  const provenance = await options.integrationStorage.subscriptions.listByTarget(
+    provenanceTarget(repository.id, pullRequest.number),
+    { status: 'active' },
+  );
+  return candidates.find(card =>
+    provenance.some(
+      subscription =>
+        subscription.orgId === card.orgId &&
+        pullRequestProvenance(subscription.data, card.factoryProjectId)?.workItemId === card.id,
+    ),
+  );
+}
+
+export function attachGithubPullRequestDiscovery(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+  listOpenPullRequests: GithubOpenPullRequestLister,
+): GithubPullRequestDiscovery | undefined {
+  const options = githubRulesOptions(github, context);
+  if (!options) return undefined;
+  return createGithubPullRequestDiscovery(options, listOpenPullRequests);
 }
 
 export function githubRulesOptions(

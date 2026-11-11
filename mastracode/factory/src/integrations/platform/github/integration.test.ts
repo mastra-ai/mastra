@@ -1182,16 +1182,22 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration({ rules: { unknown: null } })).toThrow();
   });
 
-  it('attaches GitHub rules to polled issue ingress', async () => {
+  it('imports a linked repository backlog through GitHub rules while its list routes stay reads', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/issues?')) return json({ issues: [issue] });
+      const firstPage = new URL(url).searchParams.get('page') === '1';
+      if (url.includes('/issues?')) return json({ issues: firstPage ? [issue] : [] });
+      if (url.includes('/pulls?')) return json({ pullRequests: firstPage ? [pullRequest] : [] });
+      if (url.endsWith('/collaborators/ada/permission')) return json({ permission: 'write' });
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchImpl);
-    const onEvent = vi.fn();
-    const integration = new PlatformGithubIntegration({ rules: { issueOpened: onEvent } });
+    const onIssue = vi.fn();
+    const onPullRequest = vi.fn();
+    const integration = new PlatformGithubIntegration({
+      rules: { issueOpened: onIssue, pullRequestOpened: onPullRequest },
+    });
     const sourceControl = seed.sourceControl.forIntegration('github');
     const project = await seed.projects.create({
       orgId: 'org-1',
@@ -1248,14 +1254,25 @@ describe('PlatformGithubIntegration', () => {
     });
     mountApiRoutes(app as never, integration.routes(context));
 
-    const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
+    const issues = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
+    const pullRequests = await app.request(`/web/github/projects/${projectRepository.id}/prs`);
 
-    expect(response.status).toBe(200);
-    expect(onEvent).toHaveBeenCalledOnce();
-    expect(onEvent).toHaveBeenCalledWith(
+    expect(issues.status).toBe(200);
+    expect(pullRequests.status).toBe(200);
+    expect(onIssue).not.toHaveBeenCalled();
+    expect(onPullRequest).not.toHaveBeenCalled();
+
+    await integration.ingestLinkedRepositoryBacklog({ orgId: 'org-1', projectRepositoryId: projectRepository.id });
+
+    expect(onIssue).toHaveBeenCalledOnce();
+    expect(onIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z', event: 'issueOpened' }),
+    );
+    expect(onPullRequest).toHaveBeenCalledOnce();
+    expect(onPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z',
-        event: 'issueOpened',
+        deliveryId: 'poll:101:pull-request:34:2026-07-01T00:00:00Z',
+        event: 'pullRequestOpened',
       }),
     );
   });

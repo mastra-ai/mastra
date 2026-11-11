@@ -16,6 +16,7 @@ import { GithubAppIdentity } from './app-identity.js';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
 import {
+  createGithubPullRequestDiscovery,
   createGithubPullRequestReconciler,
   GithubRules,
   polledPullRequestEvent,
@@ -4572,7 +4573,6 @@ describe('createGithubPullRequestReconciler', () => {
   function createReconciler(
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
-    fetchIssue?: ReturnType<typeof vi.fn>,
     boards = createTriageWorkRegistry(),
   ) {
     return createGithubPullRequestReconciler(
@@ -4586,9 +4586,31 @@ describe('createGithubPullRequestReconciler', () => {
         boards,
       },
       fetchPullRequest as never,
-      fetchIssue as never,
     );
   }
+
+  function openState(number: number, createdAt: string) {
+    return {
+      number,
+      title: `PR ${number}`,
+      url: `https://github.com/acme/repo/pull/${number}`,
+      state: 'open' as const,
+      draft: false,
+      merged: false,
+      assignees: ['assignee'],
+      requestedReviewers: ['reviewer'],
+      labels: ['bug'],
+      headBranch: 'feature',
+      baseBranch: 'main',
+      author: 'pr-author',
+      createdAt,
+    };
+  }
+
+  const reviewIntakes = async (context: Awaited<ReturnType<typeof setup>>) =>
+    (await context.workItems.listDeferredDecisions('org-1', context.project.id)).filter(
+      ({ decision }) => decision.type === 'upsertLinkedWorkItem',
+    );
 
   async function createIssueCard(
     context: Awaited<ReturnType<typeof setup>>,
@@ -4881,7 +4903,6 @@ describe('createGithubPullRequestReconciler', () => {
     const reconcile = createReconciler(
       context,
       vi.fn(async () => mergedState(17)),
-      undefined,
       boardRegistryOf([createTestBoard()]),
     );
 
@@ -5539,6 +5560,234 @@ describe('createGithubPullRequestReconciler', () => {
           error: 'Platform API request failed: 500 Internal Server Error',
         },
       ],
+    });
+  });
+
+  describe('missed-open discovery', () => {
+    function createDiscovery(context: Awaited<ReturnType<typeof setup>>, listOpenPullRequests: ReturnType<typeof vi.fn>) {
+      return createGithubPullRequestDiscovery(
+        {
+          github: context.github,
+          sourceControl: context.sourceControl,
+          integrationStorage: context.integrationStorage,
+          projects: context.projects,
+          storage: context.workItems,
+          configVersion: 'factory-config-v1',
+          boards: createTriageWorkRegistry(),
+        },
+        listOpenPullRequests as never,
+      );
+    }
+
+    it('mints a Review card, with its author and labels, for an open pull request whose opened webhook never arrived', async () => {
+      const context = await setup('read');
+      const listOpenPullRequests = vi.fn(async () => [openState(21, '2030-01-01T00:00:00Z')]);
+      const discover = createDiscovery(context, listOpenPullRequests);
+
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ listed: 1, created: 1, failed: 0 });
+      // Only pull requests opened since the link are asked for: the link-time import owns the backlog.
+      expect(listOpenPullRequests).toHaveBeenCalledWith({
+        installationId: 7,
+        repository: 'acme/repo',
+        createdSince: context.projectRepository.createdAt.getTime(),
+      });
+      const intakes = await reviewIntakes(context);
+      expect(intakes).toHaveLength(1);
+      expect(intakes[0]!.decision).toMatchObject({
+        type: 'upsertLinkedWorkItem',
+        metadata: {
+          author: 'pr-author',
+          factoryAuthored: false,
+          assignees: ['assignee'],
+          requestedReviewers: ['reviewer'],
+          labels: ['bug'],
+        },
+      });
+
+      // Later sweeps see the same pull request until the card lands; the stable
+      // delivery id makes the ingress replay instead of committing a second intake.
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, failed: 0 });
+      expect(await reviewIntakes(context)).toHaveLength(1);
+    });
+
+    it('leaves pull requests some card already holds', async () => {
+      const context = await setup('read');
+      await createCard(context, {
+        number: 17,
+        stages: ['done'],
+        metadata: {
+          author: 'pr-author',
+          state: 'closed',
+          draft: false,
+          merged: true,
+          assignees: [],
+          requestedReviewers: [],
+          labels: [],
+          [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+        },
+      });
+      const work = await createIssueCard(context, { number: 40 });
+      // A card intaken before URLs were recorded still holds its pull request.
+      await createCard(context, { number: 16, url: null });
+      await context.workItems.attachSource({
+        orgId: 'org-1',
+        id: work.item.id,
+        source: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:18',
+          url: 'https://github.com/acme/repo/pull/18',
+        },
+        metadata: { state: 'open' },
+      });
+      const listOpenPullRequests = vi.fn(async () => [
+        openState(16, '2030-01-01T00:00:00Z'),
+        openState(17, '2030-01-01T00:00:00Z'),
+        openState(18, '2030-01-01T00:00:00Z'),
+      ]);
+
+      await expect(createDiscovery(context, listOpenPullRequests)([repositoryTarget])).resolves.toMatchObject({
+        listed: 3,
+        created: 0,
+        repaired: 0,
+        failed: 0,
+      });
+      expect(await reviewIntakes(context)).toEqual([]);
+      // Someone else's pull request filed on the card is not this card's to mark,
+      // so it costs no replay, and no collaborator lookup, every sweep.
+      expect(context.github.getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+    });
+
+    it('records a failed open pull request listing', async () => {
+      const context = await setup('read');
+      const listOpenPullRequests = vi.fn(async () => {
+        throw new Error('GitHub API request failed: 502 Bad Gateway');
+      });
+
+      await expect(createDiscovery(context, listOpenPullRequests)([repositoryTarget])).resolves.toMatchObject({
+        repositories: 1,
+        created: 0,
+        failed: 1,
+        errors: [{ repository: 'acme/repo', error: 'GitHub API request failed: 502 Bad Gateway' }],
+      });
+    });
+
+    it('restores the open mark a card lost after its pull request opened, without filing it twice', async () => {
+      const context = await setup('read');
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = context;
+      const work = await createIssueCard(context, { number: 42, stages: ['execute'] });
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createTriageWorkRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({
+          storage: workItems,
+          configVersion: 'factory-config-v1',
+          boards: createTriageWorkRegistry(),
+        }),
+        storage: workItems,
+        boards: autoStartingBoards(createTriageWorkRegistry()),
+        ownerId: 'worker-1',
+      });
+      await service.ingest(pullRequest('opened', 'delivery-open'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      // The write recording the open pull request failed after the opening committed.
+      const marked = (await workItems.get({ orgId: 'org-1', id: work.item.id }))!;
+      expect(marked.metadata?.openPullRequestNumber).toBe(17);
+      await workItems.update({
+        orgId: 'org-1',
+        id: work.item.id,
+        userId: 'user-1',
+        patch: { metadata: { ...marked.metadata, openPullRequestNumber: null } },
+      });
+      const discover = createDiscovery(
+        context,
+        vi.fn(async () => [{ ...openState(17, '2030-01-01T00:00:00Z'), headSha: 'abc123' }]),
+      );
+
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, repaired: 1, failed: 0 });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+
+      const repaired = (await workItems.get({ orgId: 'org-1', id: work.item.id }))!;
+      expect(repaired.metadata).toMatchObject({ openPullRequestNumber: 17, pullRequestHeadSha: 'abc123' });
+      expect(repaired.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
+      expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
+
+      // Once restored, the card is no longer a candidate and later sweeps leave it alone.
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, repaired: 0 });
+      expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.revision).toBe(repaired.revision);
+    });
+
+    it('does not replay, every sweep, a lost mark that only a branch name ties to its card', async () => {
+      const context = await setup('write');
+      const { github, sourceControl, integrationStorage, workItems, projects } = context;
+      const work = await createIssueCard(context, { number: 42, stages: ['execute'] });
+      const headBranch = workItemBranch({
+        id: work.item.id,
+        source: 'github-issue',
+        metadata: work.item.workItem.metadata,
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createTriageWorkRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({
+          storage: workItems,
+          configVersion: 'factory-config-v1',
+          boards: createTriageWorkRegistry(),
+        }),
+        storage: workItems,
+        boards: autoStartingBoards(createTriageWorkRegistry()),
+        ownerId: 'worker-1',
+      });
+      // No provenance: the pull request is the card's only because it was opened from the card's branch.
+      const opened = pullRequest('opened', 'delivery-open');
+      opened.payload.pull_request.head.ref = headBranch;
+      await service.ingest(opened);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      const marked = (await workItems.get({ orgId: 'org-1', id: work.item.id }))!;
+      expect(marked.metadata?.openPullRequestNumber).toBe(17);
+      await workItems.update({
+        orgId: 'org-1',
+        id: work.item.id,
+        userId: 'user-1',
+        patch: { metadata: { ...marked.metadata, openPullRequestNumber: null } },
+      });
+      const discover = createDiscovery(
+        context,
+        vi.fn(async () => [{ ...openState(17, '2030-01-01T00:00:00Z'), headBranch, author: 'contributor' }]),
+      );
+      const permissionLookups = vi.mocked(github.getRepositoryCollaboratorPermission).mock.calls.length;
+
+      // A replay resolves to the pull request's own Review card, which cannot restore its
+      // parent's mark (a webhook redelivery cannot either), so discovery skips it rather
+      // than paying a rules pass and a collaborator lookup for it every five minutes.
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, repaired: 0, failed: 0 });
+      expect(vi.mocked(github.getRepositoryCollaboratorPermission).mock.calls).toHaveLength(permissionLookups);
+      expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
     });
   });
 });
