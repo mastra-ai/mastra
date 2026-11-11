@@ -32,13 +32,14 @@ describe('factory-triage source branches', () => {
     );
   });
 
-  it('returns already-triaged labeled cards in Triage to Intake without clearing their label', () => {
+  it('returns pending approval cards in Triage to Intake without clearing their label', () => {
     const awaitingApproval = content.split('**Awaiting approval:**')[1]?.split('\n\n')[0];
-    expect(awaitingApproval).toContain('already in the `triage` phase');
-    expect(awaitingApproval).toContain("the `rest` phase appears in the `factory-phase` signal's `Next phases`");
+    expect(awaitingApproval).toContain('For a card in `triage`');
+    expect(awaitingApproval).toContain('When prior acceptance is not established');
+    expect(awaitingApproval).toContain("If `rest` appears in the `factory-phase` signal's `Next phases`");
     expect(awaitingApproval).toContain('request a transition to `rest`');
     expect(awaitingApproval).toContain(
-      'If the card is in `triage` but `rest` is not in `Next phases`, report that the board must allow a transition',
+      'If `rest` is not in `Next phases`, report that the board must allow a transition',
     );
     expect(awaitingApproval).toContain('do not request an invalid transition or change the label');
     expect(awaitingApproval).toContain('retain `status: needs approval`');
@@ -48,6 +49,22 @@ describe('factory-triage source branches', () => {
     expect(awaitingApproval).toContain(
       'If the handoff or its `Type` is missing, state that in the rationale without inventing a `Type`',
     );
+  });
+
+  it('does not mistake a stale approval label for a new approval request after a human accepts the work', () => {
+    const awaitingApproval = content.split('**Awaiting approval:**')[1]?.split('\n\n')[0];
+    expect(awaitingApproval).toContain('factory_inspect_work_item');
+    expect(awaitingApproval).toContain('stage history');
+    expect(awaitingApproval).toContain('human');
+    expect(awaitingApproval).toContain('human `stage_moved` audit event');
+    expect(awaitingApproval).toContain('not a provider/webhook event');
+    expect(awaitingApproval).toContain('most recent approval handoff');
+    expect(awaitingApproval).toContain('stale');
+    expect(awaitingApproval).toContain('do not return it to `rest` for a second approval');
+    expect(awaitingApproval).toContain('When prior acceptance is not established');
+    expect(content).toContain('For previously approved open work, use `Route: Plan fix`');
+    expect(content).toContain('if none is in `Next phases`, report the missing board transition');
+    expect(content).toContain('or for already-approved work:');
   });
 
   it('lets explicit board Planning routes apply to all authors, including untrusted authors', () => {
