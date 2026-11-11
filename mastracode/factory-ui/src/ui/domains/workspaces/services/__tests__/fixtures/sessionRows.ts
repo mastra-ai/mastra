@@ -78,6 +78,7 @@ export function userRow(
     session: testSession(sessionId, { branch: `user/${sessionId}`, ...overrides }),
     factoryId: 'fp-1',
     pathname: '/factories/fp-1',
+    routeSessionId: undefined,
     running: input.running ?? false,
     pinned: input.pinned ?? false,
     viewer: undefined,

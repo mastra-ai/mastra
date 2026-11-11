@@ -282,7 +282,7 @@ function cardInOtherRepository(item: Card, repositoryId: number, repositoryFullN
  * recorded). Only a single match counts; two cards claiming one branch name neither.
  */
 function branchAuthoringItem(
-  items: Card[],
+  items: readonly Card[],
   headBranch: string | undefined,
   repositoryId: number,
   repositoryFullName: string,
@@ -1263,7 +1263,7 @@ export class GithubRules {
       factoryProjectId: projectId,
       sources: githubItemSources(repositoryId, 'pull-request', pullRequestNumber),
     });
-    const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
+    const items = await this.options.storage.listShared({ orgId, factoryProjectId: projectId });
     const linked =
       resolved.externalSource?.type === 'pull-request'
         ? // Bound to the pull request's own Review card: follow the recorded
@@ -1283,7 +1283,7 @@ export class GithubRules {
                 item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber)) &&
               cardBelongsToRepository(item, repositoryId, repositoryFullName),
           );
-    return linked?.id === resolved.id ? undefined : linked;
+    return linked && linked.id !== resolved.id ? structuredClone(linked) : undefined;
   }
 
   /**
@@ -1307,7 +1307,10 @@ export class GithubRules {
     body: string | undefined;
   }): Promise<{ card: Card; reason: FactoryPullRequestHome['reason'] } | undefined> {
     if (!input.factoryAuthored && !input.authorTrusted) return undefined;
-    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    const items = await this.options.storage.listShared({
+      orgId: input.orgId,
+      factoryProjectId: input.factoryProjectId,
+    });
     const filed = items.some(
       item =>
         attachedPullRequestSource(item, input.repositoryId, input.repositoryName, input.pullRequestNumber) ||
@@ -1337,7 +1340,7 @@ export class GithubRules {
             item.externalSource?.externalId === legacySourceKey(input.repositoryId, 'issue', issueNumber)) &&
           eligible(item),
       );
-      if (card) return { card, reason: 'closes' };
+      if (card) return { card: structuredClone(card), reason: 'closes' };
     }
     return undefined;
   }
@@ -1363,7 +1366,7 @@ export class GithubRules {
       ],
     });
     if (provenance) await this.options.storage.getForProject(orgId, projectId, provenance.workItemId);
-    const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
+    const items = await this.options.storage.listShared({ orgId, factoryProjectId: projectId });
     const resolved = this.#resolveItem(
       items,
       repositoryId,
@@ -1381,13 +1384,13 @@ export class GithubRules {
     // `parentWorkItemId`, so follow that link back rather than relaxing the
     // guard, which would let a Review card react to its own posted review.
     if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request' && resolved.parentWorkItemId) {
-      return (await this.#parentItem(orgId, projectId, items, resolved)) ?? resolved;
+      return structuredClone((await this.#parentItem(orgId, projectId, items, resolved)) ?? resolved);
     }
-    return resolved;
+    return resolved && structuredClone(resolved);
   }
 
   /** The card `child` was filed from; read on its own when the board list lacks it (not copied yet). */
-  async #parentItem(orgId: string, projectId: string, items: Card[], child: Card): Promise<Card | undefined> {
+  async #parentItem(orgId: string, projectId: string, items: readonly Card[], child: Card): Promise<Card | undefined> {
     if (!child.parentWorkItemId) return undefined;
     return (
       items.find(item => item.id === child.parentWorkItemId) ??
@@ -1397,7 +1400,7 @@ export class GithubRules {
   }
 
   #resolveItem(
-    items: Card[],
+    items: readonly Card[],
     repositoryId: number,
     repositoryFullName: string,
     issueNumber: number | undefined,
@@ -1952,7 +1955,7 @@ export function createGithubPullRequestReconciler(
         unanswered = [];
         for (const project of projects) {
           await rules.loadBoards(project);
-          const items = await options.storage.list({
+          const items = await options.storage.listShared({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });

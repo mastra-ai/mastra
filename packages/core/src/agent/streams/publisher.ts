@@ -12,6 +12,8 @@ import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
+import { diffResponseMessages } from './response-messages';
+import type { ResponseMessagesCursor, ResponseMessagesDiff } from './response-messages';
 import type { AgentRunRecordTarget } from './run-records';
 import { deleteAgentRunRecord, readAgentRunRecord, writeAgentRunRecord } from './run-records';
 import { toStreamFinish, toStreamStepFinish, toStreamStepStart } from './wire';
@@ -148,6 +150,32 @@ export function createAgentStreamPublisher({
   let finished = false;
   /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
   let stepToolCallIds: string[] = [];
+  /**
+   * The response messages published so far. Each step-finish sends only what changed; a run
+   * resumed in a new publisher starts over with the full list.
+   */
+  let responseMessagesCursor: ResponseMessagesCursor | { producer: string } = { producer: publisherId };
+  /** The next diff holds the whole list; its `seq` still follows on, so readers don't take it for a late copy. */
+  const forgetSentResponseMessages = () => {
+    if ('fingerprints' in responseMessagesCursor)
+      responseMessagesCursor = { ...responseMessagesCursor, fingerprints: [] };
+  };
+  /** A reader that attaches mid-run on a bus that keeps no history can only place whole lists. */
+  const sendWholeLists = !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(runId));
+  const diffStepResponseMessages = (messages: ResponseMessagesDiff['messages'] | undefined) => {
+    if (!messages) return undefined;
+    if (sendWholeLists) forgetSentResponseMessages();
+    try {
+      const { diff, cursor } = diffResponseMessages(responseMessagesCursor, messages);
+      responseMessagesCursor = cursor;
+      return diff;
+    } catch (error) {
+      // Readers report no messages for this step; publishing must not fail the run.
+      logger?.warn?.(`[AgentStream:${runId}] failed to diff response messages`, { error });
+      forgetSentResponseMessages();
+      return undefined;
+    }
+  };
   const readStepContent = (messageList: MessageList | undefined, toolCallIds: string[]) => {
     try {
       return messageList?.get.response.aiV5.modelContent(-1, toolCallIds);
@@ -243,14 +271,23 @@ export function createAgentStreamPublisher({
               ? undefined
               : readStepContent(messageList, stepToolCallIds);
           stepToolCallIds = [];
-          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content));
-          void enqueue(() => emitChunkEvent(pubsub, runId, published));
+          const responseMessages = diffStepResponseMessages(chunk.payload?.messages?.nonUser);
+          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content, responseMessages));
+          void enqueue(async () => {
+            try {
+              await emitChunkEvent(pubsub, runId, published);
+            } catch (error) {
+              // Readers that missed this diff can't place the next ones: resend the whole list.
+              if (responseMessages) forgetSentResponseMessages();
+              throw error;
+            }
+          });
           return;
         }
         case 'tool-output':
         case 'workflow-step-output': {
           // A delegated agent's chunks arrive wrapped here, with their own prompts and steps.
-          const published = slimNestedAgentChunks(chunk);
+          const published = keepProducedAt(chunk, slimNestedAgentChunks(chunk));
           void enqueue(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
@@ -271,10 +308,7 @@ export function createAgentStreamPublisher({
         }
         case 'error': {
           lastError = chunk.payload.error;
-          const serialized = {
-            ...chunk,
-            payload: { ...chunk.payload, error: serializeIfError(chunk.payload.error) },
-          } as ChunkType<any>;
+          const serialized = withPayload(chunk, { ...chunk.payload, error: serializeIfError(chunk.payload.error) });
           void enqueue(() => emitChunkEvent(pubsub, runId, serialized));
           return;
         }
@@ -294,9 +328,13 @@ export function createAgentStreamPublisher({
 
 /** A copy of `chunk` with another payload, keeping when the chunk was produced. */
 function withPayload(chunk: ChunkType<any>, payload: unknown): ChunkType<any> {
-  const copy = { ...chunk, payload } as ChunkType<any>;
+  return keepProducedAt(chunk, { ...chunk, payload } as ChunkType<any>);
+}
+
+/** `copy`, stamped with when `chunk` was produced; publishing would otherwise stamp the copy when it's sent. */
+function keepProducedAt(chunk: ChunkType<any>, copy: ChunkType<any>): ChunkType<any> {
   const producedAt = getChunkProducedAt(chunk);
-  if (producedAt !== undefined) stampChunkProducedAt(copy, producedAt);
+  if (copy !== chunk && producedAt !== undefined) stampChunkProducedAt(copy, producedAt);
   return copy;
 }
 

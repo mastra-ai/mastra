@@ -417,7 +417,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!query.success) return c.json({ error: 'invalid_metrics_range' }, 400);
           const { windowStart, windowEnd } = parseMetricsRange(query.data.from, query.data.to, new Date());
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const items = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
