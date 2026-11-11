@@ -16,7 +16,7 @@ export interface UpdateSpanPartial {
 }
 
 /** An observability event augmented with retry tracking for the buffer. */
-export type BufferableEvent = Exclude<ObservabilityEvent, { type: 'feedback_replacement' }>;
+export type BufferableEvent = Exclude<ObservabilityEvent, { type: 'feedback_replacement' | 'feedback_review_status' }>;
 export type BufferedEvent = BufferableEvent & RetryCount;
 
 /**

@@ -4922,7 +4922,9 @@ type Shared_Type_105 = {
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -4974,7 +4976,9 @@ type Shared_Type_107 = {
   id: string;
   workflowId: string;
   agentId?: undefined | undefined;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -23459,7 +23463,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       agentId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       prompt: string;
       name?: string | undefined;
@@ -23488,7 +23494,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       workflowId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       inputData?: unknown | undefined;
       initialState?: unknown | undefined;
@@ -23533,6 +23541,8 @@ export type PatchSchedulesScheduleId_PathParams = GetSchedulesScheduleId_PathPar
 
 export type PatchSchedulesScheduleId_Body = {
   cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: (number | null) | undefined;
   timezone?: string | undefined;
   status?: ('active' | 'paused') | undefined;
   metadata?:
