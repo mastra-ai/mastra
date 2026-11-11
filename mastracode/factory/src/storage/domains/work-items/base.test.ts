@@ -477,6 +477,20 @@ describe('WorkItemsStorage', () => {
     expect(shared[0]?.stages).toEqual(['intake']);
   });
 
+  it('throws when a caller writes to a card shared with the list cache', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    const [card] = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(() => Object.assign(card!, { title: 'Mutated by a caller' })).toThrow(TypeError);
+    expect(() => card!.stages.push('build')).toThrow(TypeError);
+    expect(() => Object.assign(card!.workItem, { title: 'Mutated by a caller' })).toThrow(TypeError);
+
+    const [again] = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(again?.title).toBe('Fix login');
+    expect(again?.stages).toEqual(['intake']);
+  });
+
   it('holds list order when a later write touches an older card', async () => {
     const storage = await makeStorage();
     vi.useFakeTimers({ shouldAdvanceTime: true });
