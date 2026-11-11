@@ -1342,8 +1342,7 @@ export class AgentThreadStreamRuntime {
       const preparedRun = state.preparedRunsById.get(runId);
       const controller = preparedRun?.abortController ?? record.segmentAbortController;
       const stepOwners = [controller?.signal, record.stepOwner?.()].filter(owner => owner !== undefined);
-      const executing =
-        (!!preparedRun && record.lifecycle !== 'suspended') || stepOwners.some(owner => hasRunningRunStep(owner));
+      const executing = (!!preparedRun && record.lifecycle !== 'suspended') || this.#hasRunningRunStep(state, runId);
       const abortController = executing ? controller : undefined;
       if (!state.leaseRenewalTimers.has(runId) || record.registeredElsewhere || record.lateRetakeHandoff) {
         // Another execution has the thread; it ends the run and releases the thread.
@@ -1874,7 +1873,14 @@ export class AgentThreadStreamRuntime {
     // another process) or by a successor on the thread. Step the record aside — it keeps its suspended state and
     // stays resumable, but no longer blocks the thread — instead of remote-aborting the run that is actually
     // executing the resume (#29974).
-    if (this.#isParkedRun(state, runId) && !state.preparedRunsById.has(runId)) {
+    // Only a run that has stopped executing qualifies. A partially resumed run is still parked on its remaining
+    // suspensions while its resumed segment runs, and a step that raised a suspension can outlive its segment, so a
+    // run with a step still running keeps the fence-and-stop path like any other executing run.
+    if (
+      this.#isParkedRun(state, runId) &&
+      !state.preparedRunsById.has(runId) &&
+      !this.#hasRunningRunStep(state, runId)
+    ) {
       this.#releaseSupersededParkedRun(state, pubsub, key, runId);
       return;
     }
@@ -4060,6 +4066,21 @@ export class AgentThreadStreamRuntime {
   #isParkedRun(state: AgentThreadRuntimeState, runId: string): boolean {
     const record = state.threadRunsById.get(runId);
     return state.suspendedRunIds.has(runId) || record?.lifecycle === 'suspended' || record?.lifecycle === 'suspending';
+  }
+
+  /**
+   * Whether a step (a model request or a tool call) of `runId` is running here right now. A step registers under
+   * the object its caller declares as the run's owner: the signal of the segment it was prepared with, or, for a
+   * durable run, its registry entry. A parked run's segment has been cleaned up, so `record.segmentAbortController`
+   * is the controller that segment was prepared with; a step of it still winding down, or of a resumed segment,
+   * shows as running under one of these owners. Suspension bookkeeping alone can't tell that: a partially resumed
+   * run stays parked on its sibling suspensions while its resumed segment executes.
+   */
+  #hasRunningRunStep(state: AgentThreadRuntimeState, runId: string): boolean {
+    const record = state.threadRunsById.get(runId);
+    const controller = state.preparedRunsById.get(runId)?.abortController ?? record?.segmentAbortController;
+    const stepOwners = [controller?.signal, record?.stepOwner?.()].filter(owner => owner !== undefined);
+    return stepOwners.some(owner => hasRunningRunStep(owner));
   }
 
   /**

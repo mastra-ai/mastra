@@ -11,10 +11,12 @@
  * the run — with the run id it still had, which reaches the process now executing the
  * resume and kills it mid-stream.
  *
- * A parked run has no step left to stop, so there is nothing for it to abort: it must
- * step its record aside (keep it resumable, stop blocking the thread) and let go, the
- * way it already does for a thread a different run ran to an end. These tests cover
- * both takeover shapes. `abortRunStream` is the observable — it is the hook that
+ * A parked run with nothing still running has no step left to stop, so there is nothing for it
+ * to abort: it must step its record aside (keep it resumable, stop blocking the thread) and let
+ * go, the way it already does for a thread a different run ran to an end. A parked run that is
+ * still executing — partially resumed, or a step of the segment that raised the suspension still
+ * winding down — is stopped like any other executing run instead. These tests cover both takeover
+ * shapes and both sides of that split. `abortRunStream` is the observable — it is the hook that
  * publishes the cross-process abort request.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +24,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
+import { startRunStep } from '../run-lease-fence';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const { LEASE_RENEW_INTERVAL_MS } = vi.hoisted(() => {
@@ -179,11 +182,17 @@ describe('a parked run whose thread lease moved to the resume that continues it'
   });
 
   /** Start `runId` on the thread and drive it to a suspended, parked record holding the lease. */
-  async function parkRun(runId: string, threadId: string, watcher: ThreadWatcher) {
+  async function parkRun(
+    runId: string,
+    threadId: string,
+    watcher: ThreadWatcher,
+    registrationOptions: { stepOwner?: () => object | undefined } = {},
+  ) {
     const agent = { id: 'parked-lease-loss-agent', abortRunStream } as unknown as Agent<any, any, any, any>;
     const run = createFakeRun(runId);
     await runtime.registerRun(agent, run.output, { memory: { thread: threadId, resource: RESOURCE } }, pubsub, {
       continuation: 'across-suspension',
+      ...registrationOptions,
     });
 
     // Let the broadcast tee publish the suspend part before the run settles, so the
@@ -251,17 +260,23 @@ describe('a parked run whose thread lease moved to the resume that continues it'
     await expectStepAsideWhenThreadTaken('successor-run');
   });
 
-  it('still stops a run that loses its lease while its steps are still running', async () => {
+  it('still stops a parked run whose step is still running when its lease moves on', async () => {
     const watcher = await watchThread(pubsub, THREAD);
-    // Not parked: the stream is still open, so the record has steps worth stopping.
-    const agent = { id: 'running-lease-loss-agent', abortRunStream } as unknown as Agent<any, any, any, any>;
-    const run = createFakeRun(RUN_ID);
-    await runtime.registerRun(agent, run.output, { memory: { thread: THREAD, resource: RESOURCE } }, pubsub);
-    await watcher.waitFor('run-registered', RUN_ID);
+    // A durable run's steps register under the object the agent declares as the run's owner, not under the segment
+    // controller the runtime prepared, and a run parked on one suspension can be executing a resumed segment or a
+    // sibling step of the segment that raised it. Such a run is still working beside the thread's new owner, so it
+    // keeps the fence-and-stop path: only a parked run with nothing left running may step aside.
+    const stepOwner = {};
+    await parkRun(RUN_ID, THREAD, watcher, { stepOwner: () => stepOwner });
+    const settleStep = startRunStep(stepOwner);
 
     shared.leases.set(LEASE_KEY, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
 
     await vi.waitFor(() => expect(abortRunStream).toHaveBeenCalledWith(RUN_ID));
+    // Stopped rather than stepped aside: the record is still the thread's blocking run.
+    expect(runtime.getActiveThreadRunId({ threadId: THREAD, resourceId: RESOURCE }, pubsub)).toBe(RUN_ID);
+
+    settleStep();
   });
 
   it('keeps a parked run that still holds its lease for a resume on this process', async () => {
