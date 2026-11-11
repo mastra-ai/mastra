@@ -378,7 +378,7 @@ const paused = await mastra.schedules.pause('pinger')
 
 #### `resume(id)`
 
-Resumes a paused schedule and recomputes the next fire time from the current time. One-off schedules keep their `runAt`. A paused schedule whose cron has no future occurrence is completed instead of resumed. Resuming a `completed` schedule throws a `409` error; update its timing instead to reactivate it.
+Resumes a paused schedule and recomputes the next fire time from the current time. One-off schedules keep their `runAt`; if it passed while the schedule was paused, the schedule fires on the next scheduler tick. A paused schedule whose cron has no future occurrence is completed instead of resumed. Resuming a `completed` schedule throws a `409` error; update its timing instead to reactivate it.
 
 ```typescript
 const active = await mastra.schedules.resume('pinger')
