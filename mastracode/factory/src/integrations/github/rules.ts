@@ -1859,7 +1859,7 @@ export function createGithubPullRequestReconciler(
         unanswered = [];
         for (const project of projects) {
           await rules.loadBoards(project);
-          const items = await options.storage.list({
+          const items = await options.storage.listShared({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });
