@@ -4523,7 +4523,7 @@ describe('factory environment sandbox context', () => {
 
       expect(lastGhToken()).toBe('repo-token-repository-1');
       expect(warn).toHaveBeenCalledExactlyOnceWith(
-        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        '[Mastra Factory] Sandbox GitHub tokens do not cover every environment repository',
         expect.objectContaining({
           reason: 'provider failed to mint one token for this repository set (Error)',
         }),
@@ -4545,10 +4545,10 @@ describe('factory environment sandbox context', () => {
 
       expect(lastGhToken()).toBe('repo-token-repository-1');
       expect(warn).toHaveBeenCalledExactlyOnceWith(
-        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        '[Mastra Factory] Sandbox GitHub tokens do not cover every environment repository',
         expect.objectContaining({
           sessionId: 'session-a',
-          repositories: ['octocat/hello', 'octocat/docs'],
+          uncovered: ['octocat/docs'],
           reason: 'provider mints per-repository tokens only',
         }),
       );
@@ -4557,6 +4557,68 @@ describe('factory environment sandbox context', () => {
         'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
       );
       warn.mockRestore();
+    });
+
+    it('mints one sandbox token per ten environment repositories and points each checkout at its own', async () => {
+      const links = Array.from({ length: 12 }, (_, index) => ({
+        id: index === 0 ? 'project-1' : `link-${index + 1}`,
+        repositoryId: `repository-${index + 1}`,
+        slug: index === 0 ? 'octocat/hello' : `octocat/repo-${index + 1}`,
+        position: index + 1,
+        inEnvironment: true,
+      }));
+      const { resolver, github } = environmentFixture({ links });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = await resolver({ requestContext });
+      await workspace.sandbox.getInfo();
+
+      const first = links.slice(0, 10).map(link => link.repositoryId);
+      const second = links.slice(10).map(link => link.repositoryId);
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryIds: first });
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryIds: second });
+      const env = () => {
+        const calls = mocks.setEnv.mock.calls;
+        return (
+          calls[calls.length - 1]![0] as (env: Record<string, string | undefined>) => Record<string, string | undefined>
+        )({
+          GH_TOKEN_3: 'stale',
+        });
+      };
+      expect(env()).toEqual({
+        GH_TOKEN: `env-token-${first.join('+')}`,
+        GH_TOKEN_2: `env-token-${second.join('+')}`,
+      });
+      const tokenEnvNames = Object.fromEntries(
+        mocks.syncEnvironmentRepository.mock.calls.map((call: unknown[]) => {
+          const options = call[2] as { repoFullName: string; tokenEnvName?: string };
+          return [options.repoFullName, options.tokenEnvName];
+        }),
+      );
+      expect(tokenEnvNames['octocat/repo-2']).toBe('GH_TOKEN');
+      expect(tokenEnvNames['octocat/repo-10']).toBe('GH_TOKEN');
+      expect(tokenEnvNames['octocat/repo-11']).toBe('GH_TOKEN_2');
+      expect(tokenEnvNames['octocat/repo-12']).toBe('GH_TOKEN_2');
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        [
+          `GH_TOKEN covers octocat/hello, ${links
+            .slice(1, 10)
+            .map(link => link.slug)
+            .join(', ')}.`,
+          'GH_TOKEN_2 covers octocat/repo-11, octocat/repo-12; run gh for these as \`GH_TOKEN=$GH_TOKEN_2 gh ...\`.',
+          'git in each checkout already authenticates with the token that covers it.',
+        ].join(' '),
+      );
+
+      // Refresh re-mints every group, not just the session repository's.
+      mocks.getRepositoriesAccess.mockClear();
+      const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+      const refresh = createGithubSubscriptionTools(requestContext, integration).github_refresh_token!;
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledTimes(2);
+      expect(env().GH_TOKEN_2).toBe(`env-token-${second.join('+')}`);
     });
 
     it('skips setup where the template marker matches and runs it where the marker is missing', async () => {
