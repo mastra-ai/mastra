@@ -1,5 +1,23 @@
 # mastra
 
+## 1.39.0-alpha.7
+
+### Minor Changes
+
+- Added `mastra api factory project environment variables` commands to list, set, update and delete a Factory project's sandbox environment variables. Values are never returned. ([#29923](https://github.com/mastra-ai/mastra/pull/29923))
+
+  ```bash
+  mastra api factory project environment variables set <project-id> NPM_TOKEN '{"value":"<token>","appliesTo":"runtime"}'
+  ```
+
+### Patch Changes
+
+- Fixed `mastra dev` loading the deployer from `src/mastra/index.ts` when the project has file-based agents. The dev server now leaves it out, as it does for projects without file-based agents. ([#30003](https://github.com/mastra-ai/mastra/pull/30003))
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`bd1fca8`](https://github.com/mastra-ai/mastra/commit/bd1fca831d15654d3802f7d957533234e125ca9a), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/deployer@1.83.0-alpha.7
+
 ## 1.39.0-alpha.6
 
 ### Patch Changes
