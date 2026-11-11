@@ -76,8 +76,8 @@ export interface PlatformLinearEventWorkerConfig {
    * already have a work item linked to the incoming Linear issue. Without
    * this scoping, a workspace-scoped event would fan out to every project in
    * every org and materialize a triage card in each — a cross-tenant leak.
-   * First-observation of a Linear issue happens through the user-authenticated
-   * `/web/linear/issues?factoryProjectId=...` intake path instead.
+   * First-observation of a Linear issue happens in the reconcile sweep's
+   * intake discovery, which only lists sources an org bound to its project.
    */
   workItems: Pick<WorkItemsStorage, 'list' | 'copyLegacyCards'>;
   /** Called with a single-issue rules ingress derived from an `Issue` webhook. */
@@ -406,8 +406,8 @@ export class PlatformLinearEventWorker extends MastraWorker {
     // Issue from org A materializing a triage card in org B via the default
     // `linearIssueObserved` rule), only dispatch to `(orgId, factoryProjectId)`
     // pairs that already have a persisted work item for this Linear issue.
-    // First-observation of a Linear issue happens through the
-    // user-authenticated `/web/linear/issues?factoryProjectId=...` intake path.
+    // First-observation of a Linear issue happens in the reconcile sweep's
+    // intake discovery, which only lists sources an org bound to its project.
     const sourceKey = `linear:${issue.identifier}`;
     let dispatched = 0;
     for (const project of projects) {
