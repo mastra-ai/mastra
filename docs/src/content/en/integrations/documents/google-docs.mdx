@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const googleDocsAgent = new Agent({
   id: 'google-docs-agent',
   name: 'Google Docs agent',
-  instructions:
-    'You help people create documents, insert and replace text, and edit tables, headers, footers, and styles in Google Docs.',
+  instructions: 'You help people create documents, insert and replace text, and edit tables, headers, footers, and styles in Google Docs.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['google-docs'] }),
 })

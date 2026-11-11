@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const googleMailAgent = new Agent({
   id: 'google-mail-agent',
   name: 'Gmail agent',
-  instructions:
-    'You help people read, send, and draft email, manage labels, filters, and threads, and update mailbox settings in Gmail.',
+  instructions: 'You help people read, send, and draft email, manage labels, filters, and threads, and update mailbox settings in Gmail.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['google-mail'] }),
 })

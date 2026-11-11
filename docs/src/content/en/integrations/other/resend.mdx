@@ -42,8 +42,7 @@ import { tools } from '@mastra/connect'
 export const resendAgent = new Agent({
   id: 'resend-agent',
   name: 'Resend agent',
-  instructions:
-    'You help people send email and broadcasts, and manage contacts, segments, domains, templates, and webhooks in Resend.',
+  instructions: 'You help people send email and broadcasts, and manage contacts, segments, domains, templates, and webhooks in Resend.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['resend'] }),
 })

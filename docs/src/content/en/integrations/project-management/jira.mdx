@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const jiraAgent = new Agent({
   id: 'jira-agent',
   name: 'Jira agent',
-  instructions:
-    'You help people search, create, update, and transition issues, and manage comments, worklogs, and issue links in Jira.',
+  instructions: 'You help people search, create, update, and transition issues, and manage comments, worklogs, and issue links in Jira.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['jira'] }),
 })

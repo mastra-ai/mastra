@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const neonMcpAgent = new Agent({
   id: 'neon-mcp-agent',
   name: 'Neon agent',
-  instructions:
-    'You help people manage projects and branches, run SQL, and plan and apply schema migrations in Neon.',
+  instructions: 'You help people manage projects and branches, run SQL, and plan and apply schema migrations in Neon.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['neon-mcp'] }),
 })

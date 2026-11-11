@@ -42,8 +42,7 @@ import { tools } from '@mastra/connect'
 export const microsoftExcelAgent = new Agent({
   id: 'microsoft-excel-agent',
   name: 'Microsoft Excel agent',
-  instructions:
-    'You help people find and create workbooks, read and update ranges, and manage worksheets, tables, and charts in Microsoft Excel.',
+  instructions: 'You help people find and create workbooks, read and update ranges, and manage worksheets, tables, and charts in Microsoft Excel.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['microsoft-excel'] }),
 })

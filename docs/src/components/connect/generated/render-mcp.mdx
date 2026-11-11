@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const renderMcpAgent = new Agent({
   id: 'render-mcp-agent',
   name: 'Render agent',
-  instructions:
-    'You help people create services and datastores, update environment variables, read logs and metrics, and query Postgres databases in Render.',
+  instructions: 'You help people create services and datastores, update environment variables, read logs and metrics, and query Postgres databases in Render.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['render-mcp'] }),
 })

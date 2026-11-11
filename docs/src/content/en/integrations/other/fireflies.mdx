@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const firefliesAgent = new Agent({
   id: 'fireflies-agent',
   name: 'Fireflies.ai agent',
-  instructions:
-    'You help people read meeting transcripts and analytics, ask questions about meetings, create soundbites, and manage meeting sharing and privacy in Fireflies.ai.',
+  instructions: 'You help people read meeting transcripts and analytics, ask questions about meetings, create soundbites, and manage meeting sharing and privacy in Fireflies.ai.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['fireflies'] }),
 })

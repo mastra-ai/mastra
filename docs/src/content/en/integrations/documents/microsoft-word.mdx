@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const microsoftWordAgent = new Agent({
   id: 'microsoft-word-agent',
   name: 'Microsoft Word agent',
-  instructions:
-    'You help people find, create, copy, and move Word documents, read and update their content, and share them in Microsoft Word.',
+  instructions: 'You help people find, create, copy, and move Word documents, read and update their content, and share them in Microsoft Word.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['microsoft-word'] }),
 })

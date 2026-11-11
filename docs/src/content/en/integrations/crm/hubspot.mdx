@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const hubspotAgent = new Agent({
   id: 'hubspot-agent',
   name: 'HubSpot agent',
-  instructions:
-    'You help people search, create, and update contacts, companies, deals, and tickets, and manage notes, tasks, and marketing emails in HubSpot.',
+  instructions: 'You help people search, create, and update contacts, companies, deals, and tickets, and manage notes, tasks, and marketing emails in HubSpot.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['hubspot'] }),
 })

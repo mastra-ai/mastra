@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const microsoftTeamsAgent = new Agent({
   id: 'microsoft-teams-agent',
   name: 'Microsoft Teams agent',
-  instructions:
-    'You help people read and send channel and chat messages, and manage teams, channels, chats, and members in Microsoft Teams.',
+  instructions: 'You help people read and send channel and chat messages, and manage teams, channels, chats, and members in Microsoft Teams.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['microsoft-teams'] }),
 })

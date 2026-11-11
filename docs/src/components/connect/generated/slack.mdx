@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const slackAgent = new Agent({
   id: 'slack-agent',
   name: 'Slack agent',
-  instructions:
-    'You help people read conversations, send and schedule messages, and manage channels in Slack.',
+  instructions: 'You help people read conversations, send and schedule messages, and manage channels in Slack.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['slack'] }),
 })

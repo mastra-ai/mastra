@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const supabaseAgent = new Agent({
   id: 'supabase-agent',
   name: 'Supabase agent',
-  instructions:
-    'You help people query and change table rows, call database functions, and manage storage buckets, files, and auth users in Supabase.',
+  instructions: 'You help people query and change table rows, call database functions, and manage storage buckets, files, and auth users in Supabase.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['supabase'] }),
 })

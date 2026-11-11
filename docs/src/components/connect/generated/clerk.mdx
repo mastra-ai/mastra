@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const clerkAgent = new Agent({
   id: 'clerk-agent',
   name: 'Clerk agent',
-  instructions:
-    'You help people manage users, organizations, memberships, invitations, roles, and sessions in Clerk.',
+  instructions: 'You help people manage users, organizations, memberships, invitations, roles, and sessions in Clerk.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['clerk'] }),
 })

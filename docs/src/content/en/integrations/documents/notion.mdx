@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const notionAgent = new Agent({
   id: 'notion-agent',
   name: 'Notion agent',
-  instructions:
-    'You help people search, read, create, and update pages, append blocks, and query databases and data sources in Notion.',
+  instructions: 'You help people search, read, create, and update pages, append blocks, and query databases and data sources in Notion.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['notion'] }),
 })

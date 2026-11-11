@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const googleSheetAgent = new Agent({
   id: 'google-sheet-agent',
   name: 'Google Sheets agent',
-  instructions:
-    'You help people read, append, update, and clear cell values, and create spreadsheets, rows, and worksheets in Google Sheets.',
+  instructions: 'You help people read, append, update, and clear cell values, and create spreadsheets, rows, and worksheets in Google Sheets.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['google-sheet'] }),
 })

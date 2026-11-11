@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const openaiAgent = new Agent({
   id: 'openai-agent',
   name: 'OpenAI agent',
-  instructions:
-    'You help people create responses, chat completions, embeddings, images, and moderations, and manage files, batches, and vector stores in OpenAI.',
+  instructions: 'You help people create responses, chat completions, embeddings, images, and moderations, and manage files, batches, and vector stores in OpenAI.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['openai'] }),
 })

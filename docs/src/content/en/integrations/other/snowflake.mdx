@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const snowflakeAgent = new Agent({
   id: 'snowflake-agent',
   name: 'Snowflake agent',
-  instructions:
-    'You help people run SQL statements and read their results, and list databases, schemas, tables, warehouses, and roles in Snowflake.',
+  instructions: 'You help people run SQL statements and read their results, and list databases, schemas, tables, warehouses, and roles in Snowflake.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['snowflake'] }),
 })

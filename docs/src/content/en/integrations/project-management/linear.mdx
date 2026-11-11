@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const linearAgent = new Agent({
   id: 'linear-agent',
   name: 'Linear agent',
-  instructions:
-    'You help people search, create, and update issues, and manage projects, cycles, comments, and labels in Linear.',
+  instructions: 'You help people search, create, and update issues, and manage projects, cycles, comments, and labels in Linear.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['linear'] }),
 })

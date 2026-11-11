@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const incidentIoAgent = new Agent({
   id: 'incident-io-agent',
   name: 'incident.io agent',
-  instructions:
-    'You help people create and update incidents, manage follow-ups and actions, and read alerts, schedules, and catalog entries in incident.io.',
+  instructions: 'You help people create and update incidents, manage follow-ups and actions, and read alerts, schedules, and catalog entries in incident.io.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['incident-io'] }),
 })

@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const sharepointOnlineAgent = new Agent({
   id: 'sharepoint-online-agent',
   name: 'SharePoint Online agent',
-  instructions:
-    'You help people search sites and files, manage lists, list items, and site pages, and share drive items in SharePoint Online.',
+  instructions: 'You help people search sites and files, manage lists, list items, and site pages, and share drive items in SharePoint Online.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['sharepoint-online'] }),
 })

@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const workosAgent = new Agent({
   id: 'workos-agent',
   name: 'WorkOS agent',
-  instructions:
-    'You help people manage organizations, users, memberships, invitations, SSO connections, and directories in WorkOS.',
+  instructions: 'You help people manage organizations, users, memberships, invitations, SSO connections, and directories in WorkOS.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['workos'] }),
 })

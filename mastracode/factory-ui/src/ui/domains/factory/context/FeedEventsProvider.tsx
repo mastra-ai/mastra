@@ -47,7 +47,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     ];
     // One read per query at a time, with at most one more queued behind it: a frame cancelling a slow
     // read for the next would starve a busy board, and a read that never ends holds up only its own query.
+    // The queued read waits a full refresh gap after the one ahead of it ends: a board that reads slower
+    // than the gap would otherwise be read back to back, and the reads would slow the server further.
     const reading = new Map<string, { again: boolean }>();
+    const queued = new Set<ReturnType<typeof setTimeout>>();
     const reread = (queryKey: QueryKey) => {
       // A card read taken mid-move puts the card back in the column it is leaving; the move re-reads the cards when it lands.
       if (queryKey === cardsKey && queryClient.isMutating({ mutationKey: cardMoveMutationKey(factoryProjectId) }) > 0) {
@@ -62,8 +65,17 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       const read = { again: false };
       reading.set(hash, read);
       void queryClient.invalidateQueries({ queryKey }).finally(() => {
-        reading.delete(hash);
-        if (read.again && !abort.signal.aborted) reread(queryKey);
+        if (!read.again || abort.signal.aborted) {
+          reading.delete(hash);
+          return;
+        }
+        // Frames arriving meanwhile find this entry and fold into the one queued read.
+        const timer = setTimeout(() => {
+          queued.delete(timer);
+          reading.delete(hash);
+          reread(queryKey);
+        }, BOARD_FALLBACK_POLL_MS);
+        queued.add(timer);
       });
     };
     const refreshBoard = () => {
@@ -111,6 +123,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       clearTimeout(retry);
       clearTimeout(settling);
       clearInterval(poll);
+      for (const timer of queued) clearTimeout(timer);
     };
   }, [baseUrl, factoryProjectId, queryClient, visible]);
 

@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const githubAgent = new Agent({
   id: 'github-agent',
   name: 'GitHub agent',
-  instructions:
-    'You help people search code and repositories, manage issues, pull requests, branches, files, and releases, and inspect and rerun workflow runs in GitHub.',
+  instructions: 'You help people search code and repositories, manage issues, pull requests, branches, files, and releases, and inspect and rerun workflow runs in GitHub.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['github'] }),
 })

@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const outlookAgent = new Agent({
   id: 'outlook-agent',
   name: 'Microsoft Outlook agent',
-  instructions:
-    'You help people read, send, draft, and reply to email, manage mail folders, and create and update calendar events in Microsoft Outlook.',
+  instructions: 'You help people read, send, draft, and reply to email, manage mail folders, and create and update calendar events in Microsoft Outlook.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['outlook'] }),
 })

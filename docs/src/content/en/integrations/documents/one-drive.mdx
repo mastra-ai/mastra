@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const oneDriveAgent = new Agent({
   id: 'one-drive-agent',
   name: 'OneDrive agent',
-  instructions:
-    'You help people search, upload, copy, move, and share files and folders, and manage permissions and versions in OneDrive.',
+  instructions: 'You help people search, upload, copy, move, and share files and folders, and manage permissions and versions in OneDrive.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['one-drive'] }),
 })

@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const googleDriveAgent = new Agent({
   id: 'google-drive-agent',
   name: 'Google Drive agent',
-  instructions:
-    'You help people find, upload, copy, move, and export files, and manage folders, comments, permissions, and shared drives in Google Drive.',
+  instructions: 'You help people find, upload, copy, move, and export files, and manage folders, comments, permissions, and shared drives in Google Drive.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['google-drive'] }),
 })

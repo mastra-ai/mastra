@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const discordAgent = new Agent({
   id: 'discord-agent',
   name: 'Discord agent',
-  instructions:
-    'You help people send and manage messages, and manage channels, threads, roles, members, and webhooks in Discord.',
+  instructions: 'You help people send and manage messages, and manage channels, threads, roles, members, and webhooks in Discord.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['discord'] }),
 })

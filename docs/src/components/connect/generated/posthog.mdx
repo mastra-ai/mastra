@@ -19,8 +19,7 @@ import { tools } from '@mastra/connect'
 export const posthogAgent = new Agent({
   id: 'posthog-agent',
   name: 'PostHog agent',
-  instructions:
-    'You help people capture events, run queries, and manage feature flags, experiments, insights, dashboards, cohorts, and surveys in PostHog.',
+  instructions: 'You help people capture events, run queries, and manage feature flags, experiments, insights, dashboards, cohorts, and surveys in PostHog.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['posthog'] }),
 })

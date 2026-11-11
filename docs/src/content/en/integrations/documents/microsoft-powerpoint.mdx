@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const microsoftPowerpointAgent = new Agent({
   id: 'microsoft-powerpoint-agent',
   name: 'Microsoft PowerPoint agent',
-  instructions:
-    'You help people find, create, copy, and move presentations, read and update their content, and share them in Microsoft PowerPoint.',
+  instructions: 'You help people find, create, copy, and move presentations, read and update their content, and share them in Microsoft PowerPoint.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['microsoft-powerpoint'] }),
 })

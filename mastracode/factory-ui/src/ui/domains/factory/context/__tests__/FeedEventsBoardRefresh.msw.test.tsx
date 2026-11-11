@@ -25,6 +25,7 @@ const PAST_ONE_REFRESH_GAP_MS = 6_000;
 const PAST_ONE_FALLBACK_POLL_MS = 7_000;
 const PAST_ONE_STREAM_RETRY_MS = 3_100;
 const BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS = 8_000;
+const BOARD_FALLBACK_POLL_MS_FOR_TEST = 5_000;
 const SERVER_PING_EVERY_MS = 25_000;
 const PAST_THE_SILENCE_A_LIVE_STREAM_ALLOWS_MS = 61_000;
 
@@ -220,6 +221,36 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
+  it('leaves a refresh gap after each slow card read instead of reading back to back while frames keep arriving', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    server.use(stream.handler);
+    const { board } = boardEndpoints();
+    const rendered = await renderQuietBoard(stream);
+    const reads: { startedAt: number; endedAt?: number }[] = [];
+    server.use(
+      http.get(BOARD_URL, async () => {
+        const read: { startedAt: number; endedAt?: number } = { startedAt: Date.now() };
+        reads.push(read);
+        await delay(BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS);
+        read.endedAt = Date.now();
+        return HttpResponse.json(boardSnapshot(board.title));
+      }),
+    );
+
+    for (let frame = 0; frame < 60; frame += 1) {
+      stream.push();
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+    }
+
+    expect(reads.length).toBeGreaterThanOrEqual(3);
+    for (let index = 1; index < reads.length; index += 1) {
+      const idle = reads[index]!.startedAt - reads[index - 1]!.endedAt!;
+      expect(idle).toBeGreaterThanOrEqual(BOARD_FALLBACK_POLL_MS_FOR_TEST);
+    }
+    await advance(rendered.client, BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS + PAST_ONE_REFRESH_GAP_MS);
+    await waitForMutationsIdle(rendered.client);
+  });
+
   it('polls only runs while the stream is up, then cards and decisions too once it drops', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
@@ -376,6 +407,7 @@ describe('FeedEventsProvider, on the board', () => {
     // The held read is never cancelled for a newer one; one more waits behind it.
     expect(requests.cards).toBe(before.cards + 1);
     releaseCards();
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
     await waitFor(() => expect(requests.cards).toBe(before.cards + 2));
     await waitForMutationsIdle(rendered.client);
   });

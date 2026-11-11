@@ -36,8 +36,7 @@ import { tools } from '@mastra/connect'
 export const googleCalendarAgent = new Agent({
   id: 'google-calendar-agent',
   name: 'Google Calendar agent',
-  instructions:
-    'You help people find, create, and update events, check availability, and manage calendars in Google Calendar.',
+  instructions: 'You help people find, create, and update events, check availability, and manage calendars in Google Calendar.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['google-calendar'] }),
 })
