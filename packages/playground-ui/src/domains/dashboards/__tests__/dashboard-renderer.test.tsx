@@ -584,13 +584,19 @@ describe('DashboardRenderer', () => {
     /** Whether the button only shows while the card is hovered or focused. */
     const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0') !== null;
     /**
-     * Whether the button stays shown and tappable on touch screens, which can't hover: the KPI group's
-     * floating card either always shows there, or shows once it holds a control that doesn't wait for hover.
+     * Whether the button, and every hidden element around it, shows and takes taps on touch screens, which
+     * can't hover.
      */
     const reachableOnTouch = (button: HTMLElement) => {
-      if (button.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto')) return true;
-      const floating = button.closest('.pointer-coarse\\:has-\\[\\>\\:not\\(\\.opacity-0\\)\\]\\:opacity-100');
-      return floating !== null && button.parentElement === floating && !button.classList.contains('opacity-0');
+      for (let el: HTMLElement | null = button; el; el = el.parentElement) {
+        if (el.classList.contains('opacity-0') && !el.classList.contains('pointer-coarse:opacity-100')) return false;
+        if (
+          el.classList.contains('pointer-events-none') &&
+          !el.classList.contains('pointer-coarse:pointer-events-auto')
+        )
+          return false;
+      }
+      return true;
     };
 
     it.each([
@@ -639,23 +645,24 @@ describe('DashboardRenderer', () => {
       const card = cell(container, widget.id);
       const pin = await within(card).findByRole('button', { name: pinLabel('Pin', widget) }, { timeout: 5000 });
       expect(waitsForHover(pin)).toBe(true);
+      // Touch screens can't hover, so there the pin shows and takes taps.
+      expect(reachableOnTouch(pin)).toBe(true);
 
       fireEvent.click(pin);
       expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
     });
 
-    it('keeps the controls of a KPI group, which float over its border, for hover, and its unpin reachable on touch', async () => {
+    it('keeps the controls of a KPI group, which float over its border, for hover, and reachable on touch', async () => {
       const { container } = renderWithProviders(<PinningHost widgets={[kpisWidget]} onPin={() => {}} />);
       const card = cell(container, kpisWidget.id);
       const pin = await within(card).findByRole('button', { name: pinLabel('Pin', kpisWidget) }, { timeout: 5000 });
       expect(waitsForHover(pin)).toBe(true);
       expect(pin.closest('.pointer-events-none')).not.toBeNull();
-      expect(reachableOnTouch(pin)).toBe(false);
+      expect(reachableOnTouch(pin)).toBe(true);
 
       fireEvent.click(pin);
       const unpin = within(card).getByRole('button', { name: pinLabel('Unpin', kpisWidget) });
       expect(waitsForHover(unpin)).toBe(true);
-      // Touch screens can't hover, so the unpin, which doesn't wait for hover, brings the floating card into view.
       expect(reachableOnTouch(unpin)).toBe(true);
     });
 

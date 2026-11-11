@@ -213,7 +213,7 @@ const host = useMemo(
 );
 ```
 
-The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`) and the filters it is drawn with, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus.
+The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`) and the filters it is drawn with, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus, and always shows on touch screens.
 
 ### Validating stored dashboards
 
