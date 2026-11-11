@@ -216,7 +216,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             name: 'autoRestartActiveRuns',
             type: 'boolean',
             description:
-              "Whether boot-time generic recovery (Mastra.restartAllActiveWorkflowRuns()) automatically restarts this workflow's active runs. Set to false for workflows whose side effects must not be re-driven by a blanket restart, or whose recovery is owned by another mechanism. Durable agent workflows set this to false because their recovery is owned by the opt-in recovery.durableAgents: 'auto' path. On the evented engine, false also turns off step leases and the check that makes restart() throw WORKFLOW_RESTART_RUN_OWNED while a step of the run is running. A step delivered again while one instance runs it can then run on a second instance at the same time.",
+              "Whether boot-time generic recovery (Mastra.restartAllActiveWorkflowRuns()) automatically restarts this workflow's active runs. Set to false for workflows whose side effects must not be re-driven by a blanket restart, or whose recovery is owned by another mechanism. Durable agent workflows set this to false because their recovery is owned by the opt-in recovery.durableAgents: 'auto' path. On the evented engine, false also means restart() never throws WORKFLOW_RESTART_RUN_OWNED for the workflow's runs, and a step whose event is delivered twice can run on two instances at once.",
             isOptional: true,
             defaultValue: 'true',
           },

@@ -1,9 +1,9 @@
 /**
- * Booting replicas restart every active evented run they find. An evented run
- * holds no run lease, so a replica used to restart runs another replica was
- * still executing, and each step ran once per booting replica (#28712). The
- * worker running a step now holds a lease on that step occurrence and keeps
- * the run's liveness key fresh, and `restart()` refuses while the run is live.
+ * Booting replicas restart every active evented run they find, including runs
+ * another replica is still executing (#28712). An evented run holds no run
+ * lease. The worker running a step holds a lease on that step occurrence and
+ * keeps the run's liveness key fresh, and `restart()` refuses while the run is
+ * live, so each step runs once however many replicas boot.
  *
  * Replicas are separate Mastra instances, each with its own pubsub, sharing
  * one store the way pods share one database. Leases use a short TTL here, read

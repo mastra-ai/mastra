@@ -580,10 +580,9 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * agent workflows set this to false because their recovery is owned by the
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
    *
-   * On the evented engine, false also turns off step leases and the check
-   * that makes `restart()` throw `WORKFLOW_RESTART_RUN_OWNED` while a step of
-   * the run is running. A step delivered again while one instance runs it can
-   * then run on a second instance at the same time.
+   * On the evented engine, false also turns off step leases: `restart()` never
+   * throws `WORKFLOW_RESTART_RUN_OWNED` for the workflow's runs, and a step
+   * whose event is delivered twice can run on two instances at once.
    */
   autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
