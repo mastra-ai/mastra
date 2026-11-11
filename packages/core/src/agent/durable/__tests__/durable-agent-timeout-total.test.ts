@@ -767,6 +767,78 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
+  it('saves an accepted step once when the total deadline fires before the mapping step snapshots it', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const runId = 'timeout-accepted-step-run';
+    let armed = false;
+    let pendingAtDeadline = false;
+    // Hold the workflow's next storage read after the step processors accepted the text (and the cut-off
+    // text was cleared) until the deadline fires, so it lands before the mapping step takes its snapshot.
+    const workflowsStore: any = await storage.getStore('workflows');
+    const loadWorkflowRunStatus = workflowsStore.loadWorkflowRunStatus.bind(workflowsStore);
+    vi.spyOn(workflowsStore, 'loadWorkflowRunStatus').mockImplementation(async (...args: any[]) => {
+      const entry = globalRunRegistry.get(runId);
+      if (armed && entry && entry.streamedStepText === undefined) {
+        armed = false;
+        const signal = entry.abortSignal;
+        if (signal && !signal.aborted) {
+          await new Promise<void>(resolve =>
+            signal.addEventListener(
+              'abort',
+              () => {
+                pendingAtDeadline = true;
+                resolve();
+              },
+              { once: true },
+            ),
+          );
+        }
+      }
+      return loadWorkflowRunStatus(...args);
+    });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-accepted-step',
+        name: 'Timeout accepted step',
+        instructions: 'Answer.',
+        memory,
+        model: textModel('ACCEPTED-ANSWER'),
+        outputProcessors: [
+          {
+            id: 'accept-step',
+            processOutputStep: async ({ messages }: any) => {
+              armed = true;
+              return messages;
+            },
+          },
+        ],
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const result = await agent.stream('hello', {
+      runId,
+      memory: { thread: 'timeout-accepted-step-thread', resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 300 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      expect(pendingAtDeadline).toBe(true);
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'timeout-accepted-step-thread' });
+        expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
+        const textParts = messages
+          .flatMap(m => (m.content as any).parts ?? [])
+          .filter((p: any) => p.type === 'text' && p.text.includes('ACCEPTED-ANSWER'));
+        expect(textParts).toHaveLength(1);
+      });
+    } finally {
+      result.cleanup();
+    }
+  });
+
   it.each([
     ['toModelOutput', false],
     ['processToolResult', false],
