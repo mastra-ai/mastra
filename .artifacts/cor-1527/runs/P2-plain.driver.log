@@ -1,0 +1,7 @@
+[2026-11-11T06:14:46Z] start P2-plain-memory
+[2026-11-11T06:20:11Z] exit P2-plain-memory code=0
+{"label":"P2-plain-memory","produced":6344,"delivered":6350,"callerChunks":6344,"observerTerminal":{"type":"finish","t":1794378008410},"callerTerminal":{"type":"finish"}}
+[2026-11-11T06:20:11Z] start P2-plain-redis
+[2026-11-11T06:25:36Z] exit P2-plain-redis code=0
+{"label":"P2-plain-redis","produced":6342,"delivered":6348,"callerChunks":6342,"observerTerminal":{"type":"finish","t":1794378333179},"callerTerminal":{"type":"finish"}}
+[2026-11-11T06:25:36Z] pair done

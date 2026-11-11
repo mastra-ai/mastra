@@ -1,0 +1,18 @@
+{
+  "label": "P3-durable-redis",
+  "cache": "redis",
+  "mode": "durable",
+  "runId": "cor1527-P3-durable-redis",
+  "keyPrefix": "cor1527:P3-durable-redis",
+  "preS": 5,
+  "outageS": 300,
+  "postS": 15,
+  "chunkMs": 50,
+  "chunkChars": 16,
+  "publishRetryBudgetMs": "default (120000)",
+  "gitHead": "a3c08844458bd5c1fc2148d3fb92190faa511aab",
+  "node": "v22.23.3",
+  "redisImage": "sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de5118a5da6b78dd53",
+  "redisVersion": "8.10.3",
+  "T0": 1794378818226
+}

@@ -1,0 +1,130 @@
+{
+  "label": "P2-plain-memory",
+  "mode": "plain",
+  "cache": "memory",
+  "timesAreSecondsRelativeTo": "outage.start",
+  "outageWindow": [0, 300.034],
+  "produced": 6344,
+  "framesSeen": 6350,
+  "byClass": {
+    "resolved-delivered": 6348,
+    "rejected-but-delivered": 2
+  },
+  "rejections": [
+    {
+      "id": "1eda2791-5d77-4319-a1e6-e09c3719624d",
+      "chunkSeq": 99,
+      "index": 102,
+      "xaddEnter": "-0.152",
+      "rejectedAt": "119.849",
+      "budgetExhausted": true,
+      "error": "redis-streams: publish did not reach Redis within 120000ms",
+      "reachedRedisAt": "300.029",
+      "deliveredAt": "300.032"
+    },
+    {
+      "id": "3e4d35f3-4033-43e1-92af-a9cc33826cc2",
+      "chunkSeq": 100,
+      "index": 103,
+      "xaddEnter": "119.850",
+      "rejectedAt": "239.850",
+      "budgetExhausted": true,
+      "error": "redis-streams: publish did not reach Redis within 120000ms",
+      "reachedRedisAt": "300.029",
+      "deliveredAt": "300.032"
+    }
+  ],
+  "firstRejectionAt": "119.849",
+  "longestCacheAppendMs": 2,
+  "longestPublishMs": 120001,
+  "firstDeliveryAfterOutageEnd": "300.034",
+  "lastDelivery": "315.126",
+  "undeliveredChunkSeqs": {
+    "count": 0,
+    "first": []
+  },
+  "duplicateDeliveries": 0,
+  "redisCommands": {
+    "duringOutage": {
+      "MULTI": 6,
+      "XADD": 6,
+      "PEXPIRE": 6,
+      "EXEC": 6,
+      "XREADGROUP": 3,
+      "XACK": 4
+    },
+    "afterOutage": {
+      "MULTI": 6242,
+      "XADD": 6242,
+      "PEXPIRE": 6242,
+      "EXEC": 6242,
+      "XREADGROUP": 6140,
+      "XACK": 6244,
+      "QUIT": 1,
+      "XGROUP": 1
+    },
+    "beforeOutage": {
+      "CLIENT": 8,
+      "INFO": 3,
+      "MULTI": 104,
+      "XGROUP": 2,
+      "PEXPIRE": 104,
+      "EXEC": 104,
+      "XREADGROUP": 108,
+      "XADD": 102,
+      "XACK": 102
+    }
+  },
+  "caller": [
+    {
+      "t": 1794378008371,
+      "rel": 321632,
+      "ev": "caller.terminal",
+      "type": "finish",
+      "at": "315.087"
+    },
+    {
+      "t": 1794378008371,
+      "rel": 321632,
+      "ev": "caller.done",
+      "callerChunks": 6344,
+      "at": "315.087"
+    }
+  ],
+  "observerTerminalAt": "315.126",
+  "observerTerminals": [
+    {
+      "type": "finish",
+      "at": "315.126",
+      "index": 6349
+    }
+  ],
+  "drain": {
+    "t": 1794378009372,
+    "rel": 322633,
+    "ev": "drain.done",
+    "waitedMs": 1001,
+    "observerTerminal": {
+      "type": "finish",
+      "t": 1794378008410
+    },
+    "pendingXadd": 0,
+    "outstandingCache": 0,
+    "produced": 6344,
+    "delivered": 6350,
+    "callerChunks": 6344,
+    "undeliveredIndices": [102, 103]
+  },
+  "consoleMessages": {
+    "No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and i": {
+      "count": 1,
+      "first": "-5.300",
+      "last": "-5.300"
+    },
+    "[AGENT] [AgentStream:<run>] failed to publish stream event {\"error\":{\"name\":\"PublishRetryBudgetExhaustedError\",\"message\":\"redis-streams: pub": {
+      "count": 2,
+      "first": "119.849",
+      "last": "239.850"
+    }
+  }
+}

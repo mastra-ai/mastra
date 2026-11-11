@@ -1,0 +1,86 @@
+{
+  "label": "G1-baseline-memory",
+  "mode": "plain",
+  "cache": "memory",
+  "timesAreSecondsRelativeTo": "harness T0",
+  "outageWindow": null,
+  "produced": 197,
+  "framesSeen": 203,
+  "byClass": {
+    "resolved-delivered": 203
+  },
+  "rejections": [],
+  "firstRejectionAt": null,
+  "longestCacheAppendMs": 1,
+  "longestPublishMs": 35,
+  "firstDeliveryAfterOutageEnd": "",
+  "lastDelivery": "10.168",
+  "undeliveredChunkSeqs": {
+    "count": 0,
+    "first": []
+  },
+  "duplicateDeliveries": 0,
+  "redisCommands": {
+    "duringOutage": {},
+    "afterOutage": {},
+    "beforeOutage": {
+      "CLIENT": 8,
+      "INFO": 3,
+      "MULTI": 205,
+      "XGROUP": 3,
+      "PEXPIRE": 205,
+      "EXEC": 205,
+      "XREADGROUP": 216,
+      "XADD": 203,
+      "XACK": 203,
+      "QUIT": 1
+    }
+  },
+  "caller": [
+    {
+      "t": 1794377523162,
+      "rel": 12318,
+      "ev": "caller.terminal",
+      "type": "finish",
+      "at": "10.161"
+    },
+    {
+      "t": 1794377523163,
+      "rel": 12319,
+      "ev": "caller.done",
+      "callerChunks": 197,
+      "at": "10.162"
+    }
+  ],
+  "observerTerminalAt": "10.168",
+  "observerTerminals": [
+    {
+      "type": "finish",
+      "at": "10.168",
+      "index": 202
+    }
+  ],
+  "drain": {
+    "t": 1794377524164,
+    "rel": 13320,
+    "ev": "drain.done",
+    "waitedMs": 1001,
+    "observerTerminal": {
+      "type": "finish",
+      "t": 1794377523169
+    },
+    "pendingXadd": 0,
+    "outstandingCache": 0,
+    "produced": 197,
+    "delivered": 203,
+    "callerChunks": 197,
+    "undeliveredIndices": []
+  },
+  "consoleMessages": {
+    "No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and i": {
+      "count": 1,
+      "first": "0.000",
+      "last": "0.000"
+    }
+  }
+}

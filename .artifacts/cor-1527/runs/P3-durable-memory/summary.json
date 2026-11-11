@@ -1,0 +1,147 @@
+{
+  "label": "P3-durable-memory",
+  "mode": "durable",
+  "cache": "memory",
+  "timesAreSecondsRelativeTo": "outage.start",
+  "outageWindow": [0, 300.06],
+  "produced": 6336,
+  "framesSeen": 105,
+  "byClass": {
+    "resolved-delivered": 103,
+    "rejected-but-delivered": 2
+  },
+  "rejections": [
+    {
+      "id": "cb8c2bfd-3818-4e45-b18c-3dbf943b66cc",
+      "chunkSeq": 99,
+      "index": 102,
+      "xaddEnter": "0.007",
+      "rejectedAt": "120.009",
+      "budgetExhausted": true,
+      "error": "redis-streams: publish did not reach Redis within 120000ms",
+      "reachedRedisAt": "300.039",
+      "deliveredAt": "300.044"
+    },
+    {
+      "id": "3178a1d4-4c4d-4aec-b06b-4d6ecb0344cf",
+      "index": 103,
+      "xaddEnter": "120.024",
+      "rejectedAt": "240.025",
+      "budgetExhausted": true,
+      "error": "redis-streams: publish did not reach Redis within 120000ms",
+      "reachedRedisAt": "300.039",
+      "deliveredAt": "300.044"
+    }
+  ],
+  "firstRejectionAt": "120.009",
+  "longestCacheAppendMs": 1,
+  "longestPublishMs": 120002,
+  "firstDeliveryAfterOutageEnd": "",
+  "lastDelivery": "300.044",
+  "undeliveredChunkSeqs": {
+    "count": 6236,
+    "first": [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119]
+  },
+  "duplicateDeliveries": 0,
+  "redisCommands": {
+    "duringOutage": {
+      "MULTI": 3,
+      "XADD": 3,
+      "PEXPIRE": 3,
+      "EXEC": 3,
+      "XREADGROUP": 5,
+      "XACK": 6
+    },
+    "afterOutage": {
+      "XREADGROUP": 48
+    },
+    "beforeOutage": {
+      "CLIENT": 10,
+      "INFO": 3,
+      "MULTI": 105,
+      "XGROUP": 3,
+      "PEXPIRE": 105,
+      "EXEC": 105,
+      "XREADGROUP": 211,
+      "XADD": 102,
+      "XACK": 204
+    }
+  },
+  "caller": [
+    {
+      "t": 1794378800996,
+      "rel": 306463,
+      "ev": "caller.terminal",
+      "type": "error",
+      "error": {
+        "name": "PublishRetryBudgetExhaustedError",
+        "message": "redis-streams: publish did not reach Redis within 120000ms"
+      },
+      "at": "300.042"
+    },
+    {
+      "t": 1794378800996,
+      "rel": 306463,
+      "ev": "caller.terminal",
+      "type": "error",
+      "error": {
+        "name": "Error",
+        "message": "redis-streams: publish did not reach Redis within 120000ms"
+      },
+      "at": "300.042"
+    },
+    {
+      "t": 1794378800997,
+      "rel": 306464,
+      "ev": "caller.done",
+      "callerChunks": 100,
+      "at": "300.043"
+    }
+  ],
+  "observerTerminalAt": "300.044",
+  "observerTerminals": [
+    {
+      "type": "error",
+      "at": "300.044",
+      "index": 104
+    }
+  ],
+  "drain": {
+    "t": 1794378816015,
+    "rel": 321482,
+    "ev": "drain.done",
+    "waitedMs": 0,
+    "observerTerminal": {
+      "type": "error",
+      "t": 1794378800998
+    },
+    "pendingXadd": 0,
+    "outstandingCache": 0,
+    "produced": 6336,
+    "delivered": 105,
+    "callerChunks": 100,
+    "undeliveredIndices": [102, 103]
+  },
+  "consoleMessages": {
+    "No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and i": {
+      "count": 1,
+      "first": "-5.153",
+      "last": "-5.153"
+    },
+    "Error processing LLM stream {\"error\":{\"name\":\"PublishRetryBudgetExhaustedError\",\"message\":\"redis-streams: publish did not reach Redis within": {
+      "count": 1,
+      "first": "120.018",
+      "last": "120.018"
+    },
+    "[WORKFLOW] Error executing step workflow.durable-agentic-execution.step.durable-llm-execution: PublishRetryBudgetExhaustedError: redis-strea": {
+      "count": 1,
+      "first": "240.026",
+      "last": "240.026"
+    },
+    "[WORKFLOW] Error executing step workflow.durable-agentic-loop.step.durable-agentic-execution: undefined": {
+      "count": 1,
+      "first": "240.028",
+      "last": "240.028"
+    }
+  }
+}

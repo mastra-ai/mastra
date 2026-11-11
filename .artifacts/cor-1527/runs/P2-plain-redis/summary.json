@@ -1,0 +1,117 @@
+{
+  "label": "P2-plain-redis",
+  "mode": "plain",
+  "cache": "redis",
+  "timesAreSecondsRelativeTo": "outage.start",
+  "outageWindow": [0, 300.034],
+  "produced": 6342,
+  "framesSeen": 6348,
+  "byClass": {
+    "resolved-delivered": 6348
+  },
+  "rejections": [],
+  "firstRejectionAt": null,
+  "longestCacheAppendMs": 300031,
+  "longestPublishMs": 15,
+  "firstDeliveryAfterOutageEnd": "300.035",
+  "lastDelivery": "315.142",
+  "undeliveredChunkSeqs": {
+    "count": 0,
+    "first": []
+  },
+  "duplicateDeliveries": 0,
+  "redisCommands": {
+    "duringOutage": {
+      "EVAL": 2,
+      "INCR": 2,
+      "RPUSH": 2,
+      "EXPIRE": 4,
+      "XREADGROUP": 3,
+      "MULTI": 2,
+      "XADD": 2,
+      "PEXPIRE": 2,
+      "EXEC": 2,
+      "XACK": 1
+    },
+    "afterOutage": {
+      "EVAL": 6244,
+      "INCR": 6244,
+      "RPUSH": 6244,
+      "EXPIRE": 12488,
+      "XREADGROUP": 6261,
+      "XACK": 6245,
+      "MULTI": 6244,
+      "XADD": 6244,
+      "PEXPIRE": 6244,
+      "EXEC": 6244,
+      "QUIT": 1,
+      "XGROUP": 1,
+      "SET": 1
+    },
+    "beforeOutage": {
+      "HELLO": 1,
+      "CLIENT": 10,
+      "INFO": 4,
+      "MULTI": 104,
+      "XGROUP": 2,
+      "PEXPIRE": 104,
+      "EXEC": 104,
+      "GET": 1,
+      "XREADGROUP": 108,
+      "SET": 1,
+      "EVAL": 102,
+      "INCR": 102,
+      "RPUSH": 102,
+      "EXPIRE": 204,
+      "XADD": 102,
+      "XACK": 102
+    }
+  },
+  "caller": [
+    {
+      "t": 1794378333117,
+      "rel": 321548,
+      "ev": "caller.terminal",
+      "type": "finish",
+      "at": "315.080"
+    },
+    {
+      "t": 1794378333117,
+      "rel": 321548,
+      "ev": "caller.done",
+      "callerChunks": 6342,
+      "at": "315.080"
+    }
+  ],
+  "observerTerminalAt": "315.142",
+  "observerTerminals": [
+    {
+      "type": "finish",
+      "at": "315.142",
+      "index": 6347
+    }
+  ],
+  "drain": {
+    "t": 1794378334118,
+    "rel": 322549,
+    "ev": "drain.done",
+    "waitedMs": 1001,
+    "observerTerminal": {
+      "type": "finish",
+      "t": 1794378333179
+    },
+    "pendingXadd": 0,
+    "outstandingCache": 0,
+    "produced": 6342,
+    "delivered": 6348,
+    "callerChunks": 6342,
+    "undeliveredIndices": []
+  },
+  "consoleMessages": {
+    "No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and i": {
+      "count": 1,
+      "first": "-5.137",
+      "last": "-5.137"
+    }
+  }
+}

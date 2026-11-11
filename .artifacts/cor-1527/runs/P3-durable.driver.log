@@ -1,0 +1,7 @@
+[2026-11-11T06:28:14Z] start P3-durable-memory
+[2026-11-11T06:33:38Z] exit P3-durable-memory code=0
+{"label":"P3-durable-memory","produced":6336,"delivered":105,"callerChunks":100,"observerTerminal":{"type":"error","t":1794378800998},"callerTerminal":{"type":"error","error":{"name":"Error","message":"redis-streams: publish did not reach Redis within 120000ms"}}}
+[2026-11-11T06:33:38Z] start P3-durable-redis
+[2026-11-11T06:39:02Z] exit P3-durable-redis code=0
+{"label":"P3-durable-redis","produced":6343,"delivered":6350,"callerChunks":6343,"observerTerminal":{"type":"finish","t":1794379139817},"callerTerminal":{"type":"finish"}}
+[2026-11-11T06:39:02Z] pair done

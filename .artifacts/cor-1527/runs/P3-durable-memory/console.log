@@ -1,0 +1,16 @@
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+Error processing LLM stream {
+  error: PublishRetryBudgetExhaustedError: redis-streams: publish did not reach Redis within 120000ms
+      at Timeout.<anonymous> (file:///workspace/mastra/pubsub/redis-streams/dist/index.js:383:37)
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7) {
+    [cause]: undefined
+  },
+  runId: 'cor1527-P3-durable-memory'
+}
+[WORKFLOW] Error executing step workflow.durable-agentic-execution.step.durable-llm-execution: PublishRetryBudgetExhaustedError: redis-streams: publish did not reach Redis within 120000ms
+    at Timeout.<anonymous> (file:///workspace/mastra/pubsub/redis-streams/dist/index.js:383:37)
+    at listOnTimeout (node:internal/timers:585:17)
+    at process.processTimers (node:internal/timers:521:7)
+[WORKFLOW] Error executing step workflow.durable-agentic-loop.step.durable-agentic-execution: undefined
+{"label":"P3-durable-memory","produced":6336,"delivered":105,"callerChunks":100,"observerTerminal":{"type":"error","t":1794378800998},"callerTerminal":{"type":"error","error":{"name":"Error","message":"redis-streams: publish did not reach Redis within 120000ms"}}}

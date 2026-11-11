@@ -1,0 +1,18 @@
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+[AGENT] [AgentStream:cor1527-P2-plain-memory] failed to publish stream event {
+  error: PublishRetryBudgetExhaustedError: redis-streams: publish did not reach Redis within 120000ms
+      at Timeout.<anonymous> (file:///workspace/mastra/pubsub/redis-streams/dist/index.js:383:37)
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7) {
+    [cause]: undefined
+  }
+}
+[AGENT] [AgentStream:cor1527-P2-plain-memory] failed to publish stream event {
+  error: PublishRetryBudgetExhaustedError: redis-streams: publish did not reach Redis within 120000ms
+      at Timeout.<anonymous> (file:///workspace/mastra/pubsub/redis-streams/dist/index.js:383:37)
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7) {
+    [cause]: undefined
+  }
+}
+{"label":"P2-plain-memory","produced":6344,"delivered":6350,"callerChunks":6344,"observerTerminal":{"type":"finish","t":1794378008410},"callerTerminal":{"type":"finish"}}

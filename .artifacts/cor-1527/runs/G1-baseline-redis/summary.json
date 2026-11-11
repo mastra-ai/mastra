@@ -1,0 +1,93 @@
+{
+  "label": "G1-baseline-redis",
+  "mode": "plain",
+  "cache": "redis",
+  "timesAreSecondsRelativeTo": "harness T0",
+  "outageWindow": null,
+  "produced": 198,
+  "framesSeen": 204,
+  "byClass": {
+    "resolved-delivered": 204
+  },
+  "rejections": [],
+  "firstRejectionAt": null,
+  "longestCacheAppendMs": 20,
+  "longestPublishMs": 4,
+  "firstDeliveryAfterOutageEnd": "",
+  "lastDelivery": "10.167",
+  "undeliveredChunkSeqs": {
+    "count": 0,
+    "first": []
+  },
+  "duplicateDeliveries": 0,
+  "redisCommands": {
+    "duringOutage": {},
+    "afterOutage": {},
+    "beforeOutage": {
+      "HELLO": 1,
+      "CLIENT": 10,
+      "INFO": 4,
+      "MULTI": 206,
+      "XGROUP": 3,
+      "PEXPIRE": 206,
+      "EXEC": 206,
+      "GET": 1,
+      "XREADGROUP": 217,
+      "SET": 2,
+      "EVAL": 204,
+      "INCR": 204,
+      "RPUSH": 204,
+      "EXPIRE": 408,
+      "XADD": 204,
+      "XACK": 204,
+      "QUIT": 1
+    }
+  },
+  "caller": [
+    {
+      "t": 1794377537648,
+      "rel": 11354,
+      "ev": "caller.terminal",
+      "type": "finish",
+      "at": "10.158"
+    },
+    {
+      "t": 1794377537649,
+      "rel": 11355,
+      "ev": "caller.done",
+      "callerChunks": 198,
+      "at": "10.159"
+    }
+  ],
+  "observerTerminalAt": "10.167",
+  "observerTerminals": [
+    {
+      "type": "finish",
+      "at": "10.167",
+      "index": 203
+    }
+  ],
+  "drain": {
+    "t": 1794377538651,
+    "rel": 12357,
+    "ev": "drain.done",
+    "waitedMs": 1001,
+    "observerTerminal": {
+      "type": "finish",
+      "t": 1794377537657
+    },
+    "pendingXadd": 0,
+    "outstandingCache": 0,
+    "produced": 198,
+    "delivered": 204,
+    "callerChunks": 198,
+    "undeliveredIndices": []
+  },
+  "consoleMessages": {
+    "No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and i": {
+      "count": 1,
+      "first": "0.000",
+      "last": "0.000"
+    }
+  }
+}
