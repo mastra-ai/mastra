@@ -62,6 +62,21 @@ describe('groupedRepositoryAccess', () => {
     expect(vc.mints).toEqual([['b']]);
   });
 
+  it('skips a failed group for a minute instead of retrying it for every repository', async () => {
+    const vc = versionControl({ grantGroups: true });
+    vc.getRepositoriesAccess.mockRejectedValueOnce(new Error('rate limited'));
+    let clock = 0;
+    const access = groupedRepositoryAccess(vc, 'org-1', ['a', 'b', 'c'], () => clock);
+
+    for (const id of ['a', 'b', 'c']) await access(id);
+    expect(vc.getRepositoriesAccess).toHaveBeenCalledTimes(1);
+    expect(vc.mints).toEqual([['a'], ['b'], ['c']]);
+
+    clock = 60_000;
+    expect((await access('a')).authorization?.token).toBe('group-4');
+    expect(vc.getRepositoriesAccess).toHaveBeenCalledTimes(2);
+  });
+
   it('still returns access when the group mint fails', async () => {
     const vc = versionControl({ grantGroups: true });
     vc.getRepositoriesAccess.mockRejectedValueOnce(new Error('rate limited'));
