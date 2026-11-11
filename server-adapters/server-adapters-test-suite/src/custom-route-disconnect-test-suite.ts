@@ -215,5 +215,84 @@ export function createCustomRouteDisconnectTestSuite(config: CustomRouteDisconne
       expect(outcome).toBe('model request aborted');
       // Setup, two 5s deadlines and the 3s abort race need more than the 5s default.
     }, 20_000);
+
+    // Technical: whatever keeps the re-dispatched inner Request alive for the
+    // disconnect case above must let go once a response ends without a client
+    // disconnect. Express and others never abort the client signal then, and
+    // undici's Request finalizer holds that signal strongly while the inner
+    // controller lives, so anything the signal (directly or through a WeakMap)
+    // keeps reachable is never collected. (#29154)
+    it.each([
+      { outcome: 'completes', failsMidStream: false },
+      { outcome: 'fails mid-stream', failsMidStream: true },
+    ])(
+      'releases the request of a custom route once its streamed response $outcome (#29154)',
+      async ({ failsMidStream }) => {
+        const finalized = new Set<string>();
+        const registry = new FinalizationRegistry<string>(name => finalized.add(name));
+
+        const mastra = new Mastra({
+          logger: false,
+          server: {
+            apiRoutes: [
+              registerApiRoute('/report', {
+                method: 'POST',
+                requiresAuth: false,
+                handler: async c => {
+                  registry.register(c.req.raw, 'request');
+                  registry.register(c.req.raw.signal, 'request signal');
+                  const chunks = failsMidStream ? ['part-1 '] : ['part-1 ', 'part-2 ', 'part-3'];
+                  const body = new ReadableStream<string>({
+                    pull(controller) {
+                      const chunk = chunks.shift();
+                      if (chunk !== undefined) controller.enqueue(chunk);
+                      else if (failsMidStream) controller.error(new Error('report generation failed'));
+                      else controller.close();
+                    },
+                  });
+                  return new Response(body.pipeThrough(new TextEncoderStream()), {
+                    status: 201,
+                    headers: { 'content-type': 'text/plain; charset=utf-8', 'x-report-id': 'r-1' },
+                  });
+                },
+              }),
+            ],
+          },
+        });
+        const server = await startServer(mastra);
+        cleanups.push(server.close);
+
+        const received = new Promise<{ status?: number; text: string; complete: boolean }>((resolve, reject) => {
+          const req = httpRequest(
+            `${server.baseUrl}/report`,
+            // A fresh connection that closes with the response, so a keep-alive
+            // socket can't hold the server-side request objects.
+            { method: 'POST', agent: false, headers: { 'content-type': 'application/json', connection: 'close' } },
+            res => {
+              let text = '';
+              res.setEncoding('utf8');
+              res.on('data', chunk => (text += chunk));
+              res.on('error', () => {});
+              res.on('close', () => resolve({ status: res.statusCode, text, complete: res.complete }));
+            },
+          );
+          req.on('error', reject);
+          req.end(JSON.stringify({}));
+        });
+
+        const response = await withDeadline(received, 5_000, 'the custom route response to close');
+        // Adapters surface a broken body differently (most cut the connection,
+        // Elysia appends its error JSON), so only the completed case checks it.
+        if (!failsMidStream) {
+          expect(response).toEqual({ status: 201, text: 'part-1 part-2 part-3', complete: true });
+        }
+
+        for (let round = 0; round < 20 && finalized.size < 2; round++) {
+          await collectGarbage();
+        }
+        expect([...finalized].sort()).toEqual(['request', 'request signal']);
+      },
+      20_000,
+    );
   });
 }

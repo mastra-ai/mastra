@@ -2,4 +2,4 @@
 '@mastra/server-adapters-test-suite': patch
 ---
 
-Added a shared HTTP conformance test that checks a client disconnect stops a custom route's agent run after garbage collection.
+Added shared HTTP conformance tests that check a client disconnect stops a custom route's agent run after garbage collection, and that a custom route's request is released once its streamed response ends.
