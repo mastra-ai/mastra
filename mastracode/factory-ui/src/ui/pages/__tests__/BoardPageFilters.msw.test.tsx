@@ -39,7 +39,7 @@ const workItem = (id: string, card: 'issue' | 'pull-request', metadata: Record<s
   metadata,
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
+  description: null,
   revision: 1,
   createdAt: now,
   updatedAt: now,
@@ -122,7 +122,7 @@ function renderBoard(initialSearch = '', issues = [issue(10, ['bug'], 'alice'), 
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
-    // Label-routed intake refetches issues per routed label; keep that lane empty so candidates aren't duplicated.
+    // The auto-triaged lane refetches issues by label; keep it empty so candidates aren't duplicated.
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
       HttpResponse.json({
         issues: new URL(request.url).searchParams.has('label') ? [] : issues,

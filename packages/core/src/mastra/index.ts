@@ -70,7 +70,7 @@ import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, ServerConfigInput, StudioConfig } from '../server/types';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
@@ -127,6 +127,14 @@ import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
+
+function normalizeApiRoutes(routes: NonNullable<ServerConfigInput['apiRoutes']>): ApiRoute[] {
+  return routes.flatMap(route => (Array.isArray(route) ? route : [route]));
+}
+
+function normalizeServerConfig({ apiRoutes, ...server }: ServerConfigInput): ServerConfig {
+  return apiRoutes ? { ...server, apiRoutes: normalizeApiRoutes(apiRoutes) } : server;
+}
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -419,7 +427,7 @@ export interface Config<
   /**
    * Server configuration for HTTP endpoints and middleware.
    */
-  server?: ServerConfig;
+  server?: ServerConfigInput;
 
   /**
    * Studio-specific authentication and authorization configuration.
@@ -863,6 +871,7 @@ export class Mastra<
 > {
   #vectors?: TVectors;
   #agents: TAgents;
+  #toolLoopRegistrations = new WeakMap<ToolLoopAgentLike, Map<string, Agent<any>>>();
   #logger: TLogger;
   #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
   #wiredLoggers = new WeakSet<IMastraLogger>();
@@ -1517,8 +1526,8 @@ export class Mastra<
    * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
    * ```
    */
-  public setServer(server: ServerConfig): void {
-    this.#server = server;
+  public setServer(server: ServerConfigInput): void {
+    this.#server = normalizeServerConfig(server);
   }
 
   /**
@@ -2001,7 +2010,7 @@ export class Mastra<
     }
 
     if (config?.server) {
-      this.#server = config.server;
+      this.#server = normalizeServerConfig(config.server);
       this.#serverExplicit = true;
     }
 
@@ -2813,8 +2822,12 @@ export class Mastra<
    *
    * This method allows dynamic registration of agents after the Mastra instance
    * has been created. The agent will be initialized with the current logger.
+   * Re-registering the same instance under the same key is a no-op. Rehydrating
+   * a stored agent under an existing stored-agent key also leaves the original
+   * registration unchanged.
    *
-   * @throws {MastraError} When an agent with the same key already exists
+   * @throws {MastraError} When a different agent with the same key already exists,
+   *   except when both registrations have source 'stored'
    *
    * @example
    * ```typescript
@@ -2849,12 +2862,19 @@ export class Mastra<
       const underlyingAgent = durableAgent.agent;
       const agentKey = key || durableAgent.id;
 
-      // Check if already registered
+      // Only re-registering the same wrapper is idempotent.
       const agents = this.#agents as Record<string, Agent<any>>;
       if (agents[agentKey]) {
-        const logger = this.getLogger();
-        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
-        return;
+        if (Object.is(agents[agentKey], durableAgent)) {
+          return;
+        }
+        throw new MastraError({
+          id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Agent with key ${agentKey} already exists`,
+          details: { status: 409, key: agentKey },
+        });
       }
 
       // Set the Mastra instance on the durable agent for observability
@@ -2992,16 +3012,30 @@ export class Mastra<
     }
 
     let mastraAgent: Agent<any, any, any>;
-    if (isToolLoopAgentLike(agent)) {
+    const toolLoopInput = isToolLoopAgentLike(agent) ? agent : undefined;
+    if (toolLoopInput) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
-      mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
+      mastraAgent = toolLoopAgentToMastraAgent(toolLoopInput, { fallbackName: key });
     } else {
       mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      return;
+      if (
+        agents[agentKey] === mastraAgent ||
+        (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
+        (agents[agentKey].source === 'stored' && options?.source === 'stored')
+      ) {
+        return;
+      }
+      throw new MastraError({
+        id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with key ${agentKey} already exists`,
+        details: { status: 409, key: agentKey },
+      });
     }
 
     // Initialize the agent
@@ -3021,6 +3055,14 @@ export class Mastra<
     }
 
     agents[agentKey] = mastraAgent;
+    if (toolLoopInput) {
+      let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
+      if (!registrations) {
+        registrations = new Map();
+        this.#toolLoopRegistrations.set(toolLoopInput, registrations);
+      }
+      registrations.set(agentKey, mastraAgent);
+    }
 
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor

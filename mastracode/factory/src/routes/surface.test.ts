@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
-import { createTestBoard, selfReviewWorkBoard } from '../boards/test-utils.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
+import { createTestBoard, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
@@ -77,7 +77,8 @@ function bindingInput(
   } as unknown as FactoryBindingPreparationInput;
 }
 
-const boards = createBoardRegistry();
+// Work as projects stored before new projects' Work dropped Triage: these tests start its Triage lane.
+const boards = createTriageWorkRegistry();
 /** Work as a project stored it while Work still had its `review` self-review phase. */
 const olderWork = new Map([['work', selfReviewWorkBoard]]);
 
@@ -689,6 +690,7 @@ describe('prepareFactoryRuleBinding', () => {
     const transitions = new FactoryTransitionService({
       storage: seeded.workItems,
       configVersion: 'factory-config-v1',
+      boards,
     });
     await transitions.transition({
       orgId: 'org-1',
@@ -930,21 +932,18 @@ describe('prepareFactoryRuleBinding', () => {
   it('gives a board installed as work in place of the built-in one only the lanes it declares', async () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
-    const replacement = createBoardRegistry({
-      boards: [
-        defineBoard({
-          id: 'work',
-          name: 'Work',
-          initialPhase: 'intake',
-          phases: {
-            intake: { kind: 'resting', name: 'Intake', nextPhases: ['fixing', 'done'] },
-            fixing: { kind: 'working', name: 'Fixing', runner: { context: 'work' }, nextPhases: ['done'] },
-            done: { kind: 'terminal', name: 'Done' },
-          },
-        }),
-      ],
-      includeDefaultBoards: false,
-    });
+    const replacement = boardRegistryOf([
+      defineBoard({
+        id: 'work',
+        name: 'Work',
+        initialPhase: 'intake',
+        phases: {
+          intake: { kind: 'resting', name: 'Intake', nextPhases: ['fixing', 'done'] },
+          fixing: { kind: 'working', name: 'Fixing', runner: { context: 'work' }, nextPhases: ['done'] },
+          done: { kind: 'terminal', name: 'Done' },
+        },
+      }),
+    ]);
     const start = (role: string) =>
       prepareFactoryRuleBinding(
         github,

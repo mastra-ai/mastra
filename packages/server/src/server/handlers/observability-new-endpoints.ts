@@ -86,6 +86,7 @@ import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-ada
 import { prepareAuthorEnrichment } from './author-enrichment';
 import { getCallerPermissions } from './authorship';
 import { handleError } from './error';
+import { exportPersistedEvent, persistedFeedbackEvent, persistedScoreEvent } from './observability-export';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
@@ -116,6 +117,7 @@ import {
   isObservabilityOutcomeField,
   supportsObservabilityTraceQueryOutcomeFields,
   assertObservabilityTraceQuerySupported,
+  assertObservabilityTextSearchSupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
   getObservabilityStore,
@@ -328,6 +330,8 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     requestContext,
     timeRange,
     where,
+    textSearch,
+    rootSource,
     group,
     orderBy,
     page,
@@ -336,6 +340,12 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     after,
     limit,
   }) => {
+    if (rootSource === 'aggregated') {
+      throwTraceQueryError(501, {
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Aggregated trace roots are not supported by this server',
+      });
+    }
     let plan;
     try {
       const user = requestContext.get(MASTRA_USER_KEY);
@@ -355,7 +365,19 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
             })
           : undefined;
       plan = coreStorage.planTraceQuery(
-        { timeRange, where, group, orderBy, page, pagination, mode, after, limit },
+        {
+          timeRange,
+          where,
+          ...(rootSource === undefined || rootSource === 'legacy' ? {} : { rootSource }),
+          ...(textSearch === undefined ? {} : { textSearch }),
+          group,
+          orderBy,
+          page,
+          pagination,
+          mode,
+          after,
+          limit,
+        },
         { authorizationBinding, scope: resolveTraceQueryScope(requestContext) },
       );
     } catch (error) {
@@ -375,6 +397,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
+      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'trace');
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
@@ -741,11 +764,11 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       code: 'SPAN_QUERY_UNSUPPORTED',
       message: 'Span queries require a newer @mastra/core. Please upgrade.',
     }),
-  handler: async ({ mastra, requestContext, timeRange, where, orderBy, page }) => {
+  handler: async ({ mastra, requestContext, timeRange, where, textSearch, orderBy, page }) => {
     let plan;
     try {
       plan = coreStorage.planSpanQuery(
-        { timeRange, where, orderBy, page },
+        { timeRange, where, ...(textSearch === undefined ? {} : { textSearch }), orderBy, page },
         { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED') },
       );
     } catch (error) {
@@ -765,6 +788,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
+      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'span');
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);
@@ -1203,7 +1227,9 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
     const context = await resolveSignalContext(observabilityStore, requestContext, score, contextMode);
     const scoreId = score.scoreId ?? generateSignalId();
     const timestamp = score.timestamp === undefined ? new Date() : new Date(score.timestamp);
-    await observabilityStore.createScore({ score: { ...score, ...context, scoreId, timestamp } });
+    const record = { ...score, ...context, scoreId, timestamp };
+    await observabilityStore.createScore({ score: record });
+    await exportPersistedEvent(mastra, persistedScoreEvent(record));
     return {
       success: true,
       data: { scoreId, traceId: score.traceId, spanId: score.spanId ?? null, timestamp: timestamp.toISOString() },
@@ -1350,19 +1376,19 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
     const context = await resolveSignalContext(observabilityStore, requestContext, feedback, contextMode);
     const feedbackId = feedback.feedbackId ?? generateSignalId();
     const timestamp = feedback.timestamp === undefined ? new Date() : new Date(feedback.timestamp);
-    await observabilityStore.createFeedback({
-      feedback: {
-        ...feedback,
-        ...context,
-        feedbackUserId:
-          typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
-            ? authenticatedId
-            : (feedback.feedbackUserId ?? null),
-        feedbackId,
-        timestamp,
-        reviewStatus: feedback.reviewStatus ?? 'needs-review',
-      },
-    });
+    const record = {
+      ...feedback,
+      ...context,
+      feedbackUserId:
+        typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+          ? authenticatedId
+          : (feedback.feedbackUserId ?? null),
+      feedbackId,
+      timestamp,
+      reviewStatus: feedback.reviewStatus ?? 'needs-review',
+    };
+    await observabilityStore.createFeedback({ feedback: record });
+    await exportPersistedEvent(mastra, persistedFeedbackEvent(record));
     return {
       success: true,
       data: {

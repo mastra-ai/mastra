@@ -13,6 +13,7 @@ import {
   cardBoardFlow,
   cardRuleFacts,
   hasPullRequest,
+  intakeTarget,
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
@@ -48,8 +49,6 @@ import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvo
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
-import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -66,6 +65,7 @@ import type {
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
+import { withWorkItemDescription } from '../work-items/description-context.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
@@ -476,8 +476,6 @@ export interface FactoryDecisionDispatcherOptions {
   /** The project's intake routes, which place newly filed linked cards. Without it, decisions place cards as they say. */
   intakeRoutes?: IntakeRoutesReader;
   ownerId?: string;
-  /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
-  isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -487,8 +485,6 @@ export interface FactoryDecisionDispatcherOptions {
    * per-session listener (`observeSessionRunReports`). Never throws.
    */
   reportRunEnd?: FactoryRunEndReporter;
-  /** Injects the work item's recent comments into skill-invocation kickoffs. */
-  feedReader?: FactoryFeedReader;
   /**
    * Told each step of a pull request review run: accepted, started, retrying,
    * and how it ended. Driven by the dispatcher rather than the agent, so a run
@@ -693,12 +689,10 @@ export class FactoryDecisionDispatcher {
   readonly #intakeRoutes?: IntakeRoutesReader;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
-  readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #reportRunEnd?: FactoryRunEndReporter;
-  readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #reportReviewStatus?: FactoryReviewStatusReporter;
   /** Review attempts that already said `queued`, and those that watched their run start. */
@@ -752,12 +746,10 @@ export class FactoryDecisionDispatcher {
     this.#intakeRoutes = options.intakeRoutes;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
-    this.#isAutoRunEnabled = options.isAutoRunEnabled;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
     this.#reportRunEnd = options.reportRunEnd;
-    this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#reportReviewStatus = options.reportReviewStatus;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
@@ -1368,19 +1360,19 @@ export class FactoryDecisionDispatcher {
   }
 
   // Effects a person owns: starting a run (compute + code execution), and an
-  // external event pulling a card back into a working lane.
+  // external event pulling a card back into a working lane. The board decides
+  // which of them start on their own: a phase with `autoStart` (and a card its
+  // `autoStartWhen` matches). Anything else waits for a person.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (record.approvedAt !== null) return false;
     const boards = await this.#boards.load(record);
     if (!requestsConsent(boards, record, decision)) return false;
-    // Withholding auto-run decides what the Factory may pick up on its own, not
-    // whether it may finish work a person already handed it. Once someone starts
-    // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    if (item?.autonomyArmedAt != null) return false;
-    if (item && reviewsFactoryAuthoredCode(boards, item, decision)) return false;
-    if (item && startsInAutoPhase(boards, item, decision)) return false;
-    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
+    if (!item) return true;
+    // Once someone starts a card, the runs that carry it to review are that same request continuing.
+    if (item.autonomyArmedAt != null) return false;
+    if (reviewsFactoryAuthoredCode(boards, item, decision)) return false;
+    return !startsInAutoPhase(boards, item, decision);
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
@@ -1472,11 +1464,11 @@ export class FactoryDecisionDispatcher {
           }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
-          const kickoffContents = await withWorkItemFeed(
-            this.#feedReader,
-            { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.contents,
-          );
+          // Re-read: the description may have been edited while the open run drained.
+          const current = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const kickoffContents = withWorkItemDescription(resolved.contents, current?.description);
           // A skill kickoff is system-generated, not something the human typed: send it
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces
           // record the skill name. Plain-prompt kickoffs stay user messages.
@@ -1488,7 +1480,7 @@ export class FactoryDecisionDispatcher {
                   attributes: { name: resolved.skillName },
                 }
               : { type: 'user' as const, tagName: 'user' };
-          // The feed read is async storage I/O; the card can move while it runs.
+          // The description read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) {
             if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
             return this.#replayLanded(record, decision, session, runStillActive);
@@ -1725,11 +1717,13 @@ export class FactoryDecisionDispatcher {
   ) {
     const issueId = decision.metadata?.linearIssueId;
     if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
-    const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
+    const items = await this.#storage.listShared({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
     const cards = items.filter(
       item => item.externalSource?.integrationId === 'linear' && item.workItem.metadata?.linearIssueId === issueId,
     );
-    return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
+    const card = cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0];
+    // The shared list is the cache itself: hand on a copy of the card.
+    return card ? structuredClone(card) : null;
   }
 
   async #upsertLinkedItem(
@@ -1908,10 +1902,10 @@ export class FactoryDecisionDispatcher {
       }
     }
     if (skipRules) {
-      // Creation already filed the card at `stage`. An existing card — a
-      // reconcile pass reacting to a label change, say — is placed there the
-      // same way, through the relocation the label routes use, so no phase rule
-      // runs for it and no transition is recorded.
+      // Creation already filed the card at `stage`. An existing card — one a
+      // reconcile pass files again, say — is placed there the same way, through
+      // a cross-board relocation, so no phase rule runs for it and no transition
+      // is recorded.
       // Another decision of the same delivery (a pull request attaching to this card, say) can
       // change the card in between; a placement skipped for that reason is retried on a fresh read.
       let item: Card | null = result.created ? null : result.item;
@@ -2068,7 +2062,6 @@ export class FactoryDecisionDispatcher {
     if (!authorTrusted(decision.metadata) || !this.#intakeRoutes || decision.skipRules === true) return false;
     if (record.workItemId !== null) return false;
     const boards = await this.#boards.load(record);
-    if (decision.stage !== boards.get(decision.board)?.initialPhase) return false;
     const routes = await this.#intakeRoutes.listIntakeRoutes({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
@@ -2086,9 +2079,9 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Applies the project's intake routes to an arrival: a decision filing the card at its
-   * board's initial phase. A decision naming a later phase (a maintainer's review request)
-   * or placing the card outright (`skipRules`) already chose where the card goes.
+   * Places an arrival where the project's intake routes say: the first enabled route matching it,
+   * else the default board's first phase. The board and phase an integration's rule named don't
+   * count; only a decision placing the card outright (`skipRules`) keeps its own.
    */
   async #routeArrival(
     record: FactoryDeferredDecisionRecord,
@@ -2096,7 +2089,6 @@ export class FactoryDecisionDispatcher {
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
     if (!this.#intakeRoutes || decision.skipRules === true) return decision;
-    if (decision.stage !== boards.get(decision.board)?.initialPhase) return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
@@ -2104,7 +2096,6 @@ export class FactoryDecisionDispatcher {
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
     });
-    if (routes.length === 0) return decision;
     // A route can also test the issue a pull request closes, as it is now.
     const closedIssue = decision.closesIssue
       ? await this.#storage.get({ orgId: record.orgId, id: decision.closesIssue.workItemId })
@@ -2126,7 +2117,10 @@ export class FactoryDecisionDispatcher {
         : {}),
     };
     const placement = resolveIntakePlacement(routes, facts, boards);
-    if (!placement) return decision;
+    if (!placement) {
+      const fallback = intakeTarget(boards);
+      return fallback ? { ...decision, board: fallback.board, stage: fallback.initialPhase } : decision;
+    }
     return {
       ...decision,
       board: placement.board,
@@ -2137,7 +2131,7 @@ export class FactoryDecisionDispatcher {
 
   /**
    * A card an intake route placed stays on the route's board when its source is filed again
-   * (a reconcile replaying "opened" with today's label route or binding): the decision lands
+   * (a reconcile replaying "opened"): the decision lands
    * on the card's board at its first phase, so it only backfills facts and moves nothing.
    * An explicit placement (`skipRules`) still wins.
    */
@@ -2321,7 +2315,7 @@ export class FactoryDecisionDispatcher {
       ingress: { type: 'rule', identity },
       cause: 'event_route',
       causalChain,
-      eventRoute: { routeId: route.routeId, allowWorkingPhase: route.allowWorkingPhase },
+      eventRoute: { routeId: route.routeId },
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);

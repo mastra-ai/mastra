@@ -15,16 +15,30 @@ export interface BoardRegistry extends Iterable<[string, InstalledBoard]> {
 
 export const defaultBoards = Object.freeze([workBoard]) as readonly InstalledBoard[];
 
-export function createBoardRegistry(
-  options: {
-    boards?: readonly InstalledBoard[];
-    includeDefaultBoards?: boolean;
-  } = {},
-): BoardRegistry {
-  const installed = options.includeDefaultBoards === false ? [] : defaultBoards;
+/**
+ * Factory's boards: its Work board, then `boards`. Work is always installed; to run another Work,
+ * store it under the `work` key with `factory.upsertBoard()`. The exported `workBoard` itself is
+ * accepted in `boards` and installed once.
+ */
+export function createBoardRegistry(options: { boards?: readonly InstalledBoard[] } = {}): BoardRegistry {
+  const boards = (options.boards ?? []).filter(board => !defaultBoards.includes(board));
+  for (const board of boards) {
+    const builtIn = defaultBoards.find(candidate => candidate.id === board.id);
+    if (builtIn) {
+      throw new Error(
+        `MastraFactory: board id '${board.id}' is Factory's ${builtIn.name} board, which every project has. ` +
+          `To run your own, store it under '${board.id}' with factory.upsertBoard(board, { projects: 'all' }).`,
+      );
+    }
+  }
+  return boardRegistryOf([...defaultBoards, ...boards]);
+}
+
+/** A registry of exactly `boards`, in order, such as the boards a project stored. */
+export function boardRegistryOf(boards: readonly InstalledBoard[]): BoardRegistry {
   const registry = new Map<string, InstalledBoard>();
 
-  for (const board of [...installed, ...(options.boards ?? [])]) {
+  for (const board of boards) {
     // The retired Review board is served only as itself, to projects still using it; a new board
     // under its id would take over the cards stored there.
     if (board.id === LEGACY_REVIEW_BOARD && board !== reviewBoard) {

@@ -93,6 +93,7 @@ export async function emitStepStartEvent(
     provider?: StepStartPayload['provider'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
+    backgroundResultTaskIds?: StepStartPayload['backgroundResultTaskIds'];
   },
   outputProcessed?: boolean,
 ): Promise<void> {

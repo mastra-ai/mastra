@@ -54,7 +54,7 @@ export interface LinearIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** Linear source the issue was read from (project or team); resolves the bound board via `intakeBoards`. */
+  /** Linear source the issue was read from (project or team). */
   sourceId?: string | null;
   projectId?: string | null;
 }
@@ -73,8 +73,6 @@ export interface LinearRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: LinearIssueIngress[];
-  /** Board id per bound Linear source id, from the project's intake bindings. */
-  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
@@ -109,7 +107,8 @@ export class LinearRules {
       factoryProjectId: input.factoryProjectId,
       sources: input.issues.map(issue => ({ integrationId: 'linear', type: 'issue', externalId: `linear:${issue.identifier}` })),
     });
-    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    // The shared list is the cache itself: only the card handed on to rules is cloned.
+    const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
@@ -122,7 +121,7 @@ export class LinearRules {
         itemsBySourceKey.get(`linear:${issue.identifier}`) ??
         byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ??
         byIssueId[0];
-      statuses.push(await this.#ingestIssue(input, issue, relatedItem));
+      statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
@@ -145,8 +144,6 @@ export class LinearRules {
     }
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
-    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.#boards(input).get(boundBoardId) : undefined;
     const context: FactoryLinearRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -174,7 +171,7 @@ export class LinearRules {
             ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...withIntakeTarget(this.#boards(input), boundBoard),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };

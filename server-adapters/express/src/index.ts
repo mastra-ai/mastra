@@ -3,7 +3,6 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -690,28 +689,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     if (!(await this.buildCustomRouteHandler(routes))) return;
 
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {
-      // Check if this request matches a protected custom route and run auth
+      // Check auth against the custom route the custom-route app will actually run for
+      // the URL it's forwarded, which can differ from what Express matched.
       const path = String(req.path || '/');
       const method = String(req.method || 'GET');
-      const matchedRoute = findMatchingCustomRoute(
-        path,
-        method,
-        this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
-      );
-      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
+      const dispatchUrl = `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`;
+      const {
+        match: matchedRoute,
+        requiresAuth: shouldRunCustomRouteAuth,
+        serverRoute,
+        customRouteAuthConfig,
+      } = this.resolveCustomRouteAuth(dispatchUrl, method, path);
       const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
       if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
-        const serverRoute: ServerRoute = {
-          method: (matchedRoute?.route.method ?? method) as any,
-          path: matchedRoute?.route.path ?? path,
-          responseType: 'json',
-          handler: async () => {},
-          requiresAuth: matchedRoute?.route.requiresAuth,
-          requiresPermission: matchedRoute?.route.requiresPermission,
-          fga: matchedRoute?.route.fga,
-        };
-
         if (shouldRunCustomRouteAuth) {
           const authError = await this.checkRouteAuth(serverRoute, {
             path,
@@ -721,6 +712,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             requestContext: res.locals.requestContext,
             request: toWebRequest(req),
             buildAuthorizeContext: () => toWebRequest(req),
+            customRouteAuthConfig,
           });
 
           if (authError) {
@@ -771,7 +763,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
 
       const response = await this.handleCustomRouteRequest(
-        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        dispatchUrl,
         req.method,
         req.headers as Record<string, string | string[] | undefined>,
         req.body,

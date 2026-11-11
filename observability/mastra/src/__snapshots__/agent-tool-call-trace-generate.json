@@ -501,7 +501,8 @@
                       },
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -518,7 +519,21 @@
                         "role": "user",
                         "content": "Calculate 5 + 3"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-calc-1",
+                          "toolName": "calculator",
+                          "args": {
+                            "operation": "add",
+                            "a": 5,
+                            "b": 3
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -973,7 +988,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -998,7 +1014,11 @@
                         "role": "tool",
                         "content": "[tool-result: calculator]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 generate response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

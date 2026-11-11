@@ -23,7 +23,6 @@ function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): 
     when: null,
     target: { boardKey, phaseKey: null, joinClosedIssue: false },
     on: ['work_item.created'],
-    allowWorkingPhase: false,
     revision: 1,
     createdBy: 'user-1',
     createdAt: '2026-11-01T00:00:00.000Z',
@@ -64,7 +63,7 @@ function renderBoard(
       '*/web/factory/projects/:id/intake-routes',
       typeof intakeRoutes === 'function'
         ? intakeRoutes
-        : () => HttpResponse.json({ intakeRoutes } satisfies IntakeRouteListResponse),
+        : () => HttpResponse.json({ intakeRoutes, canEdit: false } satisfies IntakeRouteListResponse),
     ),
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
     http.get('*/web/intake/config', () =>
@@ -141,16 +140,18 @@ describe('custom-only board routing', () => {
       'its only route joins pull requests to existing cards',
       [intakeRouteTo('release', { target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true } })],
     ],
-  ])('offers intake setup while a source is connected but %s', async (_case, intakeRoutes) => {
+  ])('asks for an intake route, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');
-    expect(await within(queued).findByText(/No intake sources/)).toBeVisible();
+    expect(await within(queued).findByText('No intake route sends cards here')).toBeVisible();
     expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
-    expect(within(queued).getByRole('link', { name: 'Connect issue source' })).toHaveAttribute(
+    expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
+    expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
+    expect(within(queued).getByRole('link', { name: 'Add intake route' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/intake',
+      '/factories/fp-1/settings/intake#new-cards',
     );
   });
 
@@ -161,7 +162,10 @@ describe('custom-only board routing', () => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, () =>
       fail
         ? HttpResponse.json({ error: 'Intake routes are unavailable' }, { status: 500 })
-        : HttpResponse.json({ intakeRoutes: [intakeRouteTo('release')] } satisfies IntakeRouteListResponse),
+        : HttpResponse.json({
+            intakeRoutes: [intakeRouteTo('release')],
+            canEdit: false,
+          } satisfies IntakeRouteListResponse),
     );
     await waitForMutationsIdle(client);
 
@@ -181,9 +185,7 @@ describe('custom-only board routing', () => {
   it('offers intake setup while the only selected source feeds another project', async () => {
     const { client } = renderBoard(undefined, undefined, undefined, [], {
       sourceIds: ['team-1'],
-      bindings: [
-        { integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-other', board: 'work', labels: null },
-      ],
+      bindings: [{ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-other', labels: null }],
     });
     await waitForMutationsIdle(client);
 
@@ -198,9 +200,7 @@ describe('custom-only board routing', () => {
   it("offers no intake setup while a selected source feeds one of this project's boards", async () => {
     const { client } = renderBoard(undefined, undefined, undefined, [], {
       sourceIds: ['team-1'],
-      bindings: [
-        { integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-1', board: 'work', labels: null },
-      ],
+      bindings: [{ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-1', labels: null }],
     });
     await waitForMutationsIdle(client);
 
@@ -270,7 +270,7 @@ describe('custom-only board routing', () => {
         metadata: {},
         triageType: null,
         acceptedAt: null,
-        commentCount: 0,
+        description: null,
         revision: 1,
         createdAt: now,
         updatedAt: now,

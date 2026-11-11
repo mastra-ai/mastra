@@ -57,7 +57,7 @@ export interface JiraIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** Jira source the issue was read from; resolves the bound board via `intakeBoards`. */
+  /** Jira source the issue was read from. */
   sourceId?: string | null;
 }
 
@@ -75,8 +75,6 @@ export interface JiraRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: JiraIssueIngress[];
-  /** Board id per bound Jira source id, from the project's intake bindings. */
-  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
@@ -111,12 +109,14 @@ export class JiraRules {
       factoryProjectId: input.factoryProjectId,
       sources: input.issues.map(issue => ({ integrationId: 'jira', type: 'issue', externalId: issue.id })),
     });
-    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    // The shared list is the cache itself: only the card handed on to rules is cloned.
+    const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Jira issue per project; other projects may file their own.
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(issue.id)));
+      const relatedItem = itemsBySourceKey.get(issue.id);
+      statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
@@ -139,8 +139,6 @@ export class JiraRules {
     }
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
-    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.#boards(input).get(boundBoardId) : undefined;
     const context: FactoryJiraRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -168,7 +166,7 @@ export class JiraRules {
             ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...withIntakeTarget(this.#boards(input), boundBoard),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };
