@@ -78,6 +78,10 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
     ) {
       fields.push('timeToFirstTokenMs');
     }
+    if (capabilities?.capabilities.spanQueryModelProviderSort) {
+      if (hasTraceColumn(displayedColumns, 'model')) fields.push('model');
+      if (hasTraceColumn(displayedColumns, 'provider')) fields.push('provider');
+    }
     return fields;
   }, [capabilities, withTimeToFirstChunk, withTimeToFirstToken, displayedColumns]);
 

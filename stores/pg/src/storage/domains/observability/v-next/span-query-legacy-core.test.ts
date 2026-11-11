@@ -58,6 +58,7 @@ it('supplies the metrics argument required by older core response builders', () 
 it('keeps span queries and legacy model/provider predicates usable without the new registry', async () => {
   expect(storage.getFeatures()).toContain('span-query');
   expect(storage.getFeatures()).not.toContain('span-query-duration-sort');
+  expect(storage.getFeatures()).not.toContain('span-query-model-provider-sort');
   const startedAt = new Date();
   const request = {
     timeRange: { from: startedAt.toISOString(), to: new Date(startedAt.getTime() + 60_000).toISOString() },

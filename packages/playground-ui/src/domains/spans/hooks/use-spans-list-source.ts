@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
+import { hashKey } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useListAnchor, useListHeadPoll } from '@/domains/observability/hooks/use-list-head-poll';
 import { observabilityListQueryOptions } from '@/domains/observability/hooks/use-observability-list-filters';
@@ -49,6 +50,7 @@ export function useSpansListSource({
   enabled = true,
 }: UseSpansListSourceArgs) {
   const client = useMastraClient();
+  const sortByModel = query.orderBy?.[0]?.field === 'model' || query.orderBy?.[0]?.field === 'provider';
   const { anchorTo, reanchor } = useListAnchor(query);
 
   const listQuery = useMemo<SpanQueryArgs>(
@@ -59,7 +61,7 @@ export function useSpansListSource({
 
   const { headRows } = useListHeadPoll<SpanRow>({
     queryKey: ['spans', query],
-    fetchHead: async to => {
+    fetchHead: async (to): Promise<SpanRow[]> => {
       // The server filters spans on startedAt in [from, to), whatever their endedAt,
       // so a long-running span started inside the window is caught once it ends.
       const result = await client.querySpans({
@@ -68,6 +70,12 @@ export function useSpansListSource({
         orderBy: [{ field: 'endedAt', direction: 'desc' }],
         page: { limit: OBSERVABILITY_LIST_HEAD_LIMIT },
       });
+      // Display values may come from legacy attributes while the database sorts dedicated columns.
+      // Reload the server-ordered page when fresh rows arrive instead of sorting those display values.
+      if (sortByModel) {
+        const previousRows = new Map([...(list.spans ?? []), ...headRows].map(row => [spanRowId(row), row]));
+        if (result.spans.some(span => hashKey([previousRows.get(spanRowId(span))]) !== hashKey([span]))) reanchor();
+      }
       return result.spans;
     },
     getId: spanRowId,
@@ -82,12 +90,14 @@ export function useSpansListSource({
   const spans = useMemo(
     () =>
       listSpans &&
-      mergeHeadRows(listSpans, headRows, {
-        getId: spanRowId,
-        compare: compareSpans(orderBy),
-        hasNextPage: list.hasNextPage,
-      }),
-    [listSpans, headRows, orderBy, list.hasNextPage],
+      (sortByModel
+        ? listSpans
+        : mergeHeadRows(listSpans, headRows, {
+            getId: spanRowId,
+            compare: compareSpans(orderBy),
+            hasNextPage: list.hasNextPage,
+          })),
+    [listSpans, headRows, orderBy, list.hasNextPage, sortByModel],
   );
 
   return { ...list, spans };

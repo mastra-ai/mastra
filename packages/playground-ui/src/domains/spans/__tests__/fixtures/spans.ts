@@ -284,3 +284,38 @@ export function spanCountsAggregate(timeRange: { to: string }): AggregateSpansRe
 }
 
 export const spanAggregateError = { error: 'Span aggregation failed' };
+
+/** Server ordering uses dedicated columns; a legacy display fallback still sorts with missing columns. */
+export const modelSortPage: QuerySpansResult = {
+  spans: [
+    { ...firstListedSpan, spanId: 'unicode-bmp', model: '\uE000', provider: '\uE000' },
+    { ...firstListedSpan, spanId: 'unicode-astral', model: '\u{10400}', provider: '\u{10400}' },
+    { ...firstListedSpan, spanId: 'legacy', model: 'Alpha display', provider: 'Alpha display' },
+  ],
+  page: { next: 'model-page-2' },
+};
+export const modelSortNewSpan: QuerySpansResult['spans'][number] = {
+  ...endedSpan,
+  spanId: 'new-model',
+  model: 'Beta',
+  provider: 'Beta',
+};
+export const refreshedModelSortPage: QuerySpansResult = {
+  spans: [modelSortNewSpan, ...modelSortPage.spans],
+  page: { next: 'model-page-2' },
+};
+
+export const updatedModelSortSpan: QuerySpansResult['spans'][number] = {
+  ...firstListedSpan,
+  spanId: 'unicode-astral',
+  model: 'Alpha',
+  provider: 'Alpha',
+};
+export const reorderedModelSortPage: QuerySpansResult = {
+  spans: [
+    updatedModelSortSpan,
+    modelSortNewSpan,
+    ...modelSortPage.spans.filter(row => row.spanId !== 'unicode-astral'),
+  ],
+  page: { next: 'model-page-2' },
+};
