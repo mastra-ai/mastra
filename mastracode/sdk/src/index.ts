@@ -75,9 +75,9 @@ import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { createPlanMode } from './agents/modes/plan.js';
 import {
-  createGitRefReminderReader,
+  createGitRefReminderReaderAsync,
   instructionSourcePaths,
-  loadSessionInstructions,
+  loadSessionInstructionsAsync,
   sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
 import { builtinSubagents } from './agents/subagents/index.js';
@@ -1253,7 +1253,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
         const projectPath = state?.projectPath ?? project.rootPath;
         const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
-        const reader = createGitRefReminderReader(primary!, state.baseRef);
+        const reader = createGitRefReminderReaderAsync(primary!, state.baseRef);
         if (primary === projectPath) return reader;
         // The base ref covers the session's own checkout only; the other
         // checkouts under the working directory are never read off disk.
@@ -1265,18 +1265,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         };
         return {
           ...reader,
-          pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
-          isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
+          pathExists: async filePath => !outsidePrimary(filePath) && (await reader.pathExists(filePath)),
+          isDirectory: async filePath => !outsidePrimary(filePath) && (await reader.isDirectory(filePath)),
         };
       },
-      getIgnoredInstructionPaths: ({ requestContext }) => {
+      getIgnoredInstructionPaths: async ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         const projectPath = state?.projectPath ?? project.rootPath;
         // Same sources, through the same readers, as the static prompt, so the
         // dedup stays consistent on untrusted checkouts and across roots.
         const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
         const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
-        const sources = loadSessionInstructions({
+        const sources = await loadSessionInstructionsAsync({
           workingDir: projectPath,
           instructionRoots: state?.instructionRoots,
           untrustedCheckout: untrusted,

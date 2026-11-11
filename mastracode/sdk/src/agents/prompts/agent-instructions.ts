@@ -3,9 +3,10 @@
  * Prefers AGENTS.md over CLAUDE.md when multiple exist at the same location.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../../constants.js';
@@ -245,6 +246,301 @@ export function createGitRefReminderReader(
       return rel === null ? realpathOrResolved(path) : join(canonicalRoot, rel);
     },
   };
+}
+
+// Keep in-flight object reads shared across concurrent prompt and reminder lookups.
+const pendingGitObjects = new Map<string, Promise<string | null>>();
+
+function gitAsync(args: string[], input?: string): Promise<Buffer | null> {
+  return new Promise(resolveOutput => {
+    const child = spawn('git', args, { stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'] });
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let failed = false;
+    child.stdout?.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 1024 * 1024) {
+        failed = true;
+        child.kill();
+      } else chunks.push(chunk);
+    });
+    child.on('error', () => {
+      failed = true;
+    });
+    child.on('close', code => resolveOutput(!failed && code === 0 ? Buffer.concat(chunks) : null));
+    if (input !== undefined) child.stdin?.end(input);
+  });
+}
+
+async function gitObjectReadAsync(
+  projectPath: string,
+  args: string[],
+  matchesId: (raw: Buffer) => boolean = () => true,
+): Promise<string | null> {
+  const key = args.join('\0');
+  const cached = gitObjectOutputs.get(key);
+  if (cached !== undefined) return cached;
+  const pendingKey = `${projectPath}\0${key}`;
+  let pending = pendingGitObjects.get(pendingKey);
+  if (!pending) {
+    pending = (async () => {
+      const raw = await gitAsync(['--no-replace-objects', '-C', projectPath, '--literal-pathspecs', ...args]);
+      if (!raw || !matchesId(raw)) return null;
+      const output = raw.toString('utf-8');
+      gitObjectOutputs.set(key, output);
+      gitObjectCacheChars += key.length + output.length;
+      for (const [oldest, evicted] of gitObjectOutputs) {
+        if (gitObjectCacheChars <= GIT_OBJECT_CACHE_MAX_CHARS) break;
+        gitObjectOutputs.delete(oldest);
+        gitObjectCacheChars -= oldest.length + evicted.length;
+      }
+      return output;
+    })();
+    pendingGitObjects.set(pendingKey, pending);
+    void pending.finally(() => pendingGitObjects.delete(pendingKey));
+  }
+  return pending;
+}
+
+async function realpathOrResolvedAsync(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+async function createProjectPathResolverAsync(projectPath: string): Promise<(path: string) => Promise<string | null>> {
+  const canonicalRoot = await realpathOrResolvedAsync(projectPath);
+  return async path => {
+    const rel = relative(projectPath, path);
+    if (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) return rel.split(sep).join('/');
+    let ancestor = resolve(path);
+    let projectRelativePath: string | null = null;
+    while (true) {
+      if ((await realpathOrResolvedAsync(ancestor)) === canonicalRoot) {
+        projectRelativePath = relative(ancestor, path).split(sep).join('/');
+      }
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return projectRelativePath;
+      ancestor = parent;
+    }
+  };
+}
+
+function createGitRefLookupAsync(projectPath: string, ref: string) {
+  let trees: Promise<string[]> | undefined;
+  const resolveTrees = async (): Promise<string[]> => {
+    if ([...ref].some(char => char <= ' ' || char === '\x7f')) return [];
+    const raw = await gitAsync(
+      ['-C', projectPath, 'cat-file', '--batch-check=%(objectname)'],
+      `origin/${ref}^{tree}\n${ref}^{tree}\n`,
+    );
+    return raw
+      ? [
+          ...new Set(
+            raw
+              .toString('utf-8')
+              .split('\n')
+              .filter(line => /^[0-9a-f]+$/.test(line)),
+          ),
+        ]
+      : [];
+  };
+  const entryAt = async (tree: string, rel: string): Promise<string[]> => {
+    let entry = ['', 'tree', tree];
+    for (const name of rel.split('/')) {
+      if (entry[1] !== 'tree') return [];
+      entry =
+        (await gitObjectReadAsync(projectPath, ['ls-tree', '--full-tree', entry[2]!, '--', name]))?.split(/\s/) ?? [];
+    }
+    return entry;
+  };
+  return {
+    type: async (rel: string): Promise<string | null> => {
+      for (const tree of await (trees ??= resolveTrees())) {
+        const [, type] = await entryAt(tree, rel);
+        if (type) return type;
+      }
+      return null;
+    },
+    show: async (rel: string): Promise<string | null> => {
+      for (const tree of await (trees ??= resolveTrees())) {
+        const [, type, blob] = await entryAt(tree, rel);
+        if (type !== 'blob' || !blob) continue;
+        const content = await gitObjectReadAsync(projectPath, ['cat-file', 'blob', blob], raw =>
+          blobMatchesId(blob, raw),
+        );
+        if (content !== null) return content;
+      }
+      return null;
+    },
+  };
+}
+
+export async function createGitRefInstructionReaderAsync(
+  projectPath: string,
+  ref: string,
+): Promise<AsyncInstructionFileReader> {
+  const toRelative = await createProjectPathResolverAsync(projectPath);
+  const lookup = createGitRefLookupAsync(projectPath, ref);
+  const show = async (path: string) => {
+    const rel = await toRelative(path);
+    return rel ? lookup.show(rel) : null;
+  };
+  return {
+    ref,
+    exists: async path => (await show(path)) !== null,
+    read: async path => {
+      const content = await show(path);
+      if (content === null) throw new Error(`Not found at ref ${ref}: ${path}`);
+      return content;
+    },
+  };
+}
+
+export function createGitRefReminderReaderAsync(projectPath: string, ref: string) {
+  const toRelative = createProjectPathResolverAsync(projectPath);
+  const canonicalRoot = realpathOrResolvedAsync(projectPath);
+  const lookup = createGitRefLookupAsync(projectPath, ref);
+  const objectType = (rel: string) => (rel === '' ? Promise.resolve('tree') : lookup.type(rel));
+  return {
+    pathExists: async (path: string) => {
+      const rel = await (await toRelative)(path);
+      if (rel === null) {
+        try {
+          await stat(path);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      return (await objectType(rel)) !== null;
+    },
+    isDirectory: async (path: string) => {
+      const rel = await (await toRelative)(path);
+      if (rel === null) {
+        try {
+          return (await stat(path)).isDirectory();
+        } catch {
+          return false;
+        }
+      }
+      return (await objectType(rel)) === 'tree';
+    },
+    readFile: async (path: string) => {
+      const rel = await (await toRelative)(path);
+      if (rel === null) return readFile(path, 'utf-8');
+      const content = rel ? await lookup.show(rel) : null;
+      if (content === null) throw new Error(`Not found at ref ${ref}: ${path}`);
+      return content;
+    },
+    getPathIdentity: async (path: string) => {
+      const rel = await (await toRelative)(path);
+      return rel === null ? realpathOrResolvedAsync(path) : join(await canonicalRoot, rel);
+    },
+  };
+}
+
+export interface AsyncInstructionFileReader {
+  exists(path: string): Promise<boolean>;
+  read(path: string): Promise<string>;
+  ref?: string;
+}
+
+const fsInstructionReaderAsync: AsyncInstructionFileReader = {
+  exists: async path => {
+    try {
+      await stat(path);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  read: path => readFile(path, 'utf-8'),
+};
+
+export async function loadAgentInstructionsAsync(
+  projectPath: string,
+  configDirName = DEFAULT_CONFIG_DIR,
+  projectReader: AsyncInstructionFileReader = fsInstructionReaderAsync,
+  { skipGlobal = false }: { skipGlobal?: boolean } = {},
+): Promise<InstructionSource[]> {
+  const sources: InstructionSource[] = [];
+  const projectLocations = PROJECT_LOCATIONS.map(loc => (loc === '.mastracode' ? configDirName : loc));
+  const globalLocations = skipGlobal
+    ? []
+    : GLOBAL_LOCATIONS.map(loc => {
+        if (loc === '.mastracode') return configDirName;
+        if (loc === '.config/mastracode') return '.config/' + configDirName.replace(/^\./, '');
+        return loc;
+      });
+  for (const location of globalLocations) {
+    const base = join(homedir(), location);
+    for (const filename of INSTRUCTION_FILES) {
+      const path = join(base, filename);
+      if (!(await fsInstructionReaderAsync.exists(path))) continue;
+      try {
+        const content = (await fsInstructionReaderAsync.read(path)).trim();
+        if (content) {
+          sources.push({ path, content, scope: 'global' });
+          break;
+        }
+      } catch {
+        /* Skip unreadable instructions. */
+      }
+      break;
+    }
+    if (sources.length) break;
+  }
+  for (const location of projectLocations) {
+    const base = location ? join(projectPath, location) : projectPath;
+    for (const filename of INSTRUCTION_FILES) {
+      const path = join(base, filename);
+      if (!(await projectReader.exists(path))) continue;
+      try {
+        const content = (await projectReader.read(path)).trim();
+        if (content) {
+          sources.push({ path, content, scope: 'project', ...(projectReader.ref ? { ref: projectReader.ref } : {}) });
+          break;
+        }
+      } catch {
+        /* Skip unreadable instructions. */
+      }
+      break;
+    }
+    if (sources.some(source => source.scope === 'project')) break;
+  }
+  return sources;
+}
+
+export async function loadSessionInstructionsAsync({
+  workingDir,
+  instructionRoots,
+  configDir,
+  untrustedCheckout = false,
+  baseRef,
+  skipGlobal = false,
+}: {
+  workingDir: string;
+  instructionRoots?: readonly string[];
+  configDir?: string;
+  untrustedCheckout?: boolean;
+  baseRef?: string;
+  skipGlobal?: boolean;
+}): Promise<InstructionSource[]> {
+  const [primary, ...others] = sessionInstructionRoots(workingDir, instructionRoots);
+  const reader = untrustedCheckout
+    ? baseRef
+      ? await createGitRefInstructionReaderAsync(primary!, baseRef)
+      : { exists: async () => false, read: async () => '' }
+    : undefined;
+  const sources = await loadAgentInstructionsAsync(primary!, configDir, reader, { skipGlobal });
+  if (!untrustedCheckout) {
+    for (const root of others)
+      sources.push(...(await loadAgentInstructionsAsync(root, configDir, undefined, { skipGlobal: true })));
+  }
+  return sources;
 }
 
 /**
