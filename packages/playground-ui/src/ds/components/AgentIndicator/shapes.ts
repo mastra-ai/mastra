@@ -4,18 +4,21 @@ export type Inside = (p: Point) => boolean;
 export type Segment = [number, number, number, number, number];
 export type TrailPoint = [number, number, number, number];
 type Ball = [number, number, number];
+type Ring = [number, number, number, number];
 
 export const TAU = Math.PI * 2;
 export const RAYS = 64;
 export const BALLS = 2;
 export const LINES = 2;
+export const RINGS = 1;
 export const TRAIL = 64;
 export const BODY = 2 * RAYS + 4;
-export const KIT = BODY + 3 * BALLS + 10 * LINES;
+export const KIT = BODY + 3 * BALLS + 10 * LINES + 4 * RINGS;
 export const FRAME = KIT + 4 * TRAIL;
 
 export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 export const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+export const RAY_DIRECTIONS: Point[] = range(RAYS).map(i => [Math.cos((TAU * i) / RAYS), Math.sin((TAU * i) / RAYS)]);
 
 export function once<T>(make: () => T) {
   let value: T | undefined;
@@ -26,6 +29,11 @@ export const lerpFrame = (a: Frame, b: Frame, w: number): Frame => a.map((v, i) 
 export function sstep(a: number, b: number, x: number) {
   const k = clamp01((x - a) / (b - a));
   return k * k * (3 - 2 * k);
+}
+
+export function loopPulse(clock: number, periodSeconds: number) {
+  const phase = (clock / periodSeconds) % 1;
+  return sstep(0.08, 0.28, phase) * (1 - sstep(0.52, 0.78, phase));
 }
 
 export function cubicBezier(x1: number, y1: number, x2: number, y2: number) {
@@ -123,9 +131,8 @@ export const dot = (p: Point, d: number): TrailPoint[] => [
 ];
 
 function radial(inside: Inside, [cx, cy]: Point): number[] {
-  const r = range(RAYS).map(i => {
-    const a = (TAU * i) / RAYS;
-    const at = (d: number) => inside([cx + Math.cos(a) * d, cy + Math.sin(a) * d]);
+  const r = RAY_DIRECTIONS.map(([dx, dy]) => {
+    const at = (d: number) => inside([cx + dx * d, cy + dy * d]);
     let d = 0;
     while (d < 12 && at(d)) d += 0.3;
     let lo = Math.max(0, d - 0.3);
@@ -149,12 +156,13 @@ export interface KitParts {
   balls?: Ball[];
   cuts?: Segment[];
   inks?: Segment[];
+  rings?: Ring[];
 }
 
 export function kit(
   outer: Inside,
   c: Point,
-  { hole, holeCenter = c, balls = [], cuts = [], inks = [] }: KitParts = {},
+  { hole, holeCenter = c, balls = [], cuts = [], inks = [], rings = [] }: KitParts = {},
 ) {
   return [
     ...c,
@@ -164,6 +172,7 @@ export function kit(
     ...range(BALLS).flatMap(i => balls[i] ?? [...c, 0]),
     ...range(LINES).flatMap(i => cuts[i] ?? [...c, ...c, 0]),
     ...range(LINES).flatMap(i => inks[i] ?? [...c, ...c, 0]),
+    ...range(RINGS).flatMap(i => rings[i] ?? [...c, 0, 0]),
   ];
 }
 
@@ -171,3 +180,6 @@ export function withTrail(kitFrame: Frame, points: TrailPoint[] = []): Frame {
   const [x = 0, y = 0] = points.at(-1) ?? kitFrame;
   return [...kitFrame, ...range(TRAIL).flatMap(i => points[i] ?? [x, y, 0, 0])];
 }
+
+export const polyline = (points: Point[], ink: number, cut: number): TrailPoint[] =>
+  points.map((p, i) => (i < points.length - 1 ? [...p, ink, cut] : [...p, 0, 0]));

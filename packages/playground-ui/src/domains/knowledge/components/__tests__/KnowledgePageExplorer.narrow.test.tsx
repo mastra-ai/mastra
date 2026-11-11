@@ -106,7 +106,7 @@ describe('KnowledgePageExplorer on a narrow screen', () => {
       await act(() => new Promise(resolve => setTimeout(resolve, 50)));
       expect(setViewport).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Graph' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Graph' }));
 
       await vi.waitFor(() => expect(setViewport).toHaveBeenCalled());
       const viewport = setViewport.mock.calls.at(-1)?.[0];

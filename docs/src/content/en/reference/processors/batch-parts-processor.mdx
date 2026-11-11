@@ -85,12 +85,6 @@ const processor = new BatchPartsProcessor({
     description: 'Processes streaming output parts to batch them together',
     isOptional: false,
   },
-  {
-    name: 'flush',
-    type: '(state?: BatchPartsState) => ChunkType | null',
-    description: 'Force flush any remaining batched parts when the stream ends',
-    isOptional: false,
-  },
 ]}
 />
 

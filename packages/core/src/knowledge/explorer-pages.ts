@@ -2,12 +2,19 @@ import type {
   KnowledgeNote,
   KnowledgePage,
   KnowledgePageActivityEvent,
+  KnowledgePageLinkCounts,
+  KnowledgePageLinkEdge,
   KnowledgePageSearchHit,
   KnowledgePageStore,
   KnowledgePin,
   KnowledgeReadScope,
 } from '../storage';
-import { knowledgeScopeReadable, MAX_KNOWLEDGE_PAGE_LIST_LIMIT } from '../storage';
+import {
+  KnowledgeUnsupportedCapabilityError,
+  knowledgeScopeReadable,
+  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
+  parseKnowledgePageRef,
+} from '../storage';
 import type { KnowledgeRole } from './declarations';
 
 /**
@@ -73,9 +80,23 @@ async function visibleChildScopes(
   return { scopes, truncated };
 }
 
+/** A page in one tree level, with how many readable children sit directly under it. */
+export type KnowledgeTreePage = KnowledgePage & {
+  /**
+   * Readable child pages, plus readable child scopes for a scope. Left out when the store can't count
+   * (an adapter older than `countChildPages`), so a UI can tell "none" from "unknown".
+   */
+  childCount?: number;
+  /**
+   * Set when the child-scope walk for this page hit {@link MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN}, so
+   * `childCount` is a lower bound: show it as "at least" (e.g. `1000+`), not as the exact number.
+   */
+  childCountCapped?: true;
+};
+
 export interface KnowledgeTreeChildren {
   /** Readable child scopes (all of them, on the first page only), then readable child pages in order. */
-  pages: KnowledgePage[];
+  pages: KnowledgeTreePage[];
   /** Cursor for more child pages; child scopes are never paged. */
   nextCursor?: string;
   /** True when the scope walk hit {@link MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN}. */
@@ -98,13 +119,48 @@ export async function listKnowledgeTreeChildren(
     cursor === undefined
       ? await visibleChildScopes(store, parentId, read, { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN })
       : { scopes: [], truncated: false };
-  if (parentId === null) return { pages: scopes.scopes, truncated: scopes.truncated };
+  if (parentId === null) {
+    const counted = await withChildCounts(store, scopes.scopes, read);
+    return { pages: counted.pages, truncated: scopes.truncated || counted.truncated };
+  }
   const children = await store.listChildPages({ parentId, read, cursor, limit });
+  const counted = await withChildCounts(store, [...scopes.scopes, ...children.pages], read);
   return {
-    pages: [...scopes.scopes, ...children.pages],
+    pages: counted.pages,
     ...(children.nextCursor ? { nextCursor: children.nextCursor } : {}),
-    truncated: scopes.truncated,
+    truncated: scopes.truncated || counted.truncated,
   };
+}
+
+/** Child counts for one level: one `countChildPages` call, plus a child-scope walk per scope page. */
+async function withChildCounts(
+  store: KnowledgePageStore,
+  pages: KnowledgePage[],
+  read: KnowledgeReadScope,
+): Promise<{ pages: KnowledgeTreePage[]; truncated: boolean }> {
+  if (pages.length === 0 || typeof store.countChildPages !== 'function') return { pages, truncated: false };
+  let counts: Record<string, number>;
+  try {
+    counts = await store.countChildPages({ parentIds: pages.map(page => page.id), read });
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return { pages, truncated: false };
+    throw error;
+  }
+  const budget = { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN };
+  let truncated = false;
+  const counted: KnowledgeTreePage[] = [];
+  for (const page of pages) {
+    let childCount = Object.hasOwn(counts, page.id) ? (counts[page.id] ?? 0) : 0;
+    let capped = false;
+    if (page.isScope) {
+      const childScopes = await visibleChildScopes(store, page.id, read, budget);
+      childCount += childScopes.scopes.length;
+      capped = childScopes.truncated;
+      truncated ||= capped;
+    }
+    counted.push(capped ? { ...page, childCount, childCountCapped: true } : { ...page, childCount });
+  }
+  return { pages: counted, truncated };
 }
 
 /**
@@ -146,14 +202,31 @@ export interface KnowledgePageView {
   mentionedBy: KnowledgeNote[];
 }
 
+/**
+ * A page by id, or by the reference a tool result names it with: a scope address (`site:mastra`) or
+ * `<scope>#<key>[/<key>…]`. Read-gated like the id lookup: an unreadable scope or page is not found.
+ * Scope addresses and refs always hold a `:`, which page ids never do, so an id never takes the ref path.
+ */
+async function pageByIdOrRef(store: KnowledgePageStore, ref: string, read: KnowledgeReadScope) {
+  const byId = await store.getPage({ id: ref, read });
+  if (byId || !ref.includes(':')) return byId;
+  const parsed = ref.includes('#') ? parseKnowledgePageRef(ref) : { scope: ref, path: [] };
+  if (!parsed) return null;
+  const [scope] = await store.getScopesByAddress([parsed.scope]);
+  if (!scope || !knowledgeScopeReadable(scope, read)) return null;
+  if (parsed.path.length === 0) return store.getPage({ id: scope.id, read });
+  return store.getPageByPath({ scopeId: scope.id, path: parsed.path, read });
+}
+
 /** One page with its notes, pin and the pages they reference. Null when `read` can't see the page. */
 export async function readKnowledgePage(
   store: KnowledgePageStore,
   input: { pageId: string; read: KnowledgeReadScope; noteCursor?: string; noteLimit?: number },
 ): Promise<KnowledgePageView | null> {
-  const { pageId, read } = input;
-  const page = await store.getPage({ id: pageId, read });
+  const { read } = input;
+  const page = await pageByIdOrRef(store, input.pageId, read);
   if (!page) return null;
+  const pageId = page.id;
   const [notes, pins, mentionedBy, ancestors] = await Promise.all([
     store.listNotes({
       pageId,
@@ -161,7 +234,7 @@ export async function readKnowledgePage(
       cursor: input.noteCursor,
       limit: input.noteLimit ?? DEFAULT_KNOWLEDGE_PAGE_NOTE_LIMIT,
     }),
-    store.listPins({ audience: 'all', read, pageIds: [pageId], limit: 1 }),
+    store.listPins({ audience: 'all', read, kind: 'page', pageIds: [pageId], limit: 1 }),
     store.listNotesMentioning({ pageId, read, limit: DEFAULT_KNOWLEDGE_PAGE_NOTE_LIMIT }),
     readableAncestors(store, page, read),
   ]);
@@ -222,6 +295,62 @@ export interface KnowledgePageGraph {
   truncated: boolean;
 }
 
+/** Runs a per-id count over `pages` in list-limit batches; null when the store can't count. */
+async function countInBatches(
+  pages: KnowledgePage[],
+  count: (ids: string[]) => Promise<Record<string, number>>,
+): Promise<Record<string, number> | null> {
+  const counts: Record<string, number> = {};
+  try {
+    for (let start = 0; start < pages.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+      Object.assign(
+        counts,
+        await count(pages.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT).map(page => page.id)),
+      );
+    }
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return null;
+    throw error;
+  }
+  return counts;
+}
+
+/**
+ * Children of every parent in one graph level, in the tree's order: readable child scopes of scope
+ * parents (scope pages only sit under scopes), then child pages, listed only for parents the level's
+ * one count says have some. `null` lists the root scopes.
+ */
+async function graphLevelChildren(
+  store: KnowledgePageStore,
+  level: Array<string | null>,
+  read: KnowledgeReadScope,
+  byId: Map<string, KnowledgePage>,
+): Promise<{ byParent: KnowledgePage[][]; truncated: boolean }> {
+  let truncated = false;
+  const parents = level.flatMap(id => (id === null ? [] : [byId.get(id)!]));
+  const pageCounts = await countInBatches(parents, ids => store.countChildPages({ parentIds: ids, read }));
+  const byParent: KnowledgePage[][] = [];
+  for (const parentId of level) {
+    const parent = parentId === null ? null : byId.get(parentId)!;
+    const children: KnowledgePage[] = [];
+    if (!parent || parent.isScope) {
+      const scopes = await visibleChildScopes(store, parentId, read, { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN });
+      truncated ||= scopes.truncated;
+      children.push(...scopes.scopes);
+    }
+    if (parent && (!pageCounts || pageCounts[parent.id])) {
+      let cursor: string | undefined;
+      do {
+        const result = await store.listChildPages({ parentId: parent.id, read, cursor });
+        children.push(...result.pages);
+        cursor = result.nextCursor;
+      } while (cursor);
+    }
+    byParent.push(children);
+  }
+  return { byParent, truncated };
+}
+
 /**
  * A bounded graph: pages breadth-first under `rootId` (or every root scope `read` reaches), parent
  * edges between them, and mention edges from their readable notes. A hidden note never contributes
@@ -252,14 +381,16 @@ export async function readKnowledgePageGraph(
     queue = [root.id];
   }
   // Tree parent of each walked page as the tree shows it (hoisted scopes attach to their visible parent).
+  // The walk goes a level at a time: one child-page count for the whole level, then a listing only for
+  // the parents that have children, so a tree of mostly leaf pages costs a few calls per level.
   const treeParent = new Map<string, string>();
   walk: while (queue.length) {
-    const parentId = queue.shift()!;
-    let cursor: string | undefined;
-    do {
-      const level = await listKnowledgeTreeChildren(store, { parentId, read, cursor });
-      truncated ||= level.truncated;
-      for (const child of level.pages) {
+    const level = queue;
+    queue = [];
+    const children = await graphLevelChildren(store, level, read, byId);
+    truncated ||= children.truncated;
+    for (const [i, parentId] of level.entries()) {
+      for (const child of children.byParent[i]!) {
         if (byId.has(child.id)) continue;
         if (pages.length >= limits.maxPages) {
           truncated = true;
@@ -269,18 +400,19 @@ export async function readKnowledgePageGraph(
         if (parentId !== null) treeParent.set(child.id, parentId);
         queue.push(child.id);
       }
-      cursor = level.nextCursor;
-    } while (cursor);
+    }
   }
 
   const edges: KnowledgePageGraphEdge[] = [];
   for (const [child, parent] of treeParent) edges.push({ source: parent, target: child, kind: 'parent' });
 
   const walked = [...pages];
+  const noteCounts = await countInBatches(walked, ids => store.countNotes({ pageIds: ids, read }));
   const mentionCounts = new Map<string, Map<string, number>>();
   const outsideWanted = new Set<string>();
   let notesLeft = limits.maxNotes;
   notes: for (const page of walked) {
+    if (noteCounts && !noteCounts[page.id]) continue;
     let cursor: string | undefined;
     do {
       if (notesLeft <= 0) {
@@ -303,15 +435,20 @@ export async function readKnowledgePageGraph(
   }
 
   const outsideIds: string[] = [];
-  for (const id of outsideWanted) {
-    if (outsideIds.length >= limits.maxOutsidePages) {
-      truncated = true;
-      break;
+  const wanted = [...outsideWanted];
+  outside: for (let start = 0; start < wanted.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+    const ids = wanted.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
+    const found = new Map((await store.getPages({ ids, read })).map(page => [page.id, page]));
+    for (const id of ids) {
+      const page = found.get(id);
+      if (!page || page.deletedAt || page.mergedInto) continue;
+      if (outsideIds.length >= limits.maxOutsidePages) {
+        truncated = true;
+        break outside;
+      }
+      add(page);
+      outsideIds.push(page.id);
     }
-    const page = await store.getPage({ id, read });
-    if (!page || page.deletedAt || page.mergedInto) continue;
-    add(page);
-    outsideIds.push(page.id);
   }
 
   for (const [source, counts] of mentionCounts) {
@@ -328,6 +465,7 @@ export async function readKnowledgePageGraph(
       const result = await store.listPins({
         audience: 'all',
         read,
+        kind: 'page',
         pageIds: ids.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT),
         cursor,
       });
@@ -417,4 +555,73 @@ export async function readKnowledgeScopeGrants(
     }
   }
   return grants;
+}
+
+/** Most pages one {@link readKnowledgePageLinkCounts} call counts. */
+export const MAX_KNOWLEDGE_LINK_COUNT_PAGES = 200;
+/** Most links one {@link readKnowledgePageLinks} call returns. */
+export const MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS = 200;
+
+/**
+ * How many distinct other pages link to each page (`in`) and are linked from it (`out`), by body `[[ref]]`
+ * or note mention, counted by the store over every page it holds rather than only the ones a UI has
+ * loaded. Pages `read` can't reach count as zero, the same as pages that don't exist. Returns `null`
+ * when the store has no link index.
+ */
+export async function readKnowledgePageLinkCounts(
+  store: KnowledgePageStore,
+  input: { pageIds: string[]; read: KnowledgeReadScope },
+): Promise<Record<string, KnowledgePageLinkCounts> | null> {
+  const pageIds = [...new Set(input.pageIds)].slice(0, MAX_KNOWLEDGE_LINK_COUNT_PAGES);
+  if (pageIds.length === 0) return {};
+  try {
+    return await store.countPageLinks({ pageIds, read: input.read });
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return null;
+    throw error;
+  }
+}
+
+/** One page's links, with the pages at their other ends so a UI can name and place them. */
+export interface KnowledgePageLinks {
+  edges: KnowledgePageLinkEdge[];
+  /** The pages at the other end of `edges` that `read` can reach. */
+  pages: KnowledgePage[];
+  /** True when the page has more links than {@link MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS}. */
+  truncated: boolean;
+}
+
+/**
+ * The links into and out of one readable page, by body `[[ref]]` or note mention. A page `read` can't
+ * reach has none. Returns `null` when the store has no link index.
+ */
+export async function readKnowledgePageLinks(
+  store: KnowledgePageStore,
+  input: { pageId: string; read: KnowledgeReadScope; direction?: 'in' | 'out' | 'both' },
+): Promise<KnowledgePageLinks | null> {
+  if (!(await store.getPage({ id: input.pageId, read: input.read }))) return { edges: [], pages: [], truncated: false };
+  let listed: KnowledgePageLinkEdge[];
+  try {
+    listed = await store.listPageLinks({
+      pageIds: [input.pageId],
+      read: input.read,
+      direction: input.direction ?? 'both',
+      limit: MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS + 1,
+    });
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return null;
+    throw error;
+  }
+  const truncated = listed.length > MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS;
+  const edges = listed.slice(0, MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS);
+  const others = [
+    ...new Set(edges.flatMap(edge => [edge.fromPageId, edge.toPageId]).filter(id => id !== input.pageId)),
+  ];
+  const pages: KnowledgePage[] = [];
+  for (let start = 0; start < others.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+    pages.push(
+      ...(await store.getPages({ ids: others.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT), read: input.read })),
+    );
+  }
+  return { edges, pages, truncated };
 }

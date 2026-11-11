@@ -79,6 +79,7 @@ export function createKnowledgeLegacyUpgradeTests(fixture: KnowledgeLegacyUpgrad
         schemaVersion: 4,
         supportsSchemaInspection: true,
         supportsExplicitReset: true,
+        supportsPinKinds: true,
       });
     });
 

@@ -1,8 +1,8 @@
 ---
-title: "Reference: Channels | Agents"
-description: "Channels connect agents to messaging platforms. Configure them via the channels property on the Agent constructor."
+title: 'Reference: Channels | Agents'
+description: 'Channels connect agents to messaging platforms. Configure them via the channels property on the Agent constructor.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Channels
@@ -111,7 +111,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
     isOptional: true,
     description:
-      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`. `logger` defaults to the Mastra logger. Set it to use a different logger or a Chat SDK log level.',
   },
   {
     name: 'resolveResourceId',
@@ -227,6 +227,14 @@ const agent = new Agent({
     defaultValue: 'false (true for Slack)',
     description:
       'Stream agent text deltas to the channel as the agent generates them instead of buffering and posting once per step. Requires the underlying adapter to support post-and-edit streaming. Slack defaults to `true`; other adapters default to `false`.',
+  },
+  {
+    name: 'generativeUI',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      '**Experimental. Slack only; ignored on other adapters.** Gives runs on the Slack adapter a `render_card` tool. The agent calls it with a [json-render](https://json-render.dev) spec and the card is posted to the thread as Block Kit. Invalid specs return a list of issues to the agent instead of posting. Requires the optional `@json-render/chat` package. See [Generative UI cards](#generative-ui-cards).',
   },
   {
     name: 'textFormat',
@@ -421,6 +429,65 @@ const agent = new Agent({
   },
 })
 ```
+
+## Generative UI cards
+
+:::warning[Experimental]
+`generativeUI` is experimental and may change in a minor release.
+:::
+
+Set `generativeUI: true` on the Slack adapter to let the agent post structured cards (status summaries, key/value fields, tables, charts, images, and link buttons) instead of long markdown replies. Install the optional peer first:
+
+```bash npm2yarn
+npm install @json-render/chat
+```
+
+`@json-render/chat` requires zod 4, so projects still on zod 3 can't enable `generativeUI` yet.
+
+`@mastra/core` loads `@json-render/chat` at runtime, so `mastra build` and `mastra deploy` don't pick it up on their own. Add it to [`bundler.dynamicPackages`](/reference/core/mastra-class) so it's included in the build output:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { supportAgent } from './agents/support-agent'
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  bundler: { dynamicPackages: ['@json-render/chat'] },
+})
+```
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: { adapter: createSlackAdapter(), generativeUI: true },
+    },
+  },
+})
+```
+
+Runs on that adapter get a `render_card` tool whose description lists the available components. The agent passes a flat spec of `{ root, elements }`, where the root element is a `Card`:
+
+```json
+{
+  "root": "card",
+  "elements": {
+    "card": { "type": "Card", "props": { "title": "Deploy status" }, "children": ["fields"] },
+    "fields": { "type": "Fields", "children": ["env", "version"] },
+    "env": { "type": "Field", "props": { "label": "Environment", "value": "beta" } },
+    "version": { "type": "Field", "props": { "label": "Version", "value": "1.8.1" } }
+  }
+}
+```
+
+The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the platform's limits (on Slack, one table and 100 rows per card), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. The tool call itself isn't rendered as a tool card. Interactive buttons aren't available yet. Cards can link out with `LinkButton`.
 
 ## Custom typing status
 
@@ -746,6 +813,74 @@ type InlineLinkEntry =
   | string // Domain pattern (HEAD determines mime type)
   | { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
 ```
+
+## `toChatLogger()`
+
+Adapts a Mastra logger to the Chat SDK `Logger` interface. Pass the result to an adapter's `logger` option so its logs go to the same logger as the rest of your app. See [Logging](/docs/channels#logging) for when to use it.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { toChatLogger } from '@mastra/core/channels'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { PinoLogger } from '@mastra/loggers'
+
+const logger = new PinoLogger({ name: 'app', level: 'info' })
+
+const discord = createDiscordAdapter({
+  logger: toChatLogger(logger, { component: 'discord', minLevel: 'warn' }),
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'logger',
+    type: 'IMastraLogger',
+    description: 'The Mastra logger that receives the records.',
+  },
+  {
+    name: 'options',
+    type: 'ToChatLoggerOptions',
+    isOptional: true,
+    description: 'Options for the bridge.',
+    properties: [
+      {
+        type: 'ToChatLoggerOptions',
+        parameters: [
+          {
+            name: 'minLevel',
+            type: "'debug' | 'info' | 'warn' | 'error' | 'silent'",
+            isOptional: true,
+            defaultValue: "'debug'",
+            description:
+              "Lowest level to forward. `'silent'` forwards nothing. With the default, the Mastra logger's own level decides what gets written.",
+          },
+          {
+            name: 'component',
+            type: 'string',
+            isOptional: true,
+            defaultValue: "'chat-sdk'",
+            description:
+              'Written as the `component` field on each record. `child(prefix)` extends it, so `chat-sdk` becomes `chat-sdk:discord`.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: a Chat SDK `Logger`.
+
+Extra log arguments become fields on the record:
+
+| Arguments | Fields |
+| - | - |
+| None | `component` |
+| One `Error` | `error`, `component` |
+| One non-array object | The object's fields, `component` |
+| Anything else | `args`, `component` |
+
+An `Error` passed directly or under an object's `error` key is normalized so it keeps its message and stack when serialized.
 
 ## Related
 

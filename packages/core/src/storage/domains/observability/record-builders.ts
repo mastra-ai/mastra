@@ -222,7 +222,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     // Deployment context - extracted from metadata if present
     environment: getStringOrNull(metadata.environment),
     source: getStringOrNull(metadata.source),
-    serviceName: getStringOrNull(metadata.serviceName),
+    serviceName: span.serviceName ?? getStringOrNull(metadata.serviceName),
     scope: getObjectOrNull(metadata.scope),
 
     // Experimentation
@@ -400,10 +400,12 @@ export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord 
     ...correlationFields,
     experimentId: correlationFields.experimentId ?? fb.experimentId ?? null,
     feedbackUserId:
-      fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+      fb.feedbackUserId !== undefined
+        ? fb.feedbackUserId
+        : (fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null)),
     scope: null,
     sourceId: fb.sourceId ?? null,
     metadata: fb.metadata ?? null,
-    reviewStatus: 'needs-review',
+    reviewStatus: fb.reviewStatus ?? 'needs-review',
   };
 }

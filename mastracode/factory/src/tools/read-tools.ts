@@ -1,22 +1,34 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem } from '../boards/index.js';
+import {
+  awaitsAcceptance,
+  boardFlow,
+  boardForWorkItem,
+  isTerminalWorkItem,
+  pullRequestSourceNumber,
+  pullRequestSources,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
+import { parkedRunLabel } from '../routes/attention-parked.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { needsApproval } from '../rules/types.js';
+import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import type { LiveSessions } from '../session/live-sessions.js';
+import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { CARD_NUMBER_METADATA_KEY } from '../work-items/create-work-item.js';
 import { sessionActivity } from './deliver.js';
 import type { FactorySessionActivity } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
@@ -30,7 +42,7 @@ const DEFAULT_LIST = 25;
 export interface FactoryReadToolDependencies {
   workItems: Pick<
     WorkItemsStorage,
-    | 'list'
+    | 'listShared'
     | 'getForProject'
     | 'listRunBindings'
     | 'listDeferredDecisions'
@@ -39,12 +51,15 @@ export interface FactoryReadToolDependencies {
     | 'listWorkItemSubscribers'
     | 'listSessionSubscriptions'
   >;
-  comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
   /** A fixed registry, or the per-project boards. */
   boards: BoardRegistry | ProjectBoardSource;
   /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
   messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
+  /** Finds the caller session's source-control provider, to tell which cards can't pick a repository. */
+  sessions?: Pick<SourceControlSessionLookup, 'getSourceControlBySessionId'>;
+  /** Which live sessions are parked on a tool prompt; absent before the mount is up. */
+  liveSessions?: () => Pick<LiveSessions, 'parked' | 'parkedIn'> | undefined;
 }
 
 export function truncate(text: string, max: number): string {
@@ -57,13 +72,17 @@ function iso(value: Date | string | null | undefined): string | null {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
-/** The number a person sees on the card: the issue or PR number the item was filed from. */
-export function workItemNumber(item: Pick<WorkItemRow, 'metadata'>): number | null {
-  const number = item.metadata?.number ?? item.metadata?.githubIssueNumber ?? item.metadata?.githubPullRequestNumber;
+/** The number a person sees on the card: the issue or PR number the item was filed from, or the project's own number for a card filed by hand. */
+export function workItemNumber(item: Pick<Card, 'workItem' | 'metadata'>): number | null {
+  const number =
+    item.workItem.metadata?.number ??
+    item.workItem.metadata?.githubIssueNumber ??
+    item.workItem.metadata?.githubPullRequestNumber ??
+    item.metadata?.[CARD_NUMBER_METADATA_KEY];
   return typeof number === 'number' ? number : null;
 }
 
-export function workItemStage(item: Pick<WorkItemRow, 'stages'>): string {
+export function workItemStage(item: Pick<Card, 'stages'>): string {
   return item.stages.join('+');
 }
 
@@ -79,17 +98,34 @@ export const workItemRefSchema = z
 
 /** Resolve `<uuid>` or `#123` to an item in this Factory only. Pass a ref validated by `workItemRefSchema`. */
 export async function findWorkItem(
-  workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>,
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'getForProject'>,
   scope: Pick<FactoryToolScope, 'orgId' | 'factoryProjectId'>,
   ref: string,
-): Promise<WorkItemRow | null> {
+): Promise<Card | null> {
   const trimmed = ref.trim();
   const number = /^#?(\d+)$/.exec(trimmed)?.[1];
   if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
-  const items = await workItems.list(scope);
+  const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
-  // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
-  return matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0] ?? null;
+  // Issue and PR numbers share a space on GitHub; prefer the issue's card.
+  const workCards = matches.filter(item => item.externalSource?.type !== 'pull-request');
+  // Hand-filed card numbers and issue numbers from several repositories can repeat; refuse to guess.
+  refuseAmbiguous(number, workCards);
+  const match = workCards[0] ?? matches[0];
+  if (match) return structuredClone(match);
+  // A pull request attached to an issue's card is found through that card. Pull request numbers
+  // repeat across repositories too.
+  const carriers = items.filter(item =>
+    pullRequestSources(item).some(source => pullRequestSourceNumber(source) === Number(number)),
+  );
+  refuseAmbiguous(number, carriers);
+  return carriers[0] ? structuredClone(carriers[0]) : null;
+}
+
+function refuseAmbiguous(number: string, items: readonly Card[]): void {
+  if (items.length <= 1) return;
+  const candidates = items.map(item => `${item.id} (${item.title})`).join(', ');
+  throw new Error(`#${number} matches more than one work item; use its id instead: ${candidates}.`);
 }
 
 export function workItemNotFound(ref: string): Error {
@@ -102,7 +138,7 @@ function activeWorker(bindings: FactoryRunBindingRecord[], itemId: string) {
 }
 
 /** The card on its Factory board; null when the server has no public URL configured. */
-function workItemUrl(item: WorkItemRow) {
+function workItemUrl(item: Card) {
   return (
     factoryWorkItemUrl({
       factoryProjectId: item.factoryProjectId,
@@ -112,7 +148,7 @@ function workItemUrl(item: WorkItemRow) {
   );
 }
 
-function summarizeItem(item: WorkItemRow, bindings: FactoryRunBindingRecord[]) {
+function summarizeItem(item: Card, bindings: FactoryRunBindingRecord[]) {
   return {
     id: item.id,
     number: workItemNumber(item),
@@ -145,9 +181,20 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-/** Held: a non-bug item triage parked until a person accepts it. */
-function isHeld(item: WorkItemRow): boolean {
-  return item.stages.includes('triage') && !!item.triageType && item.triageType !== 'bug' && !item.acceptedAt;
+/**
+ * Held: a card triage left resting (or whose source asks for approval), until a person moves it
+ * on. A card that has been past triage since (parked by self-review, or dragged back) resumes
+ * instead, matching the board's held state.
+ */
+function isHeld(boards: BoardRegistry, item: Card): boolean {
+  const board = boards.get(boardForWorkItem(item));
+  const stage = item.stages.length === 1 ? item.stages[0]! : undefined;
+  if (!board || !stage || board.phaseKind(stage) !== 'resting') return false;
+  if (needsApproval(item, phase => awaitsAcceptance(board, phase))) return true;
+  const triage = boardFlow(board).triage;
+  const triageRole = triage ? board.roleForPhase(triage) : undefined;
+  if (!triageRole || item.sessions[triageRole] === undefined) return false;
+  return !item.stageHistory.some(entry => entry.stage !== triage && board.isWorking(entry.stage));
 }
 
 const listInputSchema = z
@@ -174,6 +221,25 @@ const listInputSchema = z
 
 export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryReadToolDependencies): IntegrationTools {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
+  /**
+   * Of `cards` filed by hand, those that name no repository while the Factory
+   * links several, so a run on them refuses to start until someone picks one.
+   */
+  const cardsWithoutRepository = async (cards: Card[]): Promise<{ items: Card[]; candidates: string[] }> => {
+    const unnamed = cards.filter(card => typeof card.metadata?.repository !== 'string');
+    if (unnamed.length === 0 || !deps.sessions) return { items: [], candidates: [] };
+    const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
+    if (!sourceControl) return { items: [], candidates: [] };
+    // A card filed by hand has no source repository, so one that names none resolves like an empty card.
+    const resolution = await resolveWorkItemRepository({
+      sourceControl,
+      ...project,
+      item: { metadata: null, workItem: { metadata: null } },
+    });
+    return resolution.status === 'ambiguous'
+      ? { items: unnamed, candidates: resolution.candidates }
+      : { items: [], candidates: [] };
+  };
 
   return {
     factory_list_work_items: createTool({
@@ -183,7 +249,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
       inputSchema: listInputSchema,
       execute: async input => {
         const [items, bindings, followed] = await Promise.all([
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
           input.subscribed === undefined
             ? undefined
@@ -223,17 +289,16 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_inspect_work_item: createTool({
       id: 'factory_inspect_work_item',
       description:
-        'Everything the Factory knows about one work item: stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
+        'Everything the Factory knows about one work item: its description, stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
       inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
         if (!item) throw workItemNotFound(workItem);
-        const [bindings, decisions, audit, feed, all, subscribers] = await Promise.all([
+        const [bindings, decisions, audit, all, subscribers] = await Promise.all([
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id),
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.audit.list({ ...project, limit: 200 }),
-          deps.comments.listRecent({ ...project, workItemId: item.id, limit: 10 }),
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
           deps.workItems.listWorkItemSubscribers({ orgId: scope.orgId, workItemId: item.id }),
         ]);
         const itemDecisions = decisions.slice(-MAX_LIST);
@@ -243,8 +308,8 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           project,
           itemDecisions.filter(decision => decision.status === 'failed'),
         );
-        const labels = Array.isArray(item.metadata?.labels)
-          ? item.metadata.labels.filter((label): label is string => typeof label === 'string').slice(0, MAX_LIST)
+        const labels = Array.isArray(item.workItem.labels)
+          ? item.workItem.labels.filter((label): label is string => typeof label === 'string').slice(0, MAX_LIST)
           : [];
         const parent = item.parentWorkItemId
           ? all.find(candidate => candidate.id === item.parentWorkItemId)
@@ -275,9 +340,9 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         return {
           item: {
             ...summarizeItem(item, bindings),
+            description: item.description,
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
-            sourceUrl: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
-            triageType: item.triageType,
+            sourceUrl: typeof item.workItem.url === 'string' ? item.workItem.url : null,
             revision: item.revision,
           },
           labels,
@@ -298,13 +363,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
               actorType: event.actorType,
               occurredAt: iso(event.occurredAt),
             })),
-          feed: feed.map(comment => ({
-            id: comment.id,
-            kind: comment.kind,
-            author: comment.author,
-            occurredAt: iso(comment.occurredAt),
-            body: truncate(comment.body, MAX_TEXT),
-          })),
           parent: parent ? summarizeItem(parent, bindings) : null,
           children: children.slice(0, MAX_LIST).map(child => summarizeItem(child, bindings)),
           subscribers: subscribers.slice(0, MAX_LIST).map(subscription => ({
@@ -319,14 +377,14 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_list_attention: createTool({
       id: 'factory_list_attention',
       description:
-        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, and items triage is holding until someone accepts them.',
+        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, runs parked on a tool prompt (a plan to review, a question to answer) while still in flight, Work cards triage left in Intake for a person to move on, and open cards filed by hand that need a repository set (factory_update_work_item) before a run can start.',
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).optional() }).strict(),
       execute: async ({ limit = DEFAULT_LIST }) => {
         const [decisions, items] = await Promise.all([
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
             statuses: ['failed', 'proposed'],
           }),
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
         ]);
         const itemsById = new Map(items.map(item => [item.id, item]));
         const failed = decisions.filter(decision => decision.status === 'failed');
@@ -355,14 +413,22 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           .slice(0, limit)
           .map(group => ({ ...group, shown: group.decisions.slice(0, limit) }));
         // Check exactly the decisions this call returns, so every canRetry is real.
+        const boards = await toBoardSource(deps.boards).load(project);
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          await toBoardSource(deps.boards).load(project),
+          boards,
           project,
           incidents.flatMap(group => group.shown),
         );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
-        const held = items.filter(isHeld);
+        const held = items.filter(item => isHeld(boards, item));
+        const unplaced = await cardsWithoutRepository(
+          items.filter(item => !item.externalSource && !isTerminalWorkItem(boards, item)),
+        );
+        const needsRepository = unplaced.items;
+        const waiting = (deps.liveSessions?.()?.parkedIn(scope.factoryProjectId) ?? []).sort(
+          (a, b) => a.run.suspendedAt - b.run.suspendedAt,
+        );
         return {
           incidents: incidents.map(group => ({
             failureCode: group.failureCode,
@@ -379,16 +445,28 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           proposals: proposals
             .slice(0, limit)
             .map(decision => ({ ...summarizeDecision(decision), ...ref(decision.workItemId) })),
+          waiting: waiting.slice(0, limit).map(({ sessionId, run }) => ({
+            sessionId,
+            toolName: run.toolName,
+            label: parkedRunLabel(run.toolName),
+            waitingSince: new Date(run.suspendedAt).toISOString(),
+          })),
           held: held.slice(0, limit).map(item => ({
             ...ref(item.id),
-            triageType: item.triageType,
             stage: workItemStage(item),
           })),
+          needsRepository: needsRepository.slice(0, limit).map(item => ({
+            ...ref(item.id),
+            stage: workItemStage(item),
+          })),
+          ...(needsRepository.length > 0 ? { linkedRepositories: unplaced.candidates } : {}),
           truncated:
             allIncidents.length > limit ||
             incidents.some(group => group.shown.length < group.decisions.length) ||
             proposals.length > limit ||
-            held.length > limit,
+            waiting.length > limit ||
+            held.length > limit ||
+            needsRepository.length > limit,
         };
       },
     }),

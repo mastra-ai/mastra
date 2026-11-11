@@ -1,14 +1,19 @@
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 
-import { createBoardRegistry } from '../boards/index.js';
+import { LiveSessions } from '../session/live-sessions.js';
+import type { LiveSession } from '../session/live-sessions.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemSubscription,
 } from '../storage/domains/work-items/base.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { splitCardMetadata, workItemProviderAdapter } from '../work-items/providers/index.js';
 import { MAX_ERROR, MAX_TEXT, createFactoryReadTools } from './read-tools.js';
 import type { FactoryReadToolDependencies } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
@@ -26,13 +31,13 @@ const scope: FactoryToolScope = {
 
 let clock = Date.parse('2026-10-01T00:00:00Z');
 
-function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
+function item(overrides: Partial<Card> & { id: string }): Card {
   clock += 60_000;
-  return {
+  const card = {
     orgId: 'org-1',
     factoryProjectId: 'project-1',
     board: null,
-    externalSource: null,
+    externalSource: { integrationId: 'github', type: 'issue', externalId: overrides.id },
     parentWorkItemId: null,
     title: `Item ${overrides.id}`,
     stages: ['intake'],
@@ -41,16 +46,26 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     metadata: null,
     triageType: null,
     autonomyArmedAt: null,
-    plansPreapprovedAt: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdBy: 'someone-else',
     createdAt: new Date(clock),
     updatedAt: new Date(clock),
     ...overrides,
-  } as WorkItemRow;
+  };
+  const workItem = createProviderWorkItemForTests({
+    id: card.id,
+    title: card.title,
+    source: card.externalSource,
+    metadata: card.metadata,
+  });
+  return {
+    ...card,
+    workItemId: workItem.id,
+    parentBoardItemId: card.parentWorkItemId,
+    metadata: splitCardMetadata(card.metadata, workItemProviderAdapter(card.externalSource).providerMetadataKeys).board,
+    workItem,
+  };
 }
 
 function binding(workItemId: string, role: string, status: 'active' | 'revoked' = 'active'): FactoryRunBindingRecord {
@@ -105,19 +120,19 @@ function setup({
   bindings = [],
   decisions = [],
   audit = [],
-  comments = [],
   subscriptions = [],
+  sessions,
 }: {
-  items?: WorkItemRow[];
+  items?: Card[];
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
-  comments?: WorkItemCommentRow[];
   subscriptions?: WorkItemSubscription[];
+  sessions?: FactoryReadToolDependencies['sessions'];
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
-      list: vi.fn(async ({ factoryProjectId }) => items.filter(row => row.factoryProjectId === factoryProjectId)),
+      listShared: vi.fn(async ({ factoryProjectId }) => items.filter(row => row.factoryProjectId === factoryProjectId)),
       getForProject: vi.fn(
         async (_orgId, factoryProjectId, id) =>
           items.find(row => row.id === id && row.factoryProjectId === factoryProjectId) ?? null,
@@ -141,9 +156,9 @@ function setup({
         subscriptions.filter(row => row.factoryProjectId === factoryProjectId && row.sessionId === sessionId),
       ),
     },
-    comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createBoardRegistry(),
+    boards: createTriageWorkRegistry(),
+    ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
     string,
@@ -182,7 +197,7 @@ describe('factory_list_work_items', () => {
       id: 'c',
       title: 'Review: dark mode',
       stages: ['review'],
-      board: 'review',
+      board: 'release',
       sessions: { review: { sessionId: 's-c', branch: 'b', threadId: 't-c', startedBy: 'x' } },
     }),
     item({ id: 'd', title: 'Other factory', factoryProjectId: 'project-2' }),
@@ -201,12 +216,19 @@ describe('factory_list_work_items', () => {
     expect(await ids({ query: 'LOGIN' })).toEqual(['a']);
     expect(await ids({ query: '#12' })).toEqual(['a']);
     expect(await ids({ stage: 'execute' })).toEqual(['b']);
-    expect(await ids({ board: 'review' })).toEqual(['c']);
+    expect(await ids({ board: 'release' })).toEqual(['c']);
     expect(await ids({ board: 'work' })).toEqual(['b', 'a']);
     expect(await ids({ role: 'review' })).toEqual(['c']);
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
+  });
+
+  it('numbers a card filed by hand and finds it by that #number', async () => {
+    const manual = item({ id: 'm', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
+    const { run } = setup({ items: [...rows, manual] });
+    const result = await run<ListResult>('factory_list_work_items', { query: '#3' });
+    expect(result.items).toMatchObject([{ id: 'm', number: 3 }]);
   });
 
   it('filters by what this session follows', async () => {
@@ -235,7 +257,7 @@ describe('factory_list_work_items', () => {
         'https://factory.example.com/factories/project-1/work?item=a',
       );
       expect(result.items.find(row => row.id === 'c')?.url).toBe(
-        'https://factory.example.com/factories/project-1/review?item=c',
+        'https://factory.example.com/factories/project-1/boards/release?item=c',
       );
     } finally {
       vi.unstubAllEnvs();
@@ -290,7 +312,6 @@ describe('factory_inspect_work_item', () => {
       decisions: [
         decision({ id: 'd1', workItemId: TARGET, lastError: 'e'.repeat(1000), failureCode: 'session_unavailable' }),
       ],
-      comments: [{ id: 'c1', kind: 'comment', body: 'b'.repeat(1000), author: { type: 'human', id: 'u' } } as never],
       audit: [
         {
           id: 'a1',
@@ -317,7 +338,6 @@ describe('factory_inspect_work_item', () => {
     });
     const decisions = byId.decisions as Array<{ error: string }>;
     expect(decisions[0]!.error).toHaveLength(MAX_ERROR);
-    expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
   });
 
   it('shows whether each session is mid-run and when its thread last moved (#27742)', async () => {
@@ -357,6 +377,20 @@ describe('factory_inspect_work_item', () => {
     await expect(run('factory_inspect_work_item', { workItem: '#8' })).rejects.toThrow('in this Factory');
   });
 
+  it('refuses a #number that a card filed by hand shares with an issue card', async () => {
+    const manual = item({ id: 'manual', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
+    const issue = item({ id: 'issue', title: 'From GitHub', metadata: { number: 3 } });
+    for (const items of [
+      [manual, issue],
+      [issue, manual],
+    ]) {
+      const { run } = setup({ items });
+      await expect(run('factory_inspect_work_item', { workItem: '#3' })).rejects.toThrow(
+        '#3 matches more than one work item; use its id instead: ',
+      );
+    }
+  });
+
   it('rejects a ref that is neither a UUID nor a number before it reaches storage', async () => {
     const { run, deps } = setup({ items: [target] });
     await expect(run('factory_inspect_work_item', { workItem: 'not-an-id' })).resolves.toMatchObject({ error: true });
@@ -364,14 +398,37 @@ describe('factory_inspect_work_item', () => {
   });
 });
 
+const TRIAGED = { triage: { sessionId: 's', threadId: 't', branch: 'factory/item', startedBy: 'factory' } };
+
 describe('factory_list_attention', () => {
   it('groups failed decisions by failure, lists proposals and held items', async () => {
     const items = [
       item({ id: 'x', metadata: { number: 1 } }),
       item({ id: 'y' }),
-      item({ id: 'held', stages: ['triage'], triageType: 'feature' }),
-      item({ id: 'bug', stages: ['triage'], triageType: 'bug' }),
-      item({ id: 'accepted', stages: ['triage'], triageType: 'feature', acceptedAt: new Date() }),
+      item({ id: 'held', stages: ['intake'], sessions: TRIAGED }),
+      item({ id: 'labeled', stages: ['intake'], metadata: { labels: ['Status: Needs Approval'] } }),
+      item({ id: 'untriaged', stages: ['intake'] }),
+      item({ id: 'triaging', stages: ['triage'], sessions: TRIAGED }),
+      item({ id: 'moved-on', stages: ['planning'], sessions: TRIAGED }),
+      // Self-review parked this card after it was built: it resumes, it is not waiting on triage.
+      item({
+        id: 'parked',
+        stages: ['intake'],
+        sessions: TRIAGED,
+        stageHistory: ['intake', 'triage', 'planning', 'execute', 'review', 'intake'].map(stage => ({
+          stage,
+          enteredAt: '2026-10-01T00:00:00Z',
+          by: 'agent:binding-1',
+        })),
+      }),
+      item({
+        id: 'review-board',
+        board: 'review',
+        stages: ['intake'],
+        sessions: TRIAGED,
+      }),
+      // A classification and acceptance stamped under the old model no longer decide anything.
+      item({ id: 'legacy', stages: ['triage'], triageType: 'feature request' }),
     ];
     const { run } = setup({
       items,
@@ -396,8 +453,84 @@ describe('factory_list_attention', () => {
     expect(result.incidents[0]!.decisions.map(row => row.canRetry)).toEqual([true, true]);
     expect(result.incidents[1]!.decisions[0]!.canRetry).toBe(false);
     expect(result.proposals).toMatchObject([{ id: 'p1', number: 1 }]);
-    expect(result.held.map(row => row.workItemId)).toEqual(['held']);
+    expect(result.held.map(row => row.workItemId)).toEqual(['held', 'labeled']);
+    expect(result.held[0]).not.toHaveProperty('triageType');
     expect(result.truncated).toBe(false);
+  });
+
+  it('flags open cards filed by hand that name no repository while several are linked', async () => {
+    const linked = [
+      { id: 'link-1', repositoryId: 'repo-1', externalId: '2', slug: 'mastra-ai/mastra' },
+      { id: 'link-2', repositoryId: 'repo-2', externalId: '3', slug: 'mastra-ai/platform' },
+    ];
+    const sourceControl = {
+      integrationId: 'github',
+      connections: { list: async () => [{ id: 'connection-1', integrationId: 'github' }] },
+      projectRepositories: {
+        list: async () => linked.map(({ id, repositoryId }) => ({ id, repositoryId, inEnvironment: true })),
+      },
+      repositories: {
+        get: async ({ id }: { id: string }) => {
+          const link = linked.find(candidate => candidate.repositoryId === id);
+          return link ? { id, externalId: link.externalId, slug: link.slug } : null;
+        },
+      },
+    } as unknown as SourceControlStorageHandle;
+    const items = [
+      item({ id: 'unnamed', externalSource: null, metadata: { cardNumber: 1 } }),
+      item({ id: 'named', externalSource: null, metadata: { cardNumber: 2, repository: 'mastra-ai/mastra' } }),
+      item({ id: 'done', externalSource: null, stages: ['done'], metadata: { cardNumber: 3 } }),
+      item({ id: 'synced' }),
+    ];
+    const { run } = setup({ items, sessions: { getSourceControlBySessionId: async () => sourceControl } });
+    const result = await run<{
+      needsRepository: Array<{ workItemId: string; number: number | null }>;
+      linkedRepositories?: string[];
+    }>('factory_list_attention', {});
+    expect(result.needsRepository).toMatchObject([{ workItemId: 'unnamed', number: 1 }]);
+    expect(result.linkedRepositories).toEqual(['mastra-ai/mastra', 'mastra-ai/platform']);
+  });
+
+  it('lists a run parked on a tool prompt while it is still in flight', async () => {
+    let created: (session: LiveSession) => void = () => {};
+    const liveSessions = new LiveSessions({
+      onSessionCreated: listener => {
+        created = listener;
+        return () => {};
+      },
+      onSessionDeleted: () => () => {},
+    });
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    const pendingSuspensions = new Map<string, { toolName: string }>();
+    created({
+      identity: { getId: () => 'session-builder' },
+      run: { isRunning: () => true },
+      state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
+      displayState: { get: () => ({ pendingSuspensions }) },
+      subscribe: listener => {
+        emit = listener;
+        return () => {};
+      },
+    });
+    const { deps, run } = setup({ items: [item({ id: 'x' })] });
+    deps.liveSessions = () => liveSessions;
+    type Waiting = { waiting: Array<{ sessionId: string; toolName: string; label: string; waitingSince: string }> };
+
+    await expect(run<Waiting>('factory_list_attention', {})).resolves.toMatchObject({ waiting: [] });
+
+    // The run never ends: submit_plan parks it mid-stream, and it must show without waiting for agent_end.
+    pendingSuspensions.set('call-1', { toolName: 'submit_plan' });
+    emit({ type: 'tool_suspended', toolCallId: 'call-1', toolName: 'submit_plan', args: {}, suspendPayload: {} });
+
+    const result = await run<Waiting>('factory_list_attention', {});
+    expect(result.waiting).toEqual([
+      {
+        sessionId: 'session-builder',
+        toolName: 'submit_plan',
+        label: 'Plan waiting for review',
+        waitingSince: expect.any(String),
+      },
+    ]);
   });
 
   it('flags truncation when incidents are cut by the limit', async () => {

@@ -630,6 +630,8 @@ export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipeli
   skillCount?: number;
   /** Format the catalog was rendered in (inject only) */
   skillFormat?: string;
+  /** Configured catalog-injection option; `false` means no catalog was rendered (inject only) */
+  injectCatalog?: boolean;
   /** Skill the operation targeted (activate / read) */
   skillName?: string;
   /** Whether the operation succeeded */
@@ -1685,6 +1687,8 @@ export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
    * Omitted when it only inherited another entity's version through `metadata.entityVersionId`.
    */
   entityVersionId?: string;
+  /** Service name from the span's `metadata.serviceName`, else the Observability config's `serviceName` */
+  serviceName?: string;
   /**
    * Entity of the nearest ancestor span that is not internal or excluded. Omitted when there is none.
    * Independent of `includeInternalSpans`, so it can skip the span `parentSpanId` points to.

@@ -118,7 +118,7 @@ if (capabilities.spanAggregate) {
 
 The request and response structure follows `aggregateTraces()`, with direct span predicates and span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling, and `capabilities.spanAggregateModelDimensions` before grouping or counting distinct values by `model` or `provider`. With an older adapter, those requests return `501`.
 
-Both `aggregateTraces()` and `aggregateSpans()` accept `timeToFirstToken.*` and `timeToFirstChunk.*` measures when `capabilities.aggregateTimeToFirstMeasures` is `true`. Spans and traces without a recorded value are skipped, never counted as 0. See [Time to first token and chunk measures](/reference/observability/tracing/advanced-queries#time-to-first-token-and-chunk-measures).
+Both `aggregateTraces()` and `aggregateSpans()` accept time to first token (TTFT) and time to first chunk (TTFC) measures, `timeToFirstToken.*` and `timeToFirstChunk.*`, when `capabilities.aggregateTimeToFirstMeasures` is `true`. Spans and traces without a recorded value are skipped, never counted as 0. See [Time to first chunk (TTFC)](/reference/observability/tracing/advanced-queries#time-to-first-chunk-ttfc) and [Time to first token (TTFT)](/reference/observability/tracing/advanced-queries#time-to-first-token-ttft).
 
 See [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) for selection, dimensions, per-span usage, and how to list the spans behind a group.
 
@@ -374,10 +374,16 @@ const result = await mastraClient.deleteTraces({
   traceIds: ['trace-1', 'trace-2'],
 })
 
-console.log(result.success)
+if ('accepted' in result) {
+  console.log('Deletion requested')
+} else {
+  console.log(result.success)
+}
 ```
 
 Each request accepts up to 1,000 trace IDs and no tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
+
+The client supports two response shapes: OSS returns `{ success: true }` after its delete operation, while a Platform backend that supports queued batch deletion returns `202 { accepted: true }` after accepting cleanup. Acceptance doesn't mean records have disappeared from reads, so check the response before reporting deletion as complete. Using these client methods with Platform requires a deployment that supports the batch deletion endpoints.
 
 ## Scoring traces
 
@@ -406,13 +412,54 @@ const scores = await mastraClient.listScoresBySpan({
 })
 ```
 
+## Get a score by ID
+
+Use `getScore()` to retrieve one observability score:
+
+```typescript
+const { score } = await mastraClient.getScore('score-id-123')
+```
+
+The response is `{ score: record | null }`. A missing score returns HTTP 200 with `{ score: null }`.
+The return type is `GetScoreResponse`, exported from `@mastra/client-js`.
+
+## Creating scores
+
+Create a score for a trace, optionally identifying a span within it:
+
+```typescript
+const response = await mastraClient.createScore({
+  score: {
+    traceId: 'trace-123',
+    spanId: 'span-456',
+    scorerId: 'accuracy',
+    score: 0.95,
+  },
+})
+```
+
+`createScore()` requires a nonblank `score.traceId`, with an optional `spanId`. The client generates a missing `scoreId` and ISO `timestamp` once per call and preserves them across retries. Supply these fields to reuse an existing identity. See [signal write options](#signal-write-options) for context resolution and retry behavior.
+
 ## Feedback
 
-Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform Feedback API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the configured API server. Create methods support OSS and Platform. Full replacement uses Platform's PUT endpoint. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+
+### Get feedback by ID
+
+Use `getFeedback()` to retrieve one feedback record:
+
+```typescript
+const { feedback } = await mastraClient.getFeedback('feedback-id-123')
+```
+
+The response is `{ feedback: record | null }`. A missing record returns HTTP 200 with `{ feedback: null }`.
+The return type is `GetFeedbackResponse`, exported from `@mastra/client-js`.
+
+Both getters accept an unencoded ID and encode it as a URL path segment. They use the client's configured API prefix, credentials, and headers. Record timestamps are ISO strings in the JSON response.
 
 ### Creating feedback
 
-Create a feedback record linked to a trace or span:
+Create a feedback record for a trace, optionally identifying a span within it:
 
 ```typescript
 const response = await mastraClient.createFeedback({
@@ -426,6 +473,54 @@ const response = await mastraClient.createFeedback({
   },
 })
 ```
+
+`createFeedback()` requires a nonblank `feedback.traceId`, with an optional `spanId`. The client generates a missing `feedbackId` and ISO `timestamp` once per call and preserves them across retries. Set `feedbackUserId` to identify the feedback author. `userId` identifies the span's user. An authenticated OSS user takes precedence over a submitted feedback author.
+
+### Signal write options
+
+Both create methods accept an optional top-level `contextMode` alongside the `feedback` or `score` wrapper:
+
+- `"provided"` uses the record's flattened context fields without looking up spans. Missing context fields aren't enriched.
+- `"resolve"` derives context from the stored root and optional target span. Root tags are inherited. Record metadata overrides matching stored metadata keys. A missing root returns `TRACE_NOT_FOUND`. A missing target returns `SPAN_NOT_FOUND`.
+
+Omitting `contextMode` uses the server's default: `"provided"` on OSS and `"resolve"` on Platform. The client preserves omission. Select a mode explicitly when the same behavior is required on both servers. On OSS, each configured trusted scope field overrides caller input. In provided mode, other context fields remain caller-supplied. For example, a trusted organization ID overrides `organizationId` but doesn't clear `resourceId` when no trusted resource scope is configured.
+
+```typescript
+const result = await mastraClient.createFeedback({
+  contextMode: 'resolve',
+  feedback: {
+    traceId: 'trace-123',
+    feedbackUserId: 'reviewer-1',
+    feedbackType: 'thumbs',
+    value: 1,
+  },
+})
+```
+
+Use `retries` and `anchorRetryTimeoutMs` in the optional second argument to control retries. Network and server errors use the client's transport retry settings. Only 404s with `TRACE_NOT_FOUND` or `SPAN_NOT_FOUND` receive anchor retries, for at most 30 seconds after the first such response. Set `anchorRetryTimeoutMs` to a shorter window or `0` to disable them. Other 404s and authentication or validation errors are terminal.
+
+Create responses contain `success` and optional `data` with the generated or supplied `feedbackId`/`scoreId`, `traceId`, nullable `spanId`, and normalized UTC `timestamp`. The client also accepts success-only responses. Platform success confirms publication. The record may not be immediately visible to reads. Direct OSS HTTP callers can omit the ID and timestamp to have the server generate them.
+
+Explicit modes require server support. Older servers may ignore `contextMode`. Deploy Platform's supplied-context support before sending `"provided"` there.
+
+### Replacing feedback on Platform
+
+`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. This method targets Platform. OSS server doesn't implement this replacement endpoint.
+
+```typescript
+await mastraClient.replaceFeedback({
+  feedback: {
+    feedbackId: 'feedback-1',
+    traceId: 'trace-123',
+    timestamp: '2026-01-01T00:00:00.123Z',
+    feedbackType: 'thumbs',
+    value: -1,
+    feedbackUserId: 'reviewer-1',
+  },
+})
+```
+
+Use the normalized timestamp from the create response's `data` when available. A changed timestamp identifies a different Platform record. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
 
 ### Deleting feedback and scores
 
@@ -444,6 +539,8 @@ await mastraClient.deleteScores({
   resourceId: 'resource-1',
 })
 ```
+
+Both methods return `{ success: boolean }` from OSS or `{ accepted: true }` from a Platform backend that supports queued batch deletion. See [Deleting traces](#deleting-traces) for response handling. Accepted records can remain readable until cleanup runs. Platform uses authenticated organization/project scope, which request-body scope fields can't override.
 
 ### Listing feedback
 

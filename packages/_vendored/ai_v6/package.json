@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v6",
-  "version": "0.0.94",
+  "version": "0.0.95",
   "description": "",
   "type": "module",
   "private": true,
@@ -38,9 +38,9 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "^3.0.222",
+    "@ai-sdk/gateway": "^3.0.226",
     "@ai-sdk/provider": "^3.0.19",
-    "@ai-sdk/provider-utils": "^4.0.62",
+    "@ai-sdk/provider-utils": "^4.0.63",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "catalog:",
@@ -48,7 +48,7 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^6.0.316",
+    "ai": "^6.0.320",
     "json-schema": "^0.4.0",
     "msw": "^2.15.0",
     "resolve.exports": "^2.0.4",
@@ -63,7 +63,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "packages/_ai-sdk-v4"
+    "directory": "packages/_vendored/ai_v6"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

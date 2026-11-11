@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b-desktop",
-  "version": "0.1.12-alpha.0",
+  "version": "0.1.13-alpha.0",
   "description": "E2B Desktop (computer-use) sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

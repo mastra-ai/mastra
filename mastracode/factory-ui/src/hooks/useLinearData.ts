@@ -1,4 +1,4 @@
-import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -17,13 +17,13 @@ import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
  * service degrades to a disabled status instead of throwing, so consumers read
  * `data`, never `error`. Pass `enabled: false` to gate the request.
  */
+export function linearStatusQueryOptions(baseUrl: string) {
+  return queryOptions({ queryKey: queryKeys.linearStatus(), queryFn: () => fetchLinearStatus(baseUrl) });
+}
+
 export function useLinearStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.linearStatus(),
-    queryFn: () => fetchLinearStatus(baseUrl),
-    enabled,
-  });
+  return useQuery({ ...linearStatusQueryOptions(baseUrl), enabled });
 }
 
 /**
@@ -72,12 +72,22 @@ export function useLinearProjectsQuery(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.linearProjects(),
     queryFn: () => listLinearProjects(baseUrl),
+    select: data => data.projects,
     enabled,
   });
 }
 
-/** The connected workspace's teams (Settings intake-source picker). */
-export function useLinearTeamsQuery(enabled: boolean) {
+export function useLinearProjectListingQuery(enabled: boolean) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearProjects(),
+    queryFn: () => listLinearProjects(baseUrl),
+    enabled,
+  });
+}
+
+/** The connected workspaces' teams (Settings intake-source picker). */
+export function useLinearTeamListingQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearTeams(),

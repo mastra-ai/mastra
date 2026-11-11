@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { noop, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
@@ -59,15 +59,17 @@ export function useRouteThreadSync() {
 
       if (fallbackForScopeChange && latest) {
         const warm = session
-          ? queryClient.prefetchQuery({
-              queryKey: queryKeys.agentControllerThreadMessages(
-                AGENT_CONTROLLER_ID,
-                sessionId,
-                latest.id,
-                INITIAL_THREAD_MESSAGE_LIMIT,
-              ),
-              queryFn: () => session.listMessages(latest.id, INITIAL_THREAD_MESSAGE_LIMIT),
-            })
+          ? queryClient
+              .query({
+                queryKey: queryKeys.agentControllerThreadMessages(
+                  AGENT_CONTROLLER_ID,
+                  sessionId,
+                  latest.id,
+                  INITIAL_THREAD_MESSAGE_LIMIT,
+                ),
+                queryFn: () => session.listMessages(latest.id, INITIAL_THREAD_MESSAGE_LIMIT),
+              })
+              .catch(noop)
           : Promise.resolve();
         void warm.finally(() => {
           if (isLatestRequest()) void navigate(`/factories/${factoryId}/threads/${latest.id}`, { replace: true });

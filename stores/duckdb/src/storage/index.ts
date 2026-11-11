@@ -17,6 +17,7 @@ import type {
 } from './domains/observability/index';
 import {
   aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
   outcomeFeatures,
   spanAggregateFeatures,
   spanQueryFeatures,
@@ -48,6 +49,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...contextFieldFeatures,
   ...timingFeatures,
   ...outcomeFeatures,
   'trace-query-root-span-fields',
@@ -75,6 +77,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...contextFieldFeatures,
   ...timingFeatures,
   ...outcomeFeatures,
   'trace-query-root-span-fields',
@@ -109,6 +112,10 @@ type ObservabilityStoreImpl = ObservabilityStorageDuckDBImpl;
  * which lets DuckDBStore degrade cleanly when paired with an older @mastra/core runtime.
  */
 export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: DuckDBConnection;
   private delegate: ObservabilityStoreImpl | null = null;
   private loadPromise: Promise<ObservabilityStoreImpl | null> | null = null;
@@ -524,6 +531,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['getScoreById']> {
     const delegate = await this.requireDelegate();
     return delegate.getScoreById(...args);
+  }
+
+  async getFeedbackById(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackById']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackById(...args);
   }
 
   async getScoreAggregate(

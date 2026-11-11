@@ -11,6 +11,7 @@ import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import { GatewayManager } from '../llm/model/gateways';
+import type { GatewayModel, MastraModelGatewayInterface } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
@@ -28,6 +29,7 @@ import type { DynamicArgument } from '../types';
 import type { Workspace } from '../workspace/workspace';
 
 import { SessionNotStartedError } from './errors';
+import { ModelCatalogCache } from './model-catalog-cache';
 import {
   MODEL_PERSISTENCE_VERSION,
   MODEL_PERSISTENCE_VERSION_KEY,
@@ -251,8 +253,6 @@ export class AgentController<TState = {}> {
       retained: boolean;
     }
   >();
-  private availableModelsCache: AvailableModel[] | null = null;
-  private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   /** The application's event bus the backing agents share when the controller has none of its own. */
@@ -265,6 +265,9 @@ export class AgentController<TState = {}> {
    */
   #externalMastra: Mastra | undefined = undefined;
   #gatewayManager: GatewayManager | undefined = undefined;
+  readonly #modelCatalog: ModelCatalogCache;
+  /** Last {@link listAvailableModels} result, reused while its inputs are unchanged. */
+  #availableModels: { catalog: readonly GatewayModel[]; useCountsKey: string; models: AvailableModel[] } | undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
   /** Chat channels running this controller inside messaging threads (from `config.channels`). */
   #channels: AgentControllerChannels | null = null;
@@ -283,6 +286,11 @@ export class AgentController<TState = {}> {
     // (custom takes precedence). Shared by listAvailableModels,
     // getCurrentModelAuthStatus, and the OM model resolver.
     this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
+    // The router defaults list the same models whatever the credentials (and
+    // models.dev and Netlify download them), so they refresh in the background
+    // on a slower schedule.
+    const remoteGateways = new Set<MastraModelGatewayInterface>(defaultGateways);
+    this.#modelCatalog = new ModelCatalogCache(this.#gatewayManager, gateway => remoteGateways.has(gateway));
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -450,7 +458,7 @@ export class AgentController<TState = {}> {
             AGENTIC_EXECUTION_WORKFLOW_ID,
             DurableStepIds.AGENTIC_LOOP,
             DurableStepIds.AGENTIC_EXECUTION,
-          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 })),
         );
       },
       // History lets the runtime skip retained run parts that storage already
@@ -1646,7 +1654,9 @@ export class AgentController<TState = {}> {
       if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
         agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
       }
-      mastra.addAgent(agent);
+      if (!mastra.listAgents()[agent.id]) {
+        mastra.addAgent(agent);
+      }
     }
 
     if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {
@@ -1860,39 +1870,40 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Get available models from the app-provided catalog hook with use counts applied.
+   * Get available models from the configured gateways with use counts applied.
+   *
+   * Remote catalogs (models.dev, Netlify) are served from their last good
+   * download and refreshed in the background once it is a few minutes old;
+   * calls wait for one only until it has downloaded once.
+   * Configured gateways and auth are checked again after a few seconds, or on
+   * the next call after {@link invalidateAvailableModelsCache}.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
-    const now = Date.now();
-    if (this.availableModelsCache && now - this.availableModelsCacheTime < 10_000) {
-      return this.availableModelsCache;
-    }
-
+    const catalog = await this.#modelCatalog.list();
     const useCounts = this.config.modelUseCountProvider?.() ?? {};
+    // The catalog holds thousands of models: rebuild the list only when the
+    // catalog or the use counts changed since the last call.
+    const useCountsKey = JSON.stringify(useCounts);
+    const previous = this.#availableModels;
+    if (previous?.catalog === catalog && previous.useCountsKey === useCountsKey) return previous.models.slice();
+
     const modelsById = new Map<string, AvailableModel>();
-
-    const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
-      if (!model.id || !model.provider || !model.modelName) return;
-      modelsById.set(model.id, {
-        ...model,
-        useCount: useCounts[model.id] ?? 0,
-      });
-    };
-
-    const catalog = await this.#gatewayManager!.listAvailableModels();
     for (const model of catalog) {
-      upsertModel(model);
+      if (!model.id || !model.provider || !model.modelName) continue;
+      modelsById.set(model.id, { ...model, useCount: useCounts[model.id] ?? 0 });
     }
-
-    const result = [...modelsById.values()];
-    this.availableModelsCache = result;
-    this.availableModelsCacheTime = Date.now();
-    return result;
+    const models = [...modelsById.values()];
+    this.#availableModels = { catalog, useCountsKey, models };
+    return models.slice();
   }
 
+  /**
+   * Make the next {@link listAvailableModels} call check configured gateways and
+   * auth again, and download remote catalogs again in the background. Call it
+   * after credentials or custom providers change.
+   */
   invalidateAvailableModelsCache(): void {
-    this.availableModelsCache = null;
-    this.availableModelsCacheTime = 0;
+    this.#modelCatalog.invalidate();
   }
 
   // ===========================================================================
@@ -2228,7 +2239,9 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
-      ...(untilIdle !== undefined && { untilIdle }),
+      // Sessions report background work inside the run that started it, and their
+      // completion notices only persist, so runs stay open until that work is done.
+      untilIdle: untilIdle ?? true,
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);

@@ -9,14 +9,13 @@ import {
 } from '@mastra/playground-ui/components/Drawer';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
-import { useStartProviderOAuth } from '../../../../../../hooks/use-providers';
-import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
+import { useConnectMastraGateway, useStartProviderOAuth } from '../../../../../../hooks/use-providers';
+import { useSidePanelDrawer } from '../../../../../lib/hooks/useSidePanelDrawer';
+import { MastraGatewayBilling } from '../../../../workspaces/components/MastraGatewayBilling';
 import {
   CREDENTIAL_LABEL,
   SHARED_SOURCE,
@@ -26,11 +25,14 @@ import {
   signInRequest,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
+import { ProviderOptionRow } from './ProviderRows';
 
 const AUDIENCE: Record<CredentialScope, string> = {
   user: 'Only you can use it.',
   org: 'Everyone in your organization can use it.',
 };
+
+const PROVIDER_LIST_CLASS = 'border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border';
 
 function matchesSearch(provider: ProviderInfo, query: string): boolean {
   return (
@@ -39,8 +41,12 @@ function matchesSearch(provider: ProviderInfo, query: string): boolean {
   );
 }
 
+function isGateway(provider: ProviderInfo): boolean {
+  return provider.connectWithMastraAccount === true;
+}
+
 function takesApiKey(provider: ProviderInfo): boolean {
-  return provider.source !== 'deployment';
+  return provider.source !== 'deployment' && !isGateway(provider);
 }
 
 function connectionLabel(provider: ProviderInfo, scope: CredentialScope): string | undefined {
@@ -72,20 +78,33 @@ export function AddProviderDrawer({
   onAddKey: (provider: ProviderInfo) => void;
   onClose: () => void;
 }) {
-  const isMobile = useIsMobile();
+  const sidePanel = useSidePanelDrawer();
   const startOAuthMutation = useStartProviderOAuth();
+  const connectGatewayMutation = useConnectMastraGateway();
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
-  const sorted = providers.toSorted((left, right) => left.provider.localeCompare(right.provider));
+  const sorted = providers.toSorted(
+    (left, right) => Number(isGateway(right)) - Number(isGateway(left)) || left.provider.localeCompare(right.provider),
+  );
+  const gateway = query ? undefined : sorted.find(isGateway);
   const signInProviders = sorted.filter(provider => provider.oauth?.supported === true);
   const shown = query ? sorted.filter(provider => matchesSearch(provider, query)) : signInProviders;
   const keyOnlyCount = providers.filter(provider => provider.oauth?.supported !== true && takesApiKey(provider)).length;
-  const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : undefined;
+  const connectingGateway = connectGatewayMutation.isPending ? providers.find(isGateway)?.provider : undefined;
+  const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : connectingGateway;
+  const startError = startOAuthMutation.error ?? connectGatewayMutation.error;
 
+  // Each attempt shows its own error, not one left over from the other way to connect.
   const signIn = (provider: ProviderInfo) => {
+    connectGatewayMutation.reset();
     startOAuthMutation.mutate(signInRequest(provider, requestScope), {
       onSuccess: session => onOAuthStarted(provider.provider, session),
     });
+  };
+
+  const connectGateway = () => {
+    startOAuthMutation.reset();
+    connectGatewayMutation.mutate({ scope: requestScope }, { onSuccess: onClose });
   };
 
   const closeUnlessStarting = (nextOpen: boolean) => {
@@ -96,17 +115,11 @@ export function AddProviderDrawer({
     if (nextOpen) return;
     setSearch('');
     startOAuthMutation.reset();
+    connectGatewayMutation.reset();
   };
 
   return (
-    <Drawer
-      side={isMobile ? 'bottom' : 'right'}
-      variant={isMobile ? 'default' : 'floating'}
-      overlay="visible"
-      open={open}
-      onOpenChange={closeUnlessStarting}
-      onOpenChangeComplete={resetOnceHidden}
-    >
+    <Drawer {...sidePanel} open={open} onOpenChange={closeUnlessStarting} onOpenChangeComplete={resetOnceHidden}>
       <DrawerContent aria-busy={startingProvider !== undefined || undefined}>
         <DrawerHeader>
           <DrawerTitle>Add provider</DrawerTitle>
@@ -121,6 +134,23 @@ export function AddProviderDrawer({
             value={search}
             onValueChange={setSearch}
           />
+          {gateway && (
+            <>
+              <Txt as="p" variant="caption" tone="muted">
+                Recommended
+              </Txt>
+              <ul className={PROVIDER_LIST_CLASS}>
+                <AddProviderRow
+                  provider={gateway}
+                  credentialScope={credentialScope}
+                  startingProvider={startingProvider}
+                  onSignIn={signIn}
+                  onConnectGateway={connectGateway}
+                  onAddKey={onAddKey}
+                />
+              </ul>
+            </>
+          )}
           <Txt as="p" variant="caption" tone="muted">
             {query ? `${shown.length} of ${providers.length} providers` : 'Sign in with a subscription'}
           </Txt>
@@ -129,15 +159,16 @@ export function AddProviderDrawer({
               {emptyMessage(search)}
             </Txt>
           ) : (
-            <ul className="border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border">
+            <ul className={PROVIDER_LIST_CLASS}>
               {shown.map(provider => (
                 <AddProviderRow
                   key={provider.provider}
                   provider={provider}
                   credentialScope={credentialScope}
                   startingProvider={startingProvider}
-                  onSignIn={() => signIn(provider)}
-                  onAddKey={() => onAddKey(provider)}
+                  onSignIn={signIn}
+                  onConnectGateway={connectGateway}
+                  onAddKey={onAddKey}
                 />
               ))}
             </ul>
@@ -147,9 +178,9 @@ export function AddProviderDrawer({
               {keyOnlyCount} more take an API key. Type to find one.
             </Txt>
           )}
-          {startOAuthMutation.error && (
+          {startError && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-              {startOAuthMutation.error.message}
+              {startError.message}
             </Txt>
           )}
         </DrawerBody>
@@ -163,33 +194,41 @@ function AddProviderRow({
   credentialScope,
   startingProvider,
   onSignIn,
+  onConnectGateway,
   onAddKey,
 }: {
   provider: ProviderInfo;
   credentialScope: CredentialScope;
   startingProvider: string | undefined;
-  onSignIn: () => void;
-  onAddKey: () => void;
+  onSignIn: (provider: ProviderInfo) => void;
+  onConnectGateway: () => void;
+  onAddKey: (provider: ProviderInfo) => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
-  const label = connectionLabel(provider, credentialScope);
+  const label =
+    connectionLabel(provider, credentialScope) ?? (isGateway(provider) ? <MastraGatewayBilling /> : undefined);
   const starting = startingProvider !== undefined;
   return (
-    <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="caption" className="truncate">
-          {displayName}
-        </Txt>
-        {label && (
-          <Txt as="span" variant="meta" tone="muted">
-            {label}
-          </Txt>
-        )}
-      </span>
+    <ProviderOptionRow provider={provider.provider} label={label}>
       {takesApiKey(provider) && (
-        <Button size="sm" aria-label={`Add API key for ${displayName}`} disabled={starting} onClick={onAddKey}>
+        <Button
+          size="sm"
+          aria-label={`Add API key for ${displayName}`}
+          disabled={starting}
+          onClick={() => onAddKey(provider)}
+        >
           API key
+        </Button>
+      )}
+      {isGateway(provider) && !credentialAt(provider, credentialScope) && (
+        <Button
+          size="sm"
+          variant="primary"
+          aria-label={`Connect ${displayName}`}
+          disabled={starting}
+          onClick={onConnectGateway}
+        >
+          {startingProvider === provider.provider ? 'Connecting…' : 'Connect'}
         </Button>
       )}
       {provider.oauth?.supported === true && (
@@ -198,11 +237,11 @@ function AddProviderRow({
           variant="primary"
           aria-label={`Sign in to ${displayName}`}
           disabled={starting}
-          onClick={onSignIn}
+          onClick={() => onSignIn(provider)}
         >
           {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
         </Button>
       )}
-    </li>
+    </ProviderOptionRow>
   );
 }

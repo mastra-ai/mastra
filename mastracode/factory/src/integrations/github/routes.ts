@@ -20,6 +20,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { canReadSessionResource, canViewSourceControlSession } from '../../routes/session-access.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
@@ -45,8 +46,8 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
-import { polledPullRequestEvent } from './rules.js';
-import type { PolledPullRequestState, ReconcileRepository } from './rules.js';
+import { listedPullRequestState, polledPullRequestEvent } from './rules.js';
+import type { ReconcileRepository } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -93,11 +94,6 @@ import type { ParsedGithubWebhook } from './webhook.js';
  * we erase the path to a plain `Context` at the call boundary via `loose()`.
  */
 type RouteContext = Context;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
@@ -319,52 +315,11 @@ function polledIssueEvent(
   };
 }
 
-interface ListedPullRequest {
-  number: number;
-  title: string;
-  url: string;
-  author: string | null;
-  assignees: string[];
-  requestedReviewers: string[];
-  labels: string[];
-  headBranch: string;
-  baseBranch: string;
-  createdAt: string;
-}
-
-function listedPullRequestEvent(
-  project: ResolvedProjectRepository,
-  pullRequest: ListedPullRequest,
-): ParsedGithubWebhook {
-  return polledPullRequestEvent(
-    reconcileRepositoryOf(project),
-    pullRequest.number,
-    listedOpenPullRequestState(pullRequest),
-  );
-}
-
 function reconcileRepositoryOf(project: ResolvedProjectRepository): ReconcileRepository {
   return {
     id: Number(project.repository.externalId),
     fullName: project.repository.slug,
     installationId: Number(project.installation.externalId),
-  };
-}
-
-function listedOpenPullRequestState(pullRequest: ListedPullRequest): PolledPullRequestState {
-  return {
-    title: pullRequest.title,
-    url: pullRequest.url,
-    state: 'open',
-    draft: false,
-    merged: false,
-    assignees: pullRequest.assignees,
-    requestedReviewers: pullRequest.requestedReviewers,
-    labels: pullRequest.labels,
-    headBranch: pullRequest.headBranch,
-    baseBranch: pullRequest.baseBranch,
-    author: pullRequest.author ?? undefined,
-    createdAt: pullRequest.createdAt,
   };
 }
 
@@ -375,7 +330,7 @@ async function ingestPolledEvents(
   if (!ingestFactoryEvent) return;
   const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
+  // Best-effort: one failed row must not stop the rest of the backlog page from landing.
   if (rejected) {
     console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
   }
@@ -396,28 +351,12 @@ function listedIssueOf(issue: Awaited<ReturnType<GithubIntegration['intake']['li
   };
 }
 
-function listedPullRequestOf(
-  pr: Awaited<ReturnType<GithubIntegration['versionControl']['listPullRequests']>>['pullRequests'][number],
-): ListedPullRequest {
-  return {
-    number: Number(pr.id),
-    title: pr.title,
-    url: pr.url,
-    author: pr.author,
-    assignees: pr.assignees ?? [],
-    requestedReviewers: pr.requestedReviewers ?? [],
-    labels: pr.labels ?? [],
-    headBranch: pr.headBranch,
-    baseBranch: pr.baseBranch,
-    createdAt: pr.createdAt,
-  };
-}
-
 /**
  * Feed a just-linked repository's open issues and pull requests through the
- * same rules ingress the list routes use, so its backlog reaches the board
- * without anyone browsing it. Rows owned by another integration don't resolve
- * through this integration's storage handle and are skipped.
+ * rules ingress, so its backlog reaches the board without anyone browsing it.
+ * The reconcile sweeps only recover items filed after the link. Rows owned by
+ * another integration don't resolve through this integration's storage handle
+ * and are skipped.
  */
 export async function ingestLinkedRepositoryBacklog(args: {
   github: GithubIntegration;
@@ -451,7 +390,10 @@ export async function ingestLinkedRepositoryBacklog(args: {
       cursor: String(page),
     });
     await ingestPolledEvents(
-      pullRequests.map(pr => listedPullRequestEvent(project, listedPullRequestOf(pr))),
+      pullRequests.map(pr => {
+        const state = listedPullRequestState(pr);
+        return polledPullRequestEvent(reconcileRepositoryOf(project), state.number, state);
+      }),
       args.ingestFactoryEvent,
     );
     if (nextCursor === null) break;
@@ -816,10 +758,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
-          await ingestPolledEvents(
-            responseIssues.map(issue => polledIssueEvent(loaded.project, issue)),
-            options.ingestFactoryEvent,
-          );
           return c.json({
             issues: responseIssues,
             nextPage: nextCursor === null ? null : Number(nextCursor),
@@ -909,10 +847,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
-          await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
-            options.ingestFactoryEvent,
-          );
           return c.json({
             pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),

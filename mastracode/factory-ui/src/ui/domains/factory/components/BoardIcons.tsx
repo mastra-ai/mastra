@@ -148,6 +148,11 @@ function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId |
   return kind ? undefined : boardStage(stage);
 }
 
+/** The `kind` to draw a phase with: built-in boards get each phase's own art, other boards are drawn by kind. */
+export function phaseIconKind(boardId: string, kind: BoardPhaseKind): BoardPhaseKind | undefined {
+  return boardId === 'work' || boardId === 'review' ? undefined : kind;
+}
+
 function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
   return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
@@ -166,6 +171,7 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
     case 'working':
       return <ProgressPieIcon progress={0.5} className={className} />;
     case 'review':
+    case 'pr-review':
       return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
     case 'done':
     case 'terminal':
@@ -181,9 +187,12 @@ export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].tint;
 }
 
-/** Lane headers fade a translucent status tint into the card surface. */
+/** Lane headers fade a translucent status tint into a band: raised card in dark, a fill in light where card is white. */
 export function stageHeaderTintClass(stage: string, kind?: BoardPhaseKind): string {
-  return cn('bg-card bg-linear-to-r to-card', TONE_CLASSES[stageToneFor(stage, kind)].gradientFrom);
+  return cn(
+    'bg-fill-subtle dark:bg-card bg-linear-to-r to-transparent',
+    TONE_CLASSES[stageToneFor(stage, kind)].gradientFrom,
+  );
 }
 
 export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): string {

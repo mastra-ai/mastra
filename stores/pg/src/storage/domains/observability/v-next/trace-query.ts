@@ -64,6 +64,10 @@ export const outcomeFeatures = [
   ...(traceQueryOutcomeFieldsSupported ? (['trace-query-outcome-fields'] as const) : []),
 ];
 
+/** Core before the fields rejects their trace and span predicates, so the feature is only declared when core plans them. */
+export const contextFieldFeatures: readonly 'trace-query-context-fields'[] =
+  'requestId' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {}) ? ['trace-query-context-fields'] : [];
+
 export const timingFeatures = [
   ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
   ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
@@ -103,6 +107,9 @@ const TRACE_FIELDS = {
   sessionId: 'r."sessionId"',
   userId: 'r."userId"',
   organizationId: 'r."organizationId"',
+  requestId: 'r."requestId"',
+  serviceName: 'r."serviceName"',
+  experimentId: 'r."experimentId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
@@ -144,6 +151,9 @@ const SPAN_FIELDS = {
   sessionId: 's."sessionId"',
   userId: 's."userId"',
   organizationId: 's."organizationId"',
+  requestId: 's."requestId"',
+  serviceName: 's."serviceName"',
+  experimentId: 's."experimentId"',
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 // Direct querySpans policy is separate from trace-related span predicates.
@@ -154,9 +164,6 @@ const SPAN_QUERY_FIELDS = {
   parentSpanId: 's."parentSpanId"',
   threadId: 's."threadId"',
   resourceId: 's."resourceId"',
-  requestId: 's."requestId"',
-  serviceName: 's."serviceName"',
-  experimentId: 's."experimentId"',
   environment: 's."environment"',
   executionSource: 's."executionSource"',
   parentEntityType: 's."parentEntityType"',
@@ -466,6 +473,9 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'sessionId',
   'userId',
   'organizationId',
+  'requestId',
+  'serviceName',
+  'experimentId',
   'startedAt',
   'endedAt',
   'entityId',
@@ -677,7 +687,10 @@ function compilePostgresTraceScope(
       s."runId",
       s."sessionId",
       s."userId",
-      s."organizationId"
+      s."organizationId",
+      s."requestId",
+      s."serviceName",
+      s."experimentId"
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)

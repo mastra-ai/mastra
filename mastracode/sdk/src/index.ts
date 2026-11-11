@@ -89,13 +89,19 @@ import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
+  isStreamCutAfterResponse,
   MODEL_FALLBACK_STATE_KEY,
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
+import {
+  resolveAgentStreamsOff,
+  resolveExperimentalAgent,
+  validateExperimentalAgent,
+  wrapExperimentalAgent,
+} from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -119,6 +125,7 @@ import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.j
 import { setAuthStorage } from './providers/claude-max.js';
 import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
+import { createGoogleVertexGateway } from './providers/google-vertex-gateway.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
@@ -341,6 +348,13 @@ export interface MastraCodeConfig {
    */
   disableBuiltinTools?: BuiltinToolId[];
   /**
+   * Workspace-relative directory agents write plan files into, overriding the
+   * per-session default (`.mastracode/plans`, or `.artifacts/plans` for Factory
+   * project sessions). Prompts and the plan-mode write guard of the default
+   * workspace use it; a custom `workspace` must apply its own guard.
+   */
+  plansDir?: string;
+  /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
    * LibSQL fallback — if the injected store fails, that's a hard error.
@@ -388,6 +402,8 @@ export interface MastraCodeConfig {
   hostInstructions?:
     | string
     | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+  /** Whether approving a plan starts it as a goal in this host's clients. Set false when plan approval does not start a goal (Factory). Default: true */
+  planApprovalStartsGoal?: boolean;
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
@@ -617,12 +633,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
   const experimentalAgent = resolveExperimentalAgent(globalSettings);
+  const agentStreamsOff = resolveAgentStreamsOff();
   const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
-    process.env['MASTRA_GATEWAY_API_KEY'] ??= storedGatewayKey;
+    // Through AuthStorage, so removeStoredApiKey() can undo the export later.
+    // Like before, a variable already set in the environment wins.
+    authStorage.loadStoredApiKeysIntoEnv({ [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY' });
   }
 
   if (storedGatewayUrl) {
@@ -672,6 +691,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     settingsPath: config?.settingsPath,
   });
   const amazonBedrockGateway = createAmazonBedrockGateway();
+  const googleVertexGateway = createGoogleVertexGateway();
   const githubCopilotGateway = createGitHubCopilotGateway();
 
   // Project detection
@@ -1322,9 +1342,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   };
 
+  const resolveTenantSessionModel = withCredentialTenantPreparation(async (ctx: { requestContext: RequestContext }) => {
+    // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
+    const controller = ctx.requestContext.get('controller') as
+      | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+      | undefined;
+    const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+    return getDynamicModel(ctx, config?.settingsPath, {
+      modeless,
+      defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
+    });
+  });
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    ...(agentStreamsOff ? { durable: false } : {}),
     // Workspace is wired per-request at the AgentController level (see
     // `config.workspace` below), so opt out of the factory's default local
     // workspace. An explicit `undefined` is required: the factory only builds a
@@ -1355,21 +1387,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         coAuthor: config?.coAuthor,
         hasSubagents: subagents.length > 0,
         disabledBuiltinTools: config?.disableBuiltinTools,
+        planApprovalStartsGoal: config?.planApprovalStartsGoal,
+        plansDir: config?.plansDir,
+        disabledTools: config?.disabledTools,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: withCredentialTenantPreparation(async ctx => {
-      // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
-      const controller = ctx.requestContext.get('controller') as
-        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
-        | undefined;
-      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
-      return getDynamicModel(ctx, config?.settingsPath, {
-        modeless,
-        defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
-      });
-    }),
+    // Without a controller session there is no model selection, so getDynamicModel
+    // throws "No model available" before reading any credential. Skip the tenant
+    // check (and its error log) and the host thinking lookup on that path, e.g.
+    // a host reading the agent's model at startup with an empty request context.
+    model: async ctx =>
+      ctx.requestContext.get('controller')
+        ? resolveTenantSessionModel(ctx)
+        : getDynamicModel(ctx, config?.settingsPath, { modeless }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1525,6 +1557,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new CyberRefusalHandler(),
       new StreamErrorRetryProcessor({
         matchers: [
+          // Account rotation owns a stream the provider cut after accepting the
+          // request, with its own per-step budget. The matcher walk stops at the
+          // first match, so this entry claims the cut before the transient
+          // matchers below reach its socket-error cause (or the 504 derived for
+          // a duration-limit frame) and declines with no retries.
+          { match: isStreamCutAfterResponse, maxRetries: 0 },
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
           {
             match: isTransientConnectionError,
@@ -1545,7 +1583,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // Rotation runs last in the error lane: a transient error reaching here
       // means StreamErrorRetryProcessor already spent its budget, which is the
       // hop condition; quota/auth errors were never transient-matched and
-      // rotate immediately.
+      // rotate immediately, and stream cuts arrive with no retry spent.
       new AccountRotationProcessor({
         credentialStore: authStorage,
         // Same budget core enforces (maxProcessorRetries below): past it, core
@@ -1746,6 +1784,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  // Used when the host passes no `workspace`. Its plan-mode write guard must
+  // allow the same plans directory the prompts tell the agent to write to.
+  const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
+    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1756,6 +1798,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
+            // The completion callbacks signal the task's session; core's own signal would run outside it.
+            notifyAgentOnFinish: false,
             ...createBackgroundCompletionCallbacks(() => sessionRouter, backgroundCompletionEvents),
           },
         }
@@ -1782,12 +1826,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       routesToOtherGateway(
         modelId,
         Object.values(controller.getMastra()?.listGateways() ?? {}),
-        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
+        new Set([
+          mastraCodeGateway.id,
+          amazonBedrockGateway.id,
+          googleVertexGateway.id,
+          githubCopilotGateway.id,
+          'models.dev',
+        ]),
       )
         ? modelId
         : resolveModel(modelId, { requestContext }),
-    gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
+    gateways: [amazonBedrockGateway, googleVertexGateway, githubCopilotGateway, mastraCodeGateway],
+    workspace: config?.workspace ?? defaultWorkspace,
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
@@ -1912,6 +1962,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         hostScopes: knowledgeHostScopes,
       }),
     observability,
+    // Without local tracing or Mastra Code cloud credentials every exporter above
+    // is disabled, so this Observability records spans but sends them nowhere.
+    observabilityExports: Boolean(observabilityDomain || cloudObservabilityConfig),
     memory,
     knowledge,
     knowledgeKey,
@@ -2266,12 +2319,16 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
-    observability: base.observability,
+    // Only hand over an Observability that exports somewhere. A disabled one would
+    // stop the host from wiring its own, e.g. the platform deploy's exporter.
+    ...(base.observabilityExports ? { observability: base.observability } : {}),
     ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
+            // The completion callbacks signal the task's session; core's own signal would run outside it.
+            notifyAgentOnFinish: false,
             ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
           },
         }

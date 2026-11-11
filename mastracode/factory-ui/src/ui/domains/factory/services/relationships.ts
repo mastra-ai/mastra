@@ -1,20 +1,21 @@
-import { gitlabIdentifierForItem, githubNumberForItem } from '../boardItems';
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { githubNumberForItem, sourceMetadata, workItemKey } from '../boardItems';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
 import { isPullRequestSource } from './workItems';
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
-type IdentifiableItem = Pick<WorkItem, 'source' | 'metadata' | 'sourceKey'>;
+type IdentifiableItem = Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'sourceKey'>;
 
 export function workItemNumber(item: IdentifiableItem): string | undefined {
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return String(githubNumber);
   if (item.source === 'gitlab-pr') {
-    const iid = item.metadata.gitlabMergeRequestIid;
+    const iid = sourceMetadata(item).gitlabMergeRequestIid;
     return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? String(iid) : undefined;
   }
 
-  const number = item.metadata.number;
+  const number = sourceMetadata(item).number;
   if (typeof number === 'number' || typeof number === 'string') return String(number);
   return item.sourceKey?.split(':').at(-1) || undefined;
 }
@@ -24,7 +25,7 @@ function sessionBranches(item: WorkItem): Set<string> {
 }
 
 function headBranch(item: WorkItem): string | undefined {
-  const branch = item.metadata.headBranch;
+  const branch = sourceMetadata(item).headBranch;
   return typeof branch === 'string' ? branch : undefined;
 }
 
@@ -92,8 +93,14 @@ export function inferredParentWorkItemId(
   )?.id;
 }
 
-export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: string): string {
-  return rememberedBoardPath(factoryId, isPullRequestSource(item.source) ? 'review' : 'work');
+/** A pull request opens the board that holds its card; an unfiled one, or one with no board, opens the default board. */
+export function relationshipPath(
+  item: Pick<WorkItem, 'source'> & { readonly board?: string | null },
+  factoryId: string,
+): string {
+  if (!isPullRequestSource(item.source) || item.board === undefined)
+    return rememberedBoardPath(factoryId, DEFAULT_BOARD_ID);
+  return rememberedBoardPath(factoryId, item.board ?? DEFAULT_BOARD_ID);
 }
 
 export function relationshipLabel(item: WorkItem): string {
@@ -101,15 +108,12 @@ export function relationshipLabel(item: WorkItem): string {
   return isPullRequestSource(item.source) ? `Review: ${reference}` : `Work item: ${reference}`;
 }
 
-function linearIdentifier(item: IdentifiableItem): string | undefined {
-  return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : undefined;
-}
-
-/** What a person types to find the item: `#20456` on GitHub, the team key `ENG-123` on Linear. */
+/** What a person types to find the item: `#20456` on GitHub, `ENG-123` on Linear or Jira. */
 export function workItemIdentifier(item: IdentifiableItem): string | undefined {
+  const key = workItemKey(item);
+  if (key !== undefined) return key;
   // Linear source key already reads `linear:ENG-123` — hashing it would invent `#ENG-123`.
-  if (item.source === 'linear-issue') return linearIdentifier(item) ?? workItemNumber(item);
-  if (item.source === 'gitlab-pr') return gitlabIdentifierForItem(item);
+  if (item.source === 'linear-issue') return workItemNumber(item);
   if (item.source === 'github-pr' || item.source === 'github-issue') {
     const number = workItemNumber(item);
     return number ? `#${number}` : undefined;

@@ -30,7 +30,7 @@ import { streamSSE } from 'hono/streaming';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Ids and cursors are opaque, but bounded so an unbounded query string never reaches storage. */
@@ -108,10 +108,6 @@ function withDisplayLabel<T extends LabelablePage>(knowledge: Knowledge, page: T
   if (!page.isScope || !page.address) return page;
   const displayLabel = knowledge.scopeLabel(page.address);
   return displayLabel ? { ...page, displayLabel } : page;
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {

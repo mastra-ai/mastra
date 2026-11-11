@@ -119,6 +119,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
+ * - `span-query-text-search`: literal substring search in `querySpans`
+ * - `trace-query-text-search`: literal substring search across any span in `queryTraces`
  * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
@@ -126,6 +128,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-context-fields`: `requestId`, `serviceName` and `experimentId` predicates in trace queries (trace scope and `spans.some`/`spans.none`)
  * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
  * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
@@ -156,6 +159,8 @@ export type ObservabilityStorageFeature =
   | 'metric-discovery'
   | 'span-query'
   | 'span-query-context-fields'
+  | 'span-query-text-search'
+  | 'trace-query-text-search'
   | 'span-query-model-fields'
   | 'span-aggregate'
   | 'span-aggregate-model-dimensions'
@@ -168,6 +173,7 @@ export type ObservabilityStorageFeature =
   | 'trace-query-tenant-scope'
   | 'feedback'
   | 'trace-query-context-ids'
+  | 'trace-query-context-fields'
   | 'trace-query-time-to-first-chunk'
   | 'trace-query-root-span-fields'
   | 'trace-query-root-entity-id'
@@ -184,6 +190,16 @@ export type ObservabilityStorageFeature =
  * Storage adapters override only the methods they support.
  */
 export class ObservabilityStorage extends StorageDomain {
+  /**
+   * Where this domain writes data. Local includes embedded files, in-memory
+   * databases, and local replicas that sync remotely. Remote stores write
+   * through a database service. Undefined means the adapter does not report it.
+   * Platform exporters use this capability to avoid local observability writes.
+   */
+  public get persistenceLocation(): 'local' | 'remote' | undefined {
+    return undefined;
+  }
+
   constructor() {
     super({
       component: 'STORAGE',
@@ -908,6 +924,16 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing feedback',
+    });
+  }
+
+  /** Retrieves one feedback record by ID, or null when it does not exist. */
+  async getFeedbackById(_feedbackId: string): Promise<FeedbackRecord | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support retrieving feedback by ID',
     });
   }
 

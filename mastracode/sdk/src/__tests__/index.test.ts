@@ -1,3 +1,8 @@
+import { createServer } from 'node:http';
+import type { ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
+import type { ProcessAPIErrorArgs, Processor, StreamErrorRetryProcessorOptions } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -510,6 +515,126 @@ vi.mock('../utils/thread-lock.js', () => ({
   releaseThreadLock: vi.fn(),
 }));
 
+const sse = (frame: Record<string, unknown>) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`;
+const OUTPUT_FRAME = {
+  type: 'response.output_text.delta',
+  content_index: 0,
+  delta: 'Partial output.',
+  item_id: 'msg-1',
+  logprobs: [],
+  output_index: 0,
+  sequence_number: 1,
+};
+
+/**
+ * Serves one OpenAI Responses request from a local server and returns the error
+ * the real `@ai-sdk/openai` provider raises for it, so the error lane sees the
+ * shapes it gets in production.
+ */
+async function openAIResponsesFailure(respond: (res: ServerResponse) => void): Promise<unknown> {
+  const server = createServer((_req, res) => respond(res));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const { createOpenAI } = await import('@ai-sdk/openai');
+    const { port } = server.address() as AddressInfo;
+    const openai = createOpenAI({ apiKey: 'test-key', baseURL: `http://127.0.0.1:${port}/v1` });
+    try {
+      const { stream } = await openai.responses('gpt-5.4').doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      });
+      for await (const chunk of stream) {
+        if (chunk.type === 'error') return chunk.error;
+      }
+    } catch (error) {
+      return error;
+    }
+    throw new Error('Expected the response stream to fail');
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+/**
+ * Runs one model step's error through Mastra Code's default error lane the way
+ * core's agentic loop does: the lane is the configured `errorProcessors` with the
+ * Agent's stability defaults resolved in, every retry goes through
+ * `ProcessorRunner.runProcessAPIError` with the shared retry count, and the loop
+ * stops when no processor retries or the shared `maxProcessorRetries` is spent.
+ * Retry delays are zeroed; matchers and budgets are the configured ones.
+ * Returns the id of the processor that asked for each retry.
+ */
+async function runDefaultErrorLane(error: unknown, writer = { custom: vi.fn(async () => {}) }): Promise<string[]> {
+  const core = await vi.importActual<typeof import('@mastra/core/processors')>('@mastra/core/processors');
+  const { Agent, MessageList } = await vi.importActual<typeof import('@mastra/core/agent')>('@mastra/core/agent');
+  const { createMastraCode } = await import('../index.js');
+  await createMastraCode();
+
+  const config = agentConstructorMock.mock.calls
+    .map(call => call[0] as { errorProcessors?: Processor[]; maxProcessorRetries?: number } | undefined)
+    .find(candidate => candidate?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'))!;
+  const retryOptions = streamErrorRetryProcessorConstructorMock.mock.calls[0]![0] as StreamErrorRetryProcessorOptions;
+  // This file mocks the core processors; put the real ones back in their configured slots.
+  const real: Record<string, () => Processor> = {
+    'provider-history-compat': () => new core.ProviderHistoryCompat(),
+    'cyber-refusal-handler': () => new core.CyberRefusalHandler(),
+    'stream-error-retry-processor': () =>
+      new core.StreamErrorRetryProcessor({
+        ...retryOptions,
+        matchers: retryOptions.matchers!.map(entry => (typeof entry === 'function' ? entry : { ...entry, delayMs: 0 })),
+      }),
+  };
+  const configured = config.errorProcessors!.map(processor => real[processor.id]?.() ?? processor);
+  const agent = new Agent({
+    id: 'lane',
+    name: 'lane',
+    instructions: '',
+    model: 'openai/gpt-5.4',
+    errorProcessors: configured,
+  });
+  const lane = (await agent.listErrorProcessors(new RequestContext())) as Processor[];
+
+  const owners: string[] = [];
+  const errorProcessors = lane.map(processor => {
+    const processAPIError = processor.processAPIError?.bind(processor);
+    if (!processAPIError) return processor;
+    return Object.assign(Object.create(processor) as Processor, {
+      processAPIError: async (args: ProcessAPIErrorArgs) => {
+        const result = await processAPIError(args);
+        if (result?.retry) owners.push(processor.id);
+        return result;
+      },
+    });
+  });
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+  const runner = new core.ProcessorRunner({
+    inputProcessors: [],
+    outputProcessors: [],
+    errorProcessors,
+    logger: logger as any,
+    agentName: 'lane',
+  });
+  const messageList = new MessageList();
+  let messageId = 0;
+  for (let retryCount = 0; retryCount < config.maxProcessorRetries!; retryCount++) {
+    const { retry } = await runner.runProcessAPIError({
+      error,
+      messages: [],
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      retryCount,
+      requestContext: new RequestContext(),
+      writer,
+      rotateResponseMessageId: () => `msg-${++messageId}`,
+    });
+    if (!retry) break;
+  }
+  // A processor that throws is logged and skipped by the runner; none should.
+  expect(logger.error).not.toHaveBeenCalled();
+  return owners;
+}
+
 describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -618,12 +743,14 @@ describe('createMastraCode', () => {
       await createMastraCodeAgentController();
       const agentConfig = agentConstructorMock.mock.calls[0]![0];
       const memory = controllerConstructorMock.mock.calls[0]![0].memory;
-      for (const [callback, resolve] of [
-        [agentConfig.model, getDynamicModel],
-        [agentConfig.goal.judge, getGoalJudgeModel],
-        [memory, memoryResolve],
+      for (const [callback, resolve, needsController] of [
+        [agentConfig.model, getDynamicModel, true],
+        [agentConfig.goal.judge, getGoalJudgeModel, false],
+        [memory, memoryResolve, false],
       ]) {
         const requestContext = new RequestContext();
+        // The main model only runs tenant preparation for a controller session.
+        if (needsController) requestContext.set('controller', { state: {} });
         await callback({ requestContext });
         expect(resolveTenantFromRequestContext(requestContext)).toEqual(tenant);
         expect(resolve).toHaveBeenCalledOnce();
@@ -652,9 +779,33 @@ describe('createMastraCode', () => {
     expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
     expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: undefined });
 
-    await agentConfig.model({ requestContext: new RequestContext() });
+    const withoutSessionLevel = new RequestContext();
+    withoutSessionLevel.set('controller', { state: {} });
+    await agentConfig.model({ requestContext: withoutSessionLevel });
     expect(resolveDefaultThinkingLevel).toHaveBeenCalledOnce();
     expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: 'high' });
+  });
+
+  it('skips tenant preparation and the host thinking default for a model read without a controller session', async () => {
+    const { setCredentialStoreProvider } = await import('../agents/credential-resolver.js');
+    const { getDynamicModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const lookup = vi.fn(async () => undefined);
+    const resolveDefaultThinkingLevel = vi.fn(async () => 'high' as const);
+    vi.mocked(getDynamicModel).mockClear();
+    setCredentialStoreProvider(() => undefined, lookup);
+    try {
+      await createMastraCodeAgentController({ resolveDefaultThinkingLevel });
+      const agentConfig = agentConstructorMock.mock.calls.at(-1)![0];
+
+      await agentConfig.model({ requestContext: new RequestContext() });
+      expect(lookup).not.toHaveBeenCalled();
+      expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
+      expect(getDynamicModel).toHaveBeenCalledOnce();
+      expect(vi.mocked(getDynamicModel).mock.calls[0]![2]).toEqual({ modeless: false });
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
   });
 
   it.each([
@@ -714,12 +865,29 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toContain('background-work-signals');
   });
 
-  it('forwards observability to the server-owned Mastra', async () => {
+  it('forwards observability to the server-owned Mastra when it exports somewhere', async () => {
     const { prepareAgentControllerMount } = await import('../index.js');
+    vi.stubEnv('MASTRACODE_CLOUD_ACCESS_TOKEN', 'mastracode-token');
 
-    const prepared = await prepareAgentControllerMount();
+    try {
+      const prepared = await prepareAgentControllerMount();
+      expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
-    expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+  it('leaves observability to the host when Mastra Code has nowhere to export', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+    vi.stubEnv('MASTRACODE_CLOUD_ACCESS_TOKEN', '');
+
+    try {
+      const prepared = await prepareAgentControllerMount();
+      expect(prepared.base.observabilityExports).toBe(false);
+      expect(prepared.mastraArgs).not.toHaveProperty('observability');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('configures server-owned background tasks only when enabled', async () => {
@@ -765,10 +933,34 @@ describe('createMastraCode', () => {
         }
       | undefined;
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
-    expect(agentControllerConfig?.gateways?.[1]?.id).toBe('github-copilot');
-    expect(agentControllerConfig?.gateways?.[2]).toBe(mastraCodeGatewayMock);
+    expect(agentControllerConfig?.gateways?.[1]?.id).toBe('google-vertex');
+    expect(agentControllerConfig?.gateways?.[2]?.id).toBe('github-copilot');
+    expect(agentControllerConfig?.gateways?.[3]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
+
+  it('forwards plansDir to the instruction and default workspace callbacks', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ plansDir: '.artifacts/plans' });
+
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        ([config]) =>
+          config as {
+            instructions?: (ctx: { requestContext: { get(key: string): unknown } }) => Promise<string>;
+            workspace?: (ctx: { requestContext: { get(key: string): unknown } }) => unknown;
+          },
+      )
+      .find(config => typeof config.instructions === 'function');
+    if (!agentConfig?.instructions) throw new Error('Expected code agent instructions');
+    const requestContext = { get: () => undefined };
+    await agentConfig.instructions({ requestContext });
+    expect(getDynamicInstructionsMock).toHaveBeenCalledWith(expect.objectContaining({ plansDir: '.artifacts/plans' }));
+
+    const workspace = controllerConstructorMock.mock.calls[0]![0].workspace as (ctx: unknown) => unknown;
+    await workspace({ requestContext });
+    expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({ plansDir: '.artifacts/plans' }));
+  });
 
   it('passes configured co-author identity into the agent instruction callback', async () => {
     const { createMastraCode } = await import('../index.js');
@@ -1814,16 +2006,29 @@ describe('createMastraCode', () => {
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
       | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown; onRetry?: unknown }> }
       | undefined;
-    expect(options?.matchers).toHaveLength(3);
+    expect(options?.matchers).toHaveLength(4);
 
-    // First matcher: Bad Request (400) with maxRetries 1 and 2s delay.
-    const badRequestPolicy = options!.matchers![0]!;
+    // First matcher: stream cuts after the provider accepted the request are claimed
+    // with no retries, so account rotation alone retries them (see 'default error lane').
+    const streamCutPolicy = options!.matchers![0] as { match?: (error: unknown) => boolean; maxRetries?: number };
+    expect(streamCutPolicy.maxRetries).toBe(0);
+    const cutAfter200 = Object.assign(
+      new Error('Failed to process successful response', {
+        cause: new TypeError('terminated', { cause: new Error('other side closed') }),
+      }),
+      { statusCode: 200 },
+    );
+    expect(streamCutPolicy.match!(cutAfter200)).toBe(true);
+    expect(streamCutPolicy.match!(new Error('Cannot connect to API: other side closed'))).toBe(false);
+
+    // Second matcher: Bad Request (400) with maxRetries 1 and 2s delay.
+    const badRequestPolicy = options!.matchers![1]!;
     expect(typeof badRequestPolicy.match).toBe('function');
     expect(badRequestPolicy.maxRetries).toBe(1);
     expect(badRequestPolicy.delayMs).toBe(2000);
 
-    // Second matcher: transient connection failures with maxRetries 10, visible status, and exponential backoff.
-    const transientConnectionPolicy = options!.matchers![1] as {
+    // Third matcher: transient connection failures with maxRetries 10, visible status, and exponential backoff.
+    const transientConnectionPolicy = options!.matchers![2] as {
       match?: (error: unknown) => boolean;
       maxRetries?: number;
       delayMs?: (args: { error?: unknown; retryCount: number }) => number;
@@ -1863,8 +2068,8 @@ describe('createMastraCode', () => {
     // High retry counts are capped at the max delay (30000ms).
     expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
 
-    // Third matcher: provider server failures use the same retry budget and visible status.
-    const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
+    // Fourth matcher: provider server failures use the same retry budget and visible status.
+    const serverErrorPolicy = options!.matchers![3] as typeof transientConnectionPolicy;
     expect(typeof serverErrorPolicy.match).toBe('function');
     expect(serverErrorPolicy.match!(new Error('Internal Server Error'))).toBe(true);
     expect(
@@ -1886,6 +2091,60 @@ describe('createMastraCode', () => {
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');
+  });
+
+  describe('default error lane', () => {
+    const MAX_STREAM_CUT_RETRIES = 2;
+    const ROTATION_ONLY = Array.from({ length: MAX_STREAM_CUT_RETRIES }, () => 'mastracode-account-rotation');
+
+    it('leaves a stream cut after HTTP 200 to account rotation alone', async () => {
+      // The socket closes after the provider accepted the request and streamed output.
+      const error = await openAIResponsesFailure(res => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write(sse(OUTPUT_FRAME), () => setTimeout(() => res.socket?.destroy(), 20));
+      });
+      expect(error).toMatchObject({ message: 'Failed to process successful response', statusCode: 200 });
+      const writer = { custom: vi.fn(async () => {}) };
+
+      expect(await runDefaultErrorLane(error, writer)).toEqual(ROTATION_ONLY);
+      // Retried on the same account: no switch and no outage part.
+      expect(writer.custom).not.toHaveBeenCalled();
+    }, 15_000);
+
+    it('leaves a stream duration-limit error frame to account rotation alone', async () => {
+      const error = await openAIResponsesFailure(res => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(
+          sse(OUTPUT_FRAME) +
+            sse({
+              type: 'error',
+              sequence_number: 2,
+              error: {
+                type: 'server_error',
+                code: 'request_timeout',
+                message: 'The response stream exceeded its time limit.',
+                param: null,
+              },
+            }),
+        );
+      });
+      // The provider derives a 504 for this frame, which reads like a gateway timeout.
+      expect(error).toMatchObject({ code: 'request_timeout', statusCode: 504 });
+      const writer = { custom: vi.fn(async () => {}) };
+
+      expect(await runDefaultErrorLane(error, writer)).toEqual(ROTATION_ONLY);
+      expect(writer.custom).not.toHaveBeenCalled();
+    }, 15_000);
+
+    it('keeps the generic transient budget for a connection dropped before any response', async () => {
+      const error = await openAIResponsesFailure(res => res.socket?.destroy());
+      expect(error).toMatchObject({ message: expect.stringMatching(/other side closed/), isRetryable: true });
+      expect((error as { statusCode?: unknown }).statusCode).toBeUndefined();
+
+      expect(await runDefaultErrorLane(error)).toEqual(
+        Array.from({ length: 10 }, () => 'stream-error-retry-processor'),
+      );
+    }, 15_000);
   });
 
   it('registers account rotation in the error lane after stream error retries, and the start notice in the input lane only', async () => {

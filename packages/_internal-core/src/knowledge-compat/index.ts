@@ -257,6 +257,7 @@ export interface KnowledgePagesCore {
   MAX_KNOWLEDGE_MOVE_PAGES: number;
   MAX_KNOWLEDGE_PAGE_DEPTH: number;
   MAX_KNOWLEDGE_PAGE_LIST_LIMIT: number;
+  MAX_KNOWLEDGE_PAGE_LINKS: number;
   KnowledgeMoveTooLargeError: new (pageId: string, pages: number) => Error;
   KnowledgePageDepthError: new (pageId: string) => Error;
   KnowledgePageHasChildrenError: new (pageId: string) => Error;
@@ -277,6 +278,7 @@ const KNOWLEDGE_PAGES_CORE_NUMBERS = [
   'MAX_KNOWLEDGE_MOVE_PAGES',
   'MAX_KNOWLEDGE_PAGE_DEPTH',
   'MAX_KNOWLEDGE_PAGE_LIST_LIMIT',
+  'MAX_KNOWLEDGE_PAGE_LINKS',
 ] as const;
 
 function resolveKnowledgePagesCore(storageModule: unknown): KnowledgePagesCore {
@@ -318,13 +320,25 @@ export function createKnowledgePagesCoreLoader(
   };
 }
 
+/** Most words one keyword search uses; every word adds a substring check per page in each store. */
+export const KNOWLEDGE_SEARCH_MAX_WORDS = 16;
+
 /**
- * Keyword-search words: the query split on whitespace, lowercased, deduplicated. Every word must
- * appear (as a case-insensitive substring) in a hit; an empty list means the search returns nothing.
+ * Keyword-search words: the query split on whitespace, lowercased, deduplicated, keeping the first
+ * {@link KNOWLEDGE_SEARCH_MAX_WORDS}. A hit needs at least one of them (as a case-insensitive
+ * substring); an empty list means the search returns nothing.
  */
 export function knowledgeSearchWords(query: string): string[] {
-  return [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
+  return [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))].slice(0, KNOWLEDGE_SEARCH_MAX_WORDS);
 }
+
+/**
+ * Points one matched search word earns on a page, by the best field it appears in: name, then
+ * description, then body. A page whose name contains the whole query ranks first; below that, pages
+ * rank by how many query words they match, and these points only break ties between pages that
+ * match the same number of words.
+ */
+export const KNOWLEDGE_SEARCH_WEIGHTS = { name: 3, description: 2, body: 1 } as const;
 
 /**
  * Why `key` can't be a Knowledge page key, or undefined when it can. Keys are one path segment:

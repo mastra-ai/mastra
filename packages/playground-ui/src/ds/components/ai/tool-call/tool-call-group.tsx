@@ -16,6 +16,7 @@ import {
   ActivityTrigger,
 } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { Metadata } from '@/ds/components/Metadata';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 
@@ -92,15 +93,17 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
     succeeded > 0 && `${succeeded} OK`,
     failed > 0 && `${failed} failed`,
     incomplete > 0 && `${incomplete} incomplete`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  ].filter((part): part is string => typeof part === 'string');
 
   return (
     <>
       {errorIndicator}
       <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
-        {summary}
+        <Metadata>
+          {summary.map(part => (
+            <Metadata.Item key={part}>{part}</Metadata.Item>
+          ))}
+        </Metadata>
       </Txt>
     </>
   );

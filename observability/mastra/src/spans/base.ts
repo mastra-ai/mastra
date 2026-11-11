@@ -665,6 +665,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
   }
 
+  /** Read at export time, not from the cached correlation context, so a service name set on update or end wins over the config. */
+  private resolveServiceName(): string | undefined {
+    const value = this.metadata?.serviceName;
+    return typeof value === 'string' ? value : this.observabilityInstance.getConfig().serviceName;
+  }
+
   /**
    * Build and cache the canonical correlation context for this live span.
    *
@@ -746,7 +752,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       requestId: getMetadataString('requestId'),
       environment: getMetadataString('environment') ?? this.observabilityInstance.getMastraEnvironment?.(),
       source: getMetadataString('source'),
-      serviceName: getMetadataString('serviceName') ?? this.observabilityInstance.getConfig().serviceName,
+      serviceName: this.resolveServiceName(),
       experimentId: getMetadataString('experimentId'),
     };
 
@@ -762,6 +768,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Checked again here because links can be set on the span after it starts
     const links = validLinks(this.links);
     const correlation = this.getCorrelationContext();
+    const serviceName = this.resolveServiceName();
     // Measured once on the inference that streamed the first chunk and copied up as an attribute.
     const timeToFirstTokenMs = (this.attributes as { timeToFirstTokenMs?: unknown } | undefined)?.timeToFirstTokenMs;
 
@@ -789,6 +796,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
       ...(correlation.entityVersionId ? { entityVersionId: correlation.entityVersionId } : {}),
+      ...(serviceName ? { serviceName } : {}),
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),

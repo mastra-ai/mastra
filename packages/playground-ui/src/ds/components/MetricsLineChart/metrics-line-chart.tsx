@@ -1,4 +1,5 @@
-import { Area, CartesianGrid, ComposedChart, Line, Tooltip } from 'recharts';
+import { useContext } from 'react';
+import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, Tooltip } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
@@ -6,7 +7,7 @@ import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
+import { CHART_MARGIN, ChartHideYAxis } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
@@ -99,6 +100,11 @@ export type MetricsLineChartProps = {
   showYAxis?: boolean;
   /** Show a ghost of the chart while data loads, in the chart's own footprint. */
   isLoading?: boolean;
+  /**
+   * Vertical lines at buckets, e.g. where a billing period starts. `x` must be one of the data's
+   * `xKey` values: the axis is categorical, so any other value draws nothing.
+   */
+  markers?: { x: string; label?: string }[];
   className?: string;
 };
 
@@ -132,13 +138,16 @@ function LinePlot({
   valueFormatter,
   axisFormatter,
   showYAxis = true,
+  markers = [],
 }: MetricsLineChartProps) {
   const id = useChartDefsId();
   const { size, onResize, ref } = useChartSize();
 
   const format = valueFormatter ?? compactNumber.format;
   const isSparse = (key: string) => data.filter(row => typeof row[key] === 'number').length <= SPARSE_POINTS;
-  const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const hideYAxis = useContext(ChartHideYAxis);
+  const withYAxis = showYAxis && !hideYAxis;
+  const plotWidth = size.width - (withYAxis ? Y_AXIS_WIDTH : 0);
   const line = LINE_STYLES[lineStyle];
   const restDot = (s: MetricsLineChartSeries) =>
     dots === 'auto' && (showDots || isSparse(s.dataKey)) ? { r: 3, fill: s.color, strokeWidth: 0 } : false;
@@ -184,7 +193,7 @@ function LinePlot({
         <CartesianGrid {...CHART_GRID_PROPS} />
         {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
         {valueYAxis({
-          show: showYAxis,
+          show: withYAxis,
           size,
           formatter: axisFormatter ?? format,
           domain: yDomain,
@@ -197,6 +206,19 @@ function LinePlot({
             series.map(s => s.dataKey),
           ),
         })}
+        {markers.map(m => (
+          <ReferenceLine
+            key={m.x}
+            x={m.x}
+            stroke="var(--border-strong)"
+            strokeDasharray="3 3"
+            label={
+              m.label
+                ? { value: m.label, position: 'insideTopLeft', fill: 'var(--muted-foreground)', fontSize: 11 }
+                : undefined
+            }
+          />
+        ))}
         <Tooltip
           {...CHART_TOOLTIP_PROPS}
           content={

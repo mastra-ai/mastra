@@ -1,4 +1,4 @@
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/base';
+import type { Card } from '@mastra/factory/storage/domains/work-items/base';
 import type { FactoryDecisionSummary } from '../../domains/factory/services/decisions';
 import type { GithubPullRequest } from '../../domains/factory/services/factory';
 
@@ -13,11 +13,54 @@ export const reviewCandidate: GithubPullRequest = {
   updatedAt: '2026-10-01T12:00:00Z',
 };
 
-export const reviewItem: WorkItemRow = {
+export const reviewItem: Card = {
+  workItemId: 'work-review-item',
+  parentBoardItemId: null,
+  workItem: {
+    sources: [
+      {
+        id: 'source-review-item',
+        workItemId: 'work-review-item',
+        provider: 'github',
+        integrationId: 'github',
+        sourceType: 'pull-request',
+        workspaceId: null,
+        externalId: 'pull-request:github-pr:42',
+        sourceKey: 'github:pull-request:github-pr:42',
+        key: 'acme/app#42',
+        url: reviewCandidate.url,
+        state: 'open',
+        labels: [],
+        author: reviewCandidate.author,
+        metadata: { number: 42, state: 'open' },
+        revision: 1,
+        syncedAt: null,
+        createdAt: new Date(reviewCandidate.createdAt),
+        updatedAt: new Date(reviewCandidate.updatedAt),
+      },
+    ],
+    id: 'work-review-item',
+    orgId: 'org-1',
+    factoryProjectId: 'fp-1',
+    provider: 'github',
+    externalId: 'pull-request:github-pr:42',
+    key: 'acme/app#42',
+    url: reviewCandidate.url,
+    title: reviewCandidate.title,
+    state: 'open',
+    labels: [],
+    author: reviewCandidate.author,
+    parentWorkItemId: null,
+    metadata: { number: 42, state: 'open' },
+    revision: 1,
+    syncedAt: null,
+    createdAt: new Date(reviewCandidate.createdAt),
+    updatedAt: new Date(reviewCandidate.updatedAt),
+  },
   id: 'review-item',
   orgId: 'org-1',
   factoryProjectId: 'fp-1',
-  board: 'review',
+  board: 'work',
   externalSource: {
     integrationId: 'github',
     type: 'pull-request',
@@ -32,10 +75,8 @@ export const reviewItem: WorkItemRow = {
   metadata: { number: 42, state: 'open' },
   triageType: null,
   autonomyArmedAt: null,
-  plansPreapprovedAt: null,
   acceptedAt: null,
-  commentCount: 0,
-  feedActivityAt: null,
+  description: null,
   revision: 1,
   createdBy: 'user-1',
   createdAt: new Date(reviewCandidate.createdAt),

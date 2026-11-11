@@ -29,6 +29,7 @@ export const TracesListProvider = memo(function TracesListProvider({
   children,
 }: TracesListProviderProps) {
   const {
+    rootSource,
     withQueryTrace,
     withRootDuration,
     withTimeToFirstChunk,
@@ -54,8 +55,8 @@ export const TracesListProvider = memo(function TracesListProvider({
   const sort = sortable ? hostSort : DEFAULT_TRACES_SORT;
   const list = useTracesListSource({
     rolling: !dateTo,
-    query: now =>
-      buildTracesQueryRequest({
+    query: now => ({
+      ...buildTracesQueryRequest({
         filters,
         dateFrom,
         dateTo,
@@ -65,9 +66,12 @@ export const TracesListProvider = memo(function TracesListProvider({
         withOutcomeFields,
         now,
       }),
+      ...(rootSource === 'aggregated' ? { rootSource } : {}),
+    }),
     orderBy: [sort],
-    withQueryTrace,
-    withDeltaPolling,
+    // An explicit projection must never fall back to the legacy list endpoint.
+    withQueryTrace: rootSource === 'aggregated' || withQueryTrace,
+    withDeltaPolling: rootSource !== 'aggregated' && withDeltaPolling,
     enabled: !isCapabilitiesLoading,
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
   });

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { SavedViewEditor, SavedViewTabs } from '@mastra/playground-ui/components/SavedViews';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
@@ -9,7 +10,6 @@ import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardPeople';
 import type { BoardViewSettings } from '../boardSavedViews';
 import { BOARD_SORT_LABELS } from '../boardSort';
-import type { BoardKind } from '../boardStages';
 import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, boardFilterFields } from './boardFilterFields';
@@ -21,20 +21,23 @@ const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List
 function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
   return (
     <Txt as="span" variant="caption" tone="muted">
-      {LAYOUT_LABELS[settings.layout]} · {BOARD_SORT_LABELS[settings.sort]}
+      <Metadata>
+        <Metadata.Item>{LAYOUT_LABELS[settings.layout]}</Metadata.Item>
+        <Metadata.Item>{BOARD_SORT_LABELS[settings.sort]}</Metadata.Item>
+      </Metadata>
     </Txt>
   );
 }
 
 export function BoardViewControls({
-  kind,
+  reviewsPullRequests,
   view,
   participants,
   availableLabels,
   currentUserId,
   aside,
 }: {
-  kind: BoardKind;
+  reviewsPullRequests: boolean;
   view: BoardView;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
@@ -44,7 +47,7 @@ export function BoardViewControls({
   const { savedViews } = view;
   const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
-    kind,
+    reviewsPullRequests,
     filters: view.filters,
     participants,
     availableLabels,

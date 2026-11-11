@@ -17,7 +17,6 @@ import {
   withPeopleUnfolded,
   workItemMatchesPeople,
 } from './boardPeople';
-import type { BoardKind } from './boardStages';
 import type { AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
@@ -31,7 +30,7 @@ const item: WorkItem = {
   parentWorkItemId: null,
   title: 'Ship relevance filters',
   url: 'https://github.com/acme/app/pull/12',
-  stages: ['review'],
+  stages: ['pr-review'],
   stageHistory: [],
   sessions: {
     review: {
@@ -48,8 +47,7 @@ const item: WorkItem = {
   },
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
-  feedActivityAt: null,
+  description: null,
   revision: 1,
   createdAt: '2026-08-01T09:00:00.000Z',
   updatedAt: '2026-08-05T09:00:00.000Z',
@@ -75,8 +73,8 @@ const activityPage: AuditEventPage = {
 
 const asIs = boardPersonIdentity(undefined, undefined);
 
-function picks(entries: Array<[string, string]>, kind: BoardKind = 'review') {
-  return boardFiltersFromParams(new URLSearchParams(entries), kind);
+function picks(entries: Array<[string, string]>, reviewsPullRequests = true) {
+  return boardFiltersFromParams(new URLSearchParams(entries), reviewsPullRequests);
 }
 
 describe('board person filters', () => {
@@ -195,18 +193,18 @@ describe('board person filters', () => {
     expect(workItemMatchesPeople(item, activityPage, withPeopleFolded(stored, hubot), hubot)).toBe(true);
   });
 
-  it('offers Review requested only on review boards and ignores the retired relevance parameter', () => {
-    const work = picks(
-      [
-        ['reviewer', 'github:monalisa'],
-        ['relevance', 'assigned'],
-        ['teammate', 'github:octocat'],
-      ],
-      'work',
-    );
+  it('offers Review requested only on boards holding pull requests and ignores the retired relevance parameter', () => {
+    const params: [string, string][] = [
+      ['reviewer', 'github:monalisa'],
+      ['relevance', 'assigned'],
+      ['teammate', 'github:octocat'],
+    ];
+    const custom = picks(params, false);
 
-    expect(work.reviewer.size).toBe(0);
-    expect(workItemMatchesPeople(item, activityPage, work, asIs)).toBe(true);
+    expect(custom.reviewer.size).toBe(0);
+    expect(workItemMatchesPeople(item, activityPage, custom, asIs)).toBe(true);
+    // A board that reviews pull requests filters by requested reviewer.
+    expect(picks(params, true).reviewer).toEqual(new Set(['github:monalisa']));
   });
 
   it('filters intake candidates by GitHub, GitLab, Linear, Jira, and incident.io provider metadata', () => {

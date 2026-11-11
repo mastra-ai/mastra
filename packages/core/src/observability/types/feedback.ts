@@ -96,7 +96,10 @@ export interface ExportedFeedback {
   userId?: string;
 
   /** User who provided the feedback */
-  feedbackUserId?: string;
+  feedbackUserId?: string | null;
+
+  /** Review workflow status when provided by an HTTP create. */
+  reviewStatus?: 'needs-review' | 'reviewed';
 
   /** Optional comment */
   comment?: string;

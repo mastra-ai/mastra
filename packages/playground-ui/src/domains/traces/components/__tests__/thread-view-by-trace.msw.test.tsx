@@ -184,12 +184,14 @@ const installScore = () => {
 
 const renderView = ({
   withFeedback = true,
+  feedbackOptions,
   withQueryTrace = true,
   onOpenScore = () => {},
   paths,
   pageSize,
 }: {
   withFeedback?: boolean;
+  feedbackOptions?: ComponentProps<typeof ThreadViewByTrace>['feedbackOptions'];
   withQueryTrace?: boolean;
   onOpenScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
@@ -203,6 +205,7 @@ const renderView = ({
             threadId={THREAD_ID}
             withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
+            feedbackOptions={feedbackOptions}
             pageSize={pageSize}
             onOpenScore={onOpenScore}
           />
@@ -691,6 +694,35 @@ describe('ThreadViewByTrace', () => {
         expect(await row.findByRole('button', { name: /^Score / })).not.toBeNull();
         expect(row.queryByRole('link', { name: /Open scorer run/ })).toBeNull();
       });
+    });
+
+    it('keeps host feedback configuration when opening a thread turn', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      const onPost = vi.fn<(body: unknown) => void>();
+      server.use(
+        http.post(FEEDBACK_URL, async ({ request }) => {
+          onPost(await request.json());
+          return HttpResponse.json({ success: true });
+        }),
+      );
+      renderView({
+        feedbackOptions: { contextMode: 'resolve', feedbackUserId: null, allowDelete: false, allowReview: false },
+      });
+      const element = (await screen.findByText('Chef agent run')).closest<HTMLElement>('[data-trace-id]');
+      if (!element) throw new Error('Expected trace row');
+      const row = within(element);
+      fireEvent.click(row.getByRole('tab', { name: /Feedback/ }));
+      await row.findByText('Needs review');
+      expect(row.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+      fireEvent.change(row.getByPlaceholderText('Leave feedback'), { target: { value: 'Thread note' } });
+      fireEvent.click(row.getByRole('button', { name: 'Send feedback' }));
+      await waitFor(() =>
+        expect(onPost).toHaveBeenCalledWith({
+          contextMode: 'resolve',
+          feedback: expect.objectContaining({ feedbackUserId: null, value: 'Thread note' }),
+        }),
+      );
     });
 
     it('shows the messages by default and swaps them for the feedback thread on the Feedback tab, keeping the span tree', async () => {

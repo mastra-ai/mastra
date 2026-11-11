@@ -247,7 +247,8 @@ describe('PlatformSandbox.processes', () => {
     expect(await handle.kill()).toBe(true);
 
     expect(leases).toEqual(['first', 'second']);
-    expect(vm.calls).toEqual(['first run', 'second kill']);
+    // The run is the kill reaching the processes it started, on the same lease.
+    expect(vm.calls).toEqual(['first run', 'second run', 'second kill']);
   });
 
   it("lifts the SDK's stream deadline unless a timeout is set", async () => {

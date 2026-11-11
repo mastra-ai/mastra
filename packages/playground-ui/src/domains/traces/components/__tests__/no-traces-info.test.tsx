@@ -16,9 +16,7 @@ describe('NoTracesInfo', () => {
     rerender(<NoTracesInfo datePreset="last-24h" />);
 
     expect(screen.getByRole('heading', { name: 'No traces for the last 24 hours' })).toBeTruthy();
-    expect(
-      screen.getByText('Pick a wider time range — older traces may fall outside the current window.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Pick a wider time range. Older traces may fall outside the current window.')).toBeTruthy();
     expect(screen.queryByText('No traces yet')).toBeNull();
     expect(container.querySelector('svg.lucide-circle-slash')).toBeTruthy();
   });
@@ -32,7 +30,7 @@ describe('NoTracesInfo', () => {
     rerender(<NoTracesInfo resource="spans" datePreset="last-7d" />);
 
     expect(screen.getByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
-    expect(screen.getByText('Pick a wider time range — older spans may fall outside the current window.')).toBeTruthy();
+    expect(screen.getByText('Pick a wider time range. Older spans may fall outside the current window.')).toBeTruthy();
   });
 
   it('names threads when it stands for a thread list', () => {
@@ -45,7 +43,7 @@ describe('NoTracesInfo', () => {
 
     expect(screen.getByRole('heading', { name: 'No threads for the last 7 days' })).toBeTruthy();
     expect(
-      screen.getByText('Pick a wider time range — older threads may fall outside the current window.'),
+      screen.getByText('Pick a wider time range. Older threads may fall outside the current window.'),
     ).toBeTruthy();
   });
 

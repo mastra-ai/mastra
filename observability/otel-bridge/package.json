@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-bridge",
-  "version": "1.5.21-alpha.0",
+  "version": "1.5.22-alpha.4",
   "description": "OpenTelemetry observability bridge for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/observability": "workspace:*",
     "@mastra/otel-exporter": "workspace:*",
-    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.223.0"
   },
   "devDependencies": {

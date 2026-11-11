@@ -171,6 +171,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
       isForeignExecution = undefined;
     }
 
+    let watchExecutionLoss:
+      | ((requestContext: RequestContext, runId: string, onLost: (error: Error) => void) => () => void)
+      | undefined;
+    try {
+      watchExecutionLoss = this.resolveWorkflow(params.workflowId, params.runId)?.options?.watchExecutionLoss;
+    } catch {
+      watchExecutionLoss = undefined;
+    }
+
     let pendingCleanupFinish: Event | undefined;
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
       // Another execution of this run (one that lost it to recover(), say) still
@@ -230,6 +239,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
       throw err;
     }
+
+    // A caller whose execution lost the run would otherwise wait forever: a successor's finish is foreign to it,
+    // and a run released with nobody left to finish it publishes none. Stop waiting, without writing anything.
+    const stopWatchingLoss = watchExecutionLoss?.(params.requestContext, params.runId, error => {
+      void pubsub
+        .unsubscribe('workflows-finish', finishCb)
+        .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err))
+        .finally(() => rejectResult(error));
+    });
+    if (stopWatchingLoss) void resultPromise.then(stopWatchingLoss, stopWatchingLoss);
 
     // NOW safe to publish - listener is guaranteed to be registered
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
@@ -449,7 +468,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     if (resultData.prevResult.status === 'suspended') {
       const suspendedSteps = Object.entries(resultData.stepResults)
         .map(([stepId, stepResult]: [string, any]) => {
-          if (stepResult.status === 'suspended') {
+          if (stepResult?.status === 'suspended') {
             const existingPath = stepResult.suspendPayload?.__workflow_meta?.path ?? [];
             // Prepend stepId to match default engine's suspended array format
             return [stepId, ...existingPath];

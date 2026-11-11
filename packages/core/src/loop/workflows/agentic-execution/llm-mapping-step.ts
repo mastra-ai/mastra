@@ -21,6 +21,7 @@ import { takeDelegationFailure } from '../../shared/delegation-outcome';
 import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
 import { commitToolResult, computeModelOutputProviderMetadata } from '../../shared/steps/tool-result-commit-core';
+import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError, getSubAgentErrorResult } from '../errors';
@@ -158,8 +159,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, getStepResult, bail }) => {
-      const initialResult = getStepResult(llmExecutionStep);
+    execute: async ({ inputData, getStepResultAsync, bail }) => {
+      const initialResult = await getStepResultAsync(llmExecutionStep);
       // A processToolResult abort is terminal for the run: stop processing the
       // remaining tool results and end the loop instead of calling the model again.
       const bailOnToolResultTripwire = (tripwire: TripWire) => {
@@ -389,23 +390,29 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           }
         }
 
-        if (
+        const recoversFromToolErrors =
           errorResults?.length > 0 &&
           !hasPendingHITL &&
-          !(rest.options?.abortSignal?.aborted && inputData.some(toolCall => toolCall.aborted))
-        ) {
+          !(rest.options?.abortSignal?.aborted && inputData.some(toolCall => toolCall.aborted));
+
+        // A delegation hook may bail on a failed delegation (e.g. the sub-agent threw). Consume
+        // the flag whether or not the loop continues, so a reused RequestContext doesn't carry
+        // it into the caller's next run (#29518).
+        if (recoversFromToolErrors && rest.requestContext?.get('__mastra_delegationBailed')) {
+          writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
+          rest.requestContext.set('__mastra_delegationBailed', false);
+          const cause = takeDelegationFailure(rest.requestContext);
+          if (cause) rest.tracingScope?.set(DELEGATION_FAILURE_KEY, cause);
+        }
+
+        // A response that ended on an error, the output limit, or a content filter stays ended:
+        // asking again repeats it, even when its tool calls failed (#29518).
+        if (recoversFromToolErrors && !TOOL_CALL_TERMINAL_FINISH_REASONS.has(initialResult.stepResult.reason)) {
           // Continue the loop — the error messages are already in the messageList,
-          // so the model will see them and can retry with correct tool names
+          // so the model will see them and can retry with correct tool names. A bail
+          // consumed above still stops the loop instead of retrying.
           initialResult.stepResult.isContinued = true;
           initialResult.stepResult.reason = 'tool-calls';
-          // A delegation hook may still bail on a failed delegation (e.g. the sub-agent
-          // threw); honor it here too so the loop stops instead of retrying.
-          if (rest.requestContext?.get('__mastra_delegationBailed')) {
-            writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
-            rest.requestContext.set('__mastra_delegationBailed', false);
-            const cause = takeDelegationFailure(rest.requestContext);
-            if (cause) rest.tracingScope?.set(DELEGATION_FAILURE_KEY, cause);
-          }
           return {
             ...initialResult,
             messages: {
