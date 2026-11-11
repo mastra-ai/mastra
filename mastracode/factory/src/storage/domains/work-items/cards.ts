@@ -374,9 +374,10 @@ export class Cards {
         const split = splitCardRows(next, { workItemId: row.work_item_id });
         columns.metadata = split.boardItem.metadata;
       }
-      let wroteCard = false;
       const titleChanged = patch.title !== undefined && patch.title !== current.title;
       const descriptionChanged = patch.description !== undefined && patch.description !== current.description;
+      // Both live on the work item, so a card with a source can change without its own row moving.
+      let wroteCard = titleChanged || descriptionChanged;
       if (titleChanged || descriptionChanged) {
         await this.ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: row.work_item_id }, work => ({
           ...(titleChanged ? { title: patch.title } : {}),
