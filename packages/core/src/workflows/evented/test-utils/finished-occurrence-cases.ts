@@ -377,7 +377,7 @@ export function describeFinishedOccurrenceCases({
       const build = (replica: string) => {
         const report: Report = async id => {
           executions.push(`${replica}:${id}`);
-          if (replica !== 'A' || id !== 'd') {
+          if (id !== 'd') {
             return;
           }
 
@@ -437,17 +437,19 @@ export function describeFinishedOccurrenceCases({
       void (await b.workflow.createRun({ runId: run.runId })).restart().catch(restartMessage.reject);
       const held = await restartMessage.promise;
 
-      // A's step end for b is delivered: A ends the parallel, runs c and is in d when B's message arrives.
+      // A's step end for b is delivered and the run ends the parallel, runs c and is in d when B's
+      // message arrives. Which replica goes on depends on whether A saved b's result before B's
+      // restart handled finished branch a: then B ends the parallel and A's step end is dropped.
       deliverStepEnd.resolve();
       await dBlocked.promise;
       const before = b.published.length;
       expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
 
-      expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
+      expect(executions.filter(e => e === 'B:a' || e === 'B:b')).toEqual([]);
       expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
       releaseD.resolve();
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-      expect(executions.sort()).toEqual(['A:a', 'A:b', 'A:c', 'A:d']);
+      expect(executions.map(e => e.slice(2)).sort()).toEqual(['a', 'b', 'c', 'd']);
     }, 20_000);
 
     /**
