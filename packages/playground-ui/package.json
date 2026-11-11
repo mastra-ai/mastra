@@ -201,6 +201,7 @@
     "@lezer/common": "^1.5.4",
     "@lezer/highlight": "^1.2.5",
     "@lukeed/uuid": "^2.0.1",
+    "@mastra/json-render": "workspace:^",
     "@mcp-ui/client": "^7.1.1",
     "@nangohq/frontend": "0.71.9",
     "@pierre/diffs": "1.5.1",
@@ -233,7 +234,7 @@
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.81.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.90.21",

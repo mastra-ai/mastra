@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { JsonRenderProcessor } from '@mastra/json-render';
+import { studioCatalog } from '@mastra/json-render/studio';
 import { Memory } from '@mastra/memory';
-import { studioCatalog } from '@mastra/playground-ui/domains/json-render/catalog';
 
 const jsonRender = new JsonRenderProcessor({ catalog: studioCatalog });
 

@@ -25,3 +25,4 @@ const agent = new Agent({
 - Interfaces are saved with the message, so they render again after a reload.
 - Later turns can edit the latest interface with a few patches. Send the interface's state under the `JSON_RENDER_STATE` request context key, and the model sees what the user set and the edit keeps it.
 - Interfaces that don't match the catalog are sent back to the model to fix before they're saved.
+- `@mastra/json-render/studio` exports `studioCatalog`, the components Mastra Studio can render. Use it so your agent's interfaces show in Studio. It needs `@json-render/react` installed, but loads only its schema, not React.

@@ -19,6 +19,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./studio": {
+      "import": {
+        "types": "./dist/studio.d.ts",
+        "default": "./dist/studio.js"
+      },
+      "require": {
+        "types": "./dist/studio.d.ts",
+        "default": "./dist/studio.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -49,8 +59,14 @@
   },
   "peerDependencies": {
     "@json-render/core": "^0.22.0",
+    "@json-render/react": "^0.22.0",
     "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "zod": ">=3.25.0 || >=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@json-render/react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@internal/ai-sdk-v5": "workspace:*",

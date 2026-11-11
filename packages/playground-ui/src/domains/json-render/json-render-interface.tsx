@@ -2,9 +2,9 @@ import { createStateStore } from '@json-render/core';
 import type { Spec } from '@json-render/core';
 import { JSONUIProvider, Renderer, defineRegistry } from '@json-render/react';
 import type { ComponentFn } from '@json-render/react';
-import { useEffect, useState } from 'react';
+import { studioCatalog } from '@mastra/json-render/studio';
 
-import { studioCatalog } from './catalog';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Card } from '@/ds/components/Card';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';

@@ -3,8 +3,9 @@ import { schema } from '@json-render/react/schema';
 import { z } from 'zod';
 
 /**
- * The components Studio can render in json-render interfaces, built on the design system.
- * React-free, so an agent's server can import it for `catalog.prompt()` and `JsonRenderProcessor`.
+ * The components Mastra Studio can render in json-render interfaces.
+ * Pass it to `JsonRenderProcessor` and `catalog.prompt()` so an agent's interfaces show in Studio.
+ * `@json-render/react/schema` only describes the spec format; it does not load React.
  */
 export const studioCatalog = defineCatalog(schema, {
   components: {
