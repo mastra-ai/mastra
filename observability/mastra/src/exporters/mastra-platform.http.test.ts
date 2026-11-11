@@ -185,50 +185,85 @@ describe('Platform uploads over HTTP', () => {
     );
   });
 
-  it.each(['flush', 'shutdown'] as const)(
-    'preserves review order across retries on %s without blocking other feedback IDs',
-    async lifecycle => {
-      let firstArrived!: () => void;
-      const firstRequest = new Promise<void>(resolve => {
-        firstArrived = resolve;
-      });
-      let attempts = 0;
-      const receiver = await collector(false, (res, path) => {
-        if (path.includes('/ordered/') && ++attempts === 1) {
-          res.writeHead(503).end(JSON.stringify({ code: 'FEEDBACK_LOOKUP_UNAVAILABLE' }));
-          firstArrived();
-        } else res.writeHead(204).end();
-      });
-      const instance = exporter(receiver.endpoint);
-      const update = (feedbackId: string, reviewStatus: 'reviewed' | 'needs-review') =>
+  describe.each([
+    { first: 'PATCH', second: 'PATCH' },
+    { first: 'PUT', second: 'PATCH' },
+    { first: 'PATCH', second: 'PUT' },
+  ] as const)('$first then $second feedback ordering', ({ first, second }) => {
+    const update = (
+      instance: MastraPlatformExporter,
+      method: 'PUT' | 'PATCH',
+      feedbackId: string,
+      reviewStatus: 'reviewed' | 'needs-review',
+    ) => {
+      if (method === 'PATCH') {
         instance.onFeedbackReviewStatusEvent({
           type: 'feedback_review_status',
           feedback: { feedbackId, reviewStatus },
         });
-      update('ordered', 'reviewed');
-      await firstRequest;
-      update('ordered', 'needs-review');
-      update('independent', 'reviewed');
-      await instance[lifecycle]();
-      expect(
-        receiver.bodies.filter(body => body.path.includes('/ordered/')).map(body => body.data.reviewStatus),
-      ).toEqual(['reviewed', 'reviewed', 'needs-review']);
-      expect(receiver.bodies[1]?.path).toContain('/independent/');
-    },
-  );
+      } else {
+        instance.onFeedbackReplacementEvent({
+          type: 'feedback_replacement',
+          feedback: {
+            feedbackId,
+            traceId: 'trace',
+            timestamp: new Date('2026-11-11T12:00:00Z'),
+            feedbackType: 'comment',
+            value: 'keep',
+            reviewStatus,
+          },
+        });
+      }
+    };
+    const status = (body: { data: Record<string, any> }) => body.data.feedback?.reviewStatus ?? body.data.reviewStatus;
 
-  it('delivers the next review update after a terminal failure', async () => {
-    let attempts = 0;
-    const receiver = await collector(false, res => res.writeHead(++attempts === 1 ? 403 : 204).end());
-    const instance = exporter(receiver.endpoint);
-    for (const reviewStatus of ['reviewed', 'needs-review'] as const) {
-      instance.onFeedbackReviewStatusEvent({
-        type: 'feedback_review_status',
-        feedback: { feedbackId: 'review', reviewStatus },
-      });
-    }
-    await instance.flush();
-    expect(receiver.bodies.map(body => body.data.reviewStatus)).toEqual(['reviewed', 'needs-review']);
+    it.each(['flush', 'shutdown'] as const)(
+      'preserves update order across retries on %s without blocking other feedback IDs',
+      async lifecycle => {
+        let firstArrived!: () => void;
+        const firstRequest = new Promise<void>(resolve => {
+          firstArrived = resolve;
+        });
+        let attempts = 0;
+        const receiver = await collector(false, (res, path) => {
+          if (path.includes('/ordered%2Fid') && ++attempts === 1) {
+            res.writeHead(503).end(
+              JSON.stringify({
+                code: first === 'PUT' ? 'ANCHOR_LOOKUP_UNAVAILABLE' : 'FEEDBACK_LOOKUP_UNAVAILABLE',
+              }),
+            );
+            firstArrived();
+          } else res.writeHead(204).end();
+        });
+        const instance = exporter(receiver.endpoint);
+        update(instance, first, 'ordered/id', 'reviewed');
+        await firstRequest;
+        update(instance, second, 'ordered/id', 'needs-review');
+        update(instance, 'PATCH', 'independent', 'reviewed');
+        await instance[lifecycle]();
+        const writes = receiver.bodies.filter(body => body.path.includes('/ordered%2Fid'));
+        expect(writes.map(body => [body.method, status(body)])).toEqual([
+          [first, 'reviewed'],
+          [first, 'reviewed'],
+          [second, 'needs-review'],
+        ]);
+        expect(writes[0]?.raw).toBe(writes[1]?.raw);
+        expect(receiver.bodies[1]?.path).toContain('/independent/');
+      },
+    );
+
+    it('delivers the next update after a terminal failure', async () => {
+      let attempts = 0;
+      const receiver = await collector(false, res => res.writeHead(++attempts === 1 ? 403 : 204).end());
+      const instance = exporter(receiver.endpoint);
+      update(instance, first, 'ordered/id', 'reviewed');
+      update(instance, second, 'ordered/id', 'needs-review');
+      await instance.flush();
+      expect(receiver.bodies.map(body => [body.method, status(body)])).toEqual([
+        [first, 'reviewed'],
+        [second, 'needs-review'],
+      ]);
+    });
   });
 
   it.each([MastraStorageExporter, DefaultExporter])(

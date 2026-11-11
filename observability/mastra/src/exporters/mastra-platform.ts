@@ -288,7 +288,7 @@ export class MastraPlatformExporter extends BaseExporter {
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
   private pendingRecords = new Set<Promise<void>>();
-  private readonly reviewUpdates = new KeyedQueue();
+  private readonly feedbackUpdates = new KeyedQueue();
   private quotaPaused = false;
   private quotaProbeTimer: NodeJS.Timeout | null = null;
   private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
@@ -492,7 +492,7 @@ export class MastraPlatformExporter extends BaseExporter {
       `/api/observability/feedback/${encodeURIComponent(feedbackId)}/review-status`,
       this.platformConfig.feedbackEndpoint,
     );
-    this.enqueueInteractiveWrite('feedback', url, JSON.stringify({ reviewStatus }), 'PATCH');
+    this.enqueueInteractiveWrite('feedback', url, JSON.stringify({ reviewStatus }), 'PATCH', feedbackId);
   }
 
   private enqueueResolvedRecord(
@@ -517,7 +517,7 @@ export class MastraPlatformExporter extends BaseExporter {
       kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
     const url = new URL(`/api/observability/${kind === 'score' ? 'scores' : 'feedback'}`, collectorEndpoint);
     if (replacementId !== undefined) url.pathname += `/${encodeURIComponent(replacementId)}`;
-    this.enqueueInteractiveWrite(kind, url, body, replacementId !== undefined ? 'PUT' : 'POST');
+    this.enqueueInteractiveWrite(kind, url, body, replacementId !== undefined ? 'PUT' : 'POST', replacementId);
   }
 
   private enqueueInteractiveWrite(
@@ -525,6 +525,7 @@ export class MastraPlatformExporter extends BaseExporter {
     url: URL,
     body: string,
     method: 'POST' | 'PUT' | 'PATCH',
+    feedbackId?: string,
   ): void {
     const collectorEndpoint =
       kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
@@ -541,8 +542,9 @@ export class MastraPlatformExporter extends BaseExporter {
     // uploads or recursively waiting for itself through public flush().
     void this.flushBatches().catch(error => this.logger.warn('Failed to flush buffered telemetry', { error }));
     const send = () => publishResolvedRecord(url, body, headers, method);
-    // Keep retries ahead of later review edits for this ID. Other IDs remain independent.
-    const delivery = method === 'PATCH' ? this.reviewUpdates.enqueue(url.pathname, send) : send();
+    // PUT and PATCH have different paths but update the same feedback. Keep their
+    // retries ahead of later edits for that ID; unrelated records remain independent.
+    const delivery = feedbackId !== undefined ? this.feedbackUpdates.enqueue(feedbackId, send) : send();
     const pending = delivery
       .catch(error => this.logger.warn(`Dropping ${kind} after Platform delivery failed`, { error }))
       .finally(() => this.pendingRecords.delete(pending));
