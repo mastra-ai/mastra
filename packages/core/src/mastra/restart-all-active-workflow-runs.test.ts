@@ -123,17 +123,21 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     const mastra = new Mastra({ logger: false, storage, workflows: { workflow }, recovery });
 
     for (let i = 0; i < runCount; i++) await persistActiveRun(storage, workflow.id, `run-${i}`);
+    // Counts the restarts blocked at once. run-0 fails before it blocks, so the peak does not
+    // depend on where the store lists it.
     let inFlight = 0;
     let peak = 0;
+    const peakWaiters: Array<{ peak: number; resolve: () => void }> = [];
     const releases: Array<() => void> = [];
     const restarted: string[] = [];
     vi.spyOn(workflow, 'createRun').mockImplementation(async ({ runId } = {}) => {
       return {
         restart: async () => {
+          if (runId === 'run-0') throw new Error('boom');
           inFlight++;
           peak = Math.max(peak, inFlight);
+          peakWaiters.filter(waiter => peak >= waiter.peak).forEach(waiter => waiter.resolve());
           try {
-            if (runId === 'run-0') throw new Error('boom');
             await new Promise<void>(resolve => releases.push(resolve));
             restarted.push(runId!);
           } finally {
@@ -151,6 +155,9 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       sweep,
       isSettled: () => settled,
       peak: () => peak,
+      /** Resolves once `count` restarts were blocked at the same time. */
+      peakReached: (count: number) =>
+        new Promise<void>(resolve => (peak >= count ? resolve() : peakWaiters.push({ peak: count, resolve }))),
       restarted,
       releaseAll: async () => {
         while (!settled) {
@@ -163,7 +170,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
 
   it('restarts runs in parallel, capped at 5 by default, and resolves once all settle', async () => {
     const t = await trackConcurrentRestarts(undefined, 12);
-    await vi.waitFor(() => expect(t.peak()).toBe(5));
+    await t.peakReached(5);
     expect(t.isSettled()).toBe(false);
 
     await t.releaseAll();
@@ -175,7 +182,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
 
   it('honours recovery.workflowConcurrency', async () => {
     const t = await trackConcurrentRestarts({ workflowConcurrency: 2 }, 6);
-    await vi.waitFor(() => expect(t.peak()).toBe(2));
+    await t.peakReached(2);
     await t.releaseAll();
     await t.sweep;
     expect(t.peak()).toBe(2);
@@ -184,9 +191,10 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
   it('treats workflowConcurrency: Infinity as no limit', async () => {
     const t = await trackConcurrentRestarts({ workflowConcurrency: Infinity }, 8);
     // run-0 fails immediately; the other 7 all start without waiting on each other.
-    await vi.waitFor(() => expect(t.peak()).toBe(7));
+    await t.peakReached(7);
     await t.releaseAll();
     await t.sweep;
+    expect(t.peak()).toBe(7);
   });
 
   it('keeps restarting other runs when one run cannot resolve its workflow', async () => {
