@@ -289,7 +289,7 @@ Some tools stay direct agent tools instead of program functions, because they pa
 - Tools that need approval through `requireApproval`. The agent still waits for the user to approve each call.
 - The `request_connection` tool, so the connect prompt can still pause the run until the user connects.
 
-For [MCP providers](#mcp-providers), a `requireApproval` list keeps **all** of that provider's tools direct, including the ones the list doesn't name. Mastra discovers MCP tools at request time and checks the list on each call. Code Mode can't tell ahead of time which calls need approval, and it never runs a tool that might need approval inside a program. Generated HTTP tools don't have this limit: only the tools that match the list stay direct.
+For [MCP providers](#mcp-providers), a `requireApproval` list keeps **all** of that provider's tools direct, including the ones the list doesn't name. Mastra discovers MCP tools at request time and checks the list on each call, so Code Mode has no way to know in advance which calls need approval and keeps every tool from that provider out of the program. Generated HTTP tools work differently, because only the tools that match the list stay direct.
 
 ```typescript
 // Every neon-mcp tool stays direct, not just neon-mcp_run_sql
