@@ -32,7 +32,7 @@ interface HeldRestart {
   logger?: IMastraLogger;
   heldSince: number;
   renewedAt: number;
-  /** Set while a renewal of this lease is in flight, so overlapping ticks do not renew it twice. */
+  /** Set while a renewal of this lease is in flight, so no later or overlapping tick starts a second one. */
   renewing?: boolean;
   /** Stops holding; `handedOff` tells whether a worker took the run over. */
   end(handedOff: boolean): void;
@@ -42,6 +42,7 @@ interface HeldRestart {
  * Checks every restart lease held against one store on one timer: one batched
  * liveness read for all of them, then the renewals that are due, which run
  * even when the read failed or has not answered within one check interval.
+ * A tick waits for each renewal at most one check interval too.
  * The next tick starts one interval after the previous one settles, and the
  * ticks stop once nothing is held.
  */
@@ -109,7 +110,40 @@ class RestartLeasePoller {
       return this.#held.has(held) && !held.renewing && Date.now() - held.renewedAt >= LIVENESS_RENEW_INTERVAL_MS;
     });
 
-    await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, held => this.#renew(held));
+    await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, held => this.#renewWithinInterval(held));
+  }
+
+  /**
+   * Renews one held lease, waiting for it at most one check interval, so a
+   * stalled renewal cannot hold back the ticks that renew the other leases. A
+   * renewal still pending by then stays in flight with `renewing` set, and its
+   * lease gets no second renewal until it settles.
+   */
+  async #renewWithinInterval(held: HeldRestart): Promise<void> {
+    // `#renew` never rejects, so the renewal left in flight needs no handler.
+    const settled = await this.#withinInterval(this.#renew(held).then(() => true));
+    if (!settled) {
+      // Debug only: a renewal that is merely slow settles later, and one that fails logs there.
+      held.logger?.debug('Renewing other held restart leases without waiting for a slow renewal', {
+        runId: held.runId,
+      });
+    }
+  }
+
+  /** What `promise` resolves to, or `undefined` when it has not settled within one check interval. */
+  async #withinInterval<T>(promise: Promise<T>): Promise<T | undefined> {
+    let expire!: () => void;
+    const deadline = new Promise<undefined>(resolve => {
+      expire = () => resolve(undefined);
+    });
+    const timer = setTimeout(expire, HANDOFF_CHECK_INTERVAL_MS);
+    timer.unref?.();
+
+    try {
+      return await Promise.race([promise, deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -130,20 +164,9 @@ class RestartLeasePoller {
       this.#reading = undefined;
     });
 
-    let expire!: () => void;
-    const deadline = new Promise<undefined>(resolve => {
-      expire = () => resolve(undefined);
-    });
-    const timer = setTimeout(expire, HANDOFF_CHECK_INTERVAL_MS);
-    timer.unref?.();
-
-    try {
-      const records = await Promise.race([this.#reading, deadline]);
-      if (records) {
-        return records;
-      }
-    } finally {
-      clearTimeout(timer);
+    const records = await this.#withinInterval(this.#reading);
+    if (records) {
+      return records;
     }
 
     // Debug only: a read that is merely slow answers on a later tick, and one that fails warns there.

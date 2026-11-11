@@ -43,6 +43,41 @@ describe('held restart leases (#28712)', () => {
     }
   });
 
+  it('keeps renewing the other held leases while one renewal never answers', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = (await new InMemoryStore().getStore('workflows'))!;
+      const hold = async (runId: string) => {
+        const claim = await store.claimRunOwnership({
+          runId: restartLeaseKey(runId),
+          ownerId: 'restarter',
+          leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+        });
+        return holdRestartLease({ store, runId, record: claim.record! });
+      };
+      // The store hangs on every renewal of the `stalled` run's lease.
+      const renew = store.renewRunOwnership.bind(store);
+      const renewals = vi.spyOn(store, 'renewRunOwnership').mockImplementation(args => {
+        if (args.runId === restartLeaseKey('stalled')) {
+          return new Promise(() => {});
+        }
+
+        return renew(args);
+      });
+      const holds = [await hold('stalled'), await hold('renewed')];
+
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 2);
+
+      expect((await store.getRunOwnership({ runId: restartLeaseKey('renewed') }))?.live).toBe(true);
+      // The stalled lease never gets a second renewal on top of the one in flight.
+      const stalledRenewals = renewals.mock.calls.filter(([args]) => args.runId === restartLeaseKey('stalled'));
+      expect(stalledRenewals).toHaveLength(1);
+      await Promise.all(holds.map(held => held.release()));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps renewing the lease while a liveness read never answers', async () => {
     vi.useFakeTimers();
     try {
