@@ -35,7 +35,12 @@ describe('factory-triage source branches', () => {
   it('returns already-triaged labeled cards in Triage to Intake without clearing their label', () => {
     const awaitingApproval = content.split('**Awaiting approval:**')[1]?.split('\n\n')[0];
     expect(awaitingApproval).toContain('already in the `triage` phase');
-    expect(awaitingApproval).toContain('request a transition to the `rest` phase');
+    expect(awaitingApproval).toContain("the `rest` phase appears in the `factory-phase` signal's `Next phases`");
+    expect(awaitingApproval).toContain('request a transition to `rest`');
+    expect(awaitingApproval).toContain(
+      'If `rest` is not in `Next phases`, report that the board must allow a transition',
+    );
+    expect(awaitingApproval).toContain('do not request an invalid transition or change the label');
     expect(awaitingApproval).toContain('retain `status: needs approval`');
     expect(awaitingApproval).toContain(
       'If the card is not in `triage`, stop without changing labels or requesting a transition',
@@ -51,6 +56,13 @@ describe('factory-triage source branches', () => {
     expect(routing).toContain('regardless of author trust');
     expect(routing).toContain('takes precedence over the default `rest` route');
     expect(routing).not.toContain('Everything else still rests: an untrusted author');
+  });
+
+  it('does not label trusted items routed to Planning by a generic board approval waiver', () => {
+    expect(content).toContain(
+      "Never add it for an item routed to Planning without approval by either the board's explicit routing criteria or the trusted-author fallback under a generic board approval waiver",
+    );
+    expect(content).toContain('request the phase confirmed bugs use without adding `status: needs approval`');
   });
 
   it('keeps the GitHub and Linear branches', () => {
