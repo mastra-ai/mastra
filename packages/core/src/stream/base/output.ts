@@ -2179,7 +2179,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // not, are held until the message is written back: the write-back replaces it, and would
                   // drop parts merged into it.
                   let heldDataChunks:
-                    { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[] | undefined;
+                    | { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[]
+                    | undefined;
                   const writer = {
                     custom: async (
                       data: { type: string; data?: unknown; transient?: boolean },
