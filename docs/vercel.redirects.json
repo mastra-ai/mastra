@@ -2081,6 +2081,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/mcp-guide",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/using-tools",
       "destination": "/docs/agents/tools",
       "permanent": true
