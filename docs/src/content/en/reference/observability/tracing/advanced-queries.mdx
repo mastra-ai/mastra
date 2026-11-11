@@ -676,7 +676,7 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
 
 | Fields | Operators |
 | - | - |
@@ -691,6 +691,8 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews.
+
+To find the slowest spans first, use `orderBy: [{ field: 'durationMs', direction: 'desc' }]`. Check `capabilities.spanQueryDurationSort` before requesting duration ordering. An unsupported store returns `501`. Duration is `endedAt - startedAt` in milliseconds for each completed span. Zero is a valid duration. Unfinished spans aren't returned. Equal durations use ascending organization, resource, trace and span IDs to keep cursor pagination stable.
 
 Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before filtering on `traceId`, `spanId`, `parentSpanId`, `threadId`, `resourceId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource`, or the parent/root entity `Type`, `Id`, and `Name` fields. If this capability is missing or false, requests using these filters return a structured `422` error. It doesn't gate `runId`, `sessionId`, `userId`, `organizationId`, or entity `VersionId` filters.
 
