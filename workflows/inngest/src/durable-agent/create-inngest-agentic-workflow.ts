@@ -772,11 +772,16 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           const initData = getInitData() as DurableAgenticWorkflowInput;
           // This step's span is internal and has no live parent, so a score read from it
           // would name a span that is never stored.
-          const agentSpan = initData.agentSpanData
-            ? mastra?.observability
-                ?.getSelectedInstance({})
-                ?.rebuildSpan(initData.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
-            : undefined;
+          const registry = getRunRegistryEntry(initData.runId, mastra);
+          const agentSpanData = registry?.resumeAgentSpanData ?? initData.agentSpanData;
+          const agentSpan =
+            registry?.resumeAgentSpan ??
+            registry?.agentSpan ??
+            (agentSpanData
+              ? mastra?.observability
+                  ?.getSelectedInstance({})
+                  ?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
+              : undefined);
           void executeDurableAgentScorers({
             initData,
             finalOutput: inputData,
