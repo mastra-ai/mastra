@@ -7599,60 +7599,87 @@ export class Agent<
     let modelSnapshot: Promise<MastraLanguageModel | MastraLegacyLanguageModel> | undefined;
     const getResolvedModel = () => (modelSnapshot ??= Promise.resolve(model ?? this.getModel({ requestContext })));
 
-    const assignedTools = await this.listAssignedTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      model,
-      getModel: getResolvedModel,
+    // One span per tool source, so a trace shows which source makes a run wait before its first model call.
+    const prepareSpan = observabilityContext.tracingContext?.currentSpan?.createChildSpan({
+      type: SpanType.GENERIC,
+      name: 'agent:prepare-tools',
     });
+    const traced = async <T extends object>(source: string, list: () => Promise<T>): Promise<T> => {
+      const span = prepareSpan?.createChildSpan({ type: SpanType.GENERIC, name: `tools:${source}` });
+      try {
+        const result = await list();
+        span?.end({ output: { count: Object.keys(result).length } });
+        return result;
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        span?.error({ error: failure, endSpan: true });
+        prepareSpan?.error({ error: failure, endSpan: true });
+        throw error;
+      }
+    };
 
-    const memoryTools = await this.listMemoryTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      memoryConfig,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const assignedTools = await traced('assigned', () =>
+      this.listAssignedTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        outputWriter,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        model,
+        getModel: getResolvedModel,
+      }),
+    );
 
-    const toolsetTools = await this.listToolsets({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      toolsets: toolsets!,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const memoryTools = await traced('memory', () =>
+      this.listMemoryTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        memoryConfig,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
 
-    const clientSideTools = await this.listClientTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      clientTools: clientTools!,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      model,
-      getModel: getResolvedModel,
-    });
+    const toolsetTools = await traced('toolsets', () =>
+      this.listToolsets({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        toolsets: toolsets!,
+        outputWriter,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
+
+    const clientSideTools = await traced('client', () =>
+      this.listClientTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        clientTools: clientTools!,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        model,
+        getModel: getResolvedModel,
+      }),
+    );
 
     // Preserve `onOutput` and `toModelOutput` from server-declared execute-less
     // tools when the serialized client copy overwrites them below. Normal
@@ -7674,82 +7701,96 @@ export class Agent<
       }
     }
 
-    const agentTools = await this.listAgentTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      methodType,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      delegation,
-      backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const agentTools = await traced('agents', () =>
+      this.listAgentTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        methodType,
+        ...observabilityContext,
+        autoResumeSuspendedTools,
+        delegation,
+        backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
 
-    const workflowTools = await this.listWorkflowTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      methodType,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const workflowTools = await traced('workflows', () =>
+      this.listWorkflowTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        methodType,
+        ...observabilityContext,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
 
-    const workspaceTools = await this.listWorkspaceTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const workspaceTools = await traced('workspace', () =>
+      this.listWorkspaceTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
 
-    const knowledgeTools = await this.listKnowledgeTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const knowledgeTools = await traced('knowledge', () =>
+      this.listKnowledgeTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
 
-    const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
+    const configuredInputProcessors =
+      inputProcessors ??
+      (await traced('input-processor-config', () => this.listConfiguredInputProcessors(requestContext)));
     const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
     const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
 
-    const skillTools = await this.listSkillTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
-      getModel: getResolvedModel,
-    });
+    const skillTools = await traced('skills', () =>
+      this.listSkillTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
+        getModel: getResolvedModel,
+      }),
+    );
 
-    const browserTools = await this.listBrowserTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const browserTools = await traced('browser', () =>
+      this.listBrowserTools({
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
 
     const requestResolvedTools = {
       ...assignedTools,
@@ -7764,27 +7805,30 @@ export class Agent<
       ...browserTools,
     };
 
-    const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
-      processors: configuredInputProcessors,
-      tools: requestResolvedTools,
-      memoryConfig,
-      runMessages,
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
+    const inputProcessorLoadedTools = await traced('input-processors', () =>
+      this.listInputProcessorLoadedTools({
+        processors: configuredInputProcessors,
+        tools: requestResolvedTools,
+        memoryConfig,
+        runMessages,
+        runId,
+        resourceId,
+        threadId,
+        requestContext,
+        ...observabilityContext,
+        mastraProxy,
+        outputWriter,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+        getModel: getResolvedModel,
+      }),
+    );
 
     const allTools = {
       ...requestResolvedTools,
       ...inputProcessorLoadedTools,
     };
+    prepareSpan?.end({ output: { toolCount: Object.keys(allTools).length } });
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));

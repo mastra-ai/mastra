@@ -7,7 +7,7 @@ import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import { MemoryRunState } from '../../../memory/run-state';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
-import { resolveObservabilityContext } from '../../../observability';
+import { resolveObservabilityContext, SpanType } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows/workflow';
@@ -169,42 +169,54 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       }
 
       let threadObject: StorageThreadType | undefined = undefined;
-      await authorizeMemory(MastraFGAPermissions.MEMORY_READ, thread.id);
-      const existingThread = await memory.getThreadById({ threadId: thread.id });
+      let existingThread: StorageThreadType | null;
+      // Thread lookup and creation run before the input processors, so give them their own span.
+      const threadSpan = observabilityContext.tracingContext?.currentSpan?.createChildSpan({
+        type: SpanType.GENERIC,
+        name: 'agent:load-thread',
+      });
+      try {
+        await authorizeMemory(MastraFGAPermissions.MEMORY_READ, thread.id);
+        existingThread = await memory.getThreadById({ threadId: thread.id });
 
-      if (existingThread) {
-        assertThreadOwnedByResource({
-          thread: existingThread,
-          resourceId,
-          agentName: capabilities.agentName,
-        });
-
-        if (
-          (!existingThread.metadata && thread.metadata) ||
-          (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
-        ) {
-          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
-          threadObject = await memory.saveThread({
-            thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
-            memoryConfig,
+        if (existingThread) {
+          assertThreadOwnedByResource({
+            thread: existingThread,
+            resourceId,
+            agentName: capabilities.agentName,
           });
+
+          if (
+            (!existingThread.metadata && thread.metadata) ||
+            (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
+          ) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
+            threadObject = await memory.saveThread({
+              thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
+              memoryConfig,
+            });
+          } else {
+            threadObject = existingThread;
+          }
         } else {
-          threadObject = existingThread;
+          // saveThread: true ensures the thread is persisted to the database immediately.
+          // This is required because output processors (like MessageHistory) may call
+          // saveMessages() before executeOnFinish(), and some storage backends (like PostgresStore)
+          // validate that the thread exists before saving messages.
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
+          threadObject = await memory.createThread({
+            threadId: thread?.id,
+            metadata: thread.metadata,
+            title: thread.title,
+            memoryConfig,
+            resourceId,
+            saveThread: true,
+          });
         }
-      } else {
-        // saveThread: true ensures the thread is persisted to the database immediately.
-        // This is required because output processors (like MessageHistory) may call
-        // saveMessages() before executeOnFinish(), and some storage backends (like PostgresStore)
-        // validate that the thread exists before saving messages.
-        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
-        threadObject = await memory.createThread({
-          threadId: thread?.id,
-          metadata: thread.metadata,
-          title: thread.title,
-          memoryConfig,
-          resourceId,
-          saveThread: true,
-        });
+        threadSpan?.end({ output: { created: !existingThread } });
+      } catch (error) {
+        threadSpan?.error({ error: error instanceof Error ? error : new Error(String(error)), endSpan: true });
+        throw error;
       }
 
       const memoryRunState = new MemoryRunState({
