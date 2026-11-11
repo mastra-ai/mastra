@@ -134,6 +134,7 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit.',
     ),
+  feedbackReplacement: z.boolean().default(false).describe('Full feedback replacement with PUT'),
   feedback: z
     .boolean()
     .describe(

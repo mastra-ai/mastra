@@ -4,6 +4,7 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
 } from '../../../observability/index.js';
 import type { CorrelationContext } from '../../../observability/types/core.js';
 import { EntityType } from '../../../observability/types/tracing.js';
@@ -384,7 +385,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
 }
 
 /** Convert a FeedbackEvent to a CreateFeedbackRecord */
-export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord {
+export function buildFeedbackRecord(event: FeedbackEvent | FeedbackReplacementEvent): CreateFeedbackRecord {
   const fb = event.feedback;
   const correlationFields = buildCorrelationRecordFields(fb.correlationContext);
   return {
@@ -400,9 +401,11 @@ export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord 
     ...correlationFields,
     experimentId: correlationFields.experimentId ?? fb.experimentId ?? null,
     feedbackUserId:
-      fb.feedbackUserId !== undefined
-        ? fb.feedbackUserId
-        : (fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null)),
+      event.type === 'feedback_replacement'
+        ? (fb.feedbackUserId ?? null)
+        : fb.feedbackUserId !== undefined
+          ? fb.feedbackUserId
+          : (fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null)),
     scope: null,
     sourceId: fb.sourceId ?? null,
     metadata: fb.metadata ?? null,

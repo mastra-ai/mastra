@@ -48,6 +48,8 @@ function cleanEvent(event: ObservabilityEvent, options: DeepCleanOptions): Obser
       return { type: 'metric', metric: deepClean(event.metric, options) };
     case 'score':
       return { type: 'score', score: deepClean(event.score, options) };
+    case 'feedback_replacement':
+      return { type: event.type, feedback: deepClean(event.feedback, options) };
     case 'feedback':
       return { type: 'feedback', feedback: deepClean(event.feedback, options) };
     default:

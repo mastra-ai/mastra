@@ -1,4 +1,4 @@
-import type { FeedbackEvent, ScoreEvent } from '@mastra/core/observability';
+import type { FeedbackEvent, FeedbackReplacementEvent, ScoreEvent } from '@mastra/core/observability';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { resolveRecordedEventFromTrace } from '../recorded';
 
@@ -11,10 +11,10 @@ const LOOKUP_DELAYS_MS = [0, 100, 250, 500, 1000, 2000, 2000];
  * Other destinations receive the original event independently.
  */
 export async function resolveStorageAnnotation(
-  event: ScoreEvent | FeedbackEvent,
+  event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent,
   storage: ObservabilityStorage,
   flushSpans: () => Promise<void>,
-): Promise<ScoreEvent | FeedbackEvent | null> {
+): Promise<ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | null> {
   const record = event.type === 'score' ? event.score : event.feedback;
   if (record.correlationContext !== undefined) return event;
   if (!record.traceId) return null;

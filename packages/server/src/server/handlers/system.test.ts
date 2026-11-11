@@ -44,6 +44,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   spanAggregateModelDimensions: false,
   aggregateTimeToFirstMeasures: false,
   feedback: false,
+  feedbackReplacement: false,
 };
 
 type MockStorage = {

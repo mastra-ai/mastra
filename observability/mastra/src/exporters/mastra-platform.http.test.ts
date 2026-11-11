@@ -21,6 +21,7 @@ afterEach(async () => {
 async function collector(hold = false, reply?: (res: ServerResponse, path: string) => void) {
   const bodies: {
     path: string;
+    method: string;
     bytes: number;
     data: Record<string, any>;
     headers: IncomingHttpHeaders;
@@ -38,6 +39,7 @@ async function collector(hold = false, reply?: (res: ServerResponse, path: strin
     const body = Buffer.concat(chunks);
     bodies.push({
       path: req.url!,
+      method: req.method!,
       bytes: body.length,
       data: JSON.parse(body.toString()),
       headers: req.headers,
@@ -90,6 +92,143 @@ function exporter(endpoint: string, overrides: Partial<MastraPlatformExporterCon
 }
 
 describe('Platform uploads over HTTP', () => {
+  it('sends remote replacements while local storage is still resolving the trace', async () => {
+    const receiver = await collector();
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('observability'))!;
+    await store.createSpan({
+      span: {
+        traceId: 'slow-local',
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'root',
+        spanType: SpanType.GENERIC,
+        isEvent: false,
+        startedAt: new Date(),
+        endedAt: new Date(),
+        tags: ['local'],
+      },
+    });
+    const read = store.getTrace.bind(store);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    store.getTrace = async args => {
+      await gate;
+      return read(args);
+    };
+    const legacyCreates: FeedbackEvent[] = [];
+    const observability = new Observability({
+      configs: {
+        default: {
+          serviceName: 'independent-replace',
+          exporters: [
+            new MastraStorageExporter(),
+            exporter(receiver.endpoint),
+            {
+              name: 'older-exporter',
+              exportTracingEvent() {},
+              onFeedbackEvent(event) {
+                legacyCreates.push(event);
+              },
+              async flush() {},
+              async shutdown() {},
+            },
+          ],
+        },
+      },
+    });
+    new Mastra({ storage, observability, logger: false });
+    cleanup.push(() => observability.shutdown());
+    try {
+      await observability.replaceFeedback({
+        traceId: 'slow-local',
+        feedback: { feedbackId: 'independent-edit', timestamp: new Date(), feedbackType: 'thumbs', value: -1 },
+      });
+      await expect.poll(() => receiver.bodies.length, { timeout: 1000 }).toBe(1);
+      expect(receiver.bodies[0]!.method).toBe('PUT');
+      expect((await store.listFeedback({})).feedback).toHaveLength(0);
+    } finally {
+      release();
+    }
+    await observability.flush();
+    expect((await store.listFeedback({})).feedback).toEqual([expect.objectContaining({ value: -1, tags: ['local'] })]);
+    expect(legacyCreates).toEqual([]);
+  });
+
+  it.each(['flush', 'shutdown'] as const)(
+    'drains feedback PUT retries with stable identity during %s',
+    async lifecycle => {
+      let attempts = 0;
+      const receiver = await collector(false, res => {
+        if (++attempts === 1)
+          res.writeHead(404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ code: 'TRACE_NOT_FOUND' }));
+        else res.writeHead(204).end();
+      });
+      const instance = exporter(receiver.endpoint);
+      instance.onFeedbackReplacementEvent({
+        type: 'feedback_replacement',
+        feedback: {
+          feedbackId: 'edited/id',
+          traceId: 'remote',
+          timestamp: new Date('2026-11-11T12:00:00.123Z'),
+          feedbackType: 'thumbs',
+          value: -1,
+          correlationContext: {},
+          feedbackUserId: null,
+          reviewStatus: 'reviewed',
+        },
+      });
+      await instance[lifecycle]();
+      expect(receiver.bodies).toHaveLength(2);
+      expect(receiver.bodies.map(body => [body.method, body.path])).toEqual([
+        ['PUT', '/api/observability/feedback/edited%2Fid'],
+        ['PUT', '/api/observability/feedback/edited%2Fid'],
+      ]);
+      expect(receiver.bodies[1]!.raw).toBe(receiver.bodies[0]!.raw);
+      expect(receiver.bodies[0]!.data.feedback).toMatchObject({
+        feedbackId: 'edited/id',
+        value: -1,
+        feedbackUserId: null,
+        reviewStatus: 'reviewed',
+        timestamp: '2026-11-11T12:00:00.123Z',
+      });
+    },
+  );
+
+  it.each([MastraStorageExporter, DefaultExporter])(
+    'delivers replacements independently and protects local edits from delayed creates (%s)',
+    async StorageExporter => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      const local = new StorageExporter();
+      const observability = new Observability({
+        configs: { default: { serviceName: 'replace-test', exporters: [local, exporter(receiver.endpoint)] } },
+      });
+      new Mastra({ storage, observability, logger: false });
+      cleanup.push(() => observability.shutdown());
+      const feedback = { feedbackId: 'sdk-edit', timestamp: new Date(), feedbackType: 'thumbs', value: -1 };
+      // Explicit context avoids a local trace dependency; replacement can precede a batched create.
+      await observability.replaceFeedback({
+        traceId: 'remote',
+        correlationContext: {},
+        feedback: { ...feedback, metadata: { userId: 'trace-subject' } },
+      });
+      await observability.flush();
+      await local.onFeedbackEvent({
+        type: 'feedback',
+        feedback: { ...feedback, traceId: 'remote', correlationContext: {}, value: 1 },
+      });
+      await local.flush();
+      expect((await store.listFeedback({})).feedback).toEqual([
+        expect.objectContaining({ feedbackId: 'sdk-edit', value: -1, feedbackUserId: null }),
+      ]);
+      expect(receiver.bodies.map(body => body.method)).toEqual(['PUT']);
+    },
+  );
+
   it('flushes UTF-8 payloads at the byte threshold without losing or duplicating records', async () => {
     const receiver = await collector();
     const instance = exporter(receiver.endpoint);
