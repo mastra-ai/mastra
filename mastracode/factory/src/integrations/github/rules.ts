@@ -1528,10 +1528,17 @@ export function listedPullRequestState(pullRequest: PullRequest): PolledPullRequ
 }
 
 /**
+ * Missed-open discovery reads at most this many pages per repository per sweep,
+ * so a repository flooded with pull requests (or a listing whose cursor never
+ * ends) cannot grow a sweep's API cost without limit. A missed open is among
+ * the newest, and thirty per page keeps the 600 newest in reach.
+ */
+const OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES = 20;
+
+/**
  * Missed-open discovery over an integration's version-control capability.
  * GitHub lists open pull requests newest first, so paging stops at the first
- * page opened entirely before `createdSince`: the work is bounded by how many
- * pull requests are open since the repository was linked, not by a page cap.
+ * page opened entirely before `createdSince`, or at the page cap.
  */
 export function openPullRequestLister(
   versionControl: Pick<VersionControl, 'listPullRequests'>,
@@ -1539,7 +1546,7 @@ export function openPullRequestLister(
   return async ({ installationId, repository, createdSince }) => {
     const states: Array<PolledPullRequestState & { number: number }> = [];
     let cursor: string | null = '1';
-    while (cursor !== null) {
+    for (let page = 0; cursor !== null && page < OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES; page += 1) {
       // Drafts are listed too: a page of drafts still tells how far back the listing has reached.
       const listed: PullRequestPage = await versionControl.listPullRequests({
         connection: { type: 'app-installation', installationId },

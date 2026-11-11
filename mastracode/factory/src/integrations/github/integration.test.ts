@@ -1123,6 +1123,25 @@ describe('GithubIntegration open pull request discovery', () => {
     expect(list).toHaveBeenCalledTimes(3);
     expect(pullRequests.map(({ number }) => number)).toEqual(Array.from({ length: 10 }, (_, index) => 31 + index));
   });
+
+  it('stops after twenty pages when a repository keeps listing pull requests opened since the link', async () => {
+    const github = new GithubIntegration(validConfig());
+    const list = vi.fn();
+    for (let index = 0; index < 25; index += 1) list.mockResolvedValueOnce({ data: page(index * 30 + 1) });
+    list.mockResolvedValue({ data: [] });
+    // Only `pulls.list` is exercised, so the stub stands in for the full client.
+    const octokit = { pulls: { list } } as unknown as ReturnType<GithubIntegration['getInstallationOctokit']>;
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue(octokit);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(20);
+    expect(pullRequests).toHaveLength(600);
+  });
 });
 
 describe('GithubIntegration workers', () => {
