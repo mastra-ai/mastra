@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../';
-import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { persistProcessorDataChunk } from '../../../stream/base/output';
+import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { MessageList } from '../index';
 import { MessageMerger } from './MessageMerger';
 
@@ -135,6 +135,18 @@ describe('MessageMerger insertion positions', () => {
     const q1: Part = { ...empty, id: 'q1' };
 
     expectParts(merge([tool('c1', true), empty], [tool('c1', true), q1]), [tool('c1', true), q1, empty]);
+  });
+
+  it('only counts IDs from data parts with the same type and payload', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const status: Part = { type: 'data-status', id: 'q1', data: { state: 'waiting' } };
+    const q1: Part = { ...stored, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), stored, status], [tool('c1', true), q1, status]), [
+      tool('c1', true),
+      stored,
+      status,
+    ]);
   });
 
   it('keeps an empty-string ID when persisting a processor data chunk', () => {

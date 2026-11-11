@@ -362,20 +362,22 @@ export class MessageMerger {
       const otherIdless = new Map<string, number>();
       for (const part of otherParts) {
         if (!part.type.startsWith('data-')) continue;
+        const baseKey = baseKeyOf(part);
         const id = dataPartId(part);
-        if (id !== undefined) otherIds.add(id);
-        else otherIdless.set(baseKeyOf(part), (otherIdless.get(baseKeyOf(part)) ?? 0) + 1);
+        if (id !== undefined) otherIds.add(`${baseKey}|id:${JSON.stringify(id)}`);
+        else otherIdless.set(baseKey, (otherIdless.get(baseKey) ?? 0) + 1);
       }
       for (const part of [...parts].reverse()) {
         if (keys.has(part)) continue;
         const baseKey = baseKeyOf(part);
         const id = dataPartId(part);
         const unmatched = otherIdless.get(baseKey) ?? 0;
-        if (id !== undefined && !otherIds.has(id) && unmatched > 0) {
+        const idKey = id !== undefined ? `${baseKey}|id:${JSON.stringify(id)}` : undefined;
+        if (idKey !== undefined && !otherIds.has(idKey) && unmatched > 0) {
           otherIdless.set(baseKey, unmatched - 1);
           keys.set(part, baseKey);
         } else {
-          keys.set(part, id !== undefined ? `${baseKey}|id:${JSON.stringify(id)}` : baseKey);
+          keys.set(part, idKey ?? baseKey);
         }
       }
     };
