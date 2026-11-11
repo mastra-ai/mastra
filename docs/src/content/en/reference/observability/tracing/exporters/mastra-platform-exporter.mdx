@@ -272,8 +272,6 @@ The exporter batches traces, logs, and metrics, along with feedback and scores t
 
 Feedback and scores received by the exporter can reference a trace stored in Platform using its trace ID and an optional span ID. If the record needs details from that trace, the exporter sends it immediately instead of waiting for a batch.
 
-When the trace or span hasn't arrived yet, or its lookup is temporarily unavailable, the exporter retries for up to six attempts or 30 seconds. It preserves the record's ID and timestamp across attempts. Other failures are logged and the record is dropped. These individual requests continue during a telemetry quota pause; the batch retry setting, `maxRetries`, doesn't apply to them.
-
 Call `flush()` before ending a short-lived process, or `shutdown()` when stopping the exporter, to wait for pending deliveries and retries. These methods finish when records have been accepted or dropped after a failure. Accepted feedback and scores may take time to appear in Platform.
 
 ### Byte batching
