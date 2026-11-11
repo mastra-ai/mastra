@@ -1230,12 +1230,13 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       const storageTags = storageTagFilter(Object.fromEntries(tagEntries));
       const max = Number(limit);
       const capped = Number.isFinite(max) && max > 0;
+      const normalizedLimit = capped ? Math.floor(max) : undefined;
       // Only page in storage when it applies every tag; otherwise the tag filter
       // below runs in memory and needs the whole resource.
       const threads = await controller.queryThreads({
         resourceId,
         metadata: storageTags,
-        limit: capped && (tagEntries.length === 0 || storageTags) ? Math.ceil(max) : undefined,
+        limit: normalizedLimit !== undefined && (tagEntries.length === 0 || storageTags) ? normalizedLimit : undefined,
         matchesScope:
           tagEntries.length === 0
             ? undefined
@@ -1273,7 +1274,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
           : threads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
-      const limited = capped ? sorted.slice(0, Math.ceil(max)) : sorted;
+      const limited = normalizedLimit !== undefined ? sorted.slice(0, normalizedLimit) : sorted;
       // Thread run state comes from the controller-wide active-run registry,
       // which unions per-agent active thread runs across all backing agents.
       // Keyed by resourceId + threadId so it covers runs started by any session

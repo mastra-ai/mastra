@@ -1489,10 +1489,16 @@ export class AgentController<TState = {}> {
       (includeForkedSubagents || (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent !== true) &&
       (!matchesScope || matchesScope(thread));
 
-    const boundedLimit = limit === undefined ? undefined : Math.max(1, Math.ceil(limit));
+    const boundedLimit = limit === undefined ? undefined : Math.max(0, Math.floor(limit));
+    if (boundedLimit === 0) return [];
+
     let threads: StorageThreadType[];
-    if (boundedLimit === undefined || memoryStorage instanceof InMemoryMemory) {
-      // In-memory storage scans and sorts the entire map before slicing each page.
+    if (
+      boundedLimit === undefined ||
+      memoryStorage instanceof InMemoryMemory ||
+      memoryStorage.listThreadsPaginatesInMemory
+    ) {
+      // These adapters scan and sort all matching threads before slicing each page.
       threads = (
         await memoryStorage.listThreads({ filter, perPage: false, orderBy: { field: 'updatedAt', direction: 'DESC' } })
       ).threads

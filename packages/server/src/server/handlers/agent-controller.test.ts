@@ -2133,7 +2133,15 @@ describe('agent-controller routes', () => {
         sessionId: 'user-limit',
         limit: 1.2,
       } as any)) as { threads: { id: string }[] };
-      expect(fractional.threads.length).toBe(2);
+      expect(fractional.threads.length).toBe(1);
+
+      const subOne = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 0.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(subOne.threads).toEqual([]);
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {

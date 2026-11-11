@@ -73,6 +73,27 @@ describe('AgentController.queryThreads({ limit })', () => {
     }
   });
 
+  it('reads a backend that paginates in memory only once', async () => {
+    const storage = new InMemoryStore();
+    const memory = await seed(storage, [
+      ...Array.from({ length: 60 }, (_, i) => ({
+        id: `fork${i}`,
+        updatedAt: new Date(Date.UTC(2026, 0, 2, 1, i)),
+        metadata: { forkedSubagent: true },
+      })),
+      { id: 'parent', updatedAt: new Date(Date.UTC(2026, 0, 2)) },
+    ]);
+    const controller = await createController(storage);
+    const listThreads = vi.spyOn(memory, 'listThreads');
+    vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue(
+      Object.assign(Object.create(memory), { listThreadsPaginatesInMemory: true }) as MemoryStorage,
+    );
+
+    expect((await controller.queryThreads({ resourceId: 'r', limit: 1 })).map(t => t.id)).toEqual(['parent']);
+    expect(listThreads).toHaveBeenCalledTimes(1);
+    expect(listThreads.mock.calls[0]?.[0]).toMatchObject({ perPage: false });
+  });
+
   it('keeps paging past pages that hold only forked subagent threads', async () => {
     const storage = new InMemoryStore();
     await seed(storage, [
