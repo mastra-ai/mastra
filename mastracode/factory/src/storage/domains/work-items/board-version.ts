@@ -30,6 +30,23 @@ export interface BoardScope {
   factoryProjectId?: string;
 }
 
+/** The cards a write touched: by placement id (the card's own id), or by the work item behind it. */
+export interface CardIds {
+  boardItemIds: Set<string>;
+  workItemIds: Set<string>;
+}
+
+/** A board a write changed. No `cards` when the write's filter named no card: only a full re-read is safe then. */
+export interface BoardWrite extends BoardScope {
+  cards?: CardIds;
+}
+
+/** A version bump: `previous` is the version it replaced, absent when the project had none. */
+export interface BoardBump extends BoardWrite {
+  version: string;
+  previous?: string;
+}
+
 /** The tables a card is stored in: a write to one changes the card list, so it bumps the version. */
 export const CARD_TABLES: ReadonlySet<string> = new Set([
   FACTORY_BOARD_ITEMS_SCHEMA.name,
@@ -54,18 +71,33 @@ function isLeased(collection: string, row: unknown): boolean {
 
 const scopeKey = (scope: BoardScope) => `${scope.orgId}\u0000${scope.factoryProjectId ?? ''}`;
 
-function scopeOfRow(row: Record<string, unknown> | null): BoardScope | undefined {
-  if (!row || typeof row.org_id !== 'string') return undefined;
-  return typeof row.factory_project_id === 'string'
-    ? { orgId: row.org_id, factoryProjectId: row.factory_project_id }
-    : { orgId: row.org_id };
+/** Tables whose row id is the card's id; the work and source tables name the work item instead. */
+const PLACEMENT_TABLES: ReadonlySet<string> = new Set([FACTORY_BOARD_ITEMS_SCHEMA.name, 'work_items']);
+
+function idsOf(value: unknown): string[] | undefined {
+  if (typeof value === 'string') return [value];
+  if (value && typeof value === 'object' && 'in' in value && Array.isArray(value.in)) {
+    return value.in.every(id => typeof id === 'string') ? value.in : undefined;
+  }
+  return undefined;
 }
 
-function scopeOfWhere(where: CollectionWhere): BoardScope | undefined {
-  if (typeof where.org_id !== 'string') return undefined;
-  return typeof where.factory_project_id === 'string'
-    ? { orgId: where.org_id, factoryProjectId: where.factory_project_id }
-    : { orgId: where.org_id };
+/** The cards a written row or a write's filter names, read from the column that identifies the card in `collection`. */
+function cardsOf(collection: string, fields: Record<string, unknown>): CardIds | undefined {
+  if (PLACEMENT_TABLES.has(collection)) {
+    const ids = idsOf(fields.id);
+    return ids && { boardItemIds: new Set(ids), workItemIds: new Set() };
+  }
+  const ids = idsOf(collection === FACTORY_WORK_ITEMS_SCHEMA.name ? fields.id : fields.work_item_id);
+  return ids && { boardItemIds: new Set(), workItemIds: new Set(ids) };
+}
+
+function writeOf(collection: string, fields: Record<string, unknown> | null): BoardWrite | undefined {
+  if (!fields || typeof fields.org_id !== 'string') return undefined;
+  const cards = cardsOf(collection, fields);
+  return typeof fields.factory_project_id === 'string'
+    ? { orgId: fields.org_id, factoryProjectId: fields.factory_project_id, cards }
+    : { orgId: fields.org_id, cards };
 }
 
 /**
@@ -75,10 +107,10 @@ function scopeOfWhere(where: CollectionWhere): BoardScope | undefined {
 export function trackBoardWrites(
   ops: FactoryStorageOps,
   tables: ReadonlySet<string>,
-  changed: (scope: BoardScope) => void | Promise<void>,
+  changed: (write: BoardWrite) => void | Promise<void>,
 ): FactoryStorageOps {
-  const report = async (scope: BoardScope | undefined) => {
-    if (scope) await changed(scope);
+  const report = async (write: BoardWrite | undefined) => {
+    if (write) await changed(write);
   };
   return new Proxy(ops, {
     get(target, property, receiver) {
@@ -102,21 +134,21 @@ export function trackBoardWrites(
               ...args,
             );
             const leaseOnly = wasLeased && isLeased(collection, row);
-            if (tables.has(collection) && patched && !leaseOnly) await report(scopeOfRow(row));
+            if (tables.has(collection) && patched && !leaseOnly) await report(writeOf(collection, row));
             return row;
           };
         case 'insertOne':
         case 'upsertOne':
           return async (collection: string, ...args: unknown[]) => {
             const row = await value.call(target, collection, ...args);
-            if (tables.has(collection)) await report(scopeOfRow(row));
+            if (tables.has(collection)) await report(writeOf(collection, row));
             return row;
           };
         case 'updateMany':
         case 'deleteMany':
           return async (collection: string, where: CollectionWhere, ...args: unknown[]) => {
             const count: number = await value.call(target, collection, where, ...args);
-            if (tables.has(collection) && count > 0) await report(scopeOfWhere(where));
+            if (tables.has(collection) && count > 0) await report(writeOf(collection, where));
             return count;
           };
         default:
@@ -126,35 +158,66 @@ export function trackBoardWrites(
   });
 }
 
-/** Collects the boards a transaction changed so they can be bumped once it has committed. */
+/** Collects the boards a transaction changed, and the cards it wrote on each, so they can be bumped once it has committed. */
 export class BoardScopes {
-  readonly #scopes = new Map<string, BoardScope>();
+  readonly #writes = new Map<string, BoardWrite>();
 
-  add = (scope: BoardScope): void => {
-    this.#scopes.set(scopeKey(scope), scope);
+  add = (write: BoardWrite): void => {
+    const key = scopeKey(write);
+    const seen = this.#writes.get(key);
+    if (!seen) {
+      const { cards } = write;
+      this.#writes.set(key, {
+        orgId: write.orgId,
+        ...(write.factoryProjectId ? { factoryProjectId: write.factoryProjectId } : {}),
+        cards: cards && { boardItemIds: new Set(cards.boardItemIds), workItemIds: new Set(cards.workItemIds) },
+      });
+      return;
+    }
+    // One write that named no card makes the whole board unknown.
+    if (!seen.cards || !write.cards) {
+      seen.cards = undefined;
+      return;
+    }
+    for (const id of write.cards.boardItemIds) seen.cards.boardItemIds.add(id);
+    for (const id of write.cards.workItemIds) seen.cards.workItemIds.add(id);
   };
 
-  values(): BoardScope[] {
-    return [...this.#scopes.values()];
+  values(): BoardWrite[] {
+    return [...this.#writes.values()];
   }
 }
 
-export async function bumpBoardVersions(ops: FactoryStorageOps, scopes: readonly BoardScope[]): Promise<void> {
-  for (const scope of scopes) {
+export async function bumpBoardVersions(ops: FactoryStorageOps, writes: readonly BoardWrite[]): Promise<BoardBump[]> {
+  const bumps: BoardBump[] = [];
+  for (const write of writes) {
     const version = randomUUID();
     const updated_at = new Date();
-    if (scope.factoryProjectId) {
-      await ops.upsertOne(FACTORY_BOARD_VERSIONS_SCHEMA.name, ['org_id', 'factory_project_id'], {
-        org_id: scope.orgId,
-        factory_project_id: scope.factoryProjectId,
-        version,
-        updated_at,
+    if (write.factoryProjectId) {
+      const where = { org_id: write.orgId, factory_project_id: write.factoryProjectId };
+      // Atomic, so `previous` is the version this bump replaced: a reader that holds it can
+      // catch up on just this write's cards.
+      let previous: string | undefined;
+      const row = await ops.updateAtomic<{ version: string }>(FACTORY_BOARD_VERSIONS_SCHEMA.name, where, current => {
+        previous = current.version;
+        return { version, updated_at };
       });
+      if (!row) {
+        previous = undefined;
+        await ops.upsertOne(FACTORY_BOARD_VERSIONS_SCHEMA.name, ['org_id', 'factory_project_id'], {
+          ...where,
+          version,
+          updated_at,
+        });
+      }
+      bumps.push({ ...write, version, previous });
     } else {
       // Projects without a row yet have no version, which never matches a snapshot.
-      await ops.updateMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, { org_id: scope.orgId }, { version, updated_at });
+      await ops.updateMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, { org_id: write.orgId }, { version, updated_at });
+      bumps.push({ ...write, version });
     }
   }
+  return bumps;
 }
 
 export async function readBoardVersion(

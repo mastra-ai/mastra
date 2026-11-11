@@ -35,6 +35,16 @@ function countCardReads(seed: Seed) {
   return () => findMany.mock.calls.filter(([collection]) => collection === 'factory_board_items').length;
 }
 
+/** Counts reads of every card of a project, which catching up on a few cards must avoid. */
+function countFullBoardReads(seed: Seed) {
+  const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+  return () =>
+    findMany.mock.calls.filter(
+      ([collection, where]) =>
+        collection === 'factory_board_items' && where.id === undefined && where.work_item_id === undefined,
+    ).length;
+}
+
 /** Lets the next read of the work items, which carry the card fields, take its snapshot, then holds it until released. */
 function holdNextCardRead(seed: Seed) {
   const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
@@ -63,6 +73,9 @@ function nextVersionRead(seed: Seed) {
   });
   return read.promise;
 }
+
+/** The project's cards read straight from the database, in the order a full read returns them. */
+const uncached = (seed: Seed) => seed.workItems.listWith(seed.storage.ops, { orgId: ORG, factoryProjectId: PROJECT });
 
 const poll = (workItems: WorkItemsStorage, factoryProjectId = PROJECT) =>
   workItems.list({ orgId: ORG, factoryProjectId });
@@ -232,6 +245,11 @@ describe('board list cache', () => {
       await a.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: 'Edited on A' } });
 
       expect((await poll(b.workItems)).map(item => item.title)).toEqual(['Edited on A']);
+
+      // B's own edit chains from a version A wrote: A must not catch up past A's bump it never saw.
+      await poll(a.workItems);
+      await b.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: 'Edited on B' } });
+      expect((await poll(a.workItems)).map(item => item.title)).toEqual(['Edited on B']);
     } finally {
       await a.backend.close();
       await b.backend.close();
@@ -252,7 +270,48 @@ describe('board list cache', () => {
     expect(cardReads()).toBe(0);
 
     expect((await poll(seed.workItems, 'busy'))[0]?.title).toBe('Busy edit');
-    expect(cardReads()).toBe(1);
+    expect(cardReads()).toBeGreaterThan(0);
+  });
+
+  it('re-reads only the edited card on the poll after an edit', async () => {
+    const seed = await createFactoryStorageForTests();
+    const cards = [];
+    for (const title of ['One', 'Two', 'Three']) cards.push(await seedCard(seed.workItems, { title }));
+    await poll(seed.workItems);
+    const fullReads = countFullBoardReads(seed);
+
+    await seed.workItems.update({
+      orgId: ORG,
+      id: cards[1]!.id,
+      userId: 'user-alice',
+      patch: { title: 'Two, edited' },
+    });
+    const after = await poll(seed.workItems);
+
+    expect(fullReads()).toBe(0);
+    expect(after.map(item => item.title).sort()).toEqual(['One', 'Three', 'Two, edited']);
+    expect(after).toEqual(await uncached(seed));
+  });
+
+  it('adds a created card and drops a deleted one without re-reading the board', async () => {
+    const seed = await createFactoryStorageForTests();
+    const doomed = await seedCard(seed.workItems, { title: 'Doomed' });
+    await seedCard(seed.workItems, { title: 'Kept' });
+    await poll(seed.workItems);
+    const fullReads = countFullBoardReads(seed);
+
+    await seedCard(seed.workItems, { title: 'New' });
+    const created = await poll(seed.workItems);
+    expect(fullReads()).toBe(0);
+    expect(created.map(item => item.title).sort()).toEqual(['Doomed', 'Kept', 'New']);
+    expect(created).toEqual(await uncached(seed));
+
+    await seed.workItems.delete({ orgId: ORG, id: doomed.id });
+    const readsBefore = fullReads();
+    const deleted = await poll(seed.workItems);
+    expect(fullReads()).toBe(readsBefore);
+    expect(deleted.map(item => item.title).sort()).toEqual(['Kept', 'New']);
+    expect(deleted).toEqual(await uncached(seed));
   });
 
   it('does not let a caller that decorates the returned cards corrupt the next poll', async () => {
