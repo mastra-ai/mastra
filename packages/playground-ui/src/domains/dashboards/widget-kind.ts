@@ -115,8 +115,9 @@ export type WidgetRequests = (DashboardRequest | undefined)[];
 
 /**
  * Where a chart widget expands to (a host's query page), as the Gateway Overview's cards do: the card
- * shows its title with an expand icon linking there, in place of its views menu, on its first view.
- * `href` returns `undefined` for a widget with nowhere to go; that card keeps its menu.
+ * gets an expand action linking there, and shows its first view under its plain title, in place of
+ * its views menu, so the title stays editable with `onTitleChange`. `href` returns `undefined` for a
+ * widget with nowhere to go; that card keeps its menu.
  */
 export type DashboardExpand = {
   href: (widget: DashboardWidget) => string | undefined;

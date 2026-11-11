@@ -5,6 +5,7 @@ import { BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { CHART_COLORS } from '../../../metrics/lib/chart-colors';
 import { bucketPlan, intervalHours } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
+import { ExpandAction } from '../../components/widget-controls';
 import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import { viewTitle } from '../../lib/chrome';
 import type { ViewHeading } from '../../lib/chrome';
@@ -39,13 +40,13 @@ export function ScoresWidget({
   alert,
 }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
-  // Scores show their first view only, so the title is plain or, with somewhere to expand to, a link.
-  const heading = {
-    ...viewTitle(widget, [view], 0, () => {}, expand),
-    dragHandle,
-    onTitleChange,
-    actions,
-  };
+  // Scores show their first view only, so the title is plain; with somewhere to expand to, an action links there.
+  const title = viewTitle(widget, [view], 0, () => {}, expand);
+  const expandHref = expand?.href(widget);
+  const heading = withAction(
+    { ...title, dragHandle, onTitleChange, actions },
+    expand && expandHref && <ExpandAction title={title.title} href={expandHref} LinkComponent={expand.LinkComponent} />,
+  );
   // The card, and the host's actions, stay while the view waits, so e.g. a pinned widget can still be unpinned.
   if (gate.status === 'pending')
     return <PendingChartCard gate={gate.gate} heading={pendingHeading(heading, gate.gate, alert, widget, view)} />;

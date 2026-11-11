@@ -1,5 +1,5 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
-import { BellPlusIcon } from 'lucide-react';
+import { BellPlusIcon, Maximize2Icon } from 'lucide-react';
 import { useId } from 'react';
 import {
   OpenErrorsInLogsButton,
@@ -10,7 +10,7 @@ import {
 } from '../../metrics/components/card-action-buttons';
 import { viewDrilldown, targetScope } from '../lib/definition';
 import type { OnDashboardDrilldown } from '../lib/definition';
-import type { DashboardAlert, DashboardAlertAction } from '../widget-kind';
+import type { DashboardAlert, DashboardAlertAction, DashboardExpand } from '../widget-kind';
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
@@ -127,6 +127,23 @@ function DisabledAlertAction({ label, reason }: { label: string; reason: string 
         {reason}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Opens the host's fuller view of the widget (e.g. its query page), named after the card's `title`. Waits for the card's hover. */
+export function ExpandAction({
+  title,
+  href,
+  LinkComponent,
+}: {
+  title: string;
+  href: string;
+  LinkComponent: DashboardExpand['LinkComponent'];
+}) {
+  return (
+    <MetricsCard.Action label={`Expand ${title}`} className={onCardHover} render={<LinkComponent href={href} />}>
+      <Maximize2Icon />
+    </MetricsCard.Action>
   );
 }
 
