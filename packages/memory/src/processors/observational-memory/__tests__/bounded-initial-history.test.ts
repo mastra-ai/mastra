@@ -1,9 +1,11 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
+import { filterObservedMessages } from '../message-utils';
 
 const threadId = 'bounded-history';
 const resourceId = 'bounded-resource';
@@ -203,6 +205,22 @@ describe('bounded initial observation history', () => {
     const restarted = (await open().omEngine)!;
     expect(await restarted.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
     expect((await restarted.getStatus({ threadId, resourceId })).pendingTokens).toBe(0);
+  });
+
+  it('prunes the entire committed tied prefix after observed IDs rotate away', async () => {
+    const { om } = await setup();
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    record.observedMessageIds = [];
+    record.metadata = {
+      observationHistory: {
+        after: { createdAt: timestamp.toISOString(), id: message(79).id },
+        end: timestamp.toISOString(),
+      },
+    };
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([message(1), message(79), message(80)], 'memory');
+    filterObservedMessages({ messageList, record });
+    expect(messageList.get.all.db().map(row => row.id)).toEqual([message(80).id]);
   });
 
   it('preserves the legacy loader on an adapter that does not advertise paging', async () => {

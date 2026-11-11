@@ -284,7 +284,14 @@ export function filterObservedMessages(opts: {
         continue;
       }
 
-      if (derivedCursor && isMessageAtOrBeforeCursor(msg, derivedCursor)) {
+      const coveredByCursor =
+        derivedCursor &&
+        (historyState
+          ? !!msg.createdAt &&
+            (new Date(msg.createdAt).getTime() - Date.parse(derivedCursor.createdAt) ||
+              Buffer.compare(Buffer.from(msg.id), Buffer.from(derivedCursor.id))) <= 0
+          : isMessageAtOrBeforeCursor(msg, derivedCursor));
+      if (coveredByCursor) {
         if (hasPendingPair) continue;
         messagesToRemove.push(msg.id);
         continue;
