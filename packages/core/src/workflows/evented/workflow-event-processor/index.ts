@@ -2261,8 +2261,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     try {
       // Unleased steps (no run fencing, or the workflow opted out of recovery) keep running on every delivery.
-      const { decision: finished, snapshot } =
-        lease === UNLEASED_STEP ? { decision: 'run' as const } : await this.#finishedOccurrence(leafArgs, leaf);
+      const finished = lease === UNLEASED_STEP ? 'run' : await this.#finishedOccurrence(leafArgs, leaf);
       if (finished === 'drop') {
         this.mastra.getLogger()?.debug('Dropping a delivery of a step occurrence that already finished', {
           workflowId: args.workflowId,
@@ -2279,7 +2278,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         return await this.processWorkflowStepEnd(finished);
       }
-      return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease, snapshot);
+      return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease);
     } finally {
       await lease.release();
     }
@@ -2379,7 +2378,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       handoff,
       claimAfterRelease: args.resumeSteps?.[0] === leafId,
       // An occurrence the run still has to continue from waits like any other: its holder may crash first.
-      finished: async () => (await this.#finishedOccurrence(args, step)).decision === 'drop',
+      finished: async () => (await this.#finishedOccurrence(args, step)) === 'drop',
       logger: this.mastra.getLogger(),
     });
   }
@@ -2473,7 +2472,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const leaf = this.#leafAt(workflow, data);
     if (!leaf) return 'run';
     const { stepLeaseHandoff: _handoff, ...args } = data;
-    const { decision } = await this.#finishedOccurrence({ ...args, workflow, eventId: event.id }, leaf);
+    const decision = await this.#finishedOccurrence({ ...args, workflow, eventId: event.id }, leaf);
     return typeof decision === 'string' ? decision : 'continue';
   }
 
@@ -2499,10 +2498,9 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   /**
    * Checks whether the stored run shows the occurrence already finished.
-   * `decision` is `'run'` when the step still has to run, `'drop'` when the
-   * delivery is a duplicate, or the step end arguments that continue the run
-   * from the saved result. See {@link finishedOccurrence}. `snapshot` is the
-   * stored run the check read, when it read one.
+   * Returns `'run'` when the step still has to run, `'drop'` when the delivery
+   * is a duplicate, or the step end arguments that continue the run from the
+   * saved result. See {@link finishedOccurrence}.
    *
    * A resume of the step and time travel run it again on purpose and skip the
    * check.
@@ -2510,11 +2508,11 @@ export class WorkflowEventProcessor extends EventProcessor {
   async #finishedOccurrence(
     args: Omit<ProcessorArgs, 'stepLeaseHandoff'>,
     step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
-  ): Promise<{ decision: 'run' | 'drop' | ProcessorArgs; snapshot?: WorkflowRunState | null }> {
+  ): Promise<'run' | 'drop' | ProcessorArgs> {
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
-    if (args.timeTravel || args.resumeSteps?.[0] === leafId) return { decision: 'run' };
+    if (args.timeTravel || args.resumeSteps?.[0] === leafId) return 'run';
     const store = await this.mastra.getStorage()?.getStore('workflows');
-    if (!store) return { decision: 'run' };
+    if (!store) return 'run';
     const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
     const outcome = finishedOccurrence({
       step,
@@ -2525,17 +2523,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepGuards: store.supportsWorkflowStepGuards(),
       guarded: this.#guardsStepStart(store, args, step),
     });
-    if (outcome === 'run' || outcome === 'drop') return { decision: outcome, snapshot };
+    if (outcome === 'run' || outcome === 'drop') return outcome;
     const context = snapshot!.context;
     return {
-      decision: {
-        ...args,
-        stepResults: { ...args.stepResults, ...context },
-        prevResult: outcome.continueFrom,
-        state: context.__state ?? resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
-        requestContext: restoreLiveRequestContext(snapshot!.requestContext, args.requestContext),
-      },
-      snapshot,
+      ...args,
+      stepResults: { ...args.stepResults, ...context },
+      prevResult: outcome.continueFrom,
+      state: context.__state ?? resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
+      requestContext: restoreLiveRequestContext(snapshot!.requestContext, args.requestContext),
     };
   }
 
@@ -2778,10 +2773,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * suspend, cancel). The per-kind interpretation happens in the step
    * executor's dispatch; here entries are only inspected via the `step-entry`
    * accessors. `stepLease` is the occurrence lease the caller holds; a retry
-   * hands it to the worker that runs the next attempt. `loadedSnapshot` is the
-   * stored run the caller read after taking the lease. The step's start reuses
-   * it instead of reading the run again, but only when nothing was awaited
-   * between that read and the start (a nested step's authorization reads anew).
+   * hands it to the worker that runs the next attempt.
    */
   protected async runLeafStep(
     args: ProcessorArgs & {
@@ -2789,7 +2781,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     },
     control: ControlAtDispatch = {},
     stepLease: StepLease = UNLEASED_STEP,
-    loadedSnapshot?: WorkflowRunState | null,
   ) {
     const {
       workflow,
@@ -2973,10 +2964,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         // exists while the whole run sits in 'suspended'. Read-then-write
         // narrows the race window rather than closing it — closing it needs
         // an expectedStatus compare-and-set on `updateWorkflowResults` across
-        // all storage adapters. A nested step's authorization awaits in between, so it reads again.
-        const snapshot =
-          (!nestedWorkflowStep && loadedSnapshot) ||
-          (await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId }));
+        // all storage adapters.
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
         if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
           return;
         }
