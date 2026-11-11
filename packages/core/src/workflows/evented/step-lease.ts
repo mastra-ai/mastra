@@ -64,18 +64,24 @@ class ProcessRunLiveness {
   ) {}
 
   /**
-   * Counts a leaf step of `runId` as running here. Resolves once the run's
-   * liveness key is fresh, writing it unless this process wrote it within a
-   * renew interval, to the function that counts the leaf out again.
+   * Counts a leaf step of `runId` as running here, writing the run's liveness
+   * key unless this process wrote it within a renew interval, and returns the
+   * function that counts the leaf out again.
+   *
+   * The step does not wait for the write. Its step lease already keeps a
+   * second delivery of it from running, and waiting would let the steps that
+   * find the key fresh overtake the one writing it, changing the order in
+   * which concurrent steps (foreach items, parallel branches) start.
    */
-  async enter(runId: string): Promise<() => void> {
+  enter(runId: string): () => void {
     this.#active.set(runId, (this.#active.get(runId) ?? 0) + 1);
     if (!this.#timer) {
       this.#timer = setInterval(() => void this.#renew(), WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS);
       this.#timer.unref?.();
     }
+    if (this.#age(runId) >= WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS) void this.#writeOrWarn(runId);
     let left = false;
-    const leave = () => {
+    return () => {
       if (left) return;
       left = true;
       const remaining = (this.#active.get(runId) ?? 1) - 1;
@@ -83,13 +89,10 @@ class ProcessRunLiveness {
       else this.#active.delete(runId);
       if (this.#active.size === 0) this.#stopTimer();
     };
-    try {
-      if (this.#age(runId) >= WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS) await this.#write(runId);
-    } catch (error) {
-      leave();
-      throw error;
-    }
-    return leave;
+  }
+
+  #writeOrWarn(runId: string): Promise<void> {
+    return this.#write(runId).catch(error => this.logger?.warn('Failed to mark a workflow run live', { runId, error }));
   }
 
   #age(runId: string): number {
@@ -143,9 +146,7 @@ class ProcessRunLiveness {
     const renewNext = async (): Promise<void> => {
       const runId = due.shift();
       if (runId === undefined) return;
-      await this.#write(runId).catch(error =>
-        this.logger?.warn('Failed to mark a workflow run live', { runId, error }),
-      );
+      await this.#writeOrWarn(runId);
       return renewNext();
     };
     await Promise.all(Array.from({ length: Math.min(LIVENESS_RENEW_CONCURRENCY, due.length) }, renewNext));
@@ -171,7 +172,7 @@ function trackRunLiveness({
   store: WorkflowsStorage;
   runId: string;
   logger?: IMastraLogger;
-}): Promise<() => void> {
+}): () => void {
   let liveness = livenessByProcess.get(scope);
   if (!liveness) livenessByProcess.set(scope, (liveness = new ProcessRunLiveness(scope, store, logger)));
   return liveness.enter(runId);
@@ -280,7 +281,7 @@ export async function acquireStepLease({
  * lease and returns its handle. The step stops counting when the handle is
  * released, even after a hand-off: the handler that holds it ran until then.
  */
-async function holdStepLease({
+function holdStepLease({
   scope,
   store,
   runId,
@@ -292,16 +293,9 @@ async function holdStepLease({
   runId: string;
   record: RunOwnershipRecord;
   logger?: IMastraLogger;
-}): Promise<StepLease> {
+}): StepLease {
   const fence: RunFence = { runId: record.runId, generation: record.generation, ownerId: record.ownerId };
-  let leaveRun: () => void;
-  try {
-    leaveRun = await trackRunLiveness({ scope, store, runId, logger });
-  } catch (error) {
-    // The delivery fails and is redelivered; a kept lease would make that redelivery wait a full TTL.
-    await store.releaseRunOwnership(fence).catch(() => {});
-    throw error;
-  }
+  const leaveRun = trackRunLiveness({ scope, store, runId, logger });
   const stopRenewing = renewWorkflowLease({
     store,
     fence,
