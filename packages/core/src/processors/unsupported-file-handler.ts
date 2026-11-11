@@ -91,7 +91,14 @@ export class UnsupportedFileHandler implements Processor<'unsupported-file-handl
     // Only a part shown to be the rejected one goes. When none is, the history stays as it is, and the user-file
     // fallback below handles the error or it surfaces.
     const rejectedPartError = rejectedPartErrorOf(error);
-    if (rejectedPartError && omitRejectedToolMedia(messageList, rejectedPartError)) return { retry: true };
+    // An unlocated refusal may be about an unreadable user file, even if a tool result has invalid-looking bytes.
+    // In that case the existing prompt-only user-file fallback must run before tool history is changed.
+    if (
+      rejectedPartError &&
+      (!hasUnreadableFile(messageList) || identifiesToolResult(rejectedPartError)) &&
+      omitRejectedToolMedia(messageList, rejectedPartError)
+    )
+      return { retry: true };
     const mediaType = rejectedMediaTypeOf(error);
     if (mediaType) {
       if (!hasFile(messageList)) return;
@@ -287,18 +294,63 @@ function rejectedPayloadOf(error: RejectedPartError): string | null | undefined 
   return payloads.size === 1 ? [...payloads][0] : undefined;
 }
 
-/** A path into the request in an error message, followed by a colon: `messages.2.content.0.image.source.base64:`. */
-const REQUEST_PATH = /([A-Za-z_]\w*(?:\.\w+|\[\d+\])+):/g;
+/** Paths naming a request node in an error message, followed by a colon (e.g. `messages.2.content.0.image.source.base64:`). */
+function requestPathsIn(text: string): string[] {
+  const paths: string[] = [];
+  const identifierStart = (code: number) => (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95;
+  const identifierPart = (code: number) => identifierStart(code) || (code >= 48 && code <= 57);
+  const digit = (code: number) => code >= 48 && code <= 57;
+  let cursor = 0;
+  while (cursor < text.length) {
+    if (!identifierStart(text.charCodeAt(cursor))) {
+      cursor++;
+      continue;
+    }
+    let end = cursor + 1;
+    while (identifierPart(text.charCodeAt(end))) end++;
+    let segments = 0;
+    while (end < text.length) {
+      if (text[end] === '.') {
+        if (!identifierPart(text.charCodeAt(end + 1))) break;
+        end++;
+        while (identifierPart(text.charCodeAt(end))) end++;
+      } else if (text[end] === '[') {
+        if (!digit(text.charCodeAt(end + 1))) break;
+        end++;
+        while (digit(text.charCodeAt(end))) end++;
+        if (text[end] !== ']') break;
+        end++;
+      } else {
+        break;
+      }
+      segments++;
+    }
+    if (segments > 0 && text[end] === ':') paths.push(text.slice(cursor, end));
+    cursor = Math.max(end, cursor + 1);
+  }
+  return paths;
+}
+
+/** True only when a path into the actual rejected request identifies an Anthropic tool result. */
+function identifiesToolResult(error: RejectedPartError): boolean {
+  const body = jsonOf(error.requestBodyValues);
+  if (!isRecord(body)) return false;
+  let node: unknown = body;
+  for (const key of errorPathOf(error, body)) {
+    if (isRecord(node) && node.type === 'tool_result') return true;
+    if (Array.isArray(node) && /^\d+$/.test(key)) node = node[Number(key)];
+    else if (isRecord(node) && key in node) node = node[key];
+    else if (!isRecord(node) || node.type !== key) return false;
+  }
+  return isRecord(node) && node.type === 'tool_result';
+}
 
 /** The keys of the path the error names in the request, from OpenAI's `param` or the start of Anthropic's message. */
 function errorPathOf(error: RejectedPartError, body: Record<string, unknown>): string[] {
   const response = jsonOf(error.responseBody);
   const param = isRecord(response) && isRecord(response.error) ? response.error.param : undefined;
   const texts = [error.message, error.responseBody].filter((text): text is string => typeof text === 'string');
-  const paths = [
-    ...(typeof param === 'string' ? [param] : []),
-    ...texts.flatMap(text => [...text.matchAll(REQUEST_PATH)].map(match => match[1]!)),
-  ];
+  const paths = [...(typeof param === 'string' ? [param] : []), ...texts.flatMap(requestPathsIn)];
   const keyLists = paths.map(path => path.split(/[.[\]]+/).filter(Boolean));
   return keyLists.find(([first]) => first !== undefined && first in body) ?? [];
 }

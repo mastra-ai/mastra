@@ -721,6 +721,90 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
     expect(userTexts(prompts[2]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
   });
 
+  it.each(['generate', 'stream'] as const)(
+    'preserves a bad tool file when an ambiguous rejection may be for an unreadable user file (%s)',
+    async mode => {
+      const workbook = file('PK workbook', 'leads.xlsx', XLSX);
+      const viewed = { path: 'report.pdf', bytes: HTML, mediaType: 'application/pdf' };
+      const { agent, prompts, recall } = createViewAgent([viewed], prompt =>
+        userFileParts(prompt).some(part => part.mediaType === XLSX) ? openAIInvalidFile() : undefined,
+      );
+
+      expect(await run(agent, mode, turnWith(workbook))).toBe('ok');
+      expect(prompts).toHaveLength(3);
+      expect(userTexts(prompts[2]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
+      expect(holds(prompts[2]!, HTML, 'application/pdf')).toBe(true);
+      expect(await storedModelOutputs(recall)).toEqual([viewOutput(viewed)]);
+    },
+  );
+
+  it('omits a specifically rejected tool image even when an unreadable user file is present', async () => {
+    const workbook = file('PK workbook', 'leads.xlsx', XLSX);
+    const viewed = { path: 'screenshot.png', bytes: WEBP, mediaType: 'image/png' };
+    const { agent, prompts, recall } = createViewAgent([viewed], prompt =>
+      holds(prompt, WEBP, 'image/png')
+        ? new APICallError({
+            message: anthropicMismatchAt('messages.2.content.0.tool_result.content.1.image.source.base64').error
+              .message,
+            url: 'https://api.anthropic.com/v1/messages',
+            requestBodyValues: {
+              messages: [
+                {},
+                {},
+                {
+                  content: [
+                    {
+                      type: 'tool_result',
+                      content: [
+                        { type: 'text', text: viewed.path },
+                        { type: 'image', source: { data: WEBP.toString('base64') } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            statusCode: 400,
+            isRetryable: false,
+          })
+        : undefined,
+    );
+
+    expect((await agent.generate(turnWith(workbook), { memory: MEMORY })).text).toBe('ok');
+    expect(prompts).toHaveLength(3);
+    expect(toolTexts(prompts[2]!)).toEqual([viewed.path, NOTE('image/png')]);
+    expect(userFileParts(prompts[2]!)).toEqual(userFileParts(prompts[1]!));
+    expect(await storedModelOutputs(recall)).toEqual([
+      {
+        type: 'content',
+        value: [
+          { type: 'text', text: viewed.path },
+          { type: 'text', text: NOTE('image/png') },
+        ],
+      },
+    ]);
+  });
+
+  it('parses a long malformed provider path without delaying recovery', async () => {
+    const viewed = { path: 'screenshot.png', bytes: WEBP, mediaType: 'image/png' };
+    const path = `A${'.A.0'.repeat(12000)}`;
+    const { agent, prompts } = createViewAgent(
+      [viewed],
+      () =>
+        new APICallError({
+          message: `${path} The image was specified using the image/png media type, but the image appears to be a image/webp image`,
+          url: 'https://api.anthropic.com/v1/messages',
+          requestBodyValues: {},
+          statusCode: 400,
+          isRetryable: false,
+        }),
+    );
+
+    await expect(agent.generate('Look at the file', { memory: MEMORY })).rejects.toThrow('appears to be a image/webp');
+    expect(prompts).toHaveLength(3);
+    expect(toolTexts(prompts[2]!)).toContain(NOTE('image/png'));
+  });
+
   it('leaves the history alone on a 400 that is not about a file part', async () => {
     const { agent, prompts } = createViewAgent(
       [{ path: 'screenshot.png', bytes: WEBP, mediaType: 'image/png' }],
