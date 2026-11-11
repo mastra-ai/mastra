@@ -5395,14 +5395,15 @@ export class Run<
 
   /**
    * Restarts like {@link Run.restart}, but resolves once a worker took the
-   * restarted run over instead of when it finishes, as `startAsync()` does for
-   * `start()`. That is when the claim's hold ends (a worker took the run, or
-   * the process is shutting down), or one lease TTL after the restart was
-   * published, whichever comes first; on an engine that
-   * runs the restart in the caller, when it finishes. Rejects when the restart
-   * is refused (`WORKFLOW_RESTART_RUN_OWNED`) or fails before it is published;
-   * later failures are logged. The recovery sweep uses it for evented runs,
-   * which workers drive while the caller only waits for the result.
+   * restarted run over instead of when the run finishes, as `startAsync()`
+   * does for `start()`. It resolves when the claim's hold ends (a worker took
+   * the run, or the process is shutting down) or one lease TTL after the
+   * restart was published, whichever comes first. On an engine that runs the
+   * restart in the caller, it resolves when the run finishes.
+   *
+   * Rejects when the restart is refused (`WORKFLOW_RESTART_RUN_OWNED`) or
+   * fails before it is published; later failures are logged. The recovery
+   * sweep uses it for evented runs, which workers drive.
    * @internal
    */
   async restartInBackground(): Promise<void> {
@@ -5411,20 +5412,31 @@ export class Run<
       notifyDispatched = resolve;
     });
     const execution = this._restart({ onDispatched: notifyDispatched });
+
+    // A rejection before the publish rejects this race, and so this call. Engines that run the
+    // restart in the caller never dispatch, so the race resolves when the execution does.
     const dispatch = await Promise.race([dispatched, execution.then(() => undefined)]);
+
+    // From here the caller no longer waits for the execution, so its failure is logged here.
     void execution.catch(error => {
       this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background restart failed:`, error);
     });
-    if (!dispatch) return;
+
+    if (!dispatch) {
+      return;
+    }
+
     let timer: ReturnType<typeof setTimeout> | undefined;
     const lapsed = new Promise<void>(resolve => {
       timer = setTimeout(resolve, WORKFLOW_RUN_LEASE_TTL_MS);
       timer.unref?.();
     });
+    // Only marks the end of the execution; its failure is logged above.
     const settled = execution.then(
       () => {},
       () => {},
     );
+
     await Promise.race([dispatch.handedOff, lapsed, settled]);
     clearTimeout(timer);
   }

@@ -363,6 +363,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
       releaseTracking();
       throw err;
     }
+
+    // Only after a successful publish: a restart that never reached the workers must not count as handed over.
     params.onDispatched?.();
 
     // Wait for workflow to complete

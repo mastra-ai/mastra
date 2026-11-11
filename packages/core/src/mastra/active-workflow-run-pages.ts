@@ -11,11 +11,9 @@ const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'waiting'];
  * Yields the `running` and `waiting` runs of one workflow in batches of at
  * most a hundred, each run once.
  *
- * Each status is listed in one call. Paging through a status filter would
- * cost more on every SQL and document store, whose paged `listWorkflowRuns`
- * also counts the matches, and offset pages skip runs that leave the filter
- * mid-sweep. A run that moves between the statuses while the sweep runs is
- * listed under both and yielded only the first time.
+ * Each status is listed in one call. Paged reads cost more on the SQL and
+ * document stores, whose paged `listWorkflowRuns` also counts the matches,
+ * and offset pages skip runs that leave the status filter mid-sweep.
  */
 export async function* activeWorkflowRunPages({
   store,
@@ -24,10 +22,21 @@ export async function* activeWorkflowRunPages({
   store: WorkflowsStorage;
   workflowName: string;
 }): AsyncGenerator<WorkflowRun[]> {
+  // Shared by both statuses: a run that moves between them while the sweep runs is listed under each.
   const seen = new Set<string>();
+
   for (const status of ACTIVE_STATUSES) {
     const { runs } = await store.listWorkflowRuns({ workflowName, status, perPage: false });
-    const unseen = runs.filter(run => !seen.has(run.runId) && !!seen.add(run.runId));
-    for (let start = 0; start < unseen.length; start += PAGE_SIZE) yield unseen.slice(start, start + PAGE_SIZE);
+    const unseen: WorkflowRun[] = [];
+    for (const run of runs) {
+      if (!seen.has(run.runId)) {
+        seen.add(run.runId);
+        unseen.push(run);
+      }
+    }
+
+    for (let start = 0; start < unseen.length; start += PAGE_SIZE) {
+      yield unseen.slice(start, start + PAGE_SIZE);
+    }
   }
 }

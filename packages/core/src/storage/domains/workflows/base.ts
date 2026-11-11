@@ -125,24 +125,33 @@ export abstract class WorkflowsStorage extends StorageDomain {
   /**
    * The ownership records of several runs, keyed by run id, each as
    * `getRunOwnership` returns it. Runs that were never claimed are left out of
-   * the map. A Map, not a plain object, because run ids are caller-chosen
-   * strings such as `__proto__`.
+   * the map. It is a `Map` because run ids are caller-chosen strings, such as
+   * `__proto__`, that a plain object would mishandle.
    *
    * The default reads each run separately, at most 8 at once, so every adapter
-   * that implements `getRunOwnership` supports it.
-   * Adapters with a batch read override it with one query (or one per chunk of
-   * ids when the backend caps a request).
+   * that implements `getRunOwnership` supports it. Adapters with a batch read
+   * override it with one query, or one per chunk of ids when the backend caps
+   * a request.
    */
   async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
     const records = new Map<string, RunOwnershipRecord>();
     const queue = [...new Set(runIds)];
+
+    // Each reader takes the next id once its previous read settles, until the queue is empty.
     const next = async (): Promise<void> => {
       const runId = queue.shift();
-      if (runId === undefined) return;
+      if (runId === undefined) {
+        return;
+      }
+
       const record = await this.getRunOwnership({ runId });
-      if (record) records.set(runId, record);
+      if (record) {
+        records.set(runId, record);
+      }
+
       return next();
     };
+
     await Promise.all(Array.from({ length: Math.min(RUN_OWNERSHIP_READ_CONCURRENCY, queue.length) }, next));
     return records;
   }

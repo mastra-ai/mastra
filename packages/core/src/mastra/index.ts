@@ -80,6 +80,7 @@ import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/doma
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { runOutsideRunFenceScope } from '../storage/run-fencing';
+import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import { trackFeatureUsage } from '../telemetry/feature-telemetry';
@@ -4410,54 +4411,57 @@ export class Mastra<
       this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
       return;
     }
+
     // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
     // the same parent.
     const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
-    const readsOwnership = await Promise.resolve()
-      .then(() => workflowsStore.supportsRunFencing())
-      .catch(error => {
-        // restart() probes again and decides per run, so the sweep only loses its pre-check.
-        this.#logger.warn('Failed to check run fencing support before restarting workflow runs', { error });
-        return false;
-      });
-    // Shared by every page, so a long default-engine restart holds one slot rather than the next page.
+    const readsOwnership = await this.#supportsRunFencing(workflowsStore);
+    // Shared by every batch, so a long default-engine restart holds one slot rather than the next batch.
     const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency, error =>
       this.#logger.error('Failed to restart workflow run', { error }),
     );
+
     for (const workflow of this.#restartableWorkflows()) {
-      if (this.#shuttingDown) break;
+      if (this.#shuttingDown) {
+        break;
+      }
+
+      // Evented runs are kept alive through their liveness key, default-engine runs through their run lease.
       const ownershipKey = workflow.engineType === 'evented' ? runLivenessKey : (runId: string) => runId;
       try {
         for await (const page of activeWorkflowRunPages({ store: workflowsStore, workflowName: workflow.id })) {
-          if (this.#shuttingDown) break;
+          if (this.#shuttingDown) {
+            break;
+          }
+
           const runs = await this.#recoverableRuns(page, workflowsStore, parentStatusOf);
-          const owners =
-            readsOwnership && runs.length > 0
-              ? await workflowsStore
-                  .getRunOwnerships({ runIds: runs.map(run => ownershipKey(run.runId)) })
-                  .catch(error => {
-                    // restart() checks ownership itself, so a failed batch only costs the loads it would have saved.
-                    this.#logger.warn('Failed to read workflow run ownership before restarting', {
-                      workflow: workflow.id,
-                      error,
-                    });
-                    return undefined;
-                  })
-              : undefined;
+          const owners = readsOwnership
+            ? await this.#readRunOwners(
+                workflowsStore,
+                workflow.id,
+                runs.map(run => ownershipKey(run.runId)),
+              )
+            : undefined;
+
           const orphaned = runs.filter(run => !owners?.get(ownershipKey(run.runId))?.live);
           if (orphaned.length > 0) {
             this.#logger.debug(`Restarting ${orphaned.length} active workflow run${orphaned.length > 1 ? 's' : ''}`, {
               workflow: workflow.id,
             });
           }
+
           for (const run of runs) {
-            if (this.#shuttingDown) break;
+            if (this.#shuttingDown) {
+              break;
+            }
+
             const owner = owners?.get(ownershipKey(run.runId));
             if (owner?.live) {
               this.#logger.debug('Skipped restarting workflow run owned by a live process', {
                 workflow: run.workflowName,
                 runId: run.runId,
               });
+              // Checked again once the lease could have lapsed, in case its owner died meanwhile.
               this.#scheduleWorkflowRecoveryRecheck(
                 run.workflowName,
                 run.runId,
@@ -4465,6 +4469,8 @@ export class Mastra<
               );
               continue;
             }
+
+            // Waits for a free slot, so the sweep reads the next batch only once a restart frees one.
             await restarts.start(() => this.#restartWorkflowRun(run.workflowName, run.runId));
           }
         }
@@ -4473,11 +4479,48 @@ export class Mastra<
         this.#logger.error('Failed to list active workflow runs for recovery', { workflow: workflow.id, error });
       }
     }
+
     await restarts.drain();
   }
 
   /**
-   * The runs of one page the sweep should restart. A nested run is left out
+   * Whether the sweep can read run ownership before restarting. A failed probe
+   * counts as no: `restart()` probes again and decides per run, so the sweep
+   * only loses its pre-check.
+   */
+  async #supportsRunFencing(workflowsStore: WorkflowsStorage): Promise<boolean> {
+    try {
+      return await workflowsStore.supportsRunFencing();
+    } catch (error) {
+      this.#logger.warn('Failed to check run fencing support before restarting workflow runs', { error });
+      return false;
+    }
+  }
+
+  /**
+   * The ownership records of one batch of runs, read in one call. `undefined`
+   * when the read fails: `restart()` checks ownership itself, so a failed read
+   * only costs the snapshot loads it would have saved.
+   */
+  async #readRunOwners(
+    workflowsStore: WorkflowsStorage,
+    workflowId: string,
+    ownershipKeys: string[],
+  ): Promise<Map<string, RunOwnershipRecord> | undefined> {
+    if (ownershipKeys.length === 0) {
+      return undefined;
+    }
+
+    try {
+      return await workflowsStore.getRunOwnerships({ runIds: ownershipKeys });
+    } catch (error) {
+      this.#logger.warn('Failed to read workflow run ownership before restarting', { workflow: workflowId, error });
+      return undefined;
+    }
+  }
+
+  /**
+   * The runs of one batch the sweep should restart. A nested run is left out
    * when its parent still drives it, and canceled when its parent already
    * finished.
    */
@@ -4530,6 +4573,7 @@ export class Mastra<
         });
       }
     }
+
     return runs;
   }
 
@@ -4546,7 +4590,10 @@ export class Mastra<
    */
   async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
     // A sweep's wait for a free slot can outlast the start of shutdown.
-    if (this.#shuttingDown) return;
+    if (this.#shuttingDown) {
+      return;
+    }
+
     try {
       const workflow = this.#recoveryRestartableWorkflow(workflowName);
       if (!workflow) {
@@ -4558,9 +4605,16 @@ export class Mastra<
       }
       const run = await workflow.createRun({ runId });
       // A re-check can find the run already settled or suspended by its owner.
-      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
-      if (workflow.engineType === 'evented') await run.restartInBackground();
-      else await run.restart();
+      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') {
+        return;
+      }
+
+      if (workflow.engineType === 'evented') {
+        await run.restartInBackground();
+      } else {
+        await run.restart();
+      }
+
       this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
     } catch (error) {
       if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {

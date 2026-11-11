@@ -46,18 +46,32 @@ export function createConcurrencyLimiter(
   onError: (error: unknown) => void,
 ): ConcurrencyLimiter {
   const max = normalizeConcurrency(limit);
+  // Each entry settles without rejecting: `run` reports the task's failure to `onError`.
   const running = new Set<Promise<void>>();
+
+  const run = async (task: () => Promise<void>) => {
+    try {
+      await task();
+    } catch (error) {
+      onError(error);
+    }
+  };
+
   return {
     async start(task) {
-      while (running.size >= max) await Promise.race(running);
-      const settled: Promise<void> = Promise.resolve()
-        .then(task)
-        .catch(onError)
-        .finally(() => running.delete(settled));
+      // A loop, not one wait: several callers can wake on the same freed slot.
+      while (running.size >= max) {
+        await Promise.race(running);
+      }
+
+      const settled = run(task).finally(() => running.delete(settled));
       running.add(settled);
     },
     async drain() {
-      while (running.size > 0) await Promise.all(running);
+      // A loop, not one wait: tasks started while draining join the set.
+      while (running.size > 0) {
+        await Promise.all(running);
+      }
     },
   };
 }

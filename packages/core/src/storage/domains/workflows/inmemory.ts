@@ -381,8 +381,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const records = new Map<string, RunOwnershipRecord>();
     for (const runId of runIds) {
       const record = this.ownershipRecord(runId);
-      if (record) records.set(runId, record);
+      if (record) {
+        records.set(runId, record);
+      }
     }
+
     return records;
   }
 
