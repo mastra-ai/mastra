@@ -2,10 +2,11 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
 import { Mastra } from '@mastra/core';
+import { noopLogger } from '@mastra/core/logger';
 import { SpanType } from '@mastra/core/observability';
 import type { FeedbackEvent, ScoreEvent, LogEvent, TracingEvent } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from '../default';
 import { DefaultExporter } from './default';
 import { MastraPlatformExporter } from './mastra-platform';
@@ -597,10 +598,13 @@ describe('SDK feedback and score delivery', () => {
       const receiver = await collector();
       const storage = new InMemoryStore();
       const platform = exporter(receiver.endpoint);
+      const localExporter = new StorageExporter();
       const observability = new Observability({
-        configs: { default: { serviceName: 'producer-test', exporters: [new StorageExporter(), platform] } },
+        configs: { default: { serviceName: 'producer-test', exporters: [localExporter, platform] } },
       });
       const mastra = new Mastra({ logger: false, storage, observability });
+      const warn = vi.fn();
+      localExporter.__setLogger({ ...noopLogger, warn });
       cleanup.push(() => observability.shutdown());
       const submitted = Promise.all([
         mastra.observability.addFeedback({
@@ -631,6 +635,16 @@ describe('SDK feedback and score delivery', () => {
       const store = (await storage.getStore('observability'))!;
       expect((await store.listFeedback({})).feedback).toHaveLength(0);
       expect((await store.listScores({})).scores).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith('Storage export dropped because the target trace/span was not found', {
+        eventType: 'feedback',
+        traceId: 'remote-trace',
+        spanId: 'remote-span',
+      });
+      expect(warn).toHaveBeenCalledWith('Storage export dropped because the target trace/span was not found', {
+        eventType: 'score',
+        traceId: 'remote-trace',
+        spanId: undefined,
+      });
     },
     15_000,
   );
