@@ -30,6 +30,8 @@ import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
+import { stepOccurrenceKey } from './step-lease';
+import { abandonLease } from './test-utils/abandon-lease';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';
 
@@ -2008,6 +2010,8 @@ describe('Workflow (Evented Engine Specific)', () => {
           ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
         )!;
         await fixture.pubsub.releaseLease(lease[0], lease[1]);
+        // The first delivery's worker also loses its step lease, so the redelivery runs beside it.
+        await abandonLease(fixture.storage, stepOccurrenceKey(delivery.runId, delivery.data.executionPath));
         fixture.emitter.emit('workflows', delivery);
         await expect(starting).resolves.toMatchObject({ status: 'failed' });
         authorization.resolve();

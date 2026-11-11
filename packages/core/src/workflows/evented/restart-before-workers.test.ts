@@ -13,6 +13,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import { stepOccurrenceKey } from './step-lease';
+import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
 const RUN_ID = 'restart-before-workers-run';
@@ -82,6 +84,8 @@ describe('evented restart before workers have started', () => {
     // step itself before asserting. This also guards against a vacuous pass: the run
     // really is parked inside generation 1.
     await vi.waitFor(() => expect(log).toEqual([{ generation: 1, event: 'start' }]));
+    // Generation 1 stands in for a process that died mid-step, so its step lease lapses.
+    await abandonLease(storage, stepOccurrenceKey(RUN_ID, [0]));
 
     const secondProcess = new Mastra({
       logger: false,

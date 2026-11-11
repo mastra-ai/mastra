@@ -4,6 +4,8 @@ import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import { restartLeaseKey } from './step-lease';
+import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
 const hosts: Mastra[] = [];
@@ -278,6 +280,8 @@ describe('evented pre-first-step restart', () => {
 
     await firstHost.stopWorkers();
     hosts.splice(hosts.indexOf(firstHost), 1);
+    // The interrupted restart's process is gone, so its restart lease lapses.
+    await abandonLease(storage, restartLeaseKey(runId));
     await makeHost(workflow, storage);
 
     const recoveredRun = await workflow.createRun({ runId });
