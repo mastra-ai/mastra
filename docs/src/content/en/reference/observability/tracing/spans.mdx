@@ -332,9 +332,7 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
 
 `errorCount` counts failures originating on the span. It excludes child counts and repeated reports of the same failure on parent spans. A recovered failure still contributes to the count, so a successful span can have a positive count.
 
-Repeated reports of the same `Error`, including wrappers whose `cause` carries that error, share an occurrence. Use `origin: 'new'` in `span.error()` when a new independent failure references an earlier cause, or `origin: 'propagated'` when reporting a failure already attributed elsewhere without preserving its error identity.
-
-Durable snapshots preserve local accounting. Older snapshots and unsupported package combinations can leave the count unset; an unset count doesn't mean zero. Counts describe observed, exported failures. Sampling, excluded spans, and failures lost before export can leave trace coverage incomplete. Exporters don't calculate trace totals or combine suspended and resumed executions.
+An unset `errorCount` means the count is unavailable, not zero.
 
 ## Span lifecycle events
 
