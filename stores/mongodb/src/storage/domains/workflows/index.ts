@@ -108,6 +108,11 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     return this.#connector.probeTransactions();
   }
 
+  /** `listWorkflowRuns` filters, sorts by `createdAt` descending and skips and limits in one query. */
+  listsWorkflowRunsByCreatedAt(): boolean {
+    return true;
+  }
+
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
   }

@@ -426,6 +426,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     return true;
   }
 
+  /** `listWorkflowRuns` filters, orders by `createdAt DESC` and cuts the page in one query. */
+  listsWorkflowRunsByCreatedAt(): boolean {
+    return true;
+  }
+
   /** @experimental */
   supportsRunJournal(): boolean {
     return true;

@@ -1240,6 +1240,11 @@ export class WorkflowsPG extends WorkflowsStorage {
     return true;
   }
 
+  /** `listWorkflowRuns` filters, orders by `"createdAt" DESC` and cuts the page in one query. */
+  listsWorkflowRunsByCreatedAt(): boolean {
+    return true;
+  }
+
   #runOwnersTable(): string {
     return getTableName({ indexName: TABLE_WORKFLOW_RUN_OWNERS, schemaName: getSchemaName(this.#schema) });
   }
