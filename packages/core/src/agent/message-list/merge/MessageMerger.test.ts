@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../';
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
+import { persistProcessorDataChunk } from '../../../stream/base/output';
 import { MessageList } from '../index';
 import { MessageMerger } from './MessageMerger';
 
@@ -127,6 +128,22 @@ describe('MessageMerger insertion positions', () => {
     expectParts(merge([tool('c1', true), stored, q1], [tool('c1', true), q1, q2]), [tool('c1', true), stored, q1]);
     expectParts(merge([tool('c1', true), stored], [tool('c1', true), q1, q2]), [tool('c1', true), q1, stored]);
     expectParts(merge([stored, tool('c1', true)], [tool('c1', true), q1, q2]), [stored, tool('c1', true), q1]);
+  });
+
+  it('treats an empty-string data part ID as an ID', () => {
+    const empty: Part = { type: 'data-question', id: '', data: { prompt: 'Continue?' } };
+    const q1: Part = { ...empty, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), empty], [tool('c1', true), q1]), [tool('c1', true), q1, empty]);
+  });
+
+  it('keeps an empty-string ID when persisting a processor data chunk', () => {
+    const list = new MessageList();
+    persistProcessorDataChunk(list, 'assistant-1', { type: 'data-question', id: '', data: { prompt: 'Continue?' } });
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part).toMatchObject({ type: 'data-question', data: { prompt: 'Continue?' } });
+    expect(part).toHaveProperty('id', '');
   });
 
   it('does not duplicate parts on repeated updates', () => {

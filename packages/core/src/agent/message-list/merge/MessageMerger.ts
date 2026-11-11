@@ -363,7 +363,7 @@ export class MessageMerger {
       for (const part of otherParts) {
         if (!part.type.startsWith('data-')) continue;
         const id = dataPartId(part);
-        if (id) otherIds.add(id);
+        if (id !== undefined) otherIds.add(id);
         else otherIdless.set(baseKeyOf(part), (otherIdless.get(baseKeyOf(part)) ?? 0) + 1);
       }
       for (const part of [...parts].reverse()) {
@@ -371,11 +371,11 @@ export class MessageMerger {
         const baseKey = baseKeyOf(part);
         const id = dataPartId(part);
         const unmatched = otherIdless.get(baseKey) ?? 0;
-        if (id && !otherIds.has(id) && unmatched > 0) {
+        if (id !== undefined && !otherIds.has(id) && unmatched > 0) {
           otherIdless.set(baseKey, unmatched - 1);
           keys.set(part, baseKey);
         } else {
-          keys.set(part, id ? `${baseKey}|id:${JSON.stringify(id)}` : baseKey);
+          keys.set(part, id !== undefined ? `${baseKey}|id:${JSON.stringify(id)}` : baseKey);
         }
       }
     };

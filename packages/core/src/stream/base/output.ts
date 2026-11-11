@@ -139,7 +139,9 @@ export function persistProcessorDataChunk(
     role: 'assistant',
     content: {
       format: 2,
-      parts: [{ type: chunk.type as `data-${string}`, data: chunk.data, ...(chunk.id ? { id: chunk.id } : {}) }],
+      parts: [
+        { type: chunk.type as `data-${string}`, data: chunk.data, ...(chunk.id !== undefined ? { id: chunk.id } : {}) },
+      ],
     },
     createdAt: new Date(),
   };
@@ -2177,8 +2179,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // not, are held until the message is written back: the write-back replaces it, and would
                   // drop parts merged into it.
                   let heldDataChunks:
-                    | { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[]
-                    | undefined;
+                    { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[] | undefined;
                   const writer = {
                     custom: async (
                       data: { type: string; data?: unknown; transient?: boolean },
