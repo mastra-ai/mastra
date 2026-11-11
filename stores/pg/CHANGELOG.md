@@ -1,5 +1,44 @@
 # @mastra/pg
 
+## 1.36.0-alpha.3
+
+### Minor Changes
+
+- Support full feedback replacement and protected creates: ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```typescript
+  await store.createFeedback({ feedback, onConflict: 'ignore' });
+  await store.replaceFeedback({ feedback: { ...feedback, value: -1 } });
+  ```
+
+  Keep the original ID, trace ID, timestamp, and tenant when replacing feedback. ClickHouse uses its existing schema; overlapping writes from separate processes are not ordered reliably.
+
+### Patch Changes
+
+- Fixed `saveThread` so that saving an existing thread id no longer moves the thread to another resource or overwrites its creation date. Its messages could previously be left on the old resource. ([#29149](https://github.com/mastra-ai/mastra/pull/29149))
+
+  Re-saving a thread with the same `resourceId` still updates its title, metadata and `updatedAt`. It keeps the original `createdAt` and returns the stored row. Re-saving with a different `resourceId` now throws a `MastraError` with category `USER`. To move a thread and its messages to another resource, use `updateThreadResourceId`:
+
+  ```ts
+  await memory.updateThreadResourceId({ threadId: 'thread-1', resourceId: 'user-2' });
+  ```
+
+- Fixed thread metadata updates being lost when several processes share one Postgres database. Concurrent `updateThread` and `updateThreadMetadata` calls on the same thread now keep every metadata key. ([#29150](https://github.com/mastra-ai/mastra/pull/29150))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
+## 1.36.0-alpha.2
+
+### Patch Changes
+
+- Fixed index creation for descending columns that use an operator class. ([#29594](https://github.com/mastra-ai/mastra/pull/29594))
+
+- Fixed slow startup when several processes initialize the same Postgres schema for the first time. Each index build waited about a second on the other processes, so two processes cold-booting together took around 20 seconds instead of a fraction of a second. Indexes on tables that did not exist when initialization began are now built directly instead of concurrently; indexes on tables that already existed are still built concurrently. ([#29092](https://github.com/mastra-ai/mastra/pull/29092))
+
+- Updated dependencies [[`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/core@1.83.0-alpha.3
+
 ## 1.36.0-alpha.1
 
 ### Minor Changes

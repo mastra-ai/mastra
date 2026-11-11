@@ -29,3 +29,7 @@ export {
   createObservabilitySignalWriteTestSuite,
   type ObservabilitySignalWriteTestConfig,
 } from './observability-signal-write-test-suite';
+export {
+  createCustomRouteDisconnectTestSuite,
+  type CustomRouteDisconnectTestSuiteConfig,
+} from './custom-route-disconnect-test-suite';

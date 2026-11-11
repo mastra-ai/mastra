@@ -1061,6 +1061,7 @@ export {
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
+export { REPROCESS_PART_KEY } from './stream-reprocess';
 export { createProcessorSendSignal } from './send-signal';
 export { createBackgroundWorkSignalProcessor } from './background-work-signals';
 export type {

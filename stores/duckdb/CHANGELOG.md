@@ -1,5 +1,41 @@
 # @mastra/duckdb
 
+## 1.19.0-alpha.3
+
+### Minor Changes
+
+- Support full feedback replacement and protected creates: ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```typescript
+  await store.createFeedback({ feedback, onConflict: 'ignore' });
+  await store.replaceFeedback({ feedback: { ...feedback, value: -1 } });
+  ```
+
+  Keep the original ID, trace ID, timestamp, and tenant when replacing feedback. ClickHouse uses its existing schema; overlapping writes from separate processes are not ordered reliably.
+
+### Patch Changes
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
+## 1.19.0-alpha.2
+
+### Minor Changes
+
+- Added `persistenceLocation: 'local'` to DuckDB observability storage, including its lazy facade and direct implementation. ([#29737](https://github.com/mastra-ai/mastra/pull/29737))
+
+  ```ts
+  const observability = await storage.getStore('observability');
+  const location = observability?.persistenceLocation; // 'local'
+  ```
+
+  Upgrade this adapter alongside `@mastra/observability` to prevent local observability writes on Platform, even when storage export is explicitly retained.
+
+### Patch Changes
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+
 ## 1.19.0-alpha.1
 
 ### Minor Changes

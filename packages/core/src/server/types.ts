@@ -524,6 +524,14 @@ export type ServerConfig = {
   onValidationError?: ValidationErrorHook;
 };
 
+/** A custom API route or a route factory's explicit list of routes. */
+export type ApiRouteInput = ApiRoute | ApiRoute[];
+
+/** Server configuration accepted during Mastra construction and updates. */
+export type ServerConfigInput = Omit<ServerConfig, 'apiRoutes'> & {
+  apiRoutes?: ApiRouteInput[];
+};
+
 /**
  * Configuration for Mastra Studio authentication and authorization.
  *

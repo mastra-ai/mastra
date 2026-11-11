@@ -22,8 +22,22 @@ export type WorkflowScheduleConfig<TInput = unknown, TState = unknown, TRequestC
   id?: string;
   /**
    * Cron expression (5-, 6-, or 7-part). Validated at workflow construction time.
+   * Exactly one of `cron` or `runAt` must be set.
    */
-  cron: string;
+  cron?: string;
+  /**
+   * Fire exactly once at this time (`Date` or ms epoch), then mark the
+   * schedule `completed`. Mutually exclusive with `cron` and `endAt`.
+   * A completed one-off is not re-created on redeploy; changing `runAt`
+   * re-arms it.
+   */
+  runAt?: Date | number;
+  /**
+   * Stop a cron schedule after this time (`Date` or ms epoch). Once the next
+   * occurrence is past `endAt` the schedule is marked `completed`.
+   * Only valid together with `cron`.
+   */
+  endAt?: Date | number;
   /**
    * Optional IANA timezone (e.g. 'America/New_York'). Defaults to the host timezone.
    */

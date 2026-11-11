@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { boardFlow, boardPhaseOutcomes, isPullRequestCard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -24,11 +25,10 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { WorkItemSource } from '../rules/types.js';
+import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -47,9 +47,13 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { workItemBranchSource } from '../work-item-branch.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
+import { relatedCardIndex } from '../work-items/related-cards.js';
+import type { PullRequestFacts } from '../work-items/related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
+import { boardSnapshot, matchesEtag, scopedSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
@@ -65,8 +69,6 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a card filed without a board. */
   intakeRoutes?: IntakeRoutesReader;
-  /** Comments domain — backs the mention attention provider. */
-  comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -96,6 +98,34 @@ function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) 
     }
   }
   return [...picked];
+}
+
+const CARD_PULL_REQUESTS: PullRequestFacts<Card> = {
+  isPullRequest: card => isPullRequestCard({ source: workItemBranchSource(card.externalSource) }),
+  headBranch: card => {
+    const branch = card.workItem.metadata?.headBranch;
+    return typeof branch === 'string' ? branch : undefined;
+  },
+};
+
+// One index per board version: `listShared` returns the same array until a card changes.
+const relatedCards = new WeakMap<readonly Card[], (card: Card) => Card[]>();
+
+/** The cards that hold one of the sessions, and the cards related to them, in board order. */
+function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Card[] {
+  let relatedTo = relatedCards.get(board);
+  if (!relatedTo) {
+    relatedTo = relatedCardIndex(board, CARD_PULL_REQUESTS);
+    relatedCards.set(board, relatedTo);
+  }
+  const wanted = new Set(sessionIds);
+  const picked = new Set<Card>();
+  for (const card of board) {
+    if (!Object.values(card.sessions).some(session => wanted.has(session.sessionId))) continue;
+    picked.add(card);
+    for (const related of relatedTo(card)) picked.add(related);
+  }
+  return board.filter(card => picked.has(card));
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -347,6 +377,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               title: board.name,
               ...(board.description !== undefined ? { description: board.description } : {}),
               initialPhase: board.initialPhase,
+              flow: catalogFlow(boardFlow(board)),
               phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
                 id: phaseId,
                 name: phase.name,
@@ -359,6 +390,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                       role: phase.runner.context,
                       context: phase.runner.context,
                       ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
+                      ...(phase.runner.goal ? { goal: { ...phase.runner.goal } } : {}),
                       autoStart: phase.autoStart === true,
                       ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
                       ...(phase.exitTool
@@ -372,6 +404,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                             },
                           }
                         : {}),
+                      ...(phase.tools ? { tools: [...phase.tools] } : {}),
                     }
                   : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
@@ -386,18 +419,39 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
         requiresAuth: false,
         handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
           if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
+            sessionId: context.req.queries('sessionId'),
+          });
+          // A scope that fails to parse must not widen to the whole board.
+          if (!query.success) return c.json({ error: 'invalid_session_id' }, 400);
           await workItems.ensureReady();
-          const items = await workItems.listShared({
+          const board = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({
-            workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
-          });
+          const { sessionId: sessionIds } = query.data;
+          const items = sessionIds ? sessionCards(board, sessionIds) : board;
+          const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
+          const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
+          const snapshot = sessionIds
+            ? scopedSnapshot(items, toWireWorkItem, running, parked)
+            : boardSnapshot(board, toWireWorkItem, running, parked);
+          // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
+          const headers: Record<string, string> = {
+            ETag: snapshot.etag,
+            'Cache-Control': 'private, no-cache',
+            Vary: 'Accept-Encoding',
+          };
+          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) return c.body(null, 304, headers);
+          headers['Content-Type'] = 'application/json; charset=UTF-8';
+          if (/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) {
+            headers['Content-Encoding'] = 'gzip';
+            return c.body(new Uint8Array(await snapshot.gzipped()), 200, headers);
+          }
+          return c.body(snapshot.json, 200, headers);
         },
       }),
 
@@ -416,11 +470,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!query.success) return c.json({ error: 'invalid_metrics_range' }, 400);
           const { windowStart, windowEnd } = parseMetricsRange(query.data.from, query.data.to, new Date());
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const items = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
+          const boards = await this.#boards.load({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({
+            metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
+          });
         },
       }),
 
@@ -485,7 +545,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       ...buildAttentionRoutes({
         workItems,
         boards: this.#boards,
-        comments: this.deps.comments,
         liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
@@ -753,4 +812,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       }),
     ];
   }
+}
+
+/** A board's loop parts, by phase key, as the catalog reports them. */
+function catalogFlow(flow: FactoryRuleBoardFlow) {
+  return {
+    ...(flow.triage ? { triage: flow.triage } : {}),
+    ...(flow.build ? { build: flow.build } : {}),
+    ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
+    ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
+    ...(flow.completed ? { completed: flow.completed.phase } : {}),
+    ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
+  };
 }

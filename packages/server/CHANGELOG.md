@@ -1,5 +1,118 @@
 # @mastra/server
 
+## 1.83.0-alpha.8
+
+### Minor Changes
+
+- Add `PUT /api/observability/feedback/:feedbackId` for complete feedback replacement. Preserve the original ID, trace ID, and timestamp, and include every field to retain. Delayed POST retries keep existing feedback. Unsupported storage versions return 501. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```json
+  {
+    "feedback": {
+      "feedbackId": "feedback-1",
+      "traceId": "trace-123",
+      "timestamp": "2026-11-11T12:00:00.123Z",
+      "feedbackType": "thumbs",
+      "value": -1
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Add shared contracts for opt-in aggregated trace roots. OSS readers remain unsupported. ([#30054](https://github.com/mastra-ai/mastra/pull/30054))
+
+- Forward HTTP-created feedback and scores to configured exporters after local persistence, preserving IDs, timestamps, authors and review status without writing the local record twice. ([#30052](https://github.com/mastra-ai/mastra/pull/30052))
+
+- Fixed custom API routes such as `chatRoute` so a client disconnect stops the agent run and its model request. After garbage collection, the disconnect could stop reaching the run (seen on Node.js 22 and 24), so the model request kept running after the client was gone. Fixes [#29154](https://github.com/mastra-ai/mastra/issues/29154). ([#29617](https://github.com/mastra-ai/mastra/pull/29617))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
+## 1.83.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+
+## 1.83.0-alpha.6
+
+### Patch Changes
+
+- Fixed observational memory routes for gateway agents so users can't read each other's observations. `GET /api/memory/observational-memory`, `POST /api/memory/observational-memory/buffer-status`, and the observational memory details in `GET /api/memory/status` now check that the requested gateway thread belongs to the caller's resource and pass any FGA check (403 otherwise), use the server-resolved resource and thread IDs, and return no observations for a thread that no longer exists. As on the other memory routes, the caller's resource comes from `mapUserToResourceId` when it is configured; signing in alone does not tie a request to a resource. `GET /api/memory/status` stays best-effort when the gateway thread lookup fails. Without auth, the `resourceId` and `threadId` sent by the client are still used, but a request that pairs a thread with a different `resourceId` now gets 403, as it already does for local memory. ([#29926](https://github.com/mastra-ai/mastra/pull/29926))
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+
+## 1.83.0-alpha.5
+
+### Patch Changes
+
+- Fixed auth checks for custom API routes so they always follow the route that actually handles the request. Previously, overlapping routes, letter case, `HEAD` requests or percent-encoded paths could make auth check a different route than the one that ran, so a protected route could run without auth (for example, a `HEAD` request to a protected `GET` route, or `/%61dmin` for a protected `/admin`). ([#29325](https://github.com/mastra-ai/mastra/pull/29325))
+
+  Requests are now matched the way the custom route handler matches them: the first registered route that matches wins, paths are case-sensitive, trailing slashes count, and `HEAD` uses the `GET` route. Auth, permission and FGA checks use that route and its path params. If a path is registered as protected, or no custom route matches, it is not treated as public.
+
+- Experiment comparison now respects organization and project scoping. `mastra.datasets.compareExperiments` accepts `organizationId` and `projectId`, and the compare route passes them through, so experiments from another tenant are reported as not found. ([#29479](https://github.com/mastra-ai/mastra/pull/29479))
+
+  ```ts
+  const comparison = await mastra.datasets.compareExperiments({
+    experimentIds: ['exp-baseline', 'exp-candidate'],
+    organizationId: 'org_123',
+    projectId: 'proj_456',
+  });
+  ```
+
+  A scoped compare against an older `@mastra/core` that ignores those arguments is rejected. Comparisons that omit organization and project are unchanged.
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
+## 1.83.0-alpha.4
+
+### Minor Changes
+
+- Added text-search capability reporting and request forwarding for Platform integration. ([#29897](https://github.com/mastra-ai/mastra/pull/29897))
+
+### Patch Changes
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+
+## 1.83.0-alpha.3
+
+### Minor Changes
+
+- Added `cancelReaderOnResponseClose` and `writeWithBackpressure` to `@mastra/server/server-adapter` for custom adapters that write streams to a Node.js response. They stop reading a route's stream when the client disconnects, including a client that leaves before the route handler returns, and wait for a slow client instead of buffering the whole stream. ([#29669](https://github.com/mastra-ai/mastra/pull/29669))
+
+  ```ts
+  import { cancelReaderOnResponseClose, writeWithBackpressure } from '@mastra/server/server-adapter';
+
+  const reader = stream.getReader();
+  const readerCancel = cancelReaderOnResponseClose(reader, res);
+  try {
+    for (let next = await reader.read(); !next.done; next = await reader.read()) {
+      await writeWithBackpressure(res, next.value);
+    }
+  } finally {
+    readerCancel.dispose();
+    res.end();
+  }
+  ```
+
+  Fixed the agent controller session stream and the background task stream staying open forever when the client disconnected before the stream started.
+
+### Patch Changes
+
+- Fixed reconnecting to a finished durable or evented agent run from a server other than the one that ran it. While the run's output is still retained (30 seconds by default), `POST /agents/:agentId/observe` now replays it from any server that shares the cache, instead of returning 404. Access checks are unchanged: other users and callers without read access to the run's thread are still refused, stopping a run still requires write access, and the run returns 404 once its output is cleaned up. ([#29791](https://github.com/mastra-ai/mastra/pull/29791))
+
+- Fixed aborting a `DurableAgent` run (from `createDurableAgent`, including evented agents) that is waiting for tool approval when your app runs on more than one server. Before, aborting through `POST /agents/:agentId/runs/:runId/abort` only took effect on the server that handled it, so approving the tool call on another server still ran the tool. The route now records the cancellation in storage, and a later approval or resume of that run is refused with `409 Conflict` (`AGENT_RESUME_ABORTED_RUN`) on any server, so the tool doesn't run. Before, the same-server case returned a `500`. ([#29799](https://github.com/mastra-ai/mastra/pull/29799))
+
+  On storage adapters without concurrent updates, such as Redis, Valkey and LanceDB, the recorded cancellation is best effort: an abort and an approval that arrive at the same moment aren't serialized. Inngest agents aren't covered by this fix.
+
+- Updated dependencies [[`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/core@1.83.0-alpha.3
+
 ## 1.83.0-alpha.2
 
 ### Patch Changes

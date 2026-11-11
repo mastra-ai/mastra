@@ -13,13 +13,40 @@ import { createTool } from '../../../../tools';
 import { describeForAllEngines, runApprovalScenario, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 
+/**
+ * Resolves once the provider stream of a model call has finished. MODEL_INFERENCE is
+ * exported only when its processed step finishes (#29818), so tests that need the
+ * provider boundary watch the provider stream itself rather than the exported span.
+ */
+function watchProviderFinish() {
+  const descriptor = Object.getOwnPropertyDescriptor(ModelSpanTracker.prototype, 'wrapInferenceStream')!;
+  const original = descriptor.value as ModelSpanTracker['wrapInferenceStream'];
+  const finishedAt: number[] = [];
+  Object.defineProperty(ModelSpanTracker.prototype, 'wrapInferenceStream', {
+    ...descriptor,
+    value: function (this: ModelSpanTracker, stream: ReadableStream<any>) {
+      return original.call(this, stream).pipeThrough(
+        new TransformStream({
+          transform(chunk, controller) {
+            if (chunk?.type === 'finish') finishedAt.push(Date.now());
+            controller.enqueue(chunk);
+          },
+        }),
+      );
+    },
+  });
+  onTestFinished(() => Object.defineProperty(ModelSpanTracker.prototype, 'wrapInferenceStream', descriptor));
+  return finishedAt;
+}
+
 describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   const getMock = useLoopScenarioAimock();
 
   it.each([true, false])('keeps processed chunks inside their logical step (buffered=%s)', async buffered => {
     const { observability, ended } = capture();
+    const providerFinishedAt = watchProviderFinish();
     let bufferedText = '';
-    let releasedAfterInference = false;
+    let releasedAt: number | undefined;
     const { chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -37,10 +64,10 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
                   return null;
                 }
                 if (part.type === 'text-end') {
-                  // Hold content until provider completion has been exported. This makes
+                  // Hold content until the provider stream has finished. This makes
                   // the delayed-processor boundary deterministic rather than racing clocks.
-                  await expect.poll(() => ended(SpanType.MODEL_INFERENCE).length).toBe(1);
-                  releasedAfterInference = true;
+                  await expect.poll(() => providerFinishedAt.length).toBe(1);
+                  releasedAt = Date.now();
                   return { ...part, type: 'text-delta', payload: { ...part.payload, text: bufferedText } };
                 }
                 return part;
@@ -53,7 +80,12 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       },
       fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'Buffered reply' }),
     });
-    expect(releasedAfterInference).toBe(buffered);
+    expect(releasedAt !== undefined).toBe(buffered);
+    // The model call span stops at the provider finish, not at the delayed release,
+    // and carries the response as the processor released it.
+    const [inference] = ended(SpanType.MODEL_INFERENCE);
+    expect(inference?.output).toMatchObject({ text: 'Buffered reply' });
+    if (releasedAt !== undefined) expect(inference!.endTime!.getTime()).toBeLessThanOrEqual(releasedAt);
     expect(
       chunks
         ?.filter(chunk => chunk.type === 'text-delta')
@@ -680,7 +712,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
 
   it('records caller cancellation while a tool is executing', async () => {
     const { observability, ended } = capture();
+    const providerFinishedAt = watchProviderFinish();
     const controller = new AbortController();
+    let toolStartedAt: number | undefined;
     const { requests } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -699,7 +733,8 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
           execute: async () => {
             // Cancel tool work only after the provider has completed, so the
             // test also proves cancellation preserves an already settled child.
-            await expect.poll(() => ended(SpanType.MODEL_INFERENCE).at(-1)?.outcome).toBe('success');
+            toolStartedAt = Date.now();
+            await expect.poll(() => providerFinishedAt.length).toBe(1);
             controller.abort();
             throw new DOMException('Tool canceled', 'AbortError');
           },
@@ -712,6 +747,8 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
     expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
     expect(ended(SpanType.MODEL_INFERENCE)[0]).toMatchObject({ outcome: 'success', stopReason: null });
+    // Tool time is not part of the model call.
+    expect(ended(SpanType.MODEL_INFERENCE)[0]!.endTime!.getTime()).toBeLessThanOrEqual(toolStartedAt!);
     // Normal execution can enter the next attempt before observing cancellation;
     // it must abort that attempt without rewriting the completed provider call.
     for (const inference of ended(SpanType.MODEL_INFERENCE).slice(1)) {

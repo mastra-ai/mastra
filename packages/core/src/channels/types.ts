@@ -91,6 +91,22 @@ export interface ChannelAdapterBaseConfig {
   textDisplay?: 'show' | 'hidden';
 
   /**
+   * **Experimental. Slack only; ignored on other adapters.** Let the agent post
+   * Block Kit cards.
+   *
+   * When `true`, runs on the Slack adapter get a `render_card` tool. The agent
+   * calls it with a [json-render](https://json-render.dev) spec (cards, fields,
+   * tables, charts, images, link buttons) and the card is posted to the thread
+   * as Block Kit. Invalid specs come back to the agent as a list of issues so it
+   * can fix them and retry.
+   *
+   * Requires the optional `@json-render/chat` package to be installed.
+   *
+   * @default false
+   */
+  generativeUI?: boolean;
+
+  /**
    * What to do with buffered (not-yet-posted) reply text when a run is aborted.
    * Only affects the static (non-streaming) driver.
    * - `'flush'` (default) — post the partial buffered text before stopping.

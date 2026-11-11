@@ -131,28 +131,10 @@
     "mistral-medium-3-5:free"
   ],
   "reasoning": {
-    "gemini-3-6-flash": [
+    "claude-opus-4-7": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gpt-5-6-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "mistral-medium-3-5:free": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4-1-flash": [
@@ -161,9 +143,39 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "glm-4-7-flash:free": [
+    "gemini-3-6-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5-4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "nemotron-3-ultra-550b-a55b": [
       {
         "type": "toggle"
+      }
+    ],
+    "mistral-medium-3-5:free": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "gemini-3-5-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "hy3:free": [
@@ -172,28 +184,28 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "glm-5-3-flash": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3-8-max": [
+    "gpt-5-6-terra": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-4-7": [
+    "glm-5-2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
-    "claude-opus-4-8": [
+    "step-3-7-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "gpt-oss-20b": [
@@ -205,7 +217,131 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "step-3-7-flash": [
+    "nano-banana-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "grok-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nano-banana-2-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "grok-4-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nano-banana-2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "gemini-3-1-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-4-7-flash:free": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nemotron-3-super-120b-a12b:free": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
+      }
+    ],
+    "deepseek-v4-flash:free": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gemini-3-1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "gemini-3-7-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -223,63 +359,10 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "kimi-k3": [
+    "qwen3-8-max": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "grok-4-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "nano-banana-2-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "gemini-3-1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "grok-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
-    "gpt-5-6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-flash:free": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "nemotron-3-super-120b-a12b": [
@@ -288,60 +371,7 @@
         "values": ["none", "low", "medium"]
       }
     ],
-    "gemini-3-1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-sonnet-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "gemini-3-7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-opus-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nano-banana-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "nano-banana-2": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "gpt-5-4-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "claude-sonnet-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "deepseek-v4-pro": [
+    "deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -354,36 +384,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-5-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nemotron-3-super-120b-a12b:free": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium"]
-      }
-    ],
-    "gemini-3-5-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

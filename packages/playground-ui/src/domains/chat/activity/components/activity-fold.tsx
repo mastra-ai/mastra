@@ -109,14 +109,12 @@ export function ActivityFold({
           <span ref={box} className="relative flex min-w-0">
             <Shimmer ref={said} active={live} className="-my-1 flex min-w-0 items-center gap-2 overflow-hidden py-1">
               <Unwatched>
-                <ActivityLabel className={cn(prominent && 'text-body font-medium', UNTRUNCATED)}>
-                  {words.label}
-                </ActivityLabel>
+                <ActivityLabel className={cn(prominent && 'text-subheading', UNTRUNCATED)}>{words.label}</ActivityLabel>
                 {words.detail && (
                   <ActivityDetail className={cn(prominent && 'text-body', UNTRUNCATED)}>{words.detail}</ActivityDetail>
                 )}
                 {words.duration && (
-                  <ActivityLabel className={cn(prominent && 'text-body font-medium', 'tabular-nums')}>
+                  <ActivityLabel className={cn(prominent && 'text-subheading', 'tabular-nums')}>
                     {words.duration}
                   </ActivityLabel>
                 )}

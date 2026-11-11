@@ -380,7 +380,8 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "timeToFirstTokenMs": "<ms>"
+                              "timeToFirstTokenMs": "<ms>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
@@ -395,7 +396,11 @@
                                 "role": "user",
                                 "content": "Validate:   Hello! How are you?  "
                               }
-                            ]
+                            ],
+                            "output": {
+                              "text": "Mock V2 generate response",
+                              "toolCalls": []
+                            }
                           }
                         },
                         {
@@ -675,7 +680,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -690,7 +696,11 @@
                         "role": "user",
                         "content": "  Hello! How are you?  "
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 stream response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {
@@ -1052,7 +1062,8 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "timeToFirstTokenMs": "<ms>"
+                              "timeToFirstTokenMs": "<ms>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-3>",
@@ -1067,7 +1078,11 @@
                                 "role": "user",
                                 "content": "Summarize: Mock V2 stream response"
                               }
-                            ]
+                            ],
+                            "output": {
+                              "text": "Mock V2 generate response",
+                              "toolCalls": []
+                            }
                           }
                         },
                         {

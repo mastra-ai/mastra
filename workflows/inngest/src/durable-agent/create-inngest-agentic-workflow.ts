@@ -1,4 +1,4 @@
-import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
+import { buildDeferredStepFinishChunk, durableStopConditionSteps } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
   createDurableGoalStep,
@@ -19,6 +19,8 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  diffResponseMessages,
+  AGENT_STREAM_TOPIC,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   getRunRegistryEntry,
@@ -33,6 +35,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableToolCallInput,
+  ResponseMessagesCursor,
 } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
@@ -460,7 +463,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         const state = inputData as IterationState;
         const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+        const { step, inngestRunId } = engine as { step: BaseContext<Inngest>['step']; inngestRunId?: string };
 
         const emitStepFinish = async (isContinued: boolean) => {
           if (state.lastStepResult) {
@@ -470,16 +473,38 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
             // Carry the step's response messages so `onStepFinish(event).response.messages` and
-            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
-            try {
-              const list = new MessageList({}).deserialize(state.messageListState);
-              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
-            } catch (error) {
-              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
-            }
-            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
-              await emitChunkEvent(pubsub, state.runId, deferredChunk);
-            });
+            // `output.steps[i].response.messages` match the regular loop (#26780), as core does:
+            // only the part that changed since the previous step-finish, which readers rebuild. The
+            // diff is built inside the memoized step, so replays reuse it rather than recompute it,
+            // and the cursor it returns travels with the iteration state. Each Inngest function run
+            // (the first one, and each resume) starts with the whole list.
+            const previousCursor = state.responseMessagesCursor;
+            const nextCursor: ResponseMessagesCursor | null = await step.run(
+              `emit-step-finish-${state.runId}-${state.iterationCount}`,
+              async () => {
+                let cursor: ResponseMessagesCursor | null = null;
+                try {
+                  const list = new MessageList({}).deserialize(state.messageListState);
+                  const producer = `inngest:${state.runId}:${inngestRunId ?? ''}`;
+                  let sent: ResponseMessagesCursor | { producer: string } =
+                    previousCursor?.producer === producer ? previousCursor : { producer };
+                  // A reader that attaches mid-run on a bus that keeps no history can only place whole lists.
+                  if ('fingerprints' in sent && !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(state.runId))) {
+                    sent = { ...sent, fingerprints: [] };
+                  }
+                  const result = diffResponseMessages(sent, list.get.response.aiV5.model());
+                  deferredChunk.payload._durableResponseMessagesDiff = result.diff;
+                  cursor = result.cursor;
+                } catch (error) {
+                  mastra
+                    ?.getLogger?.()
+                    ?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+                }
+                await emitChunkEvent(pubsub, state.runId, deferredChunk);
+                return cursor;
+              },
+            );
+            if (nextCursor) state.responseMessagesCursor = nextCursor;
           }
         };
 
@@ -533,8 +558,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             return false;
           }
           // Hand stopWhen the full step content stream.steps reports, not the
-          // compacted snapshot records (tool-result outputs restored).
-          const steps = expandDurableSteps(state.accumulatedSteps) as any;
+          // compacted snapshot records, with AI SDK tool-result parts as toolResults.
+          const steps = durableStopConditionSteps(state.accumulatedSteps) as any;
           const conditions = await Promise.all(
             (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
               try {
@@ -620,7 +645,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               steps: state.accumulatedSteps,
             },
           });
-          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+          const textRewritten = !!lastStep && finishResult.outputTextChanged;
+          if (lastStep && finishResult.outputTextChanged) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;
           }
@@ -779,6 +805,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
+              ...(textRewritten && { textRewritten }),
             });
           }
 
@@ -791,12 +818,24 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
           const initData = getInitData() as DurableAgenticWorkflowInput;
+          // This step's span is internal and has no live parent, so a score read from it
+          // would name a span that is never stored.
+          const registry = getRunRegistryEntry(initData.runId, mastra);
+          const agentSpanData = registry?.resumeAgentSpanData ?? initData.agentSpanData;
+          const agentSpan =
+            registry?.resumeAgentSpan ??
+            registry?.agentSpan ??
+            (agentSpanData
+              ? mastra?.observability
+                  ?.getSelectedInstance({})
+                  ?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
+              : undefined);
           void executeDurableAgentScorers({
             initData,
             finalOutput: inputData,
             mastra,
             requestContext,
-            tracingContext,
+            tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
             loadStoredMessages: loadRunStoredMessages(params),
             // Call-time and defaultOptions scorers are parked in-process by instance; name
             // resolution alone misses any scorer Mastra never registered (#27579).

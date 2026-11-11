@@ -204,6 +204,19 @@ export function assertObservabilitySpanAggregateSupported(observabilityStore: Ob
   });
 }
 
+/** Reject unsupported search instead of silently returning unfiltered results. */
+export function assertObservabilityTextSearchSupported(
+  observabilityStore: ObservabilityStorage,
+  textSearch: string | undefined,
+  kind: 'span' | 'trace',
+) {
+  if (textSearch !== undefined && !getFeatures(observabilityStore)?.includes(`${kind}-query-text-search`)) {
+    throw new HTTPException(501, {
+      message: 'Text search is not supported by the configured observability store',
+    });
+  }
+}
+
 export function assertObservabilitySpanQuerySupported(observabilityStore: ObservabilityStorage) {
   if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE)) return;
 
@@ -659,6 +672,8 @@ export type ObservabilityStorageCapabilities = {
   discovery: ObservabilityDiscoveryCapabilities;
   deltaPolling: boolean;
   traceQuery: boolean;
+  traceQueryAggregatedRoots: boolean;
+  traceQueryTextSearch: boolean;
   traceQueryRootDuration: boolean;
   traceQueryContextIds: boolean;
   traceQueryContextFields: boolean;
@@ -674,6 +689,7 @@ export type ObservabilityStorageCapabilities = {
   threadQuery: boolean;
   threadQueryRows: boolean;
   spanQuery: boolean;
+  spanQueryTextSearch: boolean;
   spanQueryContextFields: boolean;
   spanQueryModelFields: boolean;
   spanQueryOutcomeFields: boolean;
@@ -684,6 +700,7 @@ export type ObservabilityStorageCapabilities = {
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
+  feedbackReplacement: boolean;
 };
 
 export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabilities = {
@@ -699,6 +716,8 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryAggregatedRoots: false,
+  traceQueryTextSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
   traceQueryContextFields: false,
@@ -714,6 +733,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanQueryTextSearch: false,
   spanAggregate: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
@@ -722,6 +742,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   spanQueryOutcomeFields: false,
   traceQueryOutcomeFields: false,
   feedback: false,
+  feedbackReplacement: false,
 };
 
 /**
@@ -787,6 +808,9 @@ export function getObservabilityStorageCapabilities(
     deltaPolling:
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
+    traceQueryAggregatedRoots: false,
+    traceQueryTextSearch:
+      traceQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('trace-query-text-search'),
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
     traceQueryContextIds:
@@ -819,6 +843,8 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
+    spanQueryTextSearch:
+      spanQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('span-query-text-search'),
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     spanQueryModelFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE),
     spanQueryOutcomeFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE),
@@ -836,6 +862,8 @@ export function getObservabilityStorageCapabilities(
         declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE)) &&
       declares(OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
+    feedbackReplacement:
+      newApiCore && declares('feedback-replacement') && typeof observabilityStore.replaceFeedback === 'function',
   };
 }
 
@@ -1048,6 +1076,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback',
     summary: 'Create feedback',
     description: 'Creates a single feedback record in the observability store',
+  },
+
+  REPLACE_FEEDBACK: {
+    method: 'PUT',
+    path: '/observability/feedback/:feedbackId',
+    summary: 'Replace feedback',
+    description: 'Replaces feedback while preserving its original identity and timestamp',
+    requiresPermission: 'observability:write',
   },
 
   DELETE_FEEDBACK: {

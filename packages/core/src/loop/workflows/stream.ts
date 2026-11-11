@@ -72,7 +72,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
           streamController.enqueue(chunk);
-          streamPublisher?.publish(chunk);
+          streamPublisher?.publish(chunk, messageList);
         },
         close: () => {
           try {
