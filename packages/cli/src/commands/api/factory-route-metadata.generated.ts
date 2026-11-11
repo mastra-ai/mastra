@@ -359,6 +359,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "id"
     ],
     "queryParams": [
+      "scope",
       "sessionId"
     ],
     "bodyParams": [],
@@ -3423,12 +3424,26 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "sessionId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "scope": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "$defs": {
+        "__schema0": {
           "type": "array",
           "items": {
             "type": "string",
             "minLength": 1,
             "maxLength": 512
           }
+        },
+        "__schema1": {
+          "type": "string",
+          "enum": [
+            "sessions"
+          ]
         }
       }
     },

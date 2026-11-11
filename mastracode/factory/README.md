@@ -58,7 +58,7 @@ function summarizeCard(card: Card) {
 
 Each work item has one board item. Factory's card-to-card parent link is `parentBoardItemId`. Provider sub-issue ancestry is not populated into `card.workItem.parentWorkItemId`; migrated work items leave that field null. Existing card IDs, comments, subscriptions, run bindings, and `/work-items/:id` URLs stay unchanged. The work item gets its own ID. For one release, work-item API responses also retain the legacy top-level title, external source, and merged metadata fields.
 
-`GET /web/factory/projects/:id/work-items` lists a project's cards. Pass `sessionId` to list only the cards holding that session and the cards related to them: a card's parent and children, and a pull request with the card whose session branch it was pushed from. Repeat `sessionId` to list several sessions' cards. The response has the same shape either way, and `runningSessionIds` and `parkedSessionIds` cover only the listed cards.
+`GET /web/factory/projects/:id/work-items` lists a project's cards. Pass `sessionId` to list only the cards holding that session and the cards related to them: a card's parent and children, and a pull request with the card whose session branch it was pushed from. Repeat `sessionId` to list several sessions' cards. Pass `scope=sessions` to list the cards holding any session and the cards related to them, without naming the sessions; it can't be combined with `sessionId`. The response has the same shape in every case, and `runningSessionIds` and `parkedSessionIds` cover only the listed cards.
 
 #### Migration and dry run
 

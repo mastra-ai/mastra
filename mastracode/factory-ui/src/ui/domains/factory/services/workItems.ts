@@ -301,16 +301,16 @@ export interface BoardSnapshot {
 }
 
 /**
- * List the org's work items for a Factory project: the whole board, or with `scope` only the
- * cards holding that session and the cards related to them.
+ * List the org's work items for a Factory project: the whole board, or with `only` the cards
+ * holding that session (`sessionId`) or any session (`scope`), and the cards related to them.
  */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-  scope?: { sessionId: string },
+  only?: { sessionId: string } | { scope: 'sessions' },
 ): Promise<BoardSnapshot> {
-  const query = scope ? `?${new URLSearchParams(scope)}` : '';
+  const query = only ? `?${new URLSearchParams(only)}` : '';
   const data = await requestJson<{
     workItems: WireWorkItem[];
     runningSessionIds?: string[];

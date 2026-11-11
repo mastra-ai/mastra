@@ -110,22 +110,39 @@ const CARD_PULL_REQUESTS: PullRequestFacts<Card> = {
 
 // One index per board version: `listShared` returns the same array until a card changes.
 const relatedCards = new WeakMap<readonly Card[], (card: Card) => Card[]>();
+// One list per board version, so every tab's sidebar shares its serialization.
+const cardsInSessions = new WeakMap<readonly Card[], Card[]>();
 
-/** The cards that hold one of the sessions, and the cards related to them, in board order. */
-function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Card[] {
+/** The cards `holds` picks, and the cards related to them, in board order. */
+function withRelatedCards(board: readonly Card[], holds: (card: Card) => boolean): Card[] {
   let relatedTo = relatedCards.get(board);
   if (!relatedTo) {
     relatedTo = relatedCardIndex(board, CARD_PULL_REQUESTS);
     relatedCards.set(board, relatedTo);
   }
-  const wanted = new Set(sessionIds);
   const picked = new Set<Card>();
   for (const card of board) {
-    if (!Object.values(card.sessions).some(session => wanted.has(session.sessionId))) continue;
+    if (!holds(card)) continue;
     picked.add(card);
     for (const related of relatedTo(card)) picked.add(related);
   }
   return board.filter(card => picked.has(card));
+}
+
+/** The cards that hold one of the sessions, and the cards related to them, in board order. */
+function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Card[] {
+  const wanted = new Set(sessionIds);
+  return withRelatedCards(board, card => Object.values(card.sessions).some(session => wanted.has(session.sessionId)));
+}
+
+/** The cards that hold any session, and the cards related to them, in board order. */
+function allSessionCards(board: readonly Card[]): Card[] {
+  let cards = cardsInSessions.get(board);
+  if (!cards) {
+    cards = withRelatedCards(board, card => Object.keys(card.sessions).length > 0);
+    cardsInSessions.set(board, cards);
+  }
+  return cards;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -424,20 +441,25 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if ('response' in resolved) return resolved.response;
           const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
             sessionId: context.req.queries('sessionId'),
+            scope: context.req.query('scope'),
           });
-          // A scope that fails to parse must not widen to the whole board.
-          if (!query.success) return c.json({ error: 'invalid_session_id' }, 400);
+          // A filter that fails to parse must not widen to the whole board.
+          if (!query.success) {
+            const field = query.error.issues[0]?.path[0];
+            return c.json({ error: field === 'scope' ? 'invalid_scope' : 'invalid_session_id' }, 400);
+          }
           await workItems.ensureReady();
           const board = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          const { sessionId: sessionIds } = query.data;
-          const items = sessionIds ? sessionCards(board, sessionIds) : board;
+          const { sessionId: sessionIds, scope } = query.data;
+          const part = scope ? allSessionCards(board) : sessionIds && sessionCards(board, sessionIds);
+          const items = part ?? board;
           const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
           const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
-          const snapshot = sessionIds
-            ? scopedSnapshot(items, toWireWorkItem, running, parked)
+          const snapshot = part
+            ? scopedSnapshot(part, toWireWorkItem, running, parked)
             : boardSnapshot(board, toWireWorkItem, running, parked);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           const headers: Record<string, string> = {

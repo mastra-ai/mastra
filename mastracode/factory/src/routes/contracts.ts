@@ -457,11 +457,18 @@ const sessionSchema = z.object({
   threadId: z.string().min(1).max(512),
 });
 
-/** Without `sessionId`, the list is the whole board. */
-const workItemListQuerySchema = z.object({
-  /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
-  sessionId: z.array(sessionSchema.shape.sessionId).optional(),
-});
+/** Without `sessionId` or `scope`, the list is the whole board. */
+const workItemListQuerySchema = z
+  .object({
+    /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
+    sessionId: z.array(sessionSchema.shape.sessionId).optional(),
+    /** `sessions` narrows the list to the cards that hold any session and the cards related to them. */
+    scope: z.enum(['sessions']).optional(),
+  })
+  .refine(query => !(query.scope && query.sessionId), {
+    path: ['scope'],
+    message: 'Send scope or sessionId, not both',
+  });
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
