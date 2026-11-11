@@ -69,7 +69,7 @@ describe('DockerSandboxesSandbox', () => {
     expect(await created.sandbox.start()).toEqual({ outcome: 'created' });
     expect(created.client.create).toHaveBeenCalledWith(
       expect.objectContaining({ image: 'ubuntu:24.04', displayName: 'stable-id' }),
-      { idempotencyKey: 'stable-id' },
+      { idempotencyKey: expect.any(String) },
     );
     expect(created.sandbox.sandboxId).toBe('sandboxes/remote-id');
     expect(created.sandbox.getInfo().createdAt).toEqual(new Date('2026-01-01'));
@@ -124,9 +124,15 @@ describe('DockerSandboxesSandbox', () => {
     const replacement = { ...remote, name: 'sandboxes/replacement' };
     replacement.waitUntilRunning = vi.fn().mockResolvedValue(replacement);
     client.get.mockRejectedValue(new NotFoundError({ code: 'not_found', message: 'sandbox not found' }, 404));
-    client.create.mockResolvedValue(replacement);
+    const keys = new Set<string>();
+    client.create.mockImplementation(async (_input, { idempotencyKey }) => {
+      if (keys.has(idempotencyKey)) return remote;
+      keys.add(idempotencyKey);
+      return replacement;
+    });
 
     expect((await sandbox.executeCommand('echo', ['recovered'])).success).toBe(true);
+    expect(client.create.mock.calls[0][1].idempotencyKey).not.toBe(client.create.mock.calls[1][1].idempotencyKey);
     expect(client.get).toHaveBeenCalledWith(remote.name);
     expect(client.create).toHaveBeenCalledTimes(2);
     expect(sandbox.sandboxId).toBe(replacement.name);
@@ -134,6 +140,16 @@ describe('DockerSandboxesSandbox', () => {
       expect.objectContaining({ args: ['sh', '-lc', 'echo recovered'] }),
       expect.anything(),
     );
+  });
+
+  it('reuses the creation key when retrying an uncertain create failure', async () => {
+    const { sandbox, client, remote } = setup();
+    client.create.mockRejectedValueOnce(new Error('request interrupted'));
+    await expect(sandbox.start()).rejects.toThrow('request interrupted');
+    client.create.mockResolvedValue(remote);
+
+    expect(await sandbox.start()).toEqual({ outcome: 'created' });
+    expect(client.create.mock.calls[0][1].idempotencyKey).toBe(client.create.mock.calls[1][1].idempotencyKey);
   });
 
   it('does not recreate a missing explicitly selected VM or hide other lookup failures', async () => {

@@ -37,6 +37,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
   private readonly image: string;
   private readonly environment?: Record<string, string>;
   private readonly pinnedSandboxId: boolean;
+  private creationKey = randomUUID();
   private remoteId?: string;
   private sandbox?: Sandbox;
   private createdAt = new Date();
@@ -64,6 +65,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
         if (!(error instanceof NotFoundError) || this.pinnedSandboxId) throw error;
         this.remoteId = undefined;
         this.sandbox = undefined;
+        this.creationKey = randomUUID();
       }
     }
     for await (const sandbox of this.client.all()) {
@@ -85,7 +87,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
   protected async create(): Promise<void> {
     const sandbox = await this.client.create(
       { image: this.image, displayName: this.id, environment: this.environment },
-      { idempotencyKey: this.id },
+      { idempotencyKey: this.creationKey },
     );
     await this.connect(sandbox);
   }
