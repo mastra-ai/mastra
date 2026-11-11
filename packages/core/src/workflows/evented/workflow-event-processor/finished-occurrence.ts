@@ -35,15 +35,13 @@ function sameRecord(stored: StoredRecord, known: StoredRecord | undefined): bool
 }
 
 /**
- * Whether `record` ends its occurrence. With step guards (records stamped
- * with `startedBy`), a failed attempt is saved before its retry is published
- * and every loop iteration saves the body's result, so those records do not
- * end the occurrence.
+ * Whether `record` ends its occurrence. On a store with step guards a failed
+ * attempt is saved before its retry is published, and every loop iteration
+ * saves the body's result, so there those records do not end the occurrence.
  */
-function isFinal(record: StoredRecord | undefined, step: LeafEntry): record is StoredRecord {
+function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: boolean): record is StoredRecord {
   if (!record || typeof record !== 'object' || !TERMINAL_STATUSES.has(record.status!)) return false;
-  const stamped = !!record.metadata?.startedBy;
-  return !(stamped && (record.status === 'failed' || step.type === 'loop'));
+  return !(stepGuards && (record.status === 'failed' || step.type === 'loop'));
 }
 
 /**
@@ -67,9 +65,9 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry): record is S
  * continues only when a restart dispatched it, since the restart is then what
  * recovers the run. Any other finished delivery is dropped.
  *
- * Records stamped by the store's step guards are left to those guards on the
- * deliveries they arbitrate (`guarded`), so a delivery never continues the run
- * through both paths.
+ * `stepGuards` tells whether the store has workflow step guards. Records they
+ * stamped are left to the guards on the deliveries the guards arbitrate
+ * (`guarded`), so a delivery never continues the run through both paths.
  */
 export function finishedOccurrence({
   step,
@@ -77,6 +75,7 @@ export function finishedOccurrence({
   stepResults,
   restart,
   snapshot,
+  stepGuards,
   guarded,
 }: {
   step: LeafEntry;
@@ -84,6 +83,7 @@ export function finishedOccurrence({
   stepResults: Record<string, StepResult<any, any, any, any>> | undefined;
   restart: RestartExecutionParams | undefined;
   snapshot: WorkflowRunState | null | undefined;
+  stepGuards: boolean;
   guarded: boolean;
 }): FinishedOccurrence {
   const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
@@ -100,10 +100,10 @@ export function finishedOccurrence({
   if (step.type === 'foreach') {
     // A foreach restart re-queues only the items that had not finished.
     const item = foreachItem(stored, executionPath[1]);
-    if (restartTarget || !isFinal(item, step)) return 'run';
+    if (restartTarget || !isFinal(item, step, stepGuards)) return 'run';
     return sameRecord(item, foreachItem(known, executionPath[1])) ? 'run' : 'drop';
   }
-  if (!isFinal(stored, step)) return 'run';
+  if (!isFinal(stored, step, stepGuards)) return 'run';
   // A step a restart dispatches was active when the restart read the run, so a terminal record is its own result.
   if (!restartTarget && sameRecord(stored, known)) return 'run';
   // Whoever ended the run also took it past this step.
