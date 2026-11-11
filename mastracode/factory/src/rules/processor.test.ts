@@ -1748,7 +1748,7 @@ describe('FactoryPhaseStateProcessor', () => {
 
   // Each model step used to read every card on the board to find these, and any card change on a
   // busy board refetched them all for every bound session.
-  it("names the card's parent, then its newest children, without reading the rest of the board", async () => {
+  it("names the card's parent and children, newest first, without reading the rest of the board", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const card = (title: string, externalId: string, parentWorkItemId?: string) =>
       storage.upsert({
@@ -1785,7 +1785,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const signal = await processor.computeStateSignal(stateArgs(requestContext()));
 
     expect(String(signal?.contents)).toContain(
-      'Linked items: github-issue Settings epic; github-issue Newer child; github-issue Older child',
+      'Linked items: github-issue Newer child; github-issue Older child; github-issue Settings epic',
     );
     expect(listShared).not.toHaveBeenCalled();
   });

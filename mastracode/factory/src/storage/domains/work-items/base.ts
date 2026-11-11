@@ -2061,8 +2061,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * The cards linked to `item` in its project: its parent, then its newest children. Read by id
-   * and by the parent index, so the cost does not grow with the board.
+   * The cards linked to `item` in its project, its parent and its children, newest first as
+   * {@link list} orders them. Read by id and by the parent index, so the cost does not grow with
+   * the board.
    */
   async listLinked({ item, limit }: { item: Card; limit: number }): Promise<Card[]> {
     const cards = this.#cards(this.#db, { transaction: false });
@@ -2080,7 +2081,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         },
       ),
     ]);
-    return (parent ? [parent, ...children] : children).slice(0, limit).map(toWorkItem);
+    return (parent ? [parent, ...children] : children)
+      .map(toWorkItem)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1))
+      .slice(0, limit);
   }
 
   async listByIds({
