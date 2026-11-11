@@ -117,6 +117,30 @@ describe('AgentController.queryThreads({ limit })', () => {
   });
 });
 
+it('pages past a run of newer forks in one or two reads', async () => {
+  const storage = new InMemoryStore();
+  const memory = await seed(storage, [
+    ...Array.from({ length: 60 }, (_, i) => ({
+      id: `fork${i}`,
+      updatedAt: new Date(Date.UTC(2026, 0, 2, 1, i)),
+      metadata: { forkedSubagent: true, projectPath: '/a' },
+    })),
+    { id: 'parent', updatedAt: new Date(Date.UTC(2026, 0, 2)), metadata: { projectPath: '/a' } },
+  ]);
+  const controller = await createController(storage);
+  const list = memory.listThreads.bind(memory);
+  let calls = 0;
+  memory.listThreads = async input => {
+    calls++;
+    return list(input);
+  };
+
+  const threads = await controller.queryThreads({ resourceId: 'r', metadata: { projectPath: '/a' }, limit: 1 });
+
+  expect(threads.map(t => t.id)).toEqual(['parent']);
+  expect(calls).toBeLessThanOrEqual(2);
+});
+
 describe('session recovery reads one thread when storage applies the scope', () => {
   it.each([
     { name: 'a matching thread among many others', threads: ['other', 'match'], recovers: true },
@@ -150,6 +174,6 @@ describe('session recovery reads one thread when storage applies the scope', () 
       );
 
     expect(result).toBe(recovers);
-    expect(calls[0]).toMatchObject({ filter: { resourceId: 'r', metadata: { projectPath: '/a' } }, perPage: 1 });
+    expect(calls[0]).toMatchObject({ filter: { resourceId: 'r', metadata: { projectPath: '/a' } }, perPage: 50 });
   });
 });

@@ -190,6 +190,8 @@ const TITLE_WINDOW_MESSAGES = 20;
  * await controller.sendMessage({ content: "Hello!" })
  * ```
  */
+
+const THREAD_PAGE_FLOOR = 50;
 export class AgentController<TState = {}> {
   readonly id: string;
 
@@ -1484,11 +1486,12 @@ export class AgentController<TState = {}> {
       // Forked subagent threads are dropped after the read, so keep paging until
       // `limit` threads remain or the resource runs out.
       // Keyed by id: a thread updated between pages can move up and be read twice.
+      // Pages hold at least THREAD_PAGE_FLOOR rows so a run of newer forks costs one or two reads, not one each.
       const byId = new Map<string, StorageThreadType>();
       for (let page = 0; byId.size < limit; page++) {
         const result = await memoryStorage.listThreads({
           filter,
-          perPage: limit,
+          perPage: Math.max(limit, THREAD_PAGE_FLOOR),
           page,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });

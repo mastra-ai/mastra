@@ -2123,7 +2123,7 @@ describe('agent-controller routes', () => {
       // The newest page is read in storage, not every thread of the resource.
       expect(listThreads).toHaveBeenCalled();
       for (const [input] of listThreads.mock.calls) {
-        expect(input).toMatchObject({ perPage: 2, orderBy: { field: 'updatedAt', direction: 'DESC' } });
+        expect(input).toMatchObject({ perPage: 50, orderBy: { field: 'updatedAt', direction: 'DESC' } });
       }
     });
 
