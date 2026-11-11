@@ -1104,5 +1104,63 @@ describe('MessageRow', () => {
       expect(screen.getByText('Here is your chart.')).toBeTruthy();
       expect(screen.queryByText('Revenue')).toBeNull();
     });
+
+    it('binds state keys that contain a slash or a tilde to the key itself, as they stream in', () => {
+      const pricing = (...state: MastraDBMessage['content']['parts']) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Pricing.' },
+              patch('add', '/root', 'main'),
+              patch('add', '/elements/main', { type: 'Stack', props: {}, children: ['per', 'about'] }),
+              patch('add', '/elements/per', {
+                type: 'Text',
+                props: { text: { $state: '/price~1seat' } },
+                children: [],
+              }),
+              patch('add', '/elements/about', { type: 'Text', props: { text: { $state: '/~0note' } }, children: [] }),
+              ...state,
+            ],
+          },
+        });
+      const { rerender } = render(<MessageRow message={pricing()} />, { wrapper: Providers });
+
+      rerender(
+        <MessageRow
+          message={pricing(patch('add', '/state/price~1seat', '$12'), patch('add', '/state/~0note', 'Billed yearly'))}
+        />,
+      );
+
+      expect(screen.getByText('$12')).toBeTruthy();
+      expect(screen.getByText('Billed yearly')).toBeTruthy();
+    });
+
+    it.each([
+      {
+        problem: 'an element map a patch replaced with null',
+        parts: [patch('add', '/root', 'main'), patch('add', '/elements', null)],
+      },
+      {
+        problem: 'a component of the same name with props studioCatalog does not have',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', { type: 'Card', props: { heading: 'Revenue' }, children: [] }),
+        ],
+      },
+      {
+        problem: 'an element that contains itself',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', { type: 'Stack', props: {}, children: ['inner'] }),
+          patch('add', '/elements/inner', { type: 'Stack', props: {}, children: ['main'] }),
+        ],
+      },
+    ])('shows the reply without an interface that has $problem', ({ parts }) => {
+      renderRow(baseMessage({ content: { format: 2, parts: [{ type: 'text', text: 'Here you go.' }, ...parts] } }));
+
+      expect(screen.getByText('Here you go.')).toBeTruthy();
+      expect(screen.queryByRole('group', { name: 'Interface' })).toBeNull();
+    });
   });
 });

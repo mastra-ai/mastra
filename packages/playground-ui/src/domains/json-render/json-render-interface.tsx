@@ -93,10 +93,13 @@ const { registry } = defineRegistry(studioCatalog, {
   },
 });
 
+/** The JSON Pointer to a top-level state key, escaped so a key like `price/seat` stays one key. */
+const pointerTo = (key: string) => `/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+
 /** The store writes that make it hold `state`, clearing the keys `state` no longer has. */
 const writesFor = (current: Record<string, unknown>, state: Record<string, unknown>) => ({
-  ...Object.fromEntries(Object.keys(current).map(key => [`/${key}`, undefined])),
-  ...Object.fromEntries(Object.entries(state).map(([key, value]) => [`/${key}`, value])),
+  ...Object.fromEntries(Object.keys(current).map(key => [pointerTo(key), undefined])),
+  ...Object.fromEntries(Object.entries(state).map(([key, value]) => [pointerTo(key), value])),
 });
 
 export interface JsonRenderInterfaceProps {
@@ -114,7 +117,9 @@ export function JsonRenderInterface({ spec }: JsonRenderInterfaceProps) {
 
   return (
     <JSONUIProvider registry={registry} store={store}>
-      <Renderer spec={spec} registry={registry} />
+      <div role="group" aria-label="Interface">
+        <Renderer spec={spec} registry={registry} />
+      </div>
     </JSONUIProvider>
   );
 }
