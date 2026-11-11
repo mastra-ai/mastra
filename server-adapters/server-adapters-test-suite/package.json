@@ -27,6 +27,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
+    "@mastra/observability": "workspace:*",
     "@mastra/server": "workspace:*",
     "@types/node": "22.19.15",
     "tsdown": "0.23.1",

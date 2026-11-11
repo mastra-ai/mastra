@@ -337,8 +337,8 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the scored target when available.
    * Include `spanId` when the score is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Otherwise, each exporter resolves context at its own destination.
    */
   addScore?(args: {
     traceId?: string;
@@ -353,8 +353,8 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the feedback target when available.
    * Include `spanId` when the feedback is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Otherwise, each exporter resolves context at its own destination.
    */
   addFeedback?(args: {
     traceId?: string;
@@ -362,6 +362,9 @@ export interface ObservabilityEntrypoint {
     correlationContext?: CorrelationContext;
     feedback: FeedbackInput;
   }): Promise<void>;
+
+  /** @internal Notify exporters of an HTTP-created record already persisted by the server. */
+  __exportPersistedEvent?(event: ScoreEvent | FeedbackEvent): Promise<void>;
 
   /**
    * Returns the proxy responsible for client observability (W3C trace

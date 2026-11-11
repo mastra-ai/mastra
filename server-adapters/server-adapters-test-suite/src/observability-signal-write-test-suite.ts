@@ -1,7 +1,10 @@
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { Mastra } from '@mastra/core';
 import { SpanType } from '@mastra/core/observability';
 import { EntityType, InMemoryStore } from '@mastra/core/storage';
 import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 export interface ObservabilitySignalWriteTestConfig {
@@ -413,5 +416,157 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       }
       expect(await list()).toEqual([expect.objectContaining({ [idField]: 'historical', traceId: null })]);
     });
+  });
+  describe.each(['feedback', 'scores'] as const)('%s HTTP export delivery', collection => {
+    it.each([
+      { contextMode: 'provided', authenticated: true, emptyContext: false },
+      { contextMode: 'resolve', authenticated: true, emptyContext: false },
+      { contextMode: 'provided', authenticated: false, emptyContext: false },
+      { contextMode: 'provided', authenticated: false, emptyContext: true },
+    ] as const)(
+      'persists and exports the same $contextMode record (authenticated: $authenticated, empty context: $emptyContext) without a second storage write',
+      async ({ contextMode, authenticated, emptyContext }) => {
+        const received: { path: string; body: Record<string, Record<string, any>[]> }[] = [];
+        const receiver = createServer(async (req, res) => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(Buffer.from(chunk));
+          received.push({ path: req.url!, body: JSON.parse(Buffer.concat(chunks).toString()) });
+          res.writeHead(204).end();
+        });
+        receiver.listen(0, '127.0.0.1');
+        await once(receiver, 'listening');
+        const address = receiver.address();
+        if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+        const storage = new InMemoryStore();
+        const store = (await storage.getStore('observability'))!;
+        const isFeedback = collection === 'feedback';
+        const field = isFeedback ? 'feedback' : 'score';
+        const idField = isFeedback ? 'feedbackId' : 'scoreId';
+        const batch = vi.spyOn(store, isFeedback ? 'batchCreateFeedback' : 'batchCreateScores');
+        const observability = new Observability({
+          configs: {
+            default: {
+              serviceName: 'http-create-test',
+              exporters: [
+                new MastraStorageExporter(),
+                new MastraPlatformExporter({
+                  endpoint: `http://127.0.0.1:${address.port}`,
+                  accessToken: 'test',
+                  resolveFromEnv: false,
+                }),
+              ],
+            },
+          },
+        });
+        const mastra = new Mastra({
+          storage,
+          observability,
+          logger: false,
+          server: {
+            auth: {
+              authenticateToken: async () => ({}),
+              authorize: async (_path, _method, _user, c) => {
+                if (!emptyContext) c.get('requestContext').set('organizationId', 'trusted-org');
+                if (authenticated) c.get('requestContext').set('mastra__user', { id: 'reviewer' });
+                return true;
+              },
+            },
+          },
+        });
+        const server = await startServer(mastra);
+        try {
+          if (contextMode === 'resolve')
+            await store.createSpan({
+              span: {
+                traceId: 'http-trace',
+                spanId: 'root',
+                parentSpanId: null,
+                name: 'root',
+                spanType: SpanType.AGENT_RUN,
+                isEvent: false,
+                startedAt: new Date(),
+                endedAt: new Date(),
+                organizationId: 'trusted-org',
+                userId: 'span-user',
+                tags: ['stored-tag'],
+                metadata: { inherited: true },
+              },
+            });
+          const timestamp = '2026-11-11T10:00:00.123Z';
+          const response = await server.request(`/api/observability/${collection}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', authorization: 'Bearer test' },
+            body: JSON.stringify({
+              contextMode,
+              [field]: {
+                [idField]: 'http-record',
+                timestamp,
+                traceId: 'http-trace',
+                ...(!emptyContext
+                  ? { organizationId: 'untrusted-org', userId: 'span-user', tags: ['provided-tag'] }
+                  : {}),
+                metadata: { explicit: true, userId: 'metadata-user' },
+                ...(isFeedback
+                  ? {
+                      feedbackType: 'comment',
+                      value: 'actionable',
+                      feedbackUserId: authenticated ? 'spoofed' : null,
+                      reviewStatus: 'reviewed',
+                    }
+                  : { scorerId: 'quality', score: 0.9 }),
+              },
+            }),
+          });
+          expect(response.status, await response.clone().text()).toBe(200);
+          expect(await response.json()).toMatchObject({ success: true, data: { [idField]: 'http-record', timestamp } });
+          await observability.shutdown();
+          const rows = isFeedback ? (await store.listFeedback({})).feedback : (await store.listScores({})).scores;
+          expect(rows).toHaveLength(1);
+          expect(batch).not.toHaveBeenCalled();
+          const expectedContext = emptyContext
+            ? {}
+            : {
+                organizationId: 'trusted-org',
+                userId: 'span-user',
+                tags: [contextMode === 'resolve' ? 'stored-tag' : 'provided-tag'],
+              };
+          expect(rows[0]).toMatchObject({
+            [idField]: 'http-record',
+            timestamp: new Date(timestamp),
+            ...expectedContext,
+          });
+          const writes = received.filter(item => item.path === `/ai/${collection}/publish`);
+          expect(writes).toHaveLength(1);
+          expect(writes[0]!.path).toBe(`/ai/${collection}/publish`);
+          expect(writes[0]!.body[collection]!).toHaveLength(1);
+          const exported = writes[0]!.body[collection]![0]!;
+          expect(exported).toMatchObject({
+            [idField]: 'http-record',
+            timestamp,
+            traceId: 'http-trace',
+            correlationContext: expectedContext,
+            metadata: { explicit: true },
+          });
+          if (emptyContext) expect(exported.correlationContext).toEqual({});
+          if (contextMode === 'resolve') expect(exported.metadata).toMatchObject({ inherited: true });
+          if (isFeedback) {
+            expect(rows[0]).toMatchObject({
+              feedbackUserId: authenticated ? 'reviewer' : null,
+              reviewStatus: 'reviewed',
+            });
+            expect(exported).toMatchObject({
+              feedbackUserId: authenticated ? 'reviewer' : null,
+              reviewStatus: 'reviewed',
+            });
+            expect(exported).not.toHaveProperty('userId');
+          }
+        } finally {
+          await observability.shutdown();
+          await server.close();
+          receiver.closeAllConnections();
+          await new Promise<void>(resolve => receiver.close(() => resolve()));
+        }
+      },
+    );
   });
 }
