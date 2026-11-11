@@ -37,6 +37,7 @@ import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
+import { ChatChannelGenerativeUIProcessor, GENERATIVE_UI_PROCESSOR_ID, RENDER_CARD_TOOL_NAME } from './generative-ui';
 import {
   buildInlineMediaCheck,
   extractUrls,
@@ -321,6 +322,8 @@ export class AgentChannels {
     this.resolveThreadId = config.resolveThreadId;
     this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
+    // The card itself is the output; a tool card for the call would duplicate it.
+    if (this.generativeUIEnabled) this.channelToolNames.add(RENDER_CARD_TOOL_NAME);
   }
 
   /**
@@ -1276,10 +1279,20 @@ export class AgentChannels {
    * - Skipped if the user already added a processor with the same id.
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
-    if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
-    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
-    if (hasProcessor) return [];
-    return [new ChatChannelProcessor(this)];
+    const has = (id: string) => configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+    const processors: InputProcessor[] = [];
+    if (this.channelConfig.threadContext?.addSystemMessage !== false && !has('chat-channel-context')) {
+      processors.push(new ChatChannelProcessor(this));
+    }
+    if (this.generativeUIEnabled && !has(GENERATIVE_UI_PROCESSOR_ID)) {
+      processors.push(new ChatChannelGenerativeUIProcessor(this));
+    }
+    return processors;
+  }
+
+  /** Whether the Slack adapter opted into `generativeUI` (the only platform it supports). */
+  private get generativeUIEnabled(): boolean {
+    return this.adapterConfigs.slack?.generativeUI === true;
   }
 
   /**
@@ -2229,6 +2242,7 @@ export class AgentChannels {
       formatError: adapterConfig?.formatError,
       textFormat: adapterConfig?.textFormat,
       textDisplay: adapterConfig?.textDisplay,
+      generativeUI: platform === 'slack' && adapterConfig?.generativeUI === true,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };

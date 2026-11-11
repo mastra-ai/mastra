@@ -4,6 +4,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
@@ -76,31 +77,108 @@ function createProjectPathResolver(projectPath: string): (path: string) => strin
   };
 }
 
+// Keys count towards the limit too: a path a folder lacks is cached as an empty listing.
+const GIT_OBJECT_CACHE_MAX_CHARS = 16 * 1024 * 1024;
+const gitObjectOutputs = new Map<string, string>();
+let gitObjectCacheChars = 0;
+
+// The cache is shared by every checkout in the process, so a read is kept only once it is known to
+// match its id: git checks the tree it is asked to list, and `matchesId` covers what git does not check.
+// A blobless clone fetches file content over the network, so a failed read is never cached.
+function gitObjectRead(
+  projectPath: string,
+  args: string[],
+  matchesId: (output: Buffer) => boolean = () => true,
+): string | null {
+  const key = args.join('\0');
+  const cached = gitObjectOutputs.get(key);
+  if (cached !== undefined) return cached;
+  try {
+    const raw = execFileSync('git', ['--no-replace-objects', '-C', projectPath, '--literal-pathspecs', ...args], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 1024 * 1024,
+    });
+    if (!matchesId(raw)) return null;
+    const output = raw.toString('utf-8');
+    gitObjectOutputs.set(key, output);
+    gitObjectCacheChars += key.length + output.length;
+    for (const [oldest, evicted] of gitObjectOutputs) {
+      if (gitObjectCacheChars <= GIT_OBJECT_CACHE_MAX_CHARS) break;
+      gitObjectOutputs.delete(oldest);
+      gitObjectCacheChars -= oldest.length + evicted.length;
+    }
+    return output;
+  } catch {
+    return null;
+  }
+}
+
+function blobMatchesId(id: string, content: Buffer): boolean {
+  const hash = createHash(id.length === 40 ? 'sha1' : 'sha256');
+  return hash.update(`blob ${content.length}\0`).update(content).digest('hex') === id;
+}
+
+function createGitRefLookup(projectPath: string, ref: string) {
+  // Resolved on first use and kept, so a lookup reads the ref as it stood then: build one per model step.
+  let trees: string[] | undefined;
+  const resolveTrees = (): string[] => {
+    // A ref name never holds a space or control character, and each line of the batch below names
+    // one object, so a line break in `ref` would add names of its own, such as the checkout's `HEAD`.
+    if ([...ref].some(char => char <= ' ' || char === '\x7f')) return [];
+    try {
+      const output = execFileSync('git', ['-C', projectPath, 'cat-file', '--batch-check=%(objectname)'], {
+        encoding: 'utf-8',
+        input: `origin/${ref}^{tree}\n${ref}^{tree}\n`,
+        stdio: ['pipe', 'pipe', 'ignore'],
+      });
+      return [...new Set(output.split('\n').filter(line => /^[0-9a-f]+$/.test(line)))];
+    } catch {
+      return [];
+    }
+  };
+  // One folder level per call: git hash-checks the tree it lists, not the trees it walks through.
+  const entryAt = (tree: string, rel: string): string[] => {
+    let entry = ['', 'tree', tree];
+    for (const name of rel.split('/')) {
+      if (entry[1] !== 'tree') return [];
+      entry = gitObjectRead(projectPath, ['ls-tree', '--full-tree', entry[2]!, '--', name])?.split(/\s/) ?? [];
+    }
+    return entry;
+  };
+  return {
+    type: (rel: string): string | null => {
+      for (const tree of (trees ??= resolveTrees())) {
+        const [, type] = entryAt(tree, rel);
+        if (type) return type;
+      }
+      return null;
+    },
+    show: (rel: string): string | null => {
+      for (const tree of (trees ??= resolveTrees())) {
+        const [, type, blob] = entryAt(tree, rel);
+        if (type !== 'blob' || !blob) continue;
+        const content = gitObjectRead(projectPath, ['cat-file', 'blob', blob], raw => blobMatchesId(blob, raw));
+        if (content !== null) return content;
+      }
+      return null;
+    },
+  };
+}
+
 /**
  * Create a reader that serves instruction files from a git ref instead of the
  * working tree. Paths are still addressed as working-tree paths under
- * `projectPath`; content comes from `git show <ref>:<relpath>` so an untrusted
+ * `projectPath`; content comes from the blob at `<ref>:<relpath>` so an untrusted
  * checkout (e.g. a PR branch under review) cannot influence what is loaded.
  * Tries `origin/<ref>` first (remote truth), then the local ref. Any git
  * failure (missing ref, missing file, no repo) reports the file as absent.
  */
 export function createGitRefInstructionReader(projectPath: string, ref: string): InstructionFileReader {
   const toRelative = createProjectPathResolver(projectPath);
+  const lookup = createGitRefLookup(projectPath, ref);
   const show = (path: string): string | null => {
     const rel = toRelative(path);
-    if (!rel) return null;
-    for (const candidate of [`origin/${ref}`, ref]) {
-      try {
-        return execFileSync('git', ['-C', projectPath, 'show', `${candidate}:${rel}`], {
-          encoding: 'utf-8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-          maxBuffer: 1024 * 1024,
-        });
-      } catch {
-        // Ref or file missing at this candidate — try the next one.
-      }
-    }
-    return null;
+    return rel ? lookup.show(rel) : null;
   };
   return {
     ref,
@@ -129,22 +207,12 @@ export function createGitRefReminderReader(
   readFile: (path: string) => string;
   getPathIdentity: (path: string) => string;
 } {
-  const gitReader = createGitRefInstructionReader(projectPath, ref);
   const toRelative = createProjectPathResolver(projectPath);
   const canonicalRoot = realpathOrResolved(projectPath);
+  const lookup = createGitRefLookup(projectPath, ref);
   const objectType = (rel: string): string | null => {
     if (rel === '') return 'tree'; // project root
-    for (const candidate of [`origin/${ref}`, ref]) {
-      try {
-        return execFileSync('git', ['-C', projectPath, 'cat-file', '-t', `${candidate}:${rel}`], {
-          encoding: 'utf-8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-        }).trim();
-      } catch {
-        // Ref or object missing at this candidate — try the next one.
-      }
-    }
-    return null;
+    return lookup.type(rel);
   };
   return {
     pathExists: path => {
@@ -166,7 +234,9 @@ export function createGitRefReminderReader(
     readFile: path => {
       const rel = toRelative(path);
       if (rel === null) return readFileSync(path, 'utf-8');
-      return gitReader.read(path);
+      const content = rel ? lookup.show(rel) : null;
+      if (content === null) throw new Error(`Not found at ref ${ref}: ${path}`);
+      return content;
     },
     getPathIdentity: path => {
       const rel = toRelative(path);

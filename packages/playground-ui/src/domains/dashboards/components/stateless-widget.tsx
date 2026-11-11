@@ -1,17 +1,11 @@
-import type { DashboardWidget } from '@mastra/client-js';
+import type { ReactNode } from 'react';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import type { DashboardEnvironment } from '../lib/gate';
 import { preparedGate } from '../lib/plan-widget';
 import type { ReadyPreparedWidget } from '../lib/plan-widget';
 import type { DashboardResult } from '../lib/requests';
-import type { DashboardAlert, DashboardExpand, WidgetPin, WidgetState } from '../widget-kind';
+import type { DashboardAlert, DashboardExpand, WidgetState } from '../widget-kind';
 import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
-
-/** A widget's pinned state, as the host holds it, and the call that asks the host to change it. */
-export type StatelessWidgetPin = Omit<WidgetPin, 'onPin'> & {
-  /** Called with the widget's definition, as it renders, and the state the user asked for. */
-  onPin: (widget: DashboardWidget, isPinned: boolean) => void;
-};
 
 export type StatelessWidgetProps = {
   /** The widget as `prepareWidget` parsed it. */
@@ -31,9 +25,20 @@ export type StatelessWidgetProps = {
   onDrilldown?: OnDashboardDrilldown;
   expand?: DashboardExpand;
   dragHandle?: MetricsCardDragHandleProps;
-  pin?: StatelessWidgetPin;
+  /**
+   * Makes the card's title editable in place, and is called with the trimmed new title when the
+   * user changes it (Enter or blur; Escape reverts). The host stores it and passes the widget back
+   * with its new `title`. Only a plain title is editable, not one that picks between several views.
+   * KPI groups have no title.
+   */
+  onTitleChange?: (title: string) => void;
   /** The card's Create alert button; see `DashboardAlert`. */
   alert?: DashboardAlert;
+  /**
+   * The host's buttons on the card, after its own: `MetricsCard.Action`s, each deciding whether it
+   * waits for the card's hover (e.g. `onCardHover`) or stays in view.
+   */
+  actions?: ReactNode;
 };
 
 /**
@@ -41,7 +46,7 @@ export type StatelessWidgetProps = {
  * The host plans its requests with `planWidget`, sends them however it can, and passes the answers
  * back; picks on the widget come back through `onStateChange`.
  */
-export function StatelessWidget({ prepared, env, discovered = [], results = [], pin, ...props }: StatelessWidgetProps) {
+export function StatelessWidget({ prepared, env, discovered = [], results = [], ...props }: StatelessWidgetProps) {
   const gate = preparedGate(prepared, env, props.state);
   if (gate.status === 'hidden') return null;
   return (
@@ -54,7 +59,6 @@ export function StatelessWidget({ prepared, env, discovered = [], results = [], 
       projectLabel={env.projectLabel}
       discovered={discovered}
       results={results}
-      pin={pin && { ...pin, onPin: next => pin.onPin(prepared.widget, next) }}
     />
   );
 }

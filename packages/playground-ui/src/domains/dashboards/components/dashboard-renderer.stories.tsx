@@ -1,6 +1,7 @@
 import { MastraReactProvider } from '@mastra/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PinIcon, PinOffIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useState } from 'react';
 import { userEvent, waitFor, within } from 'storybook/test';
@@ -9,6 +10,7 @@ import { MetricsProvider } from '../../metrics/hooks/use-metrics';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import type { DashboardAlert, DashboardAlertAction, DashboardAlertSource, DashboardAlertTarget } from '../widget-kind';
 import { DashboardRenderer } from './dashboard-renderer';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 
 type Definition = ComponentProps<typeof DashboardRenderer>['definition'];
 type Widget = Definition['rows'][number]['widgets'][number];
@@ -88,7 +90,7 @@ const scores: Widget = {
         { id: 'average', source: 'scores', request: 'aggregate', aggregation: 'avg' },
         { id: 'series', source: 'scores', request: 'timeSeries', aggregation: 'avg' },
       ],
-      options: { average: 'average', series: 'series', emptyMessage: 'No scores in this range.' },
+      options: { average: 'average', series: 'series' },
     },
   ],
 };
@@ -180,10 +182,20 @@ function AlertingHost({ hostResponse, editing }: Args) {
               onDrilldown={() => {}}
               alert={alert}
               dragHandle={editing ? id => ({ 'aria-label': `Move ${id}`, draggable: true }) : undefined}
-              isPinned={id => pinned.includes(id)}
-              onPin={(widget, next) =>
-                setPinned(ids => (next ? [...ids, widget.id] : ids.filter(id => id !== widget.id)))
-              }
+              widgetActions={widget => {
+                const isPinned = pinned.includes(widget.id);
+                return (
+                  <MetricsCard.Action
+                    label={`${isPinned ? 'Unpin' : 'Pin'} ${widget.title?.trim() || 'widget'}`}
+                    onClick={() =>
+                      setPinned(ids => (isPinned ? ids.filter(id => id !== widget.id) : [...ids, widget.id]))
+                    }
+                    className={isPinned ? undefined : onCardHover}
+                  >
+                    {isPinned ? <PinOffIcon /> : <PinIcon />}
+                  </MetricsCard.Action>
+                );
+              }}
             />
           </div>
         </MetricsProvider>

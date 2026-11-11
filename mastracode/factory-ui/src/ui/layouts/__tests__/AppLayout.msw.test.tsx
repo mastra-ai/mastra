@@ -1,5 +1,6 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { focusManager } from '@tanstack/react-query';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
@@ -9,7 +10,10 @@ import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { useSidebarHeaderSlots } from '../../domains/chat/components/useSidebarHeaderSlots';
+import { captureInstallPrompt, takeCapturedInstallPrompt } from '../../lib/pwa/installPromptCapture';
 import { AppLayout } from '../AppLayout';
+import { AppPageLoader } from '../AppPageLoader';
+import { lazyPage } from '../PageSuspense';
 
 const FACTORY_ID = 'fp-1';
 
@@ -106,6 +110,9 @@ function SlotsPage() {
   );
 }
 
+// Its code never arrives, so the route stays on its loader.
+const LoadingPage = lazyPage(() => new Promise(() => {}), <AppPageLoader />);
+
 function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
   const router = createMemoryRouter(
     [
@@ -116,6 +123,7 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
           { path: 'a', element: <PageA /> },
           { path: 'b', element: <PageB /> },
           { path: 'slots', element: <SlotsPage /> },
+          { path: 'loading', element: <LoadingPage /> },
           { path: 'user/new/:draftSessionId', element: <DraftPage /> },
         ],
       },
@@ -128,6 +136,7 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
 describe('AppLayout', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    takeCapturedInstallPrompt();
   });
 
   it('renders the sidebar once and swaps only the outlet between routes', async () => {
@@ -143,6 +152,99 @@ describe('AppLayout', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebarBeforeNavigation);
+  });
+
+  it('shows a startup problem as a banner above every page', async () => {
+    stubFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () =>
+        HttpResponse.json({
+          problems: [
+            {
+              code: 'secret_key_mismatch',
+              title: 'Factory needs its encryption key',
+              message: 'This deployment is using a different one than before.',
+              fix: 'Set `FACTORY_CREDENTIAL_ENCRYPTION_KEY` and redeploy.',
+              docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
+            },
+          ],
+        }),
+      ),
+    );
+    renderApp();
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByRole('heading', { name: 'Factory needs its encryption key.' })).toBeInTheDocument();
+    expect(within(alert).getByText('This deployment is using a different one than before.')).toBeInTheDocument();
+    expect(within(alert).getByText('FACTORY_CREDENTIAL_ENCRYPTION_KEY').tagName).toBe('CODE');
+    expect(within(alert).getByRole('button', { name: 'Copy FACTORY_CREDENTIAL_ENCRYPTION_KEY' })).toBeInTheDocument();
+    expect(within(alert).getByRole('link', { name: 'Read the docs' })).toHaveAttribute(
+      'href',
+      'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
+    );
+    // Nothing to retry: only a redeploy fixes it, so the copy button is the only control.
+    expect(within(alert).getAllByRole('button')).toHaveLength(1);
+    // Pages and the sidebar still render under the banner, so settings stay reachable.
+    expect(screen.getByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('link', { name: 'go-b' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
+    expect(screen.getByRole('alert')).toBe(alert);
+  });
+
+  it('still shows the startup problem when the first status check fails', async () => {
+    stubFactory();
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'internal' }, { status: 500 });
+        return HttpResponse.json({
+          problems: [{ code: 'secret_key_mismatch', title: 'Factory needs its encryption key', message: 'm' }],
+        });
+      }),
+    );
+    renderApp();
+
+    expect(
+      await screen.findByRole('heading', { name: 'Factory needs its encryption key.' }, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
+  it('shows the page as usual when the server has no status endpoint', async () => {
+    stubFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+    );
+    renderApp();
+
+    expect(await screen.findByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows the startup problem once the tab regains focus after a redeploy with a bad key', async () => {
+    stubFactory();
+    let problems: unknown[] = [];
+    server.use(http.get(`${TEST_BASE_URL}/web/status`, () => HttpResponse.json({ problems })));
+    renderApp();
+    expect(await screen.findByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+
+    problems = [
+      {
+        code: 'secret_key_mismatch',
+        title: 'Factory needs its encryption key',
+        message: 'This deployment is using a different one than before.',
+      },
+    ];
+    try {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+
+      expect(await screen.findByRole('heading', { name: 'Factory needs its encryption key.' })).toBeInTheDocument();
+    } finally {
+      focusManager.setFocused(undefined);
+    }
   });
 
   it('leaves retired Factory pages out of the sidebar', async () => {
@@ -198,7 +300,7 @@ describe('AppLayout', () => {
     mockMobileViewport();
     stubFactory();
     stubRepository();
-    const { router } = renderApp();
+    const { router } = renderApp(`/factories/${FACTORY_ID}/slots`);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Open navigation menu' }));
     const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
@@ -206,6 +308,17 @@ describe('AppLayout', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toMatch(`/factories/${FACTORY_ID}/user/new/`));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument());
+  });
+
+  it('keeps the mobile drawer trigger in the header while a page is still loading', async () => {
+    mockMobileViewport();
+    stubFactory();
+    renderApp(`/factories/${FACTORY_ID}/loading`);
+
+    expect(await screen.findByLabelText('Loading page')).toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    await userEvent.click(within(header).getByRole('button', { name: 'Open navigation menu' }));
+    expect(await screen.findByRole('dialog', { name: 'Navigation' })).toBeInTheDocument();
   });
 
   it('toggles the sidebar with [ but not on key repeat or while typing in a field', async () => {
@@ -262,5 +375,44 @@ describe('AppLayout', () => {
 
     await waitFor(() => expect(screen.getByRole('link', { name: 'go-draft-2' })).toBeInTheDocument());
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
+  });
+
+  it('puts the PWA install banner in its own row above the shell instead of over the page', async () => {
+    stubFactory();
+    const { container } = renderApp();
+    await screen.findByRole('heading', { name: 'Page A' });
+
+    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn(() => Promise.resolve()),
+      userChoice: Promise.resolve({ outcome: 'accepted', platform: 'web' }),
+    });
+    act(() => void window.dispatchEvent(event));
+
+    const banner = await screen.findByRole('region', { name: 'Install app' });
+    expect(banner).not.toHaveClass('fixed');
+    expect(banner).not.toHaveClass('absolute');
+    const shell = container.querySelector('[data-slot="app-shell"]')!;
+    expect(banner.compareDocumentPosition(shell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(banner).getByRole('button', { name: 'Install' })).toHaveAttribute('data-variant', 'primary');
+  });
+
+  it('keeps an install prompt that fired before the shell mounted', async () => {
+    // main.tsx starts capturing at app start; Chromium may fire the prompt
+    // during sign-in, onboarding or route loaders, before AppLayout renders.
+    captureInstallPrompt();
+    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn(() => Promise.resolve()),
+      userChoice: Promise.resolve({ outcome: 'accepted', platform: 'web' }),
+    });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+
+    stubFactory();
+    renderApp();
+    await screen.findByRole('heading', { name: 'Page A' });
+
+    const banner = await screen.findByRole('region', { name: 'Install app' });
+    await userEvent.click(within(banner).getByRole('button', { name: 'Install' }));
+    expect(event.prompt).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,6 +15,7 @@ import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
+import type { ToolResultCommitOutcome } from '../../loop/shared/steps/tool-result-commit-core';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { RunScope } from '../../mastra/run-scope';
@@ -522,6 +523,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   processorDataParts?: Array<{
     type: string;
     data?: unknown;
+    id?: string;
     messageId?: string;
   }>;
   /**
@@ -666,6 +668,12 @@ export interface AgentFinishEventData {
     user: ModelMessage[];
     nonUser: AIV5ResponseMessage[];
   };
+  /**
+   * Set when processOutputResult changed the reply after the last step-finish was streamed.
+   * The last entry of `output.steps` then holds the processed text, and callers must use it
+   * instead of the text they buffered from the stream.
+   */
+  textRewritten?: boolean;
 }
 
 /**
@@ -808,6 +816,27 @@ export interface RunRegistryEntry {
   runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Message list as of the last completed step; memory saves this when a total deadline ends the run */
+  completedStepsState?: SerializedMessageListState;
+  /**
+   * Text the step in flight has streamed (as published) before a total deadline cut it off; cleared once the
+   * step completes. Only kept for runs with a total deadline.
+   */
+  streamedStepText?: string[];
+  /**
+   * Tool calls of the step in flight that settled, kept for runs with a total deadline: when the deadline ends
+   * the run before the step merges its results, the deadline save records them.
+   */
+  settledToolResults?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    outcome: ToolResultCommitOutcome;
+    /** The approval decision of an approved approval-gated tool, so it round-trips on recall. */
+    approval?: { id: string; approved: boolean; reason?: string };
+    /** Includes the tool payload transform metadata, so transcript transforms apply on recall. */
+    providerMetadata?: Record<string, any>;
+  }>;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**

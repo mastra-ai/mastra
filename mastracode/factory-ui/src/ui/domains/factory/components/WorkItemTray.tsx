@@ -1,84 +1,103 @@
-import { useState } from 'react';
-
-import { itemBoard } from '../boardStages';
-import type { AuditActorProfile, AuditEvent } from '../services/audit';
-import { factoryAttentionTargetPath } from '../services/attention';
-import type { WorkItem } from '../services/workItems';
-import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
-import { CommentComposer } from './feed/CommentComposer';
-import { CommentList } from './feed/CommentList';
-import type { FeedUser } from './feed/CommentList';
-import type { CommentQuoteDraft } from './feed/quoteDraft';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
+import { History } from 'lucide-react';
 
-// One stream in time order, runs and moves and comments alike, the composer under it.
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { boardOf } from '../boardFlow';
+import type { CardContextSession } from '../boardItems';
+import type { ReworkReason } from '../reworkReason';
+import type { AuditActorProfile, AuditEvent } from '../services/audit';
+import type { WorkItem } from '../services/workItems';
+import { CardSourceDescription } from './BoardCardDetails';
+import { CardSessions } from './CardSessions';
+import { ActivityEvent } from './WorkItemActivity';
+import { WorkItemDescription } from './WorkItemDescription';
+
+// The card itself on top, then its runs and moves in time order.
 export function WorkItemTray({
   item,
   factoryId,
   projectRepositoryId,
-  enabled,
-  currentUser,
-  highlightCommentId,
   events,
   actors,
+  contextSessions,
+  rework,
 }: {
   item: WorkItem;
   factoryId: string;
   projectRepositoryId: string;
-  /** Mounted only once the panel opens, so closed cards run no feed queries. */
-  enabled: boolean;
-  currentUser?: FeedUser;
-  highlightCommentId?: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
+  contextSessions: readonly CardContextSession[];
+  rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
-  const [quote, setQuote] = useState<CommentQuoteDraft>();
-  const description = useSourceDescription(item, projectRepositoryId, factoryProjectId);
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
 
   return (
-    <>
-      <CommentList
-        item={item}
-        factoryProjectId={factoryProjectId}
-        enabled={enabled}
-        currentUser={currentUser}
-        highlightCommentId={highlightCommentId}
-        events={events}
-        actors={actors}
-        leadingLoaded={description === undefined || !description.isPending}
-        leading={
-          <div className="bg-fill mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
-            <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
-              {item.title}
+    <ScrollArea className="min-h-0 grow px-1">
+      <ScrollAreaViewport>
+        <div className="bg-fill mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
+          <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
+            {item.title}
+          </Txt>
+          <CardSourceDescription
+            item={item}
+            projectRepositoryId={projectRepositoryId}
+            factoryProjectId={factoryProjectId}
+          />
+          <WorkItemDescription item={item} factoryProjectId={factoryProjectId} />
+          {rework && <WhyItMovedBack rework={rework} />}
+          <CardSessions factoryId={factoryId} sessions={contextSessions} />
+        </div>
+        <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+          <span className="bg-border h-px flex-1" />
+          <Txt tone="muted" as="span" variant="meta" className="block">
+            Activity
+          </Txt>
+          <span className="bg-border h-px flex-1" />
+        </div>
+        {events.length === 0 ? (
+          <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
+            <History size={14} aria-hidden />
+            <Txt as="span" variant="caption">
+              No activity yet
             </Txt>
-            <CardSourceDescription
-              item={item}
-              projectRepositoryId={projectRepositoryId}
-              factoryProjectId={factoryProjectId}
-            />
           </div>
-        }
-        commentUrl={commentId =>
-          `${window.location.origin}${factoryAttentionTargetPath(factoryId, {
-            kind: 'work-item',
-            board: itemBoard(item),
-            workItemId: item.id,
-            commentId,
-          })}`
-        }
-        onQuote={setQuote}
-        className="min-h-0 grow px-1"
-      />
-      <div className="p-2">
-        <CommentComposer
-          workItemId={item.id}
-          factoryProjectId={factoryProjectId}
-          variant="panel"
-          quote={quote}
-          onDismissQuote={() => setQuote(undefined)}
-        />
-      </div>
-    </>
+        ) : (
+          <ol aria-label="Activity" className="m-0 list-none px-1 py-1">
+            {[...events]
+              .sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt))
+              .map(event => (
+                <li key={event.id}>
+                  <ActivityEvent event={event} actors={actors} board={board} className="px-2 py-1.5" />
+                </li>
+              ))}
+          </ol>
+        )}
+      </ScrollAreaViewport>
+    </ScrollArea>
+  );
+}
+
+const MOVED_BY = { human: 'a person', agent: 'an agent', system: 'Factory' } as const;
+
+function WhyItMovedBack({ rework }: { rework: ReworkReason }) {
+  return (
+    <section aria-label="Why it moved back" className="flex flex-col gap-1">
+      <Txt as="h4" variant="eyebrow" tone="muted" className="m-0">
+        Why it moved back from {rework.fromLabel}
+      </Txt>
+      {rework.reason ? (
+        <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
+          {rework.reason}
+        </MarkdownRenderer>
+      ) : (
+        <Txt variant="meta" tone="muted" className="m-0">
+          Moved back by {MOVED_BY[rework.movedBy]}
+        </Txt>
+      )}
+    </section>
   );
 }

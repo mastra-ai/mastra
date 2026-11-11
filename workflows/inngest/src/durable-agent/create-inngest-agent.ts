@@ -45,6 +45,8 @@ import {
   prepareForDurableExecution,
   persistDurableRunInput,
   createDurableAgentStream,
+  AgentStreamBus,
+  createRunAbortController,
   emitChunkEvent,
   emitErrorEvent,
   emitAbortEvent,
@@ -52,6 +54,7 @@ import {
   runResumeDurableStreamUntilIdle,
   getRunStreamSlot,
   getScopeStreamSlot,
+  untilIdleHandlesBackgroundTask,
   globalRunRegistry,
   getRunRegistryEntry,
   deleteRunRegistryEntry,
@@ -68,7 +71,6 @@ import type {
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
-import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
@@ -157,6 +159,10 @@ class InngestAgentPubSubRouter extends PubSub {
 
   get supportsOffsets(): boolean {
     return this.defaultPubsub.supportsOffsets && this.getAgentPubsub().supportsOffsets;
+  }
+
+  override __replaysTopic(topic: string): boolean {
+    return this.resolve(topic).__replaysTopic(topic);
   }
 
   getHistory(topic: string, offset?: number): Promise<Event[]> {
@@ -717,6 +723,10 @@ export interface InngestAgent<TOutput = undefined> {
   abortThreadStream: Agent<any, any, TOutput>['abortThreadStream'];
   /** @internal Thread abort for the server route; runs the Inngest override above. */
   __abortThreadStreamAcrossProcesses: Agent<any, any, TOutput>['__abortThreadStreamAcrossProcesses'];
+  /** @internal Whether an open `untilIdle` stream on this agent handles a finished background task. */
+  __untilIdleHandlesBackgroundTask: Agent<any, any, TOutput>['__untilIdleHandlesBackgroundTask'];
+  /** @internal Wakes the thread for a finished background task unless an `untilIdle` stream on this agent handles it. */
+  __notifyBackgroundTaskFinished: Agent<any, any, TOutput>['__notifyBackgroundTaskFinished'];
   /** Abort a run by id, including on the Inngest worker executing it. */
   abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
@@ -862,41 +872,37 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   // Set up pubsub with lazy CachingPubSub creation
   // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
-  let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
-  let _cachingPubsub: CachingPubSub | null = null;
+  const innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
 
-  // Resolve the cache that backs CachingPubSub history.
+  // The agent's run bus: the inner pubsub wrapped once in CachingPubSub, resolved
+  // lazily by the same AgentStreamBus core durable agents use. Without replay,
+  // `observe()` would only see live events: the bare InngestPubSub.subscribe streams
+  // from the current point in the realtime channel, so reconnects and late observers
+  // miss everything emitted before they attached.
   //
-  // Resolution order: user-provided > mastra's serverCache > InMemoryServerCache fallback.
-  // The fallback gives single-process observe replay parity with the in-memory durable agent.
-  // Cross-process observe still requires a shared cache backend (Redis, etc.) supplied via
-  // `cache` or `mastra.serverCache`.
-  function resolveCache(): MastraServerCache {
-    const resolved = _customCache ?? mastra?.serverCache ?? new InMemoryServerCache();
-    _customCache = resolved;
-    return resolved;
-  }
+  // Cache resolution: user-provided > mastra's serverCache > InMemoryServerCache.
+  // An inner pubsub that is already a CachingPubSub is reused, not double-wrapped
+  // (#18148). The inner pubsub is always passed as custom and the bus is never
+  // registered with Mastra, so InngestPubSub stays the transport (see __setMastra).
+  const streams = new AgentStreamBus(
+    { pubsub: innerPubsub, cache },
+    {
+      getMastra: () => mastra,
+      usesSharedRunLog: () => false,
+      warn: message => console.warn(`InngestAgent '${idOverride ?? agent.id}': ${message}`),
+    },
+  );
 
-  // Lazily create CachingPubSub for the agent.
-  //
-  // We always wrap the inner pubsub with CachingPubSub (mirroring the in-memory DurableAgent
-  // at packages/core/src/agent/durable/durable-agent.ts#ensurePubsubInitialized). Without it,
-  // `observe()` would only see live events: the bare InngestPubSub.subscribe streams from the
-  // current point in the realtime channel, with no history replay, so reconnects and late
-  // observers miss everything emitted before they attached.
-  //
-  // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
-  // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
+  let busResolved = false;
   function getPubsub(): CachingPubSub {
-    if (!_cachingPubsub) {
-      if (innerPubsub instanceof CachingPubSub) {
-        _cachingPubsub = innerPubsub;
-        _customCache = _customCache ?? mastra?.serverCache;
-      } else {
-        _cachingPubsub = new CachingPubSub(innerPubsub, resolveCache());
-      }
+    const pubsub = streams.pubsub as CachingPubSub;
+    if (!busResolved) {
+      busResolved = true;
+      // Keep the cache this agent reports (and forks with) as it was: the resolved
+      // replay cache, or for a reused CachingPubSub the configured/Mastra cache.
+      _customCache ??= innerPubsub instanceof CachingPubSub ? mastra?.serverCache : (streams.cache ?? undefined);
     }
-    return _cachingPubsub;
+    return pubsub;
   }
 
   async function getPubsubOffset(runId: string): Promise<number> {
@@ -1292,22 +1298,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * Best-effort: the local abort has already happened, and a caller asking to
    * stop a run should not get a rejection because the publish failed.
    */
-  // Forward an external signal to the local controller and also publish the
-  // abort request: the step worker may be another process that never sees
-  // this controller (mirrors `result.abort()`).
-  function forwardExternalAbort(external: AbortSignal, controller: AbortController, runId: string): () => void {
-    const forward = () => {
-      controller.abort((external as AbortSignal & { reason?: unknown }).reason);
-      void requestRemoteAbort(runId);
-    };
-    if (external.aborted) {
-      forward();
-    } else {
-      external.addEventListener('abort', forward, { once: true });
-    }
-    return () => external.removeEventListener('abort', forward);
-  }
-
   async function requestRemoteAbort(runId: string): Promise<void> {
     try {
       await publishAbortRequest(getPubsub(), runId);
@@ -1377,6 +1367,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
     | '__abortThreadStreamAcrossProcesses'
+    | '__untilIdleHandlesBackgroundTask'
+    | '__notifyBackgroundTaskFinished'
     | 'abortRunStream'
     | '__abortRunAcknowledged'
     | '__fork'
@@ -1457,10 +1449,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // an ABORT pubsub event when the inner catch detects the signal. If the
       // caller supplied an external signal, forward it onto the internal
       // controller so either source can cancel the run.
-      const abortController = new AbortController();
-      const stopForwardingAbort = streamOptions?.abortSignal
-        ? forwardExternalAbort(streamOptions.abortSignal, abortController, runId)
-        : undefined;
+      // Forward the caller's signal to the local controller and also publish the
+      // abort request: the step worker may be another process that never sees
+      // this controller (mirrors `result.abort()`).
+      const { controller: abortController, detach: stopForwardingAbort } = createRunAbortController(
+        streamOptions?.abortSignal,
+        { onExternalAbort: () => void requestRemoteAbort(runId) },
+      );
       registryEntry.abortController = abortController;
       const clearTotalTimeout = armTotalTimeout(
         registryEntry,
@@ -1881,10 +1876,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // attach it to the run-registry entry so the durable LLM step (when
       // co-located) can react. The previous run's controller is no longer
       // relevant.
-      const abortController = new AbortController();
-      const stopForwardingAbort = resumeOptions?.abortSignal
-        ? forwardExternalAbort(resumeOptions.abortSignal, abortController, runId)
-        : undefined;
+      // Forward the caller's signal to the local controller and also publish the
+      // abort request: the step worker may be another process that never sees
+      // this controller (mirrors `result.abort()`).
+      const { controller: abortController, detach: stopForwardingAbort } = createRunAbortController(
+        resumeOptions?.abortSignal,
+        { onExternalAbort: () => void requestRemoteAbort(runId) },
+      );
       // Ensure a registry entry exists for this resumed segment. On Inngest,
       // a resume frequently runs in a fresh process where no prior stream()
       // entry is in memory — without this, the abort controller would be
@@ -2020,6 +2018,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
+        // Step-finish events carry only the response messages that changed; start from the full list.
+        replayResponseMessagesBeforeOffset: true,
         initialToolCalls,
         messageId: crypto.randomUUID(),
         resumedText,
@@ -2282,6 +2282,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        replayResponseMessagesBeforeOffset: true,
         idleTimeoutMs: observeOptions?.idleTimeoutMs,
         isAlive: observeOptions?.isAlive,
         structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
@@ -2301,8 +2302,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
       Object.defineProperty(output, 'fullStream', {
         configurable: true,
-        get() {
-          const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
+        get(this: typeof output) {
+          // `this` is the real instance (the destructurable proxy reads getters
+          // with its target as receiver); the proxy itself can't reach private fields.
+          const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
           return new ReadableStream<ChunkType<TOutput>>({
             async pull(controller) {
               let result: Awaited<ReturnType<typeof reader.read>>;
@@ -2723,6 +2726,21 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
       ]);
       return true;
+    },
+
+    // untilIdle streams are tracked on this agent, not the wrapped one, so
+    // the wrapped Agent's check would never see them (#29785).
+    __untilIdleHandlesBackgroundTask(threadId, resourceId, taskId) {
+      return untilIdleHandlesBackgroundTask(activeStreamUntilIdle, threadId, resourceId, taskId);
+    },
+
+    // Defined here too: the proxy binds forwarded methods to the wrapped Agent,
+    // so its version would call its own check above instead of this agent's.
+    async __notifyBackgroundTaskFinished(params) {
+      if (untilIdleHandlesBackgroundTask(activeStreamUntilIdle, params.threadId, params.resourceId, params.taskId)) {
+        return;
+      }
+      return agent.__notifyBackgroundTaskFinished(params);
     },
 
     abortRunStream(runId) {

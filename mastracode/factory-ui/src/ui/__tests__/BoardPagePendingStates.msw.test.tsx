@@ -28,6 +28,7 @@ const workItem = {
   orgId: 'org-1',
   createdBy: 'user-1',
   githubProjectId: FACTORY_ID,
+  factoryProjectId: FACTORY_ID,
   source: 'github-issue',
   sourceKey: 'github-issue:1',
   parentWorkItemId: null,
@@ -571,8 +572,10 @@ describe('Board card pending states', () => {
     );
     renderWorkBoard();
 
-    const started = (await screen.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
-    const unstarted = (await screen.findByText('Unstarted work')).closest<HTMLElement>(
+    // The sessions sidebar also names the card, so look in the card's column.
+    const triage = within(await screen.findByTestId('board-column-triage'));
+    const started = (await triage.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
+    const unstarted = (await triage.findByText('Unstarted work')).closest<HTMLElement>(
       '[data-testid="work-item-card"]',
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
@@ -1304,10 +1307,11 @@ describe('Board card pending states', () => {
     const { transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
 
-    const titleText = await screen.findByText('Fix login bug');
+    // The sessions sidebar also names the card, so look in the card's column.
+    const currentColumn = await screen.findByTestId('board-column-triage');
+    const titleText = await within(currentColumn).findByText('Fix login bug');
     const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!card) throw new Error('Expected the title inside its work item card');
-    const currentColumn = screen.getByTestId('board-column-triage');
     const dataTransfer = createDataTransfer();
 
     fireEvent.dragStart(titleText, { dataTransfer });
@@ -1383,7 +1387,7 @@ describe('Board card pending states', () => {
     expect(within(card).getByText('Starting an automated run…')).toBeVisible();
     expect(transitionRequests).toEqual([]);
 
-    dropInto('review');
+    dropInto('intake');
     await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
     transitionGate.resolve();
     await waitForMutationsIdle(client);

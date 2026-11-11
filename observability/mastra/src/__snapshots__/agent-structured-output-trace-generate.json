@@ -298,7 +298,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -313,7 +314,14 @@
                         "role": "user",
                         "content": "Return a list of items separated by commas"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 generate response",
+                      "toolCalls": [],
+                      "object": {
+                        "items": "test structured output"
+                      }
+                    }
                   }
                 },
                 {
