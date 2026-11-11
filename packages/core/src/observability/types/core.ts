@@ -338,7 +338,8 @@ export interface ObservabilityEntrypoint {
    * `traceId` anchors the scored target when available.
    * Include `spanId` when the score is about a specific span.
    * Include `correlationContext` to supply context from live span/trace state.
-   * Otherwise, each exporter resolves context at its own destination.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addScore?(args: {
     traceId?: string;
@@ -354,7 +355,8 @@ export interface ObservabilityEntrypoint {
    * `traceId` anchors the feedback target when available.
    * Include `spanId` when the feedback is about a specific span.
    * Include `correlationContext` to supply context from live span/trace state.
-   * Otherwise, each exporter resolves context at its own destination.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addFeedback?(args: {
     traceId?: string;
