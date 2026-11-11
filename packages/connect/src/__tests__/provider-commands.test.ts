@@ -53,6 +53,30 @@ const action = createAction({
 export default action;
 `;
 
+const deleteWorkbookActionTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ driveId: z.string(), itemId: z.string() });
+const OutputSchema = z.object({ success: z.boolean() });
+
+const action = createAction({
+  description: 'Delete a workbook file.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    await nango.delete({
+      endpoint: \`/v1.0/drives/\${encodeURIComponent(input.driveId)}/items/\${encodeURIComponent(input.itemId)}\`,
+      retries: 3,
+    });
+    return { success: true };
+  },
+});
+
+export default action;
+`;
+
 const imageActionTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -467,6 +491,7 @@ describe('maintainer provider commands', () => {
     mkdirSync(microsoftExcelActionDir, { recursive: true });
     writeFileSync(resolve(microsoftExcelActionDir, 'get-user-drive.ts'), getUserDriveActionTemplate);
     writeFileSync(resolve(microsoftExcelActionDir, 'list-users.ts'), graphCursorTemplate);
+    writeFileSync(resolve(microsoftExcelActionDir, 'delete-workbook.ts'), deleteWorkbookActionTemplate);
     symlinkSync('microsoft-excel-oauth2-cc', resolve(integrationsDir, 'microsoft-excel'), 'dir');
 
     const openaiActionDir = resolve(integrationsDir, 'openai', 'actions');
@@ -812,6 +837,19 @@ export default action;
     );
     expect(clientCredentialsTool).toContain('endpoint: `/v1.0/users/${encodeURIComponent(input.userId)}/drive`');
     expect(clientCredentialsTool).not.toContain("'/v1.0/me/drive'");
+
+    const delegatedDelete = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel/tools/delete-workbook.ts'),
+      'utf8',
+    );
+    expect(delegatedDelete).toMatch(
+      /await platformProxy\.delete\(\{\s*endpoint: [^\n]+\n\s*headers: \{ Prefer: ["']bypass-shared-lock["'] \},\s*retries: 3,/,
+    );
+    const clientCredentialsDelete = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel-oauth2-cc/tools/delete-workbook.ts'),
+      'utf8',
+    );
+    expect(clientCredentialsDelete).not.toContain('bypass-shared-lock');
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
