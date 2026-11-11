@@ -17,6 +17,8 @@ import { globalRunRegistry } from '../run-registry';
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const alice = { id: 'alice', role: 'admin' };
 const bob = { id: 'bob', role: 'member' };
+const THREAD = 'resume-user-thread';
+const RESOURCE = 'resume-user-resource';
 
 // Keys the server auth middleware sets for an authenticated request.
 const USER_KEYS = [
@@ -54,6 +56,14 @@ function userKeysFor(user: { id: string; role: string } | undefined) {
     userRoles: user && [user.role],
     userPermissions: user && [`${user.role}:*`],
   };
+}
+
+/** Goal and isTaskComplete scorers, and output processors, all ran after the resume and saw only `user`. */
+function expectCompletionCallbacksSaw(completionSeen: Record<string, unknown[]>, user: unknown) {
+  for (const [callback, seen] of Object.entries(completionSeen)) {
+    expect(seen, callback).not.toHaveLength(0);
+    expect(seen, callback).toEqual(seen.map(() => user));
+  }
 }
 
 describe.each([
@@ -98,6 +108,16 @@ describe.each([
     });
     const toolSeen: unknown[] = [];
     const instructionsSeen: unknown[] = [];
+    // Scorers get the run's context entries; output processors get a RequestContext.
+    const completionSeen: Record<string, unknown[]> = { goal: [], isTaskComplete: [], outputProcessor: [] };
+    const recordingScorer = (id: 'goal' | 'isTaskComplete') => ({
+      id: `${id}-scorer`,
+      name: `${id} scorer`,
+      run: async ({ requestContext }: { requestContext?: Record<string, unknown> }) => {
+        completionSeen[id]!.push(requestContext?.[MASTRA_NORMALIZED_USER_KEY]);
+        return { score: 1, reason: 'done' };
+      },
+    });
     const approve = createTool({
       id: 'approve',
       description: 'needs approval',
@@ -122,17 +142,37 @@ describe.each([
       model: model as LanguageModelV2,
       memory,
       tools: { approve },
+      goal: { judge: 'mock-judge', maxRuns: 5, scorer: recordingScorer('goal') as any },
+      // Agent defaults, so a fresh process can restore the policy too.
+      defaultOptions: { isTaskComplete: { scorers: [recordingScorer('isTaskComplete') as any] } },
+      outputProcessors: [
+        {
+          id: 'record-user',
+          processOutputResult: async ({ messages, requestContext }) => {
+            completionSeen.outputProcessor!.push(requestContext?.get(MASTRA_NORMALIZED_USER_KEY));
+            return messages;
+          },
+        },
+      ],
     });
-    return { agent: createAgent({ agent: baseAgent, pubsub }), toolSeen, instructionsSeen };
+    return {
+      agent: createAgent({ agent: baseAgent, pubsub }),
+      toolSeen,
+      instructionsSeen,
+      completionSeen,
+    };
   }
 
   /** Starts a run as alice and waits for it to suspend on the approval. */
   async function suspendAsAlice(storage: InstanceType<typeof MockStore>, memory: MockMemory) {
     const built = approvalAgent(memory);
     new Mastra({ logger: false, storage, agents: { resumeAgent: built.agent } });
+    // An active objective makes the goal step grade the resumed run.
+    await built.agent.setObjective('Approve the request', { threadId: THREAD, resourceId: RESOURCE });
     let suspended = false;
     const initial = await built.agent.stream('go', {
       requestContext: contextFor(alice),
+      memory: { thread: THREAD, resource: RESOURCE },
       onSuspended: () => {
         suspended = true;
       },
@@ -140,6 +180,7 @@ describe.each([
     await vi.waitFor(() => expect(suspended).toBe(true));
     expect(built.instructionsSeen).toContainEqual(alice);
     built.instructionsSeen.length = 0;
+    for (const seen of Object.values(built.completionSeen)) seen.length = 0;
     return { ...built, initial };
   }
 
@@ -179,7 +220,7 @@ describe.each([
     ['a context without a user', () => contextFor(undefined)],
     ['no request context', () => undefined],
   ])('a same-process resume with %s does not act as the starting user', async (_label, resumeContext) => {
-    const { agent, initial, toolSeen } = await suspendAsAlice(
+    const { agent, initial, toolSeen, completionSeen } = await suspendAsAlice(
       new MockStore(),
       new MockMemory({ storage: new InMemoryStore() }),
     );
@@ -187,11 +228,12 @@ describe.each([
     await resume(agent, initial.runId, resumeContext());
 
     expect(toolSeen).toEqual([{ user: userKeysFor(undefined), tenant: 'acme' }]);
+    expectCompletionCallbacksSaw(completionSeen, undefined);
     initial.cleanup();
   });
 
   it('a same-process resume uses the resuming user', async () => {
-    const { agent, initial, toolSeen } = await suspendAsAlice(
+    const { agent, initial, toolSeen, completionSeen } = await suspendAsAlice(
       new MockStore(),
       new MockMemory({ storage: new InMemoryStore() }),
     );
@@ -199,6 +241,7 @@ describe.each([
     await resume(agent, initial.runId, contextFor(bob));
 
     expect(toolSeen).toEqual([{ user: userKeysFor(bob), tenant: 'acme' }]);
+    expectCompletionCallbacksSaw(completionSeen, bob);
     initial.cleanup();
   });
 
@@ -206,20 +249,22 @@ describe.each([
     ['a context without a user', () => contextFor(undefined)],
     ['no request context', () => undefined],
   ])('a fresh-process resume with %s does not act as the starting user', async (_label, resumeContext) => {
-    const { agent, runId, toolSeen, instructionsSeen } = await suspendThenRestartProcess();
+    const { agent, runId, toolSeen, instructionsSeen, completionSeen } = await suspendThenRestartProcess();
 
     await resume(agent, runId, resumeContext());
 
     expect(toolSeen).toEqual([{ user: userKeysFor(undefined), tenant: 'acme' }]);
+    expectCompletionCallbacksSaw(completionSeen, undefined);
     // A fresh process resolves the instructions again, without the starting user.
     expect(instructionsSeen).not.toHaveLength(0);
     expect(instructionsSeen.every(user => user === undefined)).toBe(true);
   });
 
   it('a fresh-process resume uses the resuming user', async () => {
-    const { agent, runId, toolSeen } = await suspendThenRestartProcess();
+    const { agent, runId, toolSeen, completionSeen } = await suspendThenRestartProcess();
 
     await resume(agent, runId, contextFor(bob));
+    expectCompletionCallbacksSaw(completionSeen, bob);
 
     expect(toolSeen).toEqual([{ user: userKeysFor(bob), tenant: 'acme' }]);
   });

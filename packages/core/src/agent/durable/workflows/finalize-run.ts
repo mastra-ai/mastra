@@ -8,7 +8,7 @@ import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { ProcessorRunner } from '../../../processors/runner';
-import { RequestContext } from '../../../request-context';
+import { RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
 import { persistProcessorDataChunk, resolveOutputMessageSkippingCompletionChecks } from '../../../stream/base/output';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
@@ -86,7 +86,9 @@ function restoreRequestContext(
   if (!entries) return fallback ?? new RequestContext();
 
   const restored = new RequestContext<unknown>(fallback?.entries());
-  for (const [key, value] of Object.entries(entries)) restored.set(key, value);
+  // The snapshot's token and signed-in user belong to whoever started the run;
+  // the live ones in `fallback` are kept.
+  for (const [key, value] of Object.entries(withoutLiveRequestKeys(entries))) restored.set(key, value);
   restoreRunAgentScopes(restored);
   return restored;
 }
