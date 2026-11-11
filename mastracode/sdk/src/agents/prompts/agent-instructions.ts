@@ -251,36 +251,51 @@ export function createGitRefReminderReader(
 // Keep in-flight object reads shared across concurrent prompt and reminder lookups.
 const pendingGitObjects = new Map<string, Promise<string | null>>();
 
-function gitAsync(args: string[], input?: string): Promise<Buffer | null> {
-  return new Promise(resolveOutput => {
-    let child: ReturnType<typeof spawn>;
-    try {
-      child = spawn('git', args, { stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'] });
-    } catch {
-      resolveOutput(null);
-      return;
-    }
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let failed = false;
-    child.stdout?.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > 1024 * 1024) {
-        failed = true;
-        child.kill();
-      } else chunks.push(chunk);
-    });
-    child.on('error', () => {
-      failed = true;
-    });
-    child.on('close', code => resolveOutput(!failed && code === 0 ? Buffer.concat(chunks) : null));
-    if (input !== undefined) {
-      child.stdin?.on('error', () => {
+const MAX_CONCURRENT_GIT_PROCESSES = 6;
+let activeGitProcesses = 0;
+const waitingGitProcesses: Array<() => void> = [];
+
+async function gitAsync(args: string[], input?: string): Promise<Buffer | null> {
+  if (activeGitProcesses >= MAX_CONCURRENT_GIT_PROCESSES) {
+    await new Promise<void>(resolve => waitingGitProcesses.push(resolve));
+  } else {
+    activeGitProcesses++;
+  }
+  try {
+    return await new Promise(resolveOutput => {
+      let child: ReturnType<typeof spawn>;
+      try {
+        child = spawn('git', args, { stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'] });
+      } catch {
+        resolveOutput(null);
+        return;
+      }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      let failed = false;
+      child.stdout?.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > 1024 * 1024) {
+          failed = true;
+          child.kill();
+        } else chunks.push(chunk);
+      });
+      child.on('error', () => {
         failed = true;
       });
-      child.stdin?.end(input);
-    }
-  });
+      child.on('close', code => resolveOutput(!failed && code === 0 ? Buffer.concat(chunks) : null));
+      if (input !== undefined) {
+        child.stdin?.on('error', () => {
+          failed = true;
+        });
+        child.stdin?.end(input);
+      }
+    });
+  } finally {
+    const next = waitingGitProcesses.shift();
+    if (next) next();
+    else activeGitProcesses--;
+  }
 }
 
 async function gitObjectReadAsync(

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('node:child_process', async importOriginal => {
   const actual = await importOriginal<typeof import('node:child_process')>();
-  return { ...actual, execFileSync: vi.fn(actual.execFileSync) };
+  return { ...actual, execFileSync: vi.fn(actual.execFileSync), spawn: vi.fn(actual.spawn) };
 });
 
 vi.mock('node:os', async importOriginal => {
@@ -226,6 +226,49 @@ describe('git-ref instruction readers', () => {
     await expect(
       createGitRefReminderReaderAsync(repo, 'nonexistent-ref').readFile(join(repo, 'AGENTS.md')),
     ).rejects.toThrow('Not found at ref');
+  });
+
+  it('bounds concurrent trusted-ref Git processes while resolving independent files', async () => {
+    for (let i = 0; i < 24; i++) writeFileSync(join(repo, `file-${i}.md`), `trusted ${i}`);
+    git('add', '.');
+    git('commit', '-m', 'add independent instruction files');
+
+    const { spawn: actualSpawn } = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+    let running = 0;
+    let peak = 0;
+    vi.mocked(spawn).mockImplementation((command, args, options) => {
+      // Run real Git behind a short delay to model overlapping subprocesses under load.
+      const child = actualSpawn('sh', ['-c', 'sleep 0.1; exec git "$@"', 'git', ...args], options);
+      running++;
+      peak = Math.max(peak, running);
+      child.once('close', () => running--);
+      return child;
+    });
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 24 }, (_, i) =>
+          createGitRefReminderReaderAsync(repo, 'main').pathExists(join(repo, `file-${i}.md`)),
+        ),
+      );
+      expect(results).toEqual(Array(24).fill(true));
+      expect(peak).toBeGreaterThan(1);
+      expect(peak).toBeLessThanOrEqual(6);
+    } finally {
+      vi.mocked(spawn).mockImplementation(actualSpawn);
+    }
+  });
+
+  it('shares in-flight trusted-ref object reads and reuses cached results', async () => {
+    const reader = createGitRefReminderReaderAsync(repo, 'main');
+    vi.mocked(spawn).mockClear();
+    expect(await Promise.all(Array.from({ length: 24 }, () => reader.pathExists(join(repo, 'AGENTS.md'))))).toEqual(
+      Array(24).fill(true),
+    );
+    const calls = vi.mocked(spawn).mock.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    expect(calls).toBeLessThanOrEqual(2); // Shared ref resolution and at most one ls-tree read.
+    expect(await reader.pathExists(join(repo, 'AGENTS.md'))).toBe(true);
+    expect(vi.mocked(spawn).mock.calls).toHaveLength(calls);
   });
 
   it('treats invalid git path arguments as absent in async readers', async () => {
