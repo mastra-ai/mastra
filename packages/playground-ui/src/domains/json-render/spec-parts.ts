@@ -19,9 +19,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
- * Whether every element is a `studioCatalog` component with only the props it declares, and the tree has no cycle.
- * A spec does not say which catalog it was written for, so a component of the same name with other props is
- * taken as another catalog's; and an element that contains itself would render forever.
+ * Whether every element is a `studioCatalog` component with only the props it declares, its children are element
+ * keys, and the tree has no cycle. A spec does not say which catalog it was written for, so a component of the same
+ * name with other props is taken as another catalog's; and an element that contains itself would render forever.
+ * No `studioCatalog` component has slots, and the renderer renders any it finds, so an element with slots is rejected.
  */
 const isStudioTree = (spec: Spec) => {
   const elements: unknown = spec.elements;
@@ -30,7 +31,11 @@ const isStudioTree = (spec: Spec) => {
     if (!isRecord(element) || typeof element.type !== 'string') return false;
     const props = studioProps.get(element.type);
     if (!props || !Object.keys(element.props ?? {}).every(prop => props.has(prop))) return false;
-    if (element.children !== undefined && !Array.isArray(element.children)) return false;
+    if (element.slots !== undefined) return false;
+    const { children } = element;
+    if (children !== undefined && !(Array.isArray(children) && children.every(key => typeof key === 'string'))) {
+      return false;
+    }
   }
   const inside = new Set<string>();
   const acyclic = (key: string): boolean => {

@@ -1156,6 +1156,25 @@ describe('MessageRow', () => {
           patch('add', '/elements/inner', { type: 'Stack', props: {}, children: ['main'] }),
         ],
       },
+      {
+        problem: 'slots, which no studioCatalog component declares',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', {
+            type: 'Card',
+            props: { title: 'Revenue' },
+            children: [],
+            slots: { body: 'text' },
+          }),
+        ],
+      },
+      {
+        problem: 'a child key that is not a string',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', { type: 'Card', props: { title: 'Revenue' }, children: [42] }),
+        ],
+      },
     ])('shows the reply without an interface that has $problem', ({ parts }) => {
       renderRow(baseMessage({ content: { format: 2, parts: [{ type: 'text', text: 'Here you go.' }, ...parts] } }));
 
