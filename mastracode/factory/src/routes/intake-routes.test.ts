@@ -2,18 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
-
 import { ProjectBoardCache } from '../boards/project-boards.js';
-import { createBoardRegistry } from '../boards/registry.js';
+
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import {
+  CATCH_ALL_INTAKE_ROUTE,
   CLOSES_ISSUE_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
@@ -34,6 +35,7 @@ const SIGNED_OUT = 'signed-out';
 const TRUSTED = { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] };
 const DOCS = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] };
 const WORK = { boardKey: 'work' };
+const TRIAGE = { boardKey: 'work', phaseKey: 'triage' };
 
 const docsBoard = {
   key: 'docs',
@@ -80,7 +82,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   /** One replica: the intake route and board routes over HTTP, with its own board cache. */
   function replica(domains: Client, orgId: string, options: { auth?: RouteAuth } = {}) {
     const cache = new ProjectBoardCache({
-      codeRegistry: createBoardRegistry(),
+      codeRegistry: createTriageWorkRegistry(),
       storage: domains.boards,
       projects: domains.projects,
       recheckMs: 1000,
@@ -156,7 +158,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [closesIssue, route, pullRequests, ...events] = await list(replicaA.send, base, MEMBER);
+    const [closesIssue, route, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
+    const events = rest.slice(0, -1);
+    // Whatever no other route takes lands on Work's first phase, as it did before routes existed.
+    expect(rest.at(-1)).toMatchObject({
+      name: CATCH_ALL_INTAKE_ROUTE.name,
+      position: 11,
+      on: ['work_item.created'],
+      when: null,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+      createdBy: 'factory',
+      problems: [],
+    });
     // Close, reopen and pull request routes target Work's phases, and none has a problem to report.
     expect(events).toMatchObject([
       { name: 'Closed issues go to Done', on: ['work_item.closed'], target: { phaseKey: 'done' }, problems: [] },
@@ -176,13 +189,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       { on: ['pull_request.merged'], target: { phaseKey: 'done' }, problems: [] },
       { on: ['pull_request.closed'], target: { phaseKey: 'canceled' }, problems: [] },
       { on: ['pull_request.closed'], target: { phaseKey: 'intake' }, problems: [] },
-      { on: ['pull_request.synchronized'], target: { phaseKey: 'pr-review' }, allowWorkingPhase: true, problems: [] },
-      {
-        on: ['pull_request.review_requested'],
-        target: { phaseKey: 'pr-review' },
-        allowWorkingPhase: true,
-        problems: [],
-      },
+      { on: ['pull_request.synchronized'], target: { phaseKey: 'pr-review' }, problems: [] },
+      { on: ['pull_request.review_requested'], target: { phaseKey: 'pr-review' }, problems: [] },
     ]);
     expect(events).toHaveLength(8);
     expect(closesIssue).toMatchObject({
@@ -284,6 +292,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(await list(replicaA.send, base, MEMBER)).toEqual([
       expect.objectContaining({ id: route.id, name: 'Docs', enabled: true, revision: 1 }),
     ]);
+    expect((await replicaA.send('GET', base, undefined, MEMBER)).body).toMatchObject({ canEdit: false });
+    expect((await replicaA.send('GET', base)).body).toMatchObject({ canEdit: true });
   });
 
   it("hides another organization's project and refuses a signed-out request", async () => {
@@ -333,7 +343,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         body: { error },
       });
     }
-    const route = (await replicaA.send('POST', base, { name: 'Ok', target: { boardKey: 'work' } })).body
+    const route = (await replicaA.send('POST', base, { name: 'Ok', when: DOCS, target: { boardKey: 'work' } })).body
       .intakeRoute as Route;
     expect(route.target).toEqual({ boardKey: 'work', phaseKey: null, joinClosedIssue: false });
     // A card a pull request joins moves to any phase its board allows from where it is, so a
@@ -409,22 +419,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(created).toMatchObject({
       status: 201,
-      body: { intakeRoute: { on: ['work_item.closed'], allowWorkingPhase: false, when: canceled, problems: [] } },
+      body: { intakeRoute: { on: ['work_item.closed'], when: canceled, problems: [] } },
     });
     const route = created.body.intakeRoute as Route;
     const bare = (await replicaA.send('POST', base, { name: 'New cards', target: WORK })).body.intakeRoute;
-    expect(bare).toMatchObject({ on: ['work_item.created'], allowWorkingPhase: false });
+    expect(bare).toMatchObject({ on: ['work_item.created'] });
 
     const reopened = await replicaA.send('PATCH', `${base}/${route.id}`, {
       on: ['work_item.reopened'],
       when: null,
       target: { boardKey: 'work', phaseKey: 'triage' },
-      allowWorkingPhase: true,
       expectedRevision: 1,
     });
+    // A route may name a working phase such as Triage: the phase's own start decides whether a run starts.
     expect(reopened).toMatchObject({
       status: 200,
-      body: { intakeRoute: { on: ['work_item.reopened'], allowWorkingPhase: true, revision: 2 } },
+      body: { intakeRoute: { on: ['work_item.reopened'], target: { phaseKey: 'triage' }, revision: 2 } },
     });
     // A route that places new cards still can't name a terminal phase, whether it is created that way or narrowed to it.
     expect(
@@ -442,6 +452,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(
       await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.created'], expectedRevision: 3 }),
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
+  });
+
+  it('refuses allowWorkingPhase like any other field a route does not have, and changes nothing', async () => {
+    const { base, replicaA } = await setup();
+    const refused = { status: 422, body: { error: 'invalid_intake_route' } };
+    const reopened = { name: 'Reopened back to Triage', on: ['work_item.reopened'], target: TRIAGE };
+    expect(await replicaA.send('POST', base, { ...reopened, allowWorkingPhase: true })).toMatchObject(refused);
+
+    const created = await replicaA.send('POST', base, reopened);
+    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { revision: 1 } } });
+    const route = created.body.intakeRoute as Route;
+    for (const patch of [
+      { allowWorkingPhase: false },
+      { name: 'Reopened issues are triaged again', allowWorkingPhase: true },
+    ]) {
+      expect(
+        await replicaA.send('PATCH', `${base}/${route.id}`, { ...patch, expectedRevision: 1 }),
+        JSON.stringify(patch),
+      ).toMatchObject(refused);
+    }
+    expect(await list(replicaA.send, base)).toContainEqual(
+      expect.objectContaining({ id: route.id, name: 'Reopened back to Triage', revision: 1 }),
+    );
   });
 
   it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {
@@ -478,7 +511,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       { on: ['work_item.closed', 'work_item.closed'] },
       { on: ['work_item.commented'] },
       { on: 'work_item.closed' },
-      { allowWorkingPhase: 'yes' },
     ];
     for (const body of bodies) {
       expect(
@@ -499,6 +531,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(placement).toMatchObject({ status: 422, body: { error: 'invalid_intake_route' } });
     expect(await list(replicaA.send, base)).toEqual([]);
+  });
+
+  it('saves a route sending a repository, team or project to a board, by any fact of the work item', async () => {
+    const { projectPath, base, replicaA } = await setup();
+    expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+    const when = {
+      operator: 'OR',
+      conditions: [
+        { field: 'source.repository', operator: 'equals', value: 'acme/app' },
+        {
+          operator: 'AND',
+          conditions: [
+            { field: 'source.provider', operator: 'equals', value: 'linear' },
+            { field: 'item.key', operator: 'contains', value: 'ENG-' },
+            { field: 'item.state', operator: 'not_equals', value: 'Backlog' },
+            { field: 'item.assignees', operator: 'contains', value: 'ada' },
+          ],
+        },
+      ],
+    };
+    const created = await replicaA.send('POST', base, { name: 'App and ENG', when, target: { boardKey: 'docs' } });
+
+    expect(created.status).toBe(201);
+    expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'App and ENG', when })]);
   });
 
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {

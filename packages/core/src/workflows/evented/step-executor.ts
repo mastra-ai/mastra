@@ -181,7 +181,10 @@ export class StepExecutor extends MastraBase {
     } = {
       ...stepResults[stepId],
       startedAt,
-      payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
+      // Store the input as the step received it, as the default engine does. Resume feeds this
+      // payload back into the step, so a `{}` stand-in for `null` or `undefined` input would fail
+      // a nullable or optional inputSchema and change what the step sees on resume.
+      payload: typeof params.foreachIdx === 'number' ? params.input : inputData,
     };
 
     // Keep the route in the running checkpoint until execution completes, but
@@ -191,7 +194,7 @@ export class StepExecutor extends MastraBase {
       stepInfo.metadata = metadata;
     }
 
-    if (params.resumeData) {
+    if (params.resumeData !== undefined) {
       stepInfo.resumePayload = params.resumeData;
       stepInfo.resumedAt = Date.now();
       // Strip __workflow_meta from suspendPayload when step is resumed

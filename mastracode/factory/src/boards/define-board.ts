@@ -155,7 +155,7 @@ type WorkingPhaseFields = {
   readonly runner?: BoardPhaseRunner;
   /** @deprecated Use `runner.context`. */
   readonly role?: string;
-  /** Runs start without anyone approving them, even with the project's auto-run off. */
+  /** Runs start without anyone approving them. The board, not a project setting, decides this. */
   readonly autoStart?: boolean;
   /** With `autoStart`, only cards this matches start on their own. */
   readonly autoStartWhen?: RuleGroup;

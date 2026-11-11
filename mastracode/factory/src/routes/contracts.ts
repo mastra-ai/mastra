@@ -32,6 +32,12 @@ const rawBoundedTrimmed = (max: number) =>
     .max(max)
     .transform(value => value.trim())
     .pipe(z.string().min(1));
+/** Card description: trimmed, and blank clears it. */
+const descriptionSchema = z
+  .string()
+  .max(8000)
+  .transform(value => value.trim() || null)
+  .nullable();
 const trimmedUuidSchema = z.string().trim().regex(new RegExp(UUID_PATTERN));
 const nullableTrimmed = (max: number) =>
   z.union([
@@ -113,8 +119,6 @@ const intakeRouteFields = {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
-  /** Lets an event move an existing card into a working phase, such as Triage. */
-  allowWorkingPhase: z.boolean(),
 };
 export const intakeRouteInputSchema = z
   .object({
@@ -123,7 +127,6 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -134,7 +137,6 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -160,7 +162,6 @@ const intakeRouteSchema = z.object({
   when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
   on: z.array(z.enum(STATUS_EVENTS)),
-  allowWorkingPhase: z.boolean(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
@@ -171,7 +172,11 @@ const intakeRouteSchema = z.object({
   problems: z.array(z.string()),
 });
 const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
-const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
+const intakeRouteListResponseSchema = z.object({
+  intakeRoutes: z.array(intakeRouteSchema),
+  /** Whether the caller may add, edit, reorder, or delete routes. */
+  canEdit: z.boolean(),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -230,10 +235,13 @@ export const updateProjectBodySchema = z
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
+    /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
+    /** @deprecated Ignored. The review skill decides whether to publish its test check. */
     reviewTestChecksEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. A card is self-reviewed when its board has a self-review phase. */
     selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
@@ -278,6 +286,50 @@ export const environmentBuildTriggersSchema = z.object({
 
 /** The last build factory asked the provider for, from the project row only; status is read live. */
 export const environmentLastBuildSchema = z.object({ buildId: z.string(), attemptedAt: z.string().nullable() });
+
+/**
+ * Names Factory or a sandbox provider injects into the same environment maps.
+ * A variable with one of these names would swap a credential or be dropped.
+ */
+export const RESERVED_SANDBOX_ENV_NAMES: readonly RegExp[] = [
+  /^GH_TOKEN(_\d+)?$/,
+  /^MASTRA_REPOSITORY_ACCESS_TOKEN(_\d+)?$/,
+  /^MASTRA_BUILD_ENV_REVISION$/,
+];
+export const MAX_SANDBOX_ENV_VALUE_LENGTH = 32 * 1024;
+export const sandboxEnvNameSchema = z
+  .string()
+  .max(128, 'Use at most 128 characters.')
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Use letters, digits and underscores, not starting with a digit.')
+  .refine(name => !RESERVED_SANDBOX_ENV_NAMES.some(pattern => pattern.test(name)), {
+    message: 'This name is reserved by Factory.',
+  })
+  // Names like `__proto__` or `toString` collide with object built-ins and would be dropped or stick around.
+  .refine(name => !(name in Object.prototype), { message: "This name can't be used." });
+export const sandboxEnvAppliesToSchema = z.enum(['build', 'runtime', 'both']);
+const sandboxEnvPathSchema = z.object({ id: uuidSchema, name: sandboxEnvNameSchema });
+export const sandboxEnvSetBodySchema = z.object({
+  value: z
+    .string()
+    .max(MAX_SANDBOX_ENV_VALUE_LENGTH)
+    // A NUL byte in an env value makes every spawn fail.
+    .refine(value => !value.includes('\0'), { message: "Values can't contain NUL characters." }),
+  appliesTo: sandboxEnvAppliesToSchema,
+});
+export const sandboxEnvUpdateBodySchema = z.object({ appliesTo: sandboxEnvAppliesToSchema });
+/** A variable as routes return it. There is deliberately no value field. */
+const sandboxEnvSchema = z.object({
+  name: z.string(),
+  appliesTo: sandboxEnvAppliesToSchema,
+  updatedAt: z.string(),
+  updatedBy: z.string(),
+});
+const sandboxEnvsListResponseSchema = z.object({
+  envs: z.array(sandboxEnvSchema),
+  /** False when values can't be stored encrypted, so writes are refused. */
+  writable: z.boolean(),
+});
+const sandboxEnvResponseSchema = z.object({ env: sandboxEnvSchema });
 
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
@@ -428,6 +480,7 @@ const metadataSchema = z
 
 export const createWorkItemBodySchema = z.object({
   title: rawBoundedTrimmed(500),
+  description: descriptionSchema.optional(),
   board: z.string().min(1).max(128).optional(),
   externalSource: externalSourceSchema.optional(),
   parentWorkItemId: uuidSchema.nullable().optional(),
@@ -439,6 +492,7 @@ export const createWorkItemBodySchema = z.object({
 export const updateWorkItemBodySchema = z
   .object({
     title: rawBoundedTrimmed(500).optional(),
+    description: descriptionSchema.optional(),
     board: z.string().min(1).max(128).optional(),
     parentWorkItemId: uuidSchema.nullable().optional(),
     stages: stagesSchema.optional(),
@@ -551,13 +605,7 @@ export const decisionQuerySchema = z.object({
   limit: boundedLimitSchema(25, 50),
 });
 
-const attentionKindSchema = z.enum([
-  'automation-failed',
-  'automation-proposed',
-  'mention',
-  'activity',
-  'agent-waiting',
-]);
+const attentionKindSchema = z.enum(['automation-failed', 'automation-proposed', 'agent-waiting']);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
 type AttentionStreamPosition = { occurredAt: Date; id: string };
 type AttentionCursorMap = Map<AttentionKind, AttentionStreamPosition | undefined>;
@@ -732,28 +780,43 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: buildPathSchema,
     responseSchema: environmentBuildResponseSchema,
   },
+  projectSandboxEnvsList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/sandbox-envs',
+    description:
+      'List the sandbox environment variables of a Factory project: names and where they apply, never values',
+    pathSchema: projectPathSchema,
+    responseSchema: sandboxEnvsListResponseSchema,
+  },
+  projectSandboxEnvSet: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Create or replace a sandbox environment variable of a Factory project',
+    pathSchema: sandboxEnvPathSchema,
+    bodySchema: sandboxEnvSetBodySchema,
+    responseSchema: sandboxEnvResponseSchema,
+  },
+  projectSandboxEnvUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Change where a sandbox environment variable of a Factory project applies',
+    pathSchema: sandboxEnvPathSchema,
+    bodySchema: sandboxEnvUpdateBodySchema,
+    responseSchema: sandboxEnvResponseSchema,
+  },
+  projectSandboxEnvDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Delete a sandbox environment variable of a Factory project',
+    pathSchema: sandboxEnvPathSchema,
+    responseSchema: z.null(),
+  },
   projectApplyDefaultModel: {
     method: 'POST',
     path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Apply the Factory default model to running work and review threads',
+    description: 'Start applying the Factory default model to running work and review threads in the background',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      modelId: z.string(),
-      applied: z.array(z.string()),
-      skipped: z.array(
-        z.object({
-          threadId: z.string(),
-          reason: z.enum([
-            'not-running',
-            'work-item-missing',
-            'stage-inactive',
-            'thread-missing',
-            'mode-unknown',
-            'apply-failed',
-          ]),
-        }),
-      ),
-    }),
+    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
   },
   projectDelete: {
     method: 'DELETE',
@@ -907,7 +970,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   intakeRouteCreate: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes',
-    description: 'Add an intake route at the end of a Factory project',
+    description:
+      'Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card',
     pathSchema: projectPathSchema,
     bodySchema: intakeRouteInputSchema,
     responseSchema: intakeRouteResponseSchema,

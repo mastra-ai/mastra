@@ -163,6 +163,7 @@ import {
   rescanFactorySkills,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
+import type { CreateWorkspaceFactoryOptions } from './workspace.js';
 
 const tempDirs: string[] = [];
 
@@ -463,6 +464,18 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
   });
 
+  it('formats Linear triage comments in Linear markdown instead of HTML', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+    const phase5 = triage.slice(triage.indexOf('## Phase 5'));
+
+    // Linear shows raw HTML as text, so neither the marker nor <details> may reach it.
+    expect(phase1).toContain('post the pending summary with `linear_create_comment`, leaving out the');
+    expect(triage).toContain('a `+++ Details` line opens it and a lone `+++` line closes it');
+    expect(phase5).toContain('in the Linear form the output contract describes');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
@@ -491,21 +504,21 @@ describe('bundled Factory skill assets', () => {
     const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('| Type'));
     const handoff = triage.slice(markerIndex);
     // A ratings table with a real header row leads, then the plain summary,
-    // the next step, and collapsed rating reasons, root cause, reproduction
-    // and assumptions; only open questions stay expanded.
+    // the next step, and one collapsed Details block with rating reasons, root
+    // cause, reproduction and assumptions; only open questions stay expanded.
     const headerIndex = handoff.search(/^\| Type +\| Severity +\| Confidence +\| Effort +\| Impact +\| Route +\|$/m);
     const typeIndex = handoff.indexOf('| <Type>');
     const severityIndex = handoff.indexOf('<Severity>');
     const routeIndex = handoff.indexOf('<Route>');
     const summaryIndex = handoff.indexOf('### Summary');
     const nextStepIndex = handoff.indexOf('**Next step:**');
-    const ratingsIndex = handoff.indexOf('<strong>Why these ratings</strong>');
+    const ratingsIndex = handoff.indexOf('**Why these ratings**');
     const confidenceIndex = handoff.indexOf('**Confidence**');
     const effortIndex = handoff.indexOf('**Effort**');
     const impactIndex = handoff.indexOf('**Impact**');
-    const rootCauseIndex = handoff.indexOf('<strong>Root cause</strong>');
-    const reproductionIndex = handoff.indexOf('<strong>Reproduction</strong>');
-    const assumptionsIndex = handoff.indexOf('<strong>Assumptions</strong>');
+    const rootCauseIndex = handoff.indexOf('**Root cause**');
+    const reproductionIndex = handoff.indexOf('**Reproduction**');
+    const assumptionsIndex = handoff.indexOf('**Assumptions**');
     const questionsIndex = handoff.indexOf('### Open questions');
 
     // GitHub renders an empty header row as a blank band above the table.
@@ -624,14 +637,27 @@ describe('bundled Factory skill assets', () => {
     expect(plan).not.toContain('report the plan headline and stop');
 
     // Building runs as a goal: it may ask a person, but only through ask_user. It opens the change
-    // request itself, unless the card's board has a self-review phase the project turned on.
+    // request itself, unless the card's board has a self-review phase: no project setting decides it.
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
-    expect(build).toContain('do not open a pull or merge request. Move the card to its `self-review` phase');
-    // The phase's own moves pick the hand-off: without a move to pull request review, no change request is opened.
+    expect(build).toContain('Do not open a pull or merge request. Move the card to its `self-review` phase');
+    // The phase's own moves pick the hand-off: a move to self-review means no change request is
+    // opened, even where the board also allows the move to pull request review.
     expect(build).toContain(
-      '- **The `pull request review` phase is not in `Next phases`, but a `self-review` phase is:** take the self-review path whatever the setting says',
+      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and it is in `Next phases`): this path comes before opening the change request, even when the `pull request review` phase is in `Next phases` too',
     );
+    expect(build).toContain(
+      'it needs the `pull request review` phase in `Next phases`, and a board whose `Board phases by part:` names no `self-review` phase',
+    );
+    // Factory's gate refuses the change request on any board with a self-review phase, so the
+    // builder asks instead of opening one when it can't move there.
+    expect(build).toContain(
+      '- **The board has a self-review phase that is not in `Next phases`:** open no change request',
+    );
+    // An open change request of this session decides before the self-review path.
+    expect(build).toContain('A change request of this session that is already open decides first');
+    expect(build).not.toContain('Self-review: on');
+    expect(build).not.toContain('whatever the setting says');
     // A push to an open change request with no move to pull request review asks a person; self-review stops on an open one.
     expect(build).toContain(
       'If the `pull request review` phase is not in `Next phases`, move nothing and ask the person with `ask_user`',
@@ -687,6 +713,13 @@ describe('bundled Factory skill assets', () => {
     for (const skill of [review, await read('factory-rereview')]) {
       expect(skill).toContain('**The head must not have moved.**');
       expect(skill).toContain('If the head moved, do not publish');
+    }
+    // Factory offers no test check tool; the test report comment carries the results.
+    for (const name of ['factory-review', 'factory-rereview', 'factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const skill = await read(name);
+      expect(skill).not.toContain('source_control_publish_test_check');
+      expect(skill).not.toContain('The check URL');
+      expect(skill).toContain('`Verification incomplete` naming the drift');
     }
     // Existing review signal (bot and human) must be collected from every
     // source — submitted reviews, unresolved inline threads with their
@@ -798,7 +831,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('related-issue context and external CI status must still be reported in the handoff');
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
-    expect(review).toContain('- **Issue and intent**');
+    expect(review).toContain('**Issue and intent** (');
     expect(review).toContain('including base-versus-head evidence for behavior-changing claims');
 
     // Issue context is collected and reported, but a missing or unrelated issue
@@ -846,10 +879,13 @@ describe('bundled Factory skill assets', () => {
     expect(security).toContain('do not run them');
     expect(security).toContain('a suggested fix is a finding to evaluate, not a commit to make on your branch');
     const phase3 = section('## Phase 3: Quality Gate', '## Phase 4');
-    expect(phase3).toContain('Report red, missing, and still-running CI as advisory findings');
+    expect(phase3).toContain('Report red, missing, and still-running CI as non-blocking findings');
     expect(phase3).toContain('CI status alone cannot block approval or create a requested change');
     expect(phase3).toContain(
-      'only a defect you confirm or a failed verification you run yourself can block the verdict',
+      'only a defect you confirm in the code or a failed verification you run yourself can block the verdict',
+    );
+    expect(phase3).toContain(
+      'checks on PR metadata or process (issue reference, title format, labels, required reviews, DCO, and similar) are never verdict inputs',
     );
     expect(phase3).toContain('After the pre-execution inspection from the security section clears the diff');
     expect(phase3).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm --filter <pkg> test');
@@ -931,7 +967,7 @@ describe('bundled Factory skill assets', () => {
 
     // The handoff carries the approach judgment and unhedged requests.
     const handoff = section('## Phase 6: Handoff & Verdict', '## Behavior Rules');
-    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('**Approach** (');
     expect(handoff).toContain('imperative and present tense');
     expect(handoff).toContain('No softened requests');
     expect(handoff).toContain('Preserve qualifications that express real limits of evidence');
@@ -1071,10 +1107,13 @@ describe('bundled Factory skill assets', () => {
     );
 
     const qualityGate = section('## Phase 4: Quality Gate', '## Phase 5');
-    expect(qualityGate).toContain('Report red, missing, and still-running CI as advisory findings');
+    expect(qualityGate).toContain('Report red, missing, and still-running CI as non-blocking findings');
     expect(qualityGate).toContain('CI status alone cannot block approval or create a requested change');
     expect(qualityGate).toContain(
-      'only a defect you confirm or a failed verification you run yourself can block the verdict',
+      'only a defect you confirm in the code or a failed verification you run yourself can block the verdict',
+    );
+    expect(qualityGate).toContain(
+      'checks on PR metadata or process (issue reference, title format, labels, required reviews, DCO, and similar) are never verdict inputs',
     );
     expect(qualityGate).toContain('Model-provider behavior requires integration-level verification');
     expect(qualityGate).toContain('unit tests with mocked SDK responses are not enough');
@@ -1103,7 +1142,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
     const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
-    expect(handoff).toContain('- **Issue and intent**');
+    expect(handoff).toContain('**Issue and intent** (');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
 
@@ -1129,7 +1168,7 @@ describe('bundled Factory skill assets', () => {
     expect(verdict).toContain(
       'A prior-pass request that the push showed to be wrong is corrected here, not carried out of loyalty',
     );
-    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('**Approach** (');
     expect(handoff).toContain('No softened requests');
     expect(instructions).toContain('**Your design before theirs.**');
   });
@@ -3924,6 +3963,7 @@ describe('factory environment sandbox context', () => {
     }>;
     project?: Record<string, unknown>;
     workspaceRegistry?: FactoryWorkspaceRegistry;
+    sandboxEnvs?: CreateWorkspaceFactoryOptions['sandboxEnvs'];
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -3960,6 +4000,7 @@ describe('factory environment sandbox context', () => {
       github: github as any,
       projects: projects as any,
       workspaceRegistry: options.workspaceRegistry,
+      ...(options.sandboxEnvs ? { sandboxEnvs: options.sandboxEnvs } : {}),
     });
     return { resolver, projects, sandbox, github };
   }
@@ -4226,6 +4267,75 @@ describe('factory environment sandbox context', () => {
       return { workspace, exec: sandbox.exec };
     }
 
+    it('hands Build variables to the template context and setup commands, never the runtime env', async () => {
+      const { sandboxEnvs } = await createFactoryStorageForTests();
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_BUILD', value: 'build-1', appliesTo: 'build' }, 'u');
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_RUNTIME', value: 'run-1', appliesTo: 'runtime' }, 'u');
+      const revisions = await sandboxEnvs.revisions('org-1', 'factory-1');
+      const { resolver, sandbox } = environmentFixture({ links: twoLinks, sandboxEnvs });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      expect(sandbox.calls[0]!.ctx).toMatchObject({
+        buildEnv: { PROOF_BUILD: 'build-1' },
+        buildEnvRevision: revisions!.buildRevision,
+      });
+      // Every Factory-run setup command gets the Build variables as its own env.
+      expect(mocks.runSetupCommand.mock.calls.map(call => [call[2], call[3]])).toEqual([
+        ['pnpm i', { PROOF_BUILD: 'build-1' }],
+        ['touch .workspace-ready', { PROOF_BUILD: 'build-1' }],
+      ]);
+      // Runtime values ride along only so a failed setup can mask them.
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[4])).toEqual([
+        { PROOF_RUNTIME: 'run-1' },
+        { PROOF_RUNTIME: 'run-1' },
+      ]);
+      // The runtime overlay only ever gets the Runtime variables.
+      let overlay: Record<string, string | undefined> = {};
+      for (const [update] of mocks.setEnv.mock.calls as Array<[(env: typeof overlay) => typeof overlay]>) {
+        overlay = update(overlay);
+      }
+      expect(overlay).toMatchObject({ PROOF_RUNTIME: 'run-1' });
+      expect(overlay).not.toHaveProperty('PROOF_BUILD');
+    });
+
+    it('leaves the build fields out of the context when the Factory has no Build variables', async () => {
+      const { sandboxEnvs } = await createFactoryStorageForTests();
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_RUNTIME', value: 'run-1', appliesTo: 'runtime' }, 'u');
+      const { resolver, sandbox } = environmentFixture({ links: twoLinks, sandboxEnvs });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      expect(sandbox.calls[0]!.ctx).not.toHaveProperty('buildEnv');
+      expect(sandbox.calls[0]!.ctx).not.toHaveProperty('buildEnvRevision');
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[3])).toEqual([{}, {}]);
+    });
+
+    it('still starts the session when the variables cannot be read', async () => {
+      const { sandboxEnvs } = await createFactoryStorageForTests();
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_BUILD', value: 'build-1', appliesTo: 'build' }, 'u');
+      const failing: typeof sandboxEnvs = Object.create(sandboxEnvs);
+      failing.resolve = async () => {
+        throw new Error('Unknown key id: old');
+      };
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { resolver, sandbox } = environmentFixture({ links: twoLinks, sandboxEnvs: failing });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      expect(sandbox.calls[0]!.ctx).not.toHaveProperty('buildEnv');
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[3])).toEqual([{}, {}]);
+      expect(JSON.stringify(warn.mock.calls)).toContain('Unknown key id');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('build-1');
+      warn.mockRestore();
+    });
+
     it('materializes every repository beneath the root, syncs the others with their own token and sets up once', async () => {
       const { resolver } = environmentFixture({ links: twoLinks });
       addProject({ setupCommand: 'pnpm i' });
@@ -4482,6 +4592,40 @@ describe('factory environment sandbox context', () => {
         setupStatus: 'failed',
       });
       warn.mockRestore();
+    });
+
+    it('syncs the other repositories side by side instead of one after another, keeping their order in the state', async () => {
+      const { resolver } = environmentFixture({
+        links: [
+          ...twoLinks,
+          { id: 'link-4', repositoryId: 'repository-4', slug: 'octocat/site', position: 4, inEnvironment: true },
+        ],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const started: string[] = [];
+      const release: Array<() => void> = [];
+      mocks.syncEnvironmentRepository.mockImplementation(async (_sandbox: unknown, dir: string) => {
+        started.push(dir);
+        await new Promise<void>(resolve => release.push(resolve));
+        return { outcome: 'created' as const, branch: 'factory/issue-7' };
+      });
+
+      const booted = boot(resolver);
+      await vi.waitFor(() => expect(started).toEqual(['/home/user/docs', '/home/user/site']));
+      for (const resolve of release) resolve();
+      await booted;
+
+      expect(peekSessionEnvironment('session-a')?.repositories.map(repo => repo.slug)).toEqual([
+        'octocat/hello',
+        'octocat/docs',
+        'octocat/site',
+      ]);
+      mocks.syncEnvironmentRepository.mockReset();
+      mocks.syncEnvironmentRepository.mockImplementation(async () => ({
+        outcome: 'created' as const,
+        branch: 'factory/issue-7',
+      }));
     });
 
     it('records the environment for teardown even when the workspace setup command fails', async () => {

@@ -1,5 +1,110 @@
 # @mastra/mcp-apps-components
 
+## 0.1.0-alpha.5
+
+### Minor Changes
+
+- Added `createObservabilityDraftSchemas`, so tools that save dashboards can build the widget and dashboard schemas from one catalog, and offer a model only the choices they accept. ([#29832](https://github.com/mastra-ai/mastra/pull/29832))
+
+  `createObservabilityDraftSchemas(catalog, options)` returns a `widget` and a `dashboard` schema. Pass `kinds` to offer only some widget kinds, and `dashboardFilters: false` to leave `defaults.filters` out. What you leave out is missing from the JSON schema the model sees, and rejected if the model writes it anyway. The draft schemas and converters are also exported from `@mastra/mcp-apps-components/dashboards`, which doesn't load the bundled apps.
+
+  ```ts
+  import { createObservabilityDraftSchemas, toObservabilityWidget } from '@mastra/mcp-apps-components/dashboards';
+
+  const schemas = createObservabilityDraftSchemas({ metricNames }, { kinds: ['kpis', 'timeseries', 'table'] });
+
+  const addWidget = createTool({
+    id: 'addWidget',
+    inputSchema: schemas.widget,
+    // Keeps the widget's id when the model gives one
+    execute: async widget => saveWidget(toObservabilityWidget(widget)),
+  });
+  ```
+
+  Invalid widgets are rejected with paths into what the model wrote, such as `timeseries.series.1.value`. When `toObservabilityWidget` throws, the error's `cause` is the `ZodError` with those paths. Converted widgets pass `strictDashboardWidgetSchema`.
+
+  The widget and dashboard input schemas are about 28% smaller, because metric and score filters are written out once instead of at every read. They also now reject a widget whose tabs share a label, which used to open as an error card.
+
+- Added `createObservabilityWidgetInputSchema`, `observabilityWidgetInputSchema` and `toObservabilityWidget`, so a tool that adds one widget to a saved dashboard accepts the same widget a model writes for `showObservabilityDashboard`, checked and converted the same way. ([#29913](https://github.com/mastra-ai/mastra/pull/29913))
+
+  ```ts
+  import { createObservabilityWidgetInputSchema, toObservabilityWidget } from '@mastra/mcp-apps-components';
+
+  const widgetSchema = createObservabilityWidgetInputSchema({ metricNames });
+  const widget = toObservabilityWidget({
+    title: 'Model spend',
+    table: { groupBy: ['model'], columns: [/* ... */] },
+  });
+  ```
+
+- Added `@mastra/mcp-apps-components/dashboards`, a strict schema for storing dashboard definitions. Unlike core's `dashboardDefinitionSchema`, it only accepts definitions the dashboard renderer can draw: built-in widget kinds only, each view's options checked against its kind, `columns` only on table views, and each kind's own checks run at both org and project scope. Every problem is a zod issue with a path. Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have, point at the view, such as `rows.0.widgets.1.views.0`, and their message says what's wrong. ([#29802](https://github.com/mastra-ai/mastra/pull/29802))
+
+  **Before**
+
+  ```ts
+  import { dashboardDefinitionEnvelopeSchema } from '@mastra/core/storage/dashboards';
+
+  dashboardDefinitionEnvelopeSchema.parse(body.definition);
+  const definition = body.definition as Record<string, unknown>;
+  ```
+
+  **After**
+
+  ```ts
+  import { strictDashboardDefinitionSchema } from '@mastra/mcp-apps-components/dashboards';
+  import type { StrictDashboardDefinition } from '@mastra/mcp-apps-components/dashboards';
+
+  // In the service that stores dashboards, on every write
+  const definition: StrictDashboardDefinition = strictDashboardDefinitionSchema.parse(body.definition);
+  ```
+
+  Use `strictDashboardWidgetSchema` to check a single widget. Call both in the code that stores dashboards, not in a request-body schema: their input type is `unknown` and their JSON schema is empty, so keep core's schema there for request types and API docs. The subpath doesn't load the package's bundled apps.
+
+### Patch Changes
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
+## 0.1.0-alpha.4
+
+### Patch Changes
+
+- Fixed menus in observability widgets showing with a transparent background. Dropdowns such as the chart's view picker now draw their own surface, so the chart behind them no longer shows through. ([#29906](https://github.com/mastra-ai/mastra/pull/29906))
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+
+## 0.1.0-alpha.3
+
+### Minor Changes
+
+- Added `observabilityWidgetHost` to `@mastra/mcp-apps-components/host`, so a host page such as Studio's Metrics page can pass its project, date range and filters down to observability widgets. The widgets read over the host's selection instead of the dashboard's defaults, read again when it changes, and send `projectId` with every `queryObservability` call so your server can scope reads to that project. With a `projectId`, the widgets show at project scope; without one, at org scope. A custom range reads over the same window as the Metrics page, and a pinned widget keeps it. Pinning is optional. ([#29736](https://github.com/mastra-ai/mastra/pull/29736))
+
+  ```tsx
+  import { McpAppHostProvider } from '@mastra/playground-ui/domains/mcps';
+  import { observabilityWidgetHost } from '@mastra/mcp-apps-components/host';
+
+  const host = observabilityWidgetHost({
+    resourceUri: 'ui://mastra/observability-widget',
+    projectId,
+    datePreset: 'custom', // or '24h' | '3d' | '7d' | '14d' | '30d'
+    customRange: { from: new Date('2026-10-01'), to: new Date('2026-10-04') },
+    filters: [{ fieldId: 'environment', value: 'production' }],
+    // pins: { pinnedIds, onPin, onUnpin },
+  });
+
+  <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
+  ```
+
+  Accept `projectId` in your `queryObservability` tool's input schema and scope the reads with it. It comes from the app's iframe, so check that the caller can access that project before reading.
+
+### Patch Changes
+
+- Fixed missing TypeScript types for `@mastra/mcp-apps-components/host`. Importing `observabilityWidgetHost` from it no longer fails with "Could not find a declaration file". ([#29742](https://github.com/mastra-ai/mastra/pull/29742))
+
+- Updated dependencies [[`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/core@1.83.0-alpha.3
+
 ## 0.1.0-alpha.2
 
 ### Minor Changes

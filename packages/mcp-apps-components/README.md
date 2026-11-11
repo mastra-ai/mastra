@@ -197,6 +197,96 @@ const host = useMemo(
 
 To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `observabilityWidgetPins` is the same helper with only pins.
 
+#### Configuring a widget
+
+Pass `onConfigure` to `observabilityWidgetHost` to show a settings button on each widget, for example to open your own dialog for it:
+
+```tsx
+const host = useMemo(
+  () =>
+    observabilityWidgetHost({
+      resourceUri: 'ui://mastra/observability-widget',
+      onConfigure: ({ widget, datePreset, customRange, filters }) =>
+        openWidgetSettings(widget, { datePreset, customRange, filters }),
+    }),
+  [],
+);
+```
+
+The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`) and the filters it is drawn with, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus, and always shows on touch screens.
+
+### Validating stored dashboards
+
+`dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` checks a definition's structure and queries, but not what each widget kind needs. A definition can pass it and still show an error in place of a widget. To store only dashboards that draw, check every write with `strictDashboardDefinitionSchema` in the code that stores them:
+
+```ts
+import { strictDashboardDefinitionSchema } from '@mastra/mcp-apps-components/dashboards';
+import type { StrictDashboardDefinition } from '@mastra/mcp-apps-components/dashboards';
+
+const result = strictDashboardDefinitionSchema.safeParse(body.definition);
+if (!result.success) {
+  // Each issue has a path to the view, or into its options
+  throw new BadRequestError(result.error.issues);
+}
+const definition: StrictDashboardDefinition = result.data;
+```
+
+On top of core's checks, the schema:
+
+- Rejects widget kinds other than `kpis`, `table`, `timeseries` and `scores`.
+- Checks each view's `options`, and each table column's `options`, against the kind's own schema.
+- Rejects `columns` on views of widgets that aren't tables. The renderer ignores them, but they usually mean the widget was written as another kind.
+- Runs each kind's checks, such as a KPI reading a query its view has, or a chart's series all fitting its buckets.
+- Checks the widget at both `org` and `project` scope, so a widget that only breaks on one kind of page is rejected too.
+
+Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have or two views with one label, point at the view, such as `rows.0.widgets.1.views.0`, with a message saying what's wrong, such as `options: reads query 'nope', which the view doesn't have`. All of a definition's problems come back together, so one fix can address them all.
+
+`result.data` is the definition you passed in, unchanged; store it as sent. A definition that passes still passes after core's `dashboardDefinitionSchema` has parsed it and filled in its defaults, so you can check what you store either way. Use `strictDashboardWidgetSchema` to check a single widget, such as one being added or pinned; its issue paths start at the widget. Checks across widgets, such as unique ids and the widget limit, need the full definition.
+
+Don't use these schemas in a request-body schema. Their input type is `unknown` and their JSON schema is empty, so a request type built from them would type `definition` as `unknown`, and generated API docs would describe it as anything. Keep core's `dashboardDefinitionSchema` there, and check with the strict schemas in the service before storing. Use `StrictDashboardDefinition` to type what you store and return.
+
+Dashboards with custom widget kinds should keep using core's `dashboardDefinitionSchema`.
+
+### Saving dashboards a model writes
+
+A model writes a widget more reliably from a schema that spells out each kind's options than from an open object. `createObservabilityDraftSchemas` returns the schemas the dashboard tool takes, for a single widget (`widget`) and a whole dashboard (`dashboard`), to use as the input of tools that save them. Convert what the model wrote with `toObservabilityWidget` or `toObservabilityDashboard`:
+
+```ts
+import { createTool } from '@mastra/core/tools';
+import {
+  createObservabilityDraftSchemas,
+  toObservabilityDashboard,
+  toObservabilityWidget,
+} from '@mastra/mcp-apps-components/dashboards';
+
+const schemas = createObservabilityDraftSchemas(
+  { metricNames: await listMetricNames() },
+  { kinds: ['kpis', 'timeseries', 'table'], dashboardFilters: false },
+);
+
+const addWidget = createTool({
+  id: 'addWidget',
+  description: 'Adds a widget to the dashboard',
+  inputSchema: schemas.widget,
+  execute: async widget => saveWidget(toObservabilityWidget(widget)),
+});
+
+const createDashboard = createTool({
+  id: 'createDashboard',
+  description: 'Creates a dashboard',
+  inputSchema: schemas.dashboard,
+  execute: async dashboard => saveDashboard(toObservabilityDashboard({ dashboard }).dashboard),
+});
+```
+
+- **Options:** `kinds` lists the widget kinds a model can write, and `dashboardFilters: false` limits a dashboard's `defaults` to `datePreset`. What you leave out is missing from the JSON schema the model sees, and rejected when a model writes it anyway. Narrowing `kinds` doesn't narrow the TypeScript types.
+- **One call per catalog:** Build both tools' schemas from one call. Building takes about a millisecond, so it's fine to build them per request.
+- **Ids:** `toObservabilityWidget` keeps a widget's `id` when the model gives one, so a widget can be pinned or replaced by it, and assigns a fresh UUID otherwise. `toObservabilityDashboard` does the same for each widget.
+- **Converting outside a tool:** `toObservabilityWidget` and `toObservabilityDashboard` check against the default schemas, which allow every kind and metric name. Inside a tool built as above, its input schema has already applied your catalog and options. Anywhere else, check the draft against your schemas first, such as with `schemas.widget.parse(draft)`.
+- **Errors:** As tool input schemas, the schemas reject a draft before `execute` runs, with paths into what the model wrote, such as `timeseries.series.1.value` for a widget or `rows.0.widgets.0.timeseries.series.1.value` for a dashboard. Nested under a field of a larger input, paths start with that field's name. `toObservabilityWidget` throws an error whose `cause` is the `ZodError`, with the same paths. Checks across widgets, such as unique ids and the widget limit, need the whole dashboard.
+
+A draft that passes converts to a widget that passes `strictDashboardWidgetSchema`. Keep checking with the strict schemas where you store dashboards, since they also cover writes that don't come from a draft.
+
 ## Documentation
 
 - [MCP Apps in Mastra](https://mastra.ai/docs/connections/mcp)

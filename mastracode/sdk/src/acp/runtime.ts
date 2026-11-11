@@ -42,6 +42,8 @@ export async function createAcpSession(
     mcpServers: Object.fromEntries(servers),
     // ACP clients can answer permission requests, but have no free-text tool response method.
     disabledTools: ['ask_user'],
+    // ACP approves submit_plan without starting a goal.
+    planApprovalStartsGoal: false,
     unixSocketPubSub: false,
     disableMcp: false,
     disableHooks: false,

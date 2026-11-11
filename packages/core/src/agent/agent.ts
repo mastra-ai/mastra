@@ -5788,16 +5788,27 @@ export class Agent<
     let toolsForRequest: Record<string, CoreTool> = {};
 
     const memory = await this.getMemory({ requestContext });
-    const toolsFromToolsets = Object.values(toolsets || {});
+    const toolsetEntries = Object.entries(toolsets || {});
 
-    if (toolsFromToolsets.length > 0) {
+    if (toolsetEntries.length > 0) {
       this.logger.debug('Adding tools from toolsets', {
         agent: this.name,
-        toolsets: Object.keys(toolsets || {}),
+        toolsets: toolsetEntries.map(([toolsetName]) => toolsetName),
         runId,
       });
-      for (const toolset of toolsFromToolsets) {
+      // Toolsets are flattened by tool name, so a later toolset replaces an earlier
+      // toolset's tool with the same name. Keep that behavior, but say so.
+      const toolsetByToolName = new Map<string, string>();
+      for (const [toolsetName, toolset] of toolsetEntries) {
         for (const [toolName, tool] of Object.entries(toolset)) {
+          const earlierToolsetName = toolsetByToolName.get(toolName);
+          if (earlierToolsetName !== undefined) {
+            this.logger.warn(
+              `Tool "${toolName}" from toolset "${toolsetName}" replaces the tool with the same name from toolset "${earlierToolsetName}", so the "${earlierToolsetName}" tool is not used. Give the tools distinct names to keep both.`,
+              { agent: this.name, tool: toolName, toolsets: [earlierToolsetName, toolsetName], runId },
+            );
+          }
+          toolsetByToolName.set(toolName, toolsetName);
           const toolObj = tool;
           const options: ToolOptions = {
             name: toolName,
@@ -12395,6 +12406,7 @@ export class Agent<
       messageId: globalThis.crypto.randomUUID(),
       model: { modelId: undefined, provider: undefined, version: 'v3' },
       offset: options?.offset,
+      replayResponseMessagesBeforeOffset: true,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
