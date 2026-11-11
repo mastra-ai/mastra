@@ -163,6 +163,7 @@ describe('evented workflow durable sleep recovery', () => {
       autoRestartActiveRuns: false,
     });
     const workflowsStore = await startSleepingRun({ storage, workflow, runId: 'disabled-sleep-restart-run' });
+    const createRun = vi.spyOn(workflow, 'createRun');
 
     const replacementRuntime = new Mastra({
       logger: false,
@@ -172,8 +173,8 @@ describe('evented workflow durable sleep recovery', () => {
     });
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
-    await new Promise(resolve => setTimeout(resolve, 200));
 
+    expect(createRun).not.toHaveBeenCalled();
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: workflow.id,
       runId: 'disabled-sleep-restart-run',
