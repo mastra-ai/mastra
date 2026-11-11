@@ -4633,12 +4633,21 @@ describe('factory environment sandbox context', () => {
       const { resolver, github } = environmentFixture({ links });
       addProject({ setupCommand: 'pnpm i' });
       addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
-      const applied = (index: number) =>
-        (
-          mocks.setEnv.mock.calls[index]![0] as (
-            env: Record<string, string | undefined>,
-          ) => Record<string, string | undefined>
-        )({});
+      // Snapshot each install as it happens: later mints must not change what an earlier call put in.
+      const installed: Record<string, string | undefined>[] = [];
+      mocks.setEnv.mockImplementation(
+        (update: (env: Record<string, string | undefined>) => Record<string, string | undefined>) => {
+          installed.push(update({}));
+        },
+      );
+      const originalAccess = mocks.getRepositoryAccess.getMockImplementation()!;
+      const originalWideAccess = mocks.getRepositoriesAccess.getMockImplementation()!;
+      onTestFinished(() => {
+        mocks.setEnv.mockReset();
+        mocks.getRepositoryAccess.mockImplementation(originalAccess);
+        mocks.getRepositoriesAccess.mockImplementation(originalWideAccess);
+      });
+      const applied = (index: number) => installed[index]!;
 
       const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
       await workspace.sandbox.getInfo();
