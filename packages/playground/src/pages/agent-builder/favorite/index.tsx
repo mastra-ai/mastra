@@ -1,25 +1,19 @@
 import type { ListStoredAgentsParams, StoredSkillResponse } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useListSearch } from '@mastra/playground-ui/hooks/use-list-search';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredAgents, useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
-import { StarIcon, SearchIcon, XIcon } from 'lucide-react';
+import { StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -37,7 +31,6 @@ type Tab = 'agents' | 'skills';
 export default function AgentBuilderFavoritePage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const searchField = useListSearch({ onSearch: setSearch });
   const [tab, setTab] = useState<Tab>('agents');
   const features = useBuilderAgentFeatures();
   const { data: currentUser } = useCurrentUser();
@@ -173,23 +166,15 @@ export default function AgentBuilderFavoritePage() {
                   </div>
                 )}
                 <div className="max-w-120 flex-1">
-                  <InputGroup size="sm" className="w-full max-w-120">
-                    <InputGroupAddon>
-                      <SearchIcon />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                      {...searchField.inputProps}
-                      aria-label="Search favorites"
-                      placeholder="Search by name or description"
-                    />
-                    {searchField.value && (
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
-                          <XIcon />
-                        </InputGroupButton>
-                      </InputGroupAddon>
-                    )}
-                  </InputGroup>
+                  <SearchInput
+                    size="sm"
+                    debounceMs={300}
+                    shortcut
+                    className="max-w-120"
+                    onValueChange={setSearch}
+                    label="Search favorites"
+                    placeholder="Search by name or description"
+                  />
                 </div>
               </ActionRow.Start>
             </ActionRow>

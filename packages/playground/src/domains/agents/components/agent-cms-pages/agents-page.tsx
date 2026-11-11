@@ -1,11 +1,6 @@
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
@@ -13,10 +8,9 @@ import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/pas
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useAgents } from '@mastra/react/hooks/agents';
-import { SearchIcon, XIcon } from 'lucide-react';
-
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
+
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
@@ -114,25 +108,7 @@ export function AgentsPage() {
             <SubSectionHeader title="Available Agents" icon={<AgentIcon />} />
           </Section.Header>
 
-          <InputGroup>
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search agents"
-              placeholder="Search agents"
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-            />
-            {search && (
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
-                  <XIcon />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
+          <SearchInput label="Search agents" placeholder="Search agents" value={search} onValueChange={setSearch} />
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">

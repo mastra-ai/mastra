@@ -1,30 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { SearchIcon, XIcon } from 'lucide-react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useListSearch } from './use-list-search';
-import type { UseListSearchOptions } from './use-list-search';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+import { SearchInput } from './search-input';
+import type { SearchInputProps } from './search-input';
 
-// A list page's search field, composed the way pages compose it.
-function ListSearchField({ label, ...options }: UseListSearchOptions & { label: string }) {
-  const search = useListSearch(options);
-  return (
-    <InputGroup size="sm">
-      <InputGroupAddon>
-        <SearchIcon />
-      </InputGroupAddon>
-      <InputGroupInput {...search.inputProps} aria-label={label} placeholder="Search by name" />
-      {search.value && (
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton aria-label="Clear search" onClick={search.clear}>
-            <XIcon />
-          </InputGroupButton>
-        </InputGroupAddon>
-      )}
-    </InputGroup>
-  );
+function ControlledSearch({ onClose }: { onClose?: () => void }) {
+  const [value, setValue] = useState('');
+  return <SearchInput label="Search code" value={value} onValueChange={setValue} onClose={onClose} />;
 }
 
 const setPlatform = (value: string) => {
@@ -42,10 +26,11 @@ afterEach(() => {
   setPlatform(originalPlatform);
 });
 
-const renderListSearch = (props: Partial<React.ComponentProps<typeof ListSearchField>> = {}) =>
-  render(<ListSearchField onSearch={vi.fn()} label="Search agents" {...props} />);
+// A list page's search: it keeps its own text and reports it debounced.
+const renderListSearch = (props: Partial<SearchInputProps> = {}) =>
+  render(<SearchInput label="Search agents" onValueChange={vi.fn()} debounceMs={300} shortcut {...props} />);
 
-describe('useListSearch keyboard shortcut', () => {
+describe('SearchInput keyboard shortcut', () => {
   it('focuses the search field on Cmd+Shift+F on mac', () => {
     setPlatform('MacIntel');
     renderListSearch();
@@ -97,8 +82,8 @@ describe('useListSearch keyboard shortcut', () => {
     setPlatform('MacIntel');
     render(
       <>
-        <ListSearchField onSearch={vi.fn()} label="Search agents" />
-        <ListSearchField onSearch={vi.fn()} label="Search skills" shortcut={false} />
+        <SearchInput label="Search agents" onValueChange={vi.fn()} shortcut />
+        <SearchInput label="Search skills" onValueChange={vi.fn()} />
       </>,
     );
 
@@ -111,7 +96,7 @@ describe('useListSearch keyboard shortcut', () => {
   it('still debounces search input', async () => {
     vi.useFakeTimers();
     const onSearch = vi.fn();
-    renderListSearch({ onSearch });
+    renderListSearch({ onValueChange: onSearch });
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search agents' }), { target: { value: 'abc' } });
     expect(onSearch).not.toHaveBeenCalled();
@@ -122,7 +107,7 @@ describe('useListSearch keyboard shortcut', () => {
   });
 });
 
-describe('useListSearch clearing', () => {
+describe('SearchInput debounced clearing', () => {
   it('offers no clear button until there is something to clear', () => {
     renderListSearch();
 
@@ -132,7 +117,7 @@ describe('useListSearch clearing', () => {
   it('clears the field at once, drops the pending search and keeps focus in the field', () => {
     vi.useFakeTimers();
     const onSearch = vi.fn();
-    renderListSearch({ onSearch });
+    renderListSearch({ onValueChange: onSearch });
     const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
 
     fireEvent.change(input, { target: { value: 'abc' } });
@@ -144,5 +129,42 @@ describe('useListSearch clearing', () => {
     expect(document.activeElement).toBe(input);
     expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
     vi.useRealTimers();
+  });
+});
+
+describe('SearchInput clearing', () => {
+  it('clears the field and keeps focus in it', () => {
+    render(<ControlledSearch />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search code' });
+
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+    fireEvent.change(input, { target: { value: 'span' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+
+    expect(input.value).toBe('');
+    expect(document.activeElement).toBe(input);
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+  });
+});
+
+describe('SearchInput that collapses', () => {
+  it('can be closed while empty', () => {
+    const onClose = vi.fn();
+    render(<ControlledSearch onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('clears what was typed when closed', () => {
+    render(<ControlledSearch onClose={() => {}} />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search code' });
+
+    fireEvent.change(input, { target: { value: 'span' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
+
+    expect(input.value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
   });
 });

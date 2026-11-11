@@ -1,13 +1,7 @@
 import { ClearFiltersButton } from '@mastra/playground-ui/components/ClearFiltersButton';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon, XIcon } from 'lucide-react';
 
 type TemplatesToolsProps = {
   selectedTag: string;
@@ -52,27 +46,15 @@ export function TemplatesTools({
 
   return (
     <div className={cn('sticky top-0 mx-auto flex flex-wrap gap-1.5 bg-background py-5', className)}>
-      <InputGroup size="sm">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          type="search"
-          aria-label="Search templates"
-          placeholder="Search templates"
-          value={searchTerm}
-          onChange={event => onSearchChange(event.target.value)}
-        />
-        {searchTerm && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton aria-label="Clear search" onClick={() => onSearchChange('')}>
-              <XIcon />
-            </InputGroupButton>
-          </InputGroupAddon>
-        )}
-      </InputGroup>
+      <SearchInput
+        label="Search templates"
+        placeholder="Search templates"
+        size="sm"
+        value={searchTerm}
+        onValueChange={onSearchChange}
+      />
       <Select value={selectedTag} onValueChange={onTagChange}>
-        <SelectTrigger aria-label="Filter by tag" size="sm" className="w-auto">
+        <SelectTrigger aria-label="Search by tag" size="sm" className="w-auto">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
         <SelectContent>
@@ -84,7 +66,7 @@ export function TemplatesTools({
         </SelectContent>
       </Select>
       <Select value={selectedProvider} onValueChange={onProviderChange}>
-        <SelectTrigger aria-label="Filter by provider" size="sm" className="w-auto">
+        <SelectTrigger aria-label="Search by provider" size="sm" className="w-auto">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
         <SelectContent>

@@ -6,16 +6,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
-import { SearchIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { GitLabIcon } from '../../../ui/icons';
@@ -42,25 +36,13 @@ export function RepositoryPickerDialog({
         <DialogHeader>
           <DialogTitle>Choose a repository</DialogTitle>
           <DialogDescription>Choose a linked repository for this task.</DialogDescription>
-          <InputGroup size="sm">
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search repositories"
-              placeholder="Search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
-            {query && (
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton aria-label="Clear search" onClick={() => setQuery('')}>
-                  <XIcon />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
+          <SearchInput
+            label="Search repositories"
+            placeholder="Search"
+            size="sm"
+            value={query}
+            onValueChange={setQuery}
+          />
         </DialogHeader>
         <DialogBody>
           <div className="flex min-w-0 flex-col gap-px">

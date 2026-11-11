@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SearchIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { expect, waitFor, within } from 'storybook/test';
@@ -21,8 +20,9 @@ import { Button } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupButton } from '@/ds/components/InputGroup';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { Switch } from '@/ds/components/Switch';
 import { Txt } from '@/ds/components/Txt';
 import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@/ds/new/settings';
@@ -261,25 +261,7 @@ function SkillBrowser() {
           <DialogDescription>Search the registry and preview a skill before installing it.</DialogDescription>
         </DialogHeader>
         <DialogBody layout="fill">
-          <InputGroup>
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search skills"
-              placeholder="Search skills"
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-            />
-            {search && (
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
-                  <XIcon />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
+          <SearchInput label="Search skills" placeholder="Search skills" value={search} onValueChange={setSearch} />
           <div className="grid min-h-0 flex-1 grid-cols-[14rem_1fr] gap-4">
             <ScrollArea className="min-h-0">
               <ul className="flex flex-col">

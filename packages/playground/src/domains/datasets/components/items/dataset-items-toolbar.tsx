@@ -3,28 +3,12 @@
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useListSearch } from '@mastra/playground-ui/hooks/use-list-search';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  Upload,
-  FileJson,
-  Download,
-  FolderPlus,
-  FolderOutput,
-  Trash2,
-  ChevronDown,
-  SearchIcon,
-  XIcon,
-} from 'lucide-react';
+import { Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -73,7 +57,6 @@ export function DatasetItemsToolbar({
   onReturnToLatestVersion,
   actionsSlot,
 }: DatasetItemsToolbarProps) {
-  const search = useListSearch({ value: searchQuery ?? '', onSearch: query => onSearchChange?.(query) });
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
     <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
       <Txt as="span" variant="caption" className="truncate">
@@ -99,19 +82,15 @@ export function DatasetItemsToolbar({
 
   const searchField = showItemActions && (
     <div className="max-w-120 flex-1">
-      <InputGroup size="sm" className="w-full max-w-120">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput {...search.inputProps} aria-label="Search items" placeholder="Search items" />
-        {search.value && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton aria-label="Clear search" onClick={search.clear}>
-              <XIcon />
-            </InputGroupButton>
-          </InputGroupAddon>
-        )}
-      </InputGroup>
+      <SearchInput
+        size="sm"
+        debounceMs={300}
+        shortcut
+        label="Search items"
+        placeholder="Search items"
+        value={searchQuery ?? ''}
+        onValueChange={query => onSearchChange?.(query)}
+      />
     </div>
   );
 

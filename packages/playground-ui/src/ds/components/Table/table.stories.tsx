@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUpRight, Bot, Columns3, Ellipsis, SearchIcon, XIcon } from 'lucide-react';
+import { ArrowUpRight, Bot, Columns3, Ellipsis } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Badge } from '../Badge';
@@ -18,14 +18,13 @@ import {
 } from '@/ds/components/Drawer/drawer';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Input } from '@/ds/components/Input/input';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { PropertyFilterApplied } from '@/ds/components/PropertyFilter/property-filter-applied';
 import { PropertyFilterCreator } from '@/ds/components/PropertyFilter/property-filter-creator';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { SkeletonText } from '@/ds/components/Skeleton/skeleton-text';
 import { Switch } from '@/ds/components/Switch/switch';
 import { Txt } from '@/ds/components/Txt/Txt';
-import { useListSearch } from '@/hooks/use-list-search';
 import { formatFullNumber } from '@/lib/cost';
 import { cn } from '@/lib/utils';
 
@@ -442,21 +441,17 @@ type CreditSearchProps = {
 };
 
 function CreditSearch({ search, onSearch }: CreditSearchProps) {
-  const searchField = useListSearch({ value: search, onSearch });
   return (
-    <InputGroup size="sm" className="w-full max-w-120">
-      <InputGroupAddon>
-        <SearchIcon />
-      </InputGroupAddon>
-      <InputGroupInput {...searchField.inputProps} aria-label="Search credits" placeholder="Search credits" />
-      {searchField.value && (
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
-            <XIcon />
-          </InputGroupButton>
-        </InputGroupAddon>
-      )}
-    </InputGroup>
+    <SearchInput
+      size="sm"
+      debounceMs={300}
+      shortcut
+      className="max-w-120"
+      label="Search credits"
+      placeholder="Search credits"
+      value={search}
+      onValueChange={onSearch}
+    />
   );
 }
 
@@ -466,7 +461,7 @@ export const InsetSearchAndFilter: Story = {
     docs: {
       description: {
         story:
-          'A search field (`InputGroup` with `useListSearch`) and a multi-select Combobox in an ActionRow above the table. The caller filters the rows and renders the empty row when nothing matches.',
+          'SearchInput and a multi-select Combobox in an ActionRow above the table. The caller filters the rows and renders the empty row when nothing matches.',
       },
     },
   },
@@ -486,7 +481,7 @@ export const InsetSearchAndFilter: Story = {
           </ActionRow.Start>
           <ActionRow.End>
             <Combobox
-              aria-label="Filter by status"
+              aria-label="Search by status"
               multiple
               options={CREDIT_STATUS_OPTIONS}
               placeholder="Status"
@@ -877,7 +872,16 @@ export const InsetPagination: Story = {
         <CreditHistoryTitle id="credit-history-pagination" withLink={false} />
         <ActionRow>
           <ActionRow.Start>
-            <CreditSearch search={search} onSearch={changeSearch} />
+            <SearchInput
+              size="sm"
+              debounceMs={300}
+              shortcut
+              className="max-w-120"
+              label="Search credits"
+              placeholder="Search credits"
+              value={search}
+              onValueChange={changeSearch}
+            />
           </ActionRow.Start>
           <ActionRow.End>
             <BillingPortalLink />

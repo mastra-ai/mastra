@@ -351,30 +351,14 @@ Controls go in an `ActionRow` above the table: search and filters in `ActionRow.
 
 <Canvas of={TableStories.InsetSearchAndFilter} />
 
-A search field is an `InputGroup` with a search icon; `useListSearch` from `@mastra/playground-ui/hooks/use-list-search` debounces it and adds the clear action and the Cmd/Ctrl+Shift+F shortcut.
-
 ```tsx
-const searchField = useListSearch({ value: search, onSearch: setSearch });
-
 <ActionRow>
   <ActionRow.Start>
-    <InputGroup size="sm" className="w-full max-w-120">
-      <InputGroupAddon>
-        <SearchIcon />
-      </InputGroupAddon>
-      <InputGroupInput {...searchField.inputProps} aria-label="Search credits" placeholder="Search credits" />
-      {searchField.value && (
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
-            <XIcon />
-          </InputGroupButton>
-        </InputGroupAddon>
-      )}
-    </InputGroup>
+    <SearchInput size="sm" debounceMs={300} shortcut className="max-w-120" label="Search credits" placeholder="Search credits" value={search} onValueChange={setSearch} />
   </ActionRow.Start>
   <ActionRow.End>
     <Combobox
-      aria-label="Filter by status"
+      aria-label="Search by status"
       multiple
       options={statusOptions}
       placeholder="Status"
@@ -422,9 +406,13 @@ const [search, setSearch] = useState('');
 const filtered = credits.filter(credit => matchesSearch(credit, search));
 const pageCredits = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
-<CreditSearch
-  search={search}
-  onSearch={value => {
+<SearchInput
+  size="sm"
+  debounceMs={300}
+  label="Search credits"
+  placeholder="Search credits"
+  value={search}
+  onValueChange={value => {
     setSearch(value);
     setPage(0);
   }}

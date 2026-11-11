@@ -1,13 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, KeyRound, LogIn, ServerCog, SearchIcon, XIcon } from 'lucide-react';
+import { Check, KeyRound, LogIn, ServerCog } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
@@ -105,25 +100,12 @@ export function ModelProviderPicker({
         </TabList>
         <TabContent value="api_key">
           <div className="flex h-36 flex-col gap-3 pt-2">
-            <InputGroup>
-              <InputGroupAddon>
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="search"
-                aria-label="Search model providers"
-                placeholder="Search providers"
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-              />
-              {search && (
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
-                    <XIcon />
-                  </InputGroupButton>
-                </InputGroupAddon>
-              )}
-            </InputGroup>
+            <SearchInput
+              label="Search model providers"
+              placeholder="Search providers"
+              value={search}
+              onValueChange={setSearch}
+            />
             <span id={connectedDescriptionId} hidden>
               Connected
             </span>

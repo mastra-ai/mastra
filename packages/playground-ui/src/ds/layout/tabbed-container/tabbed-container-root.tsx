@@ -1,4 +1,4 @@
-import { ListFilterIcon, SearchIcon, XIcon } from 'lucide-react';
+import { ListFilterIcon } from 'lucide-react';
 import { Children, isValidElement, useContext } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import './tabbed-container.css';
@@ -6,7 +6,8 @@ import { Combobox } from '@/ds/components/Combobox/combobox';
 import type { ComboboxProps } from '@/ds/components/Combobox/combobox';
 import { DataList } from '@/ds/components/DataList/data-list';
 import type { DataListFit } from '@/ds/components/DataList/data-list-root';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+import { SearchInput } from '@/ds/components/SearchInput';
+import type { SearchInputProps } from '@/ds/components/SearchInput';
 import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { TabsContext } from '@/ds/components/Tabs/tabs-context';
 import { TabList } from '@/ds/components/Tabs/tabs-list';
@@ -16,13 +17,10 @@ import { Tab } from '@/ds/components/Tabs/tabs-tab';
 import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Txt } from '@/ds/components/Txt';
-import { useListSearch } from '@/hooks/use-list-search';
-import type { UseListSearchOptions } from '@/hooks/use-list-search';
 import { cn } from '@/lib/utils';
 
-export type TabbedContainerSearchProps = Pick<UseListSearchOptions, 'debounceMs' | 'onSearch' | 'value'> & {
-  label: string;
-  placeholder: string;
+export type TabbedContainerSearchProps = Pick<SearchInputProps, 'debounceMs' | 'label' | 'placeholder' | 'value'> & {
+  onSearch: (search: string) => void;
 };
 
 export type TabbedContainerFilterProps = ComboboxProps & { 'aria-label': string };
@@ -60,31 +58,6 @@ export const TabbedContainerDataList = ({ value, columns, fit, children, classNa
   </TabContent>
 );
 
-// One per data list, so each tab's search keeps its own text; only the active tab's takes the shortcut.
-const TabbedContainerSearch = ({
-  label,
-  placeholder,
-  active,
-  ...options
-}: TabbedContainerSearchProps & { active: boolean }) => {
-  const search = useListSearch({ ...options, shortcut: active });
-  return (
-    <InputGroup className="w-full max-w-120">
-      <InputGroupAddon>
-        <SearchIcon />
-      </InputGroupAddon>
-      <InputGroupInput {...search.inputProps} aria-label={label} placeholder={placeholder} />
-      {search.value && (
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton aria-label="Clear search" onClick={search.clear}>
-            <XIcon />
-          </InputGroupButton>
-        </InputGroupAddon>
-      )}
-    </InputGroup>
-  );
-};
-
 export const DataListControls = ({ dataLists }: { dataLists: ReactElement<TabbedContainerDataListProps>[] }) => {
   const tabs = useContext(TabsContext);
   return dataLists.map(dataList => {
@@ -97,7 +70,14 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
         <div data-slot="tabbed-container-query">
           {search ? (
             <div data-slot="tabbed-container-search">
-              <TabbedContainerSearch {...search} active={active} />
+              <SearchInput
+                debounceMs={300}
+                className="max-w-120"
+                {...search}
+                onValueChange={search.onSearch}
+                size="md"
+                shortcut={active}
+              />
             </div>
           ) : null}
           {filter ? (

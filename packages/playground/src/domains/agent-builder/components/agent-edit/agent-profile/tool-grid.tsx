@@ -1,13 +1,7 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SearchIcon, XIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentTool } from '../../../types/agent-tool';
@@ -50,26 +44,15 @@ export const ToolGrid = ({
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
       <div className="flex shrink-0 items-center justify-between gap-4">
-        <InputGroup className="max-w-[30ch] flex-1">
-          <InputGroupAddon>
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Search tools"
-            data-testid="tools-card-picker-search"
-            placeholder="Search tools"
-            value={search}
-            onChange={event => onSearch(event.target.value)}
-          />
-          {search && (
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton aria-label="Clear search" onClick={() => onSearch('')}>
-                <XIcon />
-              </InputGroupButton>
-            </InputGroupAddon>
-          )}
-        </InputGroup>
+        <SearchInput
+          label="Search tools"
+          size="md"
+          className="max-w-[30ch] flex-1"
+          data-testid="tools-card-picker-search"
+          placeholder="Search tools"
+          value={search}
+          onValueChange={onSearch}
+        />
 
         <Field
           orientation="horizontal"

@@ -1,24 +1,18 @@
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { Field, FieldItem, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { SearchIcon, XIcon } from 'lucide-react';
-
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
+
 import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
@@ -120,25 +114,7 @@ export function ScorersPage() {
             <SubSectionHeader title="Available Scorers" icon={<JudgeIcon />} />
           </Section.Header>
 
-          <InputGroup>
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search scorers"
-              placeholder="Search scorers"
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-            />
-            {search && (
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
-                  <XIcon />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
+          <SearchInput label="Search scorers" placeholder="Search scorers" value={search} onValueChange={setSearch} />
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">

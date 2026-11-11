@@ -1,18 +1,11 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useListSearch } from '@mastra/playground-ui/hooks/use-list-search';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { SearchIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -60,7 +53,6 @@ export default function PromptBlocks() {
     setSearch(value);
     setPage(0);
   }, []);
-  const searchField = useListSearch({ onSearch: handleSearchChange });
   const handleSortChange = useCallback<typeof changeUrlSort>(
     (direction, key) => {
       changeUrlSort(direction, key);
@@ -118,23 +110,15 @@ export default function PromptBlocks() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <InputGroup size="sm" className="w-full max-w-120">
-                <InputGroupAddon>
-                  <SearchIcon />
-                </InputGroupAddon>
-                <InputGroupInput
-                  {...searchField.inputProps}
-                  aria-label="Search prompts"
-                  placeholder="Search by name or description"
-                />
-                {searchField.value && (
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton aria-label="Clear search" onClick={searchField.clear}>
-                      <XIcon />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                )}
-              </InputGroup>
+              <SearchInput
+                size="sm"
+                debounceMs={300}
+                shortcut
+                className="max-w-120"
+                onValueChange={handleSearchChange}
+                label="Search prompts"
+                placeholder="Search by name or description"
+              />
             </div>
           </ActionRow.Start>
         </ActionRow>

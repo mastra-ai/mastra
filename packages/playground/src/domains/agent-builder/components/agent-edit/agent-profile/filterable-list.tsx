@@ -1,17 +1,11 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon, XIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
@@ -63,26 +57,15 @@ export const FilterableList = ({
       className="flex h-full min-h-0 flex-col gap-3 border-r border-border px-4 py-4"
       data-testid={`${testIdPrefix}-filter`}
     >
-      <InputGroup className="flex-none">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          type="search"
-          aria-label={`Search ${title.toLowerCase()}`}
-          data-testid={`${testIdPrefix}-filter-search`}
-          placeholder={`Search ${title.toLowerCase()}`}
-          value={search}
-          onChange={event => setSearch(event.target.value)}
-        />
-        {search && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton aria-label="Clear search" onClick={() => setSearch('')}>
-              <XIcon />
-            </InputGroupButton>
-          </InputGroupAddon>
-        )}
-      </InputGroup>
+      <SearchInput
+        label={`Search ${title.toLowerCase()}`}
+        size="md"
+        className="flex-none"
+        data-testid={`${testIdPrefix}-filter-search`}
+        placeholder={`Search ${title.toLowerCase()}`}
+        value={search}
+        onValueChange={setSearch}
+      />
 
       <div className="flex shrink-0 items-center gap-2">
         <button
