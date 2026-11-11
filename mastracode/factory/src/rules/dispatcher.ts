@@ -1531,6 +1531,7 @@ export class FactoryDecisionDispatcher {
           const phase = stage && runItem ? boards?.get(boardForWorkItem(runItem))?.phases[stage] : undefined;
           const workingRevision =
             phase?.kind === 'working' &&
+            (phase.runner.goal || phase.exitTool) &&
             phase.runner.context === decision.role &&
             phase.runner.skill === decision.skillName
               ? runItem!.revision

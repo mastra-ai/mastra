@@ -2899,6 +2899,39 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  it('accepts clean completion in a working phase without a goal or exit tool', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-build',
+      arguments: 'Inspect the card',
+      idempotencyKey: 'working-phase-no-exit-expectation',
+    });
+    await bindWorkRun(storage, item.id);
+    const before = await storage.get({ orgId: 'org-1', id: item.id });
+    const { controller } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+    });
+    const boards = autoStartingBoards(
+      createLifecycleTestRegistry({ execute: { runner: { skill: 'factory-build', context: 'work' } } }),
+    );
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(before?.revision);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
   it('reconciles a final successful phase-exit result before deciding a clean working run is incomplete', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
@@ -8730,7 +8763,7 @@ describe('phase goals', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete' });
+    expect(decision).toMatchObject({ status: 'succeeded', failureCode: null });
     expect(await agent.getObjective({ threadId: 'thread-1' })).toBeUndefined();
     expect(sentIds(session)).toEqual([decision!.id]);
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.metadata?.[PHASE_GOAL_METADATA_KEY]).toBeUndefined();
