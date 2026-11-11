@@ -98,13 +98,17 @@ describe('evented workflow durable sleep recovery', () => {
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
 
-    await vi.waitFor(async () => {
-      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: workflow.id,
-        runId: 'sleep-restart-run',
-      });
-      expect(snapshot?.status).toBe('success');
-    });
+    // The sweep returns once the restart is handed to the workers; the replayed sleep still runs out.
+    await vi.waitFor(
+      async () => {
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: workflow.id,
+          runId: 'sleep-restart-run',
+        });
+        expect(snapshot?.status).toBe('success');
+      },
+      { timeout: 10_000 },
+    );
     expect(beforeSleep).toHaveBeenCalledTimes(1);
     expect(afterSleep).toHaveBeenCalledTimes(1);
     await replacementRuntime.stopWorkers();
@@ -132,13 +136,16 @@ describe('evented workflow durable sleep recovery', () => {
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
 
-    await vi.waitFor(async () => {
-      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: workflow.id,
-        runId: 'sleep-until-restart-run',
-      });
-      expect(snapshot?.status).toBe('success');
-    });
+    await vi.waitFor(
+      async () => {
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: workflow.id,
+          runId: 'sleep-until-restart-run',
+        });
+        expect(snapshot?.status).toBe('success');
+      },
+      { timeout: 10_000 },
+    );
     expect(beforeSleep).toHaveBeenCalledTimes(1);
     expect(afterSleep).toHaveBeenCalledTimes(1);
     await replacementRuntime.stopWorkers();

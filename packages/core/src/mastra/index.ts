@@ -77,6 +77,7 @@ import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
 import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
+import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { runOutsideRunFenceScope } from '../storage/run-fencing';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
@@ -103,7 +104,7 @@ import {
   rehydrateWorkflow,
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
-import { endRunLiveness } from '../workflows/evented/leases';
+import { endRunLiveness, runLivenessKey } from '../workflows/evented/leases';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import {
   cancelNestedRun,
@@ -116,6 +117,7 @@ import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
+import { activeWorkflowRunPages } from './active-workflow-run-pages';
 import {
   declaredSchedulesOf,
   findFsAgentScheduleHandler,
@@ -126,7 +128,12 @@ import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
-import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
+import {
+  DEFAULT_RESTART_CONCURRENCY,
+  createConcurrencyLimiter,
+  normalizeConcurrency,
+  runWithConcurrency,
+} from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
 
 function normalizeApiRoutes(routes: NonNullable<ServerConfigInput['apiRoutes']>): ApiRoute[] {
@@ -737,6 +744,8 @@ export interface MastraRecoveryConfig {
   /**
    * Maximum number of workflow runs restarted at the same time by
    * {@link Mastra.restartAllActiveWorkflowRuns}. Use `Infinity` for no limit.
+   * A default-engine run counts until it finishes, an evented run until its
+   * restart is handed to the workers.
    * @default 5
    */
   workflowConcurrency?: number;
@@ -4354,11 +4363,8 @@ export class Mastra<
       return { runs: [], total: 0 };
     }
 
-    // Skip before listing: opted-out workflows shouldn't cost storage queries.
-    const restartableWorkflows = Object.values(this.#workflows).filter(workflow => isRecoveryRestartable(workflow));
-
     const activeRunsByWorkflow = await Promise.all(
-      restartableWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+      this.#restartableWorkflows().map(workflow => workflow.listActiveWorkflowRuns()),
     );
 
     const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
@@ -4371,19 +4377,85 @@ export class Mastra<
   }
 
   /**
-   * Restart every RUNNING/WAITING run of the registered default-engine
-   * workflows. Runs are restarted `recovery.workflowConcurrency` at a time
-   * (default 5) and the promise resolves once all of them have settled.
+   * The workflows whose active runs the recovery sweep restarts (see {@link isRecoveryRestartable}).
+   * Filtered before listing, so opted-out workflows cost no storage queries.
+   */
+  #restartableWorkflows(): AnyWorkflow[] {
+    return Object.values(this.#workflows).filter(workflow => isRecoveryRestartable(workflow));
+  }
+
+  /**
+   * Restart every RUNNING/WAITING run of the registered default-engine and
+   * evented workflows. Runs are restarted `recovery.workflowConcurrency` at a
+   * time (default 5) and the promise resolves once every default-engine
+   * restart has settled and every evented restart was handed to the workers.
    * Failures are logged per run and never reject the sweep.
+   *
+   * Active runs are read a page at a time. Before restarting a page, the sweep
+   * reads in one batch whether another process still holds each run (the
+   * run's liveness key for evented runs, its run lease for default-engine
+   * runs), skips the held ones without loading them and re-checks each once
+   * its lease could have lapsed. The claim `restart()` takes stays the final
+   * check, so a run taken in between is still refused there.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
-    const activeRuns = await this.listActiveWorkflowRuns();
     const workflowsStore = await this.#storage?.getStore('workflows');
+    if (!workflowsStore) {
+      this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
+      return;
+    }
     // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
     // the same parent.
     const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
+    const readsOwnership = await workflowsStore.supportsRunFencing();
+    // Shared by every page, so a long default-engine restart holds one slot rather than the next page.
+    const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency);
+    for (const workflow of this.#restartableWorkflows()) {
+      const ownershipKey = workflow.engineType === 'evented' ? runLivenessKey : (runId: string) => runId;
+      try {
+        for await (const page of activeWorkflowRunPages({ store: workflowsStore, workflowName: workflow.id })) {
+          const runs = await this.#recoverableRuns(page, workflowsStore, parentStatusOf);
+          const owners =
+            readsOwnership && runs.length > 0
+              ? await workflowsStore.getRunOwnerships({ runIds: runs.map(run => ownershipKey(run.runId)) })
+              : undefined;
+          for (const run of runs) {
+            const owner = owners?.get(ownershipKey(run.runId));
+            if (owner?.live) {
+              this.#logger.debug('Skipped restarting workflow run owned by a live process', {
+                workflow: run.workflowName,
+                runId: run.runId,
+              });
+              this.#scheduleWorkflowRecoveryRecheck(
+                run.workflowName,
+                run.runId,
+                owner.leaseExpiresAt?.getTime() ?? Date.now(),
+              );
+              continue;
+            }
+            await restarts.start(() => this.#restartWorkflowRun(run.workflowName, run.runId));
+          }
+        }
+      } catch (error) {
+        // A store error while listing one workflow's runs must not leave the other workflows unrecovered.
+        this.#logger.error('Failed to list active workflow runs for recovery', { workflow: workflow.id, error });
+      }
+    }
+    await restarts.drain();
+  }
+
+  /**
+   * The runs of one page the sweep should restart. A nested run is left out
+   * when its parent still drives it, and canceled when its parent already
+   * finished.
+   */
+  async #recoverableRuns(
+    page: WorkflowRuns['runs'],
+    workflowsStore: WorkflowsStorage,
+    parentStatusOf: ReturnType<typeof createNestedRunParentStatusLookup>,
+  ): Promise<WorkflowRuns['runs']> {
     const runs: WorkflowRuns['runs'] = [];
-    for (const run of activeRuns.runs) {
+    for (const run of page) {
       const parent = nestedRunParentOf(run.snapshot);
       if (!parent) {
         runs.push(run);
@@ -4397,7 +4469,7 @@ export class Mastra<
         const recovery = nestedRunRecoveryAction(parentStatus);
         if (recovery === 'restart') {
           runs.push(run);
-        } else if (recovery === 'cancel' && workflowsStore) {
+        } else if (recovery === 'cancel') {
           await cancelNestedRun({
             store: workflowsStore,
             workflowName: run.workflowName,
@@ -4426,12 +4498,7 @@ export class Mastra<
         });
       }
     }
-    if (runs.length > 0) {
-      this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
-    }
-    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, runSnapshot =>
-      this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId),
-    );
+    return runs;
   }
 
   /**
@@ -4440,6 +4507,9 @@ export class Mastra<
    * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
    * A re-check that throws is retried with backoff; `recheck.failures` counts the
    * consecutive ones.
+   *
+   * An evented restart settles once it is handed to the workers: they run the steps, and
+   * waiting for the result would hold a sweep slot for the whole run.
    */
   async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
     try {
@@ -4454,7 +4524,8 @@ export class Mastra<
       const run = await workflow.createRun({ runId });
       // A re-check can find the run already settled or suspended by its owner.
       if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
-      await run.restart();
+      if (workflow.engineType === 'evented') await run.restartInBackground();
+      else await run.restart();
       this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
     } catch (error) {
       if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {

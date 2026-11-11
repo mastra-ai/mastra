@@ -24,3 +24,31 @@ export async function runWithConcurrency<T>(
   };
   await Promise.all(Array.from({ length: Math.min(normalizeConcurrency(limit), items.length) }, worker));
 }
+
+/** A concurrency limit shared by tasks that arrive over time, such as one per page read. */
+export interface ConcurrencyLimiter {
+  /**
+   * Waits for a free slot, then starts `task` without waiting for it, so a
+   * producer that awaits each call stops producing while every slot is busy.
+   * `task` is expected to handle its own errors.
+   */
+  start(task: () => Promise<void>): Promise<void>;
+  /** Resolves once every started task, including ones started meanwhile, has settled. */
+  drain(): Promise<void>;
+}
+
+/** Creates a {@link ConcurrencyLimiter} with at most `limit` tasks in flight. */
+export function createConcurrencyLimiter(limit: number | undefined): ConcurrencyLimiter {
+  const max = normalizeConcurrency(limit);
+  const running = new Set<Promise<void>>();
+  return {
+    async start(task) {
+      while (running.size >= max) await Promise.race(running);
+      const settled: Promise<void> = task().finally(() => running.delete(settled));
+      running.add(settled);
+    },
+    async drain() {
+      while (running.size > 0) await Promise.all(running);
+    },
+  };
+}
