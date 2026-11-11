@@ -97,13 +97,14 @@ describe('createTerminalStageCleanup', () => {
     );
   });
 
-  it('leaves the seat that drove its own terminal transition running', async () => {
+  it('skips its own reconciliation while reconciling and aborting the other seat', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const work = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-1' });
     const review = await prepareBinding(storage, { issue: 1, role: 'review', session: 'session-2' });
 
     const abortSession = vi.fn(async () => {});
-    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession });
+    const reconcileBinding = vi.fn(async () => {});
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession, reconcileBinding });
 
     await cleanup({
       orgId: 'org-1',
@@ -112,6 +113,7 @@ describe('createTerminalStageCleanup', () => {
       initiatingBindingId: work.binding.id,
     });
 
+    expect(reconcileBinding.mock.calls.map(([b]: any[]) => b.id)).toEqual([review.binding.id]);
     expect(abortSession.mock.calls.map(([b]: any[]) => b.id)).toEqual([review.binding.id]);
   });
 

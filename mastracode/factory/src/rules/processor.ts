@@ -394,12 +394,12 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     this.options.onBoundThreadRun?.();
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
-    if (completedMessage) {
-      await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
-      return;
-    }
-    const latest = latestToolResultMessage(args.messages);
-    if (latest) await this.ingestMessages(binding, [latest]);
+    const latest = completedMessage ?? latestToolResultMessage(args.messages);
+    if (!latest) return;
+    // A direct result may end the card and revoke this binding. Drain older
+    // persisted results first; terminal cleanup cannot read them afterward.
+    await this.reconcileBinding(binding);
+    await this.ingestMessages(binding, [latest], completedMessage ? completedToolCallIds : undefined);
   }
 
   /**
