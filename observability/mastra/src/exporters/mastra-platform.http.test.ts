@@ -211,7 +211,11 @@ describe('Platform uploads over HTTP', () => {
       cleanup.push(() => observability.shutdown());
       const feedback = { feedbackId: 'sdk-edit', timestamp: new Date(), feedbackType: 'thumbs', value: -1 };
       // Explicit context avoids a local trace dependency; replacement can precede a batched create.
-      await observability.replaceFeedback({ traceId: 'remote', correlationContext: {}, feedback });
+      await observability.replaceFeedback({
+        traceId: 'remote',
+        correlationContext: {},
+        feedback: { ...feedback, metadata: { userId: 'trace-subject' } },
+      });
       await observability.flush();
       await local.onFeedbackEvent({
         type: 'feedback',
@@ -219,7 +223,7 @@ describe('Platform uploads over HTTP', () => {
       });
       await local.flush();
       expect((await store.listFeedback({})).feedback).toEqual([
-        expect.objectContaining({ feedbackId: 'sdk-edit', value: -1 }),
+        expect.objectContaining({ feedbackId: 'sdk-edit', value: -1, feedbackUserId: null }),
       ]);
       expect(receiver.bodies.map(body => body.method)).toEqual(['PUT']);
     },
