@@ -161,11 +161,11 @@ describe('count-free observational memory context', () => {
     });
     await (await memory.omEngine)!.getOrCreateRecord(threadId, resourceId);
     const memoryStore = await store.getStore('memory');
-    const listMessages = vi.spyOn(memoryStore!, scope === 'resource' ? 'listMessagesByResourceId' : 'listMessages');
+    const listMessages = vi.spyOn(memoryStore!, 'listObservationHistory');
 
     const context = await memory.getContext({ threadId, resourceId });
 
-    expect(listMessages).toHaveBeenCalledWith(expect.objectContaining({ perPage: false, includeTotal: false }));
+    expect(listMessages).toHaveBeenCalledWith(expect.objectContaining({ limit: 40 }));
     expect(context.messages.map(message => message.id)).toContain(`message-${scope}`);
   });
 });

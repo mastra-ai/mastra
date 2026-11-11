@@ -314,6 +314,7 @@ import {
   buildThreadMetadataFromExtractedValues,
   getPriorExtractedValues,
 } from './extracted-values';
+import { getObservationHistoryState, loadObservationHistory, supportsObservationHistoryPaging } from './history-loader';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -1820,7 +1821,13 @@ export class ObservationalMemory {
     record: ObservationalMemoryRecord,
     opts?: { excludeBuffered?: boolean },
   ): MastraDBMessage[] {
-    const lastObservedAt = record.lastObservedAt;
+    const persistedHistory = getObservationHistoryState(record);
+    const historyState = persistedHistory?.complete ? undefined : persistedHistory;
+    const lastObservedAt = historyState
+      ? historyState.after
+        ? new Date(historyState.after.createdAt)
+        : undefined
+      : record.lastObservedAt;
     // Safeguard: track message IDs that were already observed to prevent re-observation
     // This handles edge cases like process restarts where lastObservedAt might not capture all messages
     const observedMessageIds = new Set<string>(
@@ -1875,7 +1882,12 @@ export class ObservationalMemory {
           result.push(msg);
         } else {
           const msgDate = new Date(msg.createdAt);
-          if (msgDate > lastObservedAt) {
+          if (
+            msgDate > lastObservedAt ||
+            (historyState?.after &&
+              msgDate.getTime() === lastObservedAt.getTime() &&
+              Buffer.compare(Buffer.from(msg.id), Buffer.from(historyState.after.id)) > 0)
+          ) {
             result.push(msg);
           } else {
           }
@@ -2250,11 +2262,56 @@ export class ObservationalMemory {
    * In resource scope mode, loads messages for the entire resource (all threads).
    * In thread scope mode, loads messages for just the current thread.
    */
+  /** @internal Shared finite selection for context, status and storage-driven observation. */
+  async loadHistoryWindow(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+    resourceScope = this.scope === 'resource',
+  ) {
+    const history = getObservationHistoryState(record);
+    if (!supportsObservationHistoryPaging(this.storage) || history?.complete) return undefined;
+    // A legacy resource watermark is not a committed prefix across its threads.
+    // Preserve that record's existing per-thread strategy instead of inventing a cursor.
+    if (resourceScope && record.lastObservedAt && !history) return undefined;
+    const coverage = new Map<string, Promise<Date | undefined>>();
+    return loadObservationHistory({
+      storage: this.storage,
+      threadId: resourceScope && resourceId ? undefined : threadId,
+      resourceId,
+      record,
+      tokenCounter: this.tokenCounter,
+      budget: Math.max(
+        getMaxThreshold(this.getEffectiveMessageTokens(record)),
+        this.getEffectiveObservationBlockAfter(record) ?? 0,
+      ),
+      isObservable: async message => {
+        if (message.role === 'system' || isWorkingMemoryStateSignal(message)) return false;
+        if (!resourceScope || history || !message.threadId) return true;
+        let boundary = coverage.get(message.threadId);
+        if (!boundary) {
+          boundary = this.storage.getThreadById({ threadId: message.threadId }).then(thread => {
+            const metadata = getThreadOMMetadata(thread?.metadata);
+            return metadata?.lastObservedAt ? new Date(metadata.lastObservedAt) : undefined;
+          });
+          coverage.set(message.threadId, boundary);
+        }
+        const lastObservedAt = await boundary;
+        return !lastObservedAt || new Date(message.createdAt) > lastObservedAt;
+      },
+    });
+  }
+
   private async loadMessagesFromStorage(
     threadId: string,
     resourceId: string | undefined,
     lastObservedAt?: Date,
   ): Promise<MastraDBMessage[]> {
+    if (supportsObservationHistoryPaging(this.storage)) {
+      const record = await this.getOrCreateRecord(threadId, resourceId);
+      const window = await this.loadHistoryWindow(threadId, resourceId, record);
+      if (window) return window.messages;
+    }
     // Add 1ms to lastObservedAt to make the filter exclusive (since dateRange.start is inclusive)
     // This prevents re-loading the same messages that were already observed
     const startDate = lastObservedAt ? new Date(lastObservedAt.getTime() + 1) : undefined;
@@ -3144,12 +3201,30 @@ ${formattedMessages}
    */
   /** @internal Used by ObservationTurn. */
   async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
+    const record = await this.getRecord(currentThreadId, resourceId);
+    if (
+      record &&
+      supportsObservationHistoryPaging(this.storage) &&
+      !getObservationHistoryState(record)?.complete &&
+      (!record.lastObservedAt || getObservationHistoryState(record)?.end)
+    ) {
+      const window = await this.loadHistoryWindow(currentThreadId, resourceId, record, true);
+      const byThread = new Map<string, MastraDBMessage[]>();
+      for (const message of window!.messages) {
+        const tid = message.threadId ?? currentThreadId;
+        const messages = byThread.get(tid) ?? [];
+        messages.push(message);
+        byThread.set(tid, messages);
+      }
+      return (
+        (await this.formatUnobservedContextBlocks(byThread, currentThreadId, record.observedTimezone)) || undefined
+      );
+    }
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
     // Fetch the OM record once so we can fall back to its lastObservedAt
     // for threads whose metadata was never stamped.  See #15265.
-    const record = await this.getRecord(currentThreadId, resourceId);
     const recordLastObservedAt = record?.lastObservedAt;
 
     for (const thread of allThreads) {
@@ -3588,6 +3663,25 @@ ${formattedMessages}
     // Check if buffering is enabled
     if (!this.buffering.isAsyncObservationEnabled()) {
       return { buffered: false, record };
+    }
+
+    // Drain an oversized stored prefix synchronously before starting live async buffering.
+    // Buffered timestamp cursors cannot safely represent half of a timestamp cohort.
+    if (opts.messages && getObservationHistoryState(record)?.end) return { buffered: false, record };
+    if (
+      !opts.messages &&
+      !record.bufferedObservationChunks?.length &&
+      !record.isBufferingObservation &&
+      supportsObservationHistoryPaging(this.storage) &&
+      (!record.lastObservedAt || getObservationHistoryState(record)?.end)
+    ) {
+      const window = await this.loadHistoryWindow(threadId, resourceId, record);
+      if (window && (window.hasMore || getObservationHistoryState(record)?.end)) {
+        if (record.bufferedObservationChunks?.length) return { buffered: false, record };
+        await opts.beforeBuffer?.(window.messages);
+        const result = await this.observe({ ...opts, useStoredHistory: true });
+        return { buffered: false, record: result.record };
+      }
     }
 
     // Check if another process is already buffering (and the op is genuinely active)
@@ -4266,6 +4360,8 @@ ${formattedMessages}
     messages?: MastraDBMessage[];
     /** Live MessageList for the in-flight turn — lets markers land on the pending assistant message. */
     messageList?: MessageList;
+    /** @internal Drain an initial stored backlog without acknowledging later live input. */
+    useStoredHistory?: boolean;
     hooks?: ObserveLifecycleHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
@@ -4313,15 +4409,46 @@ ${formattedMessages}
           recordInsideLock = freshRecord;
           generationBefore = freshRecord.generationCount;
 
-          const unobservedMessages = messages
-            ? this.getUnobservedMessages(messages, freshRecord)
-            : await this.loadMessagesFromStorage(
-                threadId,
-                resourceId,
-                freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
-              );
+          const historyWindow =
+            !messages || opts.useStoredHistory
+              ? await this.loadHistoryWindow(threadId, resourceId, freshRecord)
+              : undefined;
+          // During initial catch-up, observe only the stored prefix. A later live message
+          // is still pending, not proof that the unread historical gap was covered.
+          const useWindow =
+            historyWindow && (!messages || historyWindow.hasMore || getObservationHistoryState(freshRecord));
+          const unobservedMessages = useWindow
+            ? historyWindow.messages
+            : messages
+              ? this.getUnobservedMessages(messages, freshRecord)
+              : await this.loadMessagesFromStorage(
+                  threadId,
+                  resourceId,
+                  freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+                );
 
-          if (opts.force) {
+          if (
+            useWindow &&
+            unobservedMessages.length === 0 &&
+            historyWindow.state.after &&
+            getObservationHistoryState(freshRecord)?.end
+          ) {
+            const completedAt = new Date(historyWindow.state.after.createdAt);
+            // A tail containing only excluded state/system rows still completes catch-up.
+            await runOMCommit(lockKey, () =>
+              this.storage.commitActiveObservations({
+                id: freshRecord.id,
+                observations: freshRecord.activeObservations,
+                tokenCount: freshRecord.observationTokenCount,
+                lastObservedAt: completedAt,
+                expectedActiveObservations: freshRecord.activeObservations,
+                observationHistory: historyWindow.state,
+              }),
+            );
+            recordInsideLock = (await this.getRecord(threadId, resourceId)) ?? freshRecord;
+            return;
+          }
+          if (opts.force || (useWindow && getObservationHistoryState(freshRecord)?.end)) {
             if (unobservedMessages.length === 0) return;
           } else if (
             !this.meetsObservationThreshold({
@@ -4339,6 +4466,7 @@ ${formattedMessages}
             threadId,
             resourceId,
             messages: unobservedMessages,
+            observationHistory: useWindow ? historyWindow.state : undefined,
             messageList: opts.messageList,
             abortSignal: opts.abortSignal,
             reflectionHooks,

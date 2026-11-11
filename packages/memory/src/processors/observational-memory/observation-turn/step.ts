@@ -3,6 +3,7 @@ import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { isOmModelExecutionError } from '../error';
+import { getObservationHistoryState } from '../history-loader';
 import { filterObservedMessages, getObservableMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
@@ -187,7 +188,16 @@ export class ObservationStep {
     // A pending tool call on the newest message doesn't block the whole batch:
     // admit only the safe prefix before it — the same policy idle buffering
     // applies at turn end (see selectSafeBufferPrefix).
-    if (statusSnapshot.shouldBuffer && !activateBeforeBuffering) {
+    const initialHistoryEnd = getObservationHistoryState(statusSnapshot.record)?.end;
+    const historyWindow =
+      initialHistoryEnd ||
+      (!statusSnapshot.record.lastObservedAt &&
+        !statusSnapshot.record.bufferedObservationChunks?.length &&
+        !statusSnapshot.record.isBufferingObservation)
+        ? await om.loadHistoryWindow(threadId, resourceId, statusSnapshot.record)
+        : undefined;
+    const drainsStoredHistory = historyWindow?.hasMore || Boolean(initialHistoryEnd);
+    if (statusSnapshot.shouldBuffer && !activateBeforeBuffering && !drainsStoredHistory) {
       const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
@@ -271,8 +281,10 @@ export class ObservationStep {
     // In the threshold→blockAfter band nothing may block: run the threshold pipeline only to
     // activate an already-buffered chunk (activate() doesn't wait on an in-flight buffer op in
     // the band). Without a ready chunk, defer to a later step.
-    const bandDefersObservation = statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
-    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
+    const bandDefersObservation =
+      !drainsStoredHistory && statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
+    const willObserveNow =
+      (statusSnapshot.shouldObserve || drainsStoredHistory) && !hasIncompleteToolCalls && !bandDefersObservation;
     /**
      * In-flight message ids cleanup must never remove from live context: the turn's own
      * request, plus whatever the model has not read yet (the pending messages at step 0, the
@@ -364,7 +376,10 @@ export class ObservationStep {
       // Threshold observation (skip if tool calls pending)
       if (willObserveNow) {
         const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation(statusSnapshot.inAsyncObservationBand);
+        const obsResult = await this.runThresholdObservation(
+          statusSnapshot.inAsyncObservationBand,
+          drainsStoredHistory,
+        );
         observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
@@ -489,7 +504,10 @@ export class ObservationStep {
    * waitForBuffering → re-check → activate buffered chunks → reflect → observe
    * (sync fallback at blockAfter when async buffering is enabled)
    */
-  private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
+  private async runThresholdObservation(
+    inAsyncObservationBand?: boolean,
+    drainsStoredHistory = false,
+  ): Promise<{
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
@@ -526,7 +544,7 @@ export class ObservationStep {
       messages: observableMessages,
     });
 
-    if (!status.shouldObserve) {
+    if (!status.shouldObserve && !drainsStoredHistory) {
       return { succeeded: false, record: status.record, cleanupMessageIds: [] };
     }
 
@@ -610,7 +628,7 @@ export class ObservationStep {
         messages: pendingMessages,
       });
 
-      if (!status.shouldObserve) {
+      if (!status.shouldObserve && !drainsStoredHistory) {
         return {
           succeeded: true,
           record: postActivationRecord,
@@ -620,7 +638,7 @@ export class ObservationStep {
       }
     }
 
-    if (status.inAsyncObservationBand || status.canActivate) {
+    if ((!drainsStoredHistory && status.inAsyncObservationBand) || status.canActivate) {
       return {
         succeeded: activated,
         record: this.turn.record,
@@ -638,6 +656,7 @@ export class ObservationStep {
         threadId,
         resourceId,
         messages: pendingMessages,
+        useStoredHistory: true,
         messageList,
         trigger: 'turn-sync',
         agent: this.turn.agent,

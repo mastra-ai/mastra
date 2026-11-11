@@ -2125,7 +2125,10 @@ ${workingMemory}`;
         : undefined;
 
       const boundary = omRecord.lastObservedAt ? new Date(omRecord.lastObservedAt).toISOString() : '';
-      if (omEngine.scope === 'resource' && resourceId) {
+      const historyWindow = await omEngine.loadHistoryWindow(threadId, resourceId, omRecord);
+      if (historyWindow) {
+        messages = historyWindow.messages;
+      } else if (omEngine.scope === 'resource' && resourceId) {
         const loadMessages = async () => {
           const result = await memoryStore.listMessagesByResourceId({
             resourceId,
