@@ -1,7 +1,7 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import type { ServerResponse } from 'node:http';
-import type { LogEvent, TracingEvent } from '@mastra/core/observability';
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
+import type { FeedbackEvent, ScoreEvent, LogEvent, TracingEvent } from '@mastra/core/observability';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MastraPlatformExporter } from './mastra-platform';
 import type { MastraPlatformExporterConfig } from './mastra-platform';
@@ -11,8 +11,14 @@ afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 
-async function collector(hold = false, reply?: (res: ServerResponse) => void) {
-  const bodies: { path: string; bytes: number; data: Record<string, any[]> }[] = [];
+async function collector(hold = false, reply?: (res: ServerResponse, path: string) => void) {
+  const bodies: {
+    path: string;
+    bytes: number;
+    data: Record<string, any>;
+    headers: IncomingHttpHeaders;
+    raw: string;
+  }[] = [];
   const responses: ServerResponse[] = [];
   let active = 0;
   let peak = 0;
@@ -23,10 +29,16 @@ async function collector(hold = false, reply?: (res: ServerResponse) => void) {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
-    bodies.push({ path: req.url!, bytes: body.length, data: JSON.parse(body.toString()) });
+    bodies.push({
+      path: req.url!,
+      bytes: body.length,
+      data: JSON.parse(body.toString()),
+      headers: req.headers,
+      raw: body.toString(),
+    });
     responses.push(res);
     if (!hold) {
-      if (reply) reply(res);
+      if (reply) reply(res, req.url!);
       else res.writeHead(204).end();
     }
   });
@@ -204,7 +216,14 @@ describe('Platform uploads over HTTP', () => {
     });
     await instance.onScoreEvent({
       type: 'score',
-      score: { scoreId: 'score-1', timestamp: new Date(), scorerId: 'test', traceId: 'trace-1', score: 1 },
+      score: {
+        scoreId: 'score-1',
+        timestamp: new Date(),
+        scorerId: 'test',
+        traceId: 'trace-1',
+        score: 1,
+        correlationContext: {},
+      },
     });
     await instance.onFeedbackEvent({
       type: 'feedback',
@@ -215,6 +234,7 @@ describe('Platform uploads over HTTP', () => {
         feedbackSource: 'user',
         traceId: 'trace-1',
         value: 'up',
+        correlationContext: {},
       },
     });
     await instance.shutdown();
@@ -299,5 +319,258 @@ describe('Platform uploads over HTTP', () => {
     { maxBatchBytes: 1800, uploadTimeoutMs: 2 ** 31 },
   ])('rejects invalid byte limits: %j', byteBatching => {
     expect(() => new MastraPlatformExporter({ accessToken: 'local', resolveFromEnv: false, byteBatching })).toThrow();
+  });
+});
+
+function feedback(correlationContext?: FeedbackEvent['feedback']['correlationContext']): FeedbackEvent {
+  return {
+    type: 'feedback',
+    feedback: {
+      feedbackId: 'feedback-1',
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      timestamp: new Date('2026-11-11T10:00:00.123Z'),
+      feedbackType: 'comment',
+      value: 'actionable',
+      feedbackSource: 'user',
+      feedbackUserId: 'author-1',
+      correlationContext,
+    },
+  };
+}
+function score(correlationContext?: ScoreEvent['score']['correlationContext']): ScoreEvent {
+  return {
+    type: 'score',
+    score: {
+      scoreId: 'score-1',
+      traceId: 'trace-1',
+      timestamp: new Date('2026-11-11T10:00:00.123Z'),
+      scorerId: 'scorer-1',
+      score: 1,
+      scoreSource: 'user',
+      correlationContext,
+    },
+  };
+}
+
+describe.each([false, true])('Platform context resolution (byte batching: %s)', byteBatching => {
+  function setup(endpoint: string, overrides: Partial<MastraPlatformExporterConfig> = {}) {
+    return exporter(endpoint, { ...(!byteBatching ? { byteBatching: undefined } : {}), ...overrides });
+  }
+
+  it('sends unresolved records immediately and keeps supplied context on the collector path', async () => {
+    const receiver = await collector();
+    const instance = setup(receiver.endpoint, { projectId: 'project-1' });
+    await instance.onFeedbackEvent(feedback());
+    await instance.onScoreEvent(score());
+    await expect.poll(() => receiver.bodies.length).toBe(2);
+    await instance.onFeedbackEvent(feedback({}));
+    await instance.onScoreEvent(score({}));
+    await instance.flush();
+    const writes = receiver.bodies.filter(body => body.path.startsWith('/api/'));
+    expect(writes.map(body => body.path).sort()).toEqual(['/api/observability/feedback', '/api/observability/scores']);
+    for (const body of writes) {
+      expect(body.headers.authorization).toBe('Bearer local-test-token');
+      expect(body.headers['x-mastra-project-id']).toBe('project-1');
+    }
+    expect(writes.find(body => body.data.feedback)?.data.feedback).toEqual(
+      JSON.parse(JSON.stringify(feedback().feedback)),
+    );
+    expect(writes.find(body => body.data.score)?.data.score).toEqual(JSON.parse(JSON.stringify(score().score)));
+    expect(
+      receiver.bodies
+        .filter(body => body.path.includes('/publish'))
+        .map(body => body.path)
+        .sort(),
+    ).toEqual(['/projects/project-1/ai/feedback/publish', '/projects/project-1/ai/scores/publish']);
+    await instance.flush();
+    expect(receiver.bodies).toHaveLength(4);
+  });
+
+  it.each([
+    [404, 'TRACE_NOT_FOUND'],
+    [404, 'SPAN_NOT_FOUND'],
+    [503, 'ANCHOR_LOOKUP_UNAVAILABLE'],
+  ])('drains stable retries after %i %s during shutdown', async (status, code) => {
+    let attempts = 0;
+    const receiver = await collector(false, (res, path) => {
+      if (path.startsWith('/api/') && attempts++ === 0)
+        res.writeHead(status, { 'Retry-After': '0' }).end(JSON.stringify({ code }));
+      else res.writeHead(204).end();
+    });
+    const instance = setup(receiver.endpoint);
+    const event = feedback();
+    await instance.onFeedbackEvent(event);
+    event.feedback.value = 'mutated after export';
+    await instance.shutdown();
+    expect(receiver.bodies).toHaveLength(2);
+    expect(receiver.bodies[0]!.raw).toBe(receiver.bodies[1]!.raw);
+    expect(receiver.bodies[1]!.data.feedback.value).toBe('actionable');
+    await instance.flush();
+    expect(receiver.bodies).toHaveLength(2);
+  });
+
+  it.each([400, 401, 403, 404, 413, 429, 500, 503])('drops terminal HTTP %i without retries', async status => {
+    const receiver = await collector(false, res => res.writeHead(status).end(JSON.stringify({ code: 'OTHER_ERROR' })));
+    const instance = setup(receiver.endpoint);
+    await instance.onScoreEvent(score());
+    await instance.flush();
+    await instance.flush();
+    expect(receiver.bodies).toHaveLength(1);
+  });
+
+  it('drops records without context or traceId', async () => {
+    const receiver = await collector();
+    const instance = setup(receiver.endpoint);
+    const event = feedback();
+    delete event.feedback.traceId;
+    await instance.onFeedbackEvent(event);
+    const scoreEvent = score();
+    scoreEvent.score.traceId = '   ';
+    await instance.onScoreEvent(scoreEvent);
+    await instance.flush();
+    expect(receiver.bodies).toHaveLength(0);
+  });
+
+  it('continues resolved writes while collector quota is exhausted', async () => {
+    const receiver = await collector(false, (res, path) => {
+      if (path.endsWith('/publish')) res.writeHead(402).end('{}');
+      else res.writeHead(204).end();
+    });
+    const instance = setup(receiver.endpoint);
+    await instance.onLogEvent(log(1));
+    await instance.flush();
+    await instance.onFeedbackEvent(feedback());
+    await instance.onScoreEvent(score());
+    await instance.shutdown();
+    expect(receiver.bodies.map(body => body.path).sort()).toEqual([
+      '/ai/logs/publish',
+      '/api/observability/feedback',
+      '/api/observability/scores',
+    ]);
+  });
+
+  it.each(Array.from({ length: 20 }, (_, i) => i))(
+    'drains batches added during an active resolved write (run %i)',
+    async () => {
+      const receiver = await collector(true);
+      const instance = setup(receiver.endpoint);
+      await instance.onFeedbackEvent(feedback());
+      let finished = false;
+      const flushing = instance.flush().then(() => {
+        finished = true;
+      });
+      try {
+        await expect.poll(() => receiver.bodies.length).toBe(1);
+        await instance.onLogEvent(log(1));
+        expect(finished).toBe(false);
+      } finally {
+        receiver.release();
+        await flushing;
+      }
+      expect(receiver.bodies.map(body => body.path).sort()).toEqual([
+        '/ai/logs/publish',
+        '/api/observability/feedback',
+      ]);
+    },
+  );
+
+  it('flushes buffered telemetry when a resolved write arrives', async () => {
+    const receiver = await collector();
+    const instance = setup(receiver.endpoint);
+    await instance.onTracingEvent({
+      type: 'span_ended',
+      exportedSpan: {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'agent',
+        type: 'agent_run',
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: true,
+        attributes: {},
+      },
+    } as TracingEvent);
+    await instance.onFeedbackEvent(feedback());
+    await expect.poll(() => receiver.bodies.length).toBe(2);
+    expect(receiver.bodies.map(body => body.path).sort()).toEqual(['/ai/spans/publish', '/api/observability/feedback']);
+    await instance.shutdown();
+  });
+});
+
+describe('Resolved record delivery boundaries', () => {
+  it('uses each configured endpoint origin and project-scoped URL for API-key requests', async () => {
+    const feedbackReceiver = await collector();
+    const scoreReceiver = await collector();
+    const instance = exporter(feedbackReceiver.endpoint, {
+      accessToken: 'api-key',
+      feedbackEndpoint: `${feedbackReceiver.endpoint}/prefix/projects/project-2/ai/feedback/publish`,
+      scoresEndpoint: `${scoreReceiver.endpoint}/prefix/projects/project-2/ai/scores/publish`,
+    });
+    await instance.onFeedbackEvent(feedback());
+    await instance.onScoreEvent(score());
+    await instance.shutdown();
+    expect(feedbackReceiver.bodies[0]!.path).toBe('/api/observability/feedback');
+    expect(scoreReceiver.bodies[0]!.path).toBe('/api/observability/scores');
+    for (const receiver of [feedbackReceiver, scoreReceiver]) {
+      expect(receiver.bodies).toHaveLength(1);
+      expect(receiver.bodies[0]!.headers.authorization).toBe('Bearer api-key');
+      expect(receiver.bodies[0]!.headers['x-mastra-project-id']).toBe('project-2');
+    }
+  });
+
+  it('stops after six missing-anchor attempts and releases the record', async () => {
+    const receiver = await collector(false, res => res.writeHead(404).end(JSON.stringify({ code: 'SPAN_NOT_FOUND' })));
+    const instance = exporter(receiver.endpoint);
+    await instance.onScoreEvent(score());
+    await instance.shutdown();
+    expect(receiver.bodies).toHaveLength(6);
+    expect(new Set(receiver.bodies.map(body => body.raw)).size).toBe(1);
+    await instance.flush();
+    expect(receiver.bodies).toHaveLength(6);
+  }, 20_000);
+
+  it('bounds stalled responses and long Retry-After waits during shutdown', async () => {
+    const receiver = await collector(true);
+    const instance = exporter(receiver.endpoint);
+    await instance.onFeedbackEvent(feedback());
+    const unavailable = await collector(false, res =>
+      res.writeHead(503, { 'Retry-After': '3000000' }).end(JSON.stringify({ code: 'ANCHOR_LOOKUP_UNAVAILABLE' })),
+    );
+    const retrying = exporter(unavailable.endpoint);
+    await retrying.onScoreEvent(score());
+    const started = Date.now();
+    await Promise.all([instance.shutdown(), retrying.shutdown()]);
+    expect(Date.now() - started).toBeLessThan(32_000);
+    expect(receiver.bodies).toHaveLength(1);
+    expect(unavailable.bodies).toHaveLength(1);
+    await Promise.all([instance.flush(), retrying.flush()]);
+    expect(receiver.bodies).toHaveLength(1);
+    expect(unavailable.bodies).toHaveLength(1);
+  }, 35_000);
+
+  it('does not retry broken network responses', async () => {
+    const receiver = await collector(false, res => res.destroy());
+    const instance = exporter(receiver.endpoint);
+    await instance.onFeedbackEvent(feedback());
+    await instance.shutdown();
+    expect(receiver.bodies).toHaveLength(1);
+  });
+
+  it('honors Retry-After before delivering the same record again', async () => {
+    const receivedAt: number[] = [];
+    const receiver = await collector(false, res => {
+      receivedAt.push(Date.now());
+      if (receivedAt.length === 1)
+        res.writeHead(503, { 'Retry-After': '1' }).end(JSON.stringify({ code: 'ANCHOR_LOOKUP_UNAVAILABLE' }));
+      else res.writeHead(201).end();
+    });
+    const instance = exporter(receiver.endpoint);
+    await instance.onScoreEvent(score());
+    await instance.flush();
+    expect(receivedAt).toHaveLength(2);
+    expect(receivedAt[1]! - receivedAt[0]!).toBeGreaterThanOrEqual(990);
+    expect(receiver.bodies[0]!.raw).toBe(receiver.bodies[1]!.raw);
   });
 });

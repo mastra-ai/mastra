@@ -15,13 +15,14 @@ import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 import { PlatformByteBatcher, resolveByteBatchingConfig } from './platform-byte-batcher';
 import type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
+import { publishResolvedRecord } from './platform-resolved-record';
 import { withSpanPreviews } from './span-previews';
 export type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
 
 export interface MastraPlatformExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
-  maxRetries?: number; // Default: 3
+  maxRetries?: number; // Collector batch retries. Default: 3
   /** Opt into UTF-8 JSON byte flush thresholds and upload concurrency control. */
   byteBatching?: PlatformByteBatchingConfig;
 
@@ -267,6 +268,7 @@ type ResolvedPlatformConfig = {
   maxBatchWaitMs: number;
   maxRetries: number;
   accessToken: string;
+  projectId?: string;
   tracesEndpoint: string;
   logsEndpoint: string;
   metricsEndpoint: string;
@@ -282,6 +284,7 @@ export class MastraPlatformExporter extends BaseExporter {
   private buffer: MastraPlatformBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
+  private pendingRecords = new Set<Promise<void>>();
   private quotaPaused = false;
   private quotaProbeTimer: NodeJS.Timeout | null = null;
   private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
@@ -353,6 +356,7 @@ export class MastraPlatformExporter extends BaseExporter {
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
       accessToken: accessToken || '',
+      projectId,
       tracesEndpoint,
       logsEndpoint: resolveConfiguredSignalEndpoint('logs', config.logsEndpoint),
       metricsEndpoint: resolveConfiguredSignalEndpoint('metrics', config.metricsEndpoint),
@@ -429,7 +433,12 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || this.shuttingDown) {
+      return;
+    }
+
+    if (event.score.correlationContext == null) {
+      this.enqueueResolvedRecord('score', event.score);
       return;
     }
 
@@ -442,7 +451,12 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || this.shuttingDown) {
+      return;
+    }
+
+    if (event.feedback.correlationContext == null) {
+      this.enqueueResolvedRecord('feedback', event.feedback);
       return;
     }
 
@@ -452,6 +466,43 @@ export class MastraPlatformExporter extends BaseExporter {
 
     this.addFeedbackToBuffer(event);
     await this.handleBufferedEvent();
+  }
+
+  private enqueueResolvedRecord(
+    kind: 'score' | 'feedback',
+    record: MastraPlatformScoreRecord | MastraPlatformFeedbackRecord,
+  ): void {
+    if (!record.traceId?.trim()) {
+      this.logger.warn(`Dropping ${kind}: context resolution requires traceId`);
+      return;
+    }
+
+    let body: string;
+    try {
+      // Snapshot once: caller mutations and retries must not change identity or timestamp.
+      body = JSON.stringify({ [kind]: record });
+    } catch (error) {
+      this.logger.warn(`Dropping unserializable ${kind}`, { error });
+      return;
+    }
+    const collectorEndpoint =
+      kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
+    const url = new URL(`/api/observability/${kind === 'score' ? 'scores' : 'feedback'}`, collectorEndpoint);
+    const projectId =
+      this.platformConfig.projectId ?? new URL(collectorEndpoint).pathname.match(/\/projects\/([^/]+)\/ai\//)?.[1];
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.platformConfig.accessToken}`,
+      'Content-Type': 'application/json',
+      ...(projectId ? { 'X-Mastra-Project-Id': projectId } : {}),
+    };
+
+    // Send buffered traces promptly, without making this request wait for collector
+    // uploads or recursively waiting for itself through public flush().
+    void this.flushBatches().catch(error => this.logger.warn('Failed to flush buffered telemetry', { error }));
+    const pending = publishResolvedRecord(url, body, headers)
+      .catch(error => this.logger.warn(`Dropping ${kind} after Platform delivery failed`, { error }))
+      .finally(() => this.pendingRecords.delete(pending));
+    this.pendingRecords.add(pending);
   }
 
   private addToBuffer(event: TracingEvent): void {
@@ -937,6 +988,19 @@ export class MastraPlatformExporter extends BaseExporter {
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
+    if (this.isDisabled) return;
+    do {
+      await this.flushBatches();
+      await Promise.allSettled([...this.pendingRecords]);
+    } while (
+      this.pendingRecords.size > 0 ||
+      this.buffer.totalSize > 0 ||
+      this.inFlightFlushes.size > 0 ||
+      (this.byteBatcher?.getStats().pendingBytes ?? 0) > 0
+    );
+  }
+
+  private async flushBatches(): Promise<void> {
     if (this.isDisabled) {
       return;
     }

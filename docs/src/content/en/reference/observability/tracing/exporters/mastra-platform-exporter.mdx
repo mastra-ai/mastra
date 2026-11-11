@@ -57,7 +57,7 @@ interface MastraPlatformExporterConfig extends BaseExporterConfig {
     uploadTimeoutMs?: number // Default: 30000
   }
 
-  /** Maximum retry attempts. Default: 3 */
+  /** Maximum retry attempts for collector batches. Default: 3 */
   maxRetries?: number
 
   /** Mastra Observability access token (from env or config) */
@@ -262,11 +262,25 @@ If no access token is provided via config or environment variable, the exporter:
 
 ### Batching
 
-The exporter batches tracing spans, logs, metrics, scores, and feedback for efficient network usage:
+Tracing spans, logs, and metrics use collector batches. Scores and feedback also use batches when they include `correlationContext`:
 
 - Flushes when total buffered event count reaches `maxBatchSize`
 - Flushes when `maxBatchWaitMs` elapsed since the first buffered signal in the batch
 - Flushes on `shutdown()`
+
+### Feedback and score delivery
+
+Feedback and score events with supplied `correlationContext` use the collector batch endpoints. An empty context object also selects this path.
+
+When context is absent, the exporter sends each record immediately to `POST /api/observability/feedback` or `POST /api/observability/scores`. These requests require a `traceId`. Records without either context or a trace ID are logged and dropped.
+
+Each request uses the origin of its configured feedback or score endpoint and the exporter's bearer token. The exporter sends `X-Mastra-Project-Id` when the project is configured or included in the collector URL. IDs, timestamps, and payloads stay unchanged across attempts.
+
+The exporter retries `404 TRACE_NOT_FOUND`, `404 SPAN_NOT_FOUND`, and `503 ANCHOR_LOOKUP_UNAVAILABLE` responses. Delivery stops after six attempts or 30 seconds, whichever comes first. Backoff starts at 500 milliseconds, doubles up to four seconds, and honors longer `Retry-After` delays within the deadline. Other HTTP errors, network failures, and timeouts are logged and dropped. `maxRetries` applies only to collector batches.
+
+Any successful HTTP response completes delivery without waiting for the record to become readable. `flush()` and `shutdown()` wait for pending requests and retries alongside buffered telemetry. Incoming records that need context resolution also trigger a telemetry flush so buffered traces can reach Platform. Collector quota pauses don't suppress these individual requests.
+
+This behavior applies to events received by the exporter. It doesn't change whether other APIs resolve context locally or notify exporters.
 
 ### Byte batching
 
@@ -287,7 +301,7 @@ const exporter = new MastraPlatformExporter({
 Without `byteBatching`, the exporter keeps its existing count-based batching behavior.
 
 - `maxBatchBytes` triggers an upload when a batch reaches 8 MiB by default. Larger records are sent intact, without truncation or size-based drops.
-- `maxConcurrentUploads` controls concurrent uploads across all signal types. The default is two.
+- `maxConcurrentUploads` controls concurrent collector batch uploads. The default is two.
 - `uploadTimeoutMs` sets the upload deadline, including retries. The default is 30 seconds.
 
 Record-count and timer-based flush triggers still apply. Queued records are retained when uploads fall behind, so queue memory can grow.
@@ -296,7 +310,7 @@ Inspect the current queue with `exporter.getByteBatchingStats()`.
 
 ### Error handling
 
-- Uses exponential backoff retry with `maxRetries` attempts
+- Uses exponential backoff retry for collector batches with `maxRetries` attempts
 - Drops batches after all retries fail
 - Logs errors but continues processing new events
 
@@ -307,14 +321,14 @@ Errors raised by `MastraPlatformExporter` use the `MASTRA_PLATFORM_EXPORTER_*` `
 When an organization has exhausted its observability quota, the Mastra platform rejects publish requests with `402 Payment Required` plus the `x-mastra-observability: disabled` header. When the exporter sees a `402` (or the header) on any publish route, it:
 
 - Drops the rejected batch without retrying it
-- Pauses all five signal types (traces, logs, metrics, scores, feedback) and drops buffered and new events instead of sending them
+- Pauses collector batches for traces, logs, metrics, scores, and feedback, dropping buffered and incoming batch records
 - Logs a warning that telemetry is paused
 - Probes the platform periodically with an empty batch, using the interval from the `x-mastra-observability-retry-after` header (seconds), or every 5 minutes if the header is absent
 - Resumes exporting automatically and logs a warning once the platform stops rejecting with `402`
 
 The probe timer doesn't keep the Node.js process alive, so short-lived and serverless processes exit normally while paused.
 
-Every request the exporter sends (batch uploads for all five signal types, plus the traces recovery probe) includes the `x-mastra-observability-capabilities: quota-pause-v1` header. This tells the platform that the client understands the quota-pause contract, so it can safely respond with `402` instead of silently dropping telemetry for older clients that would retry it.
+Every collector request (batch uploads and the traces recovery probe) includes the `x-mastra-observability-capabilities: quota-pause-v1` header. This tells the platform that the client understands the quota-pause contract, so it can safely respond with `402` instead of silently dropping telemetry for older clients that would retry it.
 
 ### Endpoint routing
 
@@ -323,10 +337,11 @@ Every request the exporter sends (batch uploads for all five signal types, plus 
 - With `projectId` or `MASTRA_PROJECT_ID`, derived routes use `/projects/:projectId/ai/{signal}/publish`
 - Explicit full publish URLs are used as-is, even when `projectId` is configured
 
-### Signal Processing
+### Event processing
 
 - `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
-- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for that signal type
+- `onLogEvent()` and `onMetricEvent()` buffer events
+- `onScoreEvent()` and `onFeedbackEvent()` select batch or individual delivery based on supplied context
 - All supported signal batches are uploaded to their matching publish endpoints during `flush()` and `shutdown()`
 
 ## Span wire format
