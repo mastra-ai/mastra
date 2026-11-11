@@ -582,7 +582,8 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    *
    * On the evented engine, false also turns off step leases and the check
    * that makes `restart()` throw `WORKFLOW_RESTART_RUN_OWNED` while a step of
-   * the run is running.
+   * the run is running. A step delivered again while one instance runs it can
+   * then run on a second instance at the same time.
    */
   autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
