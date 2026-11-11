@@ -2261,7 +2261,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     try {
       // Unleased steps (no run fencing, or the workflow opted out of recovery) keep running on every delivery.
-      const finished = lease === UNLEASED_STEP ? 'run' : await this.#finishedOccurrence(leafArgs, leaf);
+      const { decision: finished, snapshot } =
+        lease === UNLEASED_STEP ? { decision: 'run' as const } : await this.#finishedOccurrence(leafArgs, leaf);
       if (finished === 'drop') return;
       if (finished !== 'run') {
         this.mastra.getLogger()?.debug('Continuing a workflow run from a step occurrence that already finished', {
@@ -2271,7 +2272,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         return await this.processWorkflowStepEnd(finished);
       }
-      return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease);
+      return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease, snapshot);
     } finally {
       await lease.release();
     }
@@ -2370,7 +2371,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       key: this.#stepLeaseKey(args, step),
       handoff,
       claimAfterRelease: args.resumeSteps?.[0] === leafId,
-      finished: async () => (await this.#finishedOccurrence(args, step)) !== 'run',
+      // An occurrence the run still has to continue from waits like any other: its holder may crash first.
+      finished: async () => (await this.#finishedOccurrence(args, step)).decision === 'drop',
       logger: this.mastra.getLogger(),
     });
   }
@@ -2381,6 +2383,29 @@ export class WorkflowEventProcessor extends EventProcessor {
     const iterationCount =
       step.type === 'loop' ? (args.stepResults?.[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) : undefined;
     return stepOccurrenceKey(args.runId, args.executionPath, iterationCount);
+  }
+
+  /**
+   * The leaf entry {@link processWorkflowStepRun} runs for a `workflow.step.run`
+   * at `data`'s execution path, or `undefined` when it routes the event to a
+   * dispatcher (parallel, conditional, foreach) or a sleep instead.
+   */
+  #leafAt(
+    workflow: Workflow,
+    { executionPath, restart }: Pick<ProcessorArgs, 'executionPath' | 'restart'>,
+  ): Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }> | undefined {
+    const [index, branch] = executionPath;
+    let leaf: StepFlowEntry | undefined = workflow.stepGraph[index!];
+    // A restart's dispatcher event carries the path of the branch or item it publishes.
+    if (leaf?.type === 'parallel' || leaf?.type === 'conditional') {
+      if (branch === undefined || (restart && !restart.isParallelOrConditionalRestarted)) return;
+      leaf = leaf.steps[branch];
+    } else if (leaf?.type === 'foreach') {
+      if (branch === undefined || (restart && !restart.isForeachRestarted)) return;
+    }
+    return leaf && isExecutableStep(leaf)
+      ? (leaf as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>)
+      : undefined;
   }
 
   /**
@@ -2405,23 +2430,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return null;
     }
 
-    const { restart } = data;
-    const [index, branch] = data.executionPath;
-    let leaf: StepFlowEntry | undefined = workflow.stepGraph[index!];
-    // A restart's dispatcher event carries the path of the branch or item it publishes.
-    if (leaf?.type === 'parallel' || leaf?.type === 'conditional') {
-      if (branch === undefined || (restart && !restart.isParallelOrConditionalRestarted)) {
-        return null;
-      }
-      leaf = leaf.steps[branch];
-    } else if (leaf?.type === 'foreach') {
-      if (branch === undefined || (restart && !restart.isForeachRestarted)) {
-        return null;
-      }
-    } else if (leaf?.type === 'sleep' || leaf?.type === 'sleepUntil') {
-      return null;
-    }
-
+    const leaf = this.#leafAt(workflow, data);
     if (!leaf) {
       return null;
     }
@@ -2442,33 +2451,51 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Whether the stored run shows that the leaf occurrence this
-   * `workflow.step.run` delivers already finished. Deliveries of control
-   * entries (parallel, conditional and foreach dispatch, sleeps) and of
-   * unleased workflows report false.
+   * What the stored run says about the leaf occurrence this `workflow.step.run`
+   * delivers: `'drop'` when it finished and the run went on without it,
+   * `'continue'` when it finished and the run still has to continue from its
+   * saved result, and `'run'` otherwise. Deliveries of control entries
+   * (parallel, conditional and foreach dispatch, sleeps) and of unleased
+   * workflows get `'run'`.
    */
-  async #isFinishedDelivery(event: Event): Promise<boolean> {
+  async #finishedDelivery(event: Event): Promise<'run' | 'drop' | 'continue'> {
     const data = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
-    if (!data?.workflowId || !data.executionPath?.length) return false;
+    if (!data?.workflowId || !data.executionPath?.length) return 'run';
     const workflow = this.#resolveLiveWorkflow(data) ?? undefined;
-    if (!workflow || !(await this.#leaseStore(workflow))) return false;
-    const [index, branch] = data.executionPath;
-    let entry: StepFlowEntry | undefined = workflow.stepGraph[index!];
-    if ((entry?.type === 'parallel' || entry?.type === 'conditional') && branch !== undefined) {
-      entry = entry.steps[branch];
-    }
-    if (!entry || !isExecutableStep(entry) || (entry.type === 'foreach' && branch === undefined)) return false;
+    if (!workflow || !(await this.#leaseStore(workflow))) return 'run';
+    const leaf = this.#leafAt(workflow, data);
+    if (!leaf) return 'run';
     const { stepLeaseHandoff: _handoff, ...args } = data;
-    const leaf = entry as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
-    return (await this.#finishedOccurrence({ ...args, workflow, eventId: event.id }, leaf)) !== 'run';
+    const { decision } = await this.#finishedOccurrence({ ...args, workflow, eventId: event.id }, leaf);
+    return typeof decision === 'string' ? decision : 'continue';
   }
 
   /**
-   * Checks, once the worker holds the occurrence's lease, whether the stored
-   * run shows the occurrence already finished. Returns `'run'` when the step
-   * still has to run, `'drop'` when the delivery is a duplicate, or the step
-   * end arguments that continue the run from the saved result. See
-   * {@link finishedOccurrence}.
+   * Whether `runLeafStep` guards the start of the step `args` delivers with the
+   * store's workflow step guards: a first delivery, not a restart, a time
+   * travel or a resume, of a step other than a foreach item.
+   */
+  #guardsStepStart(
+    store: WorkflowsStorage | undefined,
+    args: Pick<ProcessorArgs, 'eventId' | 'restart' | 'timeTravel' | 'resumeSteps'>,
+    step: StepFlowEntry,
+  ): boolean {
+    return (
+      !!store?.supportsWorkflowStepGuards() &&
+      !!args.eventId &&
+      !args.restart &&
+      !args.timeTravel &&
+      !args.resumeSteps?.length &&
+      step.type !== 'foreach'
+    );
+  }
+
+  /**
+   * Checks whether the stored run shows the occurrence already finished.
+   * `decision` is `'run'` when the step still has to run, `'drop'` when the
+   * delivery is a duplicate, or the step end arguments that continue the run
+   * from the saved result. See {@link finishedOccurrence}. `snapshot` is the
+   * stored run the check read, when it read one.
    *
    * A resume of the step and time travel run it again on purpose and skip the
    * check.
@@ -2476,33 +2503,32 @@ export class WorkflowEventProcessor extends EventProcessor {
   async #finishedOccurrence(
     args: Omit<ProcessorArgs, 'stepLeaseHandoff'>,
     step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
-  ): Promise<'run' | 'drop' | ProcessorArgs> {
+  ): Promise<{ decision: 'run' | 'drop' | ProcessorArgs; snapshot?: WorkflowRunState | null }> {
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
-    if (args.timeTravel || args.resumeSteps?.[0] === leafId) return 'run';
+    if (args.timeTravel || args.resumeSteps?.[0] === leafId) return { decision: 'run' };
     const store = await this.mastra.getStorage()?.getStore('workflows');
-    if (!store) return 'run';
+    if (!store) return { decision: 'run' };
     const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
-    const stepGuards = store.supportsWorkflowStepGuards();
-    // Mirrors the `guardStart` condition in runLeafStep.
-    const guarded =
-      stepGuards && !!args.eventId && !args.restart && !args.resumeSteps?.length && step.type !== 'foreach';
     const outcome = finishedOccurrence({
       step,
       executionPath: args.executionPath,
       stepResults: args.stepResults,
       restart: args.restart,
       snapshot,
-      stepGuards,
-      guarded,
+      stepGuards: store.supportsWorkflowStepGuards(),
+      guarded: this.#guardsStepStart(store, args, step),
     });
-    if (outcome === 'run' || outcome === 'drop') return outcome;
+    if (outcome === 'run' || outcome === 'drop') return { decision: outcome, snapshot };
     const context = snapshot!.context;
     return {
-      ...args,
-      stepResults: { ...args.stepResults, ...context },
-      prevResult: outcome.continueFrom,
-      state: context.__state ?? resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
-      requestContext: restoreLiveRequestContext(snapshot!.requestContext, args.requestContext),
+      decision: {
+        ...args,
+        stepResults: { ...args.stepResults, ...context },
+        prevResult: outcome.continueFrom,
+        state: context.__state ?? resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
+        requestContext: restoreLiveRequestContext(snapshot!.requestContext, args.requestContext),
+      },
+      snapshot,
     };
   }
 
@@ -2745,7 +2771,9 @@ export class WorkflowEventProcessor extends EventProcessor {
    * suspend, cancel). The per-kind interpretation happens in the step
    * executor's dispatch; here entries are only inspected via the `step-entry`
    * accessors. `stepLease` is the occurrence lease the caller holds; a retry
-   * hands it to the worker that runs the next attempt.
+   * hands it to the worker that runs the next attempt. `loadedSnapshot` is the
+   * stored run the caller read after taking the lease, which the step's start
+   * reuses instead of reading the run again.
    */
   protected async runLeafStep(
     args: ProcessorArgs & {
@@ -2753,6 +2781,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     },
     control: ControlAtDispatch = {},
     stepLease: StepLease = UNLEASED_STEP,
+    loadedSnapshot?: WorkflowRunState | null,
   ) {
     const {
       workflow,
@@ -2811,13 +2840,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     const nestedWorkflowStep = getEntryWorkflow(leaf);
-    const guardStart =
-      workflowsStore?.supportsWorkflowStepGuards() &&
-      args.eventId &&
-      !restart &&
-      !timeTravel &&
-      !resumeSteps?.length &&
-      step.type !== 'foreach';
+    const guardStart = this.#guardsStepStart(workflowsStore, args, step);
     let nestedRunId = '';
     let authorizedEventId: string | undefined;
     let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
@@ -2942,8 +2965,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         // exists while the whole run sits in 'suspended'. Read-then-write
         // narrows the race window rather than closing it — closing it needs
         // an expectedStatus compare-and-set on `updateWorkflowResults` across
-        // all storage adapters.
-        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        // all storage adapters. A nested step's authorization awaits in between, so it reads again.
+        const snapshot =
+          (!nestedWorkflowStep && loadedSnapshot) ||
+          (await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId }));
         if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
           return;
         }
@@ -5381,8 +5406,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           return { ok: true };
         }
 
+        const finished = event.type === 'workflow.step.run' ? await this.#finishedDelivery(event) : 'run';
         // A late delivery of a step that already finished would fail a run that went on without it.
-        if (event.type === 'workflow.step.run' && (await this.#isFinishedDelivery(event))) {
+        if (finished === 'drop') {
           this.deliveryAttempts.delete(eventKey);
           this.mastra.getLogger()?.debug('Dropping an exhausted delivery of a step that already finished', {
             runId: event.runId,
@@ -5406,10 +5432,15 @@ export class WorkflowEventProcessor extends EventProcessor {
           return { ok: true };
         }
 
-        return this.#publishPendingFailure(event, eventKey, {
-          error: new Error(`Event ${event.type} exhausted its delivery attempts`),
-          publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
-        });
+        // A finished step the run still has to continue from gets this one more delivery: it
+        // continues the run under the step's lease without running the step, and only a failure
+        // of that continuation fails the run.
+        if (finished !== 'continue') {
+          return this.#publishPendingFailure(event, eventKey, {
+            error: new Error(`Event ${event.type} exhausted its delivery attempts`),
+            publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
+          });
+        }
       }
 
       await this.#dispatch(event);
