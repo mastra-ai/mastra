@@ -125,6 +125,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
           definition: z.literal(definition),
           output: z.unknown().optional(),
           suspendedSteps: z.array(identifierSchema).max(100).optional(),
+          pending: z.unknown().optional(),
         }),
         record.result,
       );
@@ -239,6 +240,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
         },
         previous.billing.observedUnits ?? 0,
         resource.agentDependencies,
+        resource.artifactSlots,
       );
       const nativeSignal: AbortSignal = run.abortController.signal;
       signal = nativeSignal;
@@ -319,9 +321,35 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       if ((result.status === 'success' || result.status === 'suspended') && !expectedCalls) await collector.missing();
       const projection =
         result.status === 'success'
-          ? { output: await resource.output(result.result) }
+          ? {
+              output: await resource.complete(
+                {
+                  collector,
+                  slot: 0,
+                  prompt: '',
+                  signal: collector.controller.signal,
+                  checkpoint: async () => {
+                    collector.controller.signal.throwIfAborted();
+                    const cutoff = await this.options.accounting.segmentDeadline(identity, record.id, record.version);
+                    if (cutoff !== null && Date.now() >= cutoff) throw new BillingError('state_unavailable');
+                  },
+                },
+                result.result,
+              ),
+            }
           : result.status === 'suspended'
-            ? { suspendedSteps: [...new Set(result.suspended.flat())] }
+            ? {
+                suspendedSteps: [...new Set(result.suspended.flat())],
+                ...(resource.artifactSlots
+                  ? {
+                      pending: Object.fromEntries(
+                        Object.entries(result.steps)
+                          .filter(([, step]) => step.status === 'suspended')
+                          .map(([id, step]) => [id, step.suspendPayload]),
+                      ),
+                    }
+                  : {}),
+              }
             : {};
       const nativeStatus =
         result.status === 'success'

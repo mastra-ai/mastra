@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { BillingError, identifierSchema, parseInput } from '../src/billing/contracts.js';
 import { localPaths, readLocalProfiles } from '../src/local/profiles.js';
-import { weatherPrompt, observationsSchema, reportApprovalSchema } from '../src/weather/observations.js';
+import { briefSchema, kitInputSchema, approvalSchema } from '../src/images/schemas.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -70,22 +70,24 @@ const [action, executionId] = positionals;
 if (positionals.length > (['status', 'resume', 'cancel'].includes(action) ? 2 : 1))
   throw new BillingError('invalid_input');
 if (action === 'generate')
-  result = await request(`${base}/agents/weather-agent/generate`, { prompt: weatherPrompt(await input()) });
+  result = await request(`${base}/agents/image-agent/generate`, {
+    prompt: parseInput(briefSchema, ((await input()) as { brief?: unknown }).brief),
+  });
 else if (action === 'start') {
-  const observations = parseInput(observationsSchema, await input());
-  const created = await request(`${base}/workflows/weather-report/runs`, {});
-  result = await request(`${base}/workflows/weather-report/runs/${created.executionId}/start`, {
-    inputData: observations,
+  const kit = parseInput(kitInputSchema, await input());
+  const created = await request(`${base}/workflows/image-kit/runs`, {});
+  result = await request(`${base}/workflows/image-kit/runs/${created.executionId}/start`, {
+    inputData: kit,
   });
 } else if (['status', 'resume', 'cancel'].includes(action)) {
   const id = parseInput(identifierSchema, executionId);
-  const path = `${base}/workflows/weather-report/runs/${id}`;
+  const path = `${base}/workflows/image-kit/runs/${id}`;
   result =
     action === 'status'
       ? await request(path)
       : await request(
           `${path}/${action}`,
-          action === 'resume' ? { step: 'approval', resumeData: parseInput(reportApprovalSchema, await input()) } : {},
+          action === 'resume' ? { step: 'approval', resumeData: parseInput(approvalSchema, await input()) } : {},
         );
 } else if (action === 'account') {
   const usage = await request(`${base}/usage`);

@@ -11,6 +11,7 @@ const suites = [
     'tests/billing/accounting.test.ts',
     'tests/billing/mastra.test.ts',
     'tests/billing/recovery.test.ts',
+    'tests/billing/images.test.ts',
   ],
   ['tests/billing/http.test.ts'],
   ['tests/billing/autumn-reservations.test.ts'],

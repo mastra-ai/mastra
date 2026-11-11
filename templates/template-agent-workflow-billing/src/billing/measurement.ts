@@ -26,6 +26,7 @@ export class MeasurementCollector {
     private readonly cancel?: () => Promise<void>,
     initialUnits = 0,
     readonly agentDependencies?: readonly string[],
+    readonly artifactSlots?: number,
   ) {
     this.observed = initialUnits;
   }

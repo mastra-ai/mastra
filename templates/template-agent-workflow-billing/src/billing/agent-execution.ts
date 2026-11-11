@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { withinExecution } from './execution-scope.js';
 import type { FullOutput } from '@mastra/core/stream';
 import { BillingError, identifierSchema, parseInput } from './contracts.js';
 import type { Json, ExecutorOutcome } from './accounting.js';
@@ -84,14 +85,21 @@ export class AgentExecution<Agents extends AgentRegistry> {
     return Object.freeze({
       generate: async (
         prompt: string,
-        options: SafeGenerateOptions = {},
+        options: SafeGenerateOptions & { slot?: number } = {},
       ): Promise<FullOutput<AgentResult<Agents[K]>>> => {
         const parent = this.context.parent.getStore();
         if (!parent || (parent.agentDependencies && !parent.agentDependencies.includes(id)))
           throw new BillingError('unsupported');
         const parsedPrompt = resource.validatePrompt(parseInput(z.string().min(1).max(8192), prompt));
-        const safe = parseInput(safeGenerateOptionsSchema, options);
-        return this.generateNested(resource, parsedPrompt, parent, safe);
+        const { slot, ...behavior } = options;
+        const safe = parseInput(safeGenerateOptionsSchema, behavior);
+        return this.generateNested(
+          resource,
+          parsedPrompt,
+          parent,
+          safe,
+          parseInput(z.number().int().min(0).max(2).optional(), slot),
+        );
       },
     });
   }
@@ -100,6 +108,7 @@ export class AgentExecution<Agents extends AgentRegistry> {
     prompt: string,
     parent: MeasurementCollector,
     options: SafeGenerateOptions,
+    slot = 0,
   ) {
     const deadline = await this.options.accounting.segmentDeadline(
       parent.identity,
@@ -107,13 +116,14 @@ export class AgentExecution<Agents extends AgentRegistry> {
       parent.workflowVersion,
     );
     if (deadline !== null && Date.now() >= deadline) throw new BillingError('state_unavailable');
-    return this.generate(resource, prompt, parent, options);
+    return this.generate(resource, prompt, parent, options, slot);
   }
   private async generate<Output>(
     resource: AgentResource<Output>,
     prompt: string,
     collector: MeasurementCollector,
     options: SafeGenerateOptions,
+    slot = 0,
   ) {
     const charge = collector.resource.policy.charge;
     if (charge.type === 'usage' && charge.funding === 'prepaid' && !resource.enforceableCallBound)
@@ -125,13 +135,33 @@ export class AgentExecution<Agents extends AgentRegistry> {
       ? AbortSignal.any([collector.controller.signal, options.abortSignal])
       : collector.controller.signal;
     try {
-      return await resource.generate(prompt, {
-        abortSignal: signal,
-        onStepFinish: async value => {
-          await collector.capture(call, ++step, value.usage);
-          if (!collector.deadlineExpired) await options.onStepFinish?.(value);
+      const scope = {
+        collector,
+        prompt,
+        slot,
+        signal,
+        checkpoint: async () => {
+          signal.throwIfAborted();
+          const deadline = await this.options.accounting.segmentDeadline(
+            collector.identity,
+            collector.executionId,
+            collector.workflowVersion,
+          );
+          if (deadline !== null && Date.now() >= deadline) throw new BillingError('state_unavailable');
         },
-      });
+      };
+      return await withinExecution(scope, async () =>
+        resource.complete(
+          scope,
+          await resource.generate(prompt, {
+            abortSignal: signal,
+            onStepFinish: async value => {
+              await collector.capture(call, ++step, value.usage);
+              if (!collector.deadlineExpired) await options.onStepFinish?.(value);
+            },
+          }),
+        ),
+      );
     } catch (error) {
       await collector.missing();
       throw error;
@@ -153,6 +183,10 @@ export class AgentExecution<Agents extends AgentRegistry> {
       this.options.accounting,
       this.options.workflowStorage,
       false,
+      undefined,
+      0,
+      undefined,
+      resource.artifactSlots,
     );
     try {
       const deadline = await this.options.accounting.segmentDeadline(identity, executionId);

@@ -3,7 +3,7 @@ import { open, unlink } from 'node:fs/promises';
 import { configuredOrganizations, applicationMode, billingDatabaseUrl } from '../src/mastra/environment.js';
 import { BillingError } from '../src/billing/contracts.js';
 import { initializeBilling } from '../src/billing/setup.js';
-import { weatherConfiguration } from '../src/weather/configuration.js';
+import { imageConfiguration } from '../src/images/configuration.js';
 import { localPaths, privateDirectory, readLocalProfiles, writeLocalProfiles } from '../src/local/profiles.js';
 import type { LocalProfiles } from '../src/local/profiles.js';
 
@@ -39,7 +39,7 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         if (!manifest.profiles[name]) {
           if (manifest.ready) throw new BillingError('state_unavailable');
           const provisioned = await organizations.provisionLocal({
-            profileId: `weather-${name}`,
+            profileId: `image-${name}`,
             displayName: people[name],
           });
           if (!provisioned.credential) throw new BillingError('state_unavailable');
@@ -60,7 +60,7 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         if (context.actorId !== profile.actorId) throw new BillingError('conflict');
       }
       const initialized = await initializeBilling({
-        configuration: weatherConfiguration(Object.values(manifest.profiles).map(profile => profile!.workspaceId)),
+        configuration: imageConfiguration(Object.values(manifest.profiles).map(profile => profile!.workspaceId)),
         storage: { url: databaseUrl },
       });
       try {

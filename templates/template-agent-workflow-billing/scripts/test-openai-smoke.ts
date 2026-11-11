@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -8,14 +9,15 @@ import { createClient } from '@libsql/client';
 import { setupLocal } from './setup.js';
 import { createBillingApplication } from '../src/mastra/setup.js';
 import { createBillingApp } from '../src/server/billing.js';
-import { weatherPrompt } from '../src/weather/observations.js';
+import { imageProfile } from '../src/images/schemas.js';
+import { validatePng } from '../src/images/png.js';
 
-const proof = 'weather agent produces a report through the billed local gateway';
-const directory = await mkdtemp(join(tmpdir(), 'weather-openai-'));
+const proof = 'OpenAI image generation succeeds through the billed facade and private artifact store';
+const directory = await mkdtemp(join(tmpdir(), 'image-openai-'));
 const deadline = setTimeout(() => {
   console.error('OpenAI smoke exceeded its time limit; unverified.');
   process.exit(1);
-}, 120000);
+}, 180000);
 let application: Awaited<ReturnType<typeof createBillingApplication>> | undefined;
 let server: ReturnType<typeof createServer> | undefined;
 try {
@@ -28,7 +30,12 @@ try {
   };
   const manifest = await setupLocal(environment);
   application = await createBillingApplication(environment);
-  const app = createBillingApp(application.organizations, application.execution, application.runtime.commercial);
+  const app = createBillingApp(
+    application.organizations,
+    application.execution,
+    application.runtime.commercial,
+    application.artifacts,
+  );
   server = createServer(async (request, response) => {
     try {
       const chunks: Buffer[] = [];
@@ -56,18 +63,9 @@ try {
   const address = server.address();
   assert(address && typeof address !== 'string');
   const owner = manifest.profiles.owner!;
-  const url = `http://127.0.0.1:${address.port}/billing/workspaces/${owner.workspaceId}/agents/weather-agent/generate`;
+  const url = `http://127.0.0.1:${address.port}/billing/workspaces/${owner.workspaceId}/agents/image-agent/generate`;
   const body = JSON.stringify({
-    prompt: weatherPrompt({
-      location: 'Porto Alegre',
-      observedAt: '2026-11-08T12:00:00Z',
-      temperatureC: 24,
-      feelsLikeC: 26,
-      humidityPercent: 70,
-      windKph: 18,
-      precipitationChancePercent: 60,
-      conditions: 'Cloudy; showers possible',
-    }),
+    prompt: 'A small blue bird in a quiet forest, simple flat illustration without text.',
   });
   const request = async () => {
     const response = await fetch(url, {
@@ -76,50 +74,92 @@ try {
       headers: {
         authorization: `Bearer ${owner.credential}`,
         'content-type': 'application/json',
-        'idempotency-key': 'live-weather-once',
+        'idempotency-key': 'live-image-once',
       },
       body,
-      signal: AbortSignal.timeout(90000),
+      signal: AbortSignal.timeout(150000),
     });
     assert.equal(response.status, 200);
     return (await response.json()) as any;
   };
   const first = await request();
   assert.equal(first.billing.executionStatus, 'completed');
-  assert.equal(first.billing.billedUnits, 3);
+  assert.equal(first.billing.settlementStatus, 'settled');
+  assert.equal(first.billing.billedUnits, 1);
   assert.equal(first.billing.replayed, false);
-  assert(first.result.text.length >= 40 && /Porto Alegre|24|showers|rain/i.test(first.result.text));
+  assert.equal(first.result.object.artifacts.length, 1);
+  const artifact = first.result.object.artifacts[0];
+  const retrieved = await fetch(
+    `http://127.0.0.1:${address.port}/billing/workspaces/${owner.workspaceId}/artifacts/${artifact.id}`,
+    { headers: { authorization: `Bearer ${owner.credential}` }, redirect: 'error' },
+  );
+  assert.equal(retrieved.status, 200);
+  const png = Buffer.from(await retrieved.arrayBuffer());
+  validatePng(png);
+  assert.equal(png.length, artifact.bytes);
+  assert.equal(createHash('sha256').update(png).digest('hex'), artifact.sha256);
   const replay = await request();
-  assert.equal(replay.result.text, first.result.text);
+  assert.deepEqual(replay.result, first.result);
   assert.equal(replay.billing.replayed, true);
+  assert.equal(replay.billing.executionId, first.billing.executionId);
   await application.runtime.recovery.runOnce();
   const database = createClient({ url: manifest.databaseUrl });
   try {
-    const measurements = (
+    const slots = (
       await database.execute({
-        sql: 'SELECT measure, SUM(units) AS units FROM billing_measurements WHERE execution_id = ? GROUP BY measure',
+        sql: "SELECT artifact_id FROM image_slots WHERE execution_id = ? AND state = 'completed'",
         args: [first.billing.executionId],
       })
     ).rows;
-    const measured = Object.fromEntries(measurements.map(row => [String(row.measure), Number(row.units)]));
-    assert.equal(measured['model-calls'], 1);
-    assert(measured.tokens > 0);
-    const balance = (await database.execute("SELECT balance FROM commercial_meters WHERE key = 'weather-credits'"))
-      .rows;
-    assert.equal(Number(balance[0].balance), 27);
+    assert.deepEqual(
+      slots.map(row => row.artifact_id),
+      [artifact.id],
+    );
+    const artifacts = (
+      await database.execute({
+        sql: 'SELECT id FROM image_artifacts WHERE execution_id = ?',
+        args: [first.billing.executionId],
+      })
+    ).rows;
+    assert.deepEqual(
+      artifacts.map(row => row.id),
+      [artifact.id],
+    );
+    const operations = (
+      await database.execute({
+        sql: 'SELECT execution_id FROM billing_operations WHERE actor_id = ? AND workspace_id = ? AND key = ?',
+        args: [owner.actorId, owner.workspaceId, 'live-image-once'],
+      })
+    ).rows;
+    assert.deepEqual(
+      operations.map(row => row.execution_id),
+      [first.billing.executionId],
+    );
+    const balance = (
+      await database.execute({
+        sql: "SELECT m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'image-credits' AND a.workspace_id = ?",
+        args: [owner.workspaceId],
+      })
+    ).rows;
+    assert.equal(Number(balance[0].balance), 29);
     const debits = (await database.execute('SELECT units FROM billing_ledger')).rows;
     assert.deepEqual(
       debits.map(row => Number(row.units)),
-      [3],
+      [1],
     );
     console.log(
       JSON.stringify({
         proof,
         status: 'passed',
-        model: 'openai/gpt-6-luna',
-        billedUnits: 3,
-        actualTokens: measured.tokens,
-        modelCalls: measured['model-calls'],
+        imageProfile,
+        textModel: 'openai/gpt-6-luna',
+        textCallBound: 2,
+        textOutputTokenBound: 400,
+        imageCallBound: 1,
+        artifactBytes: png.length,
+        artifactSha256: artifact.sha256,
+        artifactId: artifact.id,
+        billedUnits: 1,
         replayedWithoutNewCall: true,
       }),
     );

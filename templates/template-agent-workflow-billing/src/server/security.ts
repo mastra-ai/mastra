@@ -1,3 +1,4 @@
+import type { ArtifactReader } from '../billing/artifacts.js';
 import type { MiddlewareHandler } from 'hono';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ServerConfig } from '@mastra/core/server';
@@ -11,6 +12,7 @@ export function billingOnlyServer(
   execution?: BillingHttpGateway,
   commercial?: CommercialService,
   studio?: { middleware: MiddlewareHandler },
+  artifacts?: ArtifactReader,
 ): Pick<ServerConfig, 'apiRoutes' | 'middleware' | 'cors'> {
   return {
     cors: false,
@@ -26,7 +28,7 @@ export function billingOnlyServer(
       },
     ],
     apiRoutes: [
-      ...billingApiRoutes(organizations, execution, commercial),
+      ...billingApiRoutes(organizations, execution, commercial, artifacts),
       // Discovery remains closed in both modes. With Studio disabled, also
       // cover framework-public routes that deliberately skip user middleware.
       registerApiRoute(studio ? '/.well-known/*' : '/*', {

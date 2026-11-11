@@ -1,15 +1,17 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat, writeFile, unlink, link, symlink } from 'node:fs/promises';
+import { unlinkSync } from 'node:fs';
+import filesystem from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { privateWorkflowFiles } from '../../src/billing/storage/private-files.js';
 import { join } from 'node:path';
 import { setupLocal } from '../../scripts/setup.js';
 import { createBillingApplication } from '../../src/mastra/setup.js';
 import { readLocalProfiles } from '../../src/local/profiles.js';
-import { modelBoundary } from '../support/mastra.js';
+import { imageBoundary } from '../support/images.js';
 import { billingSocket } from '../support/http.js';
 import { createBillingApp } from '../../src/server/billing.js';
-import { weatherPrompt } from '../../src/weather/observations.js';
-import { observations } from '../support/template.js';
 import { setTimeout } from 'node:timers/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeBilling } from '../../src/billing/setup.js';
 import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
 import { configuration, independentClient, temporaryDatabase, usage } from '../support/billing.js';
@@ -32,6 +34,98 @@ async function fixture() {
 }
 
 describe('local billing storage', () => {
+  it.each(['wal', 'shm'] as const)(
+    'a disappearing SQLite %s sidecar preserves restart and durable data',
+    async sidecar => {
+      const database = await temporaryDatabase();
+      cleanups.push(database.cleanup);
+      await privateWorkflowFiles(database.filename);
+      const sql = await independentClient(database.url);
+      cleanups.push(() => sql.close());
+      await sql.execute('PRAGMA journal_mode = WAL');
+      await sql.execute('CREATE TABLE restart_proof (value TEXT NOT NULL)');
+      await sql.execute("INSERT INTO restart_proof VALUES ('durable before restart')");
+      await sql.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+      const filename = `${database.filename}-${sidecar}`;
+      expect((await stat(filename)).nlink).toBe(1);
+      let removed = false;
+      // Schedule a real unlink after the optional file is open but before fstat.
+      // The decorator delegates to the real open; file handles and metadata stay real.
+      const open = filesystem.open;
+      const opening = vi.spyOn(filesystem, 'open').mockImplementation(async (...arguments_) => {
+        const handle = await open(...arguments_);
+        if (arguments_[0] === filename) {
+          unlinkSync(filename);
+          removed = true;
+        }
+        return handle;
+      });
+      syncBuiltinESMExports();
+      try {
+        await privateWorkflowFiles(database.filename);
+      } finally {
+        opening.mockRestore();
+        syncBuiltinESMExports();
+      }
+      expect(removed).toBe(true);
+      await expect(stat(filename)).rejects.toMatchObject({ code: 'ENOENT' });
+      sql.close();
+      const reopened = await independentClient(database.url);
+      try {
+        expect((await reopened.execute('SELECT value FROM restart_proof')).rows).toEqual([
+          { value: 'durable before restart' },
+        ]);
+      } finally {
+        reopened.close();
+      }
+    },
+  );
+
+  it.each(['main', 'wal', 'shm'] as const)('private %s files still reject live hardlinks and symlinks', async part => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    const target = join(database.directory, 'other-private-file');
+    await writeFile(target, 'must not change', { mode: 0o644 });
+    const filename = part === 'main' ? database.filename : `${database.filename}-${part}`;
+    for (const makeLink of [link, symlink]) {
+      await privateWorkflowFiles(database.filename);
+      if (part === 'main') await unlink(filename);
+      await makeLink(target, filename);
+      try {
+        await expect(privateWorkflowFiles(database.filename)).rejects.toMatchObject({ code: 'storage_unavailable' });
+        expect((await stat(target)).mode & 0o777).toBe(0o644);
+        expect(await readFile(target, 'utf8')).toBe('must not change');
+      } finally {
+        await unlink(filename);
+      }
+    }
+  });
+
+  it('an unlinked main database is rejected rather than treated as an optional sidecar', async () => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    await privateWorkflowFiles(database.filename);
+    const open = filesystem.open;
+    let removed = false;
+    const opening = vi.spyOn(filesystem, 'open').mockImplementation(async (...arguments_) => {
+      const handle = await open(...arguments_);
+      if (arguments_[0] === database.filename) {
+        unlinkSync(database.filename);
+        removed = true;
+      }
+      return handle;
+    });
+    syncBuiltinESMExports();
+    try {
+      await expect(privateWorkflowFiles(database.filename)).rejects.toMatchObject({ code: 'storage_unavailable' });
+    } finally {
+      opening.mockRestore();
+      syncBuiltinESMExports();
+    }
+    expect(removed).toBe(true);
+    await expect(stat(database.filename)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('independent readers cannot strand a usage commit or retain a partial debit', async () => {
     const { billing, account, observer } = await fixture();
     const reader = await observer.transaction('deferred');
@@ -152,8 +246,10 @@ describe('local billing storage', () => {
     const reopened = await LocalBillingStorage.open({ url: database.url });
     cleanups.push(() => reopened.close());
     const history = await observer.execute('SELECT version, checksum FROM billing_migrations');
-    expect(history.rows).toEqual([{ version: 1n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(1n);
+    expect(history.rows).toEqual(
+      [1n, 2n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
+    );
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(2n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -254,7 +350,7 @@ describe('local billing storage', () => {
 async function developmentFixture() {
   const directory = await temporaryDatabase();
   cleanups.push(directory.cleanup);
-  const model = await modelBoundary();
+  const model = await imageBoundary();
   cleanups.push(model.close);
   const environment = {
     MASTRA_PROJECT_ROOT: directory.directory,
@@ -285,8 +381,7 @@ async function developmentFixture() {
     });
     return { status: response.status, body: (await response.json()) as any };
   };
-  const summary = () =>
-    call('agents/weather-agent/generate', { prompt: weatherPrompt(observations) }, 'retained-summary');
+  const summary = () => call('agents/image-agent/generate', { prompt: 'A blue bird' }, 'retained-summary');
   return {
     directory,
     model,
@@ -325,7 +420,7 @@ it('fresh development state starts without Polar and setup preserves spent credi
   const credentials = await readFile(join(f.directory.directory, 'data/local-profiles.json'));
   expect(await f.summary()).toMatchObject({
     status: 200,
-    body: { result: { text: 'ok' }, billing: { executionStatus: 'completed', billedUnits: 3 } },
+    body: { result: { text: 'Image generated.' }, billing: { executionStatus: 'completed', billedUnits: 1 } },
   });
   const history = (await f.observer.execute('SELECT * FROM billing_ledger')).rows;
   await f.stop();
@@ -335,10 +430,10 @@ it('fresh development state starts without Polar and setup preserves spent credi
   expect((await f.observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(history);
   const balances = (
     await f.observer.execute(
-      "SELECT a.workspace_id, m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'weather-credits'",
+      "SELECT a.workspace_id, m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'image-credits'",
     )
   ).rows;
-  expect(balances.find(row => row.workspace_id === f.manifest.profiles.owner!.workspaceId)?.balance).toBe(27n);
+  expect(balances.find(row => row.workspace_id === f.manifest.profiles.owner!.workspaceId)?.balance).toBe(29n);
   expect(
     balances.filter(row => row.workspace_id !== f.manifest.profiles.owner!.workspaceId).map(row => row.balance),
   ).toEqual([30n, 30n]);
@@ -350,9 +445,9 @@ it('fresh development state starts without Polar and setup preserves spent credi
     ).rows,
   ).toEqual([]);
   await f.restart();
-  expect(await f.summary()).toMatchObject({ status: 200, body: { billing: { replayed: true, billedUnits: 3 } } });
+  expect(await f.summary()).toMatchObject({ status: 200, body: { billing: { replayed: true, billedUnits: 1 } } });
   expect((await f.observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(history);
-  expect(f.model.requests).toHaveLength(1);
+  expect(f.model.images).toHaveLength(1);
 });
 
 it('unsupported databases remain untouched and supported operation identities survive restart', async () => {
@@ -367,10 +462,10 @@ it('unsupported databases remain untouched and supported operation identities su
   expect(await readFile(foreign.filename)).toEqual(before);
   const f = await developmentFixture();
   const completed = await f.summary();
-  const created = await f.call('workflows/weather-report/runs', {}, 'retained-report');
+  const created = await f.call('workflows/image-kit/runs', {}, 'retained-report');
   const id = created.body.executionId;
   expect(
-    await f.call(`workflows/weather-report/runs/${id}/start`, { inputData: observations }, 'retained-start'),
+    await f.call(`workflows/image-kit/runs/${id}/start`, { inputData: { brief: 'A blue bird kit' } }, 'retained-start'),
   ).toMatchObject({
     status: 200,
     body: { result: { status: 'suspended' }, billing: { settlementStatus: 'reserved', billedUnits: null } },
@@ -402,10 +497,10 @@ it('unsupported databases remain untouched and supported operation identities su
   expect(await retained()).toEqual(history);
   expect(await f.summary()).toMatchObject({
     status: 200,
-    body: { billing: { executionId: completed.body.billing.executionId, replayed: true, billedUnits: 3 } },
+    body: { billing: { executionId: completed.body.billing.executionId, replayed: true, billedUnits: 1 } },
   });
-  expect((await f.call('workflows/weather-report/runs', {}, 'retained-report')).body.executionId).toBe(id);
+  expect((await f.call('workflows/image-kit/runs', {}, 'retained-report')).body.executionId).toBe(id);
   expect(await retained()).toEqual(history);
-  expect(f.model.requests).toHaveLength(2);
+  expect(f.model.images).toHaveLength(1);
   expect((await f.observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
 });

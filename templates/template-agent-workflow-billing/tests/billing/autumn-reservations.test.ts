@@ -1,4 +1,6 @@
 import { fork } from 'node:child_process';
+import { billingPolicySchema } from '../../src/billing/configuration.js';
+import { weatherDefinitions } from '../support/weather/resources.js';
 import { once } from 'node:events';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
@@ -1626,7 +1628,16 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       OPENAI_API_KEY: 'controlled',
     };
     const serve = async (bindings = f.options.bindings) => {
-      const application = await createBillingApplication(environment, { autumn: { ...f.options, bindings } });
+      const { resources: policies, ...billingConfiguration } = configuration;
+      const resources = weatherDefinitions(environment).map(definition => ({
+        ...definition,
+        measurements: [],
+        policy: billingPolicySchema.parse(policies.find(policy => policy.id === definition.id)!.policy),
+      }));
+      const application = await createBillingApplication(environment, {
+        autumn: { ...f.options, bindings },
+        catalog: { resources, configuration: billingConfiguration },
+      });
       cleanups.push(application.close);
       const server = await billingSocket(
         createBillingApp(application.organizations, application.execution, application.runtime.commercial),

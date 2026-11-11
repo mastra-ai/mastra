@@ -128,7 +128,7 @@ export class LocalBillingStorage {
           validUntil: row.valid_until === null ? null : String(row.valid_until),
         }));
     const meters = await transaction.execute({
-      sql: 'SELECT * FROM commercial_meters WHERE account_id = ? ORDER BY key',
+      sql: 'SELECT * FROM commercial_meters m WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM local_image_credit_migrations t WHERE t.account_id = m.account_id AND t.source_meter = m.key) ORDER BY key',
       args: [account.id],
     });
     const holds = (
@@ -176,6 +176,14 @@ export class LocalBillingStorage {
         await tx.execute({ sql: 'SELECT * FROM local_provider_reservations WHERE id = ?', args: [request.id] })
       ).rows[0];
       if (previous) return { status: 'uncertain' as const };
+      const retired =
+        (
+          await tx.execute({
+            sql: 'SELECT 1 FROM local_image_credit_migrations WHERE account_id = ? AND source_meter = ?',
+            args: [request.account.id, request.meter],
+          })
+        ).rows.length > 0;
+      if (retired) return { status: 'denied' as const, evidence: 'local:retired-meter' };
       const meter = (
         await tx.execute({
           sql: "SELECT * FROM commercial_meters WHERE account_id = ? AND key = ? AND funding = 'prepaid'",
@@ -262,6 +270,15 @@ export class LocalBillingStorage {
         return { status: 'duplicate', eventId: event.id };
       }
       await this.requireAccount(transaction, event.account);
+      if (
+        (
+          await transaction.execute({
+            sql: 'SELECT 1 FROM local_image_credit_migrations WHERE account_id = ? AND source_meter = ?',
+            args: [event.account.id, event.meter],
+          })
+        ).rows.length
+      )
+        throw new BillingError('conflict');
       if (
         (
           await transaction.execute({

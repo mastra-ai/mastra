@@ -1,6 +1,6 @@
 # Autumn billing
 
-Autumn owns paid credit balances and reservations. Local mode simulates the same reserve, execute, confirm or release lifecycle in the private SQL database and needs no payment credentials. The current weather resources remain available; image resources are not included in this integration.
+Autumn owns paid credit balances and reservations. Local mode simulates the same reserve, execute, confirm or release lifecycle in the private SQL database and needs no payment credentials. The bundled image agent costs one credit; the approval kit costs three credits after complete success. OpenAI image generation uses a separate API key.
 
 ## Configuration
 
@@ -33,7 +33,7 @@ A policy may set `suspendedReservationTtlMs` and `reservationBudget`:
 
 ```ts
 policy: {
-  version: 'image-kit-v1',
+  version: 'image-kit-v2',
   charge: { type: 'credits', meter: 'image-credits', units: 3 },
   suspendedReservationTtlMs: 1_800_000,
   reservationBudget: {

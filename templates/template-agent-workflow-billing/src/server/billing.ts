@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { ArtifactReader } from '../billing/artifacts.js';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { registerApiRoute } from '@mastra/core/server';
@@ -14,6 +15,7 @@ export function createBillingApp(
   organizations: OrganizationService,
   execution?: BillingHttpGateway,
   commercial?: CommercialService,
+  artifacts?: ArtifactReader,
 ) {
   const app = new Hono<{ Variables: { credential: string } }>();
   app.onError((error, context) => {
@@ -203,6 +205,33 @@ export function createBillingApp(
       );
     });
   }
+  if (artifacts) {
+    app.get('/billing/workspaces/:workspaceId/artifacts/:artifactId', async context => {
+      const billing = await organizations.context({
+        credential: context.get('credential'),
+        workspaceId: context.req.param('workspaceId'),
+      });
+      const artifact = await artifacts.read(
+        await organizations.accountingIdentity(billing),
+        context.req.param('artifactId'),
+      );
+      if (!artifact)
+        return context.json(
+          { error: { code: 'artifact_unavailable', message: 'The saved image is unavailable.', retryable: false } },
+          410,
+        );
+      return new Response(artifact.bytes as BodyInit, {
+        headers: {
+          'content-type': artifact.mime,
+          'content-disposition': `attachment; filename="${artifact.filename}"`,
+          'cache-control': 'private, no-store',
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+          'content-length': String(artifact.bytes.length),
+        },
+      });
+    });
+  }
   if (commercial) {
     const selected = (context: { get(key: 'credential'): string; req: { param(key: 'workspaceId'): string } }) =>
       organizations.context({ credential: context.get('credential'), workspaceId: context.req.param('workspaceId') });
@@ -235,8 +264,9 @@ export function billingApiRoutes(
   organizations: OrganizationService,
   execution?: BillingHttpGateway,
   commercial?: CommercialService,
+  artifacts?: ArtifactReader,
 ): ApiRoute[] {
-  const app = createBillingApp(organizations, execution, commercial);
+  const app = createBillingApp(organizations, execution, commercial, artifacts);
   // Mastra's custom Hono route passes through this application's own auth middleware.
   return [
     registerApiRoute('/billing/*', {

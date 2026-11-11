@@ -106,13 +106,13 @@ async function buildApplication<const D extends readonly ResourceDefinition[]>(
         server: {
           host: '127.0.0.1',
           port: settings.port,
-          ...billingOnlyServer(organizations, execution, runtime.commercial, studio),
+          ...billingOnlyServer(organizations, execution, runtime.commercial, studio, catalog.artifacts),
         },
       }),
     );
     resources.ready(runtime.billing);
     await runtime.startRecovery().ready;
-    return { mastra, organizations, runtime, execution, close: () => lifecycle.close() };
+    return { mastra, organizations, runtime, execution, artifacts: catalog.artifacts, close: () => lifecycle.close() };
   } catch (error) {
     return lifecycle.fail(error);
   }

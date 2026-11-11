@@ -317,37 +317,106 @@ const schemaStatements = [
   `CREATE TRIGGER billing_workflow_resume_preparation_no_update BEFORE UPDATE ON billing_workflow_resume_preparations BEGIN SELECT RAISE(ABORT, 'Workflow resume preparations are immutable'); END`,
   `CREATE TRIGGER billing_workflow_resume_preparation_no_delete BEFORE DELETE ON billing_workflow_resume_preparations BEGIN SELECT RAISE(ABORT, 'Workflow resume preparations are retained'); END`,
 ];
-const schemaVersion = 1;
-const checksum = createHash('sha256').update(schemaStatements.join('\n')).digest('hex');
+const imageStatements = [
+  `CREATE TABLE local_image_credit_migrations (
+    account_id TEXT PRIMARY KEY REFERENCES billing_accounts(id),
+    source_meter TEXT NOT NULL CHECK (source_meter = 'weather-credits'),
+    target_meter TEXT NOT NULL CHECK (target_meter = 'image-credits'),
+    balance INTEGER NOT NULL CHECK (balance BETWEEN 0 AND 9007199254740991),
+    consumed INTEGER NOT NULL CHECK (consumed BETWEEN 0 AND 9007199254740991)
+  ) STRICT`,
+  `CREATE TRIGGER local_image_credit_migration_no_update BEFORE UPDATE ON local_image_credit_migrations BEGIN SELECT RAISE(ABORT, 'Local credit transitions are immutable'); END`,
+  `CREATE TRIGGER local_image_credit_migration_no_delete BEFORE DELETE ON local_image_credit_migrations BEGIN SELECT RAISE(ABORT, 'Local credit transition tombstones are retained'); END`,
+  `CREATE TABLE image_slots (
+    execution_id TEXT NOT NULL REFERENCES billing_executions(id),
+    slot INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 2),
+    identity TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('dispatched', 'completed', 'failed', 'uncertain')),
+    artifact_id TEXT UNIQUE,
+    PRIMARY KEY (execution_id, slot)
+  ) STRICT`,
+  `CREATE TRIGGER image_slot_identity_immutable BEFORE UPDATE OF execution_id, slot, identity ON image_slots BEGIN SELECT RAISE(ABORT, 'Image slot identity is immutable'); END`,
+  `CREATE TRIGGER image_slot_terminal_immutable BEFORE UPDATE ON image_slots WHEN OLD.state != 'dispatched' BEGIN SELECT RAISE(ABORT, 'Image slot is terminal'); END`,
+  `CREATE TRIGGER image_slot_no_delete BEFORE DELETE ON image_slots BEGIN SELECT RAISE(ABORT, 'Image claims are retained'); END`,
+  `CREATE TABLE image_artifacts (
+    id TEXT PRIMARY KEY,
+    execution_id TEXT NOT NULL,
+    slot INTEGER NOT NULL,
+    metadata TEXT NOT NULL,
+    FOREIGN KEY (execution_id, slot) REFERENCES image_slots(execution_id, slot),
+    UNIQUE (execution_id, slot)
+  ) STRICT`,
+  `CREATE TRIGGER image_artifact_no_update BEFORE UPDATE ON image_artifacts BEGIN SELECT RAISE(ABORT, 'Artifact metadata is immutable'); END`,
+  `CREATE TRIGGER image_artifact_no_delete BEFORE DELETE ON image_artifacts BEGIN SELECT RAISE(ABORT, 'Artifact identities are retained'); END`,
+];
+const checksum = (statements: readonly string[]) => createHash('sha256').update(statements.join('\n')).digest('hex');
 const normalizedSql = (sql: string) => sql.replace(/\s+/g, ' ').trim();
-
-export async function migrateStorage(transaction: Transaction): Promise<void> {
-  const catalog = await transaction.execute(
-    "SELECT name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND sql IS NOT NULL",
-  );
-  const version = (await transaction.execute('PRAGMA user_version')).rows[0].user_version;
-  if (catalog.rows.length === 0 && version === 0n) {
-    for (const sql of schemaStatements) await transaction.execute(sql);
-    await transaction.execute({
-      sql: 'INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (?, ?, ?)',
-      args: [schemaVersion, checksum, new Date().toISOString()],
-    });
-    await transaction.execute(`PRAGMA user_version = ${schemaVersion}`);
-  } else {
-    if (version !== BigInt(schemaVersion) || !catalog.rows.some(row => row.name === 'billing_migrations'))
-      throw new BillingError('storage_incompatible');
-    const history = (await transaction.execute('SELECT version, checksum FROM billing_migrations ORDER BY version'))
-      .rows;
-    if (history.length !== 1 || history[0].version !== BigInt(schemaVersion) || history[0].checksum !== checksum)
-      throw new BillingError('storage_incompatible');
-  }
+async function validateCatalog(transaction: Transaction, statements: readonly string[]) {
   const actual = (
     await transaction.execute("SELECT sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND sql IS NOT NULL")
   ).rows
     .map(row => normalizedSql(String(row.sql)))
     .sort();
-  const expected = schemaStatements.map(normalizedSql).sort();
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new BillingError('storage_incompatible');
+  if (JSON.stringify(actual) !== JSON.stringify(statements.map(normalizedSql).sort()))
+    throw new BillingError('storage_incompatible');
   if ((await transaction.execute('PRAGMA foreign_key_check')).rows.length > 0)
     throw new BillingError('storage_incompatible');
+}
+export async function migrateStorage(transaction: Transaction): Promise<void> {
+  const catalog = await transaction.execute(
+    "SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND sql IS NOT NULL",
+  );
+  const version = (await transaction.execute('PRAGMA user_version')).rows[0].user_version;
+  if (catalog.rows.length === 0 && version === 0n) {
+    for (const sql of schemaStatements) await transaction.execute(sql);
+    await transaction.execute({
+      sql: 'INSERT INTO billing_migrations VALUES (1, ?, ?)',
+      args: [checksum(schemaStatements), new Date().toISOString()],
+    });
+  } else {
+    if (![1n, 2n].includes(version as bigint) || !catalog.rows.some(row => row.name === 'billing_migrations'))
+      throw new BillingError('storage_incompatible');
+    const history = (await transaction.execute('SELECT version, checksum FROM billing_migrations ORDER BY version'))
+      .rows;
+    if (
+      history.length !== Number(version) ||
+      history[0].version !== 1n ||
+      history[0].checksum !== checksum(schemaStatements) ||
+      (version === 2n && (history[1].version !== 2n || history[1].checksum !== checksum(imageStatements)))
+    )
+      throw new BillingError('storage_incompatible');
+    // Validate the complete recognized old schema before the first migration write.
+    await validateCatalog(transaction, version === 1n ? schemaStatements : [...schemaStatements, ...imageStatements]);
+  }
+  if (version !== 2n) {
+    for (const sql of imageStatements) await transaction.execute(sql);
+    await transaction.execute({
+      sql: 'INSERT INTO billing_migrations VALUES (2, ?, ?)',
+      args: [checksum(imageStatements), new Date().toISOString()],
+    });
+    // Only the recognized local simulation is transitioned. Preserve historical
+    // keys and exact remaining/consumed quantities; never grant a new allowance.
+    const candidates = (
+      await transaction.execute(`SELECT a.id, m.balance, m.consumed, m.period_start, m.period_end
+      FROM billing_accounts a JOIN commercial_meters m ON m.account_id = a.id
+      WHERE a.provider = 'local' AND m.key = 'weather-credits' AND m.funding = 'prepaid' AND m.balance IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM commercial_meters t WHERE t.account_id = a.id AND t.key = 'image-credits')
+        AND NOT EXISTS (SELECT 1 FROM billing_reservations r WHERE r.account_id = a.id AND r.active = 1)
+        AND NOT EXISTS (SELECT 1 FROM local_provider_reservations r WHERE r.account_id = a.id AND r.state = 'reserved')
+        AND NOT EXISTS (SELECT 1 FROM billing_executions e WHERE e.account_id = a.id AND (e.status IN ('running', 'uncertain') OR e.settlement IN ('reserved', 'pending', 'uncertain')))
+        AND NOT EXISTS (SELECT 1 FROM billing_remote_operations r JOIN billing_executions e ON e.id = r.execution_id WHERE e.account_id = a.id AND r.terminal_state = 'pending')`)
+    ).rows;
+    for (const row of candidates) {
+      await transaction.execute({
+        sql: "INSERT INTO local_image_credit_migrations VALUES (?, 'weather-credits', 'image-credits', ?, ?)",
+        args: [row.id, row.balance, row.consumed],
+      });
+      await transaction.execute({
+        sql: "INSERT INTO commercial_meters VALUES (?, 'image-credits', 'prepaid', ?, ?, ?, ?)",
+        args: [row.id, row.balance, row.consumed, row.period_start, row.period_end],
+      });
+    }
+    await transaction.execute('PRAGMA user_version = 2');
+  }
+  await validateCatalog(transaction, [...schemaStatements, ...imageStatements]);
 }

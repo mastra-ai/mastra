@@ -9,8 +9,11 @@ async function restrictFile(filename: string, create: boolean): Promise<void> {
     // Restrict the inode we opened, never the target of a symbolic/hard link.
     handle = await open(filename, constants.O_RDWR | constants.O_NOFOLLOW | (create ? constants.O_CREAT : 0), 0o600);
     const before = await handle.stat();
-    if (!before.isFile() || before.nlink !== 1 || before.uid !== process.getuid?.())
-      throw new BillingError('storage_unavailable');
+    if (!before.isFile() || before.uid !== process.getuid?.()) throw new BillingError('storage_unavailable');
+    // SQLite can unlink an optional WAL/SHM after open but before fstat. The
+    // detached inode has no pathname to restrict, just as when open sees ENOENT.
+    if (!create && before.nlink === 0) return;
+    if (before.nlink !== 1) throw new BillingError('storage_unavailable');
     await handle.chmod(0o600);
     if (((await handle.stat()).mode & 0o7777) !== 0o600) throw new BillingError('storage_unavailable');
   } catch (error) {

@@ -16,35 +16,28 @@ Local setup creates John (`profiles.owner`), Mary (`profiles.member`), and Alex 
 
 Open a tool and choose **Playground**. The Form and JSON views use the same schemas. Every tool takes `workspaceId`, which is checked against the authenticated user's current membership.
 
-| Tool                             | Input beyond workspaceId                                        | Result                                                          |
-| -------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| `billing-account`                | None                                                            | Owner-only provider balance, consumption and pending operations |
-| `billing-weather-summary`        | `idempotencyKey`, `observations`                                | Summary and billing receipt                                     |
-| `billing-weather-report-start`   | `idempotencyKey`, `observations`                                | Suspended draft with `executionId`; reservation held            |
-| `billing-weather-report-status`  | `executionId`                                                   | Private report status and receipt                               |
-| `billing-weather-report-approve` | `executionId`, `idempotencyKey`, `approval: {"approved": true}` | Completed report and one capture                                |
-| `billing-weather-report-cancel`  | `executionId`, `idempotencyKey`                                 | Cancellation and reservation release                            |
+| Tool                        | Input beyond workspaceId                                        | Result                                                          |
+| --------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| `billing-account`           | None                                                            | Owner-only provider balance, consumption and pending operations |
+| `billing-image-generate`    | `idempotencyKey`, `brief`                                       | Private image reference and billing receipt                     |
+| `billing-image-kit-start`   | `idempotencyKey`, `brief`                                       | Saved prompts with `executionId`; reservation held              |
+| `billing-image-kit-status`  | `executionId`                                                   | Private kit status and receipt                                  |
+| `billing-image-kit-approve` | `executionId`, `idempotencyKey`, `approval: {"approved": true}` | Completed kit and one capture                                   |
+| `billing-image-kit-cancel`  | `executionId`, `idempotencyKey`                                 | Cancellation and reservation release                            |
 
-For example, submit this to `billing-weather-summary` with your provisioned workspace ID:
+For example, submit this to `billing-image-generate` with your provisioned workspace ID:
 
 ```json
 {
   "workspaceId": "northstar",
-  "idempotencyKey": "weather-summary-001",
-  "observations": {
-    "location": "Porto Alegre",
-    "observedAt": "2026-11-09T12:00:00Z",
-    "temperatureC": 24,
-    "feelsLikeC": 26,
-    "humidityPercent": 70,
-    "windKph": 18,
-    "precipitationChancePercent": 60,
-    "conditions": "Cloudy with showers possible"
-  }
+  "idempotencyKey": "image-001",
+  "brief": "A small blue bird in a quiet forest"
 }
 ```
 
-The default summary policy costs 3 credits. The default local report policy costs 1 task; your configured policy determines its charge. Copy the report's `executionId` into status, approval or cancellation. The creator alone can access a private report, including after restarting the server. A successful nested agent call contributes to the report's measurement without a separate summary charge.
+The image agent costs one credit. The kit saves three prompts for the same subject as book and website illustrations, in order: Notion-inspired, 3D, and vector illustration. Review `result.pending.approval.prompts` before approving. The kit costs three credits only after all images persist. Copy its `executionId` into status, approval or cancellation. The creator alone can access the private result after a restart. Nested image calls have no separate charge.
+
+Artifact references are metadata. A browser image URL does not inherit Studio's saved authorization header. Use the authenticated download described in the [image guide](images.md). Inline Studio image presentation requires separate verification.
 
 Repeat the exact input and idempotency key to replay its saved result. The receipt keeps its original `billedUnits` and sets `replayed: true`; it does not represent a new charge. Use a new key for new work. Schema errors are rejected before execution. Tool failures return a safe `error` object; they must not be interpreted as successful work.
 
@@ -54,6 +47,6 @@ The integration uses **Tools**, not native agent chat or native workflow runs. T
 
 Use `billing-account` before and after execution. `mode` identifies local simulation or Autumn; `authority` identifies provider reservations. Meters show the provider's balance and consumption at `observedAt`, with `pendingOperations` separately identifying unresolved work. `allowance` is `null`; there is no application-owned paid grant ledger.
 
-A suspended report holds its reservation without a confirmed charge. Successful completion confirms that same reservation; cancellation releases it. Unknown finalization stays pending or uncertain until positive matching evidence arrives. Replaying a receipt never creates another financial operation. Metered local policies use the separate outbox and may reflect consumption after background delivery.
+A suspended kit holds its reservation without a confirmed charge. Successful completion confirms that same reservation; cancellation releases it. Unknown finalization stays pending or uncertain until positive matching evidence arrives. Replaying a receipt never creates another financial operation. Metered local policies use the separate outbox and may reflect consumption after background delivery.
 
 Studio custom headers and tool testing are described in the [Mastra Studio documentation](https://mastra.ai/docs/studio/overview).

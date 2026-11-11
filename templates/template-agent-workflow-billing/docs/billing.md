@@ -18,55 +18,35 @@ An idempotency key identifies one operation. Retrying with the same key and inpu
 
 If execution or measurement cannot be confirmed, the reservation stays held for investigation. Recovery does not automatically rerun uncertain work. A failed usage export does not rerun the agent or undo local consumption.
 
-## Local weather example
+## Local image example
 
-`npm run setup` creates John and `John's Org`, Mary and `Mary's Org`, and Alex and `Alex's Org`. Each person owns a separate personal workspace with 30 simulated credits, 10 tasks, and an active example subscription seeded once. The private profile aliases are `owner`, `member`, and `outsider`, respectively. Repeating setup preserves credentials, workspace identities, memberships, audit, and spent balances.
+`npm run setup` creates personal profiles with 30 simulated image credits each, seeded once. The `image-agent` produces one private image for one credit. The `image-kit` saves three prompts for the same subject in Notion-inspired, 3D and vector illustration styles, holds three credits while awaiting approval, then confirms three only after all artifacts persist. Nested calls share the parent reservation.
 
-| Resource         | Default billing                                              | Behavior                                                             |
-| ---------------- | ------------------------------------------------------------ | -------------------------------------------------------------------- |
-| `weather-agent`  | Active `weather-access` subscription and 3 `weather-credits` | Summarizes supplied observations                                     |
-| `weather-report` | 1 prepaid `weather-tasks` unit                               | Drafts a report, waits for approval, then generates the final report |
-
-The agent does not fetch weather. Both resources use the observations supplied by the caller. See the [input schemas](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/observations.ts) for required fields and accepted ranges.
-
-The workflow keeps its reservation while paused, including across server restarts. Resume with `{ "approved": true }`, or add a complete `observations` object to correct the input. Confirmed cancellation releases the reservation. The default suspension budget is 30 minutes. Execution and finalization cutoffs precede the explicit reservation expiry. Recovery cancels a positively confirmed suspension; ambiguous compute or provider outcomes remain visible for reconciliation.
-
-The CLI reads private credentials from `data/local-profiles.json`:
-
-| Command                                                                                | Purpose                               |
-| -------------------------------------------------------------------------------------- | ------------------------------------- |
-| `npm run weather -- generate --input observations.json --key summary-one`              | Generate a summary                    |
-| `npm run weather -- start --input observations.json --key report-one`                  | Start a report and pause for approval |
-| `npm run weather -- status <executionId>`                                              | Read your report's status and receipt |
-| `npm run weather -- resume <executionId> --json '{"approved":true}' --key approve-one` | Approve and complete your report      |
-| `npm run weather -- cancel <executionId> --key cancel-one`                             | Cancel your report                    |
-| `npm run weather -- account`                                                           | Read billing information as the owner |
-
-Use `--profile member` or `--profile outsider` to try authorization with another identity. The default payer is the selected person's personal workspace; `--workspace <id>` selects another workspace you can access. Omitting `--key` creates a new key for each command.
+Use [the image guide](images.md) for CLI inputs, protected downloads, fixed generation settings and failure/replay behavior. Repeating setup preserves identities and spent balances. Recognized legacy local credit balances transition conservatively without resetting history.
 
 ## Choose a billing policy
 
-Edit the resource policies in [src/weather/resources.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/resources.ts). Each resource has an optional access requirement and a charging rule.
+Edit the resource policies in [src/images/resources.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/images/resources.ts). Each resource has an optional access requirement and a charging rule.
 
-| Model               | Policy                                                                                                      |
-| ------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Free access         | `charge: { type: 'none' }` with no access requirement                                                       |
-| Subscription access | `access: { subscription: 'weather-access' }` and `charge: { type: 'none' }`                                 |
-| Prepaid credits     | `charge: { type: 'credits', meter: 'weather-credits', units: 3 }`                                           |
-| Per-task charge     | `charge: { type: 'per-task', meter: 'weather-tasks', units: 1, funding: 'prepaid' }`                        |
-| Measured usage      | `charge: { type: 'usage', meter: 'weather-tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' }` |
+| Model               | Policy                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| Free access         | `charge: { type: 'none' }` with no access requirement                                               |
+| Subscription access | `access: { subscription: 'subscription-access' }` and `charge: { type: 'none' }`                    |
+| Prepaid credits     | `charge: { type: 'credits', meter: 'image-credits', units: 1 }`                                     |
+| Per-task charge     | `charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'prepaid' }`                        |
+| Measured usage      | `charge: { type: 'usage', meter: 'tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' }` |
 
 Access requirements and charges can be combined. A subscription can grant access while each successful execution also consumes credits. Local setup simulates prepaid balances. In Autumn mode the provider owns paid credit and its atomic reservations; the policy determines how executions spend those units.
 
 Meter keys and units must match `mappings`. Quantities are integers. `prepaid` spends available units; `metered` records usage for billing without a prepaid balance. Policies also support entitlement requirements and metered per-task charges.
 
-For the included workflow, set `WEATHER_WORKFLOW_POLICY=tokens` before starting the server to measure SDK tokens across both model calls. It charges only on successful completion, up to the configured 8,192-unit limit. An output-token limit does not guarantee a total-token or monetary cost cap. Prepaid token usage and prepaid workflow usage are not supported by the supplied Mastra adapters.
+The bundled image resources use fixed credits. Generic task and metered policies remain available for other resource definitions. Prepaid token usage and prepaid workflow usage are not supported by the supplied Mastra adapters.
 
 Policy changes apply to new executions. Existing runs keep the policy and reservation recorded when they started.
 
 ## Connect your own agents and workflows
 
-The [application catalog](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/resources.ts) selects the definitions in [src/weather/resources.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/resources.ts). Each definition owns its ID, native factory, adapter limits/version, billing policy, public actions and declared agent dependencies. Adding a definition derives Mastra, billing and Studio registrations together.
+The [application catalog](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/resources.ts) selects the definitions in [src/images/resources.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/images/resources.ts). Each definition owns its ID, native factory, adapter limits/version, billing policy, public actions and declared agent dependencies. Adding a definition derives Mastra, billing and Studio registrations together.
 
 Create an application with a typed catalog and a server-side provider selection:
 
@@ -85,16 +65,19 @@ For example, the included agent definition keeps its charge next to its factory:
 
 ```ts
 {
-  id: 'weather-agent',
+  id: 'image-agent',
   kind: 'agent',
-  create: () => createWeatherAgent(environment),
-  adapter: { version: 'weather-agent-v1', maxSteps: 1, maxOutputTokens: 400 },
+  create: () => createImageAgent(environment, images),
+  adapter: {
+    version: 'image-agent-v1', maxSteps: 2, maxOutputTokens: 200, artifactSlots: 1,
+    outputSchema: imageOutputSchema,
+    completion: async scope => ({ text: 'Image generated.', finishReason: 'stop', object: { artifacts: [await images.completed(scope)] } }),
+  },
   operations: ['generate'],
-  measurements,
+  measurements: [],
   policy: {
-    version: 'weather-agent-v1',
-    access: { subscription: 'weather-access' },
-    charge: { type: 'credits', meter: 'weather-credits', units: 3 },
+    version: 'image-agent-v1',
+    charge: { type: 'credits', meter: 'image-credits', units: 1 },
   },
 }
 ```
@@ -107,33 +90,33 @@ From trusted server code, invoke an agent through the billing facade. Use `runti
 
 ```ts
 const context = await organizations.context({ credential, workspaceId });
-const response = await runtime.billing.agent('weather-agent').generate(prompt, {
+const response = await runtime.billing.agent('image-agent').generate(prompt, {
   billing: context,
-  idempotencyKey: 'summary-123',
+  idempotencyKey: 'image-123',
 });
 
 if (response.kind !== 'nested') console.log(response.billing.billedUnits);
 ```
 
-For the weather agent, `prompt` is JSON containing `{ observations, purpose: 'summary' }`. Use `weatherPrompt` from `src/weather/observations.ts` to construct it.
+For the image agent, `prompt` is the image brief, limited to 2,000 characters. Its trusted completion hook requires a durable artifact; model text cannot certify success.
 
 Workflow access uses `runtime.billing.workflow(resourceId)`: call `createRun`, then `start`. Later, load the run with `getRun` and call `resume`, `status`, or `cancel` with a freshly authenticated billing context. Each write needs its own idempotency key.
 
-For the bundled workflow, `observations` is the caller's validated weather input:
+For the bundled workflow, provide a brief of at most 1,800 characters:
 
 ```ts
-const run = await runtime.billing.workflow('weather-report').createRun({
+const run = await runtime.billing.workflow('image-kit').createRun({
   billing: context,
-  idempotencyKey: 'report-123',
+  idempotencyKey: 'kit-123',
 });
 const draft = await run.start({
   billing: context,
   idempotencyKey: 'draft-123',
-  inputData: observations,
+  inputData: { brief: 'A coordinated blue bird story' },
 });
 ```
 
-For nested agent calls, declare `agentDependencies` and use `dependencies.nestedAgent(resourceId).generate(prompt)` inside the admitted workflow factory. These calls contribute to the parent execution without a separate charge. Measured workflows must declare `measurement: 'facade-calls'` and the expected calls per segment, such as `[1, 1]` for one call before approval and one after it. Direct model calls outside this facade are not measured by the integration.
+For nested agent calls, declare `agentDependencies` and use `dependencies.nestedAgent(resourceId).generate(prompt)` inside the admitted workflow factory. These calls contribute to the parent execution without a separate charge. Measured workflows must declare `measurement: 'facade-calls'` and the expected calls per segment, such as `[0, 3]` for no image calls before approval and three afterward. Direct model calls outside this facade are not measured by the integration.
 
 Declare workflow `steps` to retain native resume types, and set `autoRestartActiveRuns: false`. Increase the resource version when changing executable code, models, tools, or schemas, and retain compatible definitions for paused runs. Token streaming, time travel, and automatic retries of uncertain work are not supported.
 
@@ -176,7 +159,7 @@ Local mode supports free, subscription, prepaid fixed/task, and metered task/usa
 
 ## Persistence and recovery
 
-Billing storage uses a single supported fresh schema with strict version, checksum, SQL-definition, and foreign-key validation. An older, altered or unrelated database fails with `storage_incompatible`; startup and setup never delete, import, or reseed it. Choose an explicit new local database only when you intend a fresh instance. Existing production balances are not migrated by this template.
+Billing storage strictly validates schema versions, migration checksums, SQL definitions and foreign keys. The recognized additive v1-to-v2 upgrade preserves identities and financial history, including remaining and consumed local credits. Unresolved obligations block an account's automatic credit transition. Unsupported, altered or unrelated databases fail with `storage_incompatible`, without automatic deletion, reset or reseeding. Autumn and production balances are not migrated. See [existing local state](images.md#existing-local-state) for credit-transition details.
 
 Execution claims, policy snapshots, admitted payer mappings, provider operation payloads, terminal intents, receipts and audit survive restart. Duplicate keys replay the original operation. Recovery reconciles unknown financial outcomes without repeating compute. Passing a deadline or losing an acknowledgement does not prove zero charge. Metered postpaid delivery has separate immutable payloads and persisted retry leases.
 

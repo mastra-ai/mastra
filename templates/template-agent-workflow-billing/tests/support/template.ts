@@ -62,7 +62,7 @@ export async function command(root: string, args: string[], env: NodeJS.ProcessE
   return { code, output };
 }
 export async function templateCopy(install = false) {
-  const root = await mkdtemp(join(tmpdir(), 'weather-template-'));
+  const root = await mkdtemp(join(tmpdir(), 'image-template-'));
   const excluded = new Set(['node_modules', 'data', '.env', '.mastra', 'dist', 'coverage', '.git']);
   await cp(templateRoot, root, {
     recursive: true,
@@ -126,7 +126,7 @@ export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 
     path: string,
     body?: unknown,
     profile: 'owner' | 'member' | 'outsider' = 'owner',
-    key = 'weather-request',
+    key = 'image-request',
   ) => {
     const response = await fetch(`${url}${path}`, {
       method: body === undefined ? 'GET' : 'POST',
@@ -159,10 +159,10 @@ export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 
 export async function assertNativeClosed(server: Awaited<ReturnType<typeof serve>>, executionId = 'unknown') {
   for (const path of [
     '/api/agents',
-    '/api/agents/weather-agent/generate',
-    '/api/agents/weather-agent/stream',
-    '/api/workflows/weather-report/start',
-    `/api/workflows/weather-report/runs/${executionId}`,
+    '/api/agents/image-agent/generate',
+    '/api/agents/image-agent/stream',
+    '/api/workflows/image-kit/start',
+    `/api/workflows/image-kit/runs/${executionId}`,
     '/api/memory/threads',
     '/.well-known/agent.json',
     '/',

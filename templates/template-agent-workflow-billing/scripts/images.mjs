@@ -5,12 +5,12 @@ process.chdir(fileURLToPath(new URL('../', import.meta.url)));
 if (existsSync('.env')) process.loadEnvFile('.env');
 register('./typescript-loader.mjs', import.meta.url);
 try {
-  await import('./weather.ts');
+  await import('./images.ts');
 } catch (error) {
   console.error(
     error?.code
-      ? `Weather request failed: ${error.code}`
-      : 'Weather request failed. Check arguments, private profiles, and the running local gateway.',
+      ? `Image request failed: ${error.code}`
+      : 'Image request failed. Check arguments, private profiles, and the running local gateway.',
   );
   process.exitCode = 1;
 }

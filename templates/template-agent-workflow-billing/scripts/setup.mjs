@@ -31,7 +31,7 @@ try {
   const { setupLocal } = await import('./setup.ts');
   await setupLocal(process.env);
   console.log(
-    'Personal weather profiles and local allowances are ready. Credentials remain private in data/local-profiles.json.',
+    'Personal image profiles and local allowances are ready. Credentials remain private in data/local-profiles.json.',
   );
 } catch {
   console.error(

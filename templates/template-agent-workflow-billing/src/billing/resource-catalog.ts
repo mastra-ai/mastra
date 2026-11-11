@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import type { ExecutionScope } from './execution-scope.js';
+import type { AgentProjection } from './mastra-resources.js';
+import type { ArtifactReader } from './artifacts.js';
 import type { AnyWorkflow } from '@mastra/core/workflows';
 import type { FullOutput } from '@mastra/core/stream';
 import type { BillingContext } from './organizations.js';
@@ -12,7 +15,7 @@ import { validateProviderConfiguration } from './setup.js';
 import { Lifecycle } from './lifecycle.js';
 
 export interface ResourceDependencies {
-  nestedAgent(id: string): { generate(prompt: string): Promise<FullOutput<unknown>> };
+  nestedAgent(id: string): { generate(prompt: string, slot?: number): Promise<FullOutput<unknown>> };
 }
 export interface ActionContext {
   execution: BillingHttpGateway;
@@ -55,6 +58,8 @@ export interface AgentDefinition<A extends AnyAgent = AnyAgent, Output = AgentOu
     readonly maxOutputTokens?: number;
     readonly outputSchema?: z.ZodType<Output, Output>;
     readonly promptSchema?: z.ZodType<string, string>;
+    readonly artifactSlots?: number;
+    readonly completion?: (scope: ExecutionScope) => Promise<AgentProjection<Output>>;
   };
   readonly dispose?: (native: A) => void | Promise<void>;
 }
@@ -63,6 +68,8 @@ export interface WorkflowDefinition<W extends AnyWorkflow = AnyWorkflow> extends
   readonly create: (dependencies: ResourceDependencies) => W;
   readonly adapter: {
     readonly version: string;
+    readonly artifactSlots?: number;
+    readonly completion?: (scope: ExecutionScope, output: unknown) => Promise<unknown>;
     readonly measurement?: 'facade-calls' | 'none';
     readonly expectedCalls?: readonly number[];
     readonly legacyAgentDefinitions?: readonly Readonly<Record<string, string>>[];
@@ -72,6 +79,7 @@ export interface WorkflowDefinition<W extends AnyWorkflow = AnyWorkflow> extends
 export type ResourceDefinition = AgentDefinition<any, any> | WorkflowDefinition<any>;
 export interface ResourceCatalog<D extends readonly ResourceDefinition[] = readonly ResourceDefinition[]> {
   readonly resources: D;
+  readonly artifacts?: ArtifactReader;
   readonly configuration: Omit<BillingConfiguration, 'resources'>;
 }
 export type CatalogAgents<D extends readonly ResourceDefinition[]> = {
@@ -89,6 +97,8 @@ const adapterSchema = z.discriminatedUnion('kind', [
     kind: z.literal('agent'),
     adapter: z.strictObject({
       version: identifierSchema,
+      artifactSlots: z.number().int().min(1).max(3).optional(),
+      completion: z.custom<Function>(value => typeof value === 'function').optional(),
       maxSteps: z.number().int().min(1).max(32).optional(),
       maxOutputTokens: z.number().int().min(1).max(8192).optional(),
       outputSchema: z
@@ -104,6 +114,8 @@ const adapterSchema = z.discriminatedUnion('kind', [
     adapter: z
       .strictObject({
         version: identifierSchema,
+        artifactSlots: z.number().int().min(1).max(3).optional(),
+        completion: z.custom<Function>(value => typeof value === 'function').optional(),
         measurement: z.enum(['facade-calls', 'none']).optional(),
         expectedCalls: z.array(z.number().int().min(0).max(32)).max(32).optional(),
         legacyAgentDefinitions: z.array(z.record(identifierSchema, identifierSchema)).max(16).optional(),
@@ -230,7 +242,10 @@ export function materializeResources<const D extends readonly ResourceDefinition
       nestedAgent: id => {
         if (!billing) throw new BillingError('state_unavailable');
         if (!definition.agentDependencies?.includes(id)) throw new BillingError('unsupported');
-        return billing.nestedAgent(id as keyof CatalogAgents<D> & string);
+        return {
+          generate: (prompt, slot) =>
+            billing!.nestedAgent(id as keyof CatalogAgents<D> & string).generate(prompt, { slot }),
+        };
       },
     };
     if (definition.kind === 'agent') {

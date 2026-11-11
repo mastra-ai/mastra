@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ExecutionScope } from './execution-scope.js';
 import type { Agent, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { FullOutput } from '@mastra/core/stream';
 import type { AnyWorkflow, Workflow, Step } from '@mastra/core/workflows';
@@ -50,6 +51,7 @@ export interface WorkflowProjection<Output> {
     | 'uncertain';
   readonly output?: Output;
   readonly suspendedSteps?: readonly string[];
+  readonly pending?: unknown;
   readonly expiresAt: number | null;
 }
 const limitsSchema = z.strictObject({
@@ -59,6 +61,9 @@ const limitsSchema = z.strictObject({
 });
 
 export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
+  private readonly projections = new WeakMap<object, AgentProjection<Output>>();
+  readonly completion: ((scope: ExecutionScope) => Promise<AgentProjection<Output>>) | undefined;
+  readonly artifactSlots: number | undefined;
   readonly limits;
   readonly definition: string;
   constructor(
@@ -69,13 +74,17 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
       maxOutputTokens?: number;
       outputSchema?: z.ZodType<Output, Output>;
       promptSchema?: z.ZodType<string, string>;
+      artifactSlots?: number;
+      completion?: (scope: ExecutionScope) => Promise<AgentProjection<Output>>;
     },
   ) {
-    const { outputSchema, promptSchema, ...limits } = options;
+    const { outputSchema, promptSchema, completion, artifactSlots, ...limits } = options;
+    this.completion = completion;
+    this.artifactSlots = artifactSlots;
     this.promptSchema = promptSchema;
     this.limits = Object.freeze(parseInput(limitsSchema, limits));
     this.outputSchema = outputSchema;
-    this.definition = `agent:${fingerprint(boundedJson({ id: native.id, limits: this.limits, structured: outputSchema !== undefined, maxProcessorRetries: 0, maxRetries: native.maxRetries ?? 0, selection: Array.isArray(native.model) ? 'fallback' : typeof native.model === 'function' ? 'dynamic' : 'static' }))}`;
+    this.definition = `agent:${fingerprint(boundedJson({ id: native.id, limits: this.limits, structured: outputSchema !== undefined, ...(artifactSlots ? { artifactSlots, trustedCompletion: !!completion } : {}), maxProcessorRetries: 0, maxRetries: native.maxRetries ?? 0, selection: Array.isArray(native.model) ? 'fallback' : typeof native.model === 'function' ? 'dynamic' : 'static' }))}`;
   }
   readonly outputSchema: z.ZodType<Output, Output> | undefined;
   readonly promptSchema: z.ZodType<string, string> | undefined;
@@ -100,7 +109,7 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
       maxProcessorRetries: 0,
       modelSettings: { maxOutputTokens: this.limits.maxOutputTokens, maxRetries: 0 },
     };
-    if (this.outputSchema)
+    if (this.outputSchema && !this.completion)
       return this.native.generate<z.ZodType<Output, Output>, Output>(prompt, {
         ...trusted,
         structuredOutput: { schema: this.outputSchema },
@@ -117,7 +126,16 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
       boundedJson(value),
     );
   }
+  async complete(scope: ExecutionScope, result: FullOutput<Output>) {
+    if (!this.completion) return result;
+    const projection = await this.completion(scope);
+    const completed = { ...result, ...projection } as FullOutput<Output>;
+    this.projections.set(completed, projection);
+    return completed;
+  }
   project(result: FullOutput<Output>): AgentProjection<Output> {
+    const trusted = this.projections.get(result);
+    if (trusted) return trusted;
     // The configured SDK structured-output parser has already validated/transformed this object.
     const fields = this.envelope({
       text: result.text,
@@ -163,6 +181,8 @@ export function agentResource(agent: AnyAgent, options: AgentLimits & { outputSc
 
 export class WorkflowResource<W extends AnyWorkflow> {
   readonly version: string;
+  readonly artifactSlots: number | undefined;
+  private readonly completion: ((scope: ExecutionScope, output: unknown) => Promise<unknown>) | undefined;
   readonly measurement: 'facade-calls' | 'none';
   readonly expectedCalls: readonly number[];
   readonly agentDependencies: readonly string[] | undefined;
@@ -171,6 +191,8 @@ export class WorkflowResource<W extends AnyWorkflow> {
     readonly native: W,
     options: {
       version: string;
+      artifactSlots?: number;
+      completion?: (scope: ExecutionScope, output: unknown) => Promise<unknown>;
       measurement?: 'facade-calls' | 'none';
       expectedCalls?: readonly number[];
       agentDependencies?: readonly string[];
@@ -181,6 +203,10 @@ export class WorkflowResource<W extends AnyWorkflow> {
       z
         .strictObject({
           version: identifierSchema,
+          artifactSlots: z.number().int().min(1).max(3).optional(),
+          completion: z
+            .custom<(scope: ExecutionScope, output: unknown) => Promise<unknown>>(value => typeof value === 'function')
+            .optional(),
           measurement: z.enum(['facade-calls', 'none']).default('none'),
           expectedCalls: z.array(z.number().int().min(0).max(32)).max(32).default([]),
           agentDependencies: z
@@ -194,6 +220,8 @@ export class WorkflowResource<W extends AnyWorkflow> {
       options,
     );
     this.version = validated.version;
+    this.artifactSlots = validated.artifactSlots;
+    this.completion = validated.completion;
     this.measurement = validated.measurement;
     this.expectedCalls = Object.freeze(validated.expectedCalls);
     this.agentDependencies = validated.agentDependencies && Object.freeze(validated.agentDependencies);
@@ -203,7 +231,12 @@ export class WorkflowResource<W extends AnyWorkflow> {
     if (native.options?.autoRestartActiveRuns !== false) throw new BillingError('invalid_configuration');
   }
   private definitionFields() {
-    return { version: this.version, measurement: this.measurement, expectedCalls: this.expectedCalls };
+    return {
+      version: this.version,
+      measurement: this.measurement,
+      expectedCalls: this.expectedCalls,
+      ...(this.artifactSlots ? { artifactSlots: this.artifactSlots, trustedCompletion: !!this.completion } : {}),
+    };
   }
   private agentDefinitions(agents: Readonly<Record<string, { readonly definition: string }>>) {
     return Object.fromEntries(Object.entries(agents).map(([key, agent]) => [key, agent.definition]));
@@ -247,6 +280,9 @@ export class WorkflowResource<W extends AnyWorkflow> {
     // Forward original JSON so the SDK applies input transforms once.
     return boundedJson(value) as WorkflowInput<W>;
   }
+  async complete(scope: ExecutionScope, value: unknown): Promise<WorkflowOutput<W>> {
+    return this.output(this.completion ? await this.completion(scope, value) : value);
+  }
   async output(value: unknown): Promise<WorkflowOutput<W>> {
     if (!this.native.outputSchema) throw new BillingError('invalid_configuration');
     const checked = await this.native.outputSchema['~standard'].validate(value);
@@ -283,6 +319,7 @@ export class WorkflowResource<W extends AnyWorkflow> {
         ]),
         output: boundedJsonSchema.optional(),
         suspendedSteps: z.array(identifierSchema).max(100).optional(),
+        pending: boundedJsonSchema.optional(),
         expiresAt: z.number().int().nonnegative().nullable(),
       }),
       stored.projection,

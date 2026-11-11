@@ -35,6 +35,7 @@ async function fixture(
     Parameters<typeof runtimeFixture>[0],
     | 'configure'
     | 'workflowPrompt'
+    | 'workflowAfterPrompt'
     | 'workflowExpectedCalls'
     | 'workflowAgentDependencies'
     | 'workflowTransforms'
@@ -731,6 +732,44 @@ describe('billed Mastra runtime', () => {
       resumeData: { approved: true },
     });
     expect(next.billing).toMatchObject({ policyVersion: 'new-policy', billedUnits: 7 });
+  });
+
+  it('canceled and failed metered workflows retain observed usage without a bill or export', async () => {
+    for (const status of ['cancel', 'failure'] as const) {
+      const { runtime, observer } = await fixture({
+        workflowAfterPrompt: status === 'failure' ? '[model-error] stop after approval' : undefined,
+        configure: configuration => {
+          configuration.resources[1].policy.charge = {
+            type: 'usage',
+            meter: 'tokens',
+            measure: 'tokens',
+            maxUnits: 40,
+            funding: 'metered',
+          };
+          return configuration;
+        },
+      });
+      const run = await runtime.billing
+        .workflow('report')
+        .createRun({ billing: runtime.billingContext, idempotencyKey: status });
+      await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+      const result =
+        status === 'cancel'
+          ? await run.cancel({ billing: runtime.billingContext, idempotencyKey: 'cancel' })
+          : await run.resume({
+              billing: runtime.billingContext,
+              idempotencyKey: 'resume',
+              step: 'approval',
+              resumeData: { approved: true },
+            });
+      expect(result.billing).toMatchObject({ observedUnits: 5, billedUnits: 0, settlementStatus: 'released' });
+      expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 0n }]);
+      expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 0n }]);
+      expect((await observer.execute('SELECT id FROM billing_outbox')).rows).toEqual([]);
+      expect(
+        (await observer.execute("SELECT SUM(units) AS units FROM billing_measurements WHERE measure = 'tokens'")).rows,
+      ).toEqual([{ units: 5n }]);
+    }
   });
 
   it('real structured output preserves SDK typing and replay uses only its projection', async () => {
