@@ -545,6 +545,75 @@ describe('evented step leases (#28712)', () => {
     expect(tracked.executions).toEqual(['A:a', 'B:a']);
   }, 30_000);
 
+  it.each([
+    ['recovers a parent run', true],
+    ['does not restart an opted-out parent run', false],
+  ] as const)(
+    '%s whose nested step dropped an exhausted delivery before its replica crashed',
+    async (_, restartable) => {
+      // Re-checks fire right at the lease expiry, so a re-check that would happen does so within the wait below.
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      const storage = new InMemoryStore();
+      const executions: string[] = [];
+      const build = (replica: string) => {
+        const child = createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num })
+          .then(
+            createStep({
+              id: 'inner',
+              inputSchema: Num,
+              outputSchema: Num,
+              execute: async ({ inputData }) => {
+                executions.push(replica);
+                if (replica === 'A') await new Promise<never>(() => {});
+                return inputData;
+              },
+            }),
+          )
+          .commit();
+        const parent = createWorkflow({
+          id: 'leased',
+          inputSchema: Num,
+          outputSchema: z.any(),
+          options: restartable ? undefined : { autoRestartActiveRuns: false },
+        })
+          .then(child)
+          .commit();
+        return { parent: parent as unknown as Built, child: child as unknown as Built };
+      };
+      const onA = build('A');
+      const onB = build('B');
+      const a = await startReplica(storage, onA.parent, { nested: { child: onA.child } });
+      const b = await startReplica(storage, onB.parent, { nested: { child: onB.child } });
+      let delivery: Event | undefined;
+      await a.pubsub.subscribe('workflows', event => {
+        // A nested event carries its parent's step graph; the broker delivers it serialized.
+        if (event.type === 'workflow.step.run' && (event.data as { workflowId?: string }).workflowId === 'child') {
+          delivery = JSON.parse(JSON.stringify(event));
+        }
+      });
+      const run = await a.workflow.createRun();
+      void run.start({ inputData: { n: 1 } });
+      await vi.waitFor(() => expect(executions).toEqual(['A']));
+      expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({ ok: true });
+
+      await crash(a, storage, [
+        stepOccurrenceKey(delivery!.runId, [0]),
+        runLivenessKey(delivery!.runId),
+        runLivenessKey(run.runId),
+      ]);
+
+      if (restartable) {
+        await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 10_000 });
+        expect(executions).toEqual(['A', 'B']);
+      } else {
+        await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 3);
+        expect(executions).toEqual(['A']);
+        expect(await runStatus(storage, run.runId)).toBe('running');
+      }
+    },
+    20_000,
+  );
+
   it('runs a step once when three replicas boot after the replica running it crashed', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
