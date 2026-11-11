@@ -289,7 +289,7 @@ describe('IntakeRoutesSection', () => {
     });
   });
 
-  it('keeps a repository being typed when the project\'s repositories arrive mid-way, the control staying put', async () => {
+  it("keeps a repository being typed when the project's repositories arrive mid-way, the control staying put", async () => {
     const state = serveRoutes();
     let release!: () => void;
     const arrived = new Promise<void>(resolve => (release = resolve));

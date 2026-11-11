@@ -77,7 +77,7 @@ describe('narrowSuggestions', () => {
     expect(narrowSuggestions(field, limits).suggestions).toEqual([{ value: 'ENG', provider: 'linear' }]);
   });
 
-  it('offers every provider\'s values with no provider limit', () => {
+  it("offers every provider's values with no provider limit", () => {
     expect(narrowSuggestions(field, []).suggestions).toEqual(field.suggestions);
   });
 
