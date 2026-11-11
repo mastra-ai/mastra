@@ -2294,6 +2294,15 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // Feedback
   // ============================================================================
 
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    // No await between checking identity and the synchronous in-memory upsert.
+    this.assertFeedbackReplacementIdentity(
+      args.feedback,
+      this.db.feedbackRecords.find(record => record.feedbackId === args.feedback.feedbackId),
+    );
+    await this.createFeedback({ feedback: args.feedback, onConflict: 'replace' });
+  }
+
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     if (
       args.onConflict === 'ignore' &&

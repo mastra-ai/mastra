@@ -491,6 +491,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
 
   // Feedback
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    return feedbackOps.createFeedback(this.db, { feedback: args.feedback, onConflict: 'replace' }, true);
+  }
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     return feedbackOps.createFeedback(this.db, args);
   }

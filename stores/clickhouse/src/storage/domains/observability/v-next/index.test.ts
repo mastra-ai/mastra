@@ -117,6 +117,7 @@ let sharedSuiteStorage: ObservabilityStorageClickhouseVNext | undefined;
 createObservabilityVNextTests({
   capabilities: {
     label: 'ClickHouse vNext',
+    concurrentFeedbackIdentity: false, // Existing schema cannot arbitrate concurrent writers without a migration.
     preferredStrategy: 'insert-only',
     traceQuery: true,
     traceQueryDiscovery: true,

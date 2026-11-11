@@ -914,7 +914,19 @@ export class ObservabilityStorage extends StorageDomain {
     if (!feedback.feedbackId?.trim() || !feedback.traceId?.trim() || !Number.isFinite(feedback.timestamp?.getTime())) {
       throw new Error('Feedback replacement requires feedbackId, traceId, and the original timestamp');
     }
-    const existing = await this.getFeedbackById(feedback.feedbackId);
+    await this.writeFeedbackReplacement(args);
+  }
+
+  /** Adapters with atomic writes override this fallback; ClickHouse retains sequential protection. */
+  protected async writeFeedbackReplacement({ feedback }: CreateFeedbackArgs): Promise<void> {
+    this.assertFeedbackReplacementIdentity(feedback, await this.getFeedbackById(feedback.feedbackId!));
+    await this.createFeedback({ feedback, onConflict: 'replace' });
+  }
+
+  protected assertFeedbackReplacementIdentity(
+    feedback: CreateFeedbackArgs['feedback'],
+    existing: FeedbackRecord | null | undefined,
+  ): void {
     if (
       existing &&
       (existing.traceId !== feedback.traceId ||
@@ -922,9 +934,13 @@ export class ObservabilityStorage extends StorageDomain {
         (existing.organizationId ?? null) !== (feedback.organizationId ?? null) ||
         (existing.resourceId ?? null) !== (feedback.resourceId ?? null))
     ) {
-      throw new Error('Feedback replacement must preserve its trace, timestamp, and tenant');
+      throw new MastraError({
+        id: 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback replacement must preserve its trace, timestamp, and tenant',
+      });
     }
-    await this.createFeedback({ feedback, onConflict: 'replace' });
   }
 
   /** Creates multiple feedback observations in a single batch. */

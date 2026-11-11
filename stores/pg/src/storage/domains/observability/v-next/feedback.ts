@@ -50,7 +50,7 @@ import type { PartitioningOptions } from './partitioning';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 import { FEEDBACK_EVENT_COLUMNS, FEEDBACK_TYPED_COLUMNS } from './signal-schema';
-import { insertRows, FEEDBACK_SELECT_COLUMNS } from './sql';
+import { buildInsert, withPartitionRetry, FEEDBACK_SELECT_COLUMNS } from './sql';
 
 const FEEDBACK_CONFLICT_KEYS = new Set(['feedbackId', 'timestamp']);
 const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT ("feedbackId", "timestamp") DO UPDATE SET ${FEEDBACK_EVENT_COLUMNS.map(
@@ -112,15 +112,16 @@ export async function createFeedback(
   args: CreateFeedbackArgs,
   partitioning: PartitioningOptions,
 ): Promise<void> {
-  const row = feedbackRecordToRow(args.feedback);
-  await insertRows(
-    client,
-    schema,
-    TABLE_FEEDBACK_EVENTS,
-    [row],
-    partitioning,
-    args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE,
-  );
+  await writeFeedback(client, schema, [args.feedback], args.onConflict, partitioning);
+}
+
+export async function replaceFeedback(
+  client: DbClient,
+  schema: string,
+  args: CreateFeedbackArgs,
+  partitioning: PartitioningOptions,
+): Promise<void> {
+  await writeFeedback(client, schema, [args.feedback], 'replace', partitioning, true);
 }
 
 export async function batchCreateFeedback(
@@ -129,21 +130,62 @@ export async function batchCreateFeedback(
   args: BatchCreateFeedbackArgs,
   partitioning: PartitioningOptions,
 ): Promise<void> {
-  if (args.feedbacks.length === 0) return;
+  await writeFeedback(client, schema, args.feedbacks, args.onConflict, partitioning);
+}
+
+/** Serialize feedback writes by ID, including absent IDs and retries with a different timestamp. */
+async function writeFeedback(
+  client: DbClient,
+  schema: string,
+  feedbacks: BatchCreateFeedbackArgs['feedbacks'],
+  onConflict: CreateFeedbackArgs['onConflict'],
+  partitioning: PartitioningOptions,
+  preserveIdentity = false,
+): Promise<void> {
+  if (!feedbacks.length) return;
   const currentFeedback = new Map(
-    (args.onConflict === 'ignore' ? [...args.feedbacks].reverse() : args.feedbacks).map(feedback => [
-      feedback.feedbackId,
-      feedback,
-    ]),
+    (onConflict === 'ignore' ? [...feedbacks].reverse() : feedbacks).map(feedback => [feedback.feedbackId, feedback]),
   );
   const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
-  await insertRows(
-    client,
-    schema,
-    TABLE_FEEDBACK_EVENTS,
-    rows,
-    partitioning,
-    args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE,
+  const ids = [...currentFeedback.keys()].sort();
+  await withPartitionRetry(client, schema, TABLE_FEEDBACK_EVENTS, rows, partitioning, () =>
+    client.tx(async tx => {
+      // Transaction locks cover missing rows too. Sorted acquisition avoids batch deadlocks.
+      for (const id of ids) {
+        await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          JSON.stringify([schema, TABLE_FEEDBACK_EVENTS, id]),
+        ]);
+      }
+      const existing = await tx.any<Record<string, any>>(
+        `SELECT DISTINCT ON ("feedbackId") "feedbackId", "traceId", "timestamp", "organizationId", "resourceId"
+         FROM ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}
+         WHERE "feedbackId" = ANY($1::text[]) ORDER BY "feedbackId", "cursorId" DESC`,
+        [ids],
+      );
+      const byId = new Map(existing.map(row => [row.feedbackId, row]));
+      const accepted = rows.filter(row => {
+        const previous = byId.get(row.feedbackId);
+        if (!previous) return true;
+        if (onConflict === 'ignore') return false;
+        if (
+          preserveIdentity &&
+          (previous.traceId !== row.traceId ||
+            new Date(previous.timestamp).getTime() !== new Date(row.timestamp as string).getTime() ||
+            (previous.organizationId ?? null) !== (row.organizationId ?? null) ||
+            (previous.resourceId ?? null) !== (row.resourceId ?? null))
+        ) {
+          throw new MastraError({
+            id: 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT',
+            domain: ErrorDomain.MASTRA_OBSERVABILITY,
+            category: ErrorCategory.USER,
+            text: 'Feedback replacement must preserve its trace, timestamp, and tenant',
+          });
+        }
+        return true;
+      });
+      const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, accepted, FEEDBACK_UPSERT_CLAUSE);
+      if (insert) await tx.query(insert.text, insert.values);
+    }),
   );
 }
 

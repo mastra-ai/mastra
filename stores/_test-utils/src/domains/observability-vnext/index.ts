@@ -76,6 +76,8 @@ export interface ObservabilityVNextCapabilities {
   traceQuerySpanWriteModel?: 'event-sourced' | 'completion-only';
   /** Whether feedback value predicates distinguish numbers from numeric-looking strings. Defaults to true. */
   traceQueryStrictFeedbackValueTypes?: boolean;
+  /** Whether concurrent replacements atomically preserve feedback identity. Defaults to true. */
+  concurrentFeedbackIdentity?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -4800,6 +4802,34 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await storage.createFeedback({ feedback: { ...original, value: 3 } });
         expect((await storage.getFeedbackById(original.feedbackId))?.value).toBe(3);
       });
+
+      it('ignores duplicate IDs with different timestamps in individual and batch creates', async () => {
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        const retry = { ...original, timestamp: new Date('2026-11-12T12:00:00.123Z'), value: -1 };
+        await storage.createFeedback({ feedback: retry, onConflict: 'ignore' });
+        await storage.batchCreateFeedback({ feedbacks: [retry], onConflict: 'ignore' });
+        expect((await storage.listFeedback({})).feedback).toEqual([expect.objectContaining(original)]);
+        expect((await storage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'count' })).value).toBe(1);
+      });
+
+      if (capabilities.concurrentFeedbackIdentity !== false) {
+        it.each([
+          { traceId: 'other-trace' },
+          { timestamp: new Date('2026-11-12T12:00:00.123Z') },
+          { organizationId: 'other-org' },
+          { resourceId: 'other-resource' },
+        ])('only accepts one identity for concurrent replacements of a missing record: %j', async change => {
+          for (let attempt = 0; attempt < 20; attempt++) {
+            const first = { ...original, feedbackId: `${original.feedbackId}-${attempt}` };
+            const records = [first, { ...first, ...change, value: -1 }];
+            const results = await Promise.allSettled(records.map(feedback => storage.replaceFeedback({ feedback })));
+            expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+            const winner = records[results.findIndex(result => result.status === 'fulfilled')];
+            expect(await storage.getFeedbackById(first.feedbackId)).toMatchObject(winner!);
+            expect((await storage.listFeedback({ pagination: { perPage: 100 } })).feedback).toHaveLength(attempt + 1);
+          }
+        });
+      }
 
       it('accepts a full replacement before the create arrives', async () => {
         await storage.replaceFeedback({ feedback: { ...original, value: -1 } });

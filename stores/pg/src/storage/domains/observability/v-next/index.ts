@@ -656,6 +656,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    await this.#run('REPLACE_FEEDBACK', () =>
+      feedbackOps.replaceFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
+  }
+
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     await this.#run('CREATE_FEEDBACK', () =>
       feedbackOps.createFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
