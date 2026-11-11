@@ -360,7 +360,8 @@
                       },
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -375,7 +376,21 @@
                         "role": "user",
                         "content": "What is 5 + 3?"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Let me calculate that for you. ",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-calc-1",
+                          "toolName": "calculator",
+                          "args": {
+                            "operation": "add",
+                            "a": 5,
+                            "b": 3
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -785,7 +800,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -808,7 +824,11 @@
                         "role": "tool",
                         "content": "[tool-result: calculator]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "The result of 5 + 3 is 8.",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

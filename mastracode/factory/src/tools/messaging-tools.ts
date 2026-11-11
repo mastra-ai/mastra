@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -92,6 +93,8 @@ export interface FactoryMessagingToolDependencies {
   auditRecorder: AuditRecorder;
   /** The live controller and notifications store; resolved per call because they exist only once the mount is up. */
   messaging: () => Promise<FactoryMessaging | null>;
+  /** Which live sessions are parked on a tool prompt; absent before the mount is up. */
+  liveSessions?: () => Pick<LiveSessions, 'parked' | 'parkedIn'> | undefined;
 }
 
 const message = z.string().trim().min(1).max(4000);
@@ -573,6 +576,7 @@ export function createFactoryMessagingTools(
           workItems: deps.workItems,
           notifications: messaging?.notifications ?? null,
           isRunning: async sessionId => (await messaging?.controller.getSession(sessionId))?.stream.isActive() ?? false,
+          isParked: sessionId => deps.liveSessions?.()?.parked(sessionId) !== undefined,
           model: messaging
             ? sessionId => sessionModel(messaging.controller, deps.sessions, deps.workItems, sessionId)
             : undefined,

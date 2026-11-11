@@ -204,8 +204,9 @@ export const resolveTracesDateWindow = (
   datePreset: TraceDatePreset,
   dateFrom: Date | undefined,
   dateTo: Date | undefined,
+  now: Date = new Date(),
 ): { dateFrom?: Date; dateTo?: Date } => {
   if (datePreset === 'custom') return { dateFrom, dateTo };
   const ms = PRESET_MS[datePreset];
-  return { dateFrom: ms ? new Date(Date.now() - ms) : undefined, dateTo: undefined };
+  return { dateFrom: ms ? new Date(now.getTime() - ms) : undefined, dateTo: undefined };
 };

@@ -744,16 +744,34 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   if (action.candidate.providerId === 'fireflies' && action.candidate.actionSlug === 'get-transcript') {
     return adaptFirefliesGetTranscript(action);
   }
-
-  // Nango shares these actions with client-credentials templates. Adapt only the
-  // customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
-  if (
-    !DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) ||
-    action.candidate.actionSlug !== 'get-user-drive'
-  ) {
-    return action;
+  if (DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) && action.candidate.actionSlug === 'get-user-drive') {
+    return adaptDelegatedGetUserDrive(action);
   }
+  if (action.candidate.localId === 'microsoft-excel' && action.candidate.actionSlug === 'delete-workbook') {
+    return bypassSharedLockOnDelete(action);
+  }
+  return action;
+}
 
+// The Excel workbook tools write through sessionless workbook API calls, which leave a shared lock on the
+// file that can last 30 minutes; without this header, deleting a workbook the agent just edited fails with 423.
+// https://learn.microsoft.com/en-us/graph/api/driveitem-delete
+function bypassSharedLockOnDelete(action: ExtractedAction): ExtractedAction {
+  const execBody = action.execBody.replace(
+    /(await platformProxy\.delete\(\{\s*endpoint:[^\n]*\n)/,
+    "$1headers: { Prefer: 'bypass-shared-lock' },\n",
+  );
+  if (execBody === action.execBody) {
+    throw new Error(
+      `Unable to add the shared-lock bypass to ${action.candidate.providerId}/${action.candidate.actionSlug}; the upstream template shape changed.`,
+    );
+  }
+  return { ...action, execBody };
+}
+
+// Nango shares these actions with client-credentials templates. Adapt only the
+// customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
+function adaptDelegatedGetUserDrive(action: ExtractedAction): ExtractedAction {
   let inputSchemaUpdated = false;
   const moduleStatements = action.moduleStatements.map(statement => {
     if (!statement.includes(`const ${action.inputSchemaName}`)) return statement;

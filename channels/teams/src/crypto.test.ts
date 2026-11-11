@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryChannelsStorage } from '@mastra/core/storage';
 import { decrypt, encrypt, isEncrypted } from './crypto';
 import { TeamsInstallStore } from './index';
@@ -66,9 +66,17 @@ describe('TeamsInstallStore encryption at rest', () => {
     expect(record?.data.appPassword).toBe('client-secret-xyz');
   });
 
-  it('refuses to read encrypted secrets without a key', async () => {
+  it('marks encrypted secrets unreadable without a key instead of throwing', async () => {
     const storage = new InMemoryChannelsStorage();
     await new TeamsInstallStore(storage, KEY).save(install);
-    await expect(new TeamsInstallStore(storage).getByAgent('agent-1')).rejects.toThrow(/encrypted at rest/);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const read = await new TeamsInstallStore(storage).getByAgent('agent-1');
+      expect(read?.secretUnreadable).toBe(true);
+      expect(read?.appPassword).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot decrypt the stored bot secret'));
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

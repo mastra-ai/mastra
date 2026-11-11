@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -111,10 +111,11 @@ describe('KnowledgePageExplorer body links', () => {
   describe('when an open page body links other pages with [[ref]]', () => {
     const body = () => within(screen.getByTestId('knowledge-page-body'));
 
-    it('draws a nested scope#path link as the target page, and opens it on click', () => {
+    it('draws a nested scope#path link as the target page, and opens it on click', async () => {
       renderWithProviders(<Host initial="overview" initialView="page" />);
       const link = body().getByRole('button', { name: 'Suspend and resume' });
-      expect(link.getAttribute('title')).toBe('docs:mastra#workflows/suspend-and-resume');
+      act(() => link.focus());
+      expect((await screen.findByRole('tooltip')).textContent).toBe('docs:mastra#workflows/suspend-and-resume');
       fireEvent.click(link);
       expect(screen.getByTestId('selected').textContent).toBe('suspend');
     });
@@ -145,11 +146,136 @@ describe('KnowledgePageExplorer body links', () => {
   });
 
   describe('when a note mentions a page by its scope#path', () => {
-    it('links the mention to the page the server resolved', () => {
+    it('links the mention by the page name, with the ref on hover, to the page the server resolved', async () => {
       renderWithProviders(<Host initial="overview" initialView="page" />);
       const notes = within(screen.getByRole('region', { name: 'Notes' }));
-      fireEvent.click(notes.getByRole('button', { name: 'docs:mastra#workflows/suspend-and-resume' }));
+      expect(notes.queryByText('docs:mastra#workflows/suspend-and-resume')).toBeNull();
+      const link = notes.getByRole('button', { name: 'Suspend and resume' });
+      act(() => link.focus());
+      expect((await screen.findByRole('tooltip')).textContent).toBe('docs:mastra#workflows/suspend-and-resume');
+      fireEvent.click(link);
       expect(screen.getByTestId('selected').textContent).toBe('suspend');
+    });
+  });
+
+  describe('when a note holds an unbroken ref and is stamped to a long scope address', () => {
+    // A layout engine isn't available here, so these check the classes that keep the note inside its card.
+    const scope = 'linear:Mastra:lin_01M6M0HHKH3T8VAWTWZ13MKNCE';
+    const longNote: KnowledgeNotePayload = {
+      ...pathNote,
+      text: `Related: [[${scope}#linear/document/464a18f3-2607-4619-b1fa-6820548f0719]] — benchmarks`,
+      mentions: [],
+      stampScopeIds: [scope],
+    };
+    const longSource: KnowledgeExplorerSource = {
+      ...source,
+      usePage: pageId => (pageId === 'overview' ? ok({ ...detail('overview'), notes: [longNote] }) : idle),
+    };
+
+    it('wraps the ref anywhere and truncates the stamp, naming the scope on hover', () => {
+      renderWithProviders(
+        <KnowledgePageExplorer
+          graph={graph}
+          source={longSource}
+          selectedPageId="overview"
+          onSelect={() => {}}
+          view="page"
+          onViewChange={() => {}}
+        />,
+      );
+      const notes = within(screen.getByRole('region', { name: 'Notes' }));
+      const ref = notes.getByText(`${scope}#linear/document/464a18f3-2607-4619-b1fa-6820548f0719`);
+      expect(ref.closest('p')?.className).toContain('wrap-anywhere');
+      const stamp = within(notes.getByLabelText('Stamped to')).getByText(scope);
+      expect(stamp.className).toContain('truncate');
+      expect(stamp.parentElement?.getAttribute('title')).toBe(scope);
+    });
+
+    it('lets a linked page name wrap inside the note', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      const notes = within(screen.getByRole('region', { name: 'Notes' }));
+      expect(notes.getByTestId('knowledge-note-link').className).toContain('wrap-anywhere');
+    });
+  });
+
+  describe('when an imported page links a page nested in a scope the explorer has not loaded', () => {
+    const ref = 'notion:acme:conn_1#roadmaps/3f2a9c1e0b7d4e5f8a6b';
+    const plan = page('plan', 'roadmaps', {
+      scopeId: 'notion',
+      name: 'Q3 launch plan',
+      key: '3f2a9c1e0b7d4e5f8a6b',
+    });
+    const issue = page('issue', 'docs', {
+      name: 'ENG-2 Ship the launch',
+      key: 'eng-2',
+      body: `Links:\n- in [[${ref}]]`,
+    });
+    const relation: KnowledgeNotePayload = {
+      ...pathNote,
+      id: 'n2',
+      pageId: 'issue',
+      text: `Related: [[${ref}]] — The plan schedules this issue`,
+      mentions: ['plan'],
+      provenance: { author: 'importer:imp_1/run:run_1' },
+    };
+    const mentionedIn: KnowledgeNotePayload = {
+      ...relation,
+      id: 'n3',
+      pageId: 'plan',
+      text: 'Related: [[docs:mastra#eng-2]] — Ships what the plan schedules',
+      mentions: ['issue'],
+    };
+    const importedSource: KnowledgeExplorerSource = {
+      usePage: pageId =>
+        pageId === 'issue'
+          ? ok({ page: issue, notes: [relation], ancestors: [docs], related: [plan], mentionedBy: [mentionedIn] })
+          : idle,
+      useSearch: () => ({ data: { results: [] } }),
+      useLinkedPages: keys =>
+        keys.map(key => (key === ref ? ok({ page: plan, notes: [], ancestors: [], related: [] }) : idle)),
+    };
+
+    function ImportedHost({ graphPages = [docs, issue] }: { graphPages?: KnowledgePagePayload[] }) {
+      const [selected, setSelected] = useState<string | null>('issue');
+      return (
+        <>
+          <output data-testid="selected">{selected}</output>
+          <KnowledgePageExplorer
+            graph={{ pages: graphPages, edges: [], pinnedIds: [], truncated: false }}
+            source={importedSource}
+            selectedPageId={selected}
+            onSelect={setSelected}
+            view="page"
+            onViewChange={() => {}}
+          />
+        </>
+      );
+    }
+
+    it('names the page in the body link the host fetched by its ref', () => {
+      renderWithProviders(<ImportedHost />);
+      const body = within(screen.getByTestId('knowledge-page-body'));
+      expect(body.queryByTestId('knowledge-body-link-unresolved')).toBeNull();
+      fireEvent.click(body.getByRole('button', { name: 'Q3 launch plan' }));
+      expect(screen.getByTestId('selected').textContent).toBe('plan');
+    });
+
+    it('names the page in a note and in a note that mentions this page, never the ref', () => {
+      renderWithProviders(<ImportedHost />);
+      const notes = within(screen.getByRole('region', { name: 'Notes' }));
+      expect(notes.queryByText(ref, { exact: false })).toBeNull();
+      expect(notes.getByText('— The plan schedules this issue', { exact: false })).toBeTruthy();
+      const mentions = within(screen.getByRole('region', { name: 'Mentioned in' }));
+      expect(mentions.getByRole('button', { name: 'ENG-2 Ship the launch' })).toBeTruthy();
+      fireEvent.click(notes.getByRole('button', { name: 'Q3 launch plan' }));
+      expect(screen.getByTestId('selected').textContent).toBe('plan');
+    });
+
+    it('names the open page in a note elsewhere that mentions it, though the graph has not loaded it', () => {
+      renderWithProviders(<ImportedHost graphPages={[docs]} />);
+      const mentions = within(screen.getByRole('region', { name: 'Mentioned in' }));
+      expect(mentions.queryByText('docs:mastra#eng-2', { exact: false })).toBeNull();
+      expect(mentions.getByRole('button', { name: 'ENG-2 Ship the launch' })).toBeTruthy();
     });
   });
 
@@ -174,7 +300,6 @@ describe('KnowledgePageExplorer body links', () => {
         .querySelector('.react-flow__node [data-page-id="overview"]')
         ?.querySelector('[data-testid="knowledge-hidden-links"]');
       expect(badge?.getAttribute('aria-label')).toBe('0 links in, 2 links out');
-      expect(badge?.getAttribute('title')).toBe('0 links in, 2 links out');
       // A count of none is left off rather than written as 0.
       expect(badge?.textContent).toBe('2→');
     });
@@ -239,7 +364,6 @@ describe('KnowledgePageExplorer body links', () => {
         const toggle = screen.getByRole('button', { name });
         expect(canvas.contains(toggle)).toBe(true);
         expect(toggle.parentElement).toBe(back.parentElement);
-        expect(toggle.getAttribute('title')).toContain(name);
       }
     });
 
@@ -253,10 +377,8 @@ describe('KnowledgePageExplorer body links', () => {
       renderWithProviders(<Host initial={null} initialView="graph" />);
       const toggle = screen.getByRole('button', { name: 'All links' });
       expect(toggle.getAttribute('aria-pressed')).toBe('false');
-      expect(toggle.getAttribute('title')).toContain('off');
       fireEvent.click(toggle);
       expect(toggle.getAttribute('aria-pressed')).toBe('true');
-      expect(toggle.getAttribute('title')).toContain('on');
     });
   });
 

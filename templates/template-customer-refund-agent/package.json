@@ -90,6 +90,12 @@
     "@modelcontextprotocol/server": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
     "vite": "8.3.4",
-    "wsl-utils": "1.0.1"
+    "wsl-utils": "1.0.1",
+    "@ts-morph/common": {
+      "minimatch": "11.0.5"
+    },
+    "readdir-glob": {
+      "minimatch": "11.0.5"
+    }
   }
 }

@@ -91,3 +91,6 @@ export * from './PerplexityIcon';
 export * from './StepFunIcon';
 export * from './UpstageIcon';
 export * from './NousResearchIcon';
+export * from './ConfluenceIcon';
+export * from './NotionIcon';
+export * from './ZendeskIcon';
