@@ -2263,7 +2263,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Unleased steps (no run fencing, or the workflow opted out of recovery) keep running on every delivery.
       const finished = lease === UNLEASED_STEP ? 'run' : await this.#finishedOccurrence(leafArgs, leaf);
       if (finished === 'drop') return;
-      if (finished !== 'run') return await this.processWorkflowStepEnd(finished);
+      if (finished !== 'run') {
+        this.mastra.getLogger()?.debug('Continuing a workflow run from a step occurrence that already finished', {
+          workflowId: args.workflowId,
+          runId: args.runId,
+          executionPath: args.executionPath,
+        });
+        return await this.processWorkflowStepEnd(finished);
+      }
       return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease);
     } finally {
       await lease.release();
@@ -2341,7 +2348,9 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Takes the lease of the leaf step occurrence `args` delivers, so a step
    * runs on one worker at a time even when several deliveries of it are in
    * flight (a restart from another replica, a broker redelivery). See
-   * {@link acquireStepLease} for when a delivery is dropped or deferred.
+   * {@link acquireStepLease} for when a delivery is dropped or deferred; a
+   * delivery whose occurrence already finished is dropped before it would
+   * wait for another worker's lease.
    */
   async #acquireStepLease(
     args: Omit<ProcessorArgs, 'stepLeaseHandoff'>,
@@ -2361,6 +2370,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       key: this.#stepLeaseKey(args, step),
       handoff,
       claimAfterRelease: args.resumeSteps?.[0] === leafId,
+      finished: async () => (await this.#finishedOccurrence(args, step)) !== 'run',
       logger: this.mastra.getLogger(),
     });
   }
@@ -2432,6 +2442,28 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * Whether the stored run shows that the leaf occurrence this
+   * `workflow.step.run` delivers already finished. Deliveries of control
+   * entries (parallel, conditional and foreach dispatch, sleeps) and of
+   * unleased workflows report false.
+   */
+  async #isFinishedDelivery(event: Event): Promise<boolean> {
+    const data = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
+    if (!data?.workflowId || !data.executionPath?.length) return false;
+    const workflow = this.#resolveLiveWorkflow(data) ?? undefined;
+    if (!workflow || !(await this.#leaseStore(workflow))) return false;
+    const [index, branch] = data.executionPath;
+    let entry: StepFlowEntry | undefined = workflow.stepGraph[index!];
+    if ((entry?.type === 'parallel' || entry?.type === 'conditional') && branch !== undefined) {
+      entry = entry.steps[branch];
+    }
+    if (!entry || !isExecutableStep(entry) || (entry.type === 'foreach' && branch === undefined)) return false;
+    const { stepLeaseHandoff: _handoff, ...args } = data;
+    const leaf = entry as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
+    return (await this.#finishedOccurrence({ ...args, workflow, eventId: event.id }, leaf)) !== 'run';
+  }
+
+  /**
    * Checks, once the worker holds the occurrence's lease, whether the stored
    * run shows the occurrence already finished. Returns `'run'` when the step
    * still has to run, `'drop'` when the delivery is a duplicate, or the step
@@ -2464,11 +2496,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       guarded,
     });
     if (outcome === 'run' || outcome === 'drop') return outcome;
-    this.mastra.getLogger()?.debug('Continuing a workflow run from a step occurrence that already finished', {
-      workflowId: args.workflowId,
-      runId: args.runId,
-      executionPath: args.executionPath,
-    });
     const context = snapshot!.context;
     return {
       ...args,
@@ -5350,6 +5377,16 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId: event.runId,
             deliveryAttempt: event.deliveryAttempt,
             recheckRunId: rechecked ? root.runId : undefined,
+          });
+          return { ok: true };
+        }
+
+        // A late delivery of a step that already finished would fail a run that went on without it.
+        if (event.type === 'workflow.step.run' && (await this.#isFinishedDelivery(event))) {
+          this.deliveryAttempts.delete(eventKey);
+          this.mastra.getLogger()?.debug('Dropping an exhausted delivery of a step that already finished', {
+            runId: event.runId,
+            deliveryAttempt: event.deliveryAttempt,
           });
           return { ok: true };
         }
