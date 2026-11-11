@@ -3895,6 +3895,7 @@ type Shared_Type_69 = {
   deltaPolling: boolean;
   /** Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead. */
   traceQuery: boolean;
+  /** Supports explicit `rootSource: 'aggregated'` trace queries */
   traceQueryAggregatedRoots: boolean;
   /** Literal substring search across any span in a trace */
   traceQueryTextSearch: boolean;

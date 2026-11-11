@@ -1,7 +1,7 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 '@mastra/server': patch
-'@mastra/client-js': patch
+'@mastra/client-js': minor
 'mastra': patch
 ---
 
