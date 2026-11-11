@@ -62,9 +62,11 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: 
  * A finished occurrence continues the run from its saved result while the run
  * has not started a later step, which recovers a run whose worker stopped
  * after the step saved its result and before the next step was published.
- * Only a top-level step shows that through the run's active path; a branch
+ * A top-level step shows that through the run's active path. A branch
  * continues only when a restart dispatched it, since the restart is then what
- * recovers the run. Any other finished delivery is dropped.
+ * recovers the run, and only while the run's active path is still inside the
+ * branch's parallel or conditional entry. Any other finished delivery is
+ * dropped.
  *
  * `stepGuards` tells whether the store has workflow step guards. Records they
  * stamped are left to the guards on the deliveries the guards arbitrate
@@ -109,14 +111,15 @@ export function finishedOccurrence({
   if (!restartTarget && sameRecord(stored, known)) return 'run';
   // Whoever ended the run also took it past this step.
   if (snapshot.status !== 'running') return 'drop';
-  // Continuing a canceled or tripwire result is left to the step itself, as before.
+  // Only success and failed results continue the run here. A restart reruns a
+  // canceled or tripwire step, and any other delivery is dropped.
   if (stored.status !== 'success' && stored.status !== 'failed') return restartTarget ? 'run' : 'drop';
   // The next leaf records itself as the active path when it starts. Sibling
-  // branches overwrite that path, so it tells only for a top-level step.
-  if (executionPath.length === 1) {
-    return samePath(snapshot.activePaths, executionPath)
-      ? { continueFrom: stored as StepResult<any, any, any, any> }
-      : 'drop';
-  }
-  return restartTarget ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
+  // branches overwrite that path, so for a branch it only tells whether the run
+  // went past the branch's parallel or conditional entry.
+  const notMovedOn =
+    executionPath.length === 1
+      ? samePath(snapshot.activePaths, executionPath)
+      : restartTarget && snapshot.activePaths?.[0] === executionPath[0];
+  return notMovedOn ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
 }
