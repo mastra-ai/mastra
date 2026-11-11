@@ -71,7 +71,7 @@ function resolveTracingStorageStrategy(
 }
 
 // Not `isDurableAgentLike`: it shipped in @mastra/core 1.30.0, above this package's peer floor.
-const isDurableAgent = (agent: { agent?: unknown }) => Boolean(agent.agent);
+const isDurableAgent = (agent: object) => 'agent' in agent && Boolean(agent.agent);
 
 function usesDurableExecution(mastra: Mastra): boolean {
   return (

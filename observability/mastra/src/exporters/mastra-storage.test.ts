@@ -2073,7 +2073,7 @@ describe('MastraStorageExporter realtime strategy with durable execution', () =>
     await Promise.all(opened.splice(0).map(resource => resource.shutdown()));
   });
 
-  const plainAgent = (config: { durable?: boolean } = {}) =>
+  const plainAgent = (config: { id?: string; durable?: boolean } = {}) =>
     new Agent({ id: 'support', name: 'support', instructions: 'Help.', model: new MockLanguageModelV2(), ...config });
   const durableAgent = () => createDurableAgent({ agent: plainAgent() });
   const workflow = { id: 'orders', inputSchema: z.object({}), outputSchema: z.object({}) };
@@ -2102,7 +2102,6 @@ describe('MastraStorageExporter realtime strategy with durable execution', () =>
   it.each([
     ['a durable agent', () => ({ agents: { support: durableAgent() } })],
     ['an evented agent', () => ({ agents: { support: createEventedAgent({ agent: plainAgent() }) } })],
-    ['an Agent with durable: true', () => ({ agents: { support: plainAgent({ durable: true }) } })],
     ['an evented workflow', () => ({ workflows: { orders: createEventedWorkflow(workflow).commit() } })],
   ])('batches spans and warns once when the app has %s', async (_name, registered) => {
     const { exporter, warn, exportSpan, isStored } = await openApp(registered());
@@ -2116,9 +2115,9 @@ describe('MastraStorageExporter realtime strategy with durable execution', () =>
     expect(await isStored('span-3')).toBe(true);
   });
 
-  it('writes spans at once when the app has only a plain agent and a default workflow', async () => {
+  it('writes spans at once when the app has a plain agent, resumable streams, and a default workflow', async () => {
     const { warn, exportSpan, isStored } = await openApp({
-      agents: { support: plainAgent() },
+      agents: { support: plainAgent(), streaming: plainAgent({ id: 'streaming', durable: true }) },
       workflows: { orders: createWorkflow(workflow).commit() },
     });
     await exportSpan('span-1');
