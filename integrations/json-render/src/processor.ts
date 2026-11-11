@@ -52,6 +52,15 @@ interface Split {
   started: boolean;
 }
 
+/** The interface the current message has streamed so far, and the patches held back from it. */
+interface Live {
+  spec?: Spec;
+  rejected: string[];
+}
+
+/** A part that empties an interface the client has already rendered. */
+const CLEARED: SpecDataPart = { type: 'flat', spec: { root: '', elements: {} } };
+
 /** The code block a line opens, as CommonMark reads it. */
 function fenceOpenedBy(line: string): Fence | undefined {
   const [, marker, info] = /^(`{3,}|~{3,})(.*)$/.exec(line) ?? [];
@@ -164,6 +173,7 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       midLine: false,
       started: false,
     });
+    const live = ((state.live as Live | undefined) ??= { rejected: [] });
     const parts: SpecDataPart[] = [];
     let text = '';
 
@@ -189,14 +199,24 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       const parsed = parseSpecStreamLine(trimmed);
       // The edit prompt asks for the patch lines alone, so they count outside a block too, when they write to a spec.
       const patch = parsed && (fence || SPEC_PATH.test(parsed.path)) ? parsed : null;
-      if (patch && !split.started) {
+      if (!patch) return void (!fence && keep());
+      if (!split.started) {
         split.started = true;
-        const edited = patch.path !== '/root' && messageList && latestSpec(messageList.get.all.db());
+        const latest = patch.path !== '/root' && messageList && latestSpec(messageList.get.all.db());
         const uiState = uiStateIn(requestContext);
-        if (edited) parts.push({ type: 'flat', spec: uiState ? { ...edited, state: uiState } : edited });
+        const edited = latest && (uiState ? { ...latest, state: uiState } : latest);
+        if (edited) {
+          live.spec = structuredClone(edited);
+          parts.push({ type: 'flat', spec: edited });
+        }
       }
-      if (patch) parts.push({ type: 'patch', patch });
-      else if (!fence) keep();
+      // The client applies each patch as it arrives, so one that cannot apply is held back and sent to the model instead.
+      try {
+        applyPatch((live.spec ??= { root: '', elements: {} }), patch);
+        parts.push({ type: 'patch', patch });
+      } catch (error) {
+        live.rejected.push((error as Error).message);
+      }
     };
 
     if (part.type === 'text-end') {
@@ -237,17 +257,30 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
   }
 
   /** Sends a reply whose interface cannot render back to the model, with what is wrong. */
-  async processOutputStep({ messages, abort }: ProcessOutputStepArgs): Promise<ProcessOutputStepArgs['messages']> {
+  async processOutputStep({
+    messages,
+    abort,
+    state,
+    writer,
+  }: ProcessOutputStepArgs): Promise<ProcessOutputStepArgs['messages']> {
+    const live = state.live as Live | undefined;
+    const rejected = live?.rejected.splice(0) ?? [];
     const reply = messages.at(-1);
     if (reply?.role !== 'assistant') return messages;
-    let problems: string | undefined;
+    let problems = rejected.join('\n') || undefined;
     try {
       const spec = buildSpec(reply.content.parts);
-      problems = spec && problemsIn(spec, this.options.catalog);
+      problems ??= spec && problemsIn(spec, this.options.catalog);
     } catch (error) {
-      problems = (error as Error).message;
+      problems ??= (error as Error).message;
     }
     if (problems) {
+      // The retry writes a new message; this one stays on the client until it reloads, so its interface is cleared.
+      // Transient: the rejected message is not saved, and nothing else should be.
+      if (live?.spec) {
+        live.spec = undefined;
+        await writer?.custom({ type: SPEC_DATA_PART_TYPE, data: CLEARED, transient: true });
+      }
       abort(
         `The interface in your \`\`\`spec block cannot be shown. Write it again without these problems:\n${problems}`,
         {
@@ -275,10 +308,8 @@ function writtenAt(message: ProcessLLMRequestArgs['prompt'][number]): number[] {
 }
 
 /**
- * The spec a message's `data-spec` parts build, the way the client renders it.
- * Patches are cloned first: `applySpecPatch` inserts into the arrays a patch
- * holds, so applying the saved parts themselves would change what gets saved.
- * Throws when a patch cannot be applied, naming it.
+ * The spec a message's `data-spec` parts build, the way the client renders it,
+ * leaving the parts as they are. Throws when a patch cannot be applied, naming it.
  */
 function buildSpec(parts: ReadonlyArray<{ type: string }>): Spec | undefined {
   let spec: Spec | undefined;
@@ -286,16 +317,23 @@ function buildSpec(parts: ReadonlyArray<{ type: string }>): Spec | undefined {
     if (part.type !== SPEC_DATA_PART_TYPE) continue;
     const data = (part as unknown as { data: SpecDataPart }).data;
     if (data.type === 'flat') spec = structuredClone(data.spec);
-    else if (data.type === 'patch') {
-      try {
-        if (typeof data.patch.path !== 'string') throw new Error('its path is not a string');
-        applySpecPatch((spec ??= { root: '', elements: {} }), structuredClone(data.patch));
-      } catch (error) {
-        throw new Error(`- ${JSON.stringify(data.patch)} cannot be applied: ${(error as Error).message}`);
-      }
-    }
+    else if (data.type === 'patch') applyPatch((spec ??= { root: '', elements: {} }), data.patch);
   }
   return spec;
+}
+
+/**
+ * Applies a copy of `patch` to `spec`: `applySpecPatch` inserts the values a
+ * patch holds, so applying the patch itself would let later patches change it.
+ * Throws when it cannot be applied, naming it.
+ */
+function applyPatch(spec: Spec, patch: Extract<SpecDataPart, { type: 'patch' }>['patch']) {
+  try {
+    if (typeof patch.path !== 'string') throw new Error('its path is not a string');
+    applySpecPatch(spec, structuredClone(patch));
+  } catch (error) {
+    throw new Error(`- ${JSON.stringify(patch)} cannot be applied: ${(error as Error).message}`);
+  }
 }
 
 /** The spec a message's `data-spec` parts build, or none when they cannot build one. */

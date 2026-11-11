@@ -232,8 +232,33 @@ describe('JsonRenderProcessor', () => {
     const { messages } = await chat(model, 'Weather in Paris?');
 
     expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[1])).toContain('cannot be applied');
     const reply = messages.find(message => message.role === 'assistant')!;
     expect(buildSpecFromParts(reply.content.parts as any)).toEqual(weatherCard);
+  });
+
+  it.each([
+    { problem: 'a patch that cannot be applied', line: '{"op":"test","path":"/root","value":"other"}' },
+    {
+      problem: 'a component the catalog does not have',
+      line: '{"op":"replace","path":"/elements/text/type","value":"LineChart"}',
+    },
+  ])('streams a rejected interface with $problem so the client can render it, then clears it', async ({ line }) => {
+    const broken = specBlock(weatherCard).replace('\n```', `\n${line}\n\`\`\``);
+    const { model } = modelWriting(`Here.\n${broken}`, `Here.\n${specBlock(weatherCard)}`);
+
+    const { streamed } = await chat(model, 'Weather in Paris?');
+
+    // What the client holds for the rejected reply: the parts streamed before the retry's reminder.
+    const rejected = streamed.slice(
+      0,
+      streamed.findIndex(chunk => chunk.type === 'data-signal'),
+    );
+    const parts = rejected.filter(chunk => chunk.type === 'data-spec');
+    for (let count = 1; count <= parts.length; count++) {
+      expect(() => buildSpecFromParts(parts.slice(0, count) as any)).not.toThrow();
+    }
+    expect(buildSpecFromParts(parts as any)?.root).toBeFalsy();
   });
 
   it('shows the model an interface it wrote with no prose around it', async () => {
