@@ -53,6 +53,7 @@ interface SearchRequestState {
   intakeRequests: number;
   sessionRequests: Record<string, number>;
   workItemRequests: number;
+  searches: Array<string | null>;
 }
 
 interface StubSearchOptions {
@@ -107,6 +108,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     intakeRequests: 0,
     sessionRequests: {},
     workItemRequests: 0,
+    searches: [],
   };
 
   server.use(
@@ -134,6 +136,12 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       return HttpResponse.json({
         workItems: factoryProjectId === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems).map(toWireWorkItem) : [],
       });
+    }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items/search`, ({ params, request }) => {
+      state.searches.push(new URL(request.url).searchParams.get('q'));
+      if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
+      const found = String(params.factoryProjectId) === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems) : [];
+      return HttpResponse.json({ workItems: found.map(toWireWorkItem) });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
@@ -559,7 +567,7 @@ describe('Global search', () => {
     expect(within(rail).getByRole('button', { name: /Review sessions/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('filters locally across titles, branches, ids, and Factory repositories without issuing more requests', async () => {
+  it('filters across titles, branches, ids, and Factory repositories without ever downloading the board', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
@@ -568,7 +576,6 @@ describe('Global search', () => {
 
     const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
     const sessionRequestCount = Object.values(requests.sessionRequests).reduce((total, count) => total + count, 0);
-    const workItemRequestCount = requests.workItemRequests;
 
     await user.type(input, 'universal 321');
     expect(await screen.findByText('Add universal command search')).toBeInTheDocument();
@@ -590,7 +597,8 @@ describe('Global search', () => {
     expect(Object.values(requests.sessionRequests).reduce((total, count) => total + count, 0)).toBe(
       sessionRequestCount,
     );
-    expect(requests.workItemRequests).toBe(workItemRequestCount);
+    expect(requests.searches).toContain('universal 321');
+    expect(requests.workItemRequests).toBe(0);
   });
 
   it('reuses warm session and work-item caches without refetching', async () => {

@@ -9,7 +9,7 @@
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
-import { requestJson } from './request';
+import { RequestError, requestJson } from './request';
 
 export type WorkItemSource =
   | 'github-issue'
@@ -316,6 +316,26 @@ export async function listWorkItems(
     runningSessionIds: data.runningSessionIds ?? [],
     parkedSessionIds: data.parkedSessionIds ?? [],
   };
+}
+
+/** The few cards a search needs: the best matches for `query`, plus every card that carries one of `keys`. */
+export async function searchWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  search: { query: string; keys: readonly string[] },
+  signal?: AbortSignal,
+): Promise<WorkItem[]> {
+  const params = new URLSearchParams([['q', search.query], ...search.keys.map(key => ['key', key])]);
+  const path = `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/search`;
+  try {
+    return (await requestJson<{ workItems: WireWorkItem[] }>(`${path}?${params}`, { signal })).workItems.map(
+      fromWireWorkItem,
+    );
+  } catch (error) {
+    // A server from before this route answers 404: read its whole board, as search did until now.
+    if (!(error instanceof RequestError) || error.status !== 404) throw error;
+    return (await listWorkItems(baseUrl, factoryProjectId, signal)).workItems;
+  }
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

@@ -417,6 +417,22 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      // ── The few cards a search needs, so the palette never downloads the board ─
+      registerApiRoute('/web/factory/projects/:id/work-items/search', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const query = (context.req.query('q') ?? '').slice(0, 200);
+          const keys = (context.req.queries('key') ?? []).slice(0, 100);
+          const items = await workItems.search(resolved.orgId, resolved.factoryProjectId, query, keys);
+          return c.json({ workItems: items.map(toWireWorkItem) });
+        },
+      }),
+
       // ── Flow metrics aggregated over the project's work items ───────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.metricsGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.metricsGet.method,

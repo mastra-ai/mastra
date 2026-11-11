@@ -497,6 +497,34 @@ describe('POST /web/factory/projects/:id/work-items', () => {
   });
 });
 
+describe('GET /web/factory/projects/:id/work-items/search', () => {
+  it('returns the cards that match what is typed and the cards asked for by key, not the board', async () => {
+    for (let number = 1; number <= 60; number += 1) {
+      const url = `https://github.com/acme/app/issues/${number}`;
+      await json(
+        'POST',
+        `/web/factory/projects/${PROJECT_ID}/work-items`,
+        createBody({
+          title: number % 2 ? `Fix the login flow ${number}` : `Rework the palette ${number}`,
+          metadata: { number },
+          externalSource: { integrationId: 'github', type: 'issue', externalId: String(number), url },
+        }),
+      );
+    }
+    const search = async (query: string): Promise<Array<{ title: string }>> =>
+      (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/search?${query}`)).json()).workItems;
+
+    const typed = await search('q=PALETTE');
+    expect(typed).toHaveLength(20);
+    expect(typed.every(card => card.title.startsWith('Rework the palette'))).toBe(true);
+    expect((await search('q=%237')).map(card => card.title)).toEqual(['Fix the login flow 7']);
+
+    const keyed = await search(`q=palette&key=${encodeURIComponent('https://github.com/acme/app/issues/3')}`);
+    expect(keyed).toHaveLength(21);
+    expect(keyed[0].title).toBe('Fix the login flow 3');
+  });
+});
+
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
   it('serves normalized source facts on create, list and update while retaining the legacy wire fields', async () => {

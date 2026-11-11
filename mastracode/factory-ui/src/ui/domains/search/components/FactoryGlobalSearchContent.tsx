@@ -49,8 +49,9 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
   const sessions = useGlobalSearchSessions(searchableFactoryId);
-  const workItems = useGlobalSearchWorkItems(searchableFactoryId);
+  const [query, setQuery] = useState('');
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId, query, intake.candidates, sessions.repositories);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const catalog = useBoardCatalog(searchableFactoryId);
   const defaultBoard = catalog.data?.find(board => board.id === DEFAULT_BOARD_ID);
@@ -60,6 +61,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     kind: boardIdOf({}),
     currentUserId,
     onFailure: toastFailureAfterPaletteCloses,
+    items: workItems.items,
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { effectByItem } = useItemDecisions(searchableFactoryId);
@@ -74,7 +76,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
     workItems: workItems.items,
-    candidates: intake.candidates,
+    candidates: workItems.candidates,
     boards: catalog.data,
   });
   const counts = createGlobalSearchScopeCounts({
@@ -91,6 +93,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     <>
       <CommandPaletteInput
         autoFocus
+        onValueChange={setQuery}
         placeholder="Search sessions, reviews, #issues, pages, and Factories"
         rightSlot={<Kbd>Esc</Kbd>}
       />

@@ -2054,6 +2054,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
+  /**
+   * The 20 cards that best match the words of `query`, newest first, plus every card that carries one
+   * of `keys` (a source id, a URL or a session branch). It filters the cached board in memory and
+   * shares its cards like {@link listShared}, so a search costs one version read, not a board.
+   */
+  async search(orgId: string, factoryProjectId: string, query: string, keys: readonly string[]): Promise<Card[]> {
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const wanted = new Set(keys);
+    const keyed: Card[] = [];
+    const scored: Array<{ card: Card; score: number }> = [];
+    for (const card of (await this.#listCached(orgId, factoryProjectId)).items) {
+      const number = card.workItem.metadata?.number ?? card.metadata?.cardNumber;
+      const identity = [card.externalSource?.externalId, card.externalSource?.url, card.workItem.url];
+      const branches = Object.values(card.sessions).map(session => session.branch);
+      if ([...identity, ...branches].some(key => key && wanted.has(key))) {
+        keyed.push(card);
+        continue;
+      }
+      const text = [card.title, card.workItem.key, `#${number ?? ''}`, ...identity, ...card.stages, ...branches]
+        .join(' ')
+        .toLowerCase();
+      const score = terms.filter(term => text.includes(term)).length;
+      if (score > 0 || terms.length === 0) scored.push({ card, score });
+    }
+    scored.sort((a, b) => b.score - a.score || b.card.updatedAt.getTime() - a.card.updatedAt.getTime());
+    return [...keyed, ...scored.slice(0, 20).map(entry => entry.card)];
+  }
+
   /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
   async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: Card[]; cached: boolean }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
