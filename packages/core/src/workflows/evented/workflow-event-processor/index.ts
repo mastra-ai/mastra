@@ -3124,7 +3124,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         // step's result record instead, so hand those up as they are.
         const storedResult = snapshot.result as any;
         const isLegacyStepRecord =
-          storedResult?.status === 'success' && typeof storedResult === 'object' && 'output' in storedResult;
+          storedResult?.status === 'success' &&
+          typeof storedResult === 'object' &&
+          'output' in storedResult &&
+          typeof storedResult.startedAt === 'number' &&
+          typeof storedResult.endedAt === 'number';
         const finishedResult: StepResult<any, any, any, any> | undefined =
           snapshot.status === 'success'
             ? isLegacyStepRecord

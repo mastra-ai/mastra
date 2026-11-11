@@ -356,3 +356,86 @@ describe('evented restart does not reuse a finished child from another occurrenc
     60_000,
   );
 });
+
+// #29759: a finished run stores its output as `result`. Rows stored before that hold the
+// last step's success record there instead, and restart must still hand its output up.
+describe('evented restart after a nested workflow finished, by stored result shape', () => {
+  async function restartWithFinishedChild(
+    name: string,
+    childOutput: (n: number) => any,
+    editChildRow?: (snapshot: any) => void,
+  ) {
+    const runId = `nested-done-evented-result-${name}`;
+    const log: Entry[] = [];
+    const scenario = createRestartScenario({
+      kind: 'workflow',
+      runId,
+      hold: { workflowName: 'shape-child', when: s => s.status === 'success' },
+      build: ({ core, generation }) => {
+        const { createStep, createWorkflow } = factories(core, 'evented');
+        const inner = createStep({
+          id: 'inner',
+          inputSchema: N,
+          outputSchema: z.any(),
+          execute: async ({ inputData }: any) => {
+            log.push({ generation, step: 'inner', input: inputData });
+            return childOutput(inputData.n);
+          },
+        });
+        const last = createStep({
+          id: 'last',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ inputData }: any) => {
+            log.push({ generation, step: 'last', input: inputData });
+            return { got: inputData };
+          },
+        });
+        const child = createWorkflow({ id: 'shape-child', inputSchema: N, outputSchema: z.any() }).then(inner).commit();
+        return createWorkflow({ id: 'shape-parent', inputSchema: N, outputSchema: z.any() })
+          .then(child)
+          .then(last)
+          .commit();
+      },
+    });
+    scenarios.push(scenario);
+    const original = await scenario.start(async ({ workflow }) =>
+      (await workflow.createRun({ runId })).start({ inputData: { n: 1 } }),
+    );
+    const held = await Promise.race([original.held!.then(() => true), original.settled.then(() => false)]);
+    expect(held, 'not exercised: the child never finished').toBe(true);
+    const checkpoint = await original.checkpoint();
+    original.releaseHold();
+    const childRow = checkpoint.rows.find(row => row.workflowName === 'shape-child');
+    expect(childRow?.snapshot.status).toBe('success');
+    editChildRow?.(childRow!.snapshot);
+    const { result } = await scenario.restart(checkpoint);
+    return { result, log };
+  }
+
+  it("hands up a legacy row's step record output", async () => {
+    const { result, log } = await restartWithFinishedChild(
+      'legacy',
+      n => ({ n: n + 1 }),
+      snapshot => {
+        expect(snapshot.result).toEqual({ n: 2 });
+        snapshot.result = { status: 'success', payload: { n: 1 }, output: { n: 2 }, startedAt: 1, endedAt: 2 };
+      },
+    );
+    expect(result).toMatchObject({ status: 'success', result: { got: { n: 2 } } });
+    expect(starts(log, 'inner')).toEqual([]);
+  }, 60_000);
+
+  it('hands up an output shaped like a step record as it is', async () => {
+    const output = { status: 'success', output: { n: 2 } };
+    const { result, log } = await restartWithFinishedChild(
+      'record-shaped',
+      () => output,
+      snapshot => {
+        expect(snapshot.result).toEqual(output);
+      },
+    );
+    expect(result).toMatchObject({ status: 'success', result: { got: output } });
+    expect(starts(log, 'inner')).toEqual([]);
+  }, 60_000);
+});
