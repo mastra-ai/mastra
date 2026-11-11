@@ -96,45 +96,37 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
   const values: any[] = [];
 
   Object.entries(value).forEach(([field, val]) => {
-    const nextParamIndex = paramIndex + values.length;
+    const operators = field.startsWith('$')
+      ? [[field, val]]
+      : typeof val === 'object' && val !== null && !Array.isArray(val)
+        ? Object.entries(val)
+        : [['$eq', val]];
 
-    let paramOperator;
-    let paramKey;
-    let paramValue;
-
-    if (field.startsWith('$')) {
-      paramOperator = field;
-      paramKey = '';
-      paramValue = val;
-    } else if (typeof val === 'object' && !Array.isArray(val)) {
-      const [op, opValue] = Object.entries(val || {})[0] || [];
-      paramOperator = op;
-      paramKey = field;
-      paramValue = opValue;
-    } else {
-      paramOperator = '$eq';
-      paramKey = field;
-      paramValue = val;
+    if (operators.length === 0) {
+      throw new Error(`$elemMatch field ${field} requires at least one operator`);
     }
 
-    const operatorFn = FILTER_OPERATORS[paramOperator as OperatorType];
-    if (!operatorFn) {
-      throw new Error(`Invalid operator: ${paramOperator}`);
-    }
-    const result = operatorFn(paramKey, nextParamIndex, paramValue);
+    for (const [operator, operatorValue] of operators) {
+      const operatorFn = FILTER_OPERATORS[operator as OperatorType];
+      if (!operatorFn) {
+        throw new Error(`Invalid operator: ${operator}`);
+      }
+      const result = operatorFn(field.startsWith('$') ? '' : field, paramIndex + values.length, operatorValue);
 
-    // Rewrite every column reference to the per-element alias. Order matters:
-    // replace the longer `metadata#>>` / `metadata->>` tokens before `metadata#>` / `metadata->` so the latter
-    // doesn't partially match the former (e.g. the jsonb_typeof guard emitted by
-    // the numeric operators uses the single-arrow `metadata->` / `metadata#>` form).
-    const sql = result.sql
-      .replaceAll('metadata->>', 'elem->>')
-      .replaceAll('metadata->', 'elem->')
-      .replaceAll('metadata#>>', 'elem#>>')
-      .replaceAll('metadata#>', 'elem#>');
-    conditions.push(sql);
-    if (result.needsValue) {
-      values.push(paramValue);
+      // Rewrite every column reference to the per-element alias. Order matters:
+      // replace the longer `metadata#>>` / `metadata->>` tokens before `metadata#>` / `metadata->` so the latter
+      // doesn't partially match the former (e.g. the jsonb_typeof guard emitted by
+      // the numeric operators uses the single-arrow `metadata->` / `metadata#>` form).
+      const sql = result.sql
+        .replaceAll('metadata->>', 'elem->>')
+        .replaceAll('metadata->', 'elem->')
+        .replaceAll('metadata#>>', 'elem#>>')
+        .replaceAll('metadata#>', 'elem#>')
+        .replaceAll('metadata ?', 'elem ?');
+      conditions.push(sql);
+      if (result.needsValue) {
+        values.push(operatorValue);
+      }
     }
   });
 
