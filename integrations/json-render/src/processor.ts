@@ -26,6 +26,8 @@ import type { z } from 'zod';
 
 const FENCE_OPEN = '```spec';
 const FENCE_CLOSE = '```';
+/** Where a patch can write in a spec. Outside a ```spec block, only patches here are taken as interface edits. */
+const SPEC_PATH = /^\/(root|elements|state)(\/|$)/;
 
 export interface JsonRenderProcessorOptions {
   /** The catalog the model composes interfaces from. */
@@ -36,18 +38,19 @@ export interface JsonRenderProcessorOptions {
 interface Split {
   line: string;
   holding: boolean;
-  inFence: boolean;
+  /** The code block the stream is in: a ```spec block, or any other, whose lines stay prose. */
+  fence?: 'spec' | 'other';
   /** Whether the open fence has had its first patch, which decides if it starts a new spec or edits the last one. */
   started: boolean;
 }
 
 /**
- * Whether a line held back may still turn out to open a spec fence or be a
- * patch (`{"op": …}`). Lines that cannot are released as prose right away, so
+ * Whether a line held back may still turn out to be a code fence or a patch
+ * (`{"op": …}`). Lines that cannot are released as prose right away, so
  * only a reply cut off inside a patch line ends with text held back.
  */
 function couldOpenSpecLine(line: string) {
-  if (line.startsWith('`')) return FENCE_OPEN.startsWith(line) || line.startsWith(FENCE_OPEN);
+  if (line.startsWith('`')) return FENCE_CLOSE.startsWith(line) || line.startsWith(FENCE_CLOSE);
   return /^\{\s*("|$)/.test(line);
 }
 
@@ -125,7 +128,7 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
     requestContext,
   }: ProcessOutputStreamArgs): Promise<ChunkType | null> {
     if (part.type !== 'text-delta' && part.type !== 'text-end') return part;
-    const split = ((state.split as Split | undefined) ??= { line: '', holding: false, inFence: false, started: false });
+    const split = ((state.split as Split | undefined) ??= { line: '', holding: false, started: false });
     const parts: SpecDataPart[] = [];
     let text = '';
 
@@ -135,14 +138,24 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       const trimmed = line.trim();
       split.line = '';
       split.holding = false;
-      if (!split.inFence && trimmed.startsWith(FENCE_OPEN)) {
-        split.inFence = true;
+      const keep = () => void (text += last ? line : `${line}\n`);
+      if (split.fence === 'other') {
+        if (trimmed.startsWith(FENCE_CLOSE)) split.fence = undefined;
+        return keep();
+      }
+      if (!split.fence && trimmed.startsWith(FENCE_CLOSE)) {
+        if (!trimmed.startsWith(FENCE_OPEN)) {
+          split.fence = 'other';
+          return keep();
+        }
+        split.fence = 'spec';
         split.started = false;
         return;
       }
-      if (split.inFence && trimmed === FENCE_CLOSE) return void (split.inFence = false);
-      const patch = parseSpecStreamLine(trimmed);
-      // Fenced or not: the edit prompt asks the model for the patch lines alone.
+      if (split.fence === 'spec' && trimmed === FENCE_CLOSE) return void (split.fence = undefined);
+      const parsed = parseSpecStreamLine(trimmed);
+      // The edit prompt asks for the patch lines alone, so they count outside a block too, when they write to a spec.
+      const patch = parsed && (split.fence === 'spec' || SPEC_PATH.test(parsed.path)) ? parsed : null;
       if (patch && !split.started) {
         split.started = true;
         const edited = patch.path !== '/root' && messageList && latestSpec(messageList.get.all.db());
@@ -150,7 +163,7 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
         if (edited) parts.push({ type: 'flat', spec: uiState ? { ...edited, state: uiState } : edited });
       }
       if (patch) parts.push({ type: 'patch', patch });
-      else if (!split.inFence) text += last ? line : `${line}\n`;
+      else if (split.fence !== 'spec') keep();
     };
 
     if (part.type === 'text-end') {
@@ -160,15 +173,15 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       for (const char of part.payload.text) {
         if (char === '\n') {
           if (split.holding) endLine();
-          else if (!split.inFence) text += char;
+          else if (split.fence !== 'spec') text += char;
         } else if (split.holding) {
           split.line += char;
-          if (!split.inFence && !couldOpenSpecLine(split.line)) {
+          if (split.fence !== 'spec' && !couldOpenSpecLine(split.line)) {
             text += split.line;
             split.line = '';
             split.holding = false;
           }
-        } else if (split.inFence || char === '{' || char === '`') {
+        } else if (split.fence === 'spec' || char === '{' || char === '`') {
           split.holding = true;
           split.line = char;
         } else {

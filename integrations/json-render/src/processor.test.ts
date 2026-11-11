@@ -321,6 +321,33 @@ describe('JsonRenderProcessor', () => {
     expect(replies.map(reply => buildSpecFromParts(reply.content.parts as any))).toEqual([weatherCard, note]);
   });
 
+  it.each([
+    {
+      where: 'in a json code block',
+      reply:
+        'A JSON Patch op looks like this:\n```json\n{"op":"replace","path":"/name","value":"Ada"}\n```\nThat is all.',
+    },
+    {
+      where: 'in a json code block, on a path an interface has',
+      reply: 'To rename the card:\n```json\n{"op":"replace","path":"/elements/card/props/title","value":"Lyon"}\n```',
+    },
+    {
+      where: 'outside a code block, on a path an interface does not have',
+      reply: 'Send this:\n{"op":"replace","path":"/name","value":"Ada"}\nThat is all.',
+    },
+  ])('keeps a JSON patch shown $where as prose', async ({ reply }) => {
+    const { model } = modelWriting(reply);
+
+    const { streamed, messages } = await chat(model, 'What does a JSON Patch op look like?');
+
+    const text = streamed.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text);
+    expect(text.join('')).toBe(reply);
+    expect(streamed.some(chunk => chunk.type === 'data-spec')).toBe(false);
+    const saved = messages.find(message => message.role === 'assistant')!;
+    expect(textOf(saved.content.parts)).toBe(reply);
+    expect(saved.content.parts.some(part => part.type === 'data-spec')).toBe(false);
+  });
+
   it('keeps a last line that only looked like it could start a spec', async () => {
     const { model } = modelWriting('Install it first.\n`pnpm add zod` does it');
 
