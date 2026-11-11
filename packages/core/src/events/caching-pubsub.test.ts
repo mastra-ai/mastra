@@ -2108,3 +2108,34 @@ describe('CachingPubSub', () => {
     });
   });
 });
+
+describe('CachingPubSub.__replaysTopic', () => {
+  // Producers that send changes against earlier events resend the whole state on topics a late
+  // subscriber can't read back; supportsOffsets is true here even for topics left out of the cache.
+  class ReplayingTransport extends EventEmitterPubSub {
+    override __replaysTopic(): boolean {
+      return true;
+    }
+  }
+
+  it('counts on the cache for the topics it keeps', () => {
+    const pubsub = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache(), {
+      shouldCache: topic => topic !== 'live-only',
+    });
+    expect(pubsub.__replaysTopic('kept')).toBe(true);
+    expect(pubsub.__replaysTopic('live-only')).toBe(false);
+  });
+
+  it('counts only on the transport when it may publish a topic live only', () => {
+    const cache = new InMemoryServerCache();
+    expect(
+      new CachingPubSub(new EventEmitterPubSub(), cache, { extendExistingLogsOnly: true }).__replaysTopic('t'),
+    ).toBe(false);
+    expect(
+      new CachingPubSub(new ReplayingTransport(), cache, { extendExistingLogsOnly: true }).__replaysTopic('t'),
+    ).toBe(true);
+    expect(new CachingPubSub(new ReplayingTransport(), cache, { shouldCache: () => false }).__replaysTopic('t')).toBe(
+      true,
+    );
+  });
+});

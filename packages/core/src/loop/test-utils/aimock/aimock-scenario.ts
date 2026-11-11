@@ -248,7 +248,7 @@ async function buildScenarioAgent({
         ...(maxRetries === undefined ? {} : { maxRetries }),
         ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
         ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
-        ...(streamReplay === false ? { durable: { cache: false } } : {}),
+        ...(streamReplay === false && !isDurableEngineVariant(engine) ? { durable: { cache: false } } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),

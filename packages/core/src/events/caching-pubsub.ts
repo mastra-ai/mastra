@@ -168,9 +168,14 @@ export class CachingPubSub extends PubSub {
     return true;
   }
 
-  /** Topics `shouldCache` leaves out only reach the inner transport. */
+  /**
+   * Topics `shouldCache` leaves out only reach the inner transport. With
+   * `extendExistingLogsOnly`, this process may publish a topic live only, so
+   * only the inner transport can be counted on.
+   */
   override __replaysTopic(topic: string): boolean {
-    return this.shouldCache?.(topic) !== false || this.inner.__replaysTopic(topic);
+    if (!this.extendExistingLogsOnly && this.shouldCache?.(topic) !== false) return true;
+    return this.inner.__replaysTopic(topic);
   }
 
   /**

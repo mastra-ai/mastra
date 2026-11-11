@@ -39,9 +39,9 @@ export interface ResponseMessagesCursor {
  * A producer's first diff holds the whole list (`from: 0`), and so does the
  * next one once the diffs sent since the last whole list add up to its size.
  * A reader that missed a diff (a lost delivery) recovers at the next whole
- * list, while whole lists cost at
- * most about as much as the diffs: the log stays proportional to the run's
- * messages instead of growing with the square of its steps.
+ * list, while whole lists cost at most about as much as the diffs: the log
+ * stays proportional to the run's messages instead of growing with the square
+ * of its steps.
  */
 export function diffResponseMessages(
   cursor: ResponseMessagesCursor | { producer: string },
@@ -86,15 +86,18 @@ export function diffResponseMessages(
 
 /** The response messages a reader rebuilt from the diffs it applied. */
 export interface ResponseMessagesReplay {
-  /** The list of the last step-finish applied. */
+  /** The list of the last diff applied. */
   messages: ResponseMessage[];
   /**
-   * The list rebuilt per producer, with the hash and `seq` of its last diff,
-   * least recent first. A run resumed in a new producer can still get a late
-   * step-finish from the previous one; each producer's diffs apply to its own
-   * list, so that event doesn't break the new producer's next diff.
+   * The list rebuilt per producer, with the hash and `seq` of its last diff, in
+   * the order the producers first appeared. A run resumed in a new producer can
+   * still get a late step-finish from the previous one; each producer's diffs
+   * apply to its own list, so that event doesn't break the new producer's next
+   * diff.
    */
   producers?: Map<string, { messages: ResponseMessage[]; hash: string; seq: number }>;
+  /** Producers whose list was dropped for a newer one; their late events never take a newer one's place. */
+  retired?: Set<string>;
 }
 
 /** Producers a reader keeps lists for: the run's current one and the one it resumed from. */
@@ -120,6 +123,7 @@ export function applyResponseMessages(
     replay.messages = payload._durableResponseMessages;
     return replay.messages;
   }
+  if (replay.retired?.has(diff.producer)) return diff.from === 0 ? diff.messages : undefined;
   const producers = (replay.producers ??= new Map());
   const held = producers.get(diff.producer);
   if (held && diff.seq <= held.seq) {
@@ -128,9 +132,12 @@ export function applyResponseMessages(
   }
   if (diff.from !== 0 && (!held || diff.base !== held.hash)) return undefined;
   const messages = [...(held?.messages.slice(0, diff.from) ?? []), ...diff.messages];
-  producers.delete(diff.producer);
   producers.set(diff.producer, { messages, hash: diff.hash, seq: diff.seq });
-  if (producers.size > KEPT_PRODUCERS) producers.delete(producers.keys().next().value!);
+  if (producers.size > KEPT_PRODUCERS) {
+    const oldest = producers.keys().next().value!;
+    producers.delete(oldest);
+    (replay.retired ??= new Set()).add(oldest);
+  }
   replay.messages = messages;
   return messages;
 }
