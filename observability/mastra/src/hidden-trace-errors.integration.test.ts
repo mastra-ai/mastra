@@ -211,7 +211,7 @@ it('redacts the complete multiline cause message from a wrapped error stack', ()
 });
 
 describe('redactErrorInfo', () => {
-  it('keeps identity and real frames after a frame-shaped line in a multi-line message', () => {
+  it('keeps only identity fields and real frames after a frame-shaped line in a multi-line message', () => {
     const message = `line one\n    at ${SECRET}`;
     const redacted = redactErrorInfo({
       id: 'TOOL_EXECUTION_FAILED',
@@ -221,6 +221,7 @@ describe('redactErrorInfo', () => {
       message,
       stack: `MastraError: ${message}\n    at run (tool.ts:1:1)\n    at next (loop.ts:2:2)`,
       details: { toolId: 'validateIban', input: SECRET },
+      responseBody: SECRET,
     });
 
     expect(redacted).toEqual({

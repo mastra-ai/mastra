@@ -39,10 +39,13 @@ export const REDACTED_ERROR_MESSAGE = '[REDACTED]';
 export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo: T, stackMessage?: string): T {
   if (!errorInfo) return errorInfo;
 
-  const { message: _message, stack, details: _details, ...identity } = errorInfo;
+  const { id, name, domain, category, stack } = errorInfo;
 
   return {
-    ...identity,
+    ...(id !== undefined ? { id } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(domain !== undefined ? { domain } : {}),
+    ...(category !== undefined ? { category } : {}),
     message: REDACTED_ERROR_MESSAGE,
     ...(stack !== undefined
       ? { stack: redactStackHeader(stack, stackMessage ?? errorInfo.message, errorInfo.name) }
