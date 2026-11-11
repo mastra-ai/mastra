@@ -592,11 +592,36 @@ describe('Resolved record delivery boundaries', () => {
 });
 
 describe('SDK feedback and score delivery', () => {
-  it.each([MastraStorageExporter, DefaultExporter])(
-    'exports remote-only anchors independently of %s',
-    async StorageExporter => {
+  it.each([
+    { StorageExporter: MastraStorageExporter, orphan: false },
+    { StorageExporter: DefaultExporter, orphan: false },
+    { StorageExporter: MastraStorageExporter, orphan: true },
+    { StorageExporter: DefaultExporter, orphan: true },
+  ])(
+    'exports remote-only anchors independently of $StorageExporter (orphan: $orphan)',
+    async ({ StorageExporter, orphan }) => {
       const receiver = await collector();
       const storage = new InMemoryStore();
+      if (orphan) {
+        const store = (await storage.getStore('observability'))!;
+        for (const [spanId, parentSpanId] of [
+          ['unrelated-root', null],
+          ['remote-span', 'missing-parent'],
+        ] as const)
+          await store.createSpan({
+            span: {
+              traceId: 'remote-trace',
+              spanId,
+              parentSpanId,
+              name: spanId,
+              spanType: SpanType.GENERIC,
+              isEvent: false,
+              startedAt: new Date(),
+              endedAt: new Date(),
+              tags: ['unrelated-tags'],
+            },
+          });
+      }
       const platform = exporter(receiver.endpoint);
       const localExporter = new StorageExporter();
       const observability = new Observability({
@@ -612,7 +637,11 @@ describe('SDK feedback and score delivery', () => {
           spanId: 'remote-span',
           feedback: { feedbackType: 'comment', value: 'actionable' },
         }),
-        mastra.observability.addScore({ traceId: 'remote-trace', score: { scorerId: 'quality', score: 1 } }),
+        mastra.observability.addScore({
+          traceId: 'remote-trace',
+          spanId: orphan ? 'remote-span' : undefined,
+          score: { scorerId: 'quality', score: 1 },
+        }),
       ]);
       // Remote delivery must start while local anchor lookup is still retrying.
       await expect.poll(() => receiver.bodies.length, { timeout: 1000 }).toBe(2);
@@ -643,7 +672,7 @@ describe('SDK feedback and score delivery', () => {
       expect(warn).toHaveBeenCalledWith('Storage export dropped because the target trace/span was not found', {
         eventType: 'score',
         traceId: 'remote-trace',
-        spanId: undefined,
+        spanId: orphan ? 'remote-span' : undefined,
       });
     },
     15_000,

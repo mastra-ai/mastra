@@ -70,6 +70,8 @@ await mastra.observability.addFeedback?.({
 
 Without `correlationContext`, each exporter handles the target trace or span at its own destination. `MastraStorageExporter` resolves it from local storage. A failed local lookup doesn't block other exporters. `MastraPlatformExporter` doesn't require local storage. Use `flush()` or `shutdown()` to drain pending deliveries.
 
+Local lookup requires the target span's parent chain through its root so feedback inherits the correct root tags. If any ancestor remains missing after retries, the storage exporter logs a warning and skips the local write. Other exporters still receive the feedback.
+
 ### `createFeedback(args)`
 
 Creates one feedback record through the observability storage domain. Storage-level calls write directly to the store, so include `timestamp`.

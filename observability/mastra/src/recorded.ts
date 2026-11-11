@@ -172,6 +172,7 @@ export function resolveRecordedEventFromTrace(
     if (visited.has(root.spanId)) return null;
     visited.add(root.spanId);
     const parent = byId.get(root.parentSpanId);
+    // Wait for the actual ancestor root: an unrelated root cannot supply this span's tags.
     if (!parent) return null;
     root = parent;
   }
