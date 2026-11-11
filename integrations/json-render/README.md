@@ -46,7 +46,8 @@ On the client, render each message's `data-spec` parts with `useJsonRenderMessag
 
 ## Documentation
 
-- [json-render](https://mastra.ai/integrations/agentic-ui/json-render)
+- [Processors](https://mastra.ai/docs/agents/processors)
+- [json-render](https://json-render.dev)
 
 ## Changelog
 
