@@ -346,6 +346,14 @@ export class MemoryPG extends MemoryStorage {
         table: TABLE_THREADS,
         columns: ['resourceId', 'createdAt DESC'],
       },
+      // listThreads filters and counts by metadata containment (@>); without this every call scans the table.
+      {
+        name: `${schemaPrefix}mastra_threads_metadata_gin_idx`,
+        table: TABLE_THREADS,
+        columns: ['metadata'],
+        method: 'gin',
+        opclass: 'jsonb_path_ops',
+      },
       {
         name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
         table: TABLE_MESSAGES,
