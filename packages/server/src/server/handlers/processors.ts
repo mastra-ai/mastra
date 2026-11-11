@@ -93,15 +93,16 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
 /**
  * Returns a filter that drops processor configurations of stored agents the caller can't read. An agent adds its
  * configurations when it is attached to Mastra, which also happens to sub-agents that aren't in the registry, so an
- * agent that isn't registered is decided from its stored record. One with no record is a code sub-agent or another
- * agent built in code, visible to everyone like registered code agents. `Mastra.removeAgent` drops the configurations
- * of the agents it removes, so evicted and deleted stored agents leave none behind.
+ * agent that isn't registered is decided from its stored record. With no record, a configuration a stored agent added
+ * is hidden (the agent was deleted while an instance of it was still in use, e.g. as a sub-agent), and any other is a
+ * code sub-agent or another agent built in code, visible to everyone like registered code agents.
+ * `Mastra.removeAgent` drops the configurations of the agents it removes, registered or not.
  */
 function createProcessorConfigurationFilter(mastra: Mastra, requestContext: RequestContext) {
   const agents = mastra.listAgents() || {};
   const decided = new Map<string, Promise<boolean>>();
 
-  const isVisible = async (agentId: string): Promise<boolean> => {
+  const isVisible = async (agentId: string, fromStoredAgent: boolean): Promise<boolean> => {
     try {
       const agent = agents[agentId];
       if (agent) {
@@ -117,19 +118,23 @@ function createProcessorConfigurationFilter(mastra: Mastra, requestContext: Requ
           resourceId: agentId,
           record: record as OwnedRecord,
         });
+        return true;
       }
-      return true;
+      // No record: a code agent, or a stored agent that was deleted while an instance of it was still in use.
+      return !fromStoredAgent;
     } catch (error) {
       if (error instanceof HTTPException) return false;
       throw error;
     }
   };
 
-  return async <TConfig extends { agentId: string }>(configs: TConfig[]): Promise<TConfig[]> => {
+  return async <TConfig extends { agentId: string; source?: string }>(configs: TConfig[]): Promise<TConfig[]> => {
     const visible = await Promise.all(
       configs.map(c => {
-        if (!decided.has(c.agentId)) decided.set(c.agentId, isVisible(c.agentId));
-        return decided.get(c.agentId)!;
+        const fromStoredAgent = c.source === 'stored';
+        const key = `${fromStoredAgent}:${c.agentId}`;
+        if (!decided.has(key)) decided.set(key, isVisible(c.agentId, fromStoredAgent));
+        return decided.get(key)!;
       }),
     );
     return configs.filter((_, i) => visible[i]);

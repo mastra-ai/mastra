@@ -210,5 +210,46 @@ describe('processor handlers', () => {
       expect(await both(mastra, caller('bob'))).toEqual(ids('code', 'code-sub'));
       expect(await both(mastra, caller('alice'))).toEqual(ids('alice-evicted', 'code', 'code-sub'));
     });
+
+    describe('a stored agent used only as a sub-agent', () => {
+      // The editor marks every agent it builds from a stored record as stored, registered or not.
+      const storedSubAgent = (stored: (id: string) => Agent) => {
+        const agent = stored('alice-evicted');
+        agent.source = 'stored';
+        return agent;
+      };
+      const parentOf = (sub: Agent) =>
+        new Agent({ id: 'parent', name: 'parent', instructions: 'x', model: 'openai/gpt-4o-mini', agents: { sub } });
+
+      it('drops its configurations when it is deleted, on both routes', async () => {
+        const { mastra, agentsStore, stored } = await setup();
+        const parent = parentOf(storedSubAgent(stored));
+        parent.__registerMastra(mastra);
+        await parent.listAgents({ requestContext: new RequestContext() });
+        expect(await both(mastra, caller('alice'))).toEqual(ids('alice-evicted', 'code', 'code-sub'));
+
+        await agentsStore.delete('alice-evicted');
+        mastra.removeAgent('alice-evicted');
+
+        expect(await both(mastra, caller('bob'))).toEqual(ids('code', 'code-sub'));
+        expect(await both(mastra, caller('alice'))).toEqual(ids('code', 'code-sub'));
+      });
+
+      it('stays hidden when a stale instance registers it again after deletion', async () => {
+        const { mastra, agentsStore, stored } = await setup();
+        const sub = storedSubAgent(stored);
+        mastra.addAgent(sub, 'alice-evicted', { source: 'stored' });
+        const parent = parentOf(sub);
+        parent.__registerMastra(mastra);
+
+        await agentsStore.delete('alice-evicted');
+        mastra.removeAgent('alice-evicted');
+        // The parent still holds the deleted agent's instance; using it registers the configurations again.
+        await parent.listAgents({ requestContext: new RequestContext() });
+
+        expect(await both(mastra, caller('bob'))).toEqual(ids('code', 'code-sub'));
+        expect(await both(mastra, caller('alice'))).toEqual(ids('code', 'code-sub'));
+      });
+    });
   });
 });
