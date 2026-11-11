@@ -4,7 +4,8 @@
  * on an id another run already holds is refused instead of taking that run over.
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
@@ -13,7 +14,7 @@ import { Mastra } from '../../../mastra';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
 import { Agent } from '../../agent';
 import type { AgentConfig } from '../../types';
-import { AGENT_STREAM_TOPIC } from '../constants';
+import { AGENT_STREAM_TOPIC, RUN_RECORD_ADMISSION_TIMEOUT_MS } from '../constants';
 import { writeAgentRunRecord } from '../run-records';
 
 class RecordingPubSub extends EventEmitterPubSub {
@@ -184,5 +185,72 @@ describe('run id ownership', () => {
     const replay = await collect((await agent.observe('reused-run')).fullStream);
     expect(replay.types.at(-1)).toBe('finish');
     expect(pubsub.count('reused-run')).toBe(published);
+  });
+
+  describe('when the run record cannot be read', () => {
+    const RECORD_UNAVAILABLE = { id: 'AGENT_RUN_RECORD_UNAVAILABLE' };
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    // A paused or partitioned cache answers nothing; the run must be refused
+    // within the bound instead of waiting out the outage.
+    it.each([
+      ['a generated run id', undefined],
+      ['a caller-supplied run id', 'caller-run'],
+    ])('refuses to start %s when the cache does not answer', async (_label, runId) => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+      const started = agent.stream('Say hello.', { runId, requestContext: resource('tenant-a') });
+      const refused = expect(started).rejects.toMatchObject(RECORD_UNAVAILABLE);
+      await vi.advanceTimersByTimeAsync(RUN_RECORD_ADMISSION_TIMEOUT_MS);
+      await refused;
+
+      expect(pubsub.published).toEqual([]);
+    });
+
+    it('refuses to start a run when the cache read fails', async () => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      const outage = new Error('Socket closed unexpectedly');
+      vi.spyOn(cache, 'get').mockRejectedValue(outage);
+
+      const error = await agent.stream('Say hello.', { requestContext: resource('tenant-a') }).catch(e => e);
+
+      expect(error).toMatchObject(RECORD_UNAVAILABLE);
+      expect(error.cause).toMatchObject({ message: 'Socket closed unexpectedly' });
+      expect(pubsub.published).toEqual([]);
+    });
+
+    it('still refuses a claimed run id once the cache answers within the bound', async () => {
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+      await writeAgentRunRecord(agent.__getStreamBus()!.runRecordCache, {
+        agentId: agent.id,
+        runId: 'slow-claimed-run',
+        resourceId: 'tenant-a',
+        status: 'running',
+        updatedAt: Date.now(),
+      });
+      const get = cache.get.bind(cache);
+      vi.spyOn(cache, 'get').mockImplementation(async key => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return get(key);
+      });
+
+      await expect(
+        agent.stream('Say hello.', { runId: 'slow-claimed-run', requestContext: resource('tenant-b') }),
+      ).rejects.toMatchObject(RUN_ID_CLAIMED);
+    });
   });
 });
