@@ -16,16 +16,34 @@ Gateways handle provider-specific logic for accessing language models:
 - URL construction for API endpoints
 - Language model instance creation
 
-Create custom gateways to support:
+## When to use custom gateways
 
-- Private or enterprise LLM deployments
-- Custom authentication schemes
-- Specialized routing logic
-- Gateway versioning with unique IDs
+Use a custom gateway when your models need more than a base URL and an API key:
+
+- Several models sit behind one endpoint and you want typed model IDs and a Studio model picker for them
+- Authentication needs a token exchange, rotating credentials, or per-request headers
+- The endpoint URL depends on a region, account, or tenant
+- The API isn't OpenAI-compatible, so you need to return a model from a specific AI SDK provider
+- You want [cost metrics](#model-pricing) for models that models.dev doesn't list
+- Studio should list only your own models, with [`AUTO_BLOCK_EXTERNAL_PROVIDERS`](#showing-only-custom-gateways-in-studio)
+
+To connect to a single OpenAI-compatible endpoint, such as a privately hosted model, set `url` in the model config instead. See [Use local models with Mastra](/models#use-local-models-with-mastra).
 
 ## Creating a Custom Gateway
 
-Implement `MastraModelGatewayInterface` for a plain object gateway, or extend `MastraModelGateway` when you want base class defaults.
+Implement `MastraModelGatewayInterface` for a plain object gateway, or extend the `MastraModelGateway` base class.
+
+### Choose a plain object or a class
+
+Both work the same way at runtime. The base class provides default `getId()`, `shouldEnable()`, `handlesModel()`, and `serializeForSpan()` methods, and Mastra applies the same defaults to a plain object that leaves them out.
+
+Use a plain object when the gateway has fixed configuration and no state. Extend `MastraModelGateway` when the gateway:
+
+- Takes options in its constructor, such as a base URL or API key
+- Keeps private state, such as cached tokens
+- Runs as several instances, such as one per region or version
+
+The following example implements the interface with a plain object:
 
 ```typescript
 import { type MastraModelGatewayInterface, type ProviderConfig } from '@mastra/core/llm';
@@ -61,25 +79,30 @@ const myPrivateGateway: MastraModelGatewayInterface = {
 };
 ```
 
-The following example extends the `MastraModelGateway` class:
+The following example extends `MastraModelGateway` and takes its base URL and API key as constructor options, so you can create one instance per endpoint:
 
 ```typescript
-import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
+import { MastraModelGateway, type GatewayLanguageModel, type ProviderConfig } from '@mastra/core/llm';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+
+interface MyPrivateGatewayOptions {
+  baseURL?: string;
+  apiKey?: string;
+}
 
 class MyPrivateGateway extends MastraModelGateway {
-  // Required: Unique identifier for the gateway
-  // This ID is used as the prefix for all providers from this gateway
   readonly id = 'private';
-
-  // Required: Human-readable name
   readonly name = 'My Private Gateway';
 
-  /**
-   * Fetch provider configurations from your gateway
-   * Returns a record of provider configurations
-   */
+  private readonly baseURL: string;
+  private readonly apiKey?: string;
+
+  constructor(options: MyPrivateGatewayOptions = {}) {
+    super();
+    this.baseURL = options.baseURL ?? 'https://api.myprovider.com/v1';
+    this.apiKey = options.apiKey;
+  }
+
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
       'my-provider': {
@@ -87,37 +110,24 @@ class MyPrivateGateway extends MastraModelGateway {
         models: ['__GATEWAY_OPENAI_MODEL__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'],
         apiKeyEnvVar: 'MY_API_KEY',
         gateway: this.id,
-        url: 'https://api.myprovider.com/v1',
+        url: this.baseURL,
       },
     };
   }
 
-  /**
-   * Build the API URL for a model
-   * @param modelId - Full model ID (e.g., "private/my-provider/model-1")
-   * @param envVars - Environment variables (optional)
-   */
-  buildUrl(modelId: string, envVars?: Record<string, string>): string {
-    return 'https://api.myprovider.com/v1';
+  buildUrl(): string {
+    return this.baseURL;
   }
 
-  /**
-   * Get the API key for authentication
-   * @param modelId - Full model ID
-   */
-  async getApiKey(modelId: string): Promise<string> {
-    const apiKey = process.env.MY_API_KEY;
+  async getApiKey(): Promise<string> {
+    const apiKey = this.apiKey ?? process.env.MY_API_KEY;
     if (!apiKey) {
-      throw new Error(`Missing MY_API_KEY environment variable`);
+      throw new Error('Missing MY_API_KEY environment variable');
     }
     return apiKey;
   }
 
-  /**
-   * Create a language model instance
-   * @param args - Model ID, provider ID, and API key
-   */
-  async resolveLanguageModel({
+  resolveLanguageModel({
     modelId,
     providerId,
     apiKey,
@@ -125,13 +135,11 @@ class MyPrivateGateway extends MastraModelGateway {
     modelId: string;
     providerId: string;
     apiKey: string;
-  }): Promise<LanguageModelV2> {
-    const baseURL = this.buildUrl(`${providerId}/${modelId}`);
-
+  }): GatewayLanguageModel {
     return createOpenAICompatible({
       name: providerId,
       apiKey,
-      baseURL,
+      baseURL: this.baseURL,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
