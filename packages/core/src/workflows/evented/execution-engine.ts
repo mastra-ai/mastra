@@ -137,6 +137,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     perStep?: boolean;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    /**
+     * Called once the start/resume event is published. `Run.startAsync()` returns at this point and
+     * leaves the returned promise to settle in the background, so lifecycle callbacks still run when
+     * the worker reports the finish.
+     * @internal
+     */
+    onDispatched?: () => void;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
@@ -361,6 +368,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
       releaseTracking();
       throw err;
     }
+
+    // The run is now handed to the workers. Dispatch-only callers (startAsync) return here and let
+    // the rest of this promise settle in the background so lifecycle callbacks still run.
+    params.onDispatched?.();
 
     // Wait for workflow to complete
     let resultData: any;
