@@ -15,6 +15,9 @@ import { StorageDomain } from '../base';
 import type { StateRef, StateVersion, StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
 import type { StatePatchOp } from './state-patch';
 
+// Reads the default getRunOwnerships() keeps in flight, so one batch does not flood the store.
+const RUN_OWNERSHIP_READ_CONCURRENCY = 8;
+
 function runJournalNotSupportedError(adapter: string): MastraError {
   return new MastraError({
     id: 'STORAGE_RUN_JOURNAL_NOT_SUPPORTED',
@@ -114,8 +117,34 @@ export abstract class WorkflowsStorage extends StorageDomain {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
+  /** The run's current ownership record, or null when the run was never claimed. */
   async getRunOwnership(_args: { runId: string }): Promise<RunOwnershipRecord | null> {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
+  }
+
+  /**
+   * The ownership records of several runs, keyed by run id, each as
+   * `getRunOwnership` returns it. Runs that were never claimed are left out of
+   * the map. A Map, not a plain object, because run ids are caller-chosen
+   * strings such as `__proto__`.
+   *
+   * The default reads the runs one by one, a few at a time, so every adapter
+   * that implements `getRunOwnership` supports it.
+   * Adapters with a batch read override it with one query (or one per chunk of
+   * ids when the backend caps a request).
+   */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const queue = [...new Set(runIds)];
+    const next = async (): Promise<void> => {
+      const runId = queue.shift();
+      if (runId === undefined) return;
+      const record = await this.getRunOwnership({ runId });
+      if (record) records.set(runId, record);
+      return next();
+    };
+    await Promise.all(Array.from({ length: Math.min(RUN_OWNERSHIP_READ_CONCURRENCY, queue.length) }, next));
+    return records;
   }
 
   // Storage v2 runs. Adapters that return true from supportsRunJournal() implement these.

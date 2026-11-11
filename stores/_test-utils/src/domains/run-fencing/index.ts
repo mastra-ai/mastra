@@ -243,6 +243,55 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         expect(fenceB.generation).toBe(fenceA.generation + 1);
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(false);
       });
+
+      it('reads many runs at once: live, released and expired records, and nothing for unclaimed runs', async ctx => {
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
+        const prefix = `run-${randomUUID()}`;
+        const live = await claimed(`${prefix}-live`, 'owner-live');
+        const released = await claimed(`${prefix}-released`, 'owner-released');
+        expect(await workflows.releaseRunOwnership(released)).toBe(true);
+        const expiredRunId = `${prefix}-expired`;
+        const expired = await workflows.claimRunOwnership({
+          runId: expiredRunId,
+          ownerId: 'owner-expired',
+          leaseMs: SHORT_LEASE_MS,
+        });
+        expect(expired.acquired).toBe(true);
+        await sleep(SHORT_LEASE_MS * 3);
+
+        // More ids than any adapter sends in one request, with the claimed runs in the first, a middle and the last chunk.
+        const unclaimed = Array.from({ length: 1_200 }, (_, i) => `${prefix}-unclaimed-${i}`);
+        const runIds = [live.runId, ...unclaimed.slice(0, 600), released.runId, ...unclaimed.slice(600), expiredRunId];
+        const records = await workflows.getRunOwnerships({ runIds });
+
+        expect([...records.keys()].sort()).toEqual([live.runId, released.runId, expiredRunId].sort());
+        expect(records.get(live.runId)).toMatchObject({
+          runId: live.runId,
+          generation: live.generation,
+          ownerId: 'owner-live',
+          live: true,
+        });
+        expect(records.get(live.runId)!.leaseExpiresAt).toBeInstanceOf(Date);
+        expect(records.get(released.runId)).toMatchObject({
+          runId: released.runId,
+          generation: released.generation,
+          ownerId: 'owner-released',
+          leaseExpiresAt: null,
+          live: false,
+        });
+        expect(records.get(expiredRunId)).toMatchObject({
+          runId: expiredRunId,
+          generation: expired.record!.generation,
+          ownerId: 'owner-expired',
+          live: false,
+        });
+        expect(records.get(expiredRunId)!.leaseExpiresAt).toBeInstanceOf(Date);
+        for (const runId of [live.runId, released.runId, expiredRunId]) {
+          expect(records.get(runId)).toEqual(await workflows.getRunOwnership({ runId }));
+        }
+
+        expect((await workflows.getRunOwnerships({ runIds: [] })).size).toBe(0);
+      });
     });
 
     describe('fenced writes', () => {

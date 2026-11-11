@@ -376,6 +376,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return this.ownershipRecord(runId);
   }
 
+  /** Reads every record in one pass, so the batch sees a single moment of the store. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    for (const runId of runIds) {
+      const record = this.ownershipRecord(runId);
+      if (record) records.set(runId, record);
+    }
+    return records;
+  }
+
   async updateWorkflowResults({
     workflowName,
     runId,
