@@ -4358,7 +4358,7 @@ export class Mastra<
 
   /**
    * Every RUNNING/WAITING run of the workflows boot-time recovery restarts, read in one call per
-   * workflow and status. `restartAllActiveWorkflowRuns()` reads them a page at a time instead.
+   * workflow and status. `restartAllActiveWorkflowRuns()` handles them a page at a time instead.
    */
   public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
     const storage = this.#storage;
@@ -4396,7 +4396,9 @@ export class Mastra<
    * lease TTL after it was published). Failures are logged per run and never
    * reject the sweep. Once `shutdown()` starts, no further runs are restarted.
    *
-   * Active runs are read a page at a time. Before restarting a page, the sweep
+   * Active runs are handled a page of a hundred at a time: read page by page
+   * from stores that page by `createdAt` in the backend, otherwise read once
+   * per status and split (see `listsWorkflowRunsByCreatedAt()`). Before restarting a page, the sweep
    * reads in one batch whether another process still holds each run (the
    * run's liveness key for evented runs, its run lease for default-engine
    * runs). It skips those runs without loading them and checks each again

@@ -315,7 +315,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return true;
   }
 
-  /** Filtering and sorting the in-process map costs no storage reads, so a page is as cheap as in a database. */
+  /**
+   * `listWorkflowRuns` filters, sorts and pages the in-process map in one call, which meets the
+   * contract. Each page sorts the whole map, which stays cheap at the sizes this store holds.
+   */
   listsWorkflowRunsByCreatedAt(): boolean {
     return true;
   }
