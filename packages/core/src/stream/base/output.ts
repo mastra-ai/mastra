@@ -130,7 +130,7 @@ export function createDestructurableOutput<OUTPUT = undefined>(
 export function persistProcessorDataChunk(
   messageList: MessageList,
   messageId: string,
-  chunk: { type: string; data?: unknown; transient?: boolean },
+  chunk: { type: string; data?: unknown; id?: string; transient?: boolean },
 ): void {
   if (!isDataChunk(chunk) || chunk.transient) return;
 
@@ -139,7 +139,9 @@ export function persistProcessorDataChunk(
     role: 'assistant',
     content: {
       format: 2,
-      parts: [{ type: chunk.type as `data-${string}`, data: chunk.data }],
+      parts: [
+        { type: chunk.type as `data-${string}`, data: chunk.data, ...(chunk.id !== undefined ? { id: chunk.id } : {}) },
+      ],
     },
     createdAt: new Date(),
   };

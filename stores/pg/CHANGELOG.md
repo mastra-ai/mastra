@@ -1,5 +1,33 @@
 # @mastra/pg
 
+## 1.36.0-alpha.3
+
+### Minor Changes
+
+- Support full feedback replacement and protected creates: ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```typescript
+  await store.createFeedback({ feedback, onConflict: 'ignore' });
+  await store.replaceFeedback({ feedback: { ...feedback, value: -1 } });
+  ```
+
+  Keep the original ID, trace ID, timestamp, and tenant when replacing feedback. ClickHouse uses its existing schema; overlapping writes from separate processes are not ordered reliably.
+
+### Patch Changes
+
+- Fixed `saveThread` so that saving an existing thread id no longer moves the thread to another resource or overwrites its creation date. Its messages could previously be left on the old resource. ([#29149](https://github.com/mastra-ai/mastra/pull/29149))
+
+  Re-saving a thread with the same `resourceId` still updates its title, metadata and `updatedAt`. It keeps the original `createdAt` and returns the stored row. Re-saving with a different `resourceId` now throws a `MastraError` with category `USER`. To move a thread and its messages to another resource, use `updateThreadResourceId`:
+
+  ```ts
+  await memory.updateThreadResourceId({ threadId: 'thread-1', resourceId: 'user-2' });
+  ```
+
+- Fixed thread metadata updates being lost when several processes share one Postgres database. Concurrent `updateThread` and `updateThreadMetadata` calls on the same thread now keep every metadata key. ([#29150](https://github.com/mastra-ai/mastra/pull/29150))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
 ## 1.36.0-alpha.2
 
 ### Patch Changes

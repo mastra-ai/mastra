@@ -48,6 +48,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'thread-query',
   'trace-query-tenant-scope',
   'feedback',
+  'feedback-replacement',
   'trace-query-context-ids',
   ...contextFieldFeatures,
   ...timingFeatures,
@@ -76,6 +77,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'thread-query',
   'trace-query-tenant-scope',
   'feedback',
+  'feedback-replacement',
   'trace-query-context-ids',
   ...contextFieldFeatures,
   ...timingFeatures,
@@ -566,6 +568,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['getScorePercentiles']> {
     const delegate = await this.requireDelegate();
     return delegate.getScorePercentiles(...args);
+  }
+
+  protected override async writeFeedbackReplacement(
+    args: Parameters<ObservabilityStoreImpl['replaceFeedback']>[0],
+  ): Promise<void> {
+    const delegate = await this.requireDelegate();
+    return delegate.replaceFeedback(args);
   }
 
   async createFeedback(

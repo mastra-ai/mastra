@@ -18,7 +18,7 @@ import type { ReadyPreparedWidget } from '../lib/plan-widget';
 import { prepareWidget } from '../lib/prepare-widget';
 import { requestKey, sendRequest } from '../lib/requests';
 import type { DashboardRequest, DashboardResult } from '../lib/requests';
-import type { WidgetState } from '../widget-kind';
+import type { DashboardExpand, WidgetState } from '../widget-kind';
 import {
   find,
   metricsWidget,
@@ -32,6 +32,7 @@ import {
 } from './equality-harness';
 import type { Rendered } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -343,12 +344,11 @@ describe('StatelessWidget on its own', () => {
   it.each([
     ['a chart', metricsWidget('agent-runs')],
     ['the KPI group', kpisWidget],
-  ])('reports the definition of %s with each pin and unpin', (_, definition) => {
-    const onPin = vi.fn();
+  ])("shows the host's actions on %s", (_, definition) => {
     const widget = prepared(definition, undefined);
     const plan = planWidget(widget, env, {});
     if (plan.status !== 'ready') throw new Error('not ready');
-    const renderPinned = (isPinned: boolean) => (
+    render(
       <StatelessWidget
         prepared={widget}
         env={env}
@@ -357,22 +357,15 @@ describe('StatelessWidget on its own', () => {
         results={results(plan.requests.length, { isLoading: true, isRefetching: false, isError: false })}
         onRetry={() => {}}
         scope="project"
-        pin={{ isPinned, onPin, name: 'it' }}
-      />
+        actions={
+          <MetricsCard.Action label="Share it" className={onCardHover}>
+            <span />
+          </MetricsCard.Action>
+        }
+      />,
     );
-    const { rerender } = render(renderPinned(false));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pin it' }));
-    expect(onPin).toHaveBeenLastCalledWith(widget.widget, true);
-
-    rerender(renderPinned(true));
-    fireEvent.click(screen.getByRole('button', { name: 'Unpin it' }));
-    expect(onPin).toHaveBeenLastCalledWith(widget.widget, false);
-    expect(onPin.mock.calls[0]?.[0]).toMatchObject({
-      id: definition.id,
-      kind: definition.kind,
-      views: definition.views,
-    });
+    expect(screen.getByRole('button', { name: 'Share it' })).toBeDefined();
   });
 
   it('asks the host to retry from its error card', () => {
@@ -396,7 +389,11 @@ describe('StatelessWidget on its own', () => {
   });
 
   describe('renaming from the title', () => {
-    function renderRenamable(definition: DashboardWidget, onTitleChange: (title: string) => void) {
+    function renderRenamable(
+      definition: DashboardWidget,
+      onTitleChange: (title: string) => void,
+      expand?: DashboardExpand,
+    ) {
       const widget = prepared(definition, undefined);
       const plan = planWidget(widget, env, {});
       if (plan.status !== 'ready') throw new Error('not ready');
@@ -409,6 +406,7 @@ describe('StatelessWidget on its own', () => {
           results={results(plan.requests.length, { isLoading: true, isRefetching: false, isError: false })}
           onRetry={() => {}}
           scope="project"
+          expand={expand}
           onTitleChange={onTitleChange}
         />,
       );
@@ -431,6 +429,24 @@ describe('StatelessWidget on its own', () => {
     it('keeps the view menu of a widget with several views', () => {
       renderRenamable(metricsWidget('agent-runs'), vi.fn());
       expect(screen.queryByRole('textbox', { name: 'Widget title' })).toBeNull();
+    });
+
+    it('keeps the title of a widget that expands editable, and opens the expand page from its action', () => {
+      const onTitleChange = vi.fn();
+      const expand: DashboardExpand = {
+        href: widget => `/query?metric=${widget.id}`,
+        LinkComponent: props => <a {...props} />,
+      };
+      renderRenamable(metricsWidget('token-usage'), onTitleChange, expand);
+
+      const link = screen.getByRole('link', { name: 'Expand Token usage' });
+      expect(link.getAttribute('href')).toBe('/query?metric=token-usage');
+      const title = screen.getByRole('textbox', { name: 'Widget title' });
+      expect(title).toHaveProperty('value', 'Token usage');
+      title.focus();
+      fireEvent.change(title, { target: { value: 'Tokens this week' } });
+      fireEvent.keyDown(title, { key: 'Enter' });
+      expect(onTitleChange).toHaveBeenCalledWith('Tokens this week');
     });
   });
 });

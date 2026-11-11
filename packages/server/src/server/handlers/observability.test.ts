@@ -1976,6 +1976,7 @@ describe('Observability Handlers', () => {
 
       expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ feedbackUserId: 'authenticated-user' }),
       });
     });
@@ -2027,6 +2028,7 @@ describe('Observability Handlers', () => {
 
       expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({
           ...feedbackData,
           feedbackId: expect.any(String),
@@ -2055,6 +2057,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
       });
     });
@@ -2068,6 +2071,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ reviewStatus: 'needs-review' }),
       });
     });
@@ -2087,6 +2091,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ reviewStatus: 'reviewed' }),
       });
     });
