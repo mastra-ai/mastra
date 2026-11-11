@@ -719,7 +719,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
     return this.#run(
       'GET_FEEDBACK_BY_ID',
-      () => feedbackOps.getFeedbackById(this.#readClient, this.#schema, feedbackId),
+      // Single-feedback reads supply accepted identities after writes and must not lag behind them.
+      () => feedbackOps.getFeedbackById(this.#client, this.#schema, feedbackId),
       {
         feedbackId,
       },
