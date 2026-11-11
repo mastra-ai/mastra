@@ -5,20 +5,21 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useJiraProjectsQuery } from '../../../../hooks/useJiraData';
 import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraStatus } from '../../factory/services/jira';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
 import { JiraRoutedSourcePicker } from './jira/JiraRoutedSourcePicker';
+import { PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 
 export function JiraIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<JiraStatus> }) {
+  const selection = useIntakeSelection('jira');
   const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
   const configured = Boolean(status?.enabled && status.configured);
@@ -35,7 +36,7 @@ export function JiraIntakeSection({
     if (reauthRequired) return 'A connected Jira account needs to be reconnected.';
     if (authError)
       return platformManaged
-        ? 'Jira rejected a connected account. Reconnect it to resume syncing.'
+        ? 'Jira rejected a connected account. Reauthorize it from Manage to resume syncing.'
         : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.';
     if (!configured)
       return platformManaged
@@ -49,15 +50,22 @@ export function JiraIntakeSection({
       icon={<SettingsIntegrationIcon provider="jira" />}
       account={account}
       listed={listed}
-      connectable={platformManaged}
+      connection={
+        platformManaged &&
+        (listed ? (
+          <PlatformConnectionActions provider="jira" connections={status?.connections ?? []} />
+        ) : (
+          <PlatformConnectButton provider="jira" />
+        ))
+      }
       description={description}
       syncControl={
         <IntakeSyncControl
           accessibleLabel="Sync Jira issues"
           description="Active issues from selected projects feed your board."
           checked={config.jira.enabled}
-          disabled={busy || !configured}
-          onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
+          disabled={!configured}
+          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
         />
       }
       action={
@@ -76,12 +84,12 @@ export function JiraIntakeSection({
           itemIcon={<SettingsIntegrationIcon provider="jira" />}
           groups={groupJiraProjectsBySite(projects)}
           selectedIds={projectsQuery.isPending ? [] : config.jira.sourceIds}
-          pending={busy}
+          saving={selection.saving}
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
           onRetry={() => void projectsQuery.refetch()}
           onToggleItem={id =>
-            update({ ...config, jira: { ...config.jira, sourceIds: toggleSourceId(config.jira.sourceIds, id) } })
+            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
           }
         />
       )}

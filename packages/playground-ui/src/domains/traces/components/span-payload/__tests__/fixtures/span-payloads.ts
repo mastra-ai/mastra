@@ -154,7 +154,7 @@ export const modelGenerationSkillSpan = makeSpan({
       {
         role: 'user',
         content:
-          '<skill name="factory-triage">Read the issue and label it.\n\nARGUMENTS: mastra-ai/mastra#123\n\n<work-item-feed>\n@alice: this blocks the release\n</work-item-feed></skill>',
+          '<skill name="factory-triage">Read the issue and label it.\n\nARGUMENTS: mastra-ai/mastra#123\n\n<work-item-description>\nBlocks the release.\n</work-item-description></skill>',
       },
     ],
   },

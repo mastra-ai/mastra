@@ -16,6 +16,17 @@ export default defineConfig({
           testTimeout: 15000,
         },
       },
+      {
+        test: {
+          name: 'typecheck:packages/mcp-apps-components',
+          environment: 'node',
+          include: [],
+          typecheck: {
+            enabled: true,
+            include: ['src/**/*.test-d.ts'],
+          },
+        },
+      },
     ],
   },
 });

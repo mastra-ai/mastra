@@ -1182,16 +1182,22 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration({ rules: { unknown: null } })).toThrow();
   });
 
-  it('attaches GitHub rules to polled issue ingress', async () => {
+  it('imports a linked repository backlog through GitHub rules while its list routes stay reads', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/issues?')) return json({ issues: [issue] });
+      const firstPage = new URL(url).searchParams.get('page') === '1';
+      if (url.includes('/issues?')) return json({ issues: firstPage ? [issue] : [] });
+      if (url.includes('/pulls?')) return json({ pullRequests: firstPage ? [pullRequest] : [] });
+      if (url.endsWith('/collaborators/ada/permission')) return json({ permission: 'write' });
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchImpl);
-    const onEvent = vi.fn();
-    const integration = new PlatformGithubIntegration({ rules: { issueOpened: onEvent } });
+    const onIssue = vi.fn();
+    const onPullRequest = vi.fn();
+    const integration = new PlatformGithubIntegration({
+      rules: { issueOpened: onIssue, pullRequestOpened: onPullRequest },
+    });
     const sourceControl = seed.sourceControl.forIntegration('github');
     const project = await seed.projects.create({
       orgId: 'org-1',
@@ -1248,14 +1254,25 @@ describe('PlatformGithubIntegration', () => {
     });
     mountApiRoutes(app as never, integration.routes(context));
 
-    const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
+    const issues = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
+    const pullRequests = await app.request(`/web/github/projects/${projectRepository.id}/prs`);
 
-    expect(response.status).toBe(200);
-    expect(onEvent).toHaveBeenCalledOnce();
-    expect(onEvent).toHaveBeenCalledWith(
+    expect(issues.status).toBe(200);
+    expect(pullRequests.status).toBe(200);
+    expect(onIssue).not.toHaveBeenCalled();
+    expect(onPullRequest).not.toHaveBeenCalled();
+
+    await integration.ingestLinkedRepositoryBacklog({ orgId: 'org-1', projectRepositoryId: projectRepository.id });
+
+    expect(onIssue).toHaveBeenCalledOnce();
+    expect(onIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z', event: 'issueOpened' }),
+    );
+    expect(onPullRequest).toHaveBeenCalledOnce();
+    expect(onPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z',
-        event: 'issueOpened',
+        deliveryId: 'poll:101:pull-request:34:2026-07-01T00:00:00Z',
+        event: 'pullRequestOpened',
       }),
     );
   });
@@ -1799,6 +1816,132 @@ describe('PlatformGithubIntegration', () => {
 
       const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
       expect(migratedRepository?.installationId).toBe(newInstallation.id);
+    });
+
+    it('skips stale installations from earlier reinstalls and only migrates to a live one', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldRepository } = await seedReinstalledOrg(storage);
+      // A third install of the same account: 456 is now stale too and 789 is live.
+      await new Promise(resolve => setTimeout(resolve, 5));
+      const liveInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '789',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      const dead = () =>
+        new Response(JSON.stringify({ error: 'Installation not found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      const fetchImpl = vi.fn<typeof fetch>(async input =>
+        String(input).includes('/installations/789/token')
+          ? json({ token: 'ghs_live', expiresAt: '2026-07-21T18:00:00Z' })
+          : dead(),
+      );
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toMatchObject({ authorization: { scheme: 'bearer', token: 'ghs_live' } });
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(liveInstallation.id);
+    });
+
+    /** Adds a third, newest install of `acme` on `789`. */
+    async function seedThirdInstall(storage: SourceControlStorageHandle) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '789',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+    }
+
+    const tokenCallOrder = (fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>) =>
+      fetchImpl.mock.calls
+        .map(([input]) => /\/installations\/(\d+)\/token/.exec(String(input))?.[1])
+        .filter((id): id is string => id !== undefined);
+
+    it('skips a dead newer installation and migrates to an older live one', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldRepository, newInstallation } = await seedReinstalledOrg(storage);
+      await seedThirdInstall(storage);
+      const fetchImpl = vi.fn<typeof fetch>(async input =>
+        String(input).includes('/installations/456/token')
+          ? json({ token: 'ghs_older_live', expiresAt: '2026-07-21T18:00:00Z' })
+          : new Response(JSON.stringify({ error: 'Installation not found' }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            }),
+      );
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toMatchObject({ authorization: { scheme: 'bearer', token: 'ghs_older_live' } });
+      expect(tokenCallOrder(fetchImpl)).toEqual(['7', '789', '456']);
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(newInstallation.id);
+    });
+
+    it('migrates to the newest live installation when several are live', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldRepository } = await seedReinstalledOrg(storage);
+      const newestInstallation = await seedThirdInstall(storage);
+      const fetchImpl = vi.fn<typeof fetch>(async input => {
+        const url = String(input);
+        if (url.includes('/installations/789/token'))
+          return json({ token: 'ghs_newest', expiresAt: '2026-07-21T18:00:00Z' });
+        if (url.includes('/installations/456/token'))
+          return json({ token: 'ghs_older', expiresAt: '2026-07-21T18:00:00Z' });
+        return new Response(JSON.stringify({ error: 'Installation not found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toMatchObject({ authorization: { scheme: 'bearer', token: 'ghs_newest' } });
+      expect(tokenCallOrder(fetchImpl)).toEqual(['7', '789']);
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(newestInstallation.id);
+    });
+
+    it('does not repoint the repository at another dead installation', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldInstallation, oldRepository } = await seedReinstalledOrg(storage);
+      const fetchImpl = vi.fn<typeof fetch>(
+        async () =>
+          new Response(JSON.stringify({ error: 'Installation not found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).rejects.toThrow();
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(oldInstallation.id);
     });
 
     it('leaves the repository alone when the mint fails for a transient reason', async () => {

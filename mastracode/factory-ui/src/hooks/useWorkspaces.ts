@@ -1,6 +1,6 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, UseQueryResult } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -11,6 +11,7 @@ import {
   createUserSession,
   deleteUserSession,
   getUserSession,
+  isSessionNotFound,
   listUserSessions,
   USER_SESSION_BRANCH_PREFIX,
   SLACK_SESSION_BRANCH_PREFIX,
@@ -155,6 +156,11 @@ export function useUserSessionQuery(sessionId: string | undefined) {
     // reopening the session still does, since its key changes.
     retryOnMount: false,
   });
+}
+
+export function sessionUnavailableError(query: UseQueryResult<FactoryUserSession>): Error | undefined {
+  if (!query.error) return undefined;
+  return query.isLoadingError || isSessionNotFound(query.error) ? query.error : undefined;
 }
 
 export function useCreateWorkspaceMutation(factoryId: string | undefined, projectRepositoryId: string | undefined) {

@@ -38,6 +38,12 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+// jsdom does not implement Element.prototype.scrollIntoView, which cmdk calls on the
+// selected item when a command list (e.g. the composer model picker) opens.
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 // jsdom does not implement Element.prototype.getAnimations, used by Radix UI
 // primitives (e.g. Switch) when reconciling presence/animation state, and by
 // @base-ui/react's ScrollAreaViewport inside a deferred timer.

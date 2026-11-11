@@ -1,4 +1,5 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -6,12 +7,18 @@ import {
   deleteIntakeBinding,
   fetchIntakeBindings,
   fetchIntakeConfig,
-  fetchIntakeLabelRoutes,
   saveIntakeBinding,
-  saveIntakeConfig,
-  saveIntakeLabelRoute,
+  saveIntakeSelection,
+  withIntakeBinding,
+  withoutIntakeBinding,
 } from '../ui/domains/factory/services/intake';
-import type { IntakeConfig } from '../ui/domains/factory/services/intake';
+import type {
+  IntakeBindingTarget,
+  IntakeBindingWrite,
+  IntakeConfig,
+  IntakeSelection,
+  IntakeSourceBinding,
+} from '../ui/domains/factory/services/intake';
 
 /** The org's intake source configuration (Settings › Intake). */
 export function intakeConfigQueryOptions(baseUrl: string) {
@@ -21,24 +28,6 @@ export function intakeConfigQueryOptions(baseUrl: string) {
 export function useIntakeConfigQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
   return useQuery({ ...intakeConfigQueryOptions(baseUrl), enabled });
-}
-
-/**
- * Persist the intake config. On success the config cache is updated in place
- * and the provider issue lists are invalidated — the server applies the
- * project selection, so a config change can alter their results.
- */
-export function useSaveIntakeConfigMutation() {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (config: IntakeConfig) => saveIntakeConfig(baseUrl, config),
-    onSuccess: saved => {
-      queryClient.setQueryData(queryKeys.intakeConfig(), saved);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.jiraIssuesAll() });
-    },
-  });
 }
 
 /** Which Factory project each intake source routes into (org-wide). */
@@ -51,67 +40,167 @@ export function useIntakeBindingsQuery(enabled: boolean = true) {
   return useQuery({ ...intakeBindingsQueryOptions(baseUrl), enabled });
 }
 
-/**
- * Route a source to a Factory project (or clear it). Issue lists are invalidated
- * because the server scopes intake by these bindings.
- */
-export function useSaveIntakeBindingMutation() {
+const configWrites = () => ['intake-write', 'config'] as const;
+const selectionWrite = (integrationId: string) => [...configWrites(), integrationId] as const;
+const bindingWrites = () => ['intake-write', 'bindings'] as const;
+
+export interface IntakeWriteCallbacks<TVariables> {
+  onSaved?: (variables: TVariables) => void;
+  onFailed?: (error: Error, variables: TVariables) => void;
+}
+
+// One write at a time per cache; only the last in flight takes the server's answer, so an older answer never undoes a newer change.
+function serialWrite<TCache, TVariables>(
+  queryClient: QueryClient,
+  queryKey: QueryKey,
+  writeKey: readonly string[],
+  apply: (cache: TCache, variables: TVariables) => TCache,
+) {
+  const lastInFlight = () => queryClient.isMutating({ mutationKey: writeKey }) === 1;
+  const patch = (variables: TVariables) =>
+    queryClient.setQueryData<TCache>(queryKey, cache => (cache === undefined ? undefined : apply(cache, variables)));
+  return {
+    scope: { id: writeKey.join('/') },
+    optimistic: async (variables: TVariables) => {
+      await queryClient.cancelQueries({ queryKey, exact: true });
+      const previous = queryClient.getQueryData<TCache>(queryKey);
+      patch(variables);
+      return { previous };
+    },
+    settle: (saved: TCache) => {
+      if (lastInFlight()) queryClient.setQueryData(queryKey, saved);
+    },
+    confirm: (saved: TCache, variables: TVariables) => {
+      if (lastInFlight()) queryClient.setQueryData(queryKey, saved);
+      else patch(variables);
+    },
+    rollback: (previous?: TCache) => {
+      if (!lastInFlight()) return;
+      if (previous !== undefined) queryClient.setQueryData(queryKey, previous);
+      void queryClient.invalidateQueries({ queryKey, exact: true });
+    },
+  };
+}
+
+// The GitHub feed never reads intake config or bindings, so it has nothing to refresh.
+function invalidateIssueFeed(queryClient: QueryClient, baseUrl: string, integrationId: string) {
+  const feeds: Record<string, QueryKey> = {
+    linear: queryKeys.linearIssuesAll(),
+    jira: queryKeys.jiraIssuesAll(),
+    gitlab: queryKeys.gitlabIssuesAll(baseUrl),
+    incidentio: queryKeys.incidentioIssuesAll(),
+  };
+  const queryKey = feeds[integrationId];
+  if (queryKey) void queryClient.invalidateQueries({ queryKey });
+}
+
+export function useSaveIntakeSelectionMutation(
+  integrationId: string,
+  callbacks?: IntakeWriteCallbacks<IntakeSelection>,
+) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const write = serialWrite<IntakeConfig, IntakeSelection>(
+    queryClient,
+    queryKeys.intakeConfig(),
+    configWrites(),
+    (config, selection) => ({ ...config, [integrationId]: selection }),
+  );
   return useMutation({
-    mutationFn: (binding: {
-      integrationId: string;
-      sourceId: string;
-      factoryProjectId: string | null;
-      board?: string | null;
-      labels?: string[] | null;
-    }) => saveIntakeBinding(baseUrl, binding),
-    onSuccess: bindings => {
-      queryClient.setQueryData(queryKeys.intakeBindings(), bindings);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.jiraIssuesAll() });
+    mutationKey: selectionWrite(integrationId),
+    scope: write.scope,
+    mutationFn: (selection: IntakeSelection) => saveIntakeSelection(baseUrl, integrationId, selection),
+    onMutate: write.optimistic,
+    onSuccess: (saved, selection) => {
+      write.settle(saved);
+      invalidateIssueFeed(queryClient, baseUrl, integrationId);
+      callbacks?.onSaved?.(selection);
+    },
+    onError: (error, selection, context) => {
+      write.rollback(context?.previous);
+      callbacks?.onFailed?.(error, selection);
     },
   });
 }
 
-/** Remove one factory's binding of a source; other factories sharing the source keep theirs. */
-export function useDeleteIntakeBindingMutation() {
+export function useIntakeSelectionSaving(integrationId: string): boolean {
+  return useIsMutating({ mutationKey: selectionWrite(integrationId) }) > 0;
+}
+
+export function useSaveIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<IntakeBindingWrite>) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const write = serialWrite<IntakeSourceBinding[], IntakeBindingWrite>(
+    queryClient,
+    queryKeys.intakeBindings(),
+    bindingWrites(),
+    withIntakeBinding,
+  );
   return useMutation({
-    mutationFn: (binding: { integrationId: string; sourceId: string; factoryProjectId: string }) =>
-      deleteIntakeBinding(baseUrl, binding),
-    onSuccess: bindings => {
-      queryClient.setQueryData(queryKeys.intakeBindings(), bindings);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.jiraIssuesAll() });
+    mutationKey: [...bindingWrites(), 'save'],
+    scope: write.scope,
+    mutationFn: (binding: IntakeBindingWrite) => saveIntakeBinding(baseUrl, binding),
+    onMutate: write.optimistic,
+    onSuccess: (saved, binding) => {
+      write.settle(saved);
+      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
+      callbacks?.onSaved?.(binding);
+    },
+    onError: (error, binding, context) => {
+      write.rollback(context?.previous);
+      callbacks?.onFailed?.(error, binding);
     },
   });
 }
 
-/** GitHub label → board routes of one Factory project. */
-export function useIntakeLabelRoutesQuery(factoryProjectId: string | undefined) {
+export function useDeleteIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<IntakeBindingTarget>) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.intakeLabelRoutes(factoryProjectId),
-    queryFn: () => fetchIntakeLabelRoutes(baseUrl, factoryProjectId!),
-    enabled: Boolean(factoryProjectId),
+  const queryClient = useQueryClient();
+  const write = serialWrite<IntakeSourceBinding[], IntakeBindingTarget>(
+    queryClient,
+    queryKeys.intakeBindings(),
+    bindingWrites(),
+    withoutIntakeBinding,
+  );
+  return useMutation({
+    mutationKey: [...bindingWrites(), 'delete'],
+    scope: write.scope,
+    mutationFn: (binding: IntakeBindingTarget) => deleteIntakeBinding(baseUrl, binding),
+    onMutate: write.optimistic,
+    onSuccess: (saved, binding) => {
+      write.settle(saved);
+      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
+      callbacks?.onSaved?.(binding);
+    },
+    onError: (error, binding, context) => {
+      write.rollback(context?.previous);
+      callbacks?.onFailed?.(error, binding);
+    },
   });
 }
 
-/**
- * Route a label to a board (or clear it with `board: null`). Work items are
- * invalidated because the server relocates cards carrying the label.
- */
-export function useSaveIntakeLabelRouteMutation() {
+// Waits for the server: the form keeps what was typed when the server refuses it.
+export function useAddIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<IntakeBindingWrite>) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const write = serialWrite<IntakeSourceBinding[], IntakeBindingWrite>(
+    queryClient,
+    queryKeys.intakeBindings(),
+    bindingWrites(),
+    withIntakeBinding,
+  );
   return useMutation({
-    mutationFn: (route: { factoryProjectId: string; integrationId: string; label: string; board: string | null }) =>
-      saveIntakeLabelRoute(baseUrl, route),
-    onSuccess: (routes, route) => {
-      queryClient.setQueryData(queryKeys.intakeLabelRoutes(route.factoryProjectId), routes);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(route.factoryProjectId) });
+    mutationKey: [...bindingWrites(), 'add'],
+    scope: write.scope,
+    mutationFn: (binding: IntakeBindingWrite) => saveIntakeBinding(baseUrl, binding),
+    onSuccess: (saved, binding) => {
+      write.confirm(saved, binding);
+      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
+      callbacks?.onSaved?.(binding);
+    },
+    onError: (error, binding) => {
+      write.rollback();
+      callbacks?.onFailed?.(error, binding);
     },
   });
 }

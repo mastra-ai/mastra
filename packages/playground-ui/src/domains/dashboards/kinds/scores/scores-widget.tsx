@@ -5,6 +5,7 @@ import { BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { CHART_COLORS } from '../../../metrics/lib/chart-colors';
 import { bucketPlan, intervalHours } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import { viewTitle } from '../../lib/chrome';
 import type { ViewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
@@ -34,20 +35,33 @@ export function ScoresWidget({
   onRetry,
   expand,
   dragHandle,
+  onTitleChange,
   pin,
+  alert,
 }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
   // Scores show their first view only, so the title is plain or, with somewhere to expand to, a link.
   const heading = {
     ...viewTitle(widget, [view], 0, () => {}, expand),
     dragHandle,
+    onTitleChange,
     ...pinActions(pin),
   };
   // The card, and its pin, stay while the view waits, so a pinned widget can still be unpinned.
-  if (gate.status === 'pending') return <PendingChartCard gate={gate.gate} heading={heading} />;
+  if (gate.status === 'pending')
+    return <PendingChartCard gate={gate.gate} heading={pendingHeading(heading, gate.gate, alert, widget, view)} />;
   return (
     <ScoresView
-      heading={heading}
+      heading={withAction(
+        heading,
+        // The scorers' means over the range: what the card's lines average to.
+        alertAction(alert, widget, view, {
+          page: gate.page,
+          values: [
+            { label: view.label?.trim() || widget.title?.trim() || 'Scores', value: { query: view.options.average } },
+          ],
+        }),
+      )}
       view={view}
       page={gate.page}
       discovered={discovered}
@@ -106,7 +120,7 @@ function ScoresView({
 
   return (
     <ChartCard {...heading} isUpdating={all.some(r => r.isRefetching)}>
-      <ChartArea isEmpty={!isLoading && lines.length === 0} emptyMessage={options.emptyMessage}>
+      <ChartArea isEmpty={!isLoading && lines.length === 0}>
         <MetricsLineChart
           lineStyle="thin"
           data={isLoading ? [] : buckets}

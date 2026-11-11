@@ -1,8 +1,10 @@
 import { viewMenu } from '../../hooks/use-widget-views';
+import { alertAction, withAction } from '../../lib/alert-actions';
 import { unsupportedMessage } from '../../lib/chrome';
 import type { BlockedFields } from '../../lib/gate';
 import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
+import { isValueColumn, parseColumns } from '../../lib/table';
 import type { TableOptions } from '../../lib/table';
 import type { WidgetKindProps } from '../../widget-kind';
 import { TableFrame } from './table-frame';
@@ -29,9 +31,25 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
     onStateChange({ view: i }),
   );
   const { view, index } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
-
   const unsupported = blocked(view.queries);
+  const alert = alertAction(
+    props.alert,
+    props.widget,
+    view,
+    unsupported
+      ? { blocked: unsupported, names: FILTER_NAMES }
+      : {
+          page,
+          values: parseColumns(view.columns)
+            .columns.filter(isValueColumn)
+            .map(c => ({ label: c.label, value: c.options.value })),
+        },
+  );
+  const heading = withAction(
+    { ...menu.heading, dragHandle: props.dragHandle, onTitleChange: props.onTitleChange, ...pinActions(props.pin) },
+    alert,
+  );
+
   if (unsupported) {
     return (
       <TableFrame heading={heading}>

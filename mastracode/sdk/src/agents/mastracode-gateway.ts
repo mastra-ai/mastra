@@ -60,6 +60,8 @@ import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
+const PROVIDERS: Record<string, ProviderConfig> = PROVIDER_REGISTRY;
+
 export {
   MASTRA_GATEWAY_PREFIX,
   OPENAI_PREFIX,
@@ -263,7 +265,7 @@ async function resolveGatewayProviderAuth(
 async function getMastraCodeProviderConfigs(
   gateway: MastraModelGatewayInterface,
 ): Promise<Record<string, ProviderConfig>> {
-  const providers: Record<string, ProviderConfig> = { ...(PROVIDER_REGISTRY as Record<string, ProviderConfig>) };
+  const providers: Record<string, ProviderConfig> = { ...PROVIDERS };
 
   try {
     const gatewayProviders = await gateway.fetchProviders();
@@ -285,13 +287,17 @@ function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | 
   return Array.isArray(envVars) ? envVars[0] : envVars;
 }
 
+export function providerApiKeyEnvVar(providerId: string): string | undefined {
+  return getApiKeyEnvVar(PROVIDERS[providerId]);
+}
+
 /**
  * Whether the process environment has a key for a models.dev provider. Checks every
  * env var the registry lists, as the models.dev gateway does when `resolveModel`
  * gets no gateway credential (e.g. `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`).
  */
 export function hasProviderEnvironmentKey(providerId: string): boolean {
-  const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[providerId]?.apiKeyEnvVar;
+  const envVars = PROVIDERS[providerId]?.apiKeyEnvVar;
   if (!envVars) return false;
   return (Array.isArray(envVars) ? envVars : [envVars]).some(envVar => Boolean(process.env[envVar]?.trim()));
 }
@@ -489,9 +495,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    const customProvider = this.#getCustomProviders().find(
-      provider => args.providerId === getCustomProviderId(provider.name),
-    );
+    // A gateway model carries the gateway key, so it must never reach a custom
+    // provider whose name matches the model's provider (e.g. one named "Anthropic").
+    const customProvider = this.#routeThroughMastraGateway
+      ? undefined
+      : this.#getCustomProviders().find(provider => args.providerId === getCustomProviderId(provider.name));
     if (customProvider) {
       const provider = createOpenAICompatible({
         name: args.providerId,
@@ -517,7 +525,8 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    if (args.providerId === 'moonshotai') {
+    // A gateway model's key is the gateway's: it must not go to Moonshot's own API.
+    if (args.providerId === 'moonshotai' && !this.#routeThroughMastraGateway) {
       // Prefer the gateway-resolved key (stored credentials), then the canonical
       // registry env var. Keep the legacy typo name as a fallback for anyone who
       // set it because of the previous error message.

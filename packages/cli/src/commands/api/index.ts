@@ -588,6 +588,33 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  const factoryEnvironmentVariables = factoryEnvironment
+    .command('variables')
+    .description('Manage the sandbox environment variables of a Factory project; values are never returned');
+  addAction(factoryEnvironmentVariables, 'list', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvsList, {
+    description: 'List the sandbox environment variables of a Factory project: names and where they apply',
+    routePlacement: 'origin',
+  });
+  addAction(factoryEnvironmentVariables, 'set', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvSet, {
+    description: 'Add a sandbox environment variable or replace its value; it applies to build, runtime or both',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Give every command in the sandbox a token',
+        command: `mastra api factory project environment variables set <project-id> NPM_TOKEN '{"value":"<token>","appliesTo":"runtime"}'`,
+      },
+    ],
+  });
+  addAction(factoryEnvironmentVariables, 'update', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvUpdate, {
+    description: 'Change where a sandbox environment variable applies without changing its value',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryEnvironmentVariables, 'delete', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvDelete, {
+    description: 'Delete a sandbox environment variable',
+    routePlacement: 'origin',
+  });
 
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
   addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {

@@ -3,7 +3,9 @@ import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { FACTORY_JIRA_EVENTS } from '../../rules/types.js';
+import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
+import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveJiraRules } from './default-rules.js';
 import type { JiraRuleOverrides } from './default-rules.js';
 import { JiraRules } from './rules.js';
@@ -49,7 +51,7 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
       boards,
       configVersion: 'factory-config-v1',
     }),
-    isAutoRunEnabled: async () => false,
+    intakeRoutes: seeded.boards,
     ownerId: 'jira-rules-test',
   });
   /** Files every committed decision, as the dispatcher's poll would. */
@@ -58,20 +60,20 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
     (await seeded.workItems.list({ orgId: 'org-1', factoryProjectId })).filter(
       item => item.externalSource?.externalId === issue.id,
     );
-  return { project, other, service, workItems: seeded.workItems, drain, cardsFor };
+  return {
+    project,
+    other,
+    service,
+    workItems: seeded.workItems,
+    storage: seeded.storage,
+    storedBoards: seeded.boards,
+    drain,
+    cardsFor,
+  };
 }
 
 describe('JiraRules', () => {
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: '10001', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: '10002', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: '10003',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed issue on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -80,11 +82,10 @@ describe('JiraRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { '10001': 'release', '10003': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 
@@ -187,6 +188,32 @@ describe('JiraRules', () => {
     expect((await cardsFor(project.id)).map(item => item.id)).toEqual([card!.id]);
   });
 
+  it('a reopened issue finds its finished card while that card is still being copied', async () => {
+    const { project, service, workItems, storage, drain, cardsFor } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    await drain();
+    await ingest({ ...issue, state: 'Done', stateType: 'completed', updatedAt: '2026-07-03T00:00:00Z' });
+    await drain();
+    const [card] = await cardsFor(project.id);
+    expect(card?.stages).toEqual(['done']);
+    await demoteCardsToLegacyForTests(storage, [card!.id]);
+    expect(workItems.legacyBackfillPending).toBe(true);
+
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+    await ingest({ ...issue, state: 'To Do', stateType: 'unstarted', updatedAt: '2026-07-04T00:00:00Z' });
+    await drain();
+
+    // The rules saw the card: the observation asked for nothing, not for a new card.
+    expect(evaluate.mock.calls[0]?.[0]).toMatchObject({ workItemId: card!.id, decisions: [] });
+    const upserts = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      entry => entry.decision.type === 'upsertLinkedWorkItem',
+    );
+    expect(upserts).toHaveLength(1);
+    expect((await cardsFor(project.id)).map(item => item.id)).toEqual([card!.id]);
+  });
+
   it('ingests an issue again once the other Factory finished its card', async () => {
     const { project, other, service, workItems } = await setup();
     await workItems.upsert({
@@ -219,6 +246,40 @@ describe('JiraRules', () => {
         },
       },
     ]);
+  });
+
+  it.each([
+    { stateType: 'completed', stage: 'done', route: 'Closed issues go to Done' },
+    { stateType: 'canceled', stage: 'canceled', route: 'Issues closed as not planned go to Canceled' },
+  ])('moves a card whose Jira issue is $stateType by the default close route', async ({ stateType, stage, route }) => {
+    const { project, service, workItems, storedBoards, drain } = await setup();
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: issue.title,
+          stages: ['planning'],
+          sessions: {},
+          externalSource: { integrationId: 'jira', type: 'issue', externalId: issue.id, url: issue.url },
+        },
+      })
+    ).item;
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, stateType }],
+    });
+    await drain();
+    const routes = await storedBoards.listIntakeRoutes({ orgId: 'org-1', factoryProjectId: project.id });
+    const moved = (await workItems.get({ orgId: 'org-1', id: card.id }))!;
+    expect(moved.stages).toEqual([stage]);
+    expect(moved.stageHistory.at(-1)).toMatchObject({
+      stage,
+      by: `intake-route:${routes.find(candidate => candidate.name === route)!.id}`,
+    });
   });
 
   it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {
@@ -317,5 +378,93 @@ describe('JiraRules', () => {
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+});
+
+describe('JiraRules and the shared board list', () => {
+  // The rules find an issue's card in the board list the storage caches for every reader in the
+  // process. A rule may write to the card it is handed, so a card leaked from that cache would
+  // corrupt every later read of the board.
+  it('hands every event kind its own copy of the card, leaving the cached board list untouched', async () => {
+    const seen = new Map<FactoryJiraEventName, FactoryRuleItemContext[]>();
+    const mutateItem = (event: FactoryJiraEventName) => (context: Readonly<FactoryJiraRuleContext>) => {
+      if (!context.item) return;
+      seen.set(event, [...(seen.get(event) ?? []), context.item]);
+      context.item.workItem.title = `mutated by ${event}`;
+      context.item.workItem.metadata = { ...context.item.workItem.metadata, mutatedBy: event };
+      if (context.item.metadata) context.item.metadata.mutatedBy = event;
+    };
+    const { project, service, workItems } = await setup(
+      Object.fromEntries(FACTORY_JIRA_EVENTS.map(event => [event, mutateItem(event)])),
+    );
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'jira', type: 'issue', externalId: issue.id, url: issue.url },
+        title: 'ENG-42: Fix intake sync',
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const deliveries: Array<[FactoryJiraEventName, typeof issue]> = [
+      ['issueObserved', issue],
+      ['issueClosed', { ...issue, stateType: 'completed', updatedAt: '2026-12-01T00:00:00Z' }],
+    ];
+
+    for (const [event, delivery] of deliveries) {
+      const before = structuredClone(await workItems.listShared(scope));
+      await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [delivery] });
+      const after = await workItems.listShared(scope);
+      expect(after, `${event} wrote to the cached board list`).toEqual(before);
+      const cached = new Set<unknown>(after);
+      expect((seen.get(event) ?? []).some(item => cached.has(item.workItem))).toBe(false);
+    }
+    expect(seen.get('issueObserved')).toHaveLength(1);
+    expect(seen.get('issueClosed')).toHaveLength(1);
+  });
+});
+
+describe('Jira board events', () => {
+  it('reports a first sighting as created and a completed or canceled Jira issue as closed for that reason', async () => {
+    const seen: Array<{ event: string; boardEvent: unknown }> = [];
+    const record = (context: FactoryJiraRuleContext) => {
+      seen.push({ event: context.event, boardEvent: context.boardEvent });
+    };
+    const { project, service, workItems } = await setup({ issueObserved: record, issueClosed: record });
+    const ingest = (stateType: string, updatedAt: string) =>
+      service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType, updatedAt }],
+      });
+    await ingest('unstarted', '2026-07-02T00:00:00Z');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'jira', type: 'issue', externalId: issue.id, url: issue.url },
+        title: issue.title,
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await ingest('started', '2026-07-03T00:00:00Z');
+    await ingest('completed', '2026-07-04T00:00:00Z');
+    await ingest('canceled', '2026-07-05T00:00:00Z');
+
+    expect(seen).toEqual([
+      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      // A later sighting of an open Jira issue is not a status change.
+      { event: 'issueObserved', boardEvent: undefined },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
+    ]);
   });
 });

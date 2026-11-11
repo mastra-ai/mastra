@@ -1,4 +1,5 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
@@ -50,7 +51,7 @@ export function attachLinearIssueReconciler(
     intake: linear.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
-    isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
+    isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => {
       const issueId = item.workItem.metadata?.linearIssueId;
       return typeof issueId === 'string' && issueId.length > 0 ? issueId : undefined;

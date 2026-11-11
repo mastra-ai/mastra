@@ -132,6 +132,8 @@ import type {
 import type { SignalWriteOptions } from './resources/signal-writes';
 import type { Body, PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
   ListFeedbackResponse,
   ClientOptions,
   McpServerEventStreamFrame,
@@ -1428,6 +1430,11 @@ export class MastraClient extends BaseResource {
   // Scores
   // --------------------------------------------------------------------------
 
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.observability.getScore(id);
+  }
+
   /** Retrieves a paginated list of observability scores. */
   listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
     return this.observability.listScores(params);
@@ -1466,6 +1473,11 @@ export class MastraClient extends BaseResource {
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
+
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.observability.getFeedback(id);
+  }
 
   /** Retrieves a paginated list of feedback records. */
   listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
