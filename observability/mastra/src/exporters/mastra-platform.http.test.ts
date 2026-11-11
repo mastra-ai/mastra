@@ -416,7 +416,7 @@ describe.each([false, true])('Platform context resolution (byte batching: %s)', 
     await instance.onScoreEvent(score());
     await instance.flush();
     await instance.flush();
-    expect(receiver.bodies).toHaveLength(1);
+    expect(receiver.bodies.map(body => body.path)).toEqual(['/api/observability/scores']);
   });
 
   it('drops records without context or traceId', async () => {
