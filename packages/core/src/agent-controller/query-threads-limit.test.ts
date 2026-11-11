@@ -245,11 +245,19 @@ describe('session recovery reads one thread when storage applies the scope', () 
 
   it('recovers a session with scope keys unsupported by storage filters', async () => {
     const storage = new InMemoryStore();
-    await seed(storage, [
-      { id: 'other', metadata: { 'project-path': '/b' } },
+    const memory = await seed(storage, [
+      ...Array.from({ length: 160 }, (_, i) => ({ id: `other${i}`, metadata: { 'project-path': '/b' } })),
       { id: 'match', metadata: { 'project-path': '/a' } },
     ]);
     const controller = await createController(storage);
+    const list = memory.listThreads.bind(memory);
+    const calls: Parameters<typeof list>[0][] = [];
+    vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue({
+      listThreads: async (input: Parameters<typeof list>[0]) => {
+        calls.push(input);
+        return list(input);
+      },
+    } as MemoryStorage);
 
     const session = await controller.createSession({
       resourceId: 'r',
@@ -258,5 +266,9 @@ describe('session recovery reads one thread when storage applies the scope', () 
       resumeOnly: true,
     });
     expect(session.thread.getId()).toBe('match');
+    expect(calls).toHaveLength(2);
+    for (const input of calls) {
+      expect(input).toMatchObject({ filter: { resourceId: 'r' }, perPage: false });
+    }
   });
 });

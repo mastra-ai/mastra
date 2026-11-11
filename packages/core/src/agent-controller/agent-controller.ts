@@ -827,7 +827,7 @@ export class AgentController<TState = {}> {
       const candidates = await this.queryThreads({
         resourceId: session.identity.getResourceId(),
         metadata,
-        limit: 1,
+        limit: scopeEntries.length > 0 && metadata === undefined ? undefined : 1,
         matchesScope: thread => {
           const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
           return scopeEntries.every(([key, value]) => values[key] === value);
@@ -877,7 +877,7 @@ export class AgentController<TState = {}> {
     const threads = await this.queryThreads({
       resourceId,
       metadata: filterable ? metadata : undefined,
-      limit: 1,
+      limit: filterable ? 1 : undefined,
       matchesScope: thread => {
         const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
         return scopeEntries.every(([key, value]) => values[key] === value);
