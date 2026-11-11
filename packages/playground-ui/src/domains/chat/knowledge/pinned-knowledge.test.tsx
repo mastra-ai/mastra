@@ -206,6 +206,42 @@ describe('pinned Knowledge in chat', () => {
       expect(within(listing).queryByTestId('pinned-knowledge-listing')).toBeNull();
     });
 
+    const listingRowFor = (text: string) => {
+      const signal = {
+        ...withListing,
+        metadata: {
+          ...withListing.metadata,
+          value: { pins: [{ id: 'list:p-guides', text, name: 'Guides', scope: 'docs:acme' }] },
+        },
+      };
+      render(withLinks(<SignalBadge signal={signal} defaultOpen />));
+      return within(screen.getByTestId('pinned-knowledge')).getByTestId('pinned-knowledge-row');
+    };
+
+    it('shows the count as a lower bound when the listing was cut short without a total', () => {
+      const row = listingRowFor(
+        [
+          'Pages under Guides (docs:acme#guides, depth 1):',
+          '- docs:acme#guides/setup — Setup',
+          '- docs:acme#guides/deploy — Deploy',
+          '…and more; knowledge_list from: "docs:acme#guides"',
+        ].join('\n'),
+      );
+      expect(within(row).getByRole('button', { name: 'Show 2+ pages' }).textContent).toBe('Show 2+ pages ▾');
+    });
+
+    it('names a single listed page in the singular', () => {
+      const row = listingRowFor(
+        ['Pages under Guides (docs:acme#guides, depth 1):', '- docs:acme#guides/setup — Setup'].join('\n'),
+      );
+      expect(within(row).getByRole('button', { name: 'Show 1 page' })).not.toBeNull();
+    });
+
+    it('falls back to a plain label when the listing has no pages', () => {
+      const row = listingRowFor('Pages under Guides (docs:acme#guides, depth 1): none.');
+      expect(within(row).getByRole('button', { name: 'Show pages' })).not.toBeNull();
+    });
+
     it('shows a changed or removed listing against the page it lists', () => {
       render(withLinks(<SignalBadge signal={listingDelta} defaultOpen />));
 
