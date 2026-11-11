@@ -859,7 +859,7 @@ describe('PlatformGithubIntegration', () => {
         orgId: 'org-1',
         repositoryIds: repositories.map(repository => repository.id),
       });
-      expect(access).toEqual({
+      expect(access).toMatchObject({
         cloneUrl: 'https://github.com/acme/app.git',
         authorization: { scheme: 'bearer', token: 'ghs_environment' },
       });
@@ -885,25 +885,27 @@ describe('PlatformGithubIntegration', () => {
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 
-    it("serves each repository's own access from the group token", async () => {
+    it("returns each repository's access under the group token without widening its own token", async () => {
       const fetchImpl = vi
         .fn<typeof fetch>()
-        .mockResolvedValue(json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }));
+        .mockResolvedValueOnce(json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }))
+        .mockResolvedValueOnce(json({ token: 'ghs_docs_only', expiresAt: '2026-07-21T18:00:00Z' }));
       const { integration, repositories } = await seed(fetchImpl);
+      const [app, docs] = repositories;
 
-      await integration.versionControl.getRepositoriesAccess!({
+      const group = await integration.versionControl.getRepositoriesAccess!({
         orgId: 'org-1',
-        repositoryIds: repositories.map(repository => repository.id),
+        repositoryIds: [app!.id, docs!.id],
       });
-      const docs = await integration.versionControl.getRepositoryAccess({
-        orgId: 'org-1',
-        repositoryId: repositories[1]!.id,
-      });
-      expect(docs).toEqual({
+      expect(group?.repositories?.[docs!.id]).toEqual({
         cloneUrl: 'https://github.com/acme/docs.git',
         authorization: { scheme: 'bearer', token: 'ghs_environment' },
       });
-      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // A caller asking for one repository still gets a token for that repository only.
+      const own = await integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: docs!.id });
+      expect(own.authorization?.token).toBe('ghs_docs_only');
+      expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body)).repositories).toEqual(['docs']);
     });
 
     it('declines a set spanning two installations without minting', async () => {

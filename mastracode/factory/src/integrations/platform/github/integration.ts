@@ -29,6 +29,7 @@ import type {
   PullRequestComment,
   PublishCommitCheckInput,
   PullRequestRef,
+  RepositoriesAccess,
   RepositoryAccess,
   Review,
   ReviewComment,
@@ -562,16 +563,20 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       );
       const authorization = { scheme: 'bearer' as const, token: token.token };
       const expiresAt = Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS;
-      const access: RepositoryAccess = { cloneUrl: `https://github.com/${found[0]!.slug}.git`, authorization };
+      // Each repository's access under the shared token, handed only to the
+      // caller that asked for the set. It is never cached under a single
+      // repository's key, where it would widen that repository's own token.
+      const access: RepositoriesAccess = {
+        cloneUrl: `https://github.com/${found[0]!.slug}.git`,
+        authorization,
+        repositories: Object.fromEntries(
+          found.map(repository => [
+            repository.id,
+            { cloneUrl: `https://github.com/${repository.slug}.git`, authorization },
+          ]),
+        ),
+      };
       setBounded(this.#repositoryAccessCache, cacheKey, { access, expiresAt });
-      // The token covers each repository, so it also serves each one's own
-      // access: an environment's per-repository clones then mint nothing.
-      for (const repository of found) {
-        setBounded(this.#repositoryAccessCache, `${orgId}:${repository.id}`, {
-          access: { cloneUrl: `https://github.com/${repository.slug}.git`, authorization },
-          expiresAt,
-        });
-      }
       return access;
       });
     },
