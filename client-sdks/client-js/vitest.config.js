@@ -9,6 +9,7 @@ export default defineConfig({
       enabled: true,
       include: [
         'type-tests/thread-query.test-d.ts',
+        'type-tests/deletion.test-d.ts',
         'type-tests/request-context.test-d.ts',
         'type-tests/generate-legacy.test-d.ts',
       ],
