@@ -119,14 +119,18 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
         resultPadding = '';
       });
 
-      /** Waits for the run's finish event, then reports the Redis memory its stream log takes. */
+      /**
+       * Waits for the run's finish event, then reports the size of the events Redis stores for its
+       * stream log. The stored content, not `MEMORY USAGE`, which also counts how Redis allocates it.
+       */
       async function storedRunBytes(runId: string): Promise<number> {
         // The stream key and, with a Redis cache, the replay list are appended separately: wait
         // until each holds the finish event, so both runs are measured complete.
         const logKeys = cache === 'redis' ? 2 : 1;
-        let keys: string[] = [];
+        let bytes = 0;
         await vi.waitFor(async () => {
-          keys = [];
+          let keys = 0;
+          bytes = 0;
           for (const key of await redis.keys(`*agent.stream.${runId}*`)) {
             const type = await redis.type(key);
             if (type !== 'stream' && type !== 'list') continue;
@@ -135,12 +139,11 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
                 ? (await redis.xRange(key, '-', '+')).map(entry => JSON.stringify(entry.message))
                 : await redis.lRange(key, 0, -1);
             expect(entries.join('\n')).toMatch(/\\?"type\\?":\\?"finish\\?"/);
-            keys.push(key);
+            keys++;
+            bytes += entries.reduce((total, entry) => total + entry.length, 0);
           }
-          expect(keys).toHaveLength(logKeys);
+          expect(keys).toBe(logKeys);
         });
-        let bytes = 0;
-        for (const key of keys) bytes += Number((await redis.memoryUsage(key, { SAMPLES: 0 })) ?? 0);
         return bytes;
       }
 
@@ -231,10 +234,11 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
 
         const short = await runBytes('RUN-SHORT', 10);
         const long = await runBytes('RUN-LONG', 20);
-        // Twice the steps take about twice the memory (it was about 7x on main, and about 3x when
-        // every step-finish still repeated the response messages so far).
+        // Twice the steps store about twice the bytes: 2.1x here, 2.9x when every step-finish still
+        // repeated the response messages so far, and far more when it also repeated the prompt.
         expect(long / short).toBeLessThan(2.5);
-        expect(long).toBeLessThan(8 * 1024 * 1024);
+        const copies = cache === 'redis' ? 2 : 1;
+        expect(long).toBeLessThan(copies * 4 * 1024 * 1024);
       }, 120_000);
     });
   },

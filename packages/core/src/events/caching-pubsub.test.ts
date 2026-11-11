@@ -2126,16 +2126,11 @@ describe('CachingPubSub.__replaysTopic', () => {
     expect(pubsub.__replaysTopic('live-only')).toBe(false);
   });
 
-  it('counts only on the transport when it may publish a topic live only', () => {
-    const cache = new InMemoryServerCache();
+  it('counts on the transport for the topics it leaves out', () => {
     expect(
-      new CachingPubSub(new EventEmitterPubSub(), cache, { extendExistingLogsOnly: true }).__replaysTopic('t'),
-    ).toBe(false);
-    expect(
-      new CachingPubSub(new ReplayingTransport(), cache, { extendExistingLogsOnly: true }).__replaysTopic('t'),
+      new CachingPubSub(new ReplayingTransport(), new InMemoryServerCache(), {
+        shouldCache: () => false,
+      }).__replaysTopic('t'),
     ).toBe(true);
-    expect(new CachingPubSub(new ReplayingTransport(), cache, { shouldCache: () => false }).__replaysTopic('t')).toBe(
-      true,
-    );
   });
 });

@@ -183,11 +183,6 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     return false;
   }
 
-  /** A subscriber that doesn't start from `'latest'` reads a topic's stream from its first entry. */
-  override __replaysTopic(_topic: string): boolean {
-    return true;
-  }
-
   protected override onUnsupportedOffset(offset: number): void {
     this.#logger?.warn?.(`valkey-streams: numeric replay offset ${offset} is unsupported; falling back to full replay`);
   }
