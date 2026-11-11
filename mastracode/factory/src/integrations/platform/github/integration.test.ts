@@ -1251,7 +1251,8 @@ describe('PlatformGithubIntegration', () => {
     const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
 
     expect(response.status).toBe(200);
-    expect(onEvent).toHaveBeenCalledOnce();
+    // The list answers before the rules pass it starts in the background.
+    await vi.waitFor(() => expect(onEvent).toHaveBeenCalledOnce());
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z',
