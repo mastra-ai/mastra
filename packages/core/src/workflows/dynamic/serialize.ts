@@ -18,6 +18,7 @@
  * would ship broken workflows unnoticed.
  */
 import { standardSchemaToJSONSchema, toStandardSchema } from '../../schema';
+import { buildProviderToolEntry, pickProviderToolStepOptions } from '../provider-tool-entry';
 import type {
   SerializableClassifierStepOptions,
   SerializedSingleStepEntry,
@@ -61,6 +62,7 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
     case 'step':
     case 'agent':
     case 'tool':
+    case 'provider-tool':
     case 'classifier':
     case 'mapping':
       return serializeSingleEntry(entry);
@@ -154,6 +156,18 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
       description: entry.tool?.description,
       ...(options ? { options } : {}),
     };
+  }
+  if (entry.type === 'provider-tool') {
+    const spec = {
+      type: 'provider' as const,
+      providerId: entry.providerId,
+      toolSlug: entry.toolSlug,
+      connection: entry.connection,
+      inputSchema: entry.inputSchema,
+      outputSchema: entry.outputSchema,
+      description: entry.description,
+    };
+    return buildProviderToolEntry(spec, pickProviderToolStepOptions(entry.options, entry.id), entry.id);
   }
   if (entry.type === 'classifier') {
     const options = pickSerializableClassifierStepOptions(entry.options);

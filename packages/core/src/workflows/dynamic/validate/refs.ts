@@ -41,6 +41,15 @@ export function validateWorkflowRefs(
         });
         return;
       }
+      case 'provider-tool': {
+        if (!index.toolProviders || index.toolProviders[entry.providerId]) return;
+        issues.push({
+          code: 'missing-reference',
+          path: `${path}.providerId`,
+          message: `Step "${entry.id}" declares providerId "${entry.providerId}" which is not a registered tool provider.`,
+        });
+        return;
+      }
       case 'classifier': {
         if (!index.classifiers || index.classifiers[entry.classifierId]) return;
         const available = Object.keys(index.classifiers);

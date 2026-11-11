@@ -44,6 +44,10 @@ export interface ToolProviderToolInfo {
   description?: string;
   /** Toolkit (tool service) this tool belongs to */
   toolkit?: string;
+  /** Optional JSON Schema snapshot for the tool input. */
+  inputSchema?: Record<string, unknown>;
+  /** Optional JSON Schema snapshot for the tool output. */
+  outputSchema?: Record<string, unknown>;
 }
 
 /**

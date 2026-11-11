@@ -12,6 +12,7 @@ import {
 } from '../schemas/dynamic-workflows';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { getCallerAuthorId } from './authorship';
 import { handleError } from './error';
 
 /**
@@ -110,17 +111,29 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
     requestContextSchema,
     graph,
     dependencies,
+    requestContext,
   }) => {
     try {
       // Pick the body fields explicitly — handler args also carry server
       // context (requestContext, abortSignal, ...) which must not leak into
       // the stored definition.
-      const def = { id, description, metadata, inputSchema, outputSchema, stateSchema, requestContextSchema, graph };
+      const authorId = getCallerAuthorId(requestContext) ?? undefined;
+      const def = {
+        id,
+        description,
+        metadata,
+        inputSchema,
+        outputSchema,
+        stateSchema,
+        requestContextSchema,
+        graph,
+        authorId,
+      };
       // Helpers are saved with the root as one unit so a nested workflow that
       // does not exist yet resolves, and so a rejected root can never leave
       // its helpers behind as orphans. Order within the bundle is derived
       // from the graphs, not from the order the client sent them in.
-      const bundle = [...(dependencies ?? []), def];
+      const bundle = [...(dependencies ?? []).map(dependency => ({ ...dependency, authorId })), def];
       // The wire schema is deliberately looser than the core authoring type:
       // it admits `mapping` entries as children of parallel/conditional/loop,
       // which `WorkflowBuilderExecutableInnerEntry` excludes. That is not

@@ -65,6 +65,7 @@ Entries in the `graph` run in order. Each entry receives the previous entry's ou
 | `agent` | Invoke a registered agent |
 | `classifier` | Evaluate data with a registered classifier |
 | `tool` | Invoke a registered tool |
+| `provider-tool` | Resolve and invoke one tool from a registered `ToolProvider` |
 | `mapping` | Reshape data between steps |
 | `workflow` | Invoke a registered workflow as a nested step |
 | `parallel` | Run several steps concurrently and merge their outputs |
@@ -192,6 +193,47 @@ A `tool` entry invokes a tool by its registration key from the `Mastra` `tools` 
 
 Tool entries accept the same optional `description` and `options` fields as agent entries. Only `retries` and `metadata` persist.
 
+### Provider tool steps
+
+A `provider-tool` entry resolves one OAuth-backed tool from a `ToolProvider` when the workflow runs. The provider must be registered on the `MastraEditor` under `providerId` and implement `resolveToolsVNext()`.
+
+```json
+{
+  "type": "provider-tool",
+  "id": "create-issue",
+  "providerId": "composio",
+  "toolSlug": "GITHUB_CREATE_ISSUE",
+  "connection": {
+    "kind": "author",
+    "connectionId": "github-connection",
+    "toolkit": "github",
+    "scope": "per-author"
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "owner": { "type": "string" },
+      "repo": { "type": "string" },
+      "title": { "type": "string" }
+    },
+    "required": ["owner", "repo", "title"]
+  }
+}
+```
+
+| Field | Type | Required | Description |
+| - | - | - | - |
+| `id` | `string` | Yes | Stable call-site ID |
+| `providerId` | `string` | Yes | ID of the registered provider |
+| `toolSlug` | `string` | Yes | Provider-specific tool identifier |
+| `connection` | `object` | Usually | Pinned connection containing `kind`, `connectionId`, `toolkit`, and optional `label` and `scope`. It can be omitted only when the provider's default scope is `caller-supplied`. |
+| `inputSchema` | `JsonSchema` | No | Authoring-time input schema snapshot used for graph validation |
+| `outputSchema` | `JsonSchema` | No | Authoring-time output schema snapshot used for graph validation |
+| `description` | `string` | No | Human-readable step description |
+| `options` | `object` | No | JSON-safe `retries` and `metadata` |
+
+Each entry resolves exactly one tool. `kind: "author"` uses the persisted workflow owner, `kind: "invoker"` uses the execution identity, and `scope: "caller-supplied"` derives the identity from request context. Schema snapshots don't replace runtime resolution; Mastra executes the current tool returned by the provider.
+
 ### Mapping steps
 
 A `mapping` entry reshapes data. Its `mapConfig` is a JSON string that encodes an object. Each key becomes a key in the step output, and each descriptor defines one source.
@@ -256,7 +298,7 @@ A `parallel` entry runs several single steps concurrently and merges their outpu
 }
 ```
 
-Each child must be an `agent`, `classifier`, `tool`, or `workflow` entry. All children receive the parallel entry's input directly.
+Each child must be an `agent`, `classifier`, `tool`, `provider-tool`, or `workflow` entry. All children receive the parallel entry's input directly.
 
 ### Conditional entries
 
@@ -276,7 +318,7 @@ A `conditional` entry pairs each step with a declarative predicate and runs ever
 }
 ```
 
-Each child must be an `agent`, `classifier`, `tool`, or `workflow` entry, and each child needs a predicate. All children receive the conditional entry's input directly.
+Each child must be an `agent`, `classifier`, `tool`, `provider-tool`, or `workflow` entry, and each child needs a predicate. All children receive the conditional entry's input directly.
 
 ### Predicates
 

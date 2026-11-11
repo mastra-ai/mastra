@@ -234,6 +234,27 @@ export const testWorkflow = createWorkflow({}).then(step1).tool(testTool).commit
 
 Like `.agent()`, `.tool()` records a declarative entry, so the workflow can be persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows). Visit [Workflow.tool()](/reference/workflows/workflow-methods/tool) for all parameters.
 
+### Provider tools as steps
+
+Use the same `.tool()` method with a provider-tool specification when the executable tool must be resolved from a registered `ToolProvider` for each run. This keeps OAuth credentials and connection selection in the provider layer while the workflow stores a deterministic provider ID, tool slug, and connection reference:
+
+```typescript title="src/mastra/workflows/github-workflow.ts"
+export const githubWorkflow = createWorkflow({})
+  .tool({
+    type: 'provider',
+    providerId: 'composio',
+    toolSlug: 'GITHUB_CREATE_ISSUE',
+    connection: {
+      kind: 'invoker',
+      connectionId: 'github-connection',
+      toolkit: 'github',
+    },
+  })
+  .commit()
+```
+
+Mastra resolves exactly that tool when the step executes. Use an `author` connection for the persisted workflow owner's credentials, an `invoker` connection for the current execution identity, or a `caller-supplied` connection derived from request context.
+
 ## Related
 
 - [Using Agents](/docs/agents/overview)

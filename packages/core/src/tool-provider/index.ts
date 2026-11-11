@@ -32,7 +32,7 @@ export { SHARED_BUCKET_ID } from './types';
 export { BaseToolProvider } from './base';
 export type { BaseToolProviderOptions } from './base';
 
-export { resolveStoredToolProviders, buildConnectionSuffix } from './runtime';
-export type { ToolProviderLookup, ResolveStoredToolProvidersOpts } from './runtime';
+export { resolveStoredToolProviders, resolveSingleProviderTool, buildConnectionSuffix } from './runtime';
+export type { ToolProviderLookup, ResolveStoredToolProvidersOpts, ResolveSingleProviderToolOpts } from './runtime';
 
-export { DuplicateToolProviderError, UnknownToolProviderError } from './errors';
+export { DuplicateToolProviderError, UnknownToolProviderError, ToolProviderStepError } from './errors';

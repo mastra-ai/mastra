@@ -20,10 +20,11 @@ const fixtures = JSON.parse(
 ) as Array<{ name: string; input: unknown; expected: unknown }>;
 
 describe('workflow builder authoring contract', () => {
-  it('publishes all eleven persisted graph families', () => {
+  it('publishes all twelve persisted graph families', () => {
     expect(WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES).toEqual([
       'agent',
       'tool',
+      'provider-tool',
       'classifier',
       'mapping',
       'workflow',

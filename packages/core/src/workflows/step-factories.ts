@@ -9,12 +9,19 @@ import type { MastraScorers } from '../evals';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema } from '../schema';
 import type { DynamicArgument } from '../types';
-import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from './entry-executors';
+import {
+  runAgentEntry,
+  runClassifierEntry,
+  runMappingEntry,
+  runProviderToolEntry,
+  runToolEntry,
+} from './entry-executors';
 import type { ClassifierStepOutput } from './entry-executors';
 import type { ExecuteFunction, Step } from './step';
 import type {
   DefaultEngineType,
   MappingConfig,
+  ProviderToolEntry,
   SerializableClassifierStepOptions,
   StepMetadata,
   ToolStep,
@@ -165,6 +172,22 @@ export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
     __toolRef: params,
     __toolOptions: toolOpts,
   } as Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+}
+
+export function createStepFromProviderToolEntry(
+  entry: ProviderToolEntry,
+  mastra?: Parameters<typeof runProviderToolEntry>[2],
+): Step<string, any, any, any, any, any, DefaultEngineType> {
+  return {
+    id: entry.id,
+    description: entry.description,
+    inputSchema: toStandardSchema(z.any()),
+    outputSchema: toStandardSchema(z.any()),
+    retries: entry.options?.retries,
+    metadata: entry.options?.metadata,
+    execute: async ctx => runProviderToolEntry(entry, ctx, mastra),
+    component: 'TOOL',
+  } as Step<string, any, any, any, any, any, DefaultEngineType>;
 }
 
 /**

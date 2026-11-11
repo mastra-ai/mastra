@@ -1,3 +1,15 @@
+import { Composio } from '@composio/core';
+import type {
+  ConnectedAccountListResponse,
+  Tool as ComposioTool,
+  ToolListParams as ComposioToolListParams,
+  ToolKitItem,
+} from '@composio/core';
+import { MastraProvider } from '@composio/mastra';
+import type { MastraToolCollection } from '@composio/mastra';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+
+import type { RequestContext } from '@mastra/core/request-context';
 import type {
   AuthFlowStatus,
   AuthorizeOpts,
@@ -16,18 +28,6 @@ import type {
 } from '@mastra/core/tool-provider';
 import { BaseToolProvider } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
-import type { RequestContext } from '@mastra/core/request-context';
-
-import { Composio } from '@composio/core';
-import type {
-  ConnectedAccountListResponse,
-  Tool as ComposioTool,
-  ToolListParams as ComposioToolListParams,
-  ToolKitItem,
-} from '@composio/core';
-import { MastraProvider } from '@composio/mastra';
-import type { MastraToolCollection } from '@composio/mastra';
 
 export interface ComposioToolProviderConfig extends BaseToolProviderOptions {
   /** Composio API key. */
@@ -209,6 +209,8 @@ export class ComposioToolProvider extends BaseToolProvider {
       name: tool.name ?? tool.slug,
       description: tool.description,
       toolkit: tool.toolkit?.slug ?? opts.toolkit ?? '',
+      inputSchema: tool.inputParameters,
+      outputSchema: tool.outputParameters,
     }));
 
     return {

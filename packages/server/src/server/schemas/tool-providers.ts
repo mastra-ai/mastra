@@ -252,6 +252,8 @@ export const listToolProviderToolsResponseSchema = z.object({
       name: z.string(),
       description: z.string().optional(),
       toolkit: z.string().optional(),
+      inputSchema: z.record(z.string(), z.unknown()).optional(),
+      outputSchema: z.record(z.string(), z.unknown()).optional(),
     }),
   ),
   pagination: paginationSchema,

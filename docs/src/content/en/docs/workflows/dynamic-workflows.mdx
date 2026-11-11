@@ -109,6 +109,25 @@ await mastra.addDynamicWorkflow(definition)
 
 Register referenced components on the same `Mastra` instance before adding the dynamic workflow. Agent and nested workflow entries use their intrinsic IDs. A tool entry uses its key from the `Mastra` `tools` object. The quickstart registers the tool under `create-greeting` before referencing that key with `toolId`.
 
+A `provider-tool` entry instead identifies one tool in a `ToolProvider` registered on the `MastraEditor`. Use it for provider-managed OAuth tools that aren't present in the static `tools` registry:
+
+```typescript
+const providerToolEntry = {
+  type: 'provider-tool',
+  id: 'create-issue',
+  providerId: 'composio',
+  toolSlug: 'GITHUB_CREATE_ISSUE',
+  connection: {
+    kind: 'author',
+    connectionId: 'github-connection',
+    toolkit: 'github',
+    scope: 'per-author',
+  },
+}
+```
+
+Mastra resolves exactly that tool when the step runs. It persists the workflow's original owner for `author` connections, uses the execution identity for `invoker` connections, and derives `caller-supplied` connections from request context. Later saves don't transfer workflow ownership.
+
 Use a `mapping` entry when one step's output doesn't match the next step's input. Mapping entries can read data from the workflow input and previous step results, along with workflow state and request context. The [definition reference](/reference/workflows/dynamic-workflow-definition#mapping-steps) lists the supported mapping descriptors.
 
 ### Replace a workflow

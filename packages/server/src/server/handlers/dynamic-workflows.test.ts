@@ -1,7 +1,7 @@
 import type { Mastra as MastraType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -83,10 +83,14 @@ function buildMastra() {
   return mastra;
 }
 
-function ctx(mastra: MastraType): ServerContext {
+function ctx(mastra: MastraType, resourceId?: string): ServerContext {
+  const requestContext = new RequestContext();
+  if (resourceId) {
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  }
   return {
     mastra,
-    requestContext: new RequestContext(),
+    requestContext,
     abortSignal: new AbortController().signal,
   };
 }
@@ -578,6 +582,27 @@ describe('Dynamic Workflows handlers', () => {
 
       // Rejected before registration and persistence.
       expect(() => mastra.getWorkflow('wf-schema-clash')).toThrow();
+    });
+
+    it('preserves the original workflow owner on later saves', async () => {
+      const input = {
+        id: 'wf-owned',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+      };
+
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({ ...ctx(mastra, 'owner-a'), ...input });
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({ ...ctx(mastra, 'owner-b'), ...input });
+
+      const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-b'),
+        dynamicWorkflowId: 'wf-owned',
+      });
+      expect(row.authorId).toBe('owner-a');
     });
 
     it('re-POST with the same id replaces the live registration', async () => {

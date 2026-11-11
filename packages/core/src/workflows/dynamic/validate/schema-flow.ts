@@ -63,6 +63,8 @@ function inputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistry
       return index.agents?.[entry.agentId]?.inputSchema ?? agentInputSchema;
     case 'tool':
       return index.tools?.[entry.toolId]?.inputSchema;
+    case 'provider-tool':
+      return entry.inputSchema;
     case 'classifier':
       return undefined;
     case 'workflow':
@@ -79,6 +81,8 @@ function outputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistr
       return entry.outputSchema ?? index.agents?.[entry.agentId]?.outputSchema ?? agentTextOutputSchema;
     case 'tool':
       return index.tools?.[entry.toolId]?.outputSchema;
+    case 'provider-tool':
+      return entry.outputSchema;
     case 'classifier':
       return index.classifiers?.[entry.classifierId]?.outputSchema ?? classifierOutputSchema;
     case 'workflow':
@@ -224,6 +228,7 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
       case 'step':
       case 'agent':
       case 'tool':
+      case 'provider-tool':
       case 'classifier':
       case 'mapping':
       case 'workflow':

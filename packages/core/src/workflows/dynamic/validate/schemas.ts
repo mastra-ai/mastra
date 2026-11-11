@@ -28,6 +28,10 @@ export function validateWorkflowSchemas(def: WorkflowValidationInput): WorkflowV
     if (entry.type === 'agent' && entry.outputSchema) {
       check(entry.outputSchema, `${path}.outputSchema`, `step "${entry.id}" outputSchema`);
     }
+    if (entry.type === 'provider-tool') {
+      if (entry.inputSchema) check(entry.inputSchema, `${path}.inputSchema`, `step "${entry.id}" inputSchema`);
+      if (entry.outputSchema) check(entry.outputSchema, `${path}.outputSchema`, `step "${entry.id}" outputSchema`);
+    }
   });
   return issues;
 }

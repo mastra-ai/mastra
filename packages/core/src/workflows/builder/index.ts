@@ -25,6 +25,7 @@ export type WorkflowBuilderSingleStepEntry = Exclude<SerializedSingleStepEntry, 
 
 export type WorkflowBuilderAgentEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'agent' }>;
 export type WorkflowBuilderToolEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'tool' }>;
+export type WorkflowBuilderProviderToolEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'provider-tool' }>;
 export type WorkflowBuilderClassifierEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'classifier' }>;
 export type WorkflowBuilderMappingEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'mapping' }>;
 export type WorkflowBuilderWorkflowEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'workflow' }>;
@@ -131,6 +132,7 @@ export type WorkflowBuilderTypeAssertions = [
 export const WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES = [
   'agent',
   'tool',
+  'provider-tool',
   'classifier',
   'mapping',
   'workflow',
@@ -175,7 +177,15 @@ function normalizeJsonValue(value: unknown, path: string, seen: Set<object>): Wo
 // would otherwise omit. Strip null at exactly the optional structural slots the
 // canonical schema declares — never blanket-strip, because a mapping constant
 // source `{ "value": null }` is a legitimate null.
-const OPTIONAL_ENTRY_KEYS = ['description', 'metadata', 'outputSchema', 'options', 'opts'] as const;
+const OPTIONAL_ENTRY_KEYS = [
+  'description',
+  'metadata',
+  'inputSchema',
+  'outputSchema',
+  'connection',
+  'options',
+  'opts',
+] as const;
 // `id` is optional only on container entries (parallel/conditional/foreach/loop);
 // on sleep/sleepUntil/mapping it is required, so a null id there must survive to
 // fail validation instead of being silently dropped.
@@ -198,6 +208,9 @@ function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEnt
   if (normalized.options && typeof normalized.options === 'object' && !Array.isArray(normalized.options)) {
     dropNullKeys(normalized.options as WorkflowBuilderJsonObject, OPTIONAL_STEP_OPTION_KEYS);
     if (Object.keys(normalized.options).length === 0) delete normalized.options;
+  }
+  if (normalized.connection && typeof normalized.connection === 'object' && !Array.isArray(normalized.connection)) {
+    dropNullKeys(normalized.connection as WorkflowBuilderJsonObject, ['label', 'scope']);
   }
   if (normalized.opts && typeof normalized.opts === 'object' && !Array.isArray(normalized.opts)) {
     dropNullKeys(normalized.opts as WorkflowBuilderJsonObject, OPTIONAL_FOREACH_OPT_KEYS);

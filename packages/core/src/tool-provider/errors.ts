@@ -26,3 +26,15 @@ export class UnknownToolProviderError extends Error {
     this.knownIds = knownIds;
   }
 }
+
+export class ToolProviderStepError extends Error {
+  readonly providerId: string;
+  readonly toolSlug: string;
+
+  constructor(providerId: string, toolSlug: string, reason: string, options?: ErrorOptions) {
+    super(`Failed to resolve provider tool "${providerId}/${toolSlug}": ${reason}`, options);
+    this.name = 'ToolProviderStepError';
+    this.providerId = providerId;
+    this.toolSlug = toolSlug;
+  }
+}

@@ -88,6 +88,7 @@ export interface ClassifierRegistrySchemas extends WorkflowRegistrySchemas {
 export interface WorkflowRegistryIndex {
   agents?: Record<string, WorkflowRegistrySchemas>;
   tools?: Record<string, WorkflowRegistrySchemas>;
+  toolProviders?: Record<string, WorkflowRegistrySchemas>;
   classifiers?: Record<string, ClassifierRegistrySchemas>;
   workflows?: Record<string, WorkflowRegistrySchemas>;
 }

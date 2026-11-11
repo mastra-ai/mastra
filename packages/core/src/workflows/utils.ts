@@ -307,7 +307,7 @@ export function defineLazyWriter<T extends object, W>(
   }) as T & { writer: W };
 }
 
-const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
+const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'provider-tool', 'classifier', 'mapping'] as const;
 
 /**
  * Whether an entry is a "single step-like" entry: a plain user step or one of the
