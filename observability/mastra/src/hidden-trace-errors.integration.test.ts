@@ -100,14 +100,15 @@ function setup(model: MockLanguageModelV2, tracingOptions: Hide) {
     tools: { validateIban },
     defaultOptions: { tracingOptions },
   });
+  const observability = new Observability({
+    configs: { test: { serviceName: 'hidden-trace-errors-it', exporters: [exporter] } },
+  });
   const mastra = new Mastra({
     agents: { banking: agent },
     storage: new MockStore(),
-    observability: new Observability({
-      configs: { test: { serviceName: 'hidden-trace-errors-it', exporters: [exporter] } },
-    }),
+    observability,
   });
-  return { exporter, agent: mastra.getAgent('banking') };
+  return { exporter, observability, agent: mastra.getAgent('banking') };
 }
 
 /**
@@ -119,32 +120,23 @@ function exportedErrors(exporter: TestExporter): string {
   return JSON.stringify(exporter.getAllSpans().map(span => span.errorInfo));
 }
 
-/** Wait until span delivery to the exporter goes quiet. */
-async function settle(exporter: TestExporter) {
-  let prev = -1;
-  for (let i = 0; i < 100 && exporter.getAllSpans().length !== prev; i++) {
-    prev = exporter.getAllSpans().length;
-    await new Promise(r => setTimeout(r, 20));
-  }
-}
-
 async function runToolError(tracingOptions: Hide) {
-  const { exporter, agent } = setup(toolThenTextModel(), tracingOptions);
+  const { exporter, observability, agent } = setup(toolThenTextModel(), tracingOptions);
   const res = await agent.stream(`Please pay to ${SECRET}`);
   await res.consumeStream();
-  await settle(exporter);
+  await observability?.flush();
   const toolSpan = exporter.getAllSpans().find(span => span.type === SpanType.TOOL_CALL && span.errorInfo);
   return { exporter, toolSpan };
 }
 
 async function runProviderError(tracingOptions: Hide) {
-  const { exporter, agent } = setup(refusingProviderModel(), tracingOptions);
+  const { exporter, observability, agent } = setup(refusingProviderModel(), tracingOptions);
   // The run fails; only what it exported matters here.
   await agent
     .stream(`my IBAN is ${SECRET}`)
     .then(res => res.consumeStream())
     .catch(() => undefined);
-  await settle(exporter);
+  await observability?.flush();
   const failed = exporter.getAllSpans().filter(span => span.errorInfo);
   return { exporter, failed };
 }
@@ -162,16 +154,11 @@ describe.each<[string, Hide]>([
     expect(exportedErrors(exporter)).not.toContain(SECRET);
   });
 
-  it('a provider refusing the prompt keeps its status but not the echoed prompt', async () => {
+  it('a provider refusing the prompt omits its free-form details', async () => {
     const { exporter, failed } = await runProviderError(tracingOptions);
 
     expect(failed.length).toBeGreaterThan(0);
-    const withStatus = failed.find(span => span.errorInfo?.details?.statusCode === 400);
-    expect(withStatus?.errorInfo?.details).toEqual({
-      statusCode: 400,
-      url: 'https://provider.example.com/v1/chat',
-      isRetryable: false,
-    });
+    expect(failed.every(span => span.errorInfo?.details === undefined)).toBe(true);
     expect(exportedErrors(exporter)).not.toContain(SECRET);
   });
 });
@@ -189,7 +176,8 @@ describe('span errors on a trace that is not hidden', () => {
   it('exports the provider response body', async () => {
     const { failed } = await runProviderError({});
 
-    expect(JSON.stringify(failed.map(span => span.errorInfo))).toContain(SECRET);
+    const responseBody = failed.find(span => span.errorInfo?.details?.responseBody)?.errorInfo?.details?.responseBody;
+    expect(JSON.stringify(responseBody)).toContain(SECRET);
   });
 });
 

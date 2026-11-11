@@ -32,24 +32,14 @@ import type { DeepCleanOptions } from './serialization';
 export const REDACTED_ERROR_MESSAGE = '[REDACTED]';
 
 /**
- * `details` keys kept on hidden traces. These are the provider API fields that
- * `apiCallErrorDetails` already sanitizes. Anything else (a provider's response
- * body, free-form `MastraError` details) can echo the hidden data.
- */
-const SAFE_ERROR_DETAIL_KEYS = ['statusCode', 'url', 'isRetryable'] as const;
-
-/**
  * The error as exported from a trace that hides input or output: keeps what
- * identifies the error (id, name, domain, category, stack frames, provider
- * status) and drops the text, which often quotes the hidden data.
+ * identifies the error (id, name, domain, category, stack frames) and drops
+ * text and free-form details, which can quote the hidden data.
  */
 export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo: T, stackMessage?: string): T {
   if (!errorInfo) return errorInfo;
 
-  const { message: _message, stack, details, ...identity } = errorInfo;
-  const safeDetails = details
-    ? Object.fromEntries(SAFE_ERROR_DETAIL_KEYS.filter(key => key in details).map(key => [key, details[key]]))
-    : undefined;
+  const { message: _message, stack, details: _details, ...identity } = errorInfo;
 
   return {
     ...identity,
@@ -57,7 +47,6 @@ export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo:
     ...(stack !== undefined
       ? { stack: redactStackHeader(stack, stackMessage ?? errorInfo.message, errorInfo.name) }
       : {}),
-    ...(safeDetails && Object.keys(safeDetails).length > 0 ? { details: safeDetails } : {}),
   } as T;
 }
 
