@@ -64,7 +64,7 @@ interface OtelExporterConfig {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
     description:
-      "Level for the logger the exporter creates when no `logger` is passed (default: 'info'). It has no effect on a supplied `logger`. When the exporter is registered with Mastra, Mastra replaces this logger with the application logger.",
+      "Level for the logger the exporter creates when no `logger` is passed (default: 'info'). It has no effect on a supplied `logger`. When the exporter is registered with Mastra, Mastra replaces this logger with the application logger. Setting `debug` also writes exporter diagnostics directly to the console and installs a global OpenTelemetry diagnostic logger, whichever logger is in use.",
     isOptional: true,
   },
   {

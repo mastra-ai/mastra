@@ -181,7 +181,7 @@ app.get('/custom/public', createAuthMiddleware({ mastra, requiresAuth: false }),
 })
 ```
 
-`createAuthMiddleware()` calls the next handler without authenticating when the Mastra server has no `auth` config, or when the route matches an `auth.public` pattern. In those cases `mastra__user` isn't set, so protected handlers should reject requests without it, as the example above does.
+`createAuthMiddleware()` calls the next handler without authenticating when the Mastra server has no `auth` config, or when the route matches a public pattern. Public patterns include the built-in defaults (`/api` and `/api/auth/*`) and any `auth.public` patterns you configure. In those cases `mastra__user` isn't set, so protected handlers should reject requests without it, as the example above does.
 
 ## Accessing context
 
