@@ -480,6 +480,8 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
+    /** The `cursor` of the whole board this reader holds: the answer is then what moved since. */
+    since: z.string().optional(),
   })
   .refine(query => !(query.scope && query.sessionId), {
     path: ['scope'],
@@ -1040,11 +1042,19 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
     responseSchema: z.object({
+      /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
-      /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
+      /**
+       * With `started=false`: how many cards matched, of which `workItems` holds the first `limit`.
+       * With `removedIds`: how many cards the board holds, for a reader to check its copy against.
+       */
       total: z.number().int().nonnegative().optional(),
+      /** Names this read of the whole board. Absent when the next read must list it whole again. */
+      cursor: z.string().optional(),
+      /** Cards gone since the `since` sent. Its presence marks an answer that holds only what moved. */
+      removedIds: z.array(z.string()).optional(),
     }),
   },
   workItemCreate: {

@@ -2310,6 +2310,77 @@ describe('run activity on the work-item listing', () => {
     return workItem;
   };
 
+  describe('a board read that sends its cursor back (?since=)', () => {
+    // Steps past the window a `since` read goes back to catch a writer whose clock runs behind.
+    const later = () => vi.setSystemTime(Date.now() + 10_000);
+    const read = async (since?: string) => {
+      const res = await buildApp(orgUser).request(since === undefined ? boardPath() : `${boardPath()}?since=${since}`);
+      const text = await res.text();
+      return { ...FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(JSON.parse(text)), bytes: text.length };
+    };
+    /** A board of `count` cards, read in full once every write to it is older than the window. */
+    const boardOf = async (count: number) => {
+      const cards: { id: string }[] = [];
+      for (let from = 0; from < count; from += 50) {
+        const ids = Array.from({ length: Math.min(50, count - from) }, (_, i) => `issue-${from + i}`);
+        cards.push(...(await Promise.all(ids.map(id => createCard(id)))));
+      }
+      later();
+      return { cards, board: await read() };
+    };
+
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }));
+
+    it('sends only the cards written and the ids removed since the cursor', async () => {
+      const { cards, board } = await boardOf(4);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+      await json('PATCH', `/web/factory/work-items/${cards[2]!.id}`, { title: 'Reworded' });
+      await json('DELETE', `/web/factory/work-items/${cards[3]!.id}`);
+      later();
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title).sort()).toEqual(['Renamed', 'Reworded']);
+      expect(next).toMatchObject({ removedIds: [cards[3]!.id], total: 3 });
+      later();
+      expect(await read(next.cursor)).toMatchObject({ workItems: [], removedIds: [], total: 3 });
+    });
+
+    it('sends a card stamped before the cursor that the cursor’s read did not hold', async () => {
+      const { board } = await boardOf(1);
+      // A second writer: its card lands after the read, stamped by a clock behind this one.
+      vi.setSystemTime(Date.now() - 2_000);
+      const late = await createCard('late');
+      later();
+
+      expect((await read(board.cursor)).workItems.map(card => card.id)).toEqual([late.id]);
+    });
+
+    it.each(['not-a-cursor', ''])('sends the whole board for the cursor %j, which it did not issue', async since => {
+      await boardOf(2);
+
+      const answer = await read(since);
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toEqual(expect.any(String));
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers one changed card in the same bytes on a board of 50 cards and of 2,000', async () => {
+      const bytes = [];
+      for (const count of [50, 2_000]) {
+        await seedProject();
+        const { cards, board } = await boardOf(count);
+        later();
+        await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+        bytes.push((await read(board.cursor)).bytes - String(count).length);
+      }
+
+      expect(bytes[1]).toBe(bytes[0]);
+    }, 60_000);
+  });
+
   describe('one session’s cards (?sessionId=)', () => {
     const scopedPath = (...sessionIds: string[]) =>
       `${boardPath()}?${sessionIds.map(sessionId => `sessionId=${encodeURIComponent(sessionId)}`).join('&')}`;

@@ -463,15 +463,18 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             q: context.req.query('q'),
             limit: context.req.query('limit'),
             source: context.req.queries('source'),
+            since: context.req.query('since'),
           });
           // A filter that fails to parse must not widen to the whole board.
           if (!query.success) return c.json({ error: listQueryError(query.error.issues[0]?.path[0]) }, 400);
           await workItems.ensureReady();
-          const board = await workItems.listShared({
+          const { sessionId: sessionIds, scope, started, q, limit, source, since } = query.data;
+          const list = await workItems.listSharedSince({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
+            since: scope || sessionIds || started || source ? undefined : since,
           });
-          const { sessionId: sessionIds, scope, started, q, limit, source } = query.data;
+          const board = list.items;
           const unstarted = started ? unstartedCards(board, q ?? '', limit) : undefined;
           const part =
             unstarted?.cards ??
@@ -483,9 +486,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const items = part ?? board;
           const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
           const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
+          // A tab that kept the board gets what moved since its cursor: a body the size of the change.
+          if (list.changed) {
+            const workItems = list.changed.map(toWireWorkItem);
+            const moved = { workItems, removedIds: list.removed, total: board.length, cursor: list.cursor };
+            const body = { ...moved, runningSessionIds: running, parkedSessionIds: parked };
+            return c.json(body, 200, { 'Cache-Control': 'no-store' });
+          }
           const snapshot = part
             ? scopedSnapshot(part, toWireWorkItem, running, parked, unstarted?.total)
-            : boardSnapshot(board, toWireWorkItem, running, parked);
+            : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           const headers: Record<string, string> = {
             ETag: snapshot.etag,

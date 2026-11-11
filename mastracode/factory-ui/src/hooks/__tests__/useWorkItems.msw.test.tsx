@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -11,6 +12,7 @@ import {
   useParkedSessions,
   useSessionWorkItemsQuery,
   useTransitionWorkItemMutation,
+  useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
   useWorkItemsQuery,
 } from '../useWorkItems';
@@ -311,5 +313,148 @@ describe('useSessionWorkItemsQuery', () => {
     });
     await waitFor(() => expect(result.current.board.data?.map(card => card.id)).toEqual(['item-2', ITEM_ID]));
     expect(result.current.session.data?.map(card => card.id)).toEqual([ITEM_ID]);
+  });
+});
+
+describe('useWorkItemsQuery', () => {
+  const card = (id: string, title = id) => ({ ...wireItem, id, title, createdAt: `2026-07-0${id}T00:00:00.000Z` });
+  const titles = (cards: WorkItem[] | undefined) => cards?.map(item => item.title);
+  /** Answers the board reads in turn, and records the `since` each one sent. */
+  function serveBoard(...answers: unknown[]) {
+    const sinces: Array<string | null> = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, async ({ request }) => {
+        sinces.push(new URL(request.url).searchParams.get('since'));
+        return HttpResponse.json((await answers[sinces.length - 1]) as object);
+      }),
+    );
+    return sinces;
+  }
+  /** What a feed frame does to the board. */
+  const refresh = (client: QueryClient) => client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
+
+  it('reads the board whole, then merges what moved since its cursor into the cards it holds', async () => {
+    const sinces = serveBoard(
+      { workItems: [card('5'), card('4'), card('2'), card('1')], cursor: 'first' },
+      { workItems: [card('4', 'Renamed'), card('3'), card('6')], removedIds: ['5'], total: 5, cursor: 'second' },
+    );
+    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['5', '4', '2', '1']));
+    const unchanged = result.current.data!.slice(2);
+
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['6', 'Renamed', '3', '2', '1']));
+    expect(sinces).toEqual([null, 'first']);
+    // Each sits where another card did: sharing by position would have rebuilt them.
+    expect(result.current.data![3]).toBe(unchanged[0]);
+    expect(result.current.data![4]).toBe(unchanged[1]);
+  });
+
+  it('takes a whole board whenever the server sends one, as one that ignores `since` does', async () => {
+    const sinces = serveBoard(
+      { workItems: [card('1')], cursor: 'first' },
+      { workItems: [card('2'), card('1')] },
+      { workItems: [card('2'), card('1')] },
+    );
+    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['1']));
+
+    await act(() => refresh(client));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['2', '1']));
+    const cards = result.current.data;
+    await act(() => refresh(client));
+    await waitForMutationsIdle(client);
+
+    expect(sinces).toEqual([null, 'first', null]);
+    expect(result.current.data).toBe(cards);
+  });
+
+  it('reads the board whole once when its count differs from the server’s', async () => {
+    const sinces = serveBoard(
+      { workItems: [card('1')], cursor: 'first' },
+      { workItems: [], removedIds: [], total: 2, cursor: 'second' },
+      { workItems: [card('2'), card('1')], cursor: 'third' },
+    );
+    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['1']));
+
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['2', '1']));
+    expect(sinces).toEqual([null, 'first', null]);
+  });
+
+  it('keeps a change the server has not answered through a merge, and drops it once the server refuses', async () => {
+    let refuse!: () => void;
+    let answerLate!: (answer: object) => void;
+    const refusal = new Promise<void>(resolve => (refuse = resolve));
+    const lateAnswer = new Promise<object>(resolve => (answerLate = resolve));
+    const nothingMoved = { workItems: [], removedIds: [], total: 2 };
+    const sinces = serveBoard(
+      { workItems: [card('2'), card('1')], cursor: 'first' },
+      { ...nothingMoved, cursor: 'second' },
+      lateAnswer,
+      { workItems: [card('2'), card('1')], cursor: 'fourth' },
+    );
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/1`, async () => {
+        await refusal;
+        return HttpResponse.json({ error: 'refused' }, { status: 409 });
+      }),
+    );
+    const { result, client } = renderHookWithProviders(() => ({
+      cards: useWorkItemsQuery(PROJECT_ID),
+      update: useUpdateWorkItemMutation(PROJECT_ID),
+    }));
+    const parent = () => result.current.cards.data?.[1]?.parentWorkItemId;
+    await waitFor(() => expect(result.current.cards.data).toHaveLength(2));
+
+    act(() => result.current.update.mutate({ id: '1', patch: { parentWorkItemId: '2' } }));
+    await waitFor(() => expect(parent()).toBe('2'));
+    await act(() => refresh(client));
+    expect(sinces).toEqual([null, 'first']);
+    expect(parent()).toBe('2');
+
+    // The refusal lands while a read is out: its answer must not bring the change back.
+    act(() => void refresh(client));
+    await waitFor(() => expect(sinces).toHaveLength(3));
+    refuse();
+    await waitFor(() => expect(result.current.update.isError).toBe(true));
+    answerLate({ ...nothingMoved, cursor: 'third' });
+    await waitForMutationsIdle(client);
+
+    expect(parent()).toBeNull();
+    expect(sinces).toEqual([null, 'first', 'second', null]);
+  });
+
+  it('does not take a card being deleted here for a drifted count', async () => {
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => (finish = resolve));
+    const sinces = serveBoard(
+      { workItems: [card('2'), card('1')], cursor: 'first' },
+      { workItems: [], removedIds: [], total: 2, cursor: 'second' },
+      { workItems: [], removedIds: ['1'], total: 1, cursor: 'third' },
+    );
+    server.use(
+      http.delete(`${TEST_BASE_URL}/web/factory/work-items/1`, async () => {
+        await finished;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const { result, client } = renderHookWithProviders(() => ({
+      cards: useWorkItemsQuery(PROJECT_ID),
+      remove: useDeleteWorkItemMutation(PROJECT_ID),
+    }));
+    await waitFor(() => expect(result.current.cards.data).toHaveLength(2));
+
+    act(() => result.current.remove.mutate('1'));
+    await waitFor(() => expect(titles(result.current.cards.data)).toEqual(['2']));
+    await act(() => refresh(client));
+    finish();
+    await waitForMutationsIdle(client);
+
+    expect(titles(result.current.cards.data)).toEqual(['2']);
+    expect(sinces).toEqual([null, 'first', 'second']);
   });
 });

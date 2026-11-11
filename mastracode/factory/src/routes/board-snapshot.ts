@@ -33,9 +33,10 @@ export function boardSnapshot(
   toWire: (item: Card) => unknown,
   runningSessionIds: readonly string[],
   parkedSessionIds: readonly string[],
+  cursor?: string,
 ): BoardSnapshot {
   // Random per cached list, so an ETag from before a restart never matches a different board.
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, () => randomUUID());
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, () => randomUUID(), { cursor });
 }
 
 /**
@@ -51,7 +52,7 @@ export function scopedSnapshot(
   parkedSessionIds: readonly string[],
   total?: number,
 ): BoardSnapshot {
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, total);
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, { total });
 }
 
 function snapshot(
@@ -60,7 +61,7 @@ function snapshot(
   runningSessionIds: readonly string[],
   parkedSessionIds: readonly string[],
   cardsId: (json: string) => string,
-  total?: number,
+  more: { total?: number; cursor?: string },
 ): BoardSnapshot {
   let cards = cardsJson.get(items);
   if (!cards) {
@@ -69,7 +70,7 @@ function snapshot(
     cardsJson.set(items, cards);
   }
   // Everything the body holds beside the cards: a 304 must never hide a change to any of it.
-  const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, total });
+  const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, ...more });
   const etag = `W/"${cards.id}.${sha1(rest)}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 

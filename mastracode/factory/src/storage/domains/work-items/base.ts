@@ -2018,13 +2018,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * `previous` updated with the cards changed or deleted since `since`. Reads from a few seconds
-   * earlier so a writer whose clock runs behind this one is still caught.
+   * The cards written and the cards deleted since `since`. Reads from a few seconds earlier so a
+   * writer whose clock runs behind this one is still caught.
    */
-  async #listDelta(orgId: string, factoryProjectId: string, previous: readonly Card[], since: number): Promise<Card[]> {
+  #movedSince(orgId: string, factoryProjectId: string, since: number) {
     const from = new Date(since - LIST_DELTA_CLOCK_SKEW_MS);
     const scope = { org_id: orgId, factory_project_id: factoryProjectId };
-    const [rows, tombstones] = await Promise.all([
+    return Promise.all([
       this.#cards(super.ops, { transaction: true }).findMany(scope, {
         orderBy: [['changed_at', 'asc']],
         cursor: { values: [from] },
@@ -2034,6 +2034,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         cursor: { values: [from] },
       }),
     ]);
+  }
+
+  /** `previous` updated with the cards changed or deleted since `since`. */
+  async #listDelta(orgId: string, factoryProjectId: string, previous: readonly Card[], since: number): Promise<Card[]> {
+    const [rows, tombstones] = await this.#movedSince(orgId, factoryProjectId, since);
     if (rows.length === 0 && tombstones.length === 0) return [...previous];
     const changed = new Map(rows.map(row => [row.id, toWorkItem(row)]));
     const deleted = new Set(tombstones.map(row => row.id));
@@ -2070,15 +2075,45 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
-  /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
-  async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: Card[]; cached: boolean }> {
+  /**
+   * {@link listShared} for a reader that keeps the board between reads. `cursor` names this read.
+   * Sent back as `since`, it adds what moved since that read: `changed`, the listed cards written
+   * since, and `removed`, the ids no longer listed. Without them only the whole list answers: no
+   * cursor or one this didn't issue, or a board showing Review cards, which move without a write.
+   */
+  async listSharedSince(scope: { orgId: string; factoryProjectId: string; since?: string }): Promise<{
+    items: readonly Card[];
+    cursor?: string;
+    changed?: Card[];
+    removed?: string[];
+  }> {
+    const { items, readFrom } = await this.#listCached(scope.orgId, scope.factoryProjectId);
+    if (readFrom === undefined || items.some(card => card.board === LEGACY_REVIEW_BOARD)) return { items };
+    const cursor = String(readFrom);
+    if (!/^\d{1,15}$/.test(scope.since ?? '')) return { items, cursor };
+    const [rows, tombstones] = await this.#movedSince(scope.orgId, scope.factoryProjectId, Number(scope.since));
+    // Answered from `items`, the list `cursor` names, so the two agree: a write that list doesn't
+    // hold yet is left for the read that sends `cursor` back.
+    const moved = new Set([...rows, ...tombstones].map(row => row.id));
+    const changed = items.filter(card => moved.delete(card.id));
+    return { items, cursor, changed, removed: tombstones.map(row => row.id).filter(id => moved.has(id)) };
+  }
+
+  /**
+   * `cached` is true when `items` is shared with other callers, which callers that mutate must clone.
+   * `readFrom` is when the read that produced a cached `items` began.
+   */
+  async #listCached(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<{ items: Card[]; cached: boolean; readFrom?: number }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
     // so the next call refetches instead of trusting a snapshot taken before that write.
     const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
     const hit = this.#listCache.get(key);
     if (version && hit?.version === version && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS) {
-      return { items: hit.items, cached: true };
+      return { items: hit.items, cached: true, readFrom: hit.readFrom };
     }
     if (!version) {
       const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
@@ -2087,7 +2122,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
     const inFlight = this.#listInFlight.get(key);
     if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
-      return { items: await inFlight.items, cached: true };
+      return { items: await inFlight.items, cached: true, readFrom: inFlight.startedAt };
     }
     const startedAt = Date.now();
     // Within the TTL a version change only needs the cards changed since the last read; the TTL
@@ -2115,7 +2150,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           this.#listCache.delete(this.#listCache.keys().next().value!);
         }
       }
-      return { items, cached: true };
+      return { items, cached: true, readFrom: startedAt };
     } finally {
       if (this.#listInFlight.get(key)?.items === read) this.#listInFlight.delete(key);
     }
