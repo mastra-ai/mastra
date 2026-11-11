@@ -42,4 +42,26 @@ describe('held restart leases (#28712)', () => {
       vi.useRealTimers();
     }
   });
+
+  it('keeps renewing the lease while a liveness read never answers', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = (await new InMemoryStore().getStore('workflows'))!;
+      const claim = await store.claimRunOwnership({
+        runId: restartLeaseKey('restarted'),
+        ownerId: 'restarter',
+        leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+      });
+      // The store hangs on every liveness read.
+      vi.spyOn(store, 'getRunOwnerships').mockReturnValue(new Promise(() => {}));
+      const hold = holdRestartLease({ store, runId: 'restarted', record: claim.record! });
+
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 2);
+
+      expect((await store.getRunOwnership({ runId: restartLeaseKey('restarted') }))?.live).toBe(true);
+      await hold.release();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

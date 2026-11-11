@@ -32,15 +32,18 @@ interface HeldRestart {
   logger?: IMastraLogger;
   heldSince: number;
   renewedAt: number;
+  /** Set while a renewal of this lease is in flight, so overlapping ticks do not renew it twice. */
+  renewing?: boolean;
   /** Stops holding; `handedOff` tells whether a worker took the run over. */
   end(handedOff: boolean): void;
 }
 
 /**
  * Checks every restart lease held against one store on one timer: one batched
- * liveness read per tick for all of them, then the renewals that are due,
- * which run even when the read failed. The next tick starts one interval after
- * the previous one settles, and the ticks stop once nothing is held.
+ * liveness read for all of them, then the renewals that are due, which run
+ * even when the read failed or has not answered within one check interval.
+ * The next tick starts one interval after the previous one settles, and the
+ * ticks stop once nothing is held.
  */
 class RestartLeasePoller {
   readonly #held = new Set<HeldRestart>();
@@ -48,6 +51,8 @@ class RestartLeasePoller {
   #stopTicks?: () => void;
   /** Whether the last liveness read failed, so a streak of failures is logged once. */
   #readFailing = false;
+  /** The batched liveness read in flight, shared by the ticks that run until it settles. */
+  #reading?: Promise<Map<string, RunOwnershipRecord>>;
 
   constructor(readonly store: WorkflowsStorage) {}
 
@@ -72,7 +77,7 @@ class RestartLeasePoller {
     }
 
     // A tick of this chain that is still running may overlap the first tick of the next chain.
-    // Both only read liveness and renew the same fences, so the overlap is harmless.
+    // They share the liveness read in flight and skip leases the other is renewing.
     this.#stopTicks?.();
     this.#stopTicks = undefined;
   }
@@ -95,16 +100,59 @@ class RestartLeasePoller {
       return;
     }
 
-    const live = await this.#readLiveness(checked);
+    const live = await this.#readLivenessWithinInterval(checked);
     const due = checked.filter(held => {
       if (live.get(runLivenessKey(held.runId))?.live) {
         held.end(true);
       }
 
-      return this.#held.has(held) && Date.now() - held.renewedAt >= LIVENESS_RENEW_INTERVAL_MS;
+      return this.#held.has(held) && !held.renewing && Date.now() - held.renewedAt >= LIVENESS_RENEW_INTERVAL_MS;
     });
 
     await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, held => this.#renew(held));
+  }
+
+  /**
+   * The liveness records the batched read returns within one check interval,
+   * or none when it has not answered by then. The due leases are renewed
+   * either way: a read that never settles must not let them lapse while the
+   * restarted runs wait in a worker backlog.
+   *
+   * At most one read is in flight. A tick that finds the previous read still
+   * pending waits on it again instead of starting another, so a slow store
+   * gets no pile of reads, and its answer reaches the first tick after it
+   * arrives. That answer covers the holds of the tick that started the read;
+   * a hold added since is checked by the next read.
+   */
+  async #readLivenessWithinInterval(checked: HeldRestart[]): Promise<Map<string, RunOwnershipRecord>> {
+    // `#readLiveness` never rejects, so the chain needs no handler.
+    this.#reading ??= this.#readLiveness(checked).finally(() => {
+      this.#reading = undefined;
+    });
+
+    let expire!: () => void;
+    const deadline = new Promise<undefined>(resolve => {
+      expire = () => resolve(undefined);
+    });
+    const timer = setTimeout(expire, HANDOFF_CHECK_INTERVAL_MS);
+    timer.unref?.();
+
+    try {
+      const records = await Promise.race([this.#reading, deadline]);
+      if (records) {
+        return records;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Debug only: a read that is merely slow answers on a later tick, and one that fails warns there.
+    checked
+      .find(held => held.logger)
+      ?.logger?.debug('Renewing held restart leases without waiting for a slow liveness read', {
+        runs: checked.length,
+      });
+    return new Map();
   }
 
   /**
@@ -140,6 +188,7 @@ class RestartLeasePoller {
 
   /** Renews one held lease, and ends the hold when the lease was taken over. Never rejects. */
   async #renew(held: HeldRestart): Promise<void> {
+    held.renewing = true;
     try {
       const renewal = await this.store.renewRunOwnership({ ...held.fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
       if (renewal.renewed) {
@@ -151,6 +200,8 @@ class RestartLeasePoller {
       // Retried on the next tick, well before the lease lapses. Debug only: a store that is down
       // fails every renewal, and the liveness read already warns about it.
       held.logger?.debug('Failed to renew a restarted workflow run lease', { runId: held.runId, error });
+    } finally {
+      held.renewing = false;
     }
   }
 }
