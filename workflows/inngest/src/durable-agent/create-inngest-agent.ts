@@ -54,6 +54,7 @@ import {
   runResumeDurableStreamUntilIdle,
   getRunStreamSlot,
   getScopeStreamSlot,
+  untilIdleHandlesBackgroundTask,
   globalRunRegistry,
   getRunRegistryEntry,
   deleteRunRegistryEntry,
@@ -722,6 +723,10 @@ export interface InngestAgent<TOutput = undefined> {
   abortThreadStream: Agent<any, any, TOutput>['abortThreadStream'];
   /** @internal Thread abort for the server route; runs the Inngest override above. */
   __abortThreadStreamAcrossProcesses: Agent<any, any, TOutput>['__abortThreadStreamAcrossProcesses'];
+  /** @internal Whether an open `untilIdle` stream on this agent handles a finished background task. */
+  __untilIdleHandlesBackgroundTask: Agent<any, any, TOutput>['__untilIdleHandlesBackgroundTask'];
+  /** @internal Wakes the thread for a finished background task unless an `untilIdle` stream on this agent handles it. */
+  __notifyBackgroundTaskFinished: Agent<any, any, TOutput>['__notifyBackgroundTaskFinished'];
   /** Abort a run by id, including on the Inngest worker executing it. */
   abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
@@ -1362,6 +1367,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
     | '__abortThreadStreamAcrossProcesses'
+    | '__untilIdleHandlesBackgroundTask'
+    | '__notifyBackgroundTaskFinished'
     | 'abortRunStream'
     | '__abortRunAcknowledged'
     | '__fork'
@@ -2719,6 +2726,21 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
       ]);
       return true;
+    },
+
+    // untilIdle streams are tracked on this agent, not the wrapped one, so
+    // the wrapped Agent's check would never see them (#29785).
+    __untilIdleHandlesBackgroundTask(threadId, resourceId, taskId) {
+      return untilIdleHandlesBackgroundTask(activeStreamUntilIdle, threadId, resourceId, taskId);
+    },
+
+    // Defined here too: the proxy binds forwarded methods to the wrapped Agent,
+    // so its version would call its own check above instead of this agent's.
+    async __notifyBackgroundTaskFinished(params) {
+      if (untilIdleHandlesBackgroundTask(activeStreamUntilIdle, params.threadId, params.resourceId, params.taskId)) {
+        return;
+      }
+      return agent.__notifyBackgroundTaskFinished(params);
     },
 
     abortRunStream(runId) {

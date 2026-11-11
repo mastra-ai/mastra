@@ -9,12 +9,13 @@ import { STATUS_MARKER_BY_ACTIVITY, pinnedSessionsAfter } from '../services/sess
 import type { SessionListRow } from '../services/sessionRows';
 import type { UserSessionVisibility } from '../services/user-sessions';
 import { SessionNavRow } from './SessionNavRow';
+import type { LivePullRequestStatus } from '../../../../hooks/useWorkspacePullRequestStatuses';
 
 export function SessionListItem({
   factoryId,
   row,
   disabled,
-  merged,
+  liveStatus,
   level,
   compact,
   onDelete,
@@ -27,7 +28,8 @@ export function SessionListItem({
   /** Single-line row; otherwise a second line shows when it last moved and its change request. */
   compact: boolean;
   disabled: boolean;
-  merged: boolean | undefined;
+  /** The change request's state from the live check, which can be ahead of the work item. */
+  liveStatus: LivePullRequestStatus | undefined;
   onDelete: (row: SessionListRow) => void;
   /** The card's child sessions, nested under its row. */
   subItems?: ReactNode;
@@ -57,7 +59,7 @@ export function SessionListItem({
       source={row.source}
       active={row.active}
       disabled={disabled}
-      merged={merged}
+      liveStatus={liveStatus}
       changeRequestProvider={row.pullRequest?.provider}
       status={STATUS_MARKER_BY_ACTIVITY[row.status]}
       pinned={row.pinned}
