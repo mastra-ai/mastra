@@ -22,6 +22,7 @@ import { Mastra } from './index';
 
 const replicas: Mastra[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown({ drainTimeout: 0 })));
 });
 
@@ -127,5 +128,18 @@ describe('boot-time recovery of evented runs behind a worker backlog (#28712)', 
     const c = await startReplica(storage, 'C', executions);
     await c.restartAllActiveWorkflowRuns();
     await vi.waitFor(() => expect(executions).toEqual(['C:orphaned']));
+  }, 20_000);
+
+  it('keeps renewing a held restart lease while reading run liveness fails', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    await persistActiveRun(storage, 'orphaned');
+    // Every batched ownership read fails, as a timed-out chunk query would.
+    vi.spyOn(store, 'getRunOwnerships').mockRejectedValue(new Error('read timed out'));
+    const b = await startReplica(storage, 'B', [], backloggedPubSub('never'));
+    await b.restartAllActiveWorkflowRuns();
+
+    await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 1.5);
+    expect((await store.getRunOwnership({ runId: restartLeaseKey('orphaned') }))?.live).toBe(true);
   }, 20_000);
 });

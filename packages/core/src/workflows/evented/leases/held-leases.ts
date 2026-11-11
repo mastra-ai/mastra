@@ -2,6 +2,7 @@
  * Leases this process keeps renewing on behalf of a run it handed to the
  * workers, until a worker takes the run over.
  */
+import type { IMastraLogger } from '../../../logger';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import { runOutsideRunFenceScope } from '../../../storage/run-fencing';
 import type { RunFence, RunOwnershipRecord } from '../../../storage/run-fencing';
@@ -29,6 +30,7 @@ interface HeldRestart {
   runId: string;
   fence: RunFence;
   scope?: LivenessScope;
+  logger?: IMastraLogger;
   heldSince: number;
   renewedAt: number;
   /** Stops holding; `handedOff` tells whether a worker took the run over. */
@@ -38,8 +40,8 @@ interface HeldRestart {
 /**
  * Checks every restart lease held against one store with a single timer: one
  * batched liveness read per tick for all of them, then the renewals that are
- * due. A tick does not start while the previous one runs, and the timer stops
- * once nothing is held.
+ * due, which run even when the read failed. A tick does not start while the
+ * previous one runs, and the timer stops once nothing is held.
  */
 class RestartLeasePoller {
   readonly #held = new Set<HeldRestart>();
@@ -75,20 +77,31 @@ class RestartLeasePoller {
         return this.#held.has(held);
       });
       if (checked.length === 0) return;
-      const live = await this.store.getRunOwnerships({ runIds: checked.map(held => runLivenessKey(held.runId)) });
+      // A failed read only means no hand-off is seen this tick: the due leases are still renewed,
+      // or another instance could take one over and restart its run again.
+      const live = await Promise.resolve()
+        .then(() => this.store.getRunOwnerships({ runIds: checked.map(held => runLivenessKey(held.runId)) }))
+        .catch(error => {
+          checked
+            .find(held => held.logger)
+            ?.logger?.warn('Failed to read whether restarted workflow runs were handed to a worker', {
+              runs: checked.length,
+              error,
+            });
+          return new Map<string, RunOwnershipRecord>();
+        });
       const due = checked.filter(held => {
         if (live.get(runLivenessKey(held.runId))?.live) held.end(true);
         return this.#held.has(held) && Date.now() - held.renewedAt >= LIVENESS_RENEW_INTERVAL_MS;
       });
       await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, async held => {
-        const renewal = await this.store
-          .renewRunOwnership({ ...held.fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS })
+        // A failed renewal is retried on the next tick, well before the lease lapses.
+        const renewal = await Promise.resolve()
+          .then(() => this.store.renewRunOwnership({ ...held.fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS }))
           .catch(() => undefined);
         if (renewal?.renewed) held.renewedAt = Date.now();
         else if (renewal) held.end(false);
       });
-    } catch {
-      // A failed read is retried on the next tick, well before any held lease lapses.
     } finally {
       this.#ticking = false;
     }
@@ -115,11 +128,13 @@ export function holdRestartLease({
   store,
   runId,
   record,
+  logger,
 }: {
   scope?: LivenessScope;
   store: WorkflowsStorage;
   runId: string;
   record: RunOwnershipRecord;
+  logger?: IMastraLogger;
 }): WorkflowRunOwnership {
   let poller = restartLeasePollers.get(store);
   if (!poller) restartLeasePollers.set(store, (poller = new RestartLeasePoller(store)));
@@ -131,6 +146,7 @@ export function holdRestartLease({
     runId,
     fence: { runId: record.runId, generation: record.generation, ownerId: record.ownerId },
     scope,
+    logger,
     heldSince: now,
     renewedAt: now,
     end(handedOffToWorker) {

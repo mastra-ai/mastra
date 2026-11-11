@@ -2032,6 +2032,7 @@ export class EventedRun<
       scope: this.mastra,
       store: await this.mastra?.getStorage()?.getStore('workflows'),
       runId: this.runId,
+      logger: this.mastra?.getLogger(),
     });
 
     // The restart event can sit in the broker for a while: a live key keeps other instances from

@@ -2,6 +2,7 @@
  * The `restart()` side of evented leases: whether a run is still live, and the
  * short lease that lets one of several concurrent restarts publish.
  */
+import type { IMastraLogger } from '../../../logger';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import type { RunOwnershipRecord } from '../../../storage/run-fencing';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
@@ -26,10 +27,12 @@ export async function claimEventedRestart({
   scope,
   store,
   runId,
+  logger,
 }: {
   scope?: LivenessScope;
   store: WorkflowsStorage | undefined;
   runId: string;
+  logger?: IMastraLogger;
 }): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
   const unfenced: WorkflowRunOwnership = { release: async () => {} };
   if (!store || !(await store.supportsRunFencing())) {
@@ -47,5 +50,7 @@ export async function claimEventedRestart({
     leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
     force: false,
   });
-  return claim.acquired ? holdRestartLease({ scope, store, runId, record: claim.record }) : { owner: claim.record };
+  return claim.acquired
+    ? holdRestartLease({ scope, store, runId, record: claim.record, logger })
+    : { owner: claim.record };
 }
