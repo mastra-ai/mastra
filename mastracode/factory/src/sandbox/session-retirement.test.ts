@@ -38,7 +38,7 @@ function workItem(sessionId: string): Card {
     acceptedAt: null,
     autonomyArmedAt: null,
     plansPreapprovedAt: null,
-    commentCount: 0,
+    description: null,
     workItem: {
       id: 'work-item-1',
       orgId: 'org-1',

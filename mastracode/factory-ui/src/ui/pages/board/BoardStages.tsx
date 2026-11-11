@@ -9,14 +9,17 @@ import { BoardTooltipDelay } from '../../domains/factory/components/BoardCardPar
 import { BoardColumn, BoardColumnHeader } from '../../domains/factory/components/BoardColumn';
 import { BoardDetailsDock } from '../../domains/factory/components/BoardDetailsDock';
 import { BoardList, BoardListGroup } from '../../domains/factory/components/BoardList';
+import { PhaseExitTool } from '../../domains/factory/components/PhaseExitTool';
+import type { PhaseExitToolInfo } from '../../domains/factory/components/PhaseExitTool';
 import { BoardOpenCardContext } from '../../domains/factory/context/BoardOpenCardContext';
 import { BoardScrollContext } from '../../domains/factory/context/BoardScrollContext';
 import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
-import type { LinkedComment } from '../../domains/factory/hooks/useOpenCardState';
 
 export interface BoardStageView {
   stage: { id: string; label: string };
   phaseKind?: BoardPhaseKind;
+  /** The tool whose success ends this working phase. */
+  exitTool?: PhaseExitToolInfo;
   taskCount: number;
   loading: boolean;
   collapsed: boolean;
@@ -30,20 +33,17 @@ export function BoardStages({
   layout,
   stages: stageViews,
   totalTaskCount,
-  linkedComment,
   onDrop,
   toolbar,
 }: {
   layout: BoardLayout;
   stages: BoardStageView[];
   totalTaskCount: number;
-  /** A `?item&comment` link, which opens its card. */
-  linkedComment: LinkedComment | undefined;
   onDrop: (payload: DragPayload, stage: string) => void;
   toolbar: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const openCard = useOpenCardState(linkedComment);
+  const openCard = useOpenCardState();
   return (
     <BoardScrollContext value={scrollRef}>
       <BoardOpenCardContext value={openCard}>
@@ -65,6 +65,11 @@ export function BoardStages({
                         loading={stageView.loading}
                         collapsed={stageView.collapsed}
                         headerAction={stageView.createButton}
+                        headerExtras={
+                          stageView.exitTool && (
+                            <PhaseExitTool phaseLabel={stageView.stage.label} exitTool={stageView.exitTool} />
+                          )
+                        }
                       />
                     ))}
                   </div>
@@ -103,6 +108,11 @@ export function BoardStages({
                           open={stageView.groupOpen}
                           onOpenChange={stageView.onGroupOpenChange}
                           action={stageView.createButton}
+                          extras={
+                            stageView.exitTool && (
+                              <PhaseExitTool phaseLabel={stageView.stage.label} exitTool={stageView.exitTool} />
+                            )
+                          }
                           onDrop={onDrop}
                         >
                           {stageView.cards}

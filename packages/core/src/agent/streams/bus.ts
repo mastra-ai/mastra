@@ -1,4 +1,5 @@
 import type { MastraServerCache } from '../../cache/base';
+import { InMemoryServerCache } from '../../cache/inmemory';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
@@ -20,6 +21,17 @@ export interface AgentStreamBusHooks {
    */
   usesSharedRunLog: () => boolean;
   warn: (message: string) => void;
+}
+
+/** Runs `cleanup` after `timeoutMs`. A timeout of 0 keeps run state forever, so nothing is scheduled. */
+export function scheduleStreamCleanup(
+  timeoutMs: number,
+  cleanup: () => void,
+): ReturnType<typeof setTimeout> | undefined {
+  if (timeoutMs === 0) return undefined;
+  const timer = setTimeout(cleanup, timeoutMs);
+  timer.unref?.();
+  return timer;
 }
 
 /**
@@ -44,6 +56,8 @@ export class AgentStreamBus {
   #pubsub: PubSub | null = null;
   /** Resolved cache instance (lazily initialized) */
   #cache: MastraServerCache | null = null;
+  /** Record cache for an unregistered agent with replay off. */
+  #localRecordCache: MastraServerCache | undefined;
 
   constructor(config: AgentStreamsConfig, hooks: AgentStreamBusHooks) {
     this.#hooks = hooks;
@@ -69,9 +83,24 @@ export class AgentStreamBus {
     return this.#cache;
   }
 
+  /**
+   * Where run ownership records live (see `run-records.ts`): the replay cache
+   * when replay is on, so ownership is shared exactly as widely as the history
+   * it guards; otherwise Mastra's server cache; otherwise, for an unregistered
+   * agent with replay off, a cache private to this bus.
+   */
+  get runRecordCache(): MastraServerCache {
+    return this.cache ?? this.#hooks.getMastra()?.serverCache ?? (this.#localRecordCache ??= new InMemoryServerCache());
+  }
+
   /** Grace period before a finished run's state is cleaned up (0 = never). */
   get cleanupTimeoutMs(): number {
     return this.#cleanupTimeoutMs;
+  }
+
+  /** Runs `cleanup` once the grace period passes. Returns no timer when cleanup is disabled. */
+  scheduleCleanup(cleanup: () => void): ReturnType<typeof setTimeout> | undefined {
+    return scheduleStreamCleanup(this.#cleanupTimeoutMs, cleanup);
   }
 
   /**
@@ -142,13 +171,14 @@ export class AgentStreamBus {
   /**
    * The bus a run's frames live on.
    *
-   * When the run's steps execute on whichever worker claims them, its frames
-   * must be on the Mastra-level bus: an observer on the agent's own bus would
-   * never see them. Using one bus also means one cache log per run — the
+   * Once registered, frames go on the Mastra-level bus so any Mastra instance
+   * sharing it can observe the run, even if this bus was resolved before
+   * registration. Using one bus also means one cache log per run — the
    * property offset replay depends on.
    *
-   * When every step runs in this process and publishes through this agent, an
-   * agent-level pubsub keeps carrying its run frames.
+   * A user-provided agent-level pubsub keeps carrying run frames, unless the
+   * run's steps execute on whichever worker claims them (evented): then an
+   * observer on the agent's own bus would never see them.
    */
   #runBus(sharedBus: PubSub | undefined): PubSub {
     return resolveRunBus({

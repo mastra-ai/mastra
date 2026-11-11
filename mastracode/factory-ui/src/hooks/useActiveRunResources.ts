@@ -10,15 +10,14 @@ interface ActiveRunResourcesOptions {
   resourceIds: string[];
 }
 
-/** `/active-runs` is the controller's whole registry, so every caller shares one poll. */
-function activeRunsQuery(agentControllerId: string, baseUrl: string) {
+/** `/active-runs` is the controller's whole registry, so every caller shares one read. The feed re-reads it: nothing here polls. */
+export function activeRunsQueryOptions(agentControllerId: string, baseUrl: string) {
   return queryOptions({
     queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl),
     queryFn: async () => {
       const { controller } = createAgentControllerClient({ agentControllerId, baseUrl });
       return requireAgentController(controller).listActiveRuns();
     },
-    refetchInterval: 5_000,
     retry: false,
   });
 }
@@ -30,7 +29,7 @@ function activeRunsQuery(agentControllerId: string, baseUrl: string) {
  */
 export function useActiveRunResourceIds(agentControllerId: string): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const { data } = useQuery(activeRunsQuery(agentControllerId, baseUrl));
+  const { data } = useQuery(activeRunsQueryOptions(agentControllerId, baseUrl));
   return useMemo(
     () =>
       new Set(

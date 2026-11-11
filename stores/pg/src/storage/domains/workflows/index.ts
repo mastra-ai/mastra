@@ -480,9 +480,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
     if (snapshotType !== 'jsonb') return;
 
+    const concurrently = !this.#db.isTableCreatedInThisInit(TABLE_WORKFLOW_SNAPSHOT);
     const indexName = workflowSnapshotStatusIndexName(this.#schema);
     try {
-      await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema, true));
+      await this.#db.createIndexFromStatement(
+        indexName,
+        workflowSnapshotStatusIndexSQL(indexName, this.#schema, concurrently),
+      );
     } catch (error) {
       this.logger?.warn?.(`Failed to create index ${indexName}:`, error);
     }
@@ -493,7 +497,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       await this.#db.createIndexFromStatement(
         threadIdIndexName,
-        workflowSnapshotThreadIdIndexSQL(threadIdIndexName, this.#schema, true),
+        workflowSnapshotThreadIdIndexSQL(threadIdIndexName, this.#schema, concurrently),
       );
     } catch (error) {
       this.logger?.warn?.(`Failed to create index ${threadIdIndexName}:`, error);
@@ -1906,19 +1910,9 @@ export class WorkflowsPG extends WorkflowsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const v2WhereClause = v2Conditions.length > 0 ? `WHERE ${v2Conditions.join(' AND ')}` : '';
 
-      let total = 0;
       const usePagination = typeof perPage === 'number' && typeof page === 'number';
-      if (usePagination) {
-        const countResult = await this.#db.client.one(
-          `SELECT (SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${whereClause})
-             + (SELECT COUNT(*) FROM ${this.#runsTable()} ${v2WhereClause}) AS count`,
-          values,
-        );
-        total = Number(countResult.count);
-      }
-
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
-      const offset = usePagination ? page! * normalizedPerPage : undefined;
+      const offset = usePagination ? page! * normalizedPerPage : 0;
 
       // In summary mode only read status/timestamp out of the snapshot so large snapshots aren't transferred.
       // Legacy json/text columns get the same sanitizing path as the status filter so bad escapes can't fail the list.
@@ -1945,6 +1939,19 @@ export class WorkflowsPG extends WorkflowsStorage {
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = await Promise.all((result || []).map(row => this.#parseRun(this.#db.client, row)));
+
+      let total = 0;
+      if (usePagination) {
+        total = offset + runs.length;
+        if (runs.length === normalizedPerPage || (runs.length === 0 && offset > 0)) {
+          const countResult = await this.#db.client.one(
+            `SELECT (SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${whereClause})
+               + (SELECT COUNT(*) FROM ${this.#runsTable()} ${v2WhereClause}) AS count`,
+            values,
+          );
+          total = Number(countResult.count);
+        }
+      }
 
       return { runs, total: total || runs.length };
     } catch (error) {

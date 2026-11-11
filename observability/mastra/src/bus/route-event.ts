@@ -100,6 +100,28 @@ export function routeToHandler(
         }
         break;
 
+      case 'feedback_review_status':
+        if (handler.onFeedbackReviewStatusEvent) {
+          return catchAsyncResult(
+            handler.onFeedbackReviewStatusEvent(event),
+            handler.name,
+            'feedback review status',
+            logger,
+          );
+        }
+        break;
+
+      case 'feedback_replacement':
+        if (handler.onFeedbackReplacementEvent) {
+          return catchAsyncResult(
+            handler.onFeedbackReplacementEvent(event),
+            handler.name,
+            'feedback replacement',
+            logger,
+          );
+        }
+        break;
+
       case 'feedback':
         if (handler.onFeedbackEvent) {
           return catchAsyncResult(handler.onFeedbackEvent(event as FeedbackEvent), handler.name, 'feedback', logger);

@@ -219,7 +219,7 @@ describe('chat run errors', () => {
     ).toBeVisible();
 
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
-    await user.click(await screen.findByRole('option', { name: /gpt-5\.4/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4(?! Mini)/ }));
 
     await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
   });
@@ -278,7 +278,7 @@ describe('chat run errors', () => {
       expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
 
       await user.click(await screen.findByRole('button', { name: 'Change model' }));
-      await user.click(await screen.findByRole('option', { name: /claude-opus-4-5/ }));
+      await user.click(await screen.findByRole('option', { name: /Claude Opus 4\.5/ }));
 
       await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
     },
@@ -293,6 +293,30 @@ describe('chat run errors', () => {
     );
 
     expect(screen.getByText('Provider access failed')).toBeVisible();
+  });
+
+  it('sends the organization to add credits on Mastra when a run runs out of gateway credits', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 0,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const outOfCredits = failedReply(
+      "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
+      'AI_APICallError',
+      { statusCode: 402 },
+    );
+    renderWithProviders(<ErrorSession messages={[outOfCredits]} modelId="mastra/anthropic/claude-opus-5.5" />);
+
+    expect(screen.getByText('Out of Mastra Gateway credits')).toBeVisible();
+    const addCredits = await screen.findByRole('link', { name: 'Add credits' });
+    expect(addCredits).toHaveAttribute('href', 'https://projects.mastra.ai/add-credits/org-1');
+    expect(addCredits).toHaveAttribute('target', '_blank');
   });
 
   it('continues a timed-out run from the card', async () => {

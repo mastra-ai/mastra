@@ -127,47 +127,36 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
     }
   }
 
-  private readonly NEGATED_OPERATORS: Record<string, string> = {
-    $eq: '$ne',
-    $ne: '$eq',
-    $gt: '$lte',
-    $gte: '$lt',
-    $lt: '$gte',
-    $lte: '$gt',
-    $in: '$nin',
-    $nin: '$in',
-    $exists: '$exists', // Special case - we'll flip the value
-  };
-
   private formatNot(path: string, value: any): string {
     if (typeof value !== 'object') {
       return `${path} != ${this.formatValue(value)}`;
     }
 
-    if (!Object.keys(value).some(k => k.startsWith('$'))) {
-      const [fieldName, fieldValue] = Object.entries(value)[0] ?? [];
+    // NOT(a AND b) is (NOT a OR NOT b), so every entry is negated and the results are OR-ed
+    const negated = Object.entries(value).map(([key, val]) =>
+      key.startsWith('$') ? this.negateOperator(path, key, val) : this.negateField(path ? `${path}.${key}` : key, val),
+    );
 
-      // If it's a nested condition with an operator
-      if (typeof fieldValue === 'object' && fieldValue !== null && Object.keys(fieldValue)[0]?.startsWith('$')) {
-        const [op, val] = Object.entries(fieldValue)[0] ?? [];
-        const negatedOp = this.NEGATED_OPERATORS[op as string];
-        if (!negatedOp) throw new Error(`Unsupported operator in NOT: ${op}`);
+    return negated.length > 1 ? `(${negated.join(' OR ')})` : (negated[0] ?? '');
+  }
 
-        // Special case for $exists - negate the value instead of the operator
-        if (op === '$exists') {
-          return this.translateOperator(op, !val, fieldName ?? '');
-        }
-
-        return this.translateOperator(negatedOp, val, fieldName ?? '');
-      }
-
-      // Otherwise handle as simple field value
-      return `${fieldName} != ${this.formatValue(fieldValue)}`;
+  private negateField(fieldName: string, fieldValue: any): string {
+    if (Array.isArray(fieldValue)) {
+      // The positive form of an empty array never matches, so its negation always does
+      return fieldValue.length === 0
+        ? '(HAS FIELD empty OR HAS NOT FIELD empty)'
+        : `${fieldName} NOT IN (${this.formatArray(fieldValue)})`;
     }
+    if (typeof fieldValue === 'object' && fieldValue !== null && Object.keys(fieldValue).length > 0) {
+      const negated = Object.entries(fieldValue).map(([key, val]) =>
+        key.startsWith('$') ? this.negateOperator(fieldName, key, val) : this.negateField(`${fieldName}.${key}`, val),
+      );
+      return negated.length > 1 ? `(${negated.join(' OR ')})` : negated[0]!;
+    }
+    return `${fieldName} != ${this.formatValue(fieldValue)}`;
+  }
 
-    // Handle top-level operators
-    const [op, val] = Object.entries(value)[0] ?? [];
-
+  private negateOperator(path: string, op: string, val: any): string {
     // Handle comparison operators
     if (op === '$lt') return `${path} >= ${this.formatValue(val)}`;
     if (op === '$lte') return `${path} > ${this.formatValue(val)}`;
@@ -182,23 +171,30 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
     if (op === '$in') return `${path} NOT IN (${this.formatArray(val as any[])})`;
     if (op === '$nin') return `${path} IN (${this.formatArray(val as any[])})`;
     if (op === '$exists') return val ? `HAS NOT FIELD ${path}` : `HAS FIELD ${path}`;
+    if (op === '$all') {
+      // Positive $all is an AND of CONTAINS (always true when empty), so its negation is an OR of NOT CONTAINS
+      if (!Array.isArray(val) || val.length === 0) return '(HAS FIELD empty AND HAS NOT FIELD empty)';
+      const negated = val.map(item => `${path} NOT CONTAINS ${this.formatValue(item)}`);
+      return negated.length > 1 ? `(${negated.join(' OR ')})` : negated[0]!;
+    }
 
-    // Transform NOT(AND) into OR(NOT) and NOT(OR) into AND(NOT)
+    // Transform NOT(AND) into OR(NOT) and NOT(OR) into AND(NOT), negating each condition as a whole
+    // and keeping the field path when the NOT is applied to a field
     if (op === '$and' || op === '$or') {
       const newOp = op === '$and' ? '$or' : '$and';
-      const conditions = (val as any[]).map((condition: any) => {
-        const [fieldName, fieldValue] = Object.entries(condition)[0] ?? [];
-        return { [fieldName as string]: { $not: fieldValue } };
-      });
+      const conditions = (val as any[]).map((condition: any) =>
+        path ? { [path]: { $not: condition } } : { $not: condition },
+      );
       return this.translateOperator(newOp, conditions, '');
     }
 
     // NOT(NOR) is equivalent to OR
     if (op === '$nor') {
-      return this.translateOperator('$or', val, '');
+      const conditions = (val as any[]).map((condition: any) => (path ? { [path]: condition } : condition));
+      return this.translateOperator('$or', conditions, '');
     }
 
-    return `${path} != ${this.formatValue(val)}`;
+    throw new Error(`Unsupported operator in NOT: ${op}`);
   }
 
   private formatValue(value: any): string {

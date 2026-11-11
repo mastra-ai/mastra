@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { queryKeys } from '../api/keys';
+import { cardMoveMutationKey, queryKeys } from '../api/keys';
 import {
   createWorkItem,
   deleteWorkItem,
@@ -32,10 +32,13 @@ function requireFactoryProjectId(factoryProjectId: string | undefined): string {
   return factoryProjectId;
 }
 
-/** Rewrite the cached board's cards, keeping the session activity read alongside them. */
+/**
+ * Rewrite the cached cards of the board and of every session read under `listKey`, keeping the
+ * session activity read alongside them.
+ */
 function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: WorkItem[]) => WorkItem[]) {
   // Returning undefined skips the write: never seed a partial board before the list query loads.
-  queryClient.setQueryData<BoardSnapshot>(listKey, board =>
+  queryClient.setQueriesData<BoardSnapshot>({ queryKey: listKey }, board =>
     board ? { ...board, workItems: patch(board.workItems) } : undefined,
   );
 }
@@ -62,11 +65,7 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
-    // Relationships can be created by GitHub ingestion or another open tab.
-    // Keep thread-page counterpart links current without requiring a reload.
-    refetchInterval: 5_000,
-    // Cards move autonomously (rule transitions, agent runs); polling pauses
-    // while the tab is hidden, so refresh immediately on return.
+    // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
   });
 }
@@ -75,6 +74,24 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
+}
+
+/**
+ * The cards holding one session, with the cards related to them: what a session page reads
+ * instead of the board.
+ */
+export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, sessionId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.sessionWorkItems(factoryProjectId, sessionId),
+    queryFn:
+      factoryProjectId && sessionId
+        ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { sessionId })
+        : skipToken,
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
+    select: selectCards,
+  });
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
@@ -95,10 +112,12 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
     mutationFn: (input: CreateWorkItemInput) =>
       createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
     onSuccess: item => {
-      patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards => [
-        item,
-        ...cards.filter(i => i.id !== item.id),
-      ]);
+      const boardKey = queryKeys.workItems(factoryProjectId);
+      // A session's cards take the saved card only where they hold it; a new card joins the board alone.
+      patchCards(queryClient, boardKey, cards => cards.map(card => (card.id === item.id ? item : card)));
+      queryClient.setQueryData<BoardSnapshot>(boardKey, board =>
+        board ? { ...board, workItems: [item, ...board.workItems.filter(card => card.id !== item.id)] } : undefined,
+      );
     },
   });
 }
@@ -112,7 +131,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) => updateWorkItem(baseUrl, id, patch),
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      const previous = queryClient.getQueryData<BoardSnapshot>(listKey);
+      const previous = queryClient.getQueriesData<BoardSnapshot>({ queryKey: listKey });
       if (patch.parentWorkItemId !== undefined) {
         patchCards(queryClient, listKey, cards =>
           cards.map(item => (item.id === id ? { ...item, parentWorkItemId: patch.parentWorkItemId ?? null } : item)),
@@ -121,7 +140,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(listKey, context.previous);
+      for (const [key, snapshot] of context?.previous ?? []) queryClient.setQueryData(key, snapshot);
     },
     onSuccess: item => {
       patchCards(queryClient, listKey, cards => cards.map(i => (i.id === item.id ? item : i)));
@@ -164,7 +183,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
-  const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
+  const mutationKey = cardMoveMutationKey(factoryProjectId);
   const mutation = useMutation({
     mutationKey,
     mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
@@ -227,8 +246,11 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
           };
         }),
       );
-      // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
-      // move pending until the card shows that run, so its button never reappears in between.
+    },
+    // Landed or not, the board skipped its card reads while this was in flight, so it re-reads here.
+    // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
+    // move pending until the card shows that run, so its button never reappears in between.
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),
@@ -269,12 +291,12 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     mutationFn: (id: string) => deleteWorkItem(baseUrl, id),
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      const previous = queryClient.getQueryData<BoardSnapshot>(listKey);
+      const previous = queryClient.getQueriesData<BoardSnapshot>({ queryKey: listKey });
       patchCards(queryClient, listKey, cards => cards.filter(item => item.id !== id));
       return { previous };
     },
     onError: (_err, _id, context) => {
-      if (context?.previous) queryClient.setQueryData(listKey, context.previous);
+      for (const [key, snapshot] of context?.previous ?? []) queryClient.setQueryData(key, snapshot);
     },
     onSuccess: () => {
       // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.

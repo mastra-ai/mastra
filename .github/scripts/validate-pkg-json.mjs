@@ -5,7 +5,6 @@ const IGNORE_LIST = [
   '@internal',
   '@mastra/memory-integration-tests',
   '@mastra/longmemeval',
-  '@mastra/mcp-configuration',
   '@mastra/server-adapters-test-suite',
   'mastra-docs',
 ];

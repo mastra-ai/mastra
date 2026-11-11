@@ -18,6 +18,7 @@ import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/do
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 import { server } from '@/test/msw-server';
+import { toUntrustedAppContext } from '@/utils/mcp-app-context';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -96,6 +97,27 @@ describe('MessageRow', () => {
       renderRow(baseMessage({ role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'Hello there' }] } }));
       expect(screen.getByText('Hello there')).toBeTruthy();
       expect(screen.queryByLabelText(/^Skill:/)).toBeNull();
+    });
+  });
+
+  describe('when a user message carries MCP App context', () => {
+    const appContextMessage = () =>
+      baseMessage({
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Show me the traces for the selection I drilled into.' },
+            { type: 'text', text: toUntrustedAppContext(['{"page":"traces","filters":[]}']) },
+          ],
+        },
+      });
+
+    it('shows only the text the user typed', () => {
+      const { container } = renderRow(appContextMessage());
+      expect(screen.getByText('Show me the traces for the selection I drilled into.')).toBeTruthy();
+      expect(container.textContent).not.toContain('mcp-app-context');
+      expect(container.textContent).not.toContain('"page":"traces"');
     });
   });
 

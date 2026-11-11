@@ -9,7 +9,13 @@ import type {
   SpanQueryResponse,
   TraceQueryPredicate,
 } from '@mastra/core/storage';
-import type { ClientOptions, GetObservabilityCapabilitiesResponse, ListFeedbackResponse } from '../types';
+import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
+  ClientOptions,
+  GetObservabilityCapabilitiesResponse,
+  ListFeedbackResponse,
+} from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 import type {
@@ -475,7 +481,9 @@ export class Observability extends BaseResource {
    * On ClickHouse-backed stores, reads may briefly return deleted rows until
    * the lightweight delete is fully applied.
    * @param params - IDs of the traces to delete
-   * @returns Promise resolving to `{ success: true }` once the delete is issued
+   * @returns `{ success: true }` after OSS deletion, or `{ accepted: true }`
+   * when a supporting Platform backend queues cleanup. Acceptance does not
+   * mean records have disappeared from reads.
    */
   deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.request(`/observability/traces/delete`, {
@@ -499,6 +507,11 @@ export class Observability extends BaseResource {
   // --------------------------------------------------------------------------
   // Scores (observability storage)
   // --------------------------------------------------------------------------
+
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.request(`/observability/scores/${encodeURIComponent(id)}`);
+  }
 
   /**
    * Retrieves a paginated list of scores with optional filtering and sorting.
@@ -530,6 +543,8 @@ export class Observability extends BaseResource {
    * Deletes score records by scoreId, optionally scoped to a tenant.
    * Idempotent: deleting missing ids succeeds. Depending on the storage
    * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   * A supporting Platform backend returns `{ accepted: true }` after queueing
+   * cleanup; OSS returns `{ success: boolean }` after deletion.
    */
   deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
     return this.request(`/observability/scores`, {
@@ -582,6 +597,11 @@ export class Observability extends BaseResource {
   // Feedback
   // --------------------------------------------------------------------------
 
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.request(`/observability/feedback/${encodeURIComponent(id)}`);
+  }
+
   /**
    * Retrieves a paginated list of feedback with optional filtering and sorting.
    */
@@ -631,6 +651,8 @@ export class Observability extends BaseResource {
    * Deletes feedback records by feedbackId, optionally scoped to a tenant.
    * Idempotent: deleting missing ids succeeds. Depending on the storage
    * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   * A supporting Platform backend returns `{ accepted: true }` after queueing
+   * cleanup; OSS returns `{ success: boolean }` after deletion.
    */
   deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
     return this.request(`/observability/feedback`, {
