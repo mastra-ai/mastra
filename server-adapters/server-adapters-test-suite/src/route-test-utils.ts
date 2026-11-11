@@ -63,6 +63,10 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
     return { body: { resourceId: 'test-resource' } };
   }
 
+  if (route.path === '/schedules' && route.method === 'POST') {
+    return { body: { cron: '* * * * *' } };
+  }
+
   // `data` must match the payloadSchema of the 'ticket.created' event on test-server-1.
   if (route.path === '/mcp/:serverId/events/:eventName/emit') {
     return { body: { data: { id: 'test-ticket' } } };

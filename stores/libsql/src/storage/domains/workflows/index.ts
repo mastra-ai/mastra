@@ -1114,10 +1114,6 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
   private async setupPragmaSettings() {
     try {
-      // Set busy timeout to wait longer before returning busy errors
-      await this.#client.execute('PRAGMA busy_timeout = 10000;');
-      this.logger.debug('LibSQL Workflows: PRAGMA busy_timeout=10000 set.');
-
       // Enable WAL mode for better concurrency (if supported)
       try {
         await this.#client.execute('PRAGMA journal_mode = WAL;');
