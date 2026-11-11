@@ -914,7 +914,10 @@ export class ObservabilityStorage extends StorageDomain {
     if (!feedback.feedbackId?.trim() || !feedback.traceId?.trim() || !Number.isFinite(feedback.timestamp?.getTime())) {
       throw new Error('Feedback replacement requires feedbackId, traceId, and the original timestamp');
     }
-    await this.writeFeedbackReplacement(args);
+    await this.writeFeedbackReplacement({
+      ...args,
+      feedback: { ...feedback, feedbackUserId: feedback.feedbackUserId ?? null },
+    });
   }
 
   /** Adapters with atomic writes override this fallback; ClickHouse retains sequential protection. */

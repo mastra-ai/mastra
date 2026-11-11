@@ -4836,6 +4836,22 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       }
 
+      it('clears an omitted replacement author without using the trace user or metadata', async () => {
+        await storage.createFeedback({ feedback: original });
+        await storage.replaceFeedback({
+          feedback: {
+            ...original,
+            feedbackUserId: undefined,
+            userId: 'trace-user',
+            metadata: { userId: 'metadata-user' },
+          },
+        });
+        expect(await storage.getFeedbackById(original.feedbackId)).toMatchObject({
+          feedbackUserId: null,
+          userId: 'trace-user',
+        });
+      });
+
       it('accepts a full replacement before the create arrives', async () => {
         await storage.replaceFeedback({ feedback: { ...original, value: -1 } });
         await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
