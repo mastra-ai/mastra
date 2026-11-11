@@ -150,12 +150,14 @@ async function writeFeedback(
   const ids = [...currentFeedback.keys()].sort();
   await withPartitionRetry(client, schema, TABLE_FEEDBACK_EVENTS, rows, partitioning, () =>
     client.tx(async tx => {
-      // Transaction locks cover missing rows too. Sorted acquisition avoids batch deadlocks.
-      for (const id of ids) {
-        await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-          JSON.stringify([schema, TABLE_FEEDBACK_EVENTS, id]),
-        ]);
-      }
+      // Acquire locks in the same sorted-ID order for every batch, in one round trip.
+      // PostgreSQL evaluates this output expression after ORDER BY (the lock isn't a sort key).
+      await tx.query(
+        `SELECT pg_advisory_xact_lock(hashtextextended(lock_key, 0))
+         FROM unnest($1::text[]) WITH ORDINALITY AS locks(lock_key, position)
+         ORDER BY position`,
+        [ids.map(id => JSON.stringify([schema, TABLE_FEEDBACK_EVENTS, id]))],
+      );
       const existing = await tx.any<Record<string, any>>(
         `SELECT DISTINCT ON ("feedbackId") "feedbackId", "traceId", "timestamp", "organizationId", "resourceId"
          FROM ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}

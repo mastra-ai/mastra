@@ -359,6 +359,35 @@ describe('PostgresStoreVNext / shared observability suite', () => {
     }
   });
 
+  it('ignores duplicate feedback in overlapping batches with reversed ID order', async () => {
+    if (!sharedStorage) throw new Error('shared storage was not initialized');
+    await sharedStorage.dangerouslyClearAll();
+    const feedbacks = Array.from({ length: 1000 }, (_, i) => ({
+      feedbackId: `batch-feedback-${i}`,
+      traceId: 'batch-trace',
+      timestamp: new Date(),
+      feedbackType: 'thumbs',
+      feedbackSource: 'user',
+      value: 1,
+    }));
+    try {
+      await Promise.all([
+        sharedStorage.batchCreateFeedback({ feedbacks, onConflict: 'ignore' }),
+        sharedStorage.batchCreateFeedback({
+          feedbacks: [...feedbacks]
+            .reverse()
+            .map(feedback => ({ ...feedback, timestamp: new Date(feedback.timestamp.getTime() + 1) })),
+          onConflict: 'ignore',
+        }),
+      ]);
+      expect((await sharedStorage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'count' })).value).toBe(
+        1000,
+      );
+    } finally {
+      await sharedStorage.dangerouslyClearAll();
+    }
+  });
+
   it('retains changed-timestamp feedback versions while querying only the latest accepted write', async () => {
     if (!sharedStorage || !sharedClient || !sharedSchema)
       throw new Error('shared observability storage was not initialized');
