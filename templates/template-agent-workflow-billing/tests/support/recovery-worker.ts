@@ -1,33 +1,27 @@
-import { independentClient, removeDriverMigration } from './billing.js';
-import { runtimeFixture } from './mastra.js';
-import { initializeBilling } from '../../src/billing/setup.js';
+import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
-import { BillingRecovery } from '../../src/billing/recovery.js';
+import type { UsageEvent } from '../../src/billing/contracts.js';
+import { independentClient } from './billing.js';
+import { runtimeFixture } from './mastra.js';
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
 import { JwtIdentityAdapter } from '../../src/billing/identity.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
 import { OrganizationStorage } from '../../src/billing/storage/organizations.js';
 const [kind, serialized] = process.argv.slice(2);
-if (kind.startsWith('source-')) {
-  const options = JSON.parse(serialized);
-  const initialized = await initializeBilling({
-    ...options,
-    polar: { ...options.polar, contact: async () => ({ email: 'trusted@example.test', name: 'Workspace billing' }) },
-  });
-  const records = await RecoveryStorage.open(options.storage);
-  const worker = new BillingRecovery(records, initialized.provider);
-  if (kind === 'source-intake')
-    await worker.intake({
-      body: Buffer.from(options.notification.body, 'base64'),
-      headers: options.notification.headers,
-    });
-  else await initialized.provider.getState(options.account);
-  process.send?.({ boundaryCommitted: true });
+const options = JSON.parse(serialized);
+if (kind === 'metered-delivery') {
+  const records = await RecoveryStorage.open({ url: options.databaseUrl });
+  const provider = await LocalBillingStorage.open({ url: options.databaseUrl });
+  const [claim] = await records.claimDeliveries({ batchSize: 1, leaseMs: 100 });
+  if (!claim) throw new Error('Expected a persisted delivery');
+  const result = await provider.reportUsage(JSON.parse(claim.payload) as UsageEvent);
+  // The receiver committed, but the sender has not persisted its ACK. Killing
+  // this process leaves a real leased delivery for the next process to recover.
+  process.send?.({ boundary: 'metered-committed', status: result.status, id: claim.id, payload: claim.payload });
   await new Promise(() => {
     setInterval(() => {}, 1000);
   });
 }
-const options = JSON.parse(serialized);
 const directory = options.autumn ? await OrganizationStorage.open({ url: options.databaseUrl }) : undefined;
 const organizations = directory
   ? new OrganizationService(directory, {
@@ -81,16 +75,6 @@ if (kind.startsWith('expiry-')) {
       snapshot: { ...snapshot, status: 'running' },
     });
   }
-  if (kind === 'expiry-legacy') {
-    await removeDriverMigration(observer);
-    // Reconstruct the shipped schema6 boundary in this disposable file only.
-    await observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
-    await observer.execute('DROP TABLE billing_catalog');
-    await observer.execute('DROP TABLE billing_usage_bindings');
-    await observer.execute('DROP TABLE billing_expiry_recovery');
-    await observer.execute('DELETE FROM billing_migrations WHERE version >= 7');
-    await observer.execute('PRAGMA user_version = 6');
-  }
   observer.close();
   process.send?.({
     executionId: handle.executionId,
@@ -134,14 +118,6 @@ if (kind === 'initial-handoff') {
   runtime.workflowStorage.beginNativeHandoff = async (...args) => {
     await begin(...args);
     await waitForInterruption(args[1].id);
-  };
-}
-if (kind === 'initial-v16') {
-  const deadline = runtime.accounting.segmentDeadline.bind(runtime.accounting);
-  runtime.accounting.segmentDeadline = async (...args) => {
-    const value = await deadline(...args);
-    if (args[3] === 'dispatch') await waitForInterruption(args[1]);
-    return value;
   };
 }
 if (kind === 'agent') {

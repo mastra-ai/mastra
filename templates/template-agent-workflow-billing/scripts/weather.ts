@@ -36,7 +36,7 @@ const endpoint = parseInput(
   }),
   values.url,
 );
-const workspace = parseInput(identifierSchema, values.workspace ?? manifest.profiles.owner?.workspaceId);
+const workspace = parseInput(identifierSchema, values.workspace ?? manifest.profiles[profileName]?.workspaceId);
 const key = parseInput(identifierSchema, values.key ?? randomUUID());
 const base = `/billing/workspaces/${workspace}`;
 async function request(path: string, body?: unknown) {

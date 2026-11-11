@@ -47,7 +47,7 @@ policy: {
 
 The sum of suspension, execution, finalization and expiry margin must fit the lifetime, capped at 24 hours. Each running segment has a persisted execution deadline. Initial work can use the time remaining before the fixed cutoff. Resume rechecks authorization, eligibility and the owned hold, and requires room for a full execution segment. An active deadline triggers cancellation and release of an acknowledged hold when no confirmation has won. The release remains pending until the provider confirms it. Application cutoffs precede the explicit remote expiry. Remote expiry is eventual: an in-budget dispatched confirmation can settle afterward.
 
-Postpaid task/usage remains supported by local mode and compatible replay-safe drivers. Autumn postpaid is explicitly unavailable until its idempotency-header, retention and lost-ack behavior is verified. This does not imply the Autumn API lacks idempotency support. Unsupported policies reject during configuration rather than silently changing financial behavior.
+Postpaid task/usage remains supported by local mode. Autumn postpaid is explicitly unavailable until its idempotency-header, retention and lost-ack behavior is verified. This does not imply the Autumn API lacks idempotency support. Unsupported policies reject during configuration rather than silently changing financial behavior.
 
 ## Receipts and recovery
 

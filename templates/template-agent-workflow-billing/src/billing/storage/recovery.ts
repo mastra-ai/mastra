@@ -1,32 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { BillingError, parseInput, usageEventSchema, identifierSchema, timestampSchema } from '../contracts.js';
-import type { BillingProvider, ProviderAccount, ProviderNotification, UsageDelivery } from '../contracts.js';
+import { BillingError, parseInput, usageEventSchema } from '../contracts.js';
+import type { BillingProvider, UsageDelivery } from '../contracts.js';
 import { BillingDatabase } from './database.js';
 import { finishUnstartedReservation } from './accounting.js';
-import { reactivateProvider } from './provider-lifecycle.js';
-import { accountFromRow } from './accounts.js';
 
 const bounds = z.strictObject({
   batchSize: z.number().int().min(1).max(100),
   leaseMs: z.number().int().min(100).max(300000),
 });
-const notificationSchema = z.strictObject({
-  id: identifierSchema,
-  digest: z.string().regex(/^[a-f0-9]{64}$/),
-  type: z.string().min(1).max(128),
-  accountReference: z.string().min(1).max(256).nullable(),
-  occurredAt: timestampSchema,
-});
 export interface DeliveryClaim {
   readonly id: string;
   readonly token: string;
   readonly payload: string;
-  readonly attempts: number;
-}
-export interface SynchronizationClaim {
-  readonly account: ProviderAccount;
-  readonly token: string;
   readonly attempts: number;
 }
 // Persist the schedule; jitter prevents all recovered records retrying in lockstep.
@@ -50,83 +36,6 @@ export class RecoveryStorage {
   }
   close() {
     this.database.close();
-  }
-
-  enqueue(input: Exclude<ProviderNotification, { status: 'unsupported' }>, provider: string) {
-    parseInput(identifierSchema, provider);
-    const notification = parseInput(notificationSchema, {
-      id: input.id,
-      digest: input.digest,
-      type: input.type,
-      accountReference: input.accountReference,
-      occurredAt: input.occurredAt,
-    });
-    return this.database.write(async tx => {
-      const previous = (
-        await tx.execute({
-          sql: 'SELECT digest FROM billing_inbox WHERE id = ? AND provider = ?',
-          args: [notification.id, provider],
-        })
-      ).rows[0];
-      if (previous) {
-        if (previous.digest !== notification.digest) throw new BillingError('conflict');
-        return { duplicate: true };
-      }
-      const accounts =
-        notification.accountReference === null
-          ? []
-          : (
-              await tx.execute({
-                sql: 'SELECT a.id FROM billing_accounts a JOIN billing_provider_links p ON p.account_id = a.id WHERE p.provider = ? AND (p.customer_id = ? OR p.external_reference = ?) LIMIT 2',
-                args: [provider, notification.accountReference, notification.accountReference],
-              })
-            ).rows;
-      if (accounts.length > 1) throw new BillingError('conflict');
-      const account = accounts[0];
-      let generation: bigint | null = null;
-      if (account) {
-        await reactivateProvider(
-          tx,
-          String(account.id),
-          provider,
-          `notification:${notification.id}:${notification.digest}`,
-        );
-        await tx.execute({
-          sql: 'INSERT INTO billing_account_sync (account_id) VALUES (?) ON CONFLICT DO NOTHING',
-          args: [account.id],
-        });
-        await tx.execute({
-          sql: 'UPDATE billing_account_sync SET generation = generation + 1, next_attempt = 0 WHERE account_id = ?',
-          args: [account.id],
-        });
-        generation = (
-          await tx.execute({
-            sql: 'SELECT generation FROM billing_account_sync WHERE account_id = ?',
-            args: [account.id],
-          })
-        ).rows[0].generation as bigint;
-        // An earlier source read can no longer apply or authorize admission.
-        await tx.execute({
-          sql: 'UPDATE commercial_state SET version = version + 1 WHERE account_id = ?',
-          args: [account.id],
-        });
-      }
-      await tx.execute({
-        sql: 'INSERT INTO billing_inbox VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        args: [
-          notification.id,
-          notification.digest,
-          notification.type,
-          account?.id ?? null,
-          notification.occurredAt,
-          Date.now(),
-          generation,
-          account ? 'pending' : 'ignored',
-          provider,
-        ],
-      });
-      return { duplicate: false };
-    });
   }
 
   claimDeliveries(options: { batchSize: number; leaseMs: number }): Promise<DeliveryClaim[]> {
@@ -181,46 +90,6 @@ export class RecoveryStorage {
       return result.rowsAffected === 1;
     });
   }
-  claimSynchronizations(options: { batchSize: number; leaseMs: number }): Promise<SynchronizationClaim[]> {
-    const { batchSize, leaseMs } = parseInput(bounds, options);
-    return this.database.write(async tx => {
-      const now = Date.now();
-      const rows = (
-        await tx.execute({
-          sql: 'SELECT a.*, s.attempts FROM billing_account_sync s JOIN billing_accounts a ON a.id = s.account_id WHERE s.generation > s.synchronized_generation AND s.next_attempt <= ? AND (s.lease_until IS NULL OR s.lease_until <= ?) ORDER BY s.next_attempt, a.id LIMIT ?',
-          args: [now, now, batchSize],
-        })
-      ).rows;
-      const claims: SynchronizationClaim[] = [];
-      for (const row of rows) {
-        const token = randomUUID();
-        await tx.execute({
-          sql: 'UPDATE billing_account_sync SET lease_token = ?, lease_until = ?, attempts = attempts + 1 WHERE account_id = ?',
-          args: [token, now + leaseMs, row.id],
-        });
-        claims.push({ account: accountFromRow(row), token, attempts: Number(row.attempts) + 1 });
-      }
-      return claims;
-    });
-  }
-  completeSynchronization(claim: SynchronizationClaim, success: boolean) {
-    return this.database.write(
-      async tx =>
-        (
-          await tx.execute({
-            sql: 'UPDATE billing_account_sync SET lease_token = NULL, lease_until = NULL, next_attempt = ?, last_error = ? WHERE account_id = ? AND lease_token = ? AND lease_until > ?',
-            args: [
-              success ? 0 : Date.now() + retryDelay(claim.attempts),
-              success ? null : 'source_unavailable',
-              claim.account.id,
-              claim.token,
-              Date.now(),
-            ],
-          })
-        ).rowsAffected === 1,
-    );
-  }
-
   async deliver(provider: BillingProvider, claim: DeliveryClaim) {
     let result: UsageDelivery;
     try {
@@ -310,18 +179,8 @@ export class RecoveryStorage {
           'SELECT status, COUNT(*) AS count, MIN(created_at) AS oldest FROM billing_delivery GROUP BY status',
         )
       ).rows;
-      const inbox = (
-        await tx.execute(
-          'SELECT status, COUNT(*) AS count, MIN(received_at) AS oldest FROM billing_inbox GROUP BY status',
-        )
-      ).rows;
       return {
         deliveries: deliveries.map(row => ({
-          status: String(row.status),
-          count: Number(row.count),
-          oldestAgeMs: Date.now() - Number(row.oldest),
-        })),
-        inbox: inbox.map(row => ({
           status: String(row.status),
           count: Number(row.count),
           oldestAgeMs: Date.now() - Number(row.oldest),

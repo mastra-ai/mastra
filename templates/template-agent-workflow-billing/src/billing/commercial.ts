@@ -24,13 +24,9 @@ export class CommercialService {
     const account = await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
     const snapshot = await this.provider.getState(account);
     await this.organizations.authorize(context, 'manage-billing');
-    const allowance =
-      snapshot.prepaidAuthority === 'application-ledger'
-        ? await this.storage.allowance(await this.organizations.accountingIdentity(context))
-        : null;
     return {
       pendingOperations: await this.storage.financialSummary(await this.organizations.accountingIdentity(context)),
-      allowance,
+      allowance: null,
       mode: this.provider.id,
       authority: snapshot.prepaidAuthority ?? 'provider-reflection',
       observedAt: snapshot.observedAt,

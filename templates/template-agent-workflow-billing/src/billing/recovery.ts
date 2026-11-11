@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BillingError, parseInput } from './contracts.js';
-import type { BillingProvider, RawWebhookRequest } from './contracts.js';
+import type { BillingProvider } from './contracts.js';
 import { RecoveryStorage } from './storage/recovery.js';
 
 export class BillingRecovery {
@@ -27,11 +27,6 @@ export class BillingRecovery {
       },
     );
   }
-  async intake(request: RawWebhookRequest, provider = this.provider.id) {
-    const notification = await this.provider.verifyWebhook(request, provider);
-    if (notification.status !== 'verified') throw new BillingError('unsupported');
-    return this.storage.enqueue(notification, provider);
-  }
   runOnce(): Promise<void> {
     if (this.stopped) return Promise.resolve();
     if (this.active) return this.active;
@@ -43,19 +38,6 @@ export class BillingRecovery {
         leaseMs: this.settings.leaseMs,
       }))
         await this.storage.deliver(this.provider, claim);
-      for (const claim of await this.storage.claimSynchronizations({
-        batchSize: this.settings.batchSize,
-        leaseMs: this.settings.leaseMs,
-      })) {
-        let success = false;
-        try {
-          await this.provider.getState(claim.account, { token: claim.token });
-          success = true;
-        } catch {
-          /* Persist a safe retry schedule; pending hints continue fencing admission. */
-        }
-        await this.storage.completeSynchronization(claim, success);
-      }
     };
     this.active = work().finally(() => {
       this.active = undefined;

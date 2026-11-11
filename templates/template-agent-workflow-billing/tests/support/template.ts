@@ -1,3 +1,4 @@
+import { configuredOrganizations } from '../../src/mastra/environment.js';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -176,5 +177,33 @@ export async function assertNativeClosed(server: Awaited<ReturnType<typeof serve
     });
     expect(response.status, path).toBe(403);
     expect(await response.text()).toContain('billing_gateway_required');
+  }
+}
+
+export async function shareOwnerWorkspace(root: string) {
+  const manifest = await profileManifest(root);
+  const organizations = await configuredOrganizations({
+    MASTRA_PROJECT_ROOT: root,
+    BILLING_MODE: 'local',
+    BILLING_PROVIDER: 'local',
+  });
+  try {
+    const owner = manifest.profiles.owner!,
+      member = manifest.profiles.member!;
+    const context = await organizations.context({ credential: owner.credential, workspaceId: owner.workspaceId });
+    await organizations.convert(context, 'shared-regression-convert');
+    const invitation = await organizations.invite(context, 'shared-regression-invite', {
+      recipientId: member.actorId,
+      role: 'member',
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+    if (!invitation.token) throw new Error('Expected a new invitation');
+    await organizations.acceptInvitation({
+      credential: member.credential,
+      key: 'shared-regression-accept',
+      token: invitation.token,
+    });
+  } finally {
+    organizations.close();
   }
 }

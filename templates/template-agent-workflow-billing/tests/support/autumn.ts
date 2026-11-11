@@ -4,12 +4,12 @@ import { BillingGateway } from '../../src/billing/gateway.js';
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
 import { AccountingStorage } from '../../src/billing/storage/accounting.js';
 import type { ExecutorOutcome } from '../../src/billing/accounting.js';
-import { polarFixture } from './polar.js';
+import { identityFixture } from './identity.js';
 
 // Only the external Autumn API is controlled. SDK, HTTP socket, authentication,
 // gateway, SQL transactions, projections and restart all execute normally.
 export async function autumnFixture() {
-  const identity = await polarFixture();
+  const identity = await identityFixture();
   const requests: { path: string; body: Record<string, any>; version: string | undefined }[] = [];
   const locks = new Map<string, number>();
   const logs: Record<string, unknown>[] = [];
@@ -169,7 +169,6 @@ export async function autumnFixture() {
     ...identity.configuration,
     resources: identity.configuration.resources.map(resource => ({ ...resource, policy: { ...resource.policy } })),
     provider: 'autumn',
-    polar: undefined,
   };
   let outcome: ExecutorOutcome | (() => Promise<ExecutorOutcome>) = {
     status: 'succeeded',

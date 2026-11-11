@@ -53,7 +53,7 @@ export class BillingDatabase {
       throw error;
     }
     const database = new BillingDatabase(parsed.data.url);
-    await database.write(migrateStorage);
+    await database.write(migrateStorage, true);
     return database;
   }
 
@@ -61,7 +61,7 @@ export class BillingDatabase {
     this.closed = true;
   }
 
-  async write<T>(operation: (transaction: Transaction) => Promise<T>): Promise<T> {
+  async write<T>(operation: (transaction: Transaction) => Promise<T>, validateSchema = false): Promise<T> {
     // Retry only complete aborted SQL transactions, never external work.
     for (let attempt = 0; attempt < 50; attempt++) {
       if (this.closed) throw new BillingError('storage_unavailable');
@@ -72,7 +72,7 @@ export class BillingDatabase {
         await verifyPrivateFiles(fileURLToPath(this.url));
         client = createClient({ url: this.url, intMode: 'bigint', concurrency: 1, timeout: 0 });
         const journal = await client.execute('PRAGMA journal_mode');
-        if (journal.rows[0].journal_mode !== 'wal') {
+        if (!validateSchema && journal.rows[0].journal_mode !== 'wal') {
           const configured = await client.execute('PRAGMA journal_mode = WAL');
           if (configured.rows[0].journal_mode !== 'wal') throw new BillingError('storage_incompatible');
         }

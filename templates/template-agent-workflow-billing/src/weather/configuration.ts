@@ -1,6 +1,9 @@
 import { billingConfigurationSchema } from '../billing/configuration.js';
 
-export function weatherConfiguration(workspaceId?: string, workflowPolicy: 'task' | 'tokens' = 'task') {
+export function weatherConfiguration(
+  workspaceIds?: string | readonly string[],
+  workflowPolicy: 'task' | 'tokens' = 'task',
+) {
   const measurements = [
     { key: 'tokens', unit: 'tokens', enforceableBound: false },
     { key: 'model-calls', unit: 'custom', enforceableBound: true },
@@ -42,18 +45,14 @@ export function weatherConfiguration(workspaceId?: string, workflowPolicy: 'task
         { key: 'weather-tokens', unit: 'tokens', funding: ['metered'] },
       ],
     },
-    localAccounts: workspaceId
-      ? [
-          {
-            workspaceId,
-            subscriptions: [{ key: 'weather-access', validFrom: '2026-01-01T00:00:00Z', validUntil: null }],
-            meters: [
-              { key: 'weather-credits', funding: 'prepaid', balance: 30 },
-              { key: 'weather-tasks', funding: 'prepaid', balance: 10 },
-              { key: 'weather-tokens', funding: 'metered', balance: null },
-            ],
-          },
-        ]
-      : [],
+    localAccounts: (typeof workspaceIds === 'string' ? [workspaceIds] : (workspaceIds ?? [])).map(workspaceId => ({
+      workspaceId,
+      subscriptions: [{ key: 'weather-access', validFrom: '2026-01-01T00:00:00Z', validUntil: null }],
+      meters: [
+        { key: 'weather-credits', funding: 'prepaid', balance: 30 },
+        { key: 'weather-tasks', funding: 'prepaid', balance: 10 },
+        { key: 'weather-tokens', funding: 'metered', balance: null },
+      ],
+    })),
   });
 }

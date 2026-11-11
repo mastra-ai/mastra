@@ -86,47 +86,6 @@ export class CommercialStorage {
       return { claimed: true, url: null };
     });
   }
-  allowance(identity: AdmissionIdentity) {
-    return this.database.write(async tx => {
-      await this.organizations.authorizeInTransaction(tx, identity.actorId, identity.workspaceId, 'manage-billing');
-      const rows = (
-        await tx.execute({
-          sql: `SELECT g.*, COALESCE((SELECT SUM(a.reserved_units) FROM grant_allocations a WHERE a.grant_id = g.id AND a.committed_units IS NULL), 0) AS reserved FROM credit_grants g JOIN billing_accounts b ON b.id = g.account_id WHERE b.workspace_id = ?`,
-          args: [identity.workspaceId],
-        })
-      ).rows;
-      const meters = new Map<
-        string,
-        { granted: bigint; consumed: bigint; reserved: bigint; unavailable: bigint; spendable: bigint }
-      >();
-      for (const row of rows) {
-        const meter = String(row.meter);
-        const totals = meters.get(meter) ?? { granted: 0n, consumed: 0n, reserved: 0n, unavailable: 0n, spendable: 0n };
-        const original = BigInt(String(row.original_units)),
-          consumed = BigInt(String(row.consumed_units)),
-          reserved = BigInt(String(row.reserved));
-        const unused = original - consumed - reserved;
-        if (unused < 0n) throw new BillingError('storage_incompatible');
-        const active =
-          row.available === 1n &&
-          Date.parse(String(row.valid_from)) <= Date.now() &&
-          (row.valid_until === null || Date.parse(String(row.valid_until)) > Date.now());
-        totals.granted += original;
-        totals.consumed += consumed;
-        totals.reserved += reserved;
-        if (active) totals.spendable += unused;
-        else totals.unavailable += unused;
-        meters.set(meter, totals);
-      }
-      return [...meters].map(([meter, totals]) => {
-        const values = Object.entries(totals).map(([key, value]) => {
-          if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new BillingError('state_unavailable');
-          return [key, Number(value)] as const;
-        });
-        return { meter, ...Object.fromEntries(values) };
-      });
-    });
-  }
   complete(identity: AdmissionIdentity, operation: string, key: string, url: string) {
     return this.database.write(tx =>
       tx.execute({

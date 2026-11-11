@@ -1,4 +1,4 @@
-import { contractProviders, providerContractFixture } from '../support/provider-contracts.js';
+import { providerContractFixture } from '../support/provider-contracts.js';
 import { stat } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeBilling } from '../../src/billing/setup.js';
@@ -61,10 +61,10 @@ describe('local provider contracts', () => {
     expect((await reopened.provider.getState(foreign)).meters).toEqual([]);
   });
 
-  it('does not replace unsupported Polar mode with local accounts', async () => {
+  it('does not replace an unsupported provider with local accounts', async () => {
     const database = await temporaryDatabase();
     cleanups.push(database.cleanup);
-    const input = { ...configuration(), provider: 'polar', localAccounts: [] };
+    const input = { ...configuration(), provider: 'unsupported-provider', localAccounts: [] };
     await expect(initializeBilling({ configuration: input, storage: { url: database.url } })).rejects.toMatchObject({
       code: 'unsupported',
     });
@@ -135,129 +135,68 @@ describe('local provider contracts', () => {
   });
 });
 
-describe.each(contractProviders)('%s shared provider contracts', provider => {
+describe('local reservation provider contracts', () => {
   async function sharedFixture() {
-    const value = await providerContractFixture(provider);
+    const value = await providerContractFixture();
     cleanups.push(value.close);
     return value;
   }
 
-  it('settles paid work, exports exact usage and replays after restart without a second debit', async () => {
+  it('settles prepaid work and replays after restart without a second debit', async () => {
     const f = await sharedFixture();
     expect(await f.execute('paid')).toMatchObject({
       result: { answer: 'done' },
       billing: { executionStatus: 'completed', billedUnits: 3 },
     });
-    if (provider === 'local') {
-      expect(await f.events()).toEqual([]);
-      const account = await f.account();
-      expect((await f.provider().getState(account)).meters[0]).toMatchObject({
-        confirmedBalance: f.initialBalance - 3,
-        consumedUnits: 3,
-      });
-      const history = await f.history();
-      await f.restart();
-      expect(await f.execute('paid')).toMatchObject({ billing: { replayed: true, billedUnits: 3 } });
-      expect(await f.history()).toEqual(history);
-      expect(f.calls()).toBe(1);
-      expect(await f.execute('next')).toMatchObject({ billing: { billedUnits: 3 } });
-      expect((await f.provider().getState(account)).meters[0]).toMatchObject({
-        confirmedBalance: f.initialBalance - 6,
-        consumedUnits: 6,
-      });
-      expect(await f.events()).toEqual([]);
-      expect(await f.exported()).toEqual([]);
-      return;
-    }
-    const [event] = await f.events();
-    expect(await f.provider().reportUsage(event)).toEqual({ status: 'accepted', eventId: event.id });
-    const history = await f.history();
-    await f.restart();
-    expect(await f.execute('paid')).toMatchObject({ billing: { replayed: true, billedUnits: 3 } });
-    expect(f.calls()).toBe(1);
-    expect(await f.provider().reportUsage(event)).toEqual({ status: 'duplicate', eventId: event.id });
-    expect(await f.history()).toEqual(history);
-    expect((await f.provider().getState(event.account)).meters[0]).toMatchObject({
+    expect(await f.events()).toEqual([]);
+    const account = await f.account();
+    expect((await f.provider().getState(account)).meters[0]).toMatchObject({
       confirmedBalance: f.initialBalance - 3,
       consumedUnits: 3,
     });
-
-    // A second admission after reflection catches double subtraction of the
-    // local reflected event while external drivers use the application ledger.
-    expect(await f.execute('next')).toMatchObject({ billing: { billedUnits: 3, executionStatus: 'completed' } });
-    const events = await f.events();
-    expect(events).toHaveLength(2);
-    expect(await f.provider().reportUsage(events[1])).toEqual({ status: 'accepted', eventId: events[1].id });
+    const history = await f.history();
     await f.restart();
-    expect((await f.provider().getState(event.account)).meters[0]).toMatchObject({
+    expect(await f.execute('paid')).toMatchObject({ billing: { replayed: true, billedUnits: 3 } });
+    expect(await f.history()).toEqual(history);
+    expect(f.calls()).toBe(1);
+    expect(await f.execute('next')).toMatchObject({ billing: { billedUnits: 3 } });
+    expect((await f.provider().getState(account)).meters[0]).toMatchObject({
       confirmedBalance: f.initialBalance - 6,
       consumedUnits: 6,
     });
-    const delivery = await f.deliveryPayloads();
-    expect(delivery.sent).toEqual(delivery.retained);
-    expect(await f.exported()).toEqual(
-      events.map(value => ({ id: value.id, units: 3, account: value.account.externalReference })),
-    );
-    expect(
-      (await f.observer.execute('SELECT COUNT(*) AS count, SUM(units) AS units FROM billing_ledger')).rows,
-    ).toEqual([{ count: 2n, units: 6n }]);
-    expect(f.calls()).toBe(2);
+    expect(await f.events()).toEqual([]);
+    expect(await f.exported()).toEqual([]);
   });
 
   it('rejects changed usage and forged account scope after restart without changing financial or export history', async () => {
     const f = await sharedFixture();
     await f.execute('paid');
-    if (provider === 'local') {
-      const account = await f.account();
-      const history = await f.history();
-      await f.restart();
-      const foreign = { ...account, workspaceId: 'foreign-workspace' };
-      await expect(f.provider().getState(foreign)).rejects.toMatchObject({ code: 'conflict' });
-      const row = (await f.observer.execute('SELECT payload, terminal_payload FROM billing_remote_operations')).rows[0];
-      const reservation = JSON.parse(String(row.payload));
-      expect(await f.provider().reservations!.reserve(JSON.stringify({ ...reservation, units: 4 }))).toMatchObject({
-        status: 'uncertain',
-      });
-      const terminal = JSON.parse(String(row.terminal_payload));
-      await expect(
-        f
-          .provider()
-          .reservations!.finalize(
-            JSON.stringify({ ...terminal, reservation: { ...terminal.reservation, account: foreign } }),
-          ),
-      ).rejects.toMatchObject({ code: 'conflict' });
-      expect(await f.history()).toEqual(history);
-      expect(await f.exported()).toEqual([]);
-      return;
-    }
-    const [event] = await f.events();
-    await f.provider().reportUsage(event);
-    await f.restart();
+    const account = await f.account();
     const history = await f.history();
-    const exported = await f.exported();
-    const foreign = { ...event.account, workspaceId: 'foreign-workspace' };
-    for (const changed of [
-      { ...event, units: 4 },
-      { ...event, executionId: 'another-execution' },
-      { ...event, metadata: { resourceId: 'report' } },
-      { ...event, account: foreign },
-    ])
-      await expect(f.provider().reportUsage(changed)).rejects.toMatchObject({ code: 'conflict' });
-    await expect(f.provider().getState(foreign)).rejects.toMatchObject({
-      code: 'state_unavailable',
+    await f.restart();
+    const foreign = { ...account, workspaceId: 'foreign-workspace' };
+    await expect(f.provider().getState(foreign)).rejects.toMatchObject({ code: 'conflict' });
+    const row = (await f.observer.execute('SELECT payload, terminal_payload FROM billing_remote_operations')).rows[0];
+    const reservation = JSON.parse(String(row.payload));
+    expect(await f.provider().reservations!.reserve(JSON.stringify({ ...reservation, units: 4 }))).toMatchObject({
+      status: 'uncertain',
     });
+    const terminal = JSON.parse(String(row.terminal_payload));
+    await expect(
+      f
+        .provider()
+        .reservations!.finalize(
+          JSON.stringify({ ...terminal, reservation: { ...terminal.reservation, account: foreign } }),
+        ),
+    ).rejects.toMatchObject({ code: 'conflict' });
     expect(await f.history()).toEqual(history);
-    expect(await f.exported()).toEqual(exported);
-    expect((await f.provider().getState(event.account)).meters[0]).toMatchObject({
-      confirmedBalance: f.initialBalance - 3,
-      consumedUnits: 3,
-    });
+    expect(await f.exported()).toEqual([]);
   });
 
   it('rejects unsafe usage before persisting or exporting it', async () => {
     const f = await sharedFixture();
     await f.execute('paid');
-    const event = provider === 'local' ? usage(await f.account()) : (await f.events())[0];
+    const event = usage(await f.account());
     const history = await f.history();
     for (const units of [-1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1])
       await expect(f.provider().reportUsage({ ...event, units })).rejects.toMatchObject({ code: 'invalid_input' });
@@ -287,51 +226,16 @@ describe.each(contractProviders)('%s shared provider contracts', provider => {
   it('honors hosted capabilities and keeps preparation free of external session side effects', async () => {
     const f = await sharedFixture();
     await f.execute('paid');
-    const [event] = await f.events();
-    const account = provider === 'local' ? await f.account() : event.account;
+    const account = await f.account();
     const returnUrl = 'https://app.example.test/billing';
     const history = await f.history();
     const checkout = await f.provider().prepareCheckout({ account, product: 'credit-pack', returnUrl });
     const portal = await f.provider().preparePortalSession({ account, returnUrl });
-    expect(f.hostedRequests()).toEqual([]);
-    expect(f.provider().capabilities).toMatchObject({ checkout: provider !== 'local', portal: provider !== 'local' });
-    if (provider === 'local') {
-      expect(checkout).toEqual({ status: 'unsupported', reason: 'local_mode' });
-      expect(portal).toEqual({ status: 'unsupported', reason: 'local_mode' });
-      expect(await f.provider().createCheckout({ account, product: 'credit-pack', returnUrl })).toEqual(checkout);
-      expect(await f.provider().createPortalSession({ account, returnUrl })).toEqual(portal);
-    } else {
-      expect(checkout.status).toBe('prepared');
-      expect(portal.status).toBe('prepared');
-      if (checkout.status !== 'prepared' || portal.status !== 'prepared')
-        throw new Error('Expected hosted preparation');
-      expect(await checkout.dispatch()).toMatchObject({ status: 'created', url: expect.stringMatching(/^https:\/\//) });
-      expect(await portal.dispatch()).toMatchObject({ status: 'created', url: expect.stringMatching(/^https:\/\//) });
-      const requests = f.hostedRequests();
-      expect(requests).toHaveLength(2);
-      if (provider === 'polar') {
-        const customer = (
-          await f.observer.execute({
-            sql: 'SELECT customer_id FROM billing_provider_links WHERE account_id = ? AND provider = ?',
-            args: [account.id, provider],
-          })
-        ).rows[0].customer_id;
-        expect(requests.map(value => value.body)).toEqual([
-          {
-            products: [f.configuration.polar!.products[0].productId],
-            customer_id: customer,
-            return_url: returnUrl,
-            success_url: returnUrl,
-          },
-          { customer_id: customer, return_url: returnUrl },
-        ]);
-      } else {
-        expect(requests.map(value => value.body)).toEqual([
-          { account, product: 'credit-pack', returnUrl },
-          { account, returnUrl },
-        ]);
-      }
-    }
+    expect(f.provider().capabilities).toMatchObject({ checkout: false, portal: false });
+    expect(checkout).toEqual({ status: 'unsupported', reason: 'local_mode' });
+    expect(portal).toEqual({ status: 'unsupported', reason: 'local_mode' });
+    expect(await f.provider().createCheckout({ account, product: 'credit-pack', returnUrl })).toEqual(checkout);
+    expect(await f.provider().createPortalSession({ account, returnUrl })).toEqual(portal);
     expect(await f.history()).toEqual(history);
     expect((await f.provider().getState(account)).meters[0].consumedUnits).toBe(3);
     expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);

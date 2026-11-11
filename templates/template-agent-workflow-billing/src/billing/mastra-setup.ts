@@ -8,8 +8,6 @@ import { z } from 'zod';
 import { BillingError, parseInput } from './contracts.js';
 import { CommercialStorage } from './storage/commercial.js';
 import { CommercialService } from './commercial.js';
-import type { BillingDriver } from './driver.js';
-import type { PolarProviderOptions } from './setup.js';
 import { initializeBilling } from './setup.js';
 import { MastraBilling } from './mastra.js';
 import type { AgentResource, WorkflowResource } from './mastra-resources.js';
@@ -44,9 +42,7 @@ export async function initializeMastraBilling<
   workflows: Workflows;
   databaseUrl: string;
   workflowDatabaseUrl?: string;
-  polar?: PolarProviderOptions;
   autumn?: AutumnProviderOptions;
-  drivers?: readonly BillingDriver[];
 }) {
   const files = parseInput(z.strictObject({ databaseUrl: localFile, workflowDatabaseUrl: localFile.optional() }), {
     databaseUrl: options.databaseUrl,
@@ -58,9 +54,7 @@ export async function initializeMastraBilling<
   const commercial = await initializeBilling({
     storage: { url: files.databaseUrl },
     configuration: options.configuration,
-    polar: options.polar,
     autumn: options.autumn,
-    drivers: options.drivers,
   });
   let commercialStorage: CommercialStorage | undefined;
   let accounting: AccountingStorage | undefined;

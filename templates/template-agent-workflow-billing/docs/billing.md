@@ -1,6 +1,6 @@
 # Billing guide
 
-Use this template to add subscription access, prepaid credits, per-task charges, or measured usage to Mastra agents and workflows. Start with the local example in the [README](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/README.md), then configure policies and connect Polar when you need payments.
+Use this template to add subscription access, prepaid credits, per-task charges, or measured usage to Mastra agents and workflows. Start with the local example in the [README](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/README.md), then configure policies and connect [Autumn](autumn.md) when you need provider-owned prepaid billing.
 
 ## How billing works
 
@@ -12,7 +12,7 @@ Each request follows the same flow:
 2. Reserve the units required by the resource's billing policy.
 3. Execute the agent or workflow.
 4. Charge once on success. Confirmed failure or cancellation releases the reservation without charging.
-5. Report successful usage to the provider in the background.
+5. Confirm the same prepaid reservation without a second usage debit. Metered postpaid policies instead deliver immutable usage through the outbox.
 
 An idempotency key identifies one operation. Retrying with the same key and input returns the saved result or status without executing or charging again. Reusing that key with different input returns a conflict.
 
@@ -20,7 +20,7 @@ If execution or measurement cannot be confirmed, the reservation stays held for 
 
 ## Local weather example
 
-`npm run setup` creates an owner, a member of the owner's shared workspace, and an outsider. It grants the shared workspace 30 credits, 10 tasks, and an active example subscription once. Repeating setup preserves credentials, membership, and remaining allowance.
+`npm run setup` creates John and `John's Org`, Mary and `Mary's Org`, and Alex and `Alex's Org`. Each person owns a separate personal workspace with 30 simulated credits, 10 tasks, and an active example subscription seeded once. The private profile aliases are `owner`, `member`, and `outsider`, respectively. Repeating setup preserves credentials, workspace identities, memberships, audit, and spent balances.
 
 | Resource         | Default billing                                              | Behavior                                                             |
 | ---------------- | ------------------------------------------------------------ | -------------------------------------------------------------------- |
@@ -29,7 +29,7 @@ If execution or measurement cannot be confirmed, the reservation stays held for 
 
 The agent does not fetch weather. Both resources use the observations supplied by the caller. See the [input schemas](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/observations.ts) for required fields and accepted ranges.
 
-The workflow keeps its reservation while paused, including across server restarts. Resume with `{ "approved": true }`, or add a complete `observations` object to correct the input. Confirmed cancellation releases the reservation. Paused runs expire after 24 hours when recovery can confirm and cancel the persisted suspension.
+The workflow keeps its reservation while paused, including across server restarts. Resume with `{ "approved": true }`, or add a complete `observations` object to correct the input. Confirmed cancellation releases the reservation. The default suspension budget is 30 minutes. Execution and finalization cutoffs precede the explicit reservation expiry. Recovery cancels a positively confirmed suspension; ambiguous compute or provider outcomes remain visible for reconciliation.
 
 The CLI reads private credentials from `data/local-profiles.json`:
 
@@ -42,7 +42,7 @@ The CLI reads private credentials from `data/local-profiles.json`:
 | `npm run weather -- cancel <executionId> --key cancel-one`                             | Cancel your report                    |
 | `npm run weather -- account`                                                           | Read billing information as the owner |
 
-Use `--profile member` or `--profile outsider` to try authorization with another identity. The default payer remains the shared workspace; `--workspace <id>` selects another workspace you can access. Omitting `--key` creates a new key for each command.
+Use `--profile member` or `--profile outsider` to try authorization with another identity. The default payer is the selected person's personal workspace; `--workspace <id>` selects another workspace you can access. Omitting `--key` creates a new key for each command.
 
 ## Choose a billing policy
 
@@ -56,7 +56,7 @@ Edit [src/weather/configuration.ts](https://github.com/mastra-ai/mastra/blob/mai
 | Per-task charge     | `charge: { type: 'per-task', meter: 'weather-tasks', units: 1, funding: 'prepaid' }`                        |
 | Measured usage      | `charge: { type: 'usage', meter: 'weather-tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' }` |
 
-Access requirements and charges can be combined. A subscription can grant access while each successful execution also consumes credits. One-time purchases fund prepaid allowances; the policy determines how executions spend those units.
+Access requirements and charges can be combined. A subscription can grant access while each successful execution also consumes credits. Local setup simulates prepaid balances. In Autumn mode the provider owns paid credit and its atomic reservations; the policy determines how executions spend those units.
 
 Meter keys and units must match `mappings`. Quantities are integers. `prepaid` spends available units; `metered` records usage for billing without a prepaid balance. Policies also support entitlement requirements and metered per-task charges.
 
@@ -124,117 +124,16 @@ All customer operations use `/billing`. Send `Authorization: Bearer <credential>
 
 Bodies are limited to 16 KiB and reject unknown fields. Common responses are `400` for invalid input, `401` for invalid credentials, `403` for denied access, `409` for conflicts, and `503` for unavailable state or storage. Organization and invitation routes are defined in [src/server/billing.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/server/billing.ts).
 
-## Polar
+## Provider configuration
 
-Polar handles products, purchases, subscriptions, checkout, and the customer portal. The application ledger tracks prepaid grants, reservations, and consumption. Credits come from verified purchases or subscription periods, never from a Polar meter balance.
+`initializeBilling` and `initializeMastraBilling` support `local` and `autumn`. Their public configuration contains policies, logical meter/access mappings, and the commercial catalog. Provider credentials and customer/feature bindings remain server-side in `autumn` options. See the [Autumn guide](autumn.md) for a complete configuration, supported policies, checkout/portal mappings, deadlines and explicit sandbox verification.
 
-### Configure products and allowances
+Local mode supports free, subscription, prepaid fixed/task, and metered task/usage policies. It persists its simulated balances and access grants. Autumn currently supports prepaid reservations and access, plus owner-only checkout/portal; Autumn postpaid is unavailable until its delivery semantics are verified. Do not export usage for a confirmed prepaid lock.
 
-Create the products, prices, meters, and meter-credit benefits in your Polar organization. Then connect them to the template's logical configuration:
+## Persistence and recovery
 
-- `mappings` names the meters and access keys used by policies.
-- `catalog.allowances` defines the number of units, source type, expiry, and version.
-- `catalog.offers` groups exact allowance versions under a checkout key.
-- `polar.grants` links an allowance to Polar product, price, benefit, and meter IDs.
-- `polar.products` links an offer to its checkout product.
-- `polar.meters` defines the event and unit field used to export consumption.
+Billing storage uses a single supported fresh schema with strict version, checksum, SQL-definition, and foreign-key validation. An older, altered or unrelated database fails with `storage_incompatible`; startup and setup never delete, import, or reseed it. Choose an explicit new local database only when you intend a fresh instance. Existing production balances are not migrated by this template.
 
-For example, this configuration sells a one-time pack of 100 credits and charges 3 per successful `assistant` invocation. It is an example for your own registered agent. To use the supplied weather application, configure its exact `weather-agent` and `weather-report` resources, policies, and mappings instead.
+Execution claims, policy snapshots, admitted payer mappings, provider operation payloads, terminal intents, receipts and audit survive restart. Duplicate keys replay the original operation. Recovery reconciles unknown financial outcomes without repeating compute. Passing a deadline or losing an acknowledgement does not prove zero charge. Metered postpaid delivery has separate immutable payloads and persisted retry leases.
 
-```ts
-const configuration = {
-  provider: 'polar',
-  resources: [
-    {
-      id: 'assistant',
-      kind: 'agent',
-      operations: ['generate'],
-      policy: { version: 'v1', charge: { type: 'credits', meter: 'credits', units: 3 } },
-    },
-  ],
-  mappings: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
-  catalog: {
-    allowances: [
-      {
-        key: 'prepaid-credits',
-        version: 'credits-v1',
-        meter: 'credits',
-        kind: 'order',
-        units: 100,
-        expiry: { type: 'none' },
-      },
-    ],
-    offers: [{ key: 'credit-pack', version: 'v1', allowances: [{ key: 'prepaid-credits', version: 'credits-v1' }] }],
-  },
-  polar: {
-    server: 'https://sandbox-api.polar.sh',
-    organizationId: sellerOrganizationId,
-    grants: [
-      {
-        allowance: { key: 'prepaid-credits', version: 'credits-v1' },
-        productId,
-        priceId,
-        benefitId,
-        meterId,
-      },
-    ],
-    meters: [{ key: 'credits', funding: 'prepaid', eventName: 'work.succeeded', unitsField: 'units' }],
-    products: [{ key: 'credit-pack', version: 'v1', productId }],
-    returnUrls: ['https://app.example.com/billing'],
-  },
-};
-```
-
-Replace the ID variables with values from your Polar organization. The benefit must grant the configured units with `rollover: false`; credit products cannot include metered overage prices. Configure the event name and unit field to match your Polar meter. Keep return URLs restricted to your application.
-
-For recurring allowances, use `kind: 'subscription'` and `expiry: { type: 'period' }` with a matching recurring product, fixed price, subscription, and benefit. Each verified period grants units once. One-time allowances use `kind: 'order'` and either no expiry or a duration measured from the verified purchase time.
-
-For postpaid usage, use a `metered` policy and meter mapping with `productId`, `priceId`, and `meterId`. The customer needs an active subscription with that metered price. Subscription and entitlement access checks are configured separately through `polar.subscriptions` and `polar.entitlements` and their logical mappings.
-
-Catalog revisions are immutable. Add a new version when changing allowance terms and retain revisions and bindings needed by existing purchases. Refunds, revocations, or expiry make the affected units unavailable for new work; refreshes never restore already consumed credit. Archived products can support existing purchases and subscriptions, but cannot open new checkout sessions.
-
-### Configure the server
-
-After configuring JWT identity, set these environment variables for the supplied application:
-
-| Variable                    | Value                                                                                                            |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `BILLING_MODE`              | `production`                                                                                                     |
-| `BILLING_PROVIDER`          | `polar`                                                                                                          |
-| `BILLING_CONFIGURATION`     | JSON configuration for the registered weather resources, catalog, and Polar mappings                             |
-| `BILLING_JWT_CONFIGURATION` | Trusted JWT verification configuration                                                                           |
-| `BILLING_CONTACTS`          | Trusted workspace contacts, for example `{"workspace-id":{"email":"billing@example.com","name":"Example team"}}` |
-| `POLAR_ACCESS_TOKEN`        | Organization token for the configured Polar seller and environment                                               |
-| `POLAR_WEBHOOK_SECRET`      | Signing secret for Polar notifications                                                                           |
-
-Use a separate persistent database for Polar when moving from the local demo. Local seeded accounts cannot become paid Polar accounts, and `npm run setup` is only for the local example. Billing contacts must come from your trusted workspace records, not the requesting member's email or an unverified token claim.
-
-When constructing your own application, pass `configuration` and `polar: { token, webhookSecret, contact }` to `initializeMastraBilling`, where `contact(workspaceId)` returns the trusted contact. Keep tokens and secrets out of the public configuration.
-
-Configure Polar notifications to reach `POST /billing/webhooks/polar` through your deployed ingress. This endpoint verifies the signature instead of using customer bearer authentication. The recovery worker refreshes verified commercial state and exports usage. An unavailable or unverifiable provider state blocks paid admission.
-
-Checkout accepts logical offer keys, and its return URL must exactly match `polar.returnUrls`. Completed requests replay their original hosted URL. If the provider response is uncertain, investigate before creating another checkout. Hosted URLs grant access to a session; keep them out of logs.
-
-### Read the balance
-
-The owner-only `/usage` response includes `granted`, `consumed`, `reserved`, `unavailable`, and `spendable` units for Polar allowances. Use `spendable` for available credit. Reserved units cannot fund another execution.
-
-Local balance reflection is asynchronous, normally within 30 seconds. Receipts can show pending delivery after successful work, while admission already accounts for the consumed units. Provider delivery status and application consumption are separate.
-
-## Storage and recovery
-
-Run one Node service with persistent local disk. The template stores billing history in `data/billing.db` and workflow snapshots in `data/workflow.db`. Remote and in-memory databases are not supported; multi-host deployment is outside this template's supported setup.
-
-Keep `.env`, both databases and their SQLite sidecars, and `data/local-profiles.json` private. Preserve matching credentials and databases together. `BILLING_DATABASE_URL` can select an absolute `file:///...` path with an existing writable parent directory; `BILLING_PORT` changes the default port of 4111.
-
-Recovery retries usage exports and verified source refreshes and expires compatible suspended workflows. Uncertain execution, incomplete usage, permanent delivery failures, or mismatched workflow snapshots require investigation. No automatic refund, destructive reset, or financial repair command is provided.
-
-Build with `npm run build` and serve with `npm start`. For development checks, run `npm run test:unit`, then `npm run test:integration`. `npm run test:local` verifies the local application flow; `npm run test:openai` explicitly performs one live model generation and replay using your OpenAI key.
-
-## Use another billing provider
-
-Implement the [BillingDriver contract](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/billing/driver.ts) and inject the constructed driver through `initializeMastraBilling({ drivers: [...] })` or `createWeatherApplication(environment, { drivers: [...] })`. Set `configuration.provider` and `BILLING_PROVIDER` to the driver's ID. Keep credentials inside the driver and retain the same logical policies and catalog.
-
-Changing the selected provider does not migrate existing accounts. Trusted server code must use `BillingService.switchProvider`. Keep historical drivers, bindings, and catalog revisions available so existing grants and pending usage remain verifiable. Provider replacement does not transfer purchases, subscriptions, or invoices.
-
-Retire a historical provider only after closing its external sales and resolving active grants, executions, and deliveries. Use the trusted `retireProvider` API with evidence of that closure. New verified notifications can require reactivating its driver. See [src/billing/service.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/billing/service.ts) for lifecycle APIs. Polar is the included external integration; Stripe and Paddle drivers are not included.
+Local profile credentials live in the private `data/local-profiles.json`; keep it with the matching database. Missing or corrupt profiles fail safely. Setup does not rotate credentials or refill accounts. Shared workspaces remain available through explicit conversion and invitations; workspace membership does not grant access to another creator's private results.

@@ -1,4 +1,3 @@
-import { removeDriverMigration } from '../support/billing.js';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -53,13 +52,13 @@ async function share(
   return service.context({ credential: recipient.credential, workspaceId: owner.workspaceId });
 }
 
-it('trusted JWT provisioning preserves an existing Polar workspace reference and rejects reassignment', async () => {
+it('trusted JWT provisioning preserves a trusted stable workspace reference and rejects reassignment', async () => {
   const { storage, observer } = await fixture();
   const keys = await generateKeyPair('EdDSA');
   const issuer = 'https://studio.example.test';
   const service = new OrganizationService(storage, {
     mode: 'production',
-    provider: 'polar',
+    provider: 'autumn',
     identity: new JwtIdentityAdapter(storage, {
       issuer,
       audience: 'billing',
@@ -98,89 +97,6 @@ describe('trusted identity and shared workspace journeys', () => {
     await expect(
       configuredOrganizations({ BILLING_DATABASE_URL: localRoot.url, NODE_ENV: 'production' }),
     ).rejects.toMatchObject({ code: 'invalid_configuration' });
-    // Reconstruct the actual previous managed schema, retaining its financial rows.
-    const legacyDatabase = await temporaryDatabase();
-    cleanups.push(legacyDatabase.cleanup);
-    const legacyAccounting = await LocalBillingStorage.open({ url: legacyDatabase.url });
-    cleanups.push(() => legacyAccounting.close());
-    const legacyAccount = await legacyAccounting.ensureAccount(
-      { workspaceId: 'legacy' },
-      localAccountSeedSchema.parse({
-        workspaceId: 'legacy',
-        meters: [{ key: 'credits', funding: 'prepaid', balance: 100 }],
-      }),
-    );
-    await legacyAccounting.reportUsage(usage(legacyAccount));
-    legacyAccounting.close();
-    const legacyObserver = await independentClient(legacyDatabase.url);
-    cleanups.push(() => legacyObserver.close());
-    const initialChecksum = (await legacyObserver.execute('SELECT checksum FROM billing_migrations WHERE version = 1'))
-      .rows[0].checksum;
-    await removeDriverMigration(legacyObserver);
-    for (const table of [
-      'billing_catalog',
-      'billing_usage_bindings',
-      'billing_expiry_recovery',
-      'billing_refresh_leases',
-      'billing_inbox',
-      'billing_account_sync',
-      'billing_delivery',
-      'billing_runtimes',
-      'provider_usage',
-      'hosted_operations',
-      'grant_allocations',
-      'credit_grants',
-      'provider_links',
-      'billing_workflow_operations',
-      'billing_workflow_runs',
-      'billing_outbox',
-      'billing_ledger',
-      'billing_measurements',
-      'billing_reservations',
-      'billing_operations',
-      'billing_executions',
-      'private_records',
-      'organization_operations',
-      'invitations',
-      'memberships',
-      'workspaces',
-      'local_credentials',
-      'identities',
-    ])
-      await legacyObserver.execute(`DROP TABLE ${table}`);
-    await legacyObserver.execute('ALTER TABLE billing_accounts DROP COLUMN effective_provider');
-    await legacyObserver.execute('DELETE FROM billing_migrations WHERE version >= 2');
-    await legacyObserver.execute('PRAGMA user_version = 1');
-    const upgraded = await OrganizationStorage.open({ url: legacyDatabase.url });
-    cleanups.push(() => upgraded.close());
-    expect(
-      (await legacyObserver.execute('SELECT version, checksum FROM billing_migrations ORDER BY version')).rows,
-    ).toEqual([
-      { version: 1n, checksum: initialChecksum },
-      { version: 2n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 3n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 4n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 5n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 6n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 7n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 8n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 9n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 10n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 11n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 12n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 13n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 14n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 15n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 16n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 17n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 18n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-    ]);
-    expect((await legacyObserver.execute('SELECT id, units FROM immutable_usage')).rows).toEqual([
-      { id: 'event-1', units: 3n },
-    ]);
-    expect((await legacyObserver.execute('SELECT balance, consumed FROM commercial_meters')).rows).toEqual([
-      { balance: 97n, consumed: 3n },
-    ]);
     const { database, service, observer } = await fixture();
     const owner = await profile(service, 'alice');
     const member = await profile(service, 'bob');
@@ -351,7 +267,7 @@ describe('trusted identity and shared workspace journeys', () => {
           provider: 'local',
         }),
     ).toThrowError(/configuration/);
-    expect(() => new OrganizationService(storage, { mode: 'local', provider: 'polar' })).toThrowError(/configuration/);
+    expect(() => new OrganizationService(storage, { mode: 'local', provider: 'autumn' })).toThrowError(/configuration/);
 
     const { privateKey, publicKey } = await generateKeyPair('ES256');
     const publicJwk = { ...(await exportJWK(publicKey)), kid: 'trusted' };

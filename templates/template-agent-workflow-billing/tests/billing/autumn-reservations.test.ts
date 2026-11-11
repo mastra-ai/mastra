@@ -819,8 +819,8 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
   it.each([
     'resume preparation',
     'resume handoff',
-    'v16 resume',
-    'v17 resume',
+    'missing resume preparation',
+    'superseded resume preparation',
     'missing native suspension',
     'lost native cancel acknowledgement',
   ] as const)('Autumn cancel during %s releases only with current suspension evidence', async boundary => {
@@ -851,18 +851,29 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       step: 'approval',
       resumeData: { approved: true },
     } as const;
+    const missingPreparation =
+      boundary === 'missing resume preparation' || boundary === 'superseded resume preparation';
+    if (missingPreparation) {
+      // A real SQL storage fault omits the current preparation or leaves only
+      // another version's evidence. Restore the exact supported schema before
+      // reopening; absent evidence must never authorize a financial release.
+      const superseded =
+        boundary === 'superseded resume preparation'
+          ? 'INSERT INTO billing_workflow_resume_preparations VALUES (NEW.execution_id, NEW.version + 1);'
+          : '';
+      await f.observer.execute(
+        `CREATE TRIGGER fault_resume_preparation BEFORE INSERT ON billing_workflow_resume_preparations WHEN NEW.version = 2 BEGIN ${superseded} SELECT RAISE(IGNORE); END`,
+      );
+    }
     const pending = run.resume(approval);
     try {
       await gate.entered;
       expect((await f.runtime.workflows.report.native.getWorkflowRunById(run.executionId))?.status).toBe('suspended');
-      const legacy = boundary === 'v16 resume' || boundary === 'v17 resume';
-      if (legacy) {
-        // The older schema recorded the resume without proving preparation.
-        await f.observer.execute('DROP TABLE billing_workflow_resume_preparations');
-        if (boundary === 'v16 resume') await f.observer.execute('DROP TABLE billing_workflow_native_handoffs');
-        const version = boundary === 'v16 resume' ? 16 : 17;
-        await f.observer.execute({ sql: 'DELETE FROM billing_migrations WHERE version > ?', args: [version] });
-        await f.observer.execute(`PRAGMA user_version = ${version}`);
+      if (missingPreparation) {
+        await f.observer.execute('DROP TRIGGER fault_resume_preparation');
+        expect((await f.observer.execute('SELECT version FROM billing_workflow_resume_preparations')).rows).toEqual(
+          boundary === 'superseded resume preparation' ? [{ version: 3n }] : [],
+        );
       }
       if (boundary === 'missing native suspension')
         await (await f.runtime.mastra.getStorage()!.getStore('workflows'))!.deleteWorkflowRunById({
@@ -888,7 +899,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
         .getRun({ billing: f.context, executionId: run.executionId });
       const request = { billing: f.context, idempotencyKey: 'cancel' };
       const cancellation = await foreign.cancel(request);
-      const known = !legacy && boundary !== 'missing native suspension';
+      const known = !missingPreparation && boundary !== 'missing native suspension';
       const expected = known
         ? { executionStatus: 'canceled', settlementStatus: 'released', billedUnits: 0 }
         : { executionStatus: 'uncertain', settlementStatus: 'uncertain', billedUnits: null };
@@ -1618,12 +1629,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       const application = await createWeatherApplication(environment, { autumn: { ...f.options, bindings } });
       cleanups.push(application.close);
       const server = await billingSocket(
-        createBillingApp(
-          application.organizations,
-          application.execution,
-          application.runtime.commercial,
-          application.runtime.recovery,
-        ),
+        createBillingApp(application.organizations, application.execution, application.runtime.commercial),
       );
       cleanups.push(server.close);
       return server.url;

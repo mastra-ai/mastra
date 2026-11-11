@@ -1,4 +1,13 @@
-import { removeDriverMigration } from '../support/billing.js';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { setupLocal } from '../../scripts/setup.js';
+import { createWeatherApplication } from '../../src/mastra/setup.js';
+import { readLocalProfiles } from '../../src/local/profiles.js';
+import { modelBoundary } from '../support/mastra.js';
+import { billingSocket } from '../support/http.js';
+import { createBillingApp } from '../../src/server/billing.js';
+import { weatherPrompt } from '../../src/weather/observations.js';
+import { observations } from '../support/template.js';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeBilling } from '../../src/billing/setup.js';
@@ -108,7 +117,7 @@ describe('local billing storage', () => {
     expect((await observer.execute('SELECT units FROM immutable_usage')).rows).toEqual([{ units: 3n }]);
   });
 
-  it.each(['newer history', 'checksum drift', 'unknown schema', 'version mismatch'] as const)(
+  it.each(['newer history', 'historical version', 'checksum drift', 'unknown schema', 'version mismatch'] as const)(
     'rejects %s and preserves accounting history',
     async corruption => {
       const { database, billing, account, observer } = await fixture();
@@ -119,7 +128,8 @@ describe('local billing storage', () => {
           "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (19, 'unknown', '2026-11-06T00:00:00Z')",
         );
         await observer.execute('PRAGMA user_version = 19');
-      } else if (corruption === 'checksum drift')
+      } else if (corruption === 'historical version') await observer.execute('PRAGMA user_version = 16');
+      else if (corruption === 'checksum drift')
         await observer.execute("UPDATE billing_migrations SET checksum = 'changed'");
       else if (corruption === 'unknown schema')
         await observer.execute('CREATE TABLE unexpected (id TEXT PRIMARY KEY) STRICT');
@@ -142,27 +152,8 @@ describe('local billing storage', () => {
     const reopened = await LocalBillingStorage.open({ url: database.url });
     cleanups.push(() => reopened.close());
     const history = await observer.execute('SELECT version, checksum FROM billing_migrations');
-    expect(history.rows).toEqual([
-      { version: 1n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 2n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 3n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 4n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 5n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 6n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 7n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 8n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 9n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 10n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 11n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 12n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 13n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 14n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 15n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 16n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 17n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { version: 18n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
-    ]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(18n);
+    expect(history.rows).toEqual([{ version: 1n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(1n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -207,7 +198,7 @@ describe('local billing storage', () => {
     );
     await observer.execute('PRAGMA foreign_keys = ON');
     await expect(LocalBillingStorage.open({ url: database.url })).rejects.toMatchObject({
-      code: 'storage_unavailable',
+      code: 'storage_incompatible',
     });
     expect((await observer.execute('SELECT version FROM billing_migrations')).rows).toEqual([]);
     expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(0n);
@@ -257,46 +248,164 @@ describe('local billing storage', () => {
       [{ count: 21n, units: 90n }],
     );
   }, 60_000);
-  it('additive provider migration preserves existing local usage and migration checksums', async () => {
-    const { billing, account, observer, database } = await fixture();
-    await billing.provider.reportUsage(usage(account));
-    billing.close();
-    const checksums = (
-      await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 4 ORDER BY version')
-    ).rows;
-    await removeDriverMigration(observer);
-    // Reconstruct the previously shipped v4 schema while retaining its actual
-    // local account, immutable usage and meter debit. No production reset API.
-    for (const table of [
-      'billing_catalog',
-      'billing_usage_bindings',
-      'billing_expiry_recovery',
-      'billing_refresh_leases',
-      'billing_inbox',
-      'billing_account_sync',
-      'billing_delivery',
-      'billing_runtimes',
-    ])
-      await observer.execute(`DROP TABLE ${table}`);
-    await observer.execute('ALTER TABLE billing_executions DROP COLUMN recovery_fenced');
-    await observer.execute('DELETE FROM billing_migrations WHERE version >= 6');
-    for (const table of ['provider_usage', 'hosted_operations', 'grant_allocations', 'credit_grants', 'provider_links'])
-      await observer.execute(`DROP TABLE ${table}`);
-    await observer.execute('ALTER TABLE billing_accounts DROP COLUMN effective_provider');
-    await observer.execute('DELETE FROM billing_migrations WHERE version = 5');
-    await observer.execute('PRAGMA user_version = 4');
-    const upgraded = await LocalBillingStorage.open({ url: database.url });
-    cleanups.push(() => upgraded.close());
-    expect(await upgraded.ensureAccount({ workspaceId: 'team' })).toEqual(account);
-    expect((await upgraded.getState(account)).meters[0]).toMatchObject({ confirmedBalance: 97, consumedUnits: 3 });
-    expect(
-      (await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 4 ORDER BY version'))
-        .rows,
-    ).toEqual(checksums);
-    expect((await observer.execute('SELECT id, units FROM immutable_usage')).rows).toEqual([
-      { id: 'event-1', units: 3n },
-    ]);
-    expect((await observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(18n);
+});
+
+// Real setup, Mastra, Hono, SQL and restart; only the paid model API is controlled.
+async function developmentFixture() {
+  const directory = await temporaryDatabase();
+  cleanups.push(directory.cleanup);
+  const model = await modelBoundary();
+  cleanups.push(model.close);
+  const environment = {
+    MASTRA_PROJECT_ROOT: directory.directory,
+    BILLING_MODE: 'local',
+    BILLING_PROVIDER: 'local',
+    OPENAI_API_KEY: 'controlled-not-live',
+    OPENAI_BASE_URL: model.url,
+  };
+  const manifest = await setupLocal(environment);
+  const observer = await independentClient(manifest.databaseUrl);
+  cleanups.push(() => observer.close());
+  let application = await createWeatherApplication(environment);
+  cleanups.push(() => application.close());
+  let server = await billingSocket(
+    createBillingApp(application.organizations, application.execution, application.runtime.commercial),
+  );
+  cleanups.push(() => server.close());
+  const owner = manifest.profiles.owner!;
+  const call = async (path: string, body: unknown, key: string) => {
+    const response = await fetch(`${server.url}/billing/workspaces/${owner.workspaceId}/${path}`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${owner.credential}`,
+        'content-type': 'application/json',
+        'idempotency-key': key,
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, body: (await response.json()) as any };
+  };
+  const summary = () =>
+    call('agents/weather-agent/generate', { prompt: weatherPrompt(observations) }, 'retained-summary');
+  return {
+    directory,
+    model,
+    environment,
+    manifest,
+    observer,
+    summary,
+    call,
+    restart: async () => {
+      await server.close();
+      await application.close();
+      application = await createWeatherApplication(environment);
+      server = await billingSocket(
+        createBillingApp(application.organizations, application.execution, application.runtime.commercial),
+      );
+    },
+    stop: async () => {
+      await server.close();
+      await application.close();
+    },
+  };
+}
+
+it('fresh development state starts without Polar and setup preserves spent credit', async () => {
+  const f = await developmentFixture();
+  expect(Object.values(f.manifest.profiles).map(profile => [profile!.name, profile!.organizationName])).toEqual([
+    ['John', "John's Org"],
+    ['Mary', "Mary's Org"],
+    ['Alex', "Alex's Org"],
+  ]);
+  expect((await f.observer.execute('SELECT kind FROM workspaces ORDER BY id')).rows.map(row => row.kind)).toEqual([
+    'personal',
+    'personal',
+    'personal',
+  ]);
+  const credentials = await readFile(join(f.directory.directory, 'data/local-profiles.json'));
+  expect(await f.summary()).toMatchObject({
+    status: 200,
+    body: { result: { text: 'ok' }, billing: { executionStatus: 'completed', billedUnits: 3 } },
   });
+  const history = (await f.observer.execute('SELECT * FROM billing_ledger')).rows;
+  await f.stop();
+  expect(await setupLocal(f.environment)).toEqual(f.manifest);
+  expect(await readFile(join(f.directory.directory, 'data/local-profiles.json'))).toEqual(credentials);
+  expect(await readLocalProfiles(f.directory.directory)).toEqual(f.manifest);
+  expect((await f.observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(history);
+  const balances = (
+    await f.observer.execute(
+      "SELECT a.workspace_id, m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'weather-credits'",
+    )
+  ).rows;
+  expect(balances.find(row => row.workspace_id === f.manifest.profiles.owner!.workspaceId)?.balance).toBe(27n);
+  expect(
+    balances.filter(row => row.workspace_id !== f.manifest.profiles.owner!.workspaceId).map(row => row.balance),
+  ).toEqual([30n, 30n]);
+  expect(
+    (
+      await f.observer.execute(
+        "SELECT name FROM sqlite_schema WHERE name IN ('credit_grants', 'grant_allocations', 'billing_source_owners', 'billing_provider_lifecycle', 'billing_account_sync', 'billing_inbox')",
+      )
+    ).rows,
+  ).toEqual([]);
+  await f.restart();
+  expect(await f.summary()).toMatchObject({ status: 200, body: { billing: { replayed: true, billedUnits: 3 } } });
+  expect((await f.observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(history);
+  expect(f.model.requests).toHaveLength(1);
+});
+
+it('unsupported databases remain untouched and supported operation identities survive restart', async () => {
+  const foreign = await temporaryDatabase();
+  cleanups.push(foreign.cleanup);
+  const client = await independentClient(foreign.url);
+  await client.execute('CREATE TABLE important_data (value TEXT) STRICT');
+  await client.execute("INSERT INTO important_data VALUES ('retain unsupported state')");
+  client.close();
+  const before = await readFile(foreign.filename);
+  await expect(LocalBillingStorage.open({ url: foreign.url })).rejects.toMatchObject({ code: 'storage_incompatible' });
+  expect(await readFile(foreign.filename)).toEqual(before);
+  const f = await developmentFixture();
+  const completed = await f.summary();
+  const created = await f.call('workflows/weather-report/runs', {}, 'retained-report');
+  const id = created.body.executionId;
+  expect(
+    await f.call(`workflows/weather-report/runs/${id}/start`, { inputData: observations }, 'retained-start'),
+  ).toMatchObject({
+    status: 200,
+    body: { result: { status: 'suspended' }, billing: { settlementStatus: 'reserved', billedUnits: null } },
+  });
+  const tables = [
+    'billing_operations',
+    'billing_ledger',
+    'billing_remote_operations',
+    'billing_admitted_accounts',
+    'billing_workflow_operations',
+    'billing_workflow_native_handoffs',
+    'billing_reservations',
+  ];
+  const retained = async () =>
+    Promise.all(tables.map(async table => (await f.observer.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows));
+  const history = await retained();
+  const remote = (
+    await f.observer.execute(
+      'SELECT request, payload, reserve_evidence FROM billing_remote_operations WHERE execution_id = ?',
+      [id],
+    )
+  ).rows[0];
+  expect(JSON.parse(String(remote.request))).toMatchObject({
+    id: `reserve:${id}`,
+    account: { workspaceId: f.manifest.profiles.owner!.workspaceId },
+  });
+  expect(remote.reserve_evidence).not.toBeNull();
+  await f.restart();
+  expect(await retained()).toEqual(history);
+  expect(await f.summary()).toMatchObject({
+    status: 200,
+    body: { billing: { executionId: completed.body.billing.executionId, replayed: true, billedUnits: 3 } },
+  });
+  expect((await f.call('workflows/weather-report/runs', {}, 'retained-report')).body.executionId).toBe(id);
+  expect(await retained()).toEqual(history);
+  expect(f.model.requests).toHaveLength(2);
+  expect((await f.observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
 });

@@ -140,7 +140,7 @@ export const snapshotSchema = z
       )
       .max(100),
     evidence: z.strictObject({ version: identifierSchema }).nullable(),
-    prepaidAuthority: z.enum(['application-ledger', 'provider-reservations']).optional(),
+    prepaidAuthority: z.literal('provider-reservations').optional(),
   })
   .superRefine(refineCommercialState);
 

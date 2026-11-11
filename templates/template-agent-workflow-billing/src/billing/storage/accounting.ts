@@ -20,7 +20,6 @@ import type {
 import { BillingDatabase } from './database.js';
 import { OrganizationStorage } from './organizations.js';
 import { accountFromRow } from './accounts.js';
-import { allocateGrants, settleGrants } from './grants.js';
 
 export interface OperationClaim {
   readonly identity: AdmissionIdentity;
@@ -660,21 +659,11 @@ export class AccountingStorage {
           String(account.version) !== snapshot.evidence?.version
         )
           return { status: 'stale' };
-        const synchronization = (
-          await transaction.execute({
-            sql: 'SELECT generation, synchronized_generation FROM billing_account_sync WHERE account_id = ?',
-            args: [account.id],
-          })
-        ).rows[0];
-        if (synchronization && synchronization.generation !== synchronization.synchronized_generation)
-          return { status: 'stale' };
         accountId = String(account.id);
         if (charge.type !== 'none') {
           const meter = snapshot.meters.find(meter => meter.key === charge.meter)!;
           const funding = charge.type === 'credits' ? 'prepaid' : charge.funding;
-          if (funding === 'prepaid' && snapshot.prepaidAuthority === 'application-ledger') {
-            await allocateGrants(transaction, accountId, charge.meter, units);
-          } else if (funding === 'prepaid') {
+          if (funding === 'prepaid') {
             const holds = (
               await transaction.execute({
                 sql: 'SELECT units FROM billing_reservations WHERE account_id = ? AND meter = ? AND active = 1',
@@ -746,13 +735,6 @@ export class AccountingStorage {
           executionId,
         ],
       });
-      if (
-        charge.type !== 'none' &&
-        (charge.type === 'credits' || charge.funding === 'prepaid') &&
-        snapshot?.prepaidAuthority === 'application-ledger'
-      ) {
-        await allocateGrants(transaction, accountId!, charge.meter, units, executionId);
-      }
       if (charge.type !== 'none')
         await transaction.execute({
           sql: 'INSERT INTO billing_reservations (execution_id, account_id, meter, units, active) VALUES (?, ?, ?, ?, 1)',
@@ -973,7 +955,6 @@ export class AccountingStorage {
         });
       }
       if (terminal && !remoteRequest) {
-        await settleGrants(transaction, executionId, billed!);
         await transaction.execute({
           sql: 'UPDATE billing_reservations SET active = 0 WHERE execution_id = ? AND active = 1',
           args: [executionId],

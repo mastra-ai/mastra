@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createHmac, randomUUID } from 'node:crypto';
-import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +6,6 @@ import { setTimeout } from 'node:timers/promises';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
 import { BillingRecovery } from '../../src/billing/recovery.js';
 import { BillingDatabase } from '../../src/billing/storage/database.js';
-import { initializeBilling } from '../../src/billing/setup.js';
-import { createBillingApp } from '../../src/server/billing.js';
-import { polarFixture } from '../support/polar.js';
 import { modelBoundary, runtimeFixture, operationBarrier } from '../support/mastra.js';
 import { independentClient, temporaryDatabase } from '../support/billing.js';
 
@@ -18,286 +13,97 @@ const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
-const secret = 'whsec_' + Buffer.from('a-test-only-32-byte-signing-secret').toString('base64');
-function signed(
-  customer: string | null,
-  options: {
-    id?: string;
-    type?: string;
-    secret?: string;
-    legacy?: boolean;
-    timestamp?: number;
-    apiVersion?: string;
-    occurredAt?: string;
-  } = {},
-) {
-  const id = options.id ?? randomUUID();
-  const timestamp = options.timestamp ?? Math.floor(Date.now() / 1000);
-  const value = options.secret ?? secret;
-  // Deliberate whitespace and Unicode make JSON reserialization detectable.
-  const body = Buffer.from(
-    JSON.stringify(
-      {
-        api_version: options.apiVersion ?? '2026-10',
-        type: options.type ?? 'customer.state_changed',
-        timestamp: options.occurredAt ?? new Date().toISOString(),
-        data: { id: customer, note: 'São Paulo' },
-      },
-      null,
-      2,
-    ) + '\n',
-  );
-  const key = options.legacy ? Buffer.from(value) : Buffer.from(value.replace(/^whsec_/, ''), 'base64');
-  const signature = createHmac('sha256', key).update(`${id}.${timestamp}.`).update(body).digest('base64');
-  return {
-    body,
-    headers: {
-      'webhook-id': id,
-      'webhook-timestamp': String(timestamp),
-      'webhook-signature': `v1,${signature}`,
-      'webhook-api-version': '2026-10',
-    },
-  };
-}
-async function fixture(options: Parameters<typeof polarFixture>[0] = {}) {
-  const fixture = await polarFixture({ ...options, webhookSecret: secret });
-  cleanups.push(fixture.close);
-  const records = await RecoveryStorage.open({ url: fixture.database.url });
-  cleanups.push(() => records.close());
-  const worker = new BillingRecovery(records, fixture.commercial.provider);
-  cleanups.push(() => worker.stop());
-  return { ...fixture, records, worker };
-}
-async function socket(app: ReturnType<typeof createBillingApp>) {
-  const server = createServer(async (request, response) => {
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    const result = await app.fetch(
-      new Request(`http://127.0.0.1${request.url}`, {
-        method: request.method,
-        headers: request.headers as Record<string, string>,
-        ...(['GET', 'HEAD'].includes(request.method!) ? {} : { body: Buffer.concat(chunks) }),
-      }),
-    );
-    const headers: Record<string, string> = {};
-    result.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-    response.writeHead(result.status, headers);
-    response.end(Buffer.from(await result.arrayBuffer()));
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('No HTTP address');
-  cleanups.push(async () => {
-    const closed = new Promise<void>(resolve => server.close(() => resolve()));
-    server.closeAllConnections();
-    await closed;
-  });
-  return `http://127.0.0.1:${address.port}`;
-}
-const revoke = (f: Awaited<ReturnType<typeof fixture>>) => {
-  for (const grant of f.wire.data.grants) {
-    grant.is_granted = false;
-    grant.is_revoked = true;
-    grant.revoked_at = null;
-  }
-  f.wire.data.subscriptions[0].status = 'canceled';
-};
-function barrier() {
-  let reached!: () => void, release!: () => void;
-  const arrived = new Promise<void>(resolve => {
-    reached = resolve;
-  });
-  const resume = new Promise<void>(resolve => {
-    release = resolve;
-  });
-  return { reached, arrived, release, resume };
-}
-
 describe('durable billing recovery', () => {
-  it('outbox survives restart and uncertain delivery without duplicate charges', async () => {
-    const f = await fixture();
-    const completed = await f.execute('completed');
-    const debit = (await f.observer.execute('SELECT * FROM billing_ledger')).rows;
-    const original = (await f.observer.execute('SELECT * FROM billing_outbox')).rows;
-    f.wire.data.lostUsage = true;
-    await f.worker.runOnce();
-    expect(f.wire.data.events.size).toBe(1);
-    expect((await f.gateway.read(f.owner.context, completed.billing.executionId)).billing.deliveryStatus).toBe(
-      'uncertain',
-    );
-    const scheduled = (await f.observer.execute('SELECT attempts, next_attempt, last_error FROM billing_delivery'))
-      .rows[0];
-    expect(scheduled).toMatchObject({ attempts: 1n, last_error: 'provider_unavailable' });
-    expect(Number(scheduled.next_attempt)).toBeGreaterThan(Date.now());
-    const requestCount = f.wire.data.requests.length;
-    await f.worker.runOnce();
-    expect(f.wire.data.requests).toHaveLength(requestCount);
-    await f.worker.stop();
-    f.records.close();
-    f.commercial.close();
-    const changed = structuredClone(f.configuration);
-    changed.polar!.meters[0].eventName = 'changed.after.restart';
-    changed.polar!.meters[0].unitsField = 'changed_units';
-    const reopened = await initializeBilling({ ...f.initialization, configuration: changed });
-    cleanups.push(reopened.close);
-    const records = await RecoveryStorage.open({ url: f.database.url });
-    cleanups.push(() => records.close());
-    const other = await RecoveryStorage.open({ url: f.database.url });
-    cleanups.push(() => other.close());
-    await f.observer.execute('UPDATE billing_delivery SET next_attempt = 0');
-    // Repeated independent SQL contenders and real expiry prove lease reclaim
-    // and stale acknowledgements, including the original lost provider response.
-    for (let round = 0; round < 20; round++) {
-      const claims = await Promise.all(
-        [records, other].map(store => store.claimDeliveries({ batchSize: 1, leaseMs: 100 })),
-      );
-      expect(claims.map(list => list.length).sort()).toEqual([0, 1]);
-      const stale = claims.flat()[0];
-      await setTimeout(110);
-      const [winner] = await other.claimDeliveries({ batchSize: 1, leaseMs: 1000 });
-      expect(winner.id).toBe(stale.id);
-      expect(winner.token).not.toBe(stale.token);
-      expect(await records.completeDelivery(stale, { status: 'accepted', eventId: stale.id })).toBe(false);
-      if (round === 19) expect(await other.deliver(reopened.provider, winner)).toBe(true);
-      else {
-        await other.completeDelivery(winner, { status: 'uncertain', code: 'lost_acknowledgement' });
-        await f.observer.execute('UPDATE billing_delivery SET next_attempt = 0');
-      }
-    }
-    expect(f.wire.data.events.size).toBe(1);
-    const wires = f.wire.data.requests
-      .filter(request => request.path === '/v1/events/ingest')
-      .map(request => request.body);
-    expect(wires).toHaveLength(2);
-    expect(wires[1]).toEqual(wires[0]);
-    expect(wires[1].events[0]).toMatchObject({ name: 'work.succeeded', metadata: { units: 3 } });
-    expect((await f.gateway.read(f.owner.context, completed.billing.executionId)).billing.deliveryStatus).toBe(
-      'accepted',
-    );
-    expect((await f.observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(debit);
-    expect((await f.observer.execute('SELECT * FROM billing_outbox')).rows).toEqual(original);
-    expect(
-      (await f.observer.execute('SELECT SUM(consumed_units) AS consumed FROM credit_grants')).rows[0].consumed,
-    ).toBe(3n);
-    expect((await f.execute('completed')).billing.billedUnits).toBe(3);
-    expect(f.calls()).toBe(1);
-    // A permanent provider rejection remains visible and cannot retry silently.
-    const fresh = await fixture();
-    const rejected = await fresh.execute('permanent');
-    fresh.wire.data.rejectUsage = true;
-    await fresh.worker.runOnce();
-    expect((await fresh.gateway.read(fresh.owner.context, rejected.billing.executionId)).billing.deliveryStatus).toBe(
-      'failed',
-    );
-    const before = fresh.wire.data.requests.length;
-    await fresh.worker.runOnce();
-    expect(fresh.wire.data.requests).toHaveLength(before);
-    expect(await fresh.worker.metrics()).toMatchObject({ deliveries: [{ status: 'failed', count: 1 }] });
-  }, 30000);
-
-  it('verified webhook inbox rejects forgery and reconciles duplicate out of order events', async () => {
-    const f = await fixture();
-    const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.context.workspaceId });
-    const url = await socket(createBillingApp(f.organizations, undefined, f.sessions, f.worker));
-    const send = (input: ReturnType<typeof signed>, path = '/billing/webhooks/polar', method = 'POST') =>
-      fetch(url + path, { method, headers: input.headers, ...(method === 'GET' ? {} : { body: input.body }) });
-    for (const webhookSecret of ['', '\n', '   '])
-      await expect(
-        initializeBilling({ ...f.initialization, polar: { ...f.initialization.polar, webhookSecret } }),
-      ).rejects.toMatchObject({ code: 'invalid_configuration' });
-    const first = signed(f.wire.ids.customer);
-    expect((await send({ ...first, body: Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), first.body]) })).status).toBe(
-      401,
-    );
-    expect((await send(first)).status).toBe(202);
-    expect((await f.observer.execute('SELECT status FROM billing_inbox')).rows).toEqual([{ status: 'pending' }]);
-    expect((await f.observer.execute('SELECT id FROM credit_grants')).rows).toEqual([]);
-    expect((await send(first)).status).toBe(202);
-    expect((await f.observer.execute('SELECT generation FROM billing_account_sync')).rows[0].generation).toBe(1n);
-    expect(
-      (await send(signed(f.wire.ids.customer, { id: first.headers['webhook-id'], occurredAt: '2020-01-01T00:00:00Z' })))
-        .status,
-    ).toBe(409);
-    const tampered = { ...signed(f.wire.ids.customer), body: Buffer.from(first.body.toString().replace('São', 'Sao')) };
-    expect((await send(tampered)).status).toBe(401);
-    for (const timestamp of [0, Math.floor(Date.now() / 1000) + 1000])
-      expect((await send(signed(f.wire.ids.customer, { timestamp }))).status).toBe(401);
-    const missing = signed(f.wire.ids.customer);
-    delete (missing.headers as Partial<typeof missing.headers>)['webhook-signature'];
-    expect((await send(missing)).status).toBe(401);
-    expect((await send(signed(f.wire.ids.customer, { secret: 'different', legacy: true }))).status).toBe(401);
-    expect((await send(signed(f.wire.ids.customer, { legacy: true }))).status).toBe(202);
-    expect((await send(signed(f.wire.ids.customer, { apiVersion: '2025-01' }))).status).toBe(400);
-    const wrongHeader = signed(f.wire.ids.customer);
-    wrongHeader.headers['webhook-api-version'] = '2025-01';
-    expect((await send(wrongHeader)).status).toBe(400);
-    expect((await send(signed(null, { type: 'future.unrecognized' }))).status).toBe(202);
-    expect((await send(signed(null, { type: 'future.unrecognized', secret: 'bad', legacy: true }))).status).toBe(401);
-    for (const path of ['/billing/context', '/billing/webhooks/polar/', '/billing/webhooks/polar/extra'])
-      expect((await send(first, path)).status).toBe(401);
-    expect((await send(first, '/billing/webhooks/polar', 'GET')).status).toBe(401);
-    expect(
-      (
-        await fetch(url + '/billing/webhooks/polar', {
-          method: 'POST',
-          headers: first.headers,
-          body: Buffer.alloc(17000),
-        })
-      ).status,
-    ).toBe(413);
-    await f.worker.runOnce();
-    expect(
-      (await f.observer.execute('SELECT status, COUNT(*) AS count FROM billing_inbox GROUP BY status ORDER BY status'))
-        .rows,
-    ).toEqual([
-      { status: 'done', count: 2n },
-      { status: 'ignored', count: 1n },
-    ]);
-    expect((await f.commercial.provider.getState(account)).meters[0].confirmedBalance).toBe(10);
-    revoke(f);
-    const newer = signed(f.wire.ids.customer),
-      older = signed(f.wire.ids.customer, { occurredAt: '2020-01-01T00:00:00Z' });
-    expect((await send(newer)).status).toBe(202);
-    await f.worker.runOnce();
-    expect((await send(older)).status).toBe(202);
-    await f.worker.runOnce();
-    expect(
-      (
-        await f.observer.execute(
-          'SELECT original_units, consumed_units, available FROM credit_grants ORDER BY original_units',
-        )
-      ).rows,
-    ).toEqual([
-      { original_units: 4n, consumed_units: 0n, available: 0n },
-      { original_units: 6n, consumed_units: 0n, available: 0n },
-    ]);
-    expect(f.calls()).toBe(0);
-    await f.worker.intake(signed(f.wire.ids.customer));
-    const paused = barrier();
-    f.wire.data.pause = {
-      path: `/v1/products/${f.wire.ids.orderProduct}`,
-      reached: paused.reached,
-      release: paused.resume,
-    };
-    const active = f.worker.runOnce();
-    await paused.arrived;
-    let drained = false;
-    const stopping = f.worker.stop().then(() => {
-      drained = true;
+  it('metered outbox survives a receiver commit and lost acknowledgement without repeated consumption', async () => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    const model = await modelBoundary();
+    cleanups.push(model.close);
+    const initial = await runtimeFixture({
+      databaseUrl: database.url,
+      directory: database.directory,
+      modelUrl: model.url,
     });
-    await setTimeout(20);
-    expect(drained).toBe(false);
-    paused.release();
-    await Promise.all([active, stopping]);
-    expect(drained).toBe(true);
-    f.records.close();
-    expect((await send(signed(f.wire.ids.customer))).status).toBe(503);
+    cleanups.push(initial.close);
+    const result = await initial.billing.http.generate(
+      'assistant',
+      '[success] metered summary',
+      initial.billingContext,
+      'metered-summary',
+    );
+    expect(result.billing).toMatchObject({ executionStatus: 'completed', billedUnits: 5, deliveryStatus: 'pending' });
+    const observer = await independentClient(database.url);
+    cleanups.push(() => observer.close());
+    const outbox = (await observer.execute('SELECT id, payload FROM billing_outbox')).rows;
+    expect(outbox).toHaveLength(1);
+    expect((await observer.execute("SELECT consumed FROM commercial_meters WHERE key = 'tokens'")).rows).toEqual([
+      { consumed: 0n },
+    ]);
+    const ledger = (await observer.execute('SELECT * FROM billing_ledger')).rows;
+    const reopen = {
+      databaseUrl: database.url,
+      directory: database.directory,
+      modelUrl: model.url,
+      credential: initial.credential,
+      workspaceId: initial.billingContext.workspaceId,
+      configuration: initial.configuration,
+    };
+    await initial.close();
+    const child = fork(
+      fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
+      ['metered-delivery', JSON.stringify(reopen)],
+      { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
+    );
+    cleanups.push(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    });
+    const [committed] = await once(child, 'message');
+    expect(committed).toMatchObject({
+      boundary: 'metered-committed',
+      status: 'accepted',
+      id: outbox[0].id,
+      payload: outbox[0].payload,
+    });
+    const exiting = once(child, 'exit');
+    child.kill('SIGKILL');
+    await exiting;
+    expect((await observer.execute('SELECT id, payload FROM immutable_usage')).rows).toEqual(outbox);
+    const restarted = await runtimeFixture(reopen);
+    cleanups.push(restarted.close);
+    const records = await RecoveryStorage.open({ url: database.url });
+    cleanups.push(() => records.close());
+    const recovery = new BillingRecovery(records, restarted.provider);
+    cleanups.push(() => recovery.stop());
+    await setTimeout(120);
+    await recovery.runOnce();
+    await recovery.runOnce();
+    expect((await observer.execute('SELECT status, attempts FROM billing_delivery')).rows).toEqual([
+      { status: 'accepted', attempts: 2n },
+    ]);
+    expect((await observer.execute('SELECT id, payload FROM immutable_usage')).rows).toEqual(outbox);
+    expect((await observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(ledger);
+    expect((await observer.execute("SELECT consumed FROM commercial_meters WHERE key = 'tokens'")).rows).toEqual([
+      { consumed: 5n },
+    ]);
+    expect(
+      (
+        await restarted.billing.http.generate(
+          'assistant',
+          '[success] metered summary',
+          restarted.billingContext,
+          'metered-summary',
+        )
+      ).billing,
+    ).toMatchObject({
+      executionId: result.billing.executionId,
+      billedUnits: 5,
+      replayed: true,
+      deliveryStatus: 'accepted',
+    });
+    expect(model.requests).toHaveLength(1);
   }, 30000);
 
-  it.each(['initial-acknowledged', 'initial-handoff', 'initial-v16', 'adopted'] as const)(
+  it.each(['initial-acknowledged', 'initial-handoff', 'adopted'] as const)(
     'startup respects the durable workflow boundary after interruption at %s',
     async boundary => {
       const database = await temporaryDatabase();
@@ -325,7 +131,7 @@ describe('durable billing recovery', () => {
       expect(execution.boundary).toBe(boundary === 'adopted' ? 'initial-acknowledged' : boundary);
       const observer = await independentClient(database.url);
       cleanups.push(() => observer.close());
-      const claimed = boundary === 'initial-v16' || boundary === 'initial-handoff';
+      const claimed = boundary === 'initial-handoff';
       expect(
         (await observer.execute('SELECT reserve_state, segment_deadline FROM billing_remote_operations')).rows,
       ).toEqual([{ reserve_state: 'reserved', segment_deadline: claimed ? expect.any(BigInt) : null }]);
@@ -335,13 +141,6 @@ describe('durable billing recovery', () => {
       const exit = once(child, 'exit');
       child.kill('SIGKILL');
       await exit;
-      if (boundary === 'initial-v16') {
-        // Reconstruct a genuine v16 database from the committed v16 marker.
-        await observer.execute('DROP TABLE billing_workflow_resume_preparations');
-        await observer.execute('DROP TABLE billing_workflow_native_handoffs');
-        await observer.execute('DELETE FROM billing_migrations WHERE version >= 17');
-        await observer.execute('PRAGMA user_version = 16');
-      }
       const restarted = await runtimeFixture(options);
       cleanups.push(restarted.close);
       const recovery = new BillingRecovery(records, restarted.provider, () => restarted.accounting.recoverFinancial());
@@ -401,10 +200,6 @@ describe('durable billing recovery', () => {
         }
       } else await recovery.runOnce();
 
-      if (boundary === 'initial-v16')
-        expect((await observer.execute('SELECT version, state FROM billing_workflow_native_handoffs')).rows).toEqual([
-          { version: 1n, state: 'active' },
-        ]);
       await recovery.runOnce();
       const canceled = await handle.cancel({
         billing: restarted.billingContext,
@@ -715,7 +510,6 @@ describe('durable billing recovery', () => {
     for (const phase of [
       'expiry-claimed',
       'expiry-canceled',
-      'expiry-legacy',
       'expiry-unconfirmed-canceled',
       'expiry-missing',
       'expiry-active',
@@ -916,175 +710,4 @@ describe('durable billing recovery', () => {
     ]);
     expect(queueModel.requests).toHaveLength(101);
   }, 120000);
-
-  it('grant synchronization recovers without duplicate funding or stale credit resurrection', async () => {
-    const f = await fixture();
-    const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.context.workspaceId });
-    await f.commercial.provider.getState(account);
-    await f.execute('settled-before-recovery');
-    const consumed = (
-      await f.observer.execute(
-        'SELECT source_key, original_units, consumed_units, fingerprint, provenance FROM credit_grants ORDER BY source_key',
-      )
-    ).rows;
-    const crash = async (phase: 'source-intake' | 'source-apply', notification = signed(f.wire.ids.customer)) => {
-      const child = fork(
-        fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
-        [
-          phase,
-          JSON.stringify({
-            ...f.initialization,
-            polar: { token: 'loopback-test-token', webhookSecret: secret },
-            account,
-            notification: { body: notification.body.toString('base64'), headers: notification.headers },
-          }),
-        ],
-        { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
-      );
-      cleanups.push(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-      });
-      let diagnostics = '';
-      child.stderr?.on('data', chunk => {
-        diagnostics = (diagnostics + chunk).slice(-4000);
-      });
-      await Promise.race([
-        once(child, 'message'),
-        once(child, 'exit').then(() => {
-          throw new Error(diagnostics);
-        }),
-      ]);
-      const exit = once(child, 'exit');
-      child.kill('SIGKILL');
-      await exit;
-    };
-    await crash('source-intake');
-    expect(
-      (await f.observer.execute("SELECT COUNT(*) AS count FROM billing_inbox WHERE status = 'pending'")).rows[0].count,
-    ).toBe(1n);
-    // Applying the same authoritative sources commits both bucket state and
-    // covered inbox hints before another abrupt process death.
-    await crash('source-apply');
-    expect((await f.observer.execute('SELECT status FROM billing_inbox')).rows).toEqual([{ status: 'done' }]);
-    const other = await RecoveryStorage.open({ url: f.database.url });
-    cleanups.push(() => other.close());
-    for (let round = 0; round < 20; round++) {
-      await f.worker.intake(signed(f.wire.ids.customer));
-      const [stale] = await f.records.claimSynchronizations({ batchSize: 1, leaseMs: 100 });
-      const paused = barrier();
-      f.wire.data.pause = {
-        path: `/v1/products/${f.wire.ids.orderProduct}`,
-        reached: paused.reached,
-        release: paused.resume,
-      };
-      const old = f.commercial.provider.getState(account, { token: stale.token });
-      const oldResult = old.then(
-        value => ({ value }),
-        error => ({ error }),
-      );
-      await paused.arrived;
-      await f.worker.intake(signed(f.wire.ids.customer)); // Revokes the in-flight observation.
-      await setTimeout(110);
-      const [winner] = await other.claimSynchronizations({ batchSize: 1, leaseMs: 5000 });
-      expect(winner.token).not.toBe(stale.token);
-      // Synchronous paid-admission refresh and leased recovery use one source
-      // application service; either can complete hints without minting again.
-      const latest = await f.commercial.provider.getState(account);
-      expect(latest.meters[0].confirmedBalance).toBe(7);
-      paused.release();
-      expect(await oldResult).toHaveProperty('error');
-      expect(await f.records.completeSynchronization(stale, true)).toBe(false);
-      await f.commercial.provider.getState(account, { token: winner.token });
-      expect(await other.completeSynchronization(winner, true)).toBe(true);
-      expect(
-        (
-          await f.observer.execute(
-            'SELECT source_key, original_units, consumed_units, fingerprint, provenance FROM credit_grants ORDER BY source_key',
-          )
-        ).rows,
-      ).toEqual(consumed);
-    }
-    // A notification while a formerly eligible read waits must prevent stale
-    // restoration, even when it came from an older event occurrence timestamp.
-    const paused = barrier();
-    f.wire.data.pause = {
-      path: `/v1/products/${f.wire.ids.orderProduct}`,
-      reached: paused.reached,
-      release: paused.resume,
-    };
-    const admission = f.execute('invalidated-admission');
-    const denied = admission.then(
-      value => ({ value }),
-      error => ({ error }),
-    );
-    await paused.arrived;
-    revoke(f);
-    await f.worker.intake(signed(f.wire.ids.customer, { occurredAt: '2020-01-01T00:00:00Z' }));
-    paused.release();
-    expect(await denied).toMatchObject({ error: { code: 'forbidden' } });
-    await f.worker.runOnce();
-    expect(f.calls()).toBe(1);
-    expect(
-      (
-        await f.observer.execute(
-          'SELECT source_key, original_units, consumed_units, fingerprint, provenance FROM credit_grants ORDER BY source_key',
-        )
-      ).rows,
-    ).toEqual(consumed);
-    expect((await f.observer.execute('SELECT available FROM credit_grants')).rows).toEqual([
-      { available: 0n },
-      { available: 0n },
-    ]);
-    // Missing evidence is not cached eligibility and cannot clear pending hints.
-    f.wire.data.unavailable = true;
-    await f.worker.intake(signed(f.wire.ids.customer));
-    await f.worker.runOnce();
-    await expect(f.execute('outage')).rejects.toMatchObject({ code: 'state_unavailable' });
-    expect(
-      (await f.observer.execute("SELECT COUNT(*) AS count FROM billing_inbox WHERE status = 'pending'")).rows[0].count,
-    ).toBe(1n);
-    expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows[0].units).toBe(3n);
-    expect(
-      (await f.observer.execute('SELECT generation, synchronized_generation, last_error FROM billing_account_sync'))
-        .rows[0],
-    ).toMatchObject({ last_error: 'source_unavailable' });
-    const metrics = JSON.stringify(await f.worker.metrics());
-    expect(metrics).not.toContain(secret);
-    expect(metrics).not.toContain(f.wire.ids.customer);
-    expect(metrics).not.toContain('São Paulo');
-    const held = barrier();
-    const holding = await fixture({
-      executor: async () => {
-        held.reached();
-        await held.resume;
-        return { status: 'failed' };
-      },
-    });
-    const failing = holding.execute('held-across-source-expiry');
-    await held.arrived;
-    holding.wire.data.subscriptions[0].current_period_end = new Date(Date.now() - 1000).toISOString();
-    const orderGrant = holding.wire.data.grants.find(grant => grant.order_id !== null)!;
-    orderGrant.is_granted = false;
-    orderGrant.is_revoked = true;
-    await holding.worker.intake(signed(holding.wire.ids.customer));
-    await holding.worker.runOnce();
-    expect((await holding.observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 1n }]);
-    held.release();
-    expect((await failing).billing).toMatchObject({ billedUnits: 0, settlementStatus: 'released' });
-    const accountAfterExpiry = await holding.commercial.provider.ensureAccount({
-      workspaceId: holding.owner.context.workspaceId,
-    });
-    await holding.commercial.provider.getState(accountAfterExpiry);
-    expect(
-      (
-        await holding.observer.execute(
-          'SELECT original_units, consumed_units, available FROM credit_grants ORDER BY original_units',
-        )
-      ).rows,
-    ).toEqual([
-      { original_units: 4n, consumed_units: 0n, available: 0n },
-      { original_units: 6n, consumed_units: 0n, available: 0n },
-    ]);
-    expect((await holding.observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 0n }]);
-  }, 60000);
 });

@@ -257,7 +257,6 @@ export function validateConfiguration(
           (funding === 'metered' && !capabilities.replaySafeUsage) ||
           (funding === 'prepaid' &&
             capabilities.reconciliation !== 'reflected-events' &&
-            capabilities.prepaidAuthority !== 'application-ledger' &&
             capabilities.prepaidAuthority !== 'provider-reservations')
         )
           ctx.addIssue({ code: 'custom', message: 'Unsupported accounting capability.' });

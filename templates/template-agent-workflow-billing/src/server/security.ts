@@ -1,5 +1,4 @@
 import type { MiddlewareHandler } from 'hono';
-import type { BillingRecovery } from '../billing/recovery.js';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ServerConfig } from '@mastra/core/server';
 import type { OrganizationService } from '../billing/organizations.js';
@@ -11,7 +10,6 @@ export function billingOnlyServer(
   organizations: OrganizationService,
   execution?: BillingHttpGateway,
   commercial?: CommercialService,
-  recovery?: BillingRecovery,
   studio?: { middleware: MiddlewareHandler },
 ): Pick<ServerConfig, 'apiRoutes' | 'middleware' | 'cors'> {
   return {
@@ -28,7 +26,7 @@ export function billingOnlyServer(
       },
     ],
     apiRoutes: [
-      ...billingApiRoutes(organizations, execution, commercial, recovery),
+      ...billingApiRoutes(organizations, execution, commercial),
       // Discovery remains closed in both modes. With Studio disabled, also
       // cover framework-public routes that deliberately skip user middleware.
       registerApiRoute(studio ? '/.well-known/*' : '/*', {

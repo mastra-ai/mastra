@@ -10,6 +10,7 @@ import {
   serve,
   observations,
   assertNativeClosed,
+  shareOwnerWorkspace,
 } from '../support/template.js';
 import { modelBoundary } from '../support/mastra.js';
 import { weatherPrompt } from '../../src/weather/observations.js';
@@ -26,7 +27,6 @@ it('local setup is repeatable and weather generation needs no payment credential
   const model = await modelBoundary();
   cleanups.push(model.close);
   const env = { ...sanitizedEnvironment(), OPENAI_API_KEY: 'controlled-not-live', OPENAI_BASE_URL: model.url };
-  expect(Object.keys(env).some(key => key.startsWith('POLAR_'))).toBe(false);
   const setup = await command(copy.root, ['run', 'setup'], env);
   expect(setup.code).toBe(0);
   if (!semanticOnly) expect(setup.output).toContain('added');
@@ -81,8 +81,13 @@ it('local setup is repeatable and weather generation needs no payment credential
     .poll(
       async () =>
         Number(
-          (await query(copy.root, 'SELECT balance FROM commercial_meters WHERE key = ?', ['weather-credits']))[0]
-            .balance,
+          (
+            await query(
+              copy.root,
+              'SELECT balance FROM commercial_meters WHERE key = ? AND account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?)',
+              ['weather-credits', manifest.profiles.owner!.workspaceId],
+            )
+          )[0].balance,
         ),
       { timeout: 45000, interval: 100 },
     )
@@ -97,9 +102,13 @@ it('local setup is repeatable and weather generation needs no payment credential
   expect(await query(copy.root, 'SELECT * FROM memberships ORDER BY workspace_id, identity_id')).toEqual(membership);
   expect(await query(copy.root, 'SELECT * FROM billing_ledger ORDER BY execution_id')).toEqual(history);
   expect(
-    await query(copy.root, 'SELECT key, balance FROM commercial_meters WHERE key = ?', ['weather-credits']),
+    await query(
+      copy.root,
+      'SELECT key, balance FROM commercial_meters WHERE key = ? AND account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?)',
+      ['weather-credits', manifest.profiles.owner!.workspaceId],
+    ),
   ).toMatchObject([{ balance: 27 }]);
-  expect(await query(copy.root, 'SELECT COUNT(*) AS count FROM billing_accounts')).toMatchObject([{ count: 1 }]);
+  expect(await query(copy.root, 'SELECT COUNT(*) AS count FROM billing_accounts')).toMatchObject([{ count: 3 }]);
   if (!semanticOnly) await command(copy.root, ['run', 'build'], env);
   const restarted = await serve(copy.root, env, semanticOnly ? 'dev' : 'start');
   cleanups.push(restarted.close);
@@ -128,7 +137,9 @@ it('local setup is repeatable and weather generation needs no payment credential
   expect((await command(copy.root, ['run', 'setup'], env, false)).code).not.toBe(0);
   expect(await readFile(path, 'utf8')).toBe('corrupt private state');
   await writeFile(path, privateBytes);
-  expect((await command(copy.root, ['run', 'setup'], { ...env, BILLING_PROVIDER: 'polar' }, false)).code).not.toBe(0);
+  expect(
+    (await command(copy.root, ['run', 'setup'], { ...env, BILLING_PROVIDER: 'unsupported-provider' }, false)).code,
+  ).not.toBe(0);
   expect((await command(copy.root, ['run', 'setup'], { ...env, BILLING_MODE: 'production' }, false)).code).not.toBe(0);
   await query(copy.root, 'UPDATE local_credentials SET active = 0 WHERE identity_id = ?', [
     manifest.profiles.member!.actorId,
@@ -146,6 +157,7 @@ it('weather examples demonstrate shared billing suspension and organization isol
   cleanups.push(model.close);
   const env = { ...sanitizedEnvironment(), OPENAI_API_KEY: 'controlled-not-live', OPENAI_BASE_URL: model.url };
   await command(copy.root, ['run', 'setup'], env);
+  await shareOwnerWorkspace(copy.root);
   let server = await serve(copy.root, env);
   cleanups.push(() => server.close());
   const manifest = await profileManifest(copy.root);
@@ -166,8 +178,13 @@ it('weather examples demonstrate shared billing suspension and organization isol
     .poll(
       async () =>
         Number(
-          (await query(copy.root, 'SELECT balance FROM commercial_meters WHERE key = ?', ['weather-credits']))[0]
-            .balance,
+          (
+            await query(
+              copy.root,
+              'SELECT balance FROM commercial_meters WHERE key = ? AND account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?)',
+              ['weather-credits', manifest.profiles.owner!.workspaceId],
+            )
+          )[0].balance,
         ),
       { timeout: 45000, interval: 100 },
     )
@@ -270,7 +287,7 @@ it('weather examples demonstrate shared billing suspension and organization isol
   ]);
   expect(
     await query(copy.root, 'SELECT COUNT(*) AS count FROM billing_outbox WHERE execution_id = ?', [id]),
-  ).toMatchObject([{ count: 1 }]);
+  ).toMatchObject([{ count: 0 }]);
   const canceled = await create('cancel');
   await server.call(`${path(canceled)}/start`, { inputData: observations }, 'owner', 'cancel-start');
   const canceledResponse = await server.call(`${path(canceled)}/cancel`, {}, 'owner', 'cancel-report');
@@ -371,8 +388,13 @@ it('weather examples demonstrate shared billing suspension and organization isol
     .poll(
       async () =>
         Number(
-          (await query(copy.root, 'SELECT consumed FROM commercial_meters WHERE key = ?', ['weather-tokens']))[0]
-            .consumed,
+          (
+            await query(
+              copy.root,
+              'SELECT consumed FROM commercial_meters WHERE key = ? AND account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?)',
+              ['weather-tokens', manifest.profiles.owner!.workspaceId],
+            )
+          )[0].consumed,
         ),
       { timeout: 45000, interval: 100 },
     )

@@ -34,15 +34,18 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         profiles: {},
       };
       if (manifest.databaseUrl !== databaseUrl) throw new BillingError('conflict');
+      const people = { owner: 'John', member: 'Mary', outsider: 'Alex' } as const;
       for (const name of ['owner', 'member', 'outsider'] as const) {
         if (!manifest.profiles[name]) {
           if (manifest.ready) throw new BillingError('state_unavailable');
           const provisioned = await organizations.provisionLocal({
             profileId: `weather-${name}`,
-            displayName: `Weather ${name}`,
+            displayName: people[name],
           });
           if (!provisioned.credential) throw new BillingError('state_unavailable');
           manifest.profiles[name] = {
+            name: people[name],
+            organizationName: `${people[name]}'s Org`,
             actorId: provisioned.identity.id,
             workspaceId: provisioned.workspaceId,
             credential: provisioned.credential,
@@ -56,57 +59,18 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         });
         if (context.actorId !== profile.actorId) throw new BillingError('conflict');
       }
-      const owner = manifest.profiles.owner!;
-      const member = manifest.profiles.member!;
-      const ownerContext = await organizations.context({
-        credential: owner.credential,
-        workspaceId: owner.workspaceId,
-      });
-      if (!manifest.ready) {
-        await organizations.convert(ownerContext, 'weather-setup-convert');
-        let joined = false;
-        try {
-          joined =
-            (await organizations.context({ credential: member.credential, workspaceId: owner.workspaceId })).role ===
-            'member';
-        } catch (error) {
-          if (!(error instanceof BillingError) || error.code !== 'forbidden') throw error;
-        }
-        if (!joined) {
-          if (!manifest.invitation) {
-            const expiresAt = new Date(Date.now() + 86400000).toISOString();
-            const invitation = await organizations.invite(ownerContext, 'weather-setup-invite', {
-              recipientId: member.actorId,
-              role: 'member',
-              expiresAt,
-            });
-            if (!invitation.token) throw new BillingError('state_unavailable');
-            manifest.invitation = { token: invitation.token, expiresAt };
-            await writeLocalProfiles(root, manifest);
-          }
-          await organizations.acceptInvitation({
-            credential: member.credential,
-            key: 'weather-setup-accept',
-            token: manifest.invitation.token,
-          });
-        }
-      }
-      if (ownerContext.role !== 'owner') throw new BillingError('forbidden');
-      const shared = await organizations.context({ credential: owner.credential, workspaceId: owner.workspaceId });
-      const joined = await organizations.context({ credential: member.credential, workspaceId: owner.workspaceId });
-      if (shared.kind !== 'shared' || joined.role !== 'member') throw new BillingError('forbidden');
       const initialized = await initializeBilling({
-        configuration: weatherConfiguration(owner.workspaceId),
+        configuration: weatherConfiguration(Object.values(manifest.profiles).map(profile => profile!.workspaceId)),
         storage: { url: databaseUrl },
       });
       try {
-        await initialized.provider.ensureAccount({ workspaceId: owner.workspaceId });
+        for (const profile of Object.values(manifest.profiles))
+          await initialized.provider.ensureAccount({ workspaceId: profile!.workspaceId });
       } finally {
         initialized.close();
       }
       if (!manifest.ready) {
         manifest = { ...manifest, ready: true };
-        delete manifest.invitation;
         await writeLocalProfiles(root, manifest);
       }
       return manifest;

@@ -84,21 +84,6 @@ export const usageEventSchema = z.strictObject({
 });
 export type UsageEvent = z.input<typeof usageEventSchema>;
 
-export const grantSourceSchema = z
-  .strictObject({
-    key: identifierSchema,
-    meter: identifierSchema,
-    kind: z.enum(['order', 'subscription']),
-    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-    provenance: z.string().min(1).max(8192),
-    units: positiveQuantitySchema,
-    validFrom: timestampSchema,
-    validUntil: timestampSchema.nullable(),
-    active: z.boolean(),
-  })
-  .refine(source => source.validUntil === null || Date.parse(source.validUntil) > Date.parse(source.validFrom));
-export type GrantSource = z.infer<typeof grantSourceSchema>;
-
 export interface ProviderCapabilities {
   readonly entitlements: boolean;
   readonly subscriptions: boolean;
@@ -106,7 +91,7 @@ export interface ProviderCapabilities {
   readonly metered: boolean;
   readonly replaySafeUsage: boolean;
   readonly reconciliation: 'reflected-events' | 'unverified';
-  readonly prepaidAuthority?: 'application-ledger' | 'provider-reservations';
+  readonly prepaidAuthority?: 'provider-reservations';
   readonly checkout: boolean;
   readonly portal: boolean;
   readonly webhooks: boolean;
@@ -134,7 +119,7 @@ export interface CommercialSnapshot {
     periodEnd: string | null;
   }[];
   readonly evidence: { readonly version: string } | null;
-  readonly prepaidAuthority?: 'application-ledger' | 'provider-reservations';
+  readonly prepaidAuthority?: 'provider-reservations';
 }
 
 export type Unsupported = { readonly status: 'unsupported'; readonly reason: 'local_mode' };
@@ -185,7 +170,7 @@ export type ProviderNotification =
       readonly occurredAt: string;
     };
 
-// Driver-owned, versioned delivery configuration. Accounting stores these bytes
+// Provider-owned, versioned delivery configuration. Accounting stores these bytes
 // at admission and never interprets the opaque data.
 export const usageBindingSchema = z
   .strictObject({
@@ -202,7 +187,7 @@ export interface BillingProvider {
   readonly id: string;
   readonly capabilities: ProviderCapabilities;
   ensureAccount(profile: OrganizationBillingProfile): Promise<ProviderAccount>;
-  getState(account: ProviderAccount, synchronization?: { token: string }): Promise<CommercialSnapshot>;
+  getState(account: ProviderAccount): Promise<CommercialSnapshot>;
   bindUsage(meter: string): UsageBinding;
   // Outbox delivery must honor the persisted admission binding. Direct trusted
   // calls without an outbox may use the driver's current configuration.

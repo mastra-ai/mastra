@@ -246,15 +246,15 @@ describe('commercial catalog revisions', () => {
 
   it('shares immutable application terms across independent provider references', () => {
     const parsed = commercialCatalogSchema.parse(catalog());
-    const polar = {
+    const productBinding = {
       allowance: catalogReferenceSchema.parse({ key: 'credit-pack', version: 'credits-v1' }),
-      productId: 'polar-product',
+      productId: 'external-product',
     };
     const stripe = {
       allowance: catalogReferenceSchema.parse({ key: 'credit-pack', version: 'credits-v1' }),
       priceId: 'stripe-price',
     };
-    expect(resolveAllowance(parsed, polar.allowance)).toEqual(terms);
+    expect(resolveAllowance(parsed, productBinding.allowance)).toEqual(terms);
     expect(resolveAllowance(parsed, stripe.allowance)).toEqual(terms);
     const reordered = commercialCatalogSchema.parse({
       allowances: [terms],
@@ -267,7 +267,7 @@ describe('commercial catalog revisions', () => {
     next.version = 'credits-v2';
     next.units = 200;
     parsed.allowances.push(commercialCatalogSchema.parse({ allowances: [next] }).allowances[0]);
-    expect(resolveAllowance(parsed, polar.allowance)?.units).toBe(100);
+    expect(resolveAllowance(parsed, productBinding.allowance)?.units).toBe(100);
     expect(resolveAllowance(parsed, { key: terms.key, version: 'credits-v2' })?.units).toBe(200);
   });
 

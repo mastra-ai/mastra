@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { BillingError, identifierSchema, parseInput } from '../billing/contracts.js';
 
 const profileSchema = z.strictObject({
+  name: z.string().min(1).max(100),
+  organizationName: z.string().min(1).max(120),
   actorId: identifierSchema,
   workspaceId: identifierSchema,
   credential: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
@@ -19,9 +21,6 @@ export const profilesSchema = z.strictObject({
     member: profileSchema.optional(),
     outsider: profileSchema.optional(),
   }),
-  invitation: z
-    .strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/), expiresAt: z.iso.datetime() })
-    .optional(),
 });
 export type LocalProfiles = z.infer<typeof profilesSchema>;
 export type ProfileName = 'owner' | 'member' | 'outsider';

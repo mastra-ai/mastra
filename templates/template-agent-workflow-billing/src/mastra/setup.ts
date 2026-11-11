@@ -4,9 +4,7 @@ import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { z } from 'zod';
 import { BillingError, identifierSchema, parseInput } from '../billing/contracts.js';
-import type { BillingDriver } from '../billing/driver.js';
 import { initializeMastraBilling } from '../billing/mastra-setup.js';
-import { billingContactSchema } from '../billing/providers/polar-contract.js';
 import { billingOnlyServer, enforceBillingBoundary } from '../server/security.js';
 import { weatherResources } from '../weather/resources.js';
 import { weatherConfiguration } from '../weather/configuration.js';
@@ -17,7 +15,6 @@ export { configuredOrganizations } from './environment.js';
 
 export interface BillingApplicationOptions {
   readonly autumn?: AutumnProviderOptions;
-  readonly drivers?: readonly BillingDriver[];
 }
 export async function createWeatherApplication(
   environment: NodeJS.ProcessEnv = process.env,
@@ -35,19 +32,17 @@ export async function createWeatherApplication(
     const policy = parseInput(z.enum(['task', 'tokens']), environment.WEATHER_WORKFLOW_POLICY ?? 'task');
     const configuration: unknown = environment.BILLING_CONFIGURATION
       ? JSON.parse(environment.BILLING_CONFIGURATION)
-      : weatherConfiguration(profiles?.profiles.owner?.workspaceId, policy);
+      : weatherConfiguration(
+          profiles ? Object.values(profiles.profiles).map(profile => profile!.workspaceId) : undefined,
+          policy,
+        );
     const resources = weatherResources(environment);
-    const usePolarEnvironment = provider === 'polar' && !options.drivers?.some(driver => driver.id === provider);
-    const contacts = usePolarEnvironment
-      ? z.record(z.string(), billingContactSchema).parse(JSON.parse(environment.BILLING_CONTACTS ?? 'null'))
-      : undefined;
     const runtime = await initializeMastraBilling({
       organizations,
       configuration,
       agents: resources.agents,
       workflows: resources.workflows,
       databaseUrl: await billingDatabaseUrl(environment),
-      drivers: options.drivers,
       autumn:
         provider === 'autumn'
           ? (options.autumn ?? {
@@ -55,17 +50,6 @@ export async function createWeatherApplication(
               bindings: JSON.parse(environment.AUTUMN_BINDINGS ?? 'null'),
             })
           : undefined,
-      polar: usePolarEnvironment
-        ? {
-            token: environment.POLAR_ACCESS_TOKEN ?? '',
-            webhookSecret: environment.POLAR_WEBHOOK_SECRET,
-            contact: async workspaceId => {
-              const contact = contacts?.[workspaceId];
-              if (!contact) throw new BillingError('invalid_configuration');
-              return contact;
-            },
-          }
-        : undefined,
     });
     initialized = runtime;
     if (runtime.configuration.provider !== provider) throw new BillingError('invalid_configuration');
@@ -98,7 +82,7 @@ export async function createWeatherApplication(
         server: {
           host: '127.0.0.1',
           port: parseInput(z.coerce.number().int().min(1).max(65535), environment.BILLING_PORT ?? 4111),
-          ...billingOnlyServer(organizations, execution, runtime.commercial, runtime.recovery, studio),
+          ...billingOnlyServer(organizations, execution, runtime.commercial, studio),
         },
       }),
     );

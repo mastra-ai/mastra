@@ -28,12 +28,7 @@ try {
   };
   const manifest = await setupLocal(environment);
   application = await createWeatherApplication(environment);
-  const app = createBillingApp(
-    application.organizations,
-    application.execution,
-    application.runtime.commercial,
-    application.runtime.recovery,
-  );
+  const app = createBillingApp(application.organizations, application.execution, application.runtime.commercial);
   server = createServer(async (request, response) => {
     try {
       const chunks: Buffer[] = [];

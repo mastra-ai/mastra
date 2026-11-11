@@ -382,7 +382,7 @@ export class AutumnBillingProvider implements BillingProvider {
     if (historical.some(intent => intent.account_id !== account.id || intent.customer_id !== customerId))
       throw new BillingError('conflict');
     await tx.execute({
-      sql: "INSERT INTO billing_provider_links (account_id, provider, customer_id, organization_id, external_reference, source_key_mode) VALUES (?, ?, ?, ?, ?, 'namespaced')",
+      sql: 'INSERT INTO billing_provider_links (account_id, provider, customer_id, organization_id, external_reference) VALUES (?, ?, ?, ?, ?)',
       args: [account.id, this.id, customerId, this.id, account.externalReference],
     });
   }
@@ -419,7 +419,7 @@ export class AutumnBillingProvider implements BillingProvider {
       this.customer(account);
       if (!row) {
         await tx.execute({
-          sql: "INSERT INTO billing_accounts (id, workspace_id, provider, external_reference, active_provider) VALUES (?, ?, 'local', ?, 'autumn')",
+          sql: "INSERT INTO billing_accounts (id, workspace_id, provider, external_reference) VALUES (?, ?, 'autumn', ?)",
           args: [account.id, account.workspaceId, account.externalReference],
         });
         await tx.execute({ sql: 'INSERT INTO commercial_state VALUES (?, 0)', args: [account.id] });

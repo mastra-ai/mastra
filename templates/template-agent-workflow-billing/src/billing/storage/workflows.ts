@@ -76,16 +76,11 @@ export class WorkflowStorage {
     if (identity.commercial) {
       const row = (
         await transaction.execute({
-          sql: 'SELECT s.version, q.generation, q.synchronized_generation FROM commercial_state s JOIN billing_accounts a ON a.id = s.account_id LEFT JOIN billing_account_sync q ON q.account_id = a.id WHERE a.id = ? AND a.workspace_id = ?',
+          sql: 'SELECT s.version FROM commercial_state s JOIN billing_accounts a ON a.id = s.account_id WHERE a.id = ? AND a.workspace_id = ?',
           args: [identity.commercial.accountId, identity.workspaceId],
         })
       ).rows[0];
-      if (
-        !row ||
-        String(row.version) !== identity.commercial.revision ||
-        row.generation !== row.synchronized_generation
-      )
-        throw new BillingError('state_unavailable');
+      if (!row || String(row.version) !== identity.commercial.revision) throw new BillingError('state_unavailable');
     }
   }
   private async find(transaction: Transaction, id: string, identity?: AdmissionIdentity) {
