@@ -201,7 +201,7 @@ The MastraStorageExporter includes reliable error handling for production use:
 
 ### Spans ended by another process
 
-With durable execution, a worker can end a span before the process that started it stores the span. With `batch-with-updates`, the worker's exporter holds that end and retries it with `maxRetries` and `retryDelayMs`. Other flushes don't send it before its retry time. With `realtime`, the exporter doesn't retry and drops the end right away. An update that doesn't apply is dropped right away, because the end carries the span's full state.
+With durable execution, a worker can end a span before the process that started it stores the span. With `batch-with-updates`, the worker's exporter holds that end and retries it with `maxRetries` and `retryDelayMs`. Other flushes don't send it before its retry time. With `realtime`, the exporter doesn't retry and drops the end right away. An update that doesn't apply is dropped right away, because a retried update could overwrite a newer one. Only an end is retried, since it carries the span's full state.
 
 This retry needs a store with conditional span updates: libSQL, PostgreSQL, or the in-memory store. On other stores, the exporter holds the end until its retries run out, then drops it with `retry-exhausted`.
 
