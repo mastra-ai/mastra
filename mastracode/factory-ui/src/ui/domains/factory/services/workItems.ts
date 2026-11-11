@@ -300,17 +300,22 @@ export interface BoardSnapshot {
   parkedSessionIds: string[];
 }
 
-/** List the org's work items for a Factory project. */
+/**
+ * List the org's work items for a Factory project: the whole board, or with `scope` only the
+ * cards holding that session and the cards related to them.
+ */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
+  scope?: { sessionId: string },
 ): Promise<BoardSnapshot> {
+  const query = scope ? `?${new URLSearchParams(scope)}` : '';
   const data = await requestJson<{
     workItems: WireWorkItem[];
     runningSessionIds?: string[];
     parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
+  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${query}`, { signal });
   return {
     workItems: data.workItems.map(fromWireWorkItem),
     runningSessionIds: data.runningSessionIds ?? [],
