@@ -1060,6 +1060,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
     const records = new Map<string, RunOwnershipRecord>();
     const ids = [...new Set(runIds)];
+
     try {
       for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
         const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
@@ -1068,8 +1069,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             WHERE runId IN (${chunk.map(() => '?').join(', ')})`,
           args: chunk,
         });
-        for (const row of result.rows) records.set(String(row.runId), toRunOwnershipRecord(String(row.runId), row));
+        for (const row of result.rows) {
+          records.set(String(row.runId), toRunOwnershipRecord(String(row.runId), row));
+        }
       }
+
       return records;
     } catch (error) {
       throw new MastraError(

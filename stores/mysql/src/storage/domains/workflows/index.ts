@@ -347,6 +347,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
   async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
     const records = new Map<string, RunOwnershipRecord>();
     const ids = [...new Set(runIds)];
+
     try {
       for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
         const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
@@ -355,15 +356,19 @@ export class WorkflowsMySQL extends WorkflowsStorage {
            WHERE ${RUN_ID} IN (${chunk.map(() => '?').join(', ')})`,
           chunk,
         );
+
         // A case-insensitive collation matches ids the way the single-run read does; key each
         // record by the id asked for, as that read does.
         const exact = new Map(rows.map(row => [String(row.runId), row]));
         const folded = new Map(rows.map(row => [String(row.runId).toLowerCase(), row]));
         for (const runId of chunk) {
           const row = exact.get(runId) ?? folded.get(runId.toLowerCase());
-          if (row) records.set(runId, toRunOwnershipRecord(runId, row));
+          if (row) {
+            records.set(runId, toRunOwnershipRecord(runId, row));
+          }
         }
       }
+
       return records;
     } catch (error) {
       throw new MastraError(

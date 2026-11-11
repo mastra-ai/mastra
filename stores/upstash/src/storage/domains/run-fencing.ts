@@ -259,18 +259,26 @@ const READ_PIPELINE_BATCH_SIZE = 100;
 export async function getRunOwnerships(client: Redis, runIds: string[]): Promise<Map<string, RunOwnershipRecord>> {
   const records = new Map<string, RunOwnershipRecord>();
   const ids = [...new Set(runIds)];
+
   for (let start = 0; start < ids.length; start += READ_PIPELINE_BATCH_SIZE) {
     const chunk = ids.slice(start, start + READ_PIPELINE_BATCH_SIZE);
     const now = Date.now();
     const pipeline = client.pipeline();
-    for (const runId of chunk) pipeline.eval(READ, [runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, runId)], []);
+    for (const runId of chunk) {
+      pipeline.eval(READ, [runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, runId)], []);
+    }
+
     const replies = await pipeline.exec<unknown[]>();
     chunk.forEach((runId, i) => {
       const raw = replies[i];
+      // Decoded the way `evalOwner` decodes a single read's reply.
       const record = toRunOwnershipRecord(runId, (typeof raw === 'string' ? JSON.parse(raw) : raw) as OwnerReply, now);
-      if (record) records.set(runId, record);
+      if (record) {
+        records.set(runId, record);
+      }
     });
   }
+
   return records;
 }
 

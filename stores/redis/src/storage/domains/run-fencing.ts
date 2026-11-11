@@ -229,14 +229,18 @@ export async function getRunOwnerships(
 ): Promise<Map<string, RunOwnershipRecord>> {
   const records = new Map<string, RunOwnershipRecord>();
   const ids = [...new Set(runIds)];
+
   for (let start = 0; start < ids.length; start += READ_BATCH_SIZE) {
     const chunk = ids.slice(start, start + READ_BATCH_SIZE);
     const read = await Promise.all(chunk.map(runId => evalOwner(client, READ, runId, [])));
     chunk.forEach((runId, i) => {
       const record = read[i]!.record;
-      if (record) records.set(runId, record);
+      if (record) {
+        records.set(runId, record);
+      }
     });
   }
+
   return records;
 }
 

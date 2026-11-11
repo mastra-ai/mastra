@@ -1354,13 +1354,20 @@ export class WorkflowsPG extends WorkflowsStorage {
   async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
     const records = new Map<string, RunOwnershipRecord>();
     const ids = [...new Set(runIds)];
-    if (ids.length === 0) return records;
+    if (ids.length === 0) {
+      return records;
+    }
+
+    // One array parameter, so the query has no bound-parameter limit to chunk under.
     try {
       const rows = await this.#db.client.manyOrNone<RunOwnerRow & { runId: string }>(
         `SELECT "runId", ${RUN_OWNER_COLUMNS} FROM ${this.#runOwnersTable()} WHERE "runId" = ANY($1::text[])`,
         [ids],
       );
-      for (const row of rows) records.set(row.runId, toRunOwnershipRecord(row.runId, row));
+      for (const row of rows) {
+        records.set(row.runId, toRunOwnershipRecord(row.runId, row));
+      }
+
       return records;
     } catch (error) {
       throw new MastraError(

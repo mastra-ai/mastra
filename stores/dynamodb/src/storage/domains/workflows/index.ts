@@ -285,22 +285,32 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
     const records = new Map<string, RunOwnershipRecord>();
     const ids = [...new Set(runIds)];
+
     try {
       const owners = this.service.entities.workflow_run_owner!;
       for (let start = 0; start < ids.length; start += BATCH_GET_MAX_KEYS) {
         let pending = ids.slice(start, start + BATCH_GET_MAX_KEYS);
+
         for (let attempt = 0; pending.length > 0; attempt++) {
           if (attempt > MAX_RETRIES) {
             throw new Error(`DynamoDB left ${pending.length} run ownership reads unprocessed`);
           }
-          if (attempt > 0) await new Promise(resolve => setTimeout(resolve, BASE_DELAY_MS * 2 ** (attempt - 1)));
+
+          if (attempt > 0) {
+            await new Promise(resolve => setTimeout(resolve, BASE_DELAY_MS * 2 ** (attempt - 1)));
+          }
+
           const { data, unprocessed } = (await owners
             .get(pending.map(runId => this.#runOwnerKey(runId)))
             .go({ consistent: true })) as { data: RunOwnerItem[]; unprocessed: { run_id: string }[] };
-          for (const item of data) records.set(item.run_id, toRunOwnershipRecord(item));
+          for (const item of data) {
+            records.set(item.run_id, toRunOwnershipRecord(item));
+          }
+
           pending = unprocessed.map(key => key.run_id);
         }
       }
+
       return records;
     } catch (error) {
       throw new MastraError(

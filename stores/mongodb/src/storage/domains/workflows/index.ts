@@ -245,13 +245,17 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
     const records = new Map<string, RunOwnershipRecord>();
     const ids = [...new Set(runIds)];
+
     try {
       const owners = await getRunClaims(this.#connector, TABLE_WORKFLOW_RUN_OWNERS);
       for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
         const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
         const docs = await owners.find({ _id: { $in: chunk } }, { projection: RUN_OWNER_PROJECTION }).toArray();
-        for (const doc of docs) records.set(doc._id, toRunOwnershipRecord(doc));
+        for (const doc of docs) {
+          records.set(doc._id, toRunOwnershipRecord(doc));
+        }
       }
+
       return records;
     } catch (error) {
       throw new MastraError(
