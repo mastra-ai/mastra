@@ -147,7 +147,7 @@ describe('redelivery processor draining', () => {
         { executed },
         { executed: ['before', 'after'] },
         {
-          reason: 'COR-1307: completed transitions execute again.',
+          reason: 'COR-1307: completed transitions of an unleased workflow execute again.',
           expect: correct => ({ executed: [...correct.executed, ...correct.executed] }),
         },
       );

@@ -27,11 +27,11 @@ describe('LibSQL evented finished step deliveries', () => {
 
   // Each replica opens its own client, as separate pods do.
   describeFinishedOccurrenceCases({
-    getStorage: () => storage as any,
+    getStorage: () => storage,
     connect: async () => {
       const replica = new LibSQLStore({ id: 'finished-occurrence', url });
       await replica.init();
-      return replica as any;
+      return replica;
     },
   });
 });
