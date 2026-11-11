@@ -192,4 +192,27 @@ describe('Mastra.removeAgent', () => {
     mastra.addAgent(create('removed'), 'removed');
     expect(configured()).toEqual(['kept', 'removed']);
   });
+
+  it("records a stored agent's processor configurations as stored, and drops them for an unregistered sub-agent", () => {
+    const create = (id: string) =>
+      new Agent({ id, name: id, instructions: 'x', model: 'openai/gpt-4o', inputProcessors: [new ToolCallFilter()] });
+    const mastra = new Mastra({ logger: false, agents: { code: create('code') } });
+    mastra.addAgent(create('stored'), 'stored', { source: 'stored' });
+    const sub = create('stored-sub');
+    sub.source = 'stored';
+    sub.__registerMastra(mastra);
+    const configured = () =>
+      mastra.getProcessorConfigurations('tool-call-filter').map(c => [c.agentId, c.source ?? 'code']);
+    expect(configured()).toEqual([
+      ['code', 'code'],
+      ['stored', 'stored'],
+      ['stored-sub', 'stored'],
+    ]);
+
+    expect(mastra.removeAgent('stored-sub')).toBe(false);
+    expect(configured()).toEqual([
+      ['code', 'code'],
+      ['stored', 'stored'],
+    ]);
+  });
 });

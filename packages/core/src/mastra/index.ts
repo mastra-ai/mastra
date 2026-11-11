@@ -906,8 +906,10 @@ export class Mastra<
   #classifiers?: TClassifiers;
   #tools?: TTools;
   #processors?: TProcessors;
-  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
-    new Map();
+  #processorConfigurations: Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
+  > = new Map();
   #memory?: TMemory;
   #knowledge: TKnowledge;
   #workspace?: Workspace;
@@ -3051,6 +3053,11 @@ export class Mastra<
       });
     }
 
+    // Set the source first: registering the agent records it on the agent's processor configurations
+    if (options?.source) {
+      mastraAgent.source = options.source;
+    }
+
     // Initialize the agent
     mastraAgent.__setLogger(this.#logger);
     mastraAgent.__registerMastra(this);
@@ -3061,11 +3068,6 @@ export class Mastra<
       tts: this.#tts,
       vectors: this.#vectors,
     });
-
-    // Set the source if provided
-    if (options?.source) {
-      mastraAgent.source = options.source;
-    }
 
     agents[agentKey] = mastraAgent;
     if (toolLoopInput) {
@@ -3571,6 +3573,8 @@ export class Mastra<
       return true;
     }
 
+    // An agent attached to Mastra without being registered (a sub-agent) still registers processor configurations.
+    this.#removeProcessorConfigurations(keyOrId);
     return false;
   }
 
@@ -5401,8 +5405,15 @@ export class Mastra<
    * @param processor - The processor instance
    * @param agentId - The ID of the agent that uses this processor
    * @param type - Whether this is an input or output processor
+   * @param source - Where the agent is defined. Configurations of stored agents stay marked as stored, so they can
+   *   be told apart from code agents' configurations after the stored agent is gone.
    */
-  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+  public addProcessorConfiguration(
+    processor: Processor,
+    agentId: string,
+    type: 'input' | 'output',
+    source?: DefinitionSource,
+  ): void {
     const processorId = processor.id;
     if (!this.#processorConfigurations.has(processorId)) {
       this.#processorConfigurations.set(processorId, []);
@@ -5410,9 +5421,11 @@ export class Mastra<
     const configs = this.#processorConfigurations.get(processorId)!;
 
     // Check if this exact configuration already exists
-    const exists = configs.some(c => c.agentId === agentId && c.type === type);
-    if (!exists) {
-      configs.push({ processor, agentId, type });
+    const existing = configs.find(c => c.agentId === agentId && c.type === type);
+    if (!existing) {
+      configs.push({ processor, agentId, type, ...(source && { source }) });
+    } else if (source === 'stored') {
+      existing.source = 'stored';
     }
   }
 
@@ -5424,7 +5437,7 @@ export class Mastra<
    */
   public getProcessorConfigurations(
     processorId: string,
-  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }> {
     return this.#processorConfigurations.get(processorId) || [];
   }
 
@@ -5435,7 +5448,7 @@ export class Mastra<
    */
   public listProcessorConfigurations(): Map<
     string,
-    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
   > {
     return this.#processorConfigurations;
   }
