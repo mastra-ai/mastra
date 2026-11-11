@@ -36,6 +36,13 @@ function mockModel() {
   });
 }
 
+/** Memory whose tool listing fails, standing in for a tool source that errors mid-setup. */
+class BrokenToolsMemory extends MockMemory {
+  override listTools(): never {
+    throw new Error('tool source unavailable');
+  }
+}
+
 let observability: Observability | undefined;
 
 afterEach(async () => {
@@ -81,7 +88,35 @@ describe('agent setup tracing', () => {
     // Only the slow source is named; the fast ones stay out of the span.
     expect(Object.keys(prepared.slowSourcesMs ?? {})).toEqual(['assigned']);
     expect(prepared.slowSourcesMs!.assigned).toBeGreaterThanOrEqual(140);
-    expect(thread?.traceId).toBe(run!.traceId);
+    expect(thread?.parentSpanId).toBe(run!.id);
     expect(thread!.output).toEqual({ created: true });
+  });
+
+  it('ends the setup span with the failing tool source when a source throws', async () => {
+    const exporter = new EndedSpans();
+    observability = new Observability({ configs: { test: { serviceName: 'agent-setup', exporters: [exporter] } } });
+    const agent = new Agent({
+      id: 'broken',
+      name: 'Broken',
+      instructions: 'Test',
+      model: mockModel(),
+      memory: new BrokenToolsMemory(),
+    });
+    const mastra = new Mastra({ storage: new MockStore(), observability, agents: { agent } });
+
+    await expect(
+      (async () => {
+        const output = await mastra
+          .getAgent('agent')
+          .stream('hi', { memory: { thread: 'thread-2', resource: 'user-1' } });
+        await output.consumeStream();
+        await output.text;
+      })(),
+    ).rejects.toThrow('tool source unavailable');
+    await observability.flush();
+
+    const [prepare] = exporter.named('agent:prepare-tools');
+    expect(prepare?.errorInfo?.message).toBe('tool source unavailable');
+    expect(prepare?.metadata).toMatchObject({ failedSource: 'memory' });
   });
 });
