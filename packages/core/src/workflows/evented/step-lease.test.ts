@@ -254,6 +254,12 @@ async function runStatus(storage: Store, runId: string) {
   return (await store.loadWorkflowSnapshot({ workflowName: 'leased', runId }))?.status;
 }
 
+/** Whether the run's liveness key is live; `undefined` when it was never written. */
+async function runIsLive(storage: Store, runId: string) {
+  const store = (await storage.getStore('workflows'))!;
+  return (await store.getRunOwnership({ runId: runLivenessKey(runId) }))?.live;
+}
+
 /** Restarts the run from `replica`: `resolved:<status>`, or the error id and lease expiry it threw. */
 async function restartOutcome(replica: { workflow: Built }, runId: string) {
   return (await replica.workflow.createRun({ runId })).restart().then(
@@ -435,7 +441,9 @@ describe('evented step leases (#28712)', () => {
     // wait for the lease to expire first.
     expect(rejected).toBe(true);
     expect(attemptsAt).toHaveLength(3);
-    expect(attemptsAt[1]! - attemptsAt[0]!).toBeLessThan(WORKFLOW_RUN_LEASE_TTL_MS / 2);
+    expect(attemptsAt[1]! - attemptsAt[0]!).toBeLessThan(
+      WORKFLOW_RUN_LEASE_TTL_MS - WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS,
+    );
   }, 20_000);
 
   it('runs a redelivered step once the lease of its crashed worker expires', async () => {
@@ -515,6 +523,27 @@ describe('evented step leases (#28712)', () => {
     expect((await result).status).toBe('success');
     expect(tracked.executions).toEqual(['A:a']);
   }, 20_000);
+
+  it('recovers a run once when the replica running its step crashes after an exhausted delivery was dropped', async () => {
+    const storage = new InMemoryStore();
+    const tracked = track({ blocks: ['a'] }, { hangForever: true });
+    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
+    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
+    let delivery: Event | undefined;
+    await a.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.step.run') delivery = structuredClone(event);
+    });
+    const run = await a.workflow.createRun();
+    void run.start({ inputData: { n: 1 } });
+    await tracked.allBlocked;
+    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({ ok: true });
+
+    // The dropped delivery can no longer bring the step back, so B re-checks the run itself.
+    await crash(a, storage, [stepOccurrenceKey(run.runId, [0]), runLivenessKey(run.runId)]);
+
+    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 15_000 });
+    expect(tracked.executions).toEqual(['A:a', 'B:a']);
+  }, 30_000);
 
   it('runs a step once when three replicas boot after the replica running it crashed', async () => {
     const storage = new InMemoryStore();
@@ -639,6 +668,7 @@ describe('evented step leases (#28712)', () => {
       if (startQueuedPastTtl) {
         // The liveness the caller wrote lapses; the worker taking the start event writes it again.
         await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
+        expect(await runIsLive(storage, run.runId)).toBe(false);
         deliverStart.resolve();
         await stepQueued.promise;
       }
@@ -687,6 +717,7 @@ describe('evented step leases (#28712)', () => {
     expect((await run.start({ inputData: { n: 1 } })).status).toBe('failed');
     // The failed run's liveness lapses before it is time travelled.
     await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
+    expect(await runIsLive(storage, run.runId)).toBe(false);
 
     holding = true;
     const travelled = (await a.workflow.createRun({ runId: run.runId })).timeTravel({ step: 'a', inputData: { n: 2 } });
@@ -739,6 +770,8 @@ describe('evented step leases (#28712)', () => {
       ?.runId as string;
     // The suspended runs' liveness lapses before the nested run is resumed.
     await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
+    expect(await runIsLive(storage, run.runId)).toBe(false);
+    expect(await runIsLive(storage, nestedRunId)).toBe(false);
 
     // Resuming the nested run directly makes its parent `running` again too.
     holding = true;
