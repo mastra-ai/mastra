@@ -1534,13 +1534,8 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
       });
     }
     const existing = await observabilityStore.getFeedbackById(feedbackId);
-    const organizationId = requestContext.get('organizationId');
     const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
-    if (
-      !existing ||
-      (typeof organizationId === 'string' && organizationId && existing.organizationId !== organizationId) ||
-      (typeof resourceId === 'string' && resourceId && existing.resourceId !== resourceId)
-    ) {
+    if (!existing || (typeof resourceId === 'string' && resourceId && existing.resourceId !== resourceId)) {
       throw new HTTPException(404, { message: 'Feedback not found' });
     }
     const updated = await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });

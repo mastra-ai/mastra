@@ -109,10 +109,18 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
         expect(response.status).toBe(200);
         expect(await response.json()).toMatchObject({ ...original, reviewStatus: 'reviewed' });
       });
-      it('does not update missing or foreign feedback', async () => {
+      it('does not use organization metadata to scope review updates', async () => {
+        await post({ ...original, organizationId: 'record-org' });
+        trustedScope.organizationId = 'request-org';
+        const response = await patchReview('edit', 'reviewed');
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ organizationId: 'record-org', reviewStatus: 'reviewed' });
+        expect((await store.getFeedbackById('edit'))?.reviewStatus).toBe('reviewed');
+      });
+      it('does not update missing feedback or feedback outside the configured resource', async () => {
         expect((await patchReview('missing', 'reviewed')).status).toBe(404);
-        await post({ ...original, organizationId: 'foreign' });
-        trustedScope.organizationId = 'trusted';
+        await post({ ...original, resourceId: 'foreign' });
+        trustedScope.mastra__resourceId = 'trusted';
         expect((await patchReview('edit', 'reviewed')).status).toBe(404);
         expect((await store.getFeedbackById('edit'))?.reviewStatus).toBe('needs-review');
       });
