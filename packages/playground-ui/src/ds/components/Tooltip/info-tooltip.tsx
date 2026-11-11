@@ -33,7 +33,7 @@ function InfoTooltip({ children, side = 'top', align, contentClassName, ...name 
             aria-describedby={descriptionId}
             // A step quieter than the placeholder grey at rest, so it reads as a hint, not a control.
             className={cn(
-              'flex shrink-0 cursor-help items-center rounded-full text-placeholder/80 hover:text-muted-foreground focus-visible:text-muted-foreground',
+              'flex aspect-square shrink-0 cursor-help items-center rounded-full text-placeholder/80 hover:text-muted-foreground focus-visible:text-muted-foreground',
               controlStateColorTransition,
               focusRing,
             )}
