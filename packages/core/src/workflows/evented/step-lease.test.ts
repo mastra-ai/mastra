@@ -353,9 +353,58 @@ describe('evented step leases (#28712)', () => {
     expect(executions).toEqual(['A:attempt-1', 'A:attempt-2']);
   }, 20_000);
 
-  it('releases the lease of a failed step whose retry could not be published', async () => {
+  it('runs a retry whose first receiver crashed after taking it over', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
+    const executions: string[] = [];
+    const retried = Promise.withResolvers<Event>();
+    // The retry A publishes goes to another replica instead of A.
+    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event =>
+      event.type === 'workflow.step.run' && (event.data as { retryCount?: number }).retryCount === 1
+        ? { divert: retried.resolve }
+        : undefined,
+    );
+    const build = (replica: string) =>
+      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num, retryConfig: { attempts: 1 } })
+        .then(
+          createStep({
+            id: 'flaky',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              executions.push(replica);
+              if (replica === 'A') throw new Error('transient');
+              return inputData;
+            },
+          }),
+        )
+        .commit();
+    const a = await startReplica(storage, build('A'), { pubsub });
+    const b = await startReplica(storage, build('B'));
+    const run = await a.workflow.createRun();
+    void run.start({ inputData: { n: 1 } });
+    const retry = await retried.promise;
+
+    // The replica the retry went to first took the step lease over, then crashed before running it.
+    const { key, generation } = (retry.data as { stepLeaseHandoff: { key: string; generation: number } })
+      .stepLeaseHandoff;
+    await store.claimRunOwnership({
+      runId: key,
+      ownerId: 'crashed-adopter',
+      leaseMs: 1,
+      force: true,
+      expectedGeneration: generation,
+    });
+    await sleep(5);
+
+    expect(await b.mastra.handleWorkflowEvent({ ...retry, deliveryAttempt: 2 })).toEqual({ ok: true });
+    expect(executions).toEqual(['A', 'B']);
+    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
+  }, 20_000);
+
+  it('runs a failed step again at once when publishing its retry failed', async () => {
+    const storage = new InMemoryStore();
+    const attemptsAt: number[] = [];
     let rejected = false;
     const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
       if (rejected || event.type !== 'workflow.step.run' || (event.data as { retryCount?: number }).retryCount !== 1) {
@@ -371,22 +420,22 @@ describe('evented step leases (#28712)', () => {
           inputSchema: Num,
           outputSchema: Num,
           execute: async () => {
+            attemptsAt.push(Date.now());
             throw new Error('transient');
           },
         }),
       )
       .commit();
     const a = await startReplica(storage, workflow as unknown as Built, { pubsub });
-    const leases = await recordLeases(storage);
     const run = await a.workflow.createRun();
     expect((await run.start({ inputData: { n: 1 } })).status).toBe('failed');
 
-    // The failed delivery is retried, and the retry finds the step free instead of waiting out the lease.
+    // The delivery whose retry could not be published is redelivered and runs the first attempt
+    // again, then the retry runs. The redelivery finds the step lease released, so it does not
+    // wait for the lease to expire first.
     expect(rejected).toBe(true);
-    const stepKey = stepOccurrenceKey(run.runId, [0]);
-    expect(leases.claims.filter(c => c.key === stepKey && c.acquired).length).toBeGreaterThanOrEqual(2);
-    expect(leases.claims.filter(c => c.key === stepKey && !c.acquired)).toEqual([]);
-    expect((await store.getRunOwnership({ runId: stepKey }))?.live).toBe(false);
+    expect(attemptsAt).toHaveLength(3);
+    expect(attemptsAt[1]! - attemptsAt[0]!).toBeLessThan(WORKFLOW_RUN_LEASE_TTL_MS / 2);
   }, 20_000);
 
   it('runs a redelivered step once the lease of its crashed worker expires', async () => {
@@ -441,6 +490,27 @@ describe('evented step leases (#28712)', () => {
       ok: false,
       retry: true,
     });
+    tracked.release();
+    expect((await result).status).toBe('success');
+    expect(tracked.executions).toEqual(['A:a']);
+  }, 20_000);
+
+  it('does not fail a run when a delivery of its running step has used up its attempts', async () => {
+    const storage = new InMemoryStore();
+    const tracked = track({ blocks: ['a'] });
+    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
+    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
+    let delivery: Event | undefined;
+    await a.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.step.run') delivery = structuredClone(event);
+    });
+    const result = (await a.workflow.createRun()).start({ inputData: { n: 1 } });
+    await tracked.allBlocked;
+
+    // Replicas that shut down while this delivery waited for A handed it back, and the broker
+    // counted every hand-back as a delivery attempt.
+    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({ ok: true });
+
     tracked.release();
     expect((await result).status).toBe('success');
     expect(tracked.executions).toEqual(['A:a']);
@@ -538,30 +608,44 @@ describe('evented step leases (#28712)', () => {
     20_000,
   );
 
-  it.each(['workflow.start', 'workflow.step.run'] as const)(
-    'leaves a just-started run to its replica while its %s event is still queued',
-    async queuedType => {
+  it.each([
+    ['its start event is still queued', false],
+    ['its first step event is queued after its start event sat queued for a lease TTL', true],
+  ] as const)(
+    'leaves a just-started run to its replica while %s',
+    async (_, startQueuedPastTtl) => {
       const storage = new InMemoryStore();
       const tracked = track({ blocks: [] });
-      const queued = Promise.withResolvers<void>();
-      const deliver = Promise.withResolvers<void>();
-      // The event that starts the run's first step sits in the broker's queue for a while.
+      const startQueued = Promise.withResolvers<void>();
+      const deliverStart = Promise.withResolvers<void>();
+      const stepQueued = Promise.withResolvers<void>();
+      const deliverStep = Promise.withResolvers<void>();
+      // The events that start the run and its first step sit in the broker's queue for a while.
       const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-        if (event.type !== queuedType || (queuedType === 'workflow.step.run' && !isStepRunAt(event, [0]))) {
-          return undefined;
+        if (event.type === 'workflow.start') {
+          startQueued.resolve();
+          return { hold: deliverStart.promise };
         }
-        queued.resolve();
-        return { hold: deliver.promise };
+        if (!startQueuedPastTtl || !isStepRunAt(event, [0])) return undefined;
+        stepQueued.resolve();
+        return { hold: deliverStep.promise };
       });
       const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')), { pubsub });
       const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
       const run = await a.workflow.createRun();
       // startAsync() resolves once its start event is published, which the queue holds back here.
       const started = run.startAsync({ inputData: { n: 1 } });
-      await queued.promise;
+      await startQueued.promise;
+      if (startQueuedPastTtl) {
+        // The liveness the caller wrote lapses; the worker taking the start event writes it again.
+        await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
+        deliverStart.resolve();
+        await stepQueued.promise;
+      }
 
       await b.mastra.restartAllActiveWorkflowRuns();
-      deliver.resolve();
+      deliverStart.resolve();
+      deliverStep.resolve();
       await started;
 
       await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
@@ -569,6 +653,104 @@ describe('evented step leases (#28712)', () => {
     },
     20_000,
   );
+
+  it('leaves a time-travelled run to its replica while its start event is still queued', async () => {
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    const queued = Promise.withResolvers<void>();
+    const deliver = Promise.withResolvers<void>();
+    let holding = false;
+    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
+      if (!holding || event.type !== 'workflow.start') return undefined;
+      queued.resolve();
+      return { hold: deliver.promise };
+    });
+    // The step fails for the run's input, and the run is time travelled with a corrected one.
+    const build = (replica: string) =>
+      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
+        .then(
+          createStep({
+            id: 'a',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              executions.push(`${replica}:${inputData.n}`);
+              if (inputData.n === 1) throw new Error('bad input');
+              return inputData;
+            },
+          }),
+        )
+        .commit();
+    const a = await startReplica(storage, build('A'), { pubsub });
+    const b = await startReplica(storage, build('B'));
+    const run = await a.workflow.createRun();
+    expect((await run.start({ inputData: { n: 1 } })).status).toBe('failed');
+    // The failed run's liveness lapses before it is time travelled.
+    await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
+
+    holding = true;
+    const travelled = (await a.workflow.createRun({ runId: run.runId })).timeTravel({ step: 'a', inputData: { n: 2 } });
+    await queued.promise;
+    await b.mastra.restartAllActiveWorkflowRuns();
+    deliver.resolve();
+
+    expect((await travelled).status).toBe('success');
+    expect(executions).toEqual(['A:1', 'A:2']);
+  }, 20_000);
+
+  it('leaves a parent run to its replica while the resume of its nested run is still queued', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const executions: string[] = [];
+    const queued = Promise.withResolvers<void>();
+    const deliver = Promise.withResolvers<void>();
+    let holding = false;
+    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
+      if (!holding || event.type !== 'workflow.resume') return undefined;
+      queued.resolve();
+      return { hold: deliver.promise };
+    });
+    const build = (replica: string) => {
+      const child = createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num })
+        .then(
+          createStep({
+            id: 'approve',
+            inputSchema: Num,
+            outputSchema: Num,
+            resumeSchema: z.object({ approved: z.boolean() }),
+            execute: async ({ inputData, resumeData, suspend }) => {
+              executions.push(`${replica}:${resumeData ? 'resumed' : 'suspended'}`);
+              return resumeData ? inputData : suspend({});
+            },
+          }),
+        )
+        .commit();
+      const parent = createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: z.any() }).then(child).commit();
+      return { parent: parent as unknown as Built, child: child as unknown as Built };
+    };
+    const onA = build('A');
+    const onB = build('B');
+    const a = await startReplica(storage, onA.parent, { pubsub, nested: { child: onA.child } });
+    const b = await startReplica(storage, onB.parent, { nested: { child: onB.child } });
+    const run = await a.workflow.createRun();
+    expect((await run.start({ inputData: { n: 1 } })).status).toBe('suspended');
+    const parentSnapshot = await store.loadWorkflowSnapshot({ workflowName: 'leased', runId: run.runId });
+    const nestedRunId = (parentSnapshot?.context.child as { suspendPayload?: any }).suspendPayload?.__workflow_meta
+      ?.runId as string;
+    // The suspended runs' liveness lapses before the nested run is resumed.
+    await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
+
+    // Resuming the nested run directly makes its parent `running` again too.
+    holding = true;
+    const resumed = (await onA.child.createRun({ runId: nestedRunId })).resume({ resumeData: { approved: true } });
+    await queued.promise;
+    await b.mastra.restartAllActiveWorkflowRuns();
+    deliver.resolve();
+
+    expect((await resumed).status).toBe('success');
+    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
+    expect(executions).toEqual(['A:suspended', 'A:resumed']);
+  }, 20_000);
 
   it('refuses to restart a run between one step finishing and the next one starting', async () => {
     const storage = new InMemoryStore();
@@ -717,8 +899,10 @@ describe('evented step leases (#28712)', () => {
     expect(result.status).toBe('success');
 
     const writes = leases.claims.filter(c => c.key.endsWith('::live')).length;
+    // The liveness timer ticks at the renew interval, or at a third of the TTL when that is shorter.
+    const tick = Math.min(WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, Math.floor(WORKFLOW_RUN_LEASE_TTL_MS / 3));
     expect(writes).toBeGreaterThanOrEqual(1);
-    expect(writes).toBeLessThanOrEqual(1 + Math.ceil((Date.now() - startedAt) / WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS));
+    expect(writes).toBeLessThanOrEqual(1 + Math.ceil((Date.now() - startedAt) / tick));
   }, 20_000);
 
   it('takes no step lease and no liveness for a workflow that opted out of restarts', async () => {

@@ -281,6 +281,7 @@ describe('evented pre-first-step restart', () => {
     await firstHost.stopWorkers();
     hosts.splice(hosts.indexOf(firstHost), 1);
     // The interrupted restart's process is gone, so its restart lease and the run's liveness lapse.
+    // stopWorkers() is enough: no step of the run is running there, so nothing renews its liveness.
     await abandonLease(storage, restartLeaseKey(runId), runLivenessKey(runId));
     await makeHost(workflow, storage);
 
