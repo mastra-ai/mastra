@@ -2848,6 +2848,45 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  it('does not succeed when a working-phase run ends complete mid-step without changing the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-build',
+      arguments: 'Continue building',
+      idempotencyKey: 'working-phase-clean-mid-step',
+    });
+    await bindWorkRun(storage, item.id);
+    const before = await storage.get({ orgId: 'org-1', id: item.id });
+    expect(before).not.toBeNull();
+
+    // The kickoff is delivered and the run ends cleanly, but it does not call a
+    // phase-exit tool or make any change to the card.
+    const { controller, getAgentEndListenerCount } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const after = await storage.get({ orgId: 'org-1', id: item.id });
+    expect(after?.revision).toBe(before?.revision);
+    expect(after?.stages).toEqual(before?.stages);
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({ status: 'retry', deliveryGeneration: 1 });
+    expect(decision?.lastError).toContain('before completing');
+    expect(getAgentEndListenerCount()).toBe(0);
+  });
+
   it.each([
     { reason: 'error' as const, key: 'skill-run-error', message: 'ended in error' },
     // An abort reads as deliberate, but the stream never says who aborted, and
