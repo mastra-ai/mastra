@@ -37,4 +37,24 @@ describe('repositoryHint', () => {
     ).toBeUndefined();
     expect(repositoryHint(null)).toBeUndefined();
   });
+
+  it('flags a bare name among the values of "is any of", but not a condition that can still match', () => {
+    const among = { field: 'source.repository', operator: 'in', value: ['mastra-ai/mastra', 'mastra'] };
+    expect(repositoryHint({ operator: 'AND', conditions: [integration('github'), among] })).toMatch(
+      /GitHub repositories are owner\/repo/,
+    );
+    for (const operator of ['contains', 'not_contains', 'not_equals', 'not_in']) {
+      const value = operator.endsWith('_in') ? ['mastra'] : 'mastra';
+      const condition = { field: 'source.repository', operator, value };
+      expect(repositoryHint({ operator: 'AND', conditions: [integration('github'), condition] })).toBeUndefined();
+    }
+  });
+
+  it('reads only its own provider formats, never inherited object keys', () => {
+    for (const value of ['constructor', 'toString', '__proto__']) {
+      expect(
+        repositoryHint({ operator: 'AND', conditions: [integration(value), repository('mastra')] }),
+      ).toBeUndefined();
+    }
+  });
 });

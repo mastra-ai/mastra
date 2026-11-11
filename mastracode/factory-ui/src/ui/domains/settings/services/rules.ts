@@ -48,35 +48,41 @@ export function rawRuleProblem<Rule>(schema: z.ZodType<Rule>, text: string): str
 type Condition = { field?: unknown; operator?: unknown; value?: unknown };
 type Group = { conditions?: unknown };
 
-const REPOSITORY_FORMATS: Record<string, string> = {
-  github: 'GitHub repositories are owner/repo, such as mastra-ai/mastra.',
-  gitlab: 'GitLab projects are group/project, such as acme/platform/api.',
-};
+const REPOSITORY_FORMATS = new Map([
+  ['github', 'GitHub repositories are owner/repo, such as mastra-ai/mastra.'],
+  ['gitlab', 'GitLab projects are group/project, such as acme/platform/api.'],
+]);
+
+/** The repository names a condition requires one of: "is" and "is any of" only, since the others can still match. */
+function requiredRepositories(condition: Condition): string[] {
+  if (condition.field !== 'source.repository') return [];
+  if (condition.operator === 'equals' && typeof condition.value === 'string') return [condition.value];
+  if (condition.operator === 'in' && Array.isArray(condition.value)) {
+    return condition.value.filter((value): value is string => typeof value === 'string');
+  }
+  return [];
+}
 
 /**
- * A hint when a group tests `source.repository` against a bare name while it also limits cards
- * to GitHub or GitLab, whose repositories always have an owner: that condition never matches.
+ * A hint when a group requires `source.repository` to be a bare name while it also limits cards
+ * to GitHub or GitLab, whose repositories always have an owner: that name never matches.
  */
 export function repositoryHint(rule: unknown): string | undefined {
   if (!rule || typeof rule !== 'object') return undefined;
   const entries: unknown = (rule as Group).conditions;
   if (!Array.isArray(entries)) return undefined;
   const conditions = entries.filter((entry): entry is Condition => !!entry && typeof entry === 'object');
-  const integration = conditions.find(
-    condition =>
-      (condition.field === 'source.integration' || condition.field === 'source.provider') &&
-      condition.operator === 'equals' &&
-      typeof condition.value === 'string' &&
-      condition.value.trim().toLowerCase() in REPOSITORY_FORMATS,
-  );
-  const bare = conditions.some(
-    condition =>
-      condition.field === 'source.repository' &&
-      typeof condition.value === 'string' &&
-      condition.value.trim() !== '' &&
-      !condition.value.includes('/'),
-  );
-  if (integration && bare) return REPOSITORY_FORMATS[String(integration.value).trim().toLowerCase()];
+  const format = conditions
+    .filter(
+      condition =>
+        (condition.field === 'source.integration' || condition.field === 'source.provider') &&
+        condition.operator === 'equals' &&
+        typeof condition.value === 'string',
+    )
+    .map(condition => REPOSITORY_FORMATS.get(String(condition.value).trim().toLowerCase()))
+    .find(found => found !== undefined);
+  const bare = conditions.flatMap(requiredRepositories).some(value => value.trim() !== '' && !value.includes('/'));
+  if (format && bare) return format;
   for (const entry of conditions) {
     const hint = repositoryHint(entry);
     if (hint) return hint;
