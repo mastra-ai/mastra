@@ -395,6 +395,7 @@ Use `hooks` to run custom logic before and after every tool call an agent makes.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
+import { db } from '../db' // your application database client
 
 export const supportAgent = new Agent({
   id: 'support-agent',
@@ -407,7 +408,6 @@ export const supportAgent = new Agent({
       console.log(`Running ${toolName}`, input)
     },
     afterToolCall: async ({ toolName, input, output, error }) => {
-      // Save an audit record with your application's storage
       await db.auditLog.insert({
         toolName,
         input,
@@ -420,7 +420,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-Hooks must return `void` (or `Promise<void>`). Await your storage call, but don't return its result. `afterToolCall` doesn't run for calls skipped by `beforeToolCall` or for declined [tool approvals](/docs/agents/human-in-the-loop), so record those decisions where you handle them.
+`afterToolCall` must return `void` (or `Promise<void>`). Await your storage call, but don't return its result. If the storage call throws, the tool call fails with that error, so catch it inside the hook if audit logging should be best-effort. `afterToolCall` doesn't run for calls skipped by `beforeToolCall` or for declined [tool approvals](/docs/agents/human-in-the-loop), so record those decisions where you handle them.
 
 `beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely, the agent receives `output` as the tool result:
 
