@@ -14,6 +14,8 @@ Scorers are automated tests that evaluate Agents outputs using model-graded, rul
 
 Scorers can run in the cloud to capture real-time results. Scorers can also be part of your CI/CD pipeline for testing and monitoring agents over time.
 
+Scorers measure a single output. To improve an agent over time, combine them with [datasets](/docs/evals/datasets), which store versioned test cases, and [experiments](/docs/evals/experiments), which run an agent or workflow against a dataset, score each result, and keep the results for comparison. [Build an eval loop](/docs/guides/build-an-eval-loop) walks through using them together.
+
 :::tip[📹 Watch]
 
 Watch [Mastra evals overview](https://www.youtube.com/watch?v=12WN6u2DrBk) for an introduction to evals and how to reason about agent quality.
@@ -212,6 +214,8 @@ Once registered, you can score traces interactively within Studio under the **Ob
 
 ## Next steps
 
+- Follow [Build an eval loop](/docs/guides/build-an-eval-loop) to compare agent changes with datasets, scorers, and experiments
+- Store test cases in [datasets](/docs/evals/datasets) and run them with [experiments](/docs/evals/experiments)
 - Use [Quick Checks](/docs/evals/quick-checks) for fast, deterministic assertions on text and tool usage
 - Add [gates and verdicts](/docs/evals/gates-and-verdicts) to enforce hard requirements and quality thresholds
 - Test [multi-turn conversations](/docs/evals/multi-turn) where behavior emerges across sequential turns
