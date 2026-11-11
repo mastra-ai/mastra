@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import * as ort from 'onnxruntime-node';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmbeddingModel, FlagEmbedding, SparseEmbeddingModel, SparseTextEmbedding } from './fastembed';
 
 // Real ONNX graphs emit [token_id, 1] for every token.
@@ -42,7 +43,10 @@ beforeEach(() => {
   }))
     fs.writeFileSync(path.join(modelDir, file), JSON.stringify(content));
 });
-afterEach(() => fs.rmSync(modelDir, { recursive: true, force: true }));
+afterEach(() => {
+  vi.restoreAllMocks();
+  fs.rmSync(modelDir, { recursive: true, force: true });
+});
 
 const rankTwoModels = {
   dense: Buffer.from(
@@ -185,5 +189,20 @@ describe.each(['dense', 'sparse'] as const)('%s model output', kind => {
       expect(vectors[0]!.values[1]).toBeCloseTo(Math.log(2));
       expect(vectors[1]!.values[1]).toBeCloseTo(Math.log(2));
     }
+  });
+
+  // Technical: ONNX Runtime sizes its thread pool from the machine's cores and keeps idle threads busy-waiting.
+  // In a container limited to 2 CPUs on an 18-core host that spends the CPU quota and the kernel pauses the whole
+  // process: one embedding took 1.0 s instead of 0.14 s, and the host server stalled with it.
+  it('keeps ONNX Runtime inside a 1-CPU limit on an 18-core host', async () => {
+    // How Node reports that container: the quota in availableParallelism, the host in cpus.
+    vi.spyOn(os, 'availableParallelism').mockReturnValue(1);
+    vi.spyOn(os, 'cpus').mockReturnValue(Array(18));
+    const createSession = vi.spyOn(ort.InferenceSession, 'create');
+    await initialize();
+    expect(createSession).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ intraOpNumThreads: 1, extra: { session: { intra_op: { allow_spinning: '0' } } } }),
+    );
   });
 });
