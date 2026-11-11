@@ -801,30 +801,57 @@ export class MemoryPG extends MemoryStorage {
 
       const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
       const baseQuery = `FROM ${tableName} ${whereClause}`;
+      const countMatching = async () => {
+        const countResult = await this.#db.readClient.one(`SELECT COUNT(*) ${baseQuery}`, queryParams);
+        return parseInt(countResult.count, 10);
+      };
 
-      const countQuery = `SELECT COUNT(*) ${baseQuery}`;
-      const countResult = await this.#db.readClient.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      if (total === 0) {
+      // A zero-size page never returns rows, so only the count is needed.
+      if (perPage === 0) {
+        const total = await countMatching();
         return {
           threads: [],
-          total: 0,
+          total,
           page,
           perPage: perPageForResponse,
-          hasMore: false,
+          hasMore: offset < total,
         };
       }
 
-      const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction}, "id" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-      const rows = await this.#db.readClient.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        dataQuery,
-        [...queryParams, limitValue, offset],
-      );
+      const selectStatement = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"`;
+      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}, "id" ${direction}`;
+      type ThreadRow = StorageThreadType & { createdAtZ: Date; updatedAtZ: Date; __total?: string | number };
 
-      const threads = (rows || []).map(thread => ({
+      let rows: ThreadRow[];
+      let total: number;
+      if (perPageInput === false) {
+        // Every matching row is returned, so the row count is the total.
+        rows =
+          (await this.#db.readClient.manyOrNone<ThreadRow>(
+            `${selectStatement} ${baseQuery} ${orderByStatement}`,
+            queryParams,
+          )) || [];
+        total = rows.length;
+      } else {
+        // Read the page and the total in one statement, like #fetchMessagePage. The scalar
+        // COUNT subquery reuses the same positional params as the outer WHERE clause.
+        rows =
+          (await this.#db.readClient.manyOrNone<ThreadRow>(
+            `${selectStatement}, (SELECT COUNT(*) ${baseQuery}) AS "__total" ${baseQuery} ${orderByStatement} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+            [...queryParams, perPage, offset],
+          )) || [];
+        if (rows.length > 0) {
+          total = Number(rows[0]!.__total);
+        } else if (offset === 0) {
+          total = 0;
+        } else {
+          // The page is past the last row, so the total has to be counted separately.
+          total = await countMatching();
+        }
+      }
+
+      const threads = rows.map(thread => ({
         id: thread.id,
         resourceId: thread.resourceId,
         title: thread.title,
