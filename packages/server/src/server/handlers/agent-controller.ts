@@ -65,6 +65,7 @@ const RESERVED_THREAD_METADATA_KEYS = {
   createdBy: true,
   thinkingLevel: true,
   notifications: true,
+  permissionRules: true,
 } satisfies Record<ReservedThreadMetadataKey, true>;
 
 function isReservedThreadMetadataKey(key: string): boolean {
