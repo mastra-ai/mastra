@@ -42,7 +42,7 @@ export const WorkflowCodeContent = ({
     const content = JSON.stringify(data, null, 2);
     return (
       <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
-        <div className="absolute top-2 right-2 z-10 rounded-full bg-muted">
+        <div className="absolute top-2 right-2 z-10 aspect-square rounded-full bg-muted">
           <CopyButton content={content} />
         </div>
         <div className="rounded-lg bg-muted p-4">
@@ -67,7 +67,7 @@ export const WorkflowCodeContent = ({
 
   return (
     <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
-      <div className="absolute top-2 right-2 z-10 rounded-full bg-muted">
+      <div className="absolute top-2 right-2 z-10 aspect-square rounded-full bg-muted">
         <CopyButton content={data} />
       </div>
       <div className="rounded-lg bg-muted p-4">
