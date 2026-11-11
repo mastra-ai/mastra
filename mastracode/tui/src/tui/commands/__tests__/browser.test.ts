@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -302,6 +303,23 @@ describe('handleBrowserCommand', () => {
 
     expect(browserInstance.retire).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(undefined);
+  });
+
+  // Windows does not set HOME; ~ must still resolve to the user's home rather
+  // than staying literal and creating a ./~ profile folder per project (#30102).
+  it('expands ~ in /browser set profile to the home directory when HOME is unset', async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    const previousHome = process.env.HOME;
+    delete process.env.HOME;
+    try {
+      await handleBrowserCommand(ctx, ['set', 'profile', '~/.mastracode/browser-profile-agent-browser']);
+    } finally {
+      if (previousHome !== undefined) process.env.HOME = previousHome;
+    }
+
+    expect(settings.browser.profile).toBe(`${homedir()}/.mastracode/browser-profile-agent-browser`);
+    expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
   });
 
   describe('set model', () => {
