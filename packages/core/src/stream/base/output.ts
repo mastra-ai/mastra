@@ -281,7 +281,7 @@ export function resolveOutputMessageSkippingCompletionChecks(messageList: Messag
  * A failed completion check moves the answer to a new message, but this output keeps the id it
  * was built with. Resolve at write time so processor data lands on the answer that is returned.
  */
-function resolveProcessorWriterMessageId(
+export function resolveProcessorWriterMessageId(
   messageList: MessageList,
   fallbackMessageId: string,
   explicitMessageId?: string,
