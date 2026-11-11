@@ -109,15 +109,13 @@ export function SearchInput({
         onChange={event => change(event.target.value)}
       />
       {/* Always rendered so the field keeps its width when text appears (it can be sized by its
-          content, e.g. joined in a ButtonsGroup); hidden and out of the tab order while empty. */}
-      <InputGroupAddon
-        align="inline-end"
-        className={hasButton ? undefined : 'invisible'}
-        aria-hidden={!hasButton}
-        inert={!hasButton}
-      >
+          content, e.g. joined in a ButtonsGroup). While empty only the button hides, so a click on
+          its spot still lands on the addon, which focuses the input. */}
+      <InputGroupAddon align="inline-end" aria-hidden={!hasButton}>
         <InputGroupButton
           aria-label={onClose ? 'Close search' : 'Clear search'}
+          className={hasButton ? undefined : 'invisible'}
+          inert={!hasButton}
           onClick={() => {
             if (editable) change('');
             if (onClose) onClose();
