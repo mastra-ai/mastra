@@ -168,6 +168,11 @@ export class CachingPubSub extends PubSub {
     return true;
   }
 
+  /** Topics `shouldCache` leaves out only reach the inner transport. */
+  override __replaysTopic(topic: string): boolean {
+    return this.shouldCache?.(topic) !== false || this.inner.__replaysTopic(topic);
+  }
+
   /**
    * Log an error message using the configured logger or console.error.
    */

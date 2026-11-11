@@ -38,8 +38,8 @@ export interface ResponseMessagesCursor {
  *
  * A producer's first diff holds the whole list (`from: 0`), and so does the
  * next one once the diffs sent since the last whole list add up to its size.
- * A reader that missed a diff (a lost delivery, a live-only transport that
- * joined mid-run) recovers at the next whole list, while whole lists cost at
+ * A reader that missed a diff (a lost delivery) recovers at the next whole
+ * list, while whole lists cost at
  * most about as much as the diffs: the log stays proportional to the run's
  * messages instead of growing with the square of its steps.
  */
@@ -86,13 +86,19 @@ export function diffResponseMessages(
 
 /** The response messages a reader rebuilt from the diffs it applied. */
 export interface ResponseMessagesReplay {
+  /** The list of the last step-finish applied. */
   messages: ResponseMessage[];
-  /** Hash of `messages` as its producer computed it; unset when unknown. */
-  hash?: string;
-  /** Producer and `seq` of the last diff applied, to tell late copies apart. */
-  producer?: string;
-  seq?: number;
+  /**
+   * The list rebuilt per producer, with the hash and `seq` of its last diff,
+   * least recent first. A run resumed in a new producer can still get a late
+   * step-finish from the previous one; each producer's diffs apply to its own
+   * list, so that event doesn't break the new producer's next diff.
+   */
+  producers?: Map<string, { messages: ResponseMessage[]; hash: string; seq: number }>;
 }
+
+/** Producers a reader keeps lists for: the run's current one and the one it resumed from. */
+const KEPT_PRODUCERS = 2;
 
 /**
  * Apply a step-finish payload's response messages to what a reader holds.
@@ -102,7 +108,7 @@ export interface ResponseMessagesReplay {
  * is a late copy of one it is already past. Such a reader reports nothing
  * until a diff fits its list or the producer's next whole list arrives,
  * instead of guessing. Payloads from producers that publish the whole list
- * (`_durableResponseMessages`) replace what the reader holds.
+ * (`_durableResponseMessages`) report it as is.
  */
 export function applyResponseMessages(
   replay: ResponseMessagesReplay,
@@ -111,26 +117,22 @@ export function applyResponseMessages(
   const diff = payload._durableResponseMessagesDiff;
   if (!diff) {
     if (!Array.isArray(payload._durableResponseMessages)) return undefined;
-    Object.assign(replay, {
-      messages: payload._durableResponseMessages,
-      hash: undefined,
-      producer: undefined,
-      seq: undefined,
-    });
+    replay.messages = payload._durableResponseMessages;
     return replay.messages;
   }
-  if (replay.producer === diff.producer && replay.seq !== undefined && diff.seq <= replay.seq) {
+  const producers = (replay.producers ??= new Map());
+  const held = producers.get(diff.producer);
+  if (held && diff.seq <= held.seq) {
     // A step-finish delivered twice still reports its list; anything older says nothing new.
-    return diff.seq === replay.seq && diff.hash === replay.hash ? replay.messages : undefined;
+    return diff.seq === held.seq && diff.hash === held.hash ? held.messages : undefined;
   }
-  if (diff.from !== 0 && (replay.hash === undefined || diff.base !== replay.hash)) return undefined;
-  Object.assign(replay, {
-    messages: [...replay.messages.slice(0, diff.from), ...diff.messages],
-    hash: diff.hash,
-    producer: diff.producer,
-    seq: diff.seq,
-  });
-  return replay.messages;
+  if (diff.from !== 0 && (!held || diff.base !== held.hash)) return undefined;
+  const messages = [...(held?.messages.slice(0, diff.from) ?? []), ...diff.messages];
+  producers.delete(diff.producer);
+  producers.set(diff.producer, { messages, hash: diff.hash, seq: diff.seq });
+  if (producers.size > KEPT_PRODUCERS) producers.delete(producers.keys().next().value!);
+  replay.messages = messages;
+  return messages;
 }
 
 /**

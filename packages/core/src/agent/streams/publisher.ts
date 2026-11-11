@@ -160,8 +160,11 @@ export function createAgentStreamPublisher({
     if ('fingerprints' in responseMessagesCursor)
       responseMessagesCursor = { ...responseMessagesCursor, fingerprints: [] };
   };
+  /** A reader that attaches mid-run on a bus that keeps no history can only place whole lists. */
+  const sendWholeLists = !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(runId));
   const diffStepResponseMessages = (messages: ResponseMessagesDiff['messages'] | undefined) => {
     if (!messages) return undefined;
+    if (sendWholeLists) forgetSentResponseMessages();
     try {
       const { diff, cursor } = diffResponseMessages(responseMessagesCursor, messages);
       responseMessagesCursor = cursor;

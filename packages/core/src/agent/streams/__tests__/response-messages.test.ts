@@ -118,6 +118,19 @@ describe('response message diffs', () => {
     expect(read(replay, second[1]!)).toEqual(steps[2]);
   });
 
+  it('keeps a resumed producer’s list when the previous producer’s whole list lands late', () => {
+    const before = publish([steps[0]!, steps[1]!], 'segment-1');
+    const resumed = publish([steps[1]!, steps[2]!], 'segment-2');
+    const replay: ResponseMessagesReplay = { messages: [] };
+    read(replay, before[0]!);
+    expect(read(replay, resumed[0]!)).toEqual(steps[1]);
+    // The previous segment was still publishing when the run resumed.
+    expect(read(replay, before[1]!)).toEqual(steps[1]);
+    expect(read(replay, { ...before[0]!, seq: 2 })).toEqual(steps[0]);
+    expect(resumed[1]!.from).toBeGreaterThan(0);
+    expect(read(replay, resumed[1]!)).toEqual(steps[2]);
+  });
+
   it('treats whole lists from producers that send no diffs as the list', () => {
     const replay: ResponseMessagesReplay = { messages: [] };
     expect(applyResponseMessages(replay, { _durableResponseMessages: steps[1] })).toEqual(steps[1]);

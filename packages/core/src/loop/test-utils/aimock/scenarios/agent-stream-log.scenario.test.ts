@@ -12,6 +12,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../../../../agent/streams/constants';
 import { InMemoryServerCache } from '../../../../cache/inmemory';
+import { CachingPubSub } from '../../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { createTool } from '../../../../tools';
 import type { OutputProcessor } from '../../../../processors';
@@ -185,7 +186,10 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
       const resumedOutput = resumed.output ?? resumed;
       await resumedOutput.consumeStream();
       expect(await resumedOutput.text).toBe('Approved and done.');
-      const liveMessages = JSON.parse(JSON.stringify((await resumedOutput.steps).at(-1).response.messages));
+      const liveSteps = JSON.parse(
+        JSON.stringify((await resumedOutput.steps).map((step: any) => step.response.messages)),
+      );
+      const liveMessages = liveSteps.at(-1);
       await waitForTerminal(runBus(agent), run.runId);
 
       const observed: any[] = [];
@@ -198,7 +202,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
         // drain
       }
       expect(JSON.stringify(liveMessages)).toContain('RESULT-approved');
-      expect(observed.at(-1).response.messages).toEqual(liveMessages);
+      expect(observed.slice(-liveSteps.length).map(step => step.response.messages)).toEqual(liveSteps);
     } finally {
       resumed?.cleanup?.();
       run.cleanup?.();
@@ -249,6 +253,79 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
       if (engine !== 'inngest') await mastra.shutdown();
     }
   }, 30_000);
+
+  // Technical: on a bus that keeps no history of the run's topic, an observer that attaches mid-run
+  // has none of the earlier step-finishes, so it can't place a diff made against them. Producers
+  // send such a bus whole lists. A CachingPubSub supports offsets even for the topics it doesn't
+  // cache, so producers ask the bus about the topic.
+  // The Inngest engine runs on its own bus.
+  (engine === 'inngest' ? it.skip : it).each(['replay turned off', 'a cache that leaves the topic out'] as const)(
+    'gives an observer that joins mid-run with %s the full response messages of each step',
+    async bus => {
+      const llm = getMock();
+      scriptToolLoop(llm);
+      let reachedMidRun!: () => void;
+      const midRun = new Promise<void>(resolve => (reachedMidRun = resolve));
+      let attach!: () => void;
+      const attached = new Promise<void>(resolve => (attach = resolve));
+      const pausingLookup = createTool({
+        id: 'lookup',
+        description: 'Look something up.',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async ({ q }) => {
+          if (q === '3') {
+            reachedMidRun();
+            await attached;
+          }
+          return { value: `RESULT-${q}` };
+        },
+      });
+      const { agent, mastra } = await createSharedAgent(llm, {
+        engine,
+        tools: { lookup: pausingLookup },
+        ...(bus === 'replay turned off'
+          ? { pubsub: new JsonPubSub(), streamReplay: false }
+          : {
+              pubsub: new CachingPubSub(new JsonPubSub(), new JsonCache(), {
+                shouldCache: topic => !topic.startsWith(AGENT_STREAM_TOPIC('')),
+              }),
+            }),
+      });
+      const live: any[] = [];
+      const run: any = await agent.stream('Look it all up.', {
+        maxSteps: 12,
+        onStepFinish: (step: any) => {
+          live.push(step);
+        },
+      });
+      try {
+        const consumed = (run.output ?? run).consumeStream();
+        await midRun;
+        const observed: any[] = [];
+        const observation: any = await agent.observe(run.runId, {
+          onStepFinish: (step: any) => {
+            observed.push(step);
+          },
+        });
+        attach();
+        for await (const _chunk of observation.fullStream) {
+          // drain
+        }
+        await consumed;
+
+        // Attached during the fourth step's tool call: it sees that step's step-finish and the rest.
+        expect(observed).toHaveLength(TOOL_STEPS + 1 - 3);
+        expect(observed.map(step => step.response.messages)).toEqual(
+          live.slice(3).map(step => JSON.parse(JSON.stringify(step.response.messages))),
+        );
+        expect(JSON.stringify(observed[0].response.messages)).toContain('RESULT-0');
+      } finally {
+        run.cleanup?.();
+        if (engine !== 'inngest') await mastra.shutdown();
+      }
+    },
+    30_000,
+  );
 
   // Technical: a delegated agent's chunks are forwarded inside `tool-output` chunks, and its own
   // step-start / step-finish / finish carried its prompt like the parent's did.
