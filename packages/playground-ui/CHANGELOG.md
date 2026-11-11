@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.9
+
+### Patch Changes
+
+- The toggle on pinned Knowledge listings in Studio chat now says how many pages the listing covers: "Show N pages ▾" when collapsed ("Show N+ pages ▾" when the total is unknown), "Hide pages ▴" when open. ([#29987](https://github.com/mastra-ai/mastra/pull/29987))
+
 ## 69.0.0-alpha.8
 
 ### Minor Changes
