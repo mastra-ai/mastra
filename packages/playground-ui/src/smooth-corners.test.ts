@@ -104,11 +104,15 @@ describe('smooth corners', () => {
 
   it('makes `rounded-full` a capsule that turns into a circle on a square', () => {
     const full = gatedRule(css, '.rounded-full:not(._)') ?? '';
+    // The capsule is the radius that wins: nothing after it in the rule sets another one.
+    const radii = [...full.matchAll(/border-radius: ([^;]+);/g)].map(([, value = '']) => value);
+    expect(radii).toHaveLength(1);
+    expect(radii[0]).toContain('/ calc(var(--corner-h) / 2)');
     // Smoothing capped by width / height - 1: 0 on a square, so q = 1 and the shape is round.
     expect(full).toContain('max(var(--corner-w) / var(--corner-h) - 1');
     expect(full).toContain('corner-shape: superellipse(calc(1 + 0.1 * var(--_ps)');
     // One-sided pills take the infinite radius token, which caps their smoothing to 0.
-    expect(rulesFor(css, '.rounded-t-full')).toContain('border-top-left-radius: var(--radius-full)');
+    expect(gatedRule(css, '.rounded-t-full:not(._)')).toContain('border-top-left-radius: calc(var(--corner-end-full)');
   });
 
   it('gives `rounded-[inherit]` the inherited shape too, pseudo-elements included', () => {
