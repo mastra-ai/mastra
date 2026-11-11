@@ -72,6 +72,28 @@ describe('Knowledge scope rows stored under a different declaration than their a
     expect(read !== 'all' && read.children).toEqual([]);
   });
 
+  it('never lets one give belongsTo roles to a child placed under it', async () => {
+    const store = await legacyStore();
+    const [legacy] = await store.getScopesByAddress(['org:acme:viewer']);
+    const { scope: doc } = await store.materializeScope({
+      address: 'doc:d1',
+      declaration: 'doc:$docId',
+      name: 'doc:d1',
+      parentId: legacy!.id,
+      provenance: host,
+    });
+    const runtime = new KnowledgeScopeRuntime(
+      {
+        ...SIDE_TYPE,
+        'doc:$docId': { belongsTo: 'org:$orgId:viewer', access: [{ principal: 'org:$orgId', role: 'editor' }] },
+      },
+      async () => store,
+      () => {},
+    );
+    expect(await runtime.roleOn(['org:acme'], doc)).toBeNull();
+    expect((await runtime.explainAccess(['org:acme'], { scope: 'doc:d1' })).role).toBeNull();
+  });
+
   it('keeps reads its own declaration still grants by prefix, but no role', async () => {
     // A prefix grant on org:$orgId covered this row when it was written; reads under that grant stay,
     // as with any data written before the change. Nothing of org:$orgId:viewer reaches it.

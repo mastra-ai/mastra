@@ -159,8 +159,17 @@ export class KnowledgeScopeRuntime {
     if (!scope.isScope || !scope.address) throw new Error('Knowledge roles require a scope page.');
     if (!this.#isCurrent(scope)) return null;
     const storage = await this.getStorage();
-    const parent = scope.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
-    return knowledgeRoleOn(this.compiled, principals, { address: scope.address, parentAddress: parent?.address });
+    return knowledgeRoleOn(this.compiled, principals, {
+      address: scope.address,
+      parentAddress: await this.#currentParentAddress(storage, scope),
+    });
+  }
+
+  // A stale parent row (its address now matches another declaration) must not bind belongsTo rules.
+  async #currentParentAddress(storage: KnowledgeStorage, scope: KnowledgePage): Promise<string | undefined> {
+    if (!scope.parentId) return undefined;
+    const parent = await storage.getPage({ id: scope.parentId, read: 'all' });
+    return parent && this.#isCurrent(parent) ? (parent.address ?? undefined) : undefined;
   }
 
   async explainAccess(
@@ -197,11 +206,13 @@ export class KnowledgeScopeRuntime {
     }
 
     const address = scope?.address ?? (target as { scope: string }).scope;
-    const parent = scope?.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
     const reasons =
       scope && !this.#isCurrent(scope)
         ? []
-        : knowledgeAccessGrants(this.compiled, principals, { address, parentAddress: parent?.address });
+        : knowledgeAccessGrants(this.compiled, principals, {
+            address,
+            parentAddress: scope ? await this.#currentParentAddress(storage, scope) : undefined,
+          });
     let role: KnowledgeRole | null = null;
     for (const reason of reasons) role = strongerKnowledgeRole(role, reason.role);
     return {
