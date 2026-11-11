@@ -1,5 +1,45 @@
 # mastracode
 
+## 0.50.0-alpha.7
+
+### Minor Changes
+
+- Approving a plan now starts it as a goal. The plan approval prompt offers only **Approve** and **Request changes**; the separate **Use as /goal** option is gone. When no goal judge model is configured, the current model judges the plan goal instead of prompting for one. ([#28037](https://github.com/mastra-ai/mastra/pull/28037))
+
+- Added text selection in the prompt input box. Shift+arrow keys select characters and lines, Shift+Alt or Shift+Ctrl with ←/→ select by word, and Shift+Home/End select to the line edges; Backspace, typing and pasting then work on the selection like they do after a mouse drag. Keyboard selection works with the Mouse setting off. ([#29994](https://github.com/mastra-ai/mastra/pull/29994))
+
+  With input box mouse mode on, a double click selects the word under the pointer, a triple click selects the line and dragging after a double click grows the selection by whole words. Like a drag, these copy the selected text to the clipboard.
+
+### Patch Changes
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`210458a`](https://github.com/mastra-ai/mastra/commit/210458a144ac5a934663db7bfe6cc650c0d2adaa), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`ac40e76`](https://github.com/mastra-ai/mastra/commit/ac40e762db7b6614076273221aae6681945f9da1), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/code-sdk@1.19.0-alpha.7
+
+## 0.50.0-alpha.6
+
+### Patch Changes
+
+- Removed comments from Factory work items. Cards no longer have a comment feed, mentions, or comment counts, and the mention and activity items are gone from the attention inbox. Slack `aside` messages are still ignored by the agent but are no longer copied onto the card, and Factory no longer mirrors card comments to Slack. ([#29062](https://github.com/mastra-ai/mastra/pull/29062))
+
+  Each card now has a single `description` instead. Set it with `description` on `POST /web/factory/projects/:id/work-items` and `PATCH /web/factory/work-items/:id` (a blank string clears it), or edit it from the card panel. Runs started on the card receive it in a `<work-item-description>` block after the skill instructions, in place of the old `<work-item-feed>` block.
+
+  Breaking changes for API and agent-tool callers:
+
+  - `factory_create_work_item` takes `description` instead of `brief`. `factory_update_work_item` also accepts `description`, and `factory_inspect_work_item` returns it in place of recent comments.
+  - The `/web/factory/work-items/:id/comments` and `/web/factory/projects/:id/mention-roster` routes are removed. `/web/factory/projects/:id/feed-events` stays and still refreshes open boards, but its frames no longer carry a `workItemId`.
+  - The `mention` and `activity` attention kinds are removed.
+  - Work items no longer include `commentCount` or `feedActivityAt`.
+  - Integrations can no longer declare a `feedPublisher`, and `IntegrationContext` no longer has `feed`.
+  - `factoryWorkItemUrl()` no longer accepts `commentId`.
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`023455e`](https://github.com/mastra-ai/mastra/commit/023455e2d45ba13aef1880364985c949308ae015), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`08e677f`](https://github.com/mastra-ai/mastra/commit/08e677fdbe36c10118c54c0494c8412019d61955), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`04803ea`](https://github.com/mastra-ai/mastra/commit/04803ea00e168759ed3e28ce8a65977df7355df9), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/code-sdk@1.19.0-alpha.6
+  - @mastra/memory@1.41.1-alpha.3
+  - @mastra/mcp@2.9.0-alpha.3
+  - @mastra/schema-compat@1.3.18-alpha.0
+
 ## 0.50.0-alpha.5
 
 ### Patch Changes

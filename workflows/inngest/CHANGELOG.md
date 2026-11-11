@@ -1,5 +1,39 @@
 # @mastra/inngest
 
+## 1.11.2-alpha.5
+
+### Patch Changes
+
+- The Inngest durable agent's run stream events now send only the response messages that changed since the previous step, instead of the whole list on every step, so long runs keep their stream logs small. Callers and `observe()` still report the full list for each step, including after a resume or from an offset when the pubsub keeps history. ([#29976](https://github.com/mastra-ai/mastra/pull/29976))
+
+  Upgrade the processes that run Inngest durable agents and the ones that read their streams together: a reader on an older `@mastra/core` reports no response messages for steps published by this version.
+
+- Fixed `streamUntilIdle()` on agents created with `createInngestAgent` closing right after `background-task-completed`. When a deferred background task finishes while an until-idle stream is open, the follow-up answer now streams on that same stream instead of waking the thread as a separate run that only reaches memory. ([#29877](https://github.com/mastra-ai/mastra/pull/29877))
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+
+## 1.11.2-alpha.4
+
+### Patch Changes
+
+- Fixed custom `stopWhen` conditions on Inngest agents receiving tool results in Mastra's internal shape. Each step's `toolResults` now uses the same AI SDK tool-result parts as the default agent (`type: 'tool-result'`, `input`, `output`), so a condition that reads `toolResults[i].output` stops the run when it should. Fixes [#28519](https://github.com/mastra-ai/mastra/issues/28519). ([#29426](https://github.com/mastra-ai/mastra/pull/29426))
+
+  If your condition read the old internal fields, switch to the AI SDK fields:
+
+  ```ts
+  // Before: only matched on these agents
+  stopWhen: ({ steps }) => steps.at(-1)?.toolResults.some(r => r.result?.conditions === 'sunny'),
+
+  // After: matches on every agent type
+  stopWhen: ({ steps }) => steps.at(-1)?.toolResults.some(r => r.output?.value?.conditions === 'sunny'),
+  ```
+
+  Use `input` instead of `args` in the same way.
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+
 ## 1.11.2-alpha.3
 
 ### Patch Changes

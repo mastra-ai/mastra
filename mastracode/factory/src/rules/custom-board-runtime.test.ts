@@ -91,6 +91,7 @@ const releaseSkills = [
 
 describe('custom board public runtime', () => {
   it.each([true, false])(
+    // The retired includeDefaultBoards changes nothing: Work is installed either way.
     'executes a release through both phase runners and terminal tool-result dispatch (includeDefaultBoards: %s)',
     async includeDefaultBoards => {
       // The mocked fetch below makes any key work, but gateway auth resolution

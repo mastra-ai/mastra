@@ -32,7 +32,7 @@ function card(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(30),

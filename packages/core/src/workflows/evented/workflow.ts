@@ -2025,7 +2025,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
@@ -2176,7 +2176,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller

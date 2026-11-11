@@ -13,6 +13,7 @@ import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
+import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type {
@@ -201,15 +202,19 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
-  boards?: Pick<ProjectBoardCache, 'describe'>;
+  boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
 }
 
-/** Provider output is shown to the user; strip any clone credential from it first. */
-function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
+/**
+ * Provider output is shown to the user; strip any clone credential and any
+ * Build variable value from it first.
+ */
+function redactBuild<T extends { error?: string; logs?: string[] }>(build: T, buildEnv?: Record<string, string>): T {
+  const redact = (text: string) => maskSandboxEnvValues(redactCredentials(text), buildEnv);
   return {
     ...build,
-    ...(build.error !== undefined ? { error: redactCredentials(build.error) } : {}),
-    ...(build.logs ? { logs: build.logs.map(redactCredentials) } : {}),
+    ...(build.error !== undefined ? { error: redact(build.error) } : {}),
+    ...(build.logs ? { logs: build.logs.map(redact) } : {}),
   };
 }
 
@@ -478,7 +483,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const read = await capability.runner.readContext(project.id);
           if (!read) return context.json({ error: 'no_environment' }, 404);
           const builds = await capability.builds.list(read.ctx, read.settings);
-          return context.json({ builds: builds.map(redactBuild) });
+          return context.json({ builds: builds.map(build => redactBuild(build, read.ctx.buildEnv)) });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
@@ -509,7 +514,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               return context.json({ error: 'Build not found' }, 404);
             }
           }
-          return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
+          const build = await capability.builds.get(read.ctx, read.settings, buildId);
+          return context.json({ build: redactBuild(build, read.ctx.buildEnv) });
         },
       }),
     ];
@@ -590,8 +596,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
-          // The project's first board load retries anything this misses.
-          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+          // A new project gets today's Work, without Triage; a project that existed before keeps the
+          // Work it had. The project's first board load retries anything this misses, with Work as
+          // it was for older projects, as this one can't be told apart from them by then.
+          await this.deps.boards?.seedNewProject({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
             console.warn('[factory] could not store the boards of a new project:', error);
           });
           return context.json({ project }, 201);

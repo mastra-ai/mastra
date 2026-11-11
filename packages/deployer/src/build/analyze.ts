@@ -387,6 +387,7 @@ export async function analyzeBundle(
     isDev = false,
     bundlerOptions,
     env = { 'process.env.NODE_ENV': JSON.stringify('production') },
+    configEntryFile = mastraEntry,
   }: {
     outputDir: string;
     projectRoot: string;
@@ -397,14 +398,19 @@ export async function analyzeBundle(
       'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
     > | null;
     env?: Record<string, string>;
+    /**
+     * File holding `new Mastra({...})`. Differs from `mastraEntry` when that is the generated
+     * file-based agents wrapper, which only imports it.
+     */
+    configEntryFile?: string;
   },
   logger: IMastraLogger,
 ) {
-  const mastraConfig = await readFile(mastraEntry, 'utf-8');
+  const mastraConfig = await readFile(configEntryFile, 'utf-8');
   const mastraConfigResult: { hasValidConfig: boolean; projectType?: string } = { hasValidConfig: false };
 
   await transformAsync(mastraConfig, {
-    filename: mastraEntry,
+    filename: configEntryFile,
     presets: [import.meta.resolve('@babel/preset-typescript')],
     plugins: [() => checkConfigExport(mastraConfigResult)],
   });
@@ -452,6 +458,7 @@ export async function analyzeBundle(
       externalsPreset,
       alias: bundlerOptions?.alias,
       platform,
+      configEntryFile,
     });
 
     // The output includes the bundled server code (often several MB), so skip the Babel parse

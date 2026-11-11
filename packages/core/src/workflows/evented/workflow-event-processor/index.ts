@@ -2924,9 +2924,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         // The resumed inner step's input is the output of the step that ran before it
         // inside the nested workflow (i.e. the suspended step's stored payload), not the
         // input to the nested-workflow step itself.
+        // Use the stored payload even when it is `null` or `undefined`: that is the input the step ran with.
+        const suspendedStepResult = nestedStepResults?.[suspendedStepId] as StepResult<any, any, any, any> | undefined;
         const nestedPrevResult = {
           status: 'success' as const,
-          output: (nestedStepResults?.[suspendedStepId] as any)?.payload ?? (prevResult as any)?.output,
+          output: suspendedStepResult ? suspendedStepResult.payload : (prevResult as any)?.output,
         };
 
         await this.mastra.pubsub.publish('workflows', {
@@ -2997,9 +2999,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         const nestedSteps = resumeSteps.slice(1);
         // The step the nested workflow resumes into receives the output of the step that
         // ran before it (its stored payload), not the input to the nested-workflow step.
+        // Use the stored payload even when it is `null` or `undefined`: that is the input the step ran with.
+        const resumedStepResult = nestedStepResults?.[nestedSteps[0]!] as StepResult<any, any, any, any> | undefined;
         const nestedPrevResult = {
           status: 'success' as const,
-          output: (nestedStepResults?.[nestedSteps[0]!] as any)?.payload ?? (prevResult as any)?.output,
+          output: resumedStepResult ? resumedStepResult.payload : (prevResult as any)?.output,
         };
 
         await this.mastra.pubsub.publish('workflows', {
@@ -3037,11 +3041,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (nestedDispatch === 'time-travel' && timeTravel) {
+        // Without a stored child snapshot, the child replays the input the parent gives it,
+        // kept as is when null or undefined (#29424).
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
             runId: nestedRunId,
-          })) ?? ({ context: {} } as WorkflowRunState);
+          })) ??
+          ({
+            context: { input: prevResult.status === 'success' ? prevResult.output : undefined },
+          } as WorkflowRunState);
 
         const timeTravelParams = createTimeTravelExecutionParams({
           steps: timeTravel.steps.slice(1),
@@ -3224,7 +3233,9 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepResults: nestedContext,
               prevResult: {
                 status: 'success',
-                output: nestedContext[suspendedNestedStepId]?.payload ?? (prevResult as any)?.output,
+                output: nestedContext[suspendedNestedStepId]
+                  ? nestedContext[suspendedNestedStepId].payload
+                  : (prevResult as any)?.output,
               },
               resumeData: nestedResumeData,
               activeStepsPath,
@@ -3391,9 +3402,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
     let resumeDataToUse;
-    if (timeTravelResumeData && !timeTravelResumeValidationError) {
+    if (timeTravelResumeData !== undefined && !timeTravelResumeValidationError) {
       resumeDataToUse = timeTravelResumeData;
-    } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+    } else if (timeTravelResumeData !== undefined && timeTravelResumeValidationError) {
       this.mastra.getLogger()?.warn('Time travel resume data validation failed', {
         stepId: leafId,
         error: timeTravelResumeValidationError.message,
@@ -3594,6 +3605,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       }
       if (guardStart) stepResults[leafId] = stepResult;
+      // Wait `retryConfig.delay` before the next attempt, as the default
+      // engine does (#29389). Waiting here rather than in a detached timer
+      // keeps this delivery unacked until the retry is published, so a worker
+      // that dies mid-delay gets the event redelivered instead of dropping the
+      // retry. The step fence lease keeps renewing during the wait, so a broker
+      // redelivery after an ack deadline is dropped as a duplicate rather than
+      // starting a second retry. A run canceled meanwhile drops the retry at
+      // dispatch.
+      const retryDelay = workflow.retryConfig.delay ?? 0;
+      if (retryDelay > 0) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
       return this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.run',
         runId,

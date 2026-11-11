@@ -4,7 +4,7 @@ import type { BoardEventFacts } from '../boards/board-events.js';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
-import { autoStartingBoards } from '../boards/test-utils.js';
+import { autoStartingBoards, createTriageWorkRegistry } from '../boards/test-utils.js';
 import {
   CATCH_ALL_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
@@ -66,8 +66,8 @@ async function setup(
   }
   const boards = new ProjectBoardCache({
     codeRegistry: options.autoStart
-      ? autoStartingBoards(options.codeRegistry)
-      : (options.codeRegistry ?? createBoardRegistry()),
+      ? autoStartingBoards(options.codeRegistry ?? createTriageWorkRegistry())
+      : (options.codeRegistry ?? createTriageWorkRegistry()),
     storage: seeded.boards,
     recheckMs: 0,
   });
@@ -912,7 +912,7 @@ describe('intake routes moving existing cards on status events', () => {
 
     expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['intake'] });
     // The bypass is the route's, not the board's: Work still only lets Done go to PR review.
-    expect(createBoardRegistry().get('work')!.allowsTransition('done', 'intake')).toBe(false);
+    expect(createTriageWorkRegistry().get('work')!.allowsTransition('done', 'intake')).toBe(false);
   });
 
   it("moves a card into a working phase such as Triage, where the phase's own start decides the run", async () => {

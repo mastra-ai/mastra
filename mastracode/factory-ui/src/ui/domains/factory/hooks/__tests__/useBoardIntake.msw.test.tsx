@@ -8,7 +8,7 @@ import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, newProjectWorkBoardInfo, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
@@ -381,6 +381,56 @@ describe('useBoardIntake GitHub issues', () => {
       ),
     );
   }
+  it("offers an auto-triaged issue in Intake on a new project's Work, which has no Triage, and never fetches the triaged feed", async () => {
+    stubGithub();
+    const triagedRequests: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) => {
+        const label = new URL(request.url).searchParams.get('label');
+        if (label) triagedRequests.push(label);
+        return HttpResponse.json({
+          issues: label ? [] : [...issues, githubIssue(4, ['status: auto-triaged'])],
+          nextCursor: null,
+        });
+      }),
+    );
+
+    const { result } = renderIntake('factory-1', newProjectWorkBoardInfo);
+
+    await waitFor(() => expect(result.current.active).toBe('github'));
+    await waitFor(() => expect(result.current.candidates).toHaveLength(4));
+    expect(result.current.candidates.find(candidate => candidate.sourceKey === 'github-issue:4')).toMatchObject({
+      column: 'intake',
+    });
+    expect(result.current.feedByColumn).not.toHaveProperty('triage');
+    expect(result.current.isTriagePending).toBe(false);
+    expect(triagedRequests).toEqual([]);
+  });
+
+  it('keeps an auto-triaged issue out of Intake on Work that kept Triage, where the triaged feed offers it', async () => {
+    stubGithub();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
+        HttpResponse.json({
+          issues: new URL(request.url).searchParams.get('label')
+            ? [githubIssue(4, ['status: auto-triaged'])]
+            : [...issues, githubIssue(4, ['status: auto-triaged'])],
+          nextCursor: null,
+        }),
+      ),
+    );
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.active).toBe('github'));
+    await waitFor(() =>
+      expect(result.current.candidates.filter(candidate => candidate.sourceKey === 'github-issue:4')).toEqual([
+        expect.objectContaining({ column: 'triage' }),
+      ]),
+    );
+    expect(result.current.feedByColumn).toHaveProperty('triage');
+  });
+
   it('offers Work every issue of a selected repository, whatever its labels', async () => {
     stubGithub();
 

@@ -1,6 +1,6 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import type { InstalledBoardInfo } from '../../../../api/types';
-import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
+import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestStatuses';
 import {
   cardContextSessions,
   cardThreadSession,
@@ -292,19 +292,15 @@ export function oneRowPerCard(
     if (!cardRows || cardRows.length === 1) return [row];
     const [shown, ...others] = orderCardRows(cardRows, boards);
     if (shown !== row) return [];
-    const shared = {
-      pinned: cardRows.some(candidate => candidate.pinned),
-      cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
-    };
     const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.status === status));
     // Listed, each session shows its own state and the open one highlights.
-    if (revealChildSessions) {
-      return [{ ...shown, ...shared, cardStatus: carried ?? shown.status, childRows: others }];
-    }
+    // Each listed session keeps its own pin; only a folded card carries its sessions' pins.
+    if (revealChildSessions) return [{ ...shown, cardStatus: carried ?? shown.status, childRows: others }];
     return [
       {
         ...shown,
-        ...shared,
+        pinned: cardRows.some(candidate => candidate.pinned),
+        cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
         status: carried ?? shown.status,
         active: cardRows.some(candidate => candidate.active),
       },
@@ -334,6 +330,8 @@ export interface UserSessionRowInput {
   pullRequest?: WorkItem;
   factoryId: string;
   pathname: string;
+  /** The `:sessionId` of a `/workspaces/:sessionId/threads/:threadId` route, which Slack links use for user sessions too. */
+  routeSessionId: string | undefined;
   running: boolean;
   pinned: boolean;
   viewer: SessionViewerProfile | undefined;
@@ -345,6 +343,7 @@ export function buildUserSessionRow({
   pullRequest,
   factoryId,
   pathname,
+  routeSessionId,
   running,
   pinned,
   viewer,
@@ -361,7 +360,7 @@ export function buildUserSessionRow({
     url,
     openPath: url,
     externalLinks: sessionExternalLinks(item, pullRequest),
-    active: pathname === url,
+    active: pathname === url || session.sessionId === routeSessionId,
     status: sessionActivityStatus({
       initializing: !session.materializedAt,
       running,

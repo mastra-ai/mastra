@@ -210,8 +210,8 @@ minimumReleaseAgeExclude:
   # Renovate security update: dompurify@3.4.13
   - dompurify@3.4.13
   - dompurify@3.4.16
-  # Renovate security update: fast-xml-parser@5.10.1
-  - fast-xml-parser@5.10.1
+  # Renovate security update: fast-xml-parser@5.10.1 || 5.12.0
+  - fast-xml-parser@5.10.1 || 5.12.0
   # Renovate security update: svgo@3.3.5
   - svgo@3.3.4
   - svgo@3.3.5
@@ -395,7 +395,7 @@ overrides:
   glob@<14.0.2: 14.0.4
   body-parser@<2.4.0: 2.4.0
   inngest: ^4.26.1
-  fast-xml-parser@<5.5.7: ^5.10.1
+  fast-xml-parser@<5.5.7: ^5.12.0
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
@@ -508,7 +508,7 @@ overrides:
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.42
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.45
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
   # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
   # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.

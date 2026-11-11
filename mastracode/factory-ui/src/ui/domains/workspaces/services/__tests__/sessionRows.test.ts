@@ -187,6 +187,17 @@ describe('oneRowPerCard', () => {
         ['status:working', ['work']],
       ]);
     });
+
+    it('pins only the session that was pinned, since each one is listed on its own', () => {
+      const [card] = oneRowPerCard([cardRow('triage', { pinned: true }), cardRow('work')], boards, {
+        revealChildSessions: true,
+      });
+
+      expect(card).toMatchObject({ session: { sessionId: 'work' }, pinned: false });
+      expect(card?.childRows).toMatchObject([{ session: { sessionId: 'triage' }, pinned: true }]);
+      // Unpinning the card's row leaves the child's own pin alone.
+      expect([...pinnedSessionsAfter(new Set(['triage', 'work']), card, false)]).toEqual(['triage']);
+    });
   });
 
   it('leaves sessions without a card alone', () => {
