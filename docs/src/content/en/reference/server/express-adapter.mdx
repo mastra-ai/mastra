@@ -169,7 +169,10 @@ const server = new MastraServer({ app, mastra })
 await server.init()
 
 app.get('/custom/protected', createAuthMiddleware({ mastra }), (req, res) => {
-  const user = res.locals.requestContext.get('mastra__user')
+  const user = res.locals.requestContext?.get('mastra__user')
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
   res.json({ user })
 })
 
@@ -177,6 +180,8 @@ app.get('/custom/public', createAuthMiddleware({ mastra, requiresAuth: false }),
   res.json({ ok: true })
 })
 ```
+
+`createAuthMiddleware()` calls the next handler without authenticating when the Mastra server has no `auth` config, or when the route matches an `auth.public` pattern. In those cases `mastra__user` isn't set, so protected handlers should reject requests without it, as the example above does.
 
 ## Accessing context
 
@@ -204,7 +209,7 @@ Available properties on `res.locals`:
 | `taskStore` | Task store for A2A operations |
 | `customRouteAuthConfig` | Per-route auth overrides |
 
-When auth is configured, read the authenticated user with `res.locals.requestContext.get('mastra__user')`. Clients can't set the reserved `mastra__user` key through the `requestContext` query parameter or body. On raw Express routes, the value is only populated after [`createAuthMiddleware()`](#adding-custom-routes) runs, so apply it before trusting the user. Don't rely on the legacy `user` key for authorization: a client can supply it on routes without auth middleware.
+When auth is configured, read the authenticated user with `res.locals.requestContext.get('mastra__user')`. Clients can't set the reserved `mastra__user` key through the `requestContext` query parameter or body. On raw Express routes, the value is only populated after [`createAuthMiddleware()`](#adding-custom-routes) runs, so apply it before trusting the user. Don't rely on the legacy `user` key for authorization. A client can supply it on routes without auth middleware.
 
 ## Adding middleware
 

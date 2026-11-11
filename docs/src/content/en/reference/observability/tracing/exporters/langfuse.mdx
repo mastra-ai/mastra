@@ -106,7 +106,8 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
-    description: "Logger level (default: 'info')",
+    description:
+      "Level for the logger the exporter creates when no `logger` is passed (default: 'info'). It has no effect on a supplied `logger`. When the exporter is registered with Mastra, Mastra replaces this logger with the application logger.",
     isOptional: true,
   },
 ]}

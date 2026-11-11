@@ -93,7 +93,7 @@ export const mastra = new Mastra({
     name: 'source',
     type: "'code' | 'db'",
     description:
-      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files at `codePath` (routed through a local FilesystemStore) and Studio shows filesystem actions. With 'code' and a configured source-control provider, agent overrides are persisted through source-control operations instead of the local filesystem. See [Editor storage options](/docs/studio/editor#choose-where-changes-are-stored) for the difference.",
+      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files at `codePath` (routed through a local FilesystemStore) and Studio shows filesystem actions. When `source` is 'code' and a source-control provider is configured, agent overrides are persisted through source-control operations instead of the local filesystem, and the provider controls the repository path. A provider passed as `sourceControlProvider` uses its own `pathPrefix`; the provider created from GitHub environment variables uses `codePath`. See [Editor storage options](/docs/studio/editor#choose-where-changes-are-stored) for the difference.",
     isOptional: true,
     defaultValue: "'db'",
   },
