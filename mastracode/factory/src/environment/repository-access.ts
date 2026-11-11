@@ -1,4 +1,6 @@
-import type { RepositoryAccess, VersionControl } from '../capabilities/version-control.js';
+import type { RepositoriesAccess, RepositoryAccess, VersionControl } from '../capabilities/version-control.js';
+
+type GetRepositoriesAccess = NonNullable<VersionControl['getRepositoriesAccess']>;
 
 /** The most repositories one Platform GitHub token can name. */
 const REPOSITORIES_PER_TOKEN = 10;
@@ -29,15 +31,29 @@ export function groupedRepositoryAccess(
   const groups: string[][] = [];
   for (let i = 0; i < ids.length; i += REPOSITORIES_PER_TOKEN) groups.push(ids.slice(i, i + REPOSITORIES_PER_TOKEN));
   const skipUntil = new Map<string[], number>();
+  const pending = new Map<string[], Promise<RepositoriesAccess | undefined>>();
+  const groupAccess = (group: string[], getRepositoriesAccess: GetRepositoriesAccess) => {
+    let request = pending.get(group);
+    if (!request) {
+      // Best-effort: the repository's own token still works without it.
+      request = getRepositoriesAccess({ orgId, repositoryIds: group })
+        .catch(() => undefined)
+        .then(access => {
+          if (!access) skipUntil.set(group, now() + GROUP_RETRY_AFTER_MS);
+          return access;
+        })
+        .finally(() => pending.delete(group));
+      pending.set(group, request);
+    }
+    return request;
+  };
   return async repositoryId => {
     const group = groups.find(candidate => candidate.includes(repositoryId));
-    if (group && group.length > 1 && versionControl.getRepositoriesAccess && (skipUntil.get(group) ?? 0) <= now()) {
-      // Parallel callers share the provider's in-flight mint and cache.
-      // Best-effort: the repository's own token still works without it.
-      const access = await versionControl.getRepositoriesAccess({ orgId, repositoryIds: group }).catch(() => undefined);
-      const own = access?.repositories?.[repositoryId];
+    const getRepositoriesAccess = versionControl.getRepositoriesAccess?.bind(versionControl);
+    if (group && group.length > 1 && getRepositoriesAccess && (skipUntil.get(group) ?? 0) <= now()) {
+      // Parallel callers share one group request.
+      const own = (await groupAccess(group, getRepositoriesAccess))?.repositories?.[repositoryId];
       if (own) return own;
-      skipUntil.set(group, now() + GROUP_RETRY_AFTER_MS);
     }
     return versionControl.getRepositoryAccess({ orgId, repositoryId });
   };
