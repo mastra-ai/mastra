@@ -25,6 +25,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
+import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
 import type { Workspace } from '../workspace/workspace';
 
@@ -854,7 +855,15 @@ export class AgentController<TState = {}> {
     const tagScope = Object.entries(tags ?? {}).filter(([key]) => !isReservedThreadMetadataKey(key));
     const { projectPath } = (initialState ?? {}) as { projectPath?: string };
     const scopeEntries = tagScope.length > 0 ? tagScope : projectPath ? [['projectPath', projectPath] as const] : [];
-    const threads = await this.queryThreads({ resourceId });
+    let metadata: Record<string, unknown> | undefined;
+    let filterable = true;
+    try {
+      if (scopeEntries.length > 0) metadata = validateStorageMetadataFilter(Object.fromEntries(scopeEntries));
+    } catch {
+      filterable = false;
+    }
+    // When storage can apply the scope, one matching thread answers the question.
+    const threads = await this.queryThreads(filterable ? { resourceId, metadata, limit: 1 } : { resourceId });
     const recoverable = threads.some(thread => {
       const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
       return scopeEntries.every(([key, value]) => metadata[key] === value);
@@ -1443,10 +1452,13 @@ export class AgentController<TState = {}> {
     resourceId,
     includeForkedSubagents,
     metadata,
+    limit,
   }: {
     resourceId?: string;
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
+    /** Return only the newest `limit` threads by `updatedAt`, read page by page instead of all at once. */
+    limit?: number;
   }): Promise<AgentControllerThread[]> {
     await this.initStorage();
     if (!this.#resolveStorage()) {
@@ -1462,14 +1474,28 @@ export class AgentController<TState = {}> {
             ...(metadata === undefined ? {} : { metadata }),
           };
 
-    const result = await memoryStorage.listThreads({ filter, perPage: false });
+    const keep = (thread: StorageThreadType) =>
+      includeForkedSubagents || (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent !== true;
 
-    const threads = includeForkedSubagents
-      ? result.threads
-      : result.threads.filter(thread => {
-          const metadata = thread.metadata as Record<string, unknown> | undefined;
-          return metadata?.forkedSubagent !== true;
+    let threads: StorageThreadType[];
+    if (limit === undefined) {
+      threads = (await memoryStorage.listThreads({ filter, perPage: false })).threads.filter(keep);
+    } else {
+      // Forked subagent threads are dropped after the read, so keep paging until
+      // `limit` threads remain or the resource runs out.
+      threads = [];
+      for (let page = 0; threads.length < limit; page++) {
+        const result = await memoryStorage.listThreads({
+          filter,
+          perPage: limit,
+          page,
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
+        threads.push(...result.threads.filter(keep));
+        if (!result.hasMore) break;
+      }
+      threads = threads.slice(0, limit);
+    }
 
     return threads.map((thread: StorageThreadType) => ({
       id: thread.id,

@@ -2102,6 +2102,8 @@ describe('agent-controller routes', () => {
         .getAgentController('code')!
         .createSession({ resourceId: 'user-limit', id: 'user-limit', ownerId: 'code' });
       for (let i = 0; i < 4; i++) await session.thread.create({ title: `t${i}` });
+      const memory = (await mastra.getStorage()!.getStore('memory'))!;
+      const listThreads = vi.spyOn(memory, 'listThreads');
 
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
@@ -2118,6 +2120,11 @@ describe('agent-controller routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+      // The newest page is read in storage, not every thread of the resource.
+      expect(listThreads).toHaveBeenCalled();
+      for (const [input] of listThreads.mock.calls) {
+        expect(input).toMatchObject({ perPage: 2, orderBy: { field: 'updatedAt', direction: 'DESC' } });
+      }
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {
