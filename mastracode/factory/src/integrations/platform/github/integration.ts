@@ -267,6 +267,23 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  /**
+   * In-flight mints by the same key as `#repositoryAccessCache`. Sessions that
+   * boot together all miss the cache at once; without this each one minted its
+   * own token and drained the Platform's per-installation mint budget.
+   */
+  readonly #repositoryAccessInFlight = new Map<string, Promise<RepositoryAccess | undefined>>();
+
+  #mintOnce<T extends RepositoryAccess | undefined>(cacheKey: string, mint: () => Promise<T>): Promise<T> {
+    const cached = this.#repositoryAccessCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.access as T);
+    this.#repositoryAccessCache.delete(cacheKey);
+    const inFlight = this.#repositoryAccessInFlight.get(cacheKey);
+    if (inFlight) return inFlight as Promise<T>;
+    const pending = mint().finally(() => this.#repositoryAccessInFlight.delete(cacheKey));
+    this.#repositoryAccessInFlight.set(cacheKey, pending);
+    return pending;
+  }
   /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
     string,
@@ -440,10 +457,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       // instead of re-minting through the Platform each time. The TTL keeps
       // a wide margin under GitHub's ~60min installation-token lifetime.
       const cacheKey = `${orgId}:${repositoryId}`;
-      const cached = this.#repositoryAccessCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) return cached.access;
-      this.#repositoryAccessCache.delete(cacheKey);
-
+      return this.#mintOnce(cacheKey, async () => {
       const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
       const cloneUrl = `https://github.com/${repository.slug}.git`;
@@ -518,15 +532,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }
         throw err;
       }
+      });
     },
     getRepositoriesAccess: async ({ orgId, repositoryIds }) => {
       const ids = [...new Set(repositoryIds)];
       if (ids.length === 0 || ids.length > MAX_REPOSITORIES_PER_TOKEN) return undefined;
       const cacheKey = `${orgId}:${[...ids].sort().join(',')}`;
-      const cached = this.#repositoryAccessCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) return cached.access;
-      this.#repositoryAccessCache.delete(cacheKey);
-
+      return this.#mintOnce(cacheKey, async () => {
       const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
       if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
       const found = repositories as NonNullable<(typeof repositories)[number]>[];
@@ -556,6 +568,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
       });
       return access;
+      });
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),

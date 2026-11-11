@@ -2583,6 +2583,25 @@ export class EventedRun<
       }
     }
 
+    // A label raised inside a nested workflow is recorded against the step that
+    // wraps it, so follow it down through the nested snapshots to the step that
+    // owns it. Otherwise the nested run would resume whichever step it finds first.
+    if (params.label && snapshotResumeLabel) {
+      let levelSnapshot: WorkflowRunState | null = snapshot;
+      while (levelSnapshot) {
+        const stepResult = (levelSnapshot.context as any)?.[steps[steps.length - 1]!];
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? stepResult?.suspendPayload?.__workflow_meta?.runId;
+        if (!nestedRunId) break;
+        levelSnapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: steps[steps.length - 1]!,
+          runId: nestedRunId,
+        });
+        const nestedStepId = levelSnapshot?.resumeLabels?.[params.label]?.stepId;
+        if (!nestedStepId) break;
+        steps = [...steps, nestedStepId];
+      }
+    }
+
     // Validate that the step is actually suspended
     const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
     const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
