@@ -340,6 +340,23 @@ describe('Workspace sidebar statuses', () => {
     },
   );
 
+  it("trusts a closed live check over the work item's open state", async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {
+        'review-thread:review-session': [pullRequestSubscription(202, 'closed')],
+      },
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    expect(
+      await screen.findByRole('link', { name: 'Review loader', description: /^Closed pull request/ }),
+    ).toBeInTheDocument();
+  });
+
   it.each(newestPullRequestCases)(
     'uses the newest related $newestStatus pull request instead of an older merged one',
     async ({ newestStatus, expectedMerged }) => {

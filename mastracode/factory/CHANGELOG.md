@@ -1,5 +1,53 @@
 # @mastra/factory
 
+## 0.28.0-alpha.9
+
+### Patch Changes
+
+- Factory servers no longer wait for a pass over every active run binding before they finish booting. The decision dispatcher already runs that catch-up in the background on its first tick, so boot stops being held for it. With a few hundred active bindings this took over a minute, which pushed deploys past their health check and left new instances unauthenticated for longer. ([#30025](https://github.com/mastra-ai/mastra/pull/30025))
+
+- Updated dependencies [[`13b4728`](https://github.com/mastra-ai/mastra/commit/13b47281ca4e91df1d5eda1dda55b14576529509)]:
+  - @mastra/code-sdk@1.19.0-alpha.9
+
+## 0.28.0-alpha.8
+
+### Patch Changes
+
+- The board listing no longer re-sends every card on each refresh. Each open tab refetched the whole board (megabytes on large projects) every few seconds, and the server serialized it again each time, stalling the process. The listing now builds its body once per board version and run activity, answers repeat reads with `304 Not Modified` via an `ETag`, and gzips the body for clients that accept it. ([#30014](https://github.com/mastra-ai/mastra/pull/30014))
+
+- Acknowledge running-session model switches immediately and apply the new default in the background without letting slow or failed session gateways block other sessions or newer defaults. ([#29979](https://github.com/mastra-ai/mastra/pull/29979))
+
+- Fixed the active-runs list failing with `invalid input syntax for type uuid` whenever a teammate's private session had a run in progress. Requests naming another person's private resource now answer 404 instead of 500, and a run whose access check fails is left out of the list rather than failing it. ([#30010](https://github.com/mastra-ai/mastra/pull/30010))
+
+- Updated dependencies:
+  - @mastra/code-sdk@1.19.0-alpha.8
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 0.28.0-alpha.7
+
+### Minor Changes
+
+- Added Factory-wide sandbox environment variables. Open **Settings › Manage Factory › Environment variables** to add a variable and choose where it applies: ([#29923](https://github.com/mastra-ai/mastra/pull/29923))
+
+  - **Runtime**: every command in every sandbox of the factory. Adds, edits and deletes take effect on the next command in a running sandbox, without restarting it.
+  - **Build**: the template build and setup commands only. Editing one rebuilds the template on the next build.
+  - **Both**: runtime and build.
+
+  Values are encrypted with the factory's credential encryption key and are never returned by the API or shown again in the UI. When sign-in is on and no key is configured, saving is blocked and the settings page explains why.
+
+### Patch Changes
+
+- Stop GitHub, GitLab, Linear, Jira and incident.io events from freezing the Factory server on large boards. Each event used to copy every card on the board, two or three times, to find the one it was about. Events, the issue and pull request sweeps, and board edits now read the board once and copy only the card they act on. On a 2,180-card board, 90 GitHub events went from 1.4 s to 0.06 s of blocked CPU. ([#29991](https://github.com/mastra-ai/mastra/pull/29991))
+
+- Factory agents are no longer told that approving a plan starts a goal. In Factory, approving a plan switches to Build mode and implements it without starting a goal, and the agent's instructions now say so. ([#28037](https://github.com/mastra-ai/mastra/pull/28037))
+
+- Fixed slow GitHub board loads in Factory. Listing a project's issues and pull requests no longer runs Factory rules on every board poll, so boards stay fast with many repositories and open tabs. A background check now runs every five minutes and creates Review cards for open pull requests whose opened webhook never arrived, checking the 600 newest per repository, and restores the open pull request on a card that lost track of it. Set `MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS` (or `MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS` on Mastra Platform) to change its cadence. Linking a repository through Mastra Platform now imports its open issues and pull requests like a direct GitHub App connection does. ([#29995](https://github.com/mastra-ai/mastra/pull/29995))
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`210458a`](https://github.com/mastra-ai/mastra/commit/210458a144ac5a934663db7bfe6cc650c0d2adaa), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`ac40e76`](https://github.com/mastra-ai/mastra/commit/ac40e762db7b6614076273221aae6681945f9da1), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/code-sdk@1.19.0-alpha.7
+  - @mastra/platform-workspace@1.13.0-alpha.1
+
 ## 0.28.0-alpha.6
 
 ### Minor Changes

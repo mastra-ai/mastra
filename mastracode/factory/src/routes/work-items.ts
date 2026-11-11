@@ -50,6 +50,7 @@ import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/wor
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
+import { boardSnapshot, matchesEtag } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
@@ -394,11 +395,25 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({
-            workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
-          });
+          const snapshot = boardSnapshot(
+            items,
+            toWireWorkItem,
+            sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
+            sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+          );
+          // Every open tab refetches the whole board on each feed frame; most frames leave it unchanged.
+          const headers: Record<string, string> = {
+            ETag: snapshot.etag,
+            'Cache-Control': 'private, no-cache',
+            Vary: 'Accept-Encoding',
+          };
+          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) return c.body(null, 304, headers);
+          headers['Content-Type'] = 'application/json; charset=UTF-8';
+          if (/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) {
+            headers['Content-Encoding'] = 'gzip';
+            return c.body(new Uint8Array(await snapshot.gzipped()), 200, headers);
+          }
+          return c.body(snapshot.json, 200, headers);
         },
       }),
 
@@ -417,7 +432,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!query.success) return c.json({ error: 'invalid_metrics_range' }, 400);
           const { windowStart, windowEnd } = parseMetricsRange(query.data.from, query.data.to, new Date());
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const items = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });

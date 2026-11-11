@@ -6,11 +6,11 @@ export { DashboardGrid, DashboardGridCell, DashboardGridRow } from './components
 export type { DashboardSpan } from './components/dashboard-grid';
 export { ViewGate } from './components/view-gate';
 export { WidgetError } from './components/widget-error';
-export { AlertAction, AlertMenu, DrilldownAction, PinAction } from './components/widget-controls';
+export { AlertAction, AlertMenu, DrilldownAction } from './components/widget-controls';
 export type { AlertEntry } from './components/widget-controls';
 export { METRICS_DASHBOARD } from './metrics-dashboard';
 export { StatelessWidget } from './components/stateless-widget';
-export type { StatelessWidgetPin, StatelessWidgetProps } from './components/stateless-widget';
+export type { StatelessWidgetProps } from './components/stateless-widget';
 export { useDashboardRequests, useDashboardResults, toDashboardResult } from './hooks/use-dashboard-requests';
 export { useDashboardEnvironment } from './hooks/use-dashboard-environment';
 export { hasDrilldownAction, useDrilldown, useViewMenu, viewMenu } from './hooks/use-widget-views';
@@ -36,7 +36,6 @@ export type {
   ShownGate,
   WidgetKind,
   WidgetKindProps,
-  WidgetPin,
   WidgetPlanContext,
   WidgetRequests,
   WidgetState,

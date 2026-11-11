@@ -814,25 +814,9 @@ export const FACTORY_ROUTE_CONTRACTS = {
   projectApplyDefaultModel: {
     method: 'POST',
     path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Apply the Factory default model to running work and review threads',
+    description: 'Start applying the Factory default model to running work and review threads in the background',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      modelId: z.string(),
-      applied: z.array(z.string()),
-      skipped: z.array(
-        z.object({
-          threadId: z.string(),
-          reason: z.enum([
-            'not-running',
-            'work-item-missing',
-            'stage-inactive',
-            'thread-missing',
-            'mode-unknown',
-            'apply-failed',
-          ]),
-        }),
-      ),
-    }),
+    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
   },
   projectDelete: {
     method: 'DELETE',

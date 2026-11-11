@@ -278,6 +278,60 @@ function isExpectedResponseCloseError(error: unknown): boolean {
   );
 }
 
+/**
+ * Returns `response` with a pass-through body that holds the re-dispatched
+ * custom route `request` until that body is fully read, errors or is cancelled.
+ *
+ * `new Request(url, { signal })` gives the request its own signal and forwards
+ * the outer abort to it through a listener that only weakly references the
+ * request's controller (nodejs/undici#4068). Once a custom route returns a
+ * streaming Response, nothing else holds that inner Request, so a GC can drop
+ * it and a client disconnect never reaches `c.req.raw.signal` (#29154).
+ *
+ * The reference lives on the body because the body is reachable exactly while
+ * an adapter is still sending the response. Anything reachable from the outer
+ * signal (a WeakMap keyed by it, or an abort listener on it) would leak instead:
+ * undici's request finalizer holds the outer signal strongly while the inner
+ * controller is alive, so signal -> request -> controller -> signal is never
+ * collected when the signal never aborts, as after a normal Express response.
+ * An abort ends or cancels the body, which releases the request too.
+ */
+function retainRequestWhileBodyIsOpen(response: Response, request: Request): Response {
+  const source = response.body;
+  if (!source) return response;
+
+  const reader = source.getReader();
+  const retained: { request?: Request } = { request };
+  const release = () => {
+    retained.request = undefined;
+  };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            release();
+            controller.close();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          release();
+          controller.error(error);
+        }
+      },
+      cancel(reason) {
+        release();
+        return reader.cancel(reason);
+      },
+    },
+    // Read from the route's body only when the adapter asks for a chunk.
+    { highWaterMark: 0 },
+  );
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
 function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
   return Boolean(response.writableEnded || response.destroyed);
 }
@@ -1362,7 +1416,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const response = await this.customRouteHandler(request, { requestContext }, executionCtx);
 
     if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
-    return response;
+    return signal ? retainRequestWhileBodyIsOpen(response, request) : response;
   }
 
   /**

@@ -550,6 +550,27 @@ describe('FactoryDecisionDispatcher', () => {
     expect(reconcileToolResults).toHaveBeenCalledTimes(1);
   });
 
+  it('catches up on bound-thread tool results on its first loop after start, with no local activity', async () => {
+    // Boot no longer awaits a reconcile; this first pass covers results written while no process watched.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const reconcileToolResults = vi.fn(async () => {});
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
+      storage,
+      reconcileToolResults,
+    });
+
+    dispatcher.start();
+    try {
+      await vi.waitFor(() => expect(reconcileToolResults).toHaveBeenCalledOnce());
+    } finally {
+      await dispatcher.stop();
+    }
+  });
+
   it('throttles the reconcile walk, coalesces overlapping runs, and never blocks claiming', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const claims = vi.spyOn(storage, 'claimPendingStarts');
