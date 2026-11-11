@@ -133,7 +133,7 @@ export class WorkflowsValkey extends WorkflowsStorage {
     }
   }
 
-  /** Reads the records with one script call per few hundred runs, all on the store's clock. */
+  /** Reads the records with single-key script calls the client multiplexes, 500 at a time. */
   public override async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
     try {
       return await getRunOwnerships(this.client, runIds);
