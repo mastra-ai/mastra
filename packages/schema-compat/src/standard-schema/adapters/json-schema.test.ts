@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { isStandardSchemaWithJSON } from '../standard-schema';
 import { toStandardSchema } from './json-schema';
 
@@ -289,6 +289,112 @@ describe('json-schema standard-schema adapter', () => {
       if ('issues' in invalidResult && invalidResult.issues) {
         expect(invalidResult.issues.length).toBeGreaterThan(0);
       }
+    });
+  });
+
+  describe('format keywords', () => {
+    const dialects: [string, string | undefined][] = [
+      ['draft-07', undefined],
+      ['draft-2020-12', 'https://json-schema.org/draft/2020-12/schema'],
+    ];
+
+    it.each(dialects)('enforces standard string formats (%s)', async (_name, $schema) => {
+      const schema = {
+        ...($schema ? { $schema } : {}),
+        type: 'object',
+        properties: {
+          email: { type: 'string', format: 'email' },
+          at: { type: 'string', format: 'date-time' },
+        },
+        required: ['email', 'at'],
+      } as JSONSchema7;
+
+      const standardSchema = toStandardSchema(schema);
+
+      const valid = await standardSchema['~standard'].validate({
+        email: 'ada@example.com',
+        at: '2026-11-05T10:00:00Z',
+      });
+      expect('value' in valid).toBe(true);
+
+      const badEmail = await standardSchema['~standard'].validate({
+        email: 'not-an-email',
+        at: '2026-11-05T10:00:00Z',
+      });
+      expect('issues' in badEmail).toBe(true);
+
+      const badDate = await standardSchema['~standard'].validate({
+        email: 'ada@example.com',
+        at: 'tomorrow',
+      });
+      expect('issues' in badDate).toBe(true);
+
+      // `date-time` requires a timezone offset.
+      const noOffset = await standardSchema['~standard'].validate({
+        email: 'ada@example.com',
+        at: '2024-01-01T10:00:00',
+      });
+      expect('issues' in noOffset).toBe(true);
+    });
+
+    it('does not warn about unknown formats', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const standardSchema = toStandardSchema({
+          type: 'object',
+          properties: { since: { type: 'string', format: 'date-time' } },
+          required: ['since'],
+        } as JSONSchema7);
+
+        await standardSchema['~standard'].validate({ since: '2026-11-05T10:00:00Z' });
+
+        const messages = warn.mock.calls.flat().join(' ');
+        expect(messages).not.toContain('unknown format');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('keeps caller-provided formats ahead of the built-in ones', async () => {
+      const standardSchema = toStandardSchema(
+        {
+          type: 'object',
+          properties: { email: { type: 'string', format: 'email' } },
+          required: ['email'],
+        } as JSONSchema7,
+        { ajvOptions: { formats: { email: /@mastra\.ai$/ } } },
+      );
+
+      const allowed = await standardSchema['~standard'].validate({ email: 'ada@mastra.ai' });
+      expect('value' in allowed).toBe(true);
+
+      const rejected = await standardSchema['~standard'].validate({ email: 'ada@example.com' });
+      expect('issues' in rejected).toBe(true);
+    });
+
+    it('allows opting out of format validation', async () => {
+      const standardSchema = toStandardSchema(
+        {
+          type: 'object',
+          properties: { at: { type: 'string', format: 'date-time' } },
+          required: ['at'],
+        } as JSONSchema7,
+        { ajvOptions: { validateFormats: false } },
+      );
+
+      const result = await standardSchema['~standard'].validate({ at: 'not-a-date' });
+      expect('value' in result).toBe(true);
+    });
+
+    it('enforces formatMinimum now that formats are registered', async () => {
+      const standardSchema = toStandardSchema({
+        type: 'object',
+        properties: { d: { type: 'string', format: 'date', formatMinimum: '2020-01-01' } },
+        required: ['d'],
+      } as JSONSchema7);
+
+      expect('value' in (await standardSchema['~standard'].validate({ d: '2021-01-01' }))).toBe(true);
+      expect('issues' in (await standardSchema['~standard'].validate({ d: '2019-01-01' }))).toBe(true);
     });
   });
 

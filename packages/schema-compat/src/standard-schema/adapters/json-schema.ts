@@ -1,6 +1,7 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import { Ajv } from 'ajv';
 import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
@@ -213,6 +214,18 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
         strict: false,
         ...this.#options.ajvOptions,
       });
+
+      // Ajv ships without format validators, so `format` keywords (e.g. date-time, email) are
+      // ignored and Ajv logs `unknown format "..." ignored`. Register the standard formats.
+      addFormats(this.#ajvInstance);
+
+      // addFormats installs standard formats and would overwrite any same-named format supplied
+      // via `ajvOptions.formats`, so re-apply the caller's formats to keep their precedence.
+      for (const [name, format] of Object.entries(this.#options.ajvOptions?.formats ?? {})) {
+        if (format !== undefined) {
+          this.#ajvInstance.addFormat(name, format);
+        }
+      }
 
       this.#ajvValidateCache = this.#ajvInstance.compile(this.#schema);
     }

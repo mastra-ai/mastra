@@ -77,4 +77,34 @@ describeForAllEngines('AIMock loop scenario: structured output schema types', en
     const object = await (output as unknown as { object: Promise<unknown> }).object;
     expect(object).toEqual({ winners: [{ winner: 'Barack Obama', year: '2012' }] });
   });
+
+  it('rejects a JSON Schema value that breaks a string format', async () => {
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      errorProcessors: [],
+      prompt: 'When does the conference start?',
+      stopWhen: stepCountIs(1),
+      collectChunks: true,
+      structuredOutput: {
+        schema: {
+          type: 'object',
+          properties: {
+            // `date-time` requires a timezone offset, so the fixture below is invalid.
+            startsAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['startsAt'],
+        },
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: JSON.stringify({ startsAt: '2024-01-01T10:00:00' }) });
+      },
+    });
+
+    const errorChunk = chunks?.find((c: any) => c?.type === 'error');
+    expect(errorChunk).toBeDefined();
+    const message = (errorChunk as any)?.payload?.error?.message ?? '';
+    expect(message).toContain('validation failed');
+    expect(message).toContain('startsAt');
+  });
 });

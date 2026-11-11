@@ -594,6 +594,37 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it('enforces string formats in MCP tool input schemas', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'events_since',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { since: { type: 'string' as const, format: 'date-time' } },
+            required: ['since'],
+          },
+        },
+      ],
+    });
+    const callTool = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tool = (await client.tools()).events_since;
+    expect(tool).toBeDefined();
+
+    // `date-time` requires a timezone offset.
+    const rejected = await tool?.execute?.({ since: '2024-01-01T10:00:00' });
+    expect(rejected).toMatchObject({ error: true, message: expect.stringMatching(/input validation failed/i) });
+    expect(callTool).not.toHaveBeenCalled();
+
+    await tool?.execute?.({ since: '2024-01-01T10:00:00Z' });
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
   it('skips tools whose input schema is nested too deeply to validate', async () => {
     const sdkClient = (client as any).client as Client;
     let nestedSchema: Record<string, unknown> = { type: 'string' };
