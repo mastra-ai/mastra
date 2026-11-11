@@ -2038,6 +2038,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/mcp-guide",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/using-tools",
       "destination": "/docs/agents/tools",
       "permanent": true
@@ -3919,6 +3924,11 @@
     },
     {
       "source": "/docs/mcp/overview/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/mcp-guide/llms.txt",
       "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     },
