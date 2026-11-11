@@ -29,6 +29,16 @@ export function billingOnlyServer(
     ],
     apiRoutes: [
       ...billingApiRoutes(organizations, execution, commercial, artifacts),
+      // Public native auth handlers skip user middleware. The constrained Hono
+      // path excludes capabilities so Studio can still discover authentication.
+      ...(studio
+        ? [
+            registerApiRoute('/:api{api}/auth/:action{(?!capabilities$).+}', {
+              method: 'ALL',
+              handler: context => context.json({ error: 'billing_gateway_required' }, 403),
+            }),
+          ]
+        : []),
       // Discovery remains closed in both modes. With Studio disabled, also
       // cover framework-public routes that deliberately skip user middleware.
       registerApiRoute(studio ? '/.well-known/*' : '/*', {

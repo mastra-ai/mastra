@@ -25,16 +25,44 @@ Reusing an operation's exact key and input returns its saved result. A different
 
 Agent output contains `result.object.artifacts`; a completed kit contains `result.output.artifacts`. Each reference includes an opaque ID, safe filename, dimensions, byte count and SHA-256 digest. Binary image data stays outside billing JSON.
 
-From trusted code, fetch the protected route with a freshly authenticated creator credential:
+From the template directory, replace `ARTIFACT_ID` with the reference's `id` and run this command. It reads the synthetic local owner's private profile without printing its credential, downloads from the running local server, and creates `bird.png` with owner-only permissions. Choose a new output filename for each download; an existing file is never overwritten. The optional third argument sets the local server URL when its port differs.
 
-```ts
-const response = await fetch(`${baseUrl}/billing/workspaces/${workspaceId}/artifacts/${artifactId}`, {
-  headers: { Authorization: `Bearer ${credential}` },
+```sh
+node --input-type=module - ARTIFACT_ID bird.png http://127.0.0.1:4111 <<'NODE'
+import { readFile, open } from 'node:fs/promises';
+
+const [artifactId, output, baseUrl = 'http://127.0.0.1:4111'] = process.argv.slice(2);
+if (!/^[a-f0-9-]{36}$/i.test(artifactId ?? '') || !output) {
+  throw new Error('Provide an artifact ID and a new output filename.');
+}
+const base = new URL(baseUrl);
+if (base.protocol !== 'http:' || base.hostname !== '127.0.0.1' || base.username || base.password) {
+  throw new Error('Use the local server at http://127.0.0.1:PORT.');
+}
+const manifest = JSON.parse(await readFile('data/local-profiles.json', 'utf8'));
+const owner = manifest.profiles.owner;
+const response = await fetch(new URL(
+  `/billing/workspaces/${encodeURIComponent(owner.workspaceId)}/artifacts/${artifactId}`,
+  base,
+), {
+  headers: { Authorization: `Bearer ${owner.credential}` },
   redirect: 'error',
 });
-if (!response.ok) throw new Error(`Artifact unavailable: ${response.status}`);
+if (!response.ok || response.headers.get('content-type') !== 'image/png') {
+  throw new Error(`Artifact unavailable: ${response.status}`);
+}
 const png = new Uint8Array(await response.arrayBuffer());
+const file = await open(output, 'wx', 0o600);
+try {
+  await file.writeFile(png);
+} finally {
+  await file.close();
+}
+console.log(`Saved ${png.length} bytes to ${output}`);
+NODE
 ```
+
+Open the saved PNG with your image viewer. For an artifact created by another profile, use that creator's authenticated credential in trusted code. Production integrations use their configured authenticated creator credential rather than this local profile command.
 
 Current membership and creator ownership are checked on every read. Other workspace members cannot download another person's image. Reads send private, no-store headers and never bill. Missing, corrupt or unsafe linked files return `410` with `artifact_unavailable`; replay keeps its saved financial identity and never regenerates the file. Pending financial settlement does not expose image bytes.
 
