@@ -1307,6 +1307,7 @@ export class MastraFactory {
           workItemId: string;
           revision: number;
           actor: FactoryRuleActor;
+          initiatingBindingId?: string;
         }): Promise<void> =>
           terminalCleanup({
             orgId: args.orgId,
@@ -1315,7 +1316,11 @@ export class MastraFactory {
             revision: args.revision,
             // Leave the seat that drove its own terminal transition running; it
             // is already returning from its transition tool call.
-            ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),
+            ...(args.initiatingBindingId
+              ? { initiatingBindingId: args.initiatingBindingId }
+              : args.actor.type === 'agent'
+                ? { initiatingBindingId: args.actor.bindingId }
+                : {}),
           })
       : retireTerminalSessions;
     const transitionService = workItemsReady
