@@ -5,6 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import { sealUserTurnMessage } from '../../memory/turn-markup';
 import type { AnySpan } from '../../observability/types';
 import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
@@ -2688,7 +2689,9 @@ export class MessageList {
       });
     }
 
-    const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    const messageV2 = sealUserTurnMessage(
+      convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext()),
+    );
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)

@@ -5,30 +5,25 @@ import type { CallToolRequest, CallToolResult, JSONRPCRequest } from '@modelcont
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import type { McpAppModelContextParams } from '../context/mcp-app-host-context-value';
+import { installMcpAppSandboxLock, sandboxAttributeForProxy, sandboxProxyHtml } from './mcp-app-sandbox';
 import { useTheme } from '@/ds/components/ThemeProvider';
 
 type HostCapabilities = NonNullable<ComponentProps<typeof AppRenderer>['hostCapabilities']>;
 
-const SANDBOX_PROXY_HTML = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><style>html,body{margin:0;padding:0;width:100%;height:100%}</style></head>
-<body><script>
-window.addEventListener('message',function(e){
-  var d=e.data;if(!d||typeof d!=='object')return;
-  if(d.method==='ui/notifications/sandbox-resource-ready'){
-    var h=(d.params||{}).html;if(h){document.open();document.write(h);document.close()}
-  }
-});
-window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/sandbox-proxy-ready',params:{}},'*');
-<\/script></body></html>`;
-
 let _blobUrl: URL | null = null;
+let _blobOrigin: string | null = null;
 function getSandboxBlobUrl(): URL {
-  if (!_blobUrl) {
-    const blob = new Blob([SANDBOX_PROXY_HTML], { type: 'text/html' });
+  const origin = window.location.origin;
+  if (!_blobUrl || _blobOrigin !== origin) {
+    // Opaque to Studio: the proxy document does not inherit this page's origin.
+    const blob = new Blob([sandboxProxyHtml(origin)], { type: 'text/html' });
     _blobUrl = new URL(URL.createObjectURL(blob));
+    _blobOrigin = origin;
   }
   return _blobUrl;
 }
+
+if (typeof document !== 'undefined') installMcpAppSandboxLock();
 
 /** Renders an app's model context as text, labelled with the app it comes from. Empty context clears it. */
 function modelContextText(toolName: string, params: JSONRPCRequest['params']): string | undefined {
@@ -147,7 +142,19 @@ export function McpAppViewer({
   }, [toolResult]);
 
   const resolvedSandboxUrl = useMemo(() => sandboxUrl ?? getSandboxBlobUrl(), [sandboxUrl]);
-  const sandbox: SandboxConfig = useMemo(() => ({ url: resolvedSandboxUrl }), [resolvedSandboxUrl]);
+  // `@mcp-ui/client` currently ignores `permissions` and hardcodes allow-same-origin.
+  // `installMcpAppSandboxLock` applies this value before the frame navigates.
+  const sandbox: SandboxConfig = useMemo(
+    () => ({
+      url: resolvedSandboxUrl,
+      permissions: sandboxAttributeForProxy(
+        'allow-scripts allow-forms',
+        resolvedSandboxUrl.href,
+        typeof window === 'undefined' ? 'http://localhost' : window.location.origin,
+      ),
+    }),
+    [resolvedSandboxUrl],
+  );
 
   const handleCallTool = useCallback(
     async (params: CallToolRequest['params']): Promise<CallToolResult> => {

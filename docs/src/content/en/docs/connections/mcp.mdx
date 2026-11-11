@@ -461,13 +461,15 @@ export const greetingServer = new MCPServer({
 })
 ```
 
-`getGreeting` runs on your server, so it can call any API with your server's credentials. The app's iframe has no network access of its own.
+`getGreeting` runs on your server, so it can call any API with your server's credentials. The app reaches your server through the host bridge, not by calling Studio itself.
 
 ### Sandbox security
 
 Mastra Studio uses [`@mcp-ui/client`](https://www.npmjs.com/package/@mcp-ui/client) to load app HTML through a sandbox proxy and communicate over JSON-RPC with `postMessage`.
 
-App iframes allow scripts, forms, and popups. They can't access the parent page's DOM, cookies, or storage. The host controls all communication with the guest app.
+Guest HTML runs in an inner frame sandboxed with `allow-scripts` and `allow-forms`, and that sandbox doesn't include Studio's origin, so the frame can't read the parent page, cookies, or storage or send credentialed requests to Studio. When the proxy is a same-origin blob, Studio also removes `allow-same-origin` from the outer frame, ignores any sandbox attribute the app supplies, and applies a content security policy that blocks connections back to the Studio origin.
+
+If you replace the built-in proxy, host it on a separate registrable domain rather than the Studio host. The host still controls all communication with the guest app.
 
 ## MCP events
 

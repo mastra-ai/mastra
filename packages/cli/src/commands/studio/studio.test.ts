@@ -37,7 +37,7 @@ function createStudioFixture() {
   return dir;
 }
 
-function request(url: string): Promise<{ status: number; body: string }> {
+function request(url: string): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
     http
       .get(url, response => {
@@ -48,6 +48,7 @@ function request(url: string): Promise<{ status: number; body: string }> {
           resolve({
             status: response.statusCode ?? 0,
             body: chunks.join(''),
+            headers: response.headers,
           });
         });
       })
@@ -323,6 +324,27 @@ describe('studio base path support', () => {
 
       expect(spaLikeRoute.status).toBe(200);
       expect(spaLikeRoute.body).toContain('<body>studio</body>');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
+  it('sends a content security policy that limits frames on the Studio document', async () => {
+    const studioDir = createStudioFixture();
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const htmlResponse = await request(`http://127.0.0.1:${port}/`);
+      const policy = htmlResponse.headers['content-security-policy'];
+
+      expect(htmlResponse.status).toBe(200);
+      expect(policy).toContain("frame-src 'self' blob: data:");
+      expect(policy).toContain("object-src 'none'");
+      expect(policy).toContain("frame-ancestors 'self'");
     } finally {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
     }
