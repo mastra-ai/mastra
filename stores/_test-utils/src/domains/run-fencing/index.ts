@@ -259,7 +259,8 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         expect(expired.acquired).toBe(true);
         await sleep(SHORT_LEASE_MS * 3);
 
-        // More ids than any adapter sends in one request, with the claimed runs in the first, a middle and the last chunk.
+        // More ids than the largest chunk an adapter reads at once (MongoDB's 1,000), with claimed
+        // runs at the start, in the middle and at the end.
         const unclaimed = Array.from({ length: 1_200 }, (_, i) => `${prefix}-unclaimed-${i}`);
         const runIds = [live.runId, ...unclaimed.slice(0, 600), released.runId, ...unclaimed.slice(600), expiredRunId];
         const records = await workflows.getRunOwnerships({ runIds });

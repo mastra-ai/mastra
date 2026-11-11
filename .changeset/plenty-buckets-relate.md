@@ -10,4 +10,4 @@
 '@mastra/pg': patch
 ---
 
-Sped up the boot-time restart of workflow runs when many runs are active. Whether each run is still owned by another instance is now read with one request per page of runs instead of one request per run (#28712).
+The boot-time workflow restart now checks whether a page of runs is still owned by another instance with one request instead of one request per run (#28712).
