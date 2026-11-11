@@ -72,11 +72,7 @@ type Variant = 'agent defaultOptions' | 'per-call tracingOptions' | 'durable age
 
 type Hide = { hideInput?: boolean; hideOutput?: boolean };
 
-function setup(
-  variant: Variant,
-  tracingOptions: Hide,
-  transform?: 'input-to-output' | 'output-to-input',
-) {
+function setup(variant: Variant, tracingOptions: Hide, transform?: 'input-to-output' | 'output-to-input') {
   const exporter = new TestExporter();
   const storage = new MockStore();
 
@@ -122,11 +118,7 @@ async function waitForScore(storage: MockStore, exporter: TestExporter, runId: s
 
 const HIDE_BOTH: Hide = { hideInput: true, hideOutput: true };
 
-async function runAndScore(
-  variant: Variant,
-  hide: Hide,
-  transform?: 'input-to-output' | 'output-to-input',
-) {
+async function runAndScore(variant: Variant, hide: Hide, transform?: 'input-to-output' | 'output-to-input') {
   const { exporter, storage, agent, callOptions } = setup(variant, hide, transform);
   const runId = `run-${variant.replace(/\W+/g, '-')}-${JSON.stringify(hide).replace(/\W+/g, '-')}`;
 
