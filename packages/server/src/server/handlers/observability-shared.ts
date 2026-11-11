@@ -550,6 +550,14 @@ export function assertObservabilityTraceQueryRootSpanValuesSupported(
   throw new coreStorage.TraceQueryValidationError([rootSpanFieldIssue(['path'], plan.path)]);
 }
 
+export function assertObservabilitySpanDurationSortSupported(store: ObservabilityStorage, orderBy: { field: string }) {
+  if (orderBy.field === 'durationMs' && !getFeatures(store)?.includes('span-query-duration-sort')) {
+    throw new HTTPException(501, {
+      message: 'Span duration sorting is not supported by the configured observability store',
+    });
+  }
+}
+
 export function supportsObservabilityTraceQueryTimeToFirstChunkSort(observabilityStore: ObservabilityStorage) {
   return (
     getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE) ===
@@ -690,6 +698,7 @@ export type ObservabilityStorageCapabilities = {
   threadQueryRows: boolean;
   spanQuery: boolean;
   spanQueryTextSearch: boolean;
+  spanQueryDurationSort: boolean;
   spanQueryContextFields: boolean;
   spanQueryModelFields: boolean;
   spanQueryOutcomeFields: boolean;
@@ -735,6 +744,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   spanQuery: false,
   spanQueryTextSearch: false,
   spanAggregate: false,
+  spanQueryDurationSort: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
   spanAggregateModelDimensions: false,
@@ -845,6 +855,10 @@ export function getObservabilityStorageCapabilities(
     spanQuery,
     spanQueryTextSearch:
       spanQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('span-query-text-search'),
+    spanQueryDurationSort:
+      spanQuery &&
+      coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') === true &&
+      declares('span-query-duration-sort'),
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     spanQueryModelFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE),
     spanQueryOutcomeFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE),

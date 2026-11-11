@@ -7,7 +7,7 @@ import type { Card } from '../storage/domains/work-items/base.js';
 const gzip = promisify(gzipCallback);
 
 interface CardsJson {
-  /** Random per cached list, so an ETag from before a restart never matches a different board. */
+  /** Names the cards in the ETag. */
   id: string;
   json: string;
   latest?: BoardSnapshot;
@@ -19,8 +19,8 @@ export interface BoardSnapshot {
   gzipped(): Promise<Buffer>;
 }
 
-// Keyed on the list `listShared` returns: one frozen array per board version, so a new
-// version or an evicted list drops its entry with it.
+// Keyed on the list a caller keeps per board version: `listShared` returns one frozen array until
+// a card changes, so a new version or an evicted list drops its entry with it.
 const cardsJson = new WeakMap<readonly Card[], CardsJson>();
 
 /**
@@ -34,20 +34,53 @@ export function boardSnapshot(
   runningSessionIds: readonly string[],
   parkedSessionIds: readonly string[],
 ): BoardSnapshot {
+  // Random per cached list, so an ETag from before a restart never matches a different board.
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, () => randomUUID());
+}
+
+/**
+ * The wire body for the cards a scoped listing picked. Its ETag names the cards by a hash of
+ * their body, not by the board version: a write to a card outside the scope leaves it unchanged,
+ * so the tab gets a 304. A caller that passes the same list again shares its serialization.
+ */
+export function scopedSnapshot(
+  items: readonly Card[],
+  toWire: (item: Card) => unknown,
+  runningSessionIds: readonly string[],
+  parkedSessionIds: readonly string[],
+): BoardSnapshot {
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1);
+}
+
+function snapshot(
+  items: readonly Card[],
+  toWire: (item: Card) => unknown,
+  runningSessionIds: readonly string[],
+  parkedSessionIds: readonly string[],
+  cardsId: (json: string) => string,
+): BoardSnapshot {
   let cards = cardsJson.get(items);
   if (!cards) {
-    cards = { id: randomUUID(), json: JSON.stringify(items.map(toWire)) };
+    const json = JSON.stringify(items.map(toWire));
+    cards = { id: cardsId(json), json };
     cardsJson.set(items, cards);
   }
-  const activity = JSON.stringify([runningSessionIds, parkedSessionIds]);
-  const etag = `W/"${cards.id}.${createHash('sha1').update(activity).digest('base64url')}"`;
+  const etag = `W/"${cards.id}.${sha1(JSON.stringify([runningSessionIds, parkedSessionIds]))}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 
-  const json = `{"workItems":${cards.json},"runningSessionIds":${JSON.stringify(runningSessionIds)},"parkedSessionIds":${JSON.stringify(parkedSessionIds)}}`;
+  const json = listingJson(cards.json, runningSessionIds, parkedSessionIds);
   let gzipped: Promise<Buffer> | undefined;
   // zlib runs on the libuv pool, off the event loop.
   cards.latest = { etag, json, gzipped: () => (gzipped ??= gzip(json)) };
   return cards.latest;
+}
+
+function sha1(text: string): string {
+  return createHash('sha1').update(text).digest('base64url');
+}
+
+function listingJson(cards: string, runningSessionIds: readonly string[], parkedSessionIds: readonly string[]): string {
+  return `{"workItems":${cards},"runningSessionIds":${JSON.stringify(runningSessionIds)},"parkedSessionIds":${JSON.stringify(parkedSessionIds)}}`;
 }
 
 /** Whether an `If-None-Match` header names this ETag (weak comparison, as for GET). */

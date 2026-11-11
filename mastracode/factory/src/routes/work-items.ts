@@ -11,7 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardFlow, boardPhaseOutcomes } from '../boards/index.js';
+import { boardFlow, boardPhaseOutcomes, isPullRequestCard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -47,10 +47,13 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { workItemBranchSource } from '../work-item-branch.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
+import { relatedCardIndex } from '../work-items/related-cards.js';
+import type { PullRequestFacts } from '../work-items/related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { boardSnapshot, matchesEtag } from './board-snapshot.js';
+import { boardSnapshot, matchesEtag, scopedSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
@@ -95,6 +98,51 @@ function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) 
     }
   }
   return [...picked];
+}
+
+const CARD_PULL_REQUESTS: PullRequestFacts<Card> = {
+  isPullRequest: card => isPullRequestCard({ source: workItemBranchSource(card.externalSource) }),
+  headBranch: card => {
+    const branch = card.workItem.metadata?.headBranch;
+    return typeof branch === 'string' ? branch : undefined;
+  },
+};
+
+// One index per board version: `listShared` returns the same array until a card changes.
+const relatedCards = new WeakMap<readonly Card[], (card: Card) => Card[]>();
+// One list per board version, so every tab's sidebar shares its serialization.
+const cardsInSessions = new WeakMap<readonly Card[], Card[]>();
+
+/** The cards `holds` picks, and the cards related to them, in board order. */
+function withRelatedCards(board: readonly Card[], holds: (card: Card) => boolean): Card[] {
+  let relatedTo = relatedCards.get(board);
+  if (!relatedTo) {
+    relatedTo = relatedCardIndex(board, CARD_PULL_REQUESTS);
+    relatedCards.set(board, relatedTo);
+  }
+  const picked = new Set<Card>();
+  for (const card of board) {
+    if (!holds(card)) continue;
+    picked.add(card);
+    for (const related of relatedTo(card)) picked.add(related);
+  }
+  return board.filter(card => picked.has(card));
+}
+
+/** The cards that hold one of the sessions, and the cards related to them, in board order. */
+function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Card[] {
+  const wanted = new Set(sessionIds);
+  return withRelatedCards(board, card => Object.values(card.sessions).some(session => wanted.has(session.sessionId)));
+}
+
+/** The cards that hold any session, and the cards related to them, in board order. */
+function allSessionCards(board: readonly Card[]): Card[] {
+  let cards = cardsInSessions.get(board);
+  if (!cards) {
+    cards = withRelatedCards(board, card => Object.keys(card.sessions).length > 0);
+    cardsInSessions.set(board, cards);
+  }
+  return cards;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -388,20 +436,32 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
         requiresAuth: false,
         handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
           if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
+            sessionId: context.req.queries('sessionId'),
+            scope: context.req.query('scope'),
+          });
+          // A filter that fails to parse must not widen to the whole board.
+          if (!query.success) {
+            const field = query.error.issues[0]?.path[0];
+            return c.json({ error: field === 'scope' ? 'invalid_scope' : 'invalid_session_id' }, 400);
+          }
           await workItems.ensureReady();
-          const items = await workItems.listShared({
+          const board = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          const snapshot = boardSnapshot(
-            items,
-            toWireWorkItem,
-            sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
-          );
-          // Every open tab refetches the whole board on each feed frame; most frames leave it unchanged.
+          const { sessionId: sessionIds, scope } = query.data;
+          const part = scope ? allSessionCards(board) : sessionIds && sessionCards(board, sessionIds);
+          const items = part ?? board;
+          const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
+          const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
+          const snapshot = part
+            ? scopedSnapshot(part, toWireWorkItem, running, parked)
+            : boardSnapshot(board, toWireWorkItem, running, parked);
+          // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           const headers: Record<string, string> = {
             ETag: snapshot.etag,
             'Cache-Control': 'private, no-cache',

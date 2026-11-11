@@ -3933,6 +3933,8 @@ type Shared_Type_69 = {
   threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Whether completed spans can be sorted by duration */
+  spanQueryDurationSort: boolean;
   /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
   spanQueryContextFields: boolean;
   /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
@@ -4922,7 +4924,9 @@ type Shared_Type_105 = {
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -4974,7 +4978,9 @@ type Shared_Type_107 = {
   id: string;
   workflowId: string;
   agentId?: undefined | undefined;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -11133,7 +11139,7 @@ export type PostObservabilitySpansQuery_Body = {
   where?: InputShared_Auxiliary_231 | undefined;
   textSearch?: string | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'durationMs';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -23459,7 +23465,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       agentId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       prompt: string;
       name?: string | undefined;
@@ -23488,7 +23496,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       workflowId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       inputData?: unknown | undefined;
       initialState?: unknown | undefined;
@@ -23533,6 +23543,8 @@ export type PatchSchedulesScheduleId_PathParams = GetSchedulesScheduleId_PathPar
 
 export type PatchSchedulesScheduleId_Body = {
   cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: (number | null) | undefined;
   timezone?: string | undefined;
   status?: ('active' | 'paused') | undefined;
   metadata?:

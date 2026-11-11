@@ -10,7 +10,11 @@ import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '..
 import { queryKeys } from '../../../../../api/keys';
 import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResources';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
-import { useTransitionWorkItemMutation, useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import {
+  useSessionWorkItemsQuery,
+  useTransitionWorkItemMutation,
+  useWorkItemsQuery,
+} from '../../../../../hooks/useWorkItems';
 import { createQueryClient } from '../../../../../query-client';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { FeedEventsProvider } from '../FeedEventsProvider';
@@ -410,6 +414,52 @@ describe('FeedEventsProvider, on the board', () => {
 
     expect(stream.opens).toBe(1);
     expect(stream.open).toBe(true);
+    await waitForMutationsIdle(rendered.client);
+  });
+});
+
+describe('FeedEventsProvider, on a session page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps a session’s card current, change after change, while the board read hangs', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const shown = { title: 'Fix login' };
+    let releaseBoard = () => {};
+    const boardHeld = new Promise<void>(resolve => {
+      releaseBoard = resolve;
+    });
+    server.use(
+      stream.handler,
+      http.get(BOARD_URL, async ({ request }) => {
+        const snapshot = boardSnapshot(shown.title);
+        if (!new URL(request.url).searchParams.has('sessionId')) await boardHeld;
+        return HttpResponse.json(snapshot);
+      }),
+    );
+    // The sidebar reads the whole board on a session page; the header reads the session's cards.
+    const rendered = renderHookWithProviders(
+      () => ({ board: useWorkItemsQuery(PROJECT_ID), session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1') }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    const sessionCardTitle = () => rendered.result.current.session.data?.[0]?.title;
+    await waitFor(() => expect(sessionCardTitle()).toBe('Fix login'));
+
+    for (const title of ['Fix logout', 'Fix signup']) {
+      shown.title = title;
+      stream.push();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+      await waitFor(() => expect(sessionCardTitle()).toBe(title));
+    }
+
+    releaseBoard();
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
     await waitForMutationsIdle(rendered.client);
   });
 });

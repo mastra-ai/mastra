@@ -358,9 +358,12 @@ export const FACTORY_API_ROUTE_METADATA = {
     "pathParams": [
       "id"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "scope",
+      "sessionId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -3415,6 +3418,34 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "id"
       ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "scope": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "__schema1": {
+          "type": "string",
+          "enum": [
+            "sessions"
+          ]
+        }
+      }
     },
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
