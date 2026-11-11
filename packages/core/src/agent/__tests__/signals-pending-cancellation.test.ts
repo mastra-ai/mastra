@@ -1944,6 +1944,34 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it('keeps a forward held when an older registration of its still-live run is discarded', async () => {
+      const { scope, pubsub, model, forwardedTo, getStreamCount, deliver, releaseFollowUp, cleanup } =
+        await forwardToFollowUpRun('stale-discard');
+      try {
+        const runId = forwardedTo[0]!;
+        // A rolled-back older registration of the run; the run still holds the lease under its newer registration.
+        await pubsub.publish(agentThreadStreamTopicForKey(`${scope.resourceId}\u0000${scope.threadId}`), {
+          type: 'agent.thread-stream',
+          runId,
+          data: { type: 'run-discarded', runId, streamId: 'stale-registration-stream' },
+        });
+        await nextTick();
+        await nextTick();
+        // Held, not queued again: requeueing would forward it a second time.
+        expect(forwardedTo).toHaveLength(1);
+        deliver();
+        releaseFollowUp();
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        await vi.waitFor(() => expect(pubsub.owners.size).toBe(0));
+        await nextTick();
+        expect(getStreamCount()).toBe(3);
+        expect(forwardedTo).toHaveLength(1);
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
+      } finally {
+        cleanup();
+      }
+    });
+
     it('does not run a forwarded message cancelled from its queue before the owner admitted it', async () => {
       const { scope, agent, model, follower, pubsub, getStreamCount, deliver, releaseFollowUp, cleanup } =
         await forwardToFollowUpRun('cancelled-forward', { queueOwnerId: 'group' });

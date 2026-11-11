@@ -2038,7 +2038,15 @@ export class AgentThreadStreamRuntime {
         this.#releaseRunSupersededBy(state, resolvedPubSub, key, subscription, data.runId);
         // A discarded run never starts, so it admits nothing. A stopped run still admits until its stream ends and
         // then completes; one stopped while parked never completes, and the lease check covers it.
-        if (data.type === 'run-discarded' && this.#requeueUnadmittedForwards(state, key, data.runId)) {
+        // A discard can roll back an older registration of a run that still lives under a newer one, which may have
+        // admitted the forward already; while the lease still names the run (or can't be read), keep holding.
+        if (
+          data.type === 'run-discarded' &&
+          !(
+            state.forwardedIdleLeaseChecks.has(key) && (await this.#leaseMayStillName(resolvedPubSub, key, data.runId))
+          ) &&
+          this.#requeueUnadmittedForwards(state, key, data.runId)
+        ) {
           await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         }
       } else if (data?.type === 'run-completed' || data?.type === 'run-failed') {
@@ -3276,6 +3284,17 @@ export class AgentThreadStreamRuntime {
     }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
     check.unref?.();
     state.forwardedIdleLeaseChecks.set(key, check);
+  }
+
+  /** Whether the thread lease may still name `runId`: it does, or the backend could not say. */
+  async #leaseMayStillName(pubsub: PubSub | undefined, key: string, runId: string): Promise<boolean> {
+    const { provider } = this.#resolveLeaseProvider(pubsub);
+    try {
+      const owner = await this.#readLeaseOwnerInTime(provider, key);
+      return owner !== undefined && forwardedSignalRunId(owner) === runId;
+    } catch {
+      return true;
+    }
   }
 
   /** Queue again the idle messages forwarded to `runId` that it ended without admitting. */
