@@ -30,7 +30,7 @@ import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
-import { runLivenessKey, stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './leases';
 import { abandonLease } from './test-utils/abandon-lease';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';

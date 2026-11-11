@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
-import { runLivenessKey, stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './leases';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 

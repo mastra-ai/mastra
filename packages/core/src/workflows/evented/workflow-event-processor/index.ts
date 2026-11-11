@@ -70,9 +70,9 @@ import {
   RunFailure,
   withoutAuthToken,
 } from '../helpers';
+import { acquireStepLease, markRunLive, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
+import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../leases';
 import { StepExecutor } from '../step-executor';
-import { acquireStepLease, markRunLive, stepOccurrenceKey, UNLEASED_STEP } from '../step-lease';
-import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../step-lease';
 import {
   evaluateLoopCondition,
   failedLoopStep,

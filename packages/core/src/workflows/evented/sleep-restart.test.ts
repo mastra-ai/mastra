@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
-import { runLivenessKey } from './step-lease';
+import { runLivenessKey } from './leases';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 

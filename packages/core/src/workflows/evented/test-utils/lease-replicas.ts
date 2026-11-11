@@ -1,0 +1,307 @@
+/**
+ * Replicas, workflow shapes and event interceptors shared by the evented lease
+ * tests. Replicas are separate Mastra instances, each with its own pubsub,
+ * sharing one store the way pods share one database.
+ */
+import { vi } from 'vitest';
+import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { PubSub } from '../../../events/pubsub';
+import type { Event } from '../../../events/types';
+import { Mastra } from '../../../mastra';
+import type { InMemoryStore } from '../../../storage/mock';
+import { runLivenessKey } from '../leases';
+import { abandonLease } from './abandon-lease';
+import { createStep, createWorkflow } from '..';
+
+export const Num = z.object({ n: z.number() });
+export type Report = (label: string) => Promise<void>;
+export type Store = InstanceType<typeof InMemoryStore>;
+
+/** A step that reports its id before returning its input. */
+export function work(id: string, report: Report) {
+  return createStep({
+    id,
+    inputSchema: Num,
+    outputSchema: Num,
+    execute: async ({ inputData }) => {
+      await report(id);
+      return inputData;
+    },
+  });
+}
+
+/**
+ * Workflow shapes whose steps report a label per occurrence: the step id, the
+ * foreach item or the loop iteration. `running` lists the execution paths of
+ * the occurrences in `blocks`.
+ */
+export const shapes = {
+  step: {
+    input: { n: 0 },
+    build: (report: Report) =>
+      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: z.any() }).then(work('a', report)).commit(),
+    labels: ['a'],
+    blocks: ['a'],
+    running: [[0]],
+  },
+  parallel: {
+    input: { n: 0 },
+    build: (report: Report) =>
+      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: z.any() })
+        .parallel([work('a', report), work('b', report)])
+        .commit(),
+    labels: ['a', 'b'],
+    blocks: ['a', 'b'],
+    running: [
+      [0, 0],
+      [0, 1],
+    ],
+  },
+  conditional: {
+    input: { n: 0 },
+    build: (report: Report) =>
+      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: z.any() })
+        .branch([
+          [async () => true, work('a', report)],
+          [async () => false, work('b', report)],
+        ])
+        .commit(),
+    labels: ['a'],
+    blocks: ['a'],
+    running: [[0, 0]],
+  },
+  foreach: {
+    input: [{ n: 1 }, { n: 2 }, { n: 3 }],
+    build: (report: Report) =>
+      createWorkflow({ id: 'leased', inputSchema: z.array(Num), outputSchema: z.any() })
+        .foreach(
+          createStep({
+            id: 'item',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              await report(`item:${inputData.n}`);
+              return inputData;
+            },
+          }),
+          { concurrency: 3 },
+        )
+        .commit(),
+    labels: ['item:1', 'item:2', 'item:3'],
+    blocks: ['item:1', 'item:2', 'item:3'],
+    running: [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+    ],
+  },
+  loop: {
+    input: { n: 0 },
+    build: (report: Report) =>
+      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: z.any() })
+        .dountil(
+          createStep({
+            id: 'body',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              await report(`body:${inputData.n + 1}`);
+              return { n: inputData.n + 1 };
+            },
+          }),
+          async ({ inputData }) => inputData.n >= 3,
+        )
+        .commit(),
+    labels: ['body:1', 'body:2', 'body:3'],
+    blocks: ['body:2'],
+    running: [[0]],
+  },
+};
+export type Shape = (typeof shapes)[keyof typeof shapes];
+export type Built = ReturnType<Shape['build']>;
+
+/** Every Mastra instance a test started; {@link stopReplicas} shuts them down. */
+export const replicas: Mastra[] = [];
+
+/** Restores mocks and shuts every replica a test started down; run it after each test. */
+export async function stopReplicas() {
+  vi.restoreAllMocks();
+  await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown({ drainTimeout: 0 })));
+}
+
+/** Starts a replica running `workflow` (registered as `leased`) and any nested workflows it calls. */
+export async function startReplica<W extends Built>(
+  storage: Store,
+  workflow: W,
+  { pubsub = new EventEmitterPubSub() as PubSub, nested = {} as Record<string, Built> } = {},
+) {
+  const mastra = new Mastra({ logger: false, storage, pubsub, workflows: { leased: workflow, ...nested } as any });
+  await mastra.startWorkers();
+  replicas.push(mastra);
+  return { mastra, pubsub, workflow };
+}
+
+/** A replica crashing: it stops renewing anything, and the leases it held lapse. */
+export async function crash(replica: { mastra: Mastra }, storage: Store, keys: string[]) {
+  await replica.mastra.shutdown({ drainTimeout: 0 });
+  await abandonLease(storage, ...keys);
+}
+
+/**
+ * Wraps a pubsub so an event on the `workflows` topic the test picks out is
+ * held back (`hold` resolves when it may go on), kept from this replica
+ * entirely (`divert` receives it instead), or fails to publish (`reject`).
+ */
+export function interceptWorkflowEvents(
+  inner: PubSub,
+  pick: (event: Event) => { hold?: Promise<void>; divert?: (event: Event) => void; reject?: Error } | undefined,
+) {
+  return new Proxy(inner, {
+    get(target, prop) {
+      if (prop === 'publish') {
+        return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
+          const picked = topic === 'workflows' ? pick(event) : undefined;
+          if (picked?.reject) {
+            throw picked.reject;
+          }
+
+          if (picked?.divert) {
+            return picked.divert(structuredClone(event));
+          }
+
+          if (picked?.hold) {
+            await picked.hold;
+          }
+
+          return target.publish(topic, event, options);
+        };
+      }
+
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+/** Whether `event` is the `workflow.step.run` of the step at `path`. */
+export const isStepRunAt = (event: Event, path: number[]) =>
+  event.type === 'workflow.step.run' &&
+  JSON.stringify((event.data as { executionPath?: number[] }).executionPath) === JSON.stringify(path);
+
+/** Records every lease claim and lease read on the shared store, and waits for ones matching a condition. */
+export async function recordLeases(storage: Store) {
+  const store = (await storage.getStore('workflows'))!;
+  const claim = store.claimRunOwnership.bind(store);
+  const read = store.getRunOwnership.bind(store);
+  const claims: { key: string; acquired: boolean }[] = [];
+  const reads: string[] = [];
+  let notify = () => {};
+
+  vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+    const result = await claim(args);
+    claims.push({ key: args.runId, acquired: result.acquired });
+    notify();
+    return result;
+  });
+  vi.spyOn(store, 'getRunOwnership').mockImplementation(async args => {
+    const result = await read(args);
+    reads.push(args.runId);
+    notify();
+    return result;
+  });
+
+  // Re-checks `done` after every recorded claim or read.
+  const until = async (done: () => boolean) => {
+    while (!done()) {
+      await new Promise<void>(resolve => (notify = resolve));
+    }
+  };
+
+  return { claims, reads, until };
+}
+
+/**
+ * Delays every lease release the way a remote store's round trip does, so a
+ * follow-up a step publishes (its retry, the next loop iteration) is delivered
+ * before the step's own lease is released.
+ */
+export async function delayReleases(storage: Store) {
+  const store = (await storage.getStore('workflows'))!;
+  const release = store.releaseRunOwnership.bind(store);
+  vi.spyOn(store, 'releaseRunOwnership').mockImplementation(async fence => {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return release(fence);
+  });
+}
+
+/** `Promise.withResolvers()`, which the ES2023 library this non-test module compiles against lacks. */
+function withResolvers<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/** Records every step occurrence a replica runs, and holds replica A's `blocks` until `release` is called. */
+export function track(shape: Pick<Shape, 'blocks'>, { hangForever = false } = {}) {
+  const executions: string[] = [];
+  const at: Record<string, number> = {};
+  const gate = withResolvers<void>();
+  const allBlocked = withResolvers<void>();
+  const otherReplicaRan = withResolvers<void>();
+  let blocked = 0;
+
+  const reporter =
+    (replica: string): Report =>
+    async label => {
+      executions.push(`${replica}:${label}`);
+      at[`${replica}:${label}`] = Date.now();
+
+      // Only replica A blocks; any other replica running a step is what the tests watch for.
+      if (replica !== 'A') {
+        return otherReplicaRan.resolve();
+      }
+
+      if (!shape.blocks.includes(label)) {
+        return;
+      }
+
+      blocked++;
+      if (blocked === shape.blocks.length) {
+        allBlocked.resolve();
+      }
+
+      // A hanging step stands for a crashed replica: it never finishes.
+      await (hangForever ? new Promise<never>(() => {}) : gate.promise);
+    };
+
+  return { executions, at, reporter, release: gate.resolve, allBlocked: allBlocked.promise, otherReplicaRan };
+}
+
+/** The stored status of the `leased` workflow's run. */
+export async function runStatus(storage: Store, runId: string) {
+  const store = (await storage.getStore('workflows'))!;
+  return (await store.loadWorkflowSnapshot({ workflowName: 'leased', runId }))?.status;
+}
+
+/** Whether the run's liveness key is live; `undefined` when it was never written. */
+export async function runIsLive(storage: Store, runId: string) {
+  const store = (await storage.getStore('workflows'))!;
+  return (await store.getRunOwnership({ runId: runLivenessKey(runId) }))?.live;
+}
+
+/** Restarts the run from `replica`: `resolved:<status>`, or the error id and lease expiry it threw. */
+export async function restartOutcome(replica: { workflow: Built }, runId: string) {
+  return (await replica.workflow.createRun({ runId })).restart().then(
+    result => ({ id: `resolved:${result.status}`, leaseExpiresAt: undefined }),
+    (error: { id?: string; details?: { leaseExpiresAt?: string | null } }) => ({
+      id: error.id,
+      leaseExpiresAt: error.details?.leaseExpiresAt,
+    }),
+  );
+}
+
+/** Waits `ms`, for the tests that must let a lease TTL pass. */
+export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

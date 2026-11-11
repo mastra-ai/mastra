@@ -13,7 +13,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { assertWorkflowStepGuard } from '../../storage/workflow-step-guard';
-import { runLivenessKey, stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './leases';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 

@@ -6,7 +6,7 @@ import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../../../../packages/core/src/request-context';
 import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
-import { runLivenessKey, stepOccurrenceKey } from '../../../../../../packages/core/src/workflows/evented/step-lease';
+import { runLivenessKey, stepOccurrenceKey } from '../../../../../../packages/core/src/workflows/evented/leases';
 import { abandonLease } from '../../../../../../packages/core/src/workflows/evented/test-utils/abandon-lease';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
 import { connectionString, TEST_CONFIG } from '../../test-utils';

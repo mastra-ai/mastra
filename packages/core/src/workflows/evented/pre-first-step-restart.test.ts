@@ -4,7 +4,7 @@ import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
-import { restartLeaseKey, runLivenessKey } from './step-lease';
+import { restartLeaseKey, runLivenessKey } from './leases';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
