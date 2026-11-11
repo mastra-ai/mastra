@@ -114,6 +114,22 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
           ]);
         },
       );
+      it('returns the stored timestamp on a duplicate POST so the next PUT succeeds', async () => {
+        expect((await post(original)).status).toBe(200);
+        const retry = await post({ ...original, timestamp: undefined, value: -1 });
+        expect(retry.status).toBe(200);
+        const { data } = (await retry.json()) as { data: Record<string, unknown> };
+        expect(data).toMatchObject({ feedbackId: original.feedbackId, timestamp: original.timestamp });
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+        expect((await put({ ...original, ...data, value: -1 })).status).toBe(200);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(-1);
+      });
+      it("does not disclose another tenant's feedback identity on a duplicate POST", async () => {
+        await post({ ...original, organizationId: 'other' });
+        trustedScope.organizationId = 'trusted';
+        expect((await post({ ...original, organizationId: 'other' })).status).toBe(404);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+      });
       it('returns 404 instead of overwriting feedback from another tenant', async () => {
         await post({ ...original, organizationId: 'other' });
         trustedScope.organizationId = 'trusted';
@@ -724,6 +740,23 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
           );
           expect(response.status, await response.clone().text()).toBe(200);
           expect(await response.json()).toMatchObject({ success: true, data: { [idField]: 'http-record', timestamp } });
+          if (isFeedback && method === 'POST') {
+            const retry = await server.request('/api/observability/feedback', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', authorization: 'Bearer test' },
+              body: JSON.stringify({
+                contextMode: 'provided',
+                feedback: {
+                  feedbackId: 'http-record',
+                  traceId: 'http-trace',
+                  feedbackType: 'comment',
+                  value: 'discarded',
+                },
+              }),
+            });
+            expect(retry.status).toBe(200);
+            expect(await retry.json()).toMatchObject({ data: { feedbackId: 'http-record', timestamp } });
+          }
           await observability.shutdown();
           const rows = isFeedback ? (await store.listFeedback({})).feedback : (await store.listScores({})).scores;
           expect(rows).toHaveLength(1);
@@ -745,7 +778,12 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
           const writes = received.filter(item => item.path === expectedPath);
           expect(writes).toHaveLength(1);
           expect(writes[0]!.method).toBe(method);
-          if (method === 'POST') expect(writes[0]!.body[collection]).toHaveLength(1);
+          if (method === 'POST') {
+            expect(writes[0]!.body[collection]).toHaveLength(isFeedback ? 2 : 1);
+            if (isFeedback) {
+              expect(writes[0]!.body.feedback[1]).toEqual(writes[0]!.body.feedback[0]);
+            }
+          }
           const exported = method === 'PUT' ? writes[0]!.body.feedback : writes[0]!.body[collection][0];
           expect(exported).toMatchObject({
             [idField]: 'http-record',

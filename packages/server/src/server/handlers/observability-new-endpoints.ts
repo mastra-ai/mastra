@@ -1389,14 +1389,30 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
       reviewStatus: feedback.reviewStatus ?? 'needs-review',
     };
     await observabilityStore.createFeedback({ feedback: record, onConflict: 'ignore' });
-    await exportPersistedEvent(mastra, persistedFeedbackEvent(record));
+    // New adapters can ignore a duplicate POST. Older packages retain their existing create behavior.
+    const stored = getObservabilityStorageCapabilities(observabilityStore).feedbackReplacement
+      ? await observabilityStore.getFeedbackById(feedbackId)
+      : null;
+    if (
+      stored &&
+      ((stored.organizationId ?? null) !== (record.organizationId ?? null) ||
+        (stored.resourceId ?? null) !== (record.resourceId ?? null))
+    ) {
+      throw new HTTPException(404, { message: 'Feedback not found' });
+    }
+    if (stored && stored.traceId !== record.traceId) {
+      throw new HTTPException(409, { message: 'Feedback already exists for a different trace' });
+    }
+    const accepted = { ...(stored ?? record), feedbackId };
+    // Re-notify exporters on retries, using accepted values and identity rather than the discarded request.
+    await exportPersistedEvent(mastra, persistedFeedbackEvent(accepted));
     return {
       success: true,
       data: {
-        feedbackId,
-        traceId: feedback.traceId,
-        spanId: feedback.spanId ?? null,
-        timestamp: timestamp.toISOString(),
+        feedbackId: accepted.feedbackId,
+        traceId: record.traceId,
+        spanId: accepted.spanId ?? null,
+        timestamp: accepted.timestamp.toISOString(),
       },
     };
   },
@@ -1445,7 +1461,30 @@ export const REPLACE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.REPLACE_FEEDBACK, 
         });
       }
     }
-    await observabilityStore.replaceFeedback({ feedback: record });
+    try {
+      await observabilityStore.replaceFeedback({ feedback: record });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'id' in error &&
+        error.id === 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT'
+      ) {
+        // Another writer can establish the identity after the pre-read. Preserve the same HTTP contract.
+        const current = await observabilityStore.getFeedbackById(feedbackId);
+        if (
+          current &&
+          ((current.organizationId ?? null) !== (record.organizationId ?? null) ||
+            (current.resourceId ?? null) !== (record.resourceId ?? null))
+        ) {
+          throw new HTTPException(404, { message: 'Feedback not found' });
+        }
+        throw new HTTPException(409, {
+          message: 'Feedback replacement must preserve the original traceId and timestamp',
+        });
+      }
+      throw error;
+    }
     const event = persistedFeedbackEvent(record);
     await exportPersistedEvent(mastra, {
       type: 'feedback_replacement',
