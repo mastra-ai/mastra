@@ -92,7 +92,7 @@ overrides:
   glob@<14.0.2: 14.0.4
   body-parser@<2.4.0: 2.4.0
   inngest: ^4.26.1
-  fast-xml-parser@<5.5.7: ^5.10.1
+  fast-xml-parser@<5.5.7: ^5.12.0
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
