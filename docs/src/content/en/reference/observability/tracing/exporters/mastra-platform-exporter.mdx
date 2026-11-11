@@ -195,9 +195,7 @@ Every `MetricEvent` passed to this handler is buffered and exported to the metri
 async onScoreEvent(event: ScoreEvent): Promise<void>
 ```
 
-Processes score signals for export.
-
-Every `ScoreEvent` passed to this handler is buffered and exported to the scores endpoint derived from the configured base endpoint. No extra filtering at the exporter layer beyond the disabled-exporter check is performed, so all score events received by this method are forwarded.
+Schedules a score for export using the [feedback and score delivery](#feedback-and-score-delivery) behavior. Events are ignored when the exporter is disabled or shutdown has started. If Platform needs to look up the trace, a missing trace ID causes the record to be dropped.
 
 <PropertiesTable
   props={[
@@ -210,7 +208,7 @@ Every `ScoreEvent` passed to this handler is buffered and exported to the scores
 ]}
 />
 
-**Returns:** `Promise<void>` after the score event has been accepted for buffering.
+**Returns:** `Promise<void>` when the event has been scheduled or ignored. Call `flush()` to wait for pending deliveries, because this return value doesn't confirm delivery.
 
 ### `onFeedbackEvent`
 
@@ -218,9 +216,7 @@ Every `ScoreEvent` passed to this handler is buffered and exported to the scores
 async onFeedbackEvent(event: FeedbackEvent): Promise<void>
 ```
 
-Processes feedback signals for export.
-
-Every `FeedbackEvent` passed to this handler is buffered and exported to the feedback endpoint derived from the configured base endpoint. No feedback-type filtering inside `MastraPlatformExporter` is performed. All feedback events received here are forwarded unless the exporter is disabled.
+Schedules feedback for export using the [feedback and score delivery](#feedback-and-score-delivery) behavior. Events are ignored when the exporter is disabled or shutdown has started. If Platform needs to look up the trace, a missing trace ID causes the record to be dropped.
 
 <PropertiesTable
   props={[
@@ -233,7 +229,7 @@ Every `FeedbackEvent` passed to this handler is buffered and exported to the fee
 ]}
 />
 
-**Returns:** `Promise<void>` after the feedback event has been accepted for buffering.
+**Returns:** `Promise<void>` when the event has been scheduled or ignored. Call `flush()` to wait for pending deliveries, because this return value doesn't confirm delivery.
 
 ### flush
 
