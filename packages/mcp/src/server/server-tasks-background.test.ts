@@ -224,12 +224,15 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     probe = { runs: [] };
   });
 
+  // An instance whose task is still running waits out the background task drain window (5 s by
+  // default) when it shuts down, so a test that leaves tasks running on two instances outlasts the
+  // default 10 s hook timeout.
   afterEach(async () => {
     for (const child of children.splice(0)) child.kill('SIGKILL');
     await Promise.all(clients.splice(0).map(client => client.close()));
     for (const instance of instances.splice(0)) await instance.close();
     rmSync(dir, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   async function instance(
     tasks: MCPServerConfig['tasks'],
