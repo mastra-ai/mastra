@@ -93,8 +93,11 @@ const { registry } = defineRegistry(studioCatalog, {
   },
 });
 
-const pathsOf = (state: Record<string, unknown>) =>
-  Object.fromEntries(Object.entries(state).map(([key, value]) => [`/${key}`, value]));
+/** The store writes that make it hold `state`, clearing the keys `state` no longer has. */
+const writesFor = (current: Record<string, unknown>, state: Record<string, unknown>) => ({
+  ...Object.fromEntries(Object.keys(current).map(key => [`/${key}`, undefined])),
+  ...Object.fromEntries(Object.entries(state).map(([key, value]) => [`/${key}`, value])),
+});
 
 export interface JsonRenderInterfaceProps {
   spec: Spec;
@@ -104,9 +107,9 @@ export interface JsonRenderInterfaceProps {
 export function JsonRenderInterface({ spec }: JsonRenderInterfaceProps) {
   const [store] = useState(() => createStateStore(spec.state ?? {}));
 
-  // State streams in after the first render, as later patches of the same spec.
+  // State streams in after the first render, as later patches of the same spec, which can also remove it.
   useEffect(() => {
-    if (spec.state) store.update(pathsOf(spec.state));
+    store.update(writesFor(store.getSnapshot(), spec.state ?? {}));
   }, [spec.state, store]);
 
   return (

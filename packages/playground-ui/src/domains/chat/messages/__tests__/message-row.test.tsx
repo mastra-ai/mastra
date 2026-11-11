@@ -967,8 +967,8 @@ describe('MessageRow', () => {
   });
 
   describe('when the agent composed a json-render interface', () => {
-    const patch = (op: 'add' | 'replace', path: string, value: unknown) =>
-      ({ type: 'data-spec', data: { type: 'patch', patch: { op, path, value } } }) as never;
+    const patch = (op: 'add' | 'replace' | 'remove' | 'test', path: string, value?: unknown) =>
+      ({ type: 'data-spec', data: { type: 'patch', patch: { op, path, value } } }) as const;
 
     // The parts JsonRenderProcessor saves for a ```spec block, one patch per line the model wrote.
     const launchStatus = (): MastraDBMessage =>
@@ -1000,11 +1000,14 @@ describe('MessageRow', () => {
 
     // Memory saves the spec parts before the reply's text, while the live stream has the text first.
     it.each([
-      ['while it streams', (parts: unknown[]) => parts],
-      ['once reloaded from memory', (parts: unknown[]) => [...parts.slice(1), parts[0]]],
+      ['while it streams', (parts: MastraDBMessage['content']['parts']) => parts],
+      [
+        'once reloaded from memory',
+        (parts: MastraDBMessage['content']['parts']) => [...parts.slice(1), ...parts.slice(0, 1)],
+      ],
     ])('shows the prose above the interface %s', (_, order) => {
       const message = launchStatus();
-      renderRow({ ...message, content: { ...message.content, parts: order(message.content.parts) as never } });
+      renderRow({ ...message, content: { ...message.content, parts: order(message.content.parts) } });
 
       const prose = screen.getByText('Here is where the launch stands.');
       const card = screen.getByText('Launch');
@@ -1041,6 +1044,29 @@ describe('MessageRow', () => {
 
       expect(screen.getAllByText('Ana')).toHaveLength(1);
       expect(screen.getAllByText('Bo')).toHaveLength(1);
+    });
+
+    it('drops the state a later patch removes from an interface already on screen', () => {
+      const message = launchStatus();
+      const { rerender } = render(<MessageRow message={message} />, { wrapper: Providers });
+      expect(screen.getByText('Ana')).toBeTruthy();
+
+      const parts = [...message.content.parts, patch('remove', '/state/team')];
+      rerender(<MessageRow message={{ ...message, content: { ...message.content, parts } }} />);
+
+      expect(screen.queryByText('Ana')).toBeNull();
+      expect(screen.getByText('Launch')).toBeTruthy();
+    });
+
+    it('shows the reply without its interface when a patch cannot be applied', () => {
+      const message = launchStatus();
+      renderRow({
+        ...message,
+        content: { ...message.content, parts: [...message.content.parts, patch('test', '/root', 'other')] },
+      });
+
+      expect(screen.getByText('Here is where the launch stands.')).toBeTruthy();
+      expect(screen.queryByText('Launch')).toBeNull();
     });
 
     it('shows nothing for an interface whose patches have not reached the root yet', () => {
