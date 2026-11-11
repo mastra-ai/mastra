@@ -140,7 +140,11 @@ export interface PruneResult {
  * pruned. Hence the single `'experiments'` key.
  *
  * Note: `workflows.runOwnership` and `memory.runFences` are the run fencing
- * records (one row per run). `runOwnership` is anchored on the claim's
+ * records. `memory.runFences` holds one row per run. `workflows.runOwnership`
+ * holds one row per run for default-engine runs and durable agents, and for
+ * evented runs one row per step occurrence plus a `::live` and a `::restart`
+ * row per run; pruning their released or expired rows is safe.
+ * `runOwnership` is anchored on the claim's
  * `updatedAt`, which every claim, renewal and release refreshes, so a live
  * execution's row is never older than its renewal interval; keep `maxAge` well
  * above the lease. `runFences` is anchored on `retiredAt`, which stays NULL

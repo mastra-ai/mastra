@@ -576,9 +576,13 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * Whether `Mastra.restartAllActiveWorkflowRuns()` (boot-time generic
    * recovery) automatically restarts this workflow's active runs. Defaults to
    * true. Set to false for workflows whose recovery is owned elsewhere or
-   * whose side effects must not be re-driven by a blanket restart — durable
+   * whose side effects must not be re-driven by a blanket restart. Durable
    * agent workflows set this to false because their recovery is owned by the
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
+   *
+   * On the evented engine, false also turns off step leases and the check
+   * that makes `restart()` throw `WORKFLOW_RESTART_RUN_OWNED` while a step of
+   * the run is running.
    */
   autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
