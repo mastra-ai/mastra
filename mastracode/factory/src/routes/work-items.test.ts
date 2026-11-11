@@ -1,6 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -2147,21 +2147,21 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   });
 });
 
-describe('run activity on the work-item listing', () => {
-  async function startRun(sessionId: string) {
-    await seed.workItems.prepareRunStart({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId: PROJECT_ID,
-      workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
-      role: 'execute',
-      session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
-      resourceId: sessionId,
-      kickoffKey: `kickoff-${sessionId}`,
-      kickoffMessage: null,
-    });
-  }
+async function startRun(sessionId: string) {
+  await seed.workItems.prepareRunStart({
+    orgId: 'org1',
+    userId: 'u1',
+    factoryProjectId: PROJECT_ID,
+    workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
+    role: 'execute',
+    session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
+    resourceId: sessionId,
+    kickoffKey: `kickoff-${sessionId}`,
+    kickoffMessage: null,
+  });
+}
 
+describe('run activity on the work-item listing', () => {
   it('stamps only the starting role, preserving other roles’ sessions and startedBy (#22254)', async () => {
     const first = await seed.workItems.prepareRunStart({
       orgId: 'org1',
@@ -2230,6 +2230,128 @@ describe('run activity on the work-item listing', () => {
     );
 
     expect((await res.json()).runningSessionIds).toEqual([]);
+  });
+});
+
+// The board poll asks for every card of the project every few seconds, per open tab. Building
+// that response per request kept the server's event loop busy on a board of a few thousand cards.
+describe('board list response', () => {
+  const listPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+
+  it('answers with the JSON text, status and content type of the whole response serialized at once', async () => {
+    const created = await (
+      await json(
+        'POST',
+        listPath(),
+        createBody({ title: 'Fix the “login” flow — 日本語 🚀', description: 'a\n"b"\\c' }),
+      )
+    ).json();
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '43',
+          url: 'https://github.com/acme/app/issues/43',
+        },
+        title: 'Carries internal tokens',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { number: 43, [FACTORY_RULE_MATERIALIZATION_KEY]: 'rule-7:issue-43' },
+      },
+    });
+    await startRun('session-running');
+    await startRun('session-parked');
+
+    const res = await buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(['session-running']),
+      undefined,
+      new Set(['session-parked']),
+    ).request(listPath());
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/json');
+    const text = await res.text();
+    const body = JSON.parse(text);
+    // Parsing keeps key order, so the text only survives the round trip when it is what
+    // `JSON.stringify` writes for the whole response.
+    expect(JSON.stringify(body)).toBe(text);
+    expect(Object.keys(body)).toEqual(['workItems', 'runningSessionIds', 'parkedSessionIds']);
+    expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+    expect(body.workItems).toHaveLength(4);
+    expect(body.workItems.find((card: { id: string }) => card.id === created.workItem.id)).toEqual(created.workItem);
+    expect(text).not.toContain(FACTORY_RULE_MATERIALIZATION_KEY);
+    expect(body.runningSessionIds).toEqual(['session-running']);
+    expect(body.parkedSessionIds).toEqual(['session-parked']);
+  });
+
+  it('shows a card created, changed or deleted since the last read', async () => {
+    const list = async () =>
+      (await (await json('GET', listPath())).json()).workItems as { id: string; title: string }[];
+    expect(await list()).toEqual([]);
+
+    const { workItem } = await (await json('POST', listPath(), createBody())).json();
+    expect((await list()).map(card => card.title)).toEqual(['Fix the login flow']);
+
+    await json('PATCH', `/web/factory/work-items/${workItem.id}`, { title: 'Updated title' });
+    expect((await list()).map(card => card.title)).toEqual(['Updated title']);
+
+    await json('DELETE', `/web/factory/work-items/${workItem.id}`);
+    expect(await list()).toEqual([]);
+  });
+
+  it('reports a run that starts or parks between reads of an unchanged board', async () => {
+    await startRun('session-a');
+    await startRun('session-b');
+    const running = new Set<string>();
+    const parked = new Set<string>();
+    const app = buildApp(orgUser, undefined, undefined, running, undefined, parked);
+    const read = async () => (await app.request(listPath())).json();
+
+    const idle = await read();
+    expect(idle.runningSessionIds).toEqual([]);
+    expect(idle.parkedSessionIds).toEqual([]);
+
+    running.add('session-a');
+    const working = await read();
+    expect(working.runningSessionIds).toEqual(['session-a']);
+    expect(working.parkedSessionIds).toEqual([]);
+
+    running.delete('session-a');
+    parked.add('session-a');
+    running.add('session-b');
+    const waiting = await read();
+    expect(waiting.runningSessionIds).toEqual(['session-b']);
+    expect(waiting.parkedSessionIds).toEqual(['session-a']);
+    expect(waiting.workItems).toEqual(idle.workItems);
+  });
+
+  it('serializes the cards once for every viewer of an unchanged board', async () => {
+    const { workItem } = await (await json('POST', listPath(), createBody())).json();
+    await startRun('session-a');
+    // Every card carries dates, and `JSON.stringify` asks each one for its JSON form.
+    const serializedDates = vi.spyOn(Date.prototype, 'toJSON');
+    onTestFinished(() => serializedDates.mockRestore());
+    const read = (user: typeof orgUser) => json('GET', listPath(), undefined, user).then(res => res.text());
+
+    const first = await read(orgUser);
+    const afterFirstRead = serializedDates.mock.calls.length;
+    expect(afterFirstRead).toBeGreaterThan(0);
+
+    const second = await read({ workosId: 'u2', organizationId: 'org1' });
+    expect(second).toBe(first);
+    expect(serializedDates.mock.calls.length).toBe(afterFirstRead);
+
+    await json('PATCH', `/web/factory/work-items/${workItem.id}`, { title: 'Updated title' });
+    serializedDates.mockClear();
+    expect(await read(orgUser)).toContain('Updated title');
+    expect(serializedDates.mock.calls.length).toBeGreaterThan(0);
   });
 });
 

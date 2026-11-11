@@ -85,6 +85,41 @@ function toWireWorkItem(item: Card): Card {
   };
 }
 
+const textEncoder = new TextEncoder();
+const BOARD_LIST_OPENING = textEncoder.encode('{"workItems":');
+
+/**
+ * The wire cards of a list that `listShared` returned, as the bytes of their JSON. A list is
+ * frozen and replaced when the board changes, so it always encodes to the same bytes, and the
+ * entry goes when storage drops the list.
+ */
+const encodedWireCards = new WeakMap<readonly Card[], Uint8Array<ArrayBuffer>>();
+
+/**
+ * The bytes of `JSON.stringify({ workItems, runningSessionIds, parkedSessionIds })`. The board
+ * poll asks for every card of the project every few seconds, so the cards are mapped and
+ * encoded once per list. The session ids change without a board write and are read per request.
+ */
+function boardListBody(
+  items: readonly Card[],
+  runningSessionIds: string[],
+  parkedSessionIds: string[],
+): Uint8Array<ArrayBuffer> {
+  let cards = encodedWireCards.get(items);
+  if (!cards) {
+    cards = textEncoder.encode(JSON.stringify(items.map(toWireWorkItem)));
+    encodedWireCards.set(items, cards);
+  }
+  const closing = textEncoder.encode(
+    `,"runningSessionIds":${JSON.stringify(runningSessionIds)},"parkedSessionIds":${JSON.stringify(parkedSessionIds)}}`,
+  );
+  const body = new Uint8Array(BOARD_LIST_OPENING.length + cards.length + closing.length);
+  body.set(BOARD_LIST_OPENING);
+  body.set(cards, BOARD_LIST_OPENING.length);
+  body.set(closing, BOARD_LIST_OPENING.length + cards.length);
+  return body;
+}
+
 /** Session ids of the listed cards that the predicate picks, each once. */
 function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
   const picked = new Set<string>();
@@ -394,11 +429,15 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({
-            workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
-          });
+          return c.body(
+            boardListBody(
+              items,
+              sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
+              sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+            ),
+            undefined,
+            { 'Content-Type': 'application/json' },
+          );
         },
       }),
 
