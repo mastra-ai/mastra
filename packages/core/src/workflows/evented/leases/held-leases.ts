@@ -47,6 +47,8 @@ class RestartLeasePoller {
   readonly #held = new Set<HeldRestart>();
   #timer?: ReturnType<typeof setInterval>;
   #ticking = false;
+  /** Whether the last liveness read failed, so a streak of failures is logged once. */
+  #readFailing = false;
 
   constructor(readonly store: WorkflowsStorage) {}
 
@@ -79,17 +81,28 @@ class RestartLeasePoller {
       if (checked.length === 0) return;
       // A failed read only means no hand-off is seen this tick: the due leases are still renewed,
       // or another instance could take one over and restart its run again.
+      const logger = checked.find(held => held.logger)?.logger;
       const live = await Promise.resolve()
         .then(() => this.store.getRunOwnerships({ runIds: checked.map(held => runLivenessKey(held.runId)) }))
-        .catch(error => {
-          checked
-            .find(held => held.logger)
-            ?.logger?.warn('Failed to read whether restarted workflow runs were handed to a worker', {
-              runs: checked.length,
-              error,
-            });
-          return new Map<string, RunOwnershipRecord>();
-        });
+        .then(
+          records => {
+            if (this.#readFailing)
+              logger?.info('Reading whether restarted workflow runs were handed to a worker works again');
+            this.#readFailing = false;
+            return records;
+          },
+          error => {
+            // Once per failure streak: a store that is down would otherwise log on every tick.
+            if (!this.#readFailing) {
+              logger?.warn('Failed to read whether restarted workflow runs were handed to a worker', {
+                runs: checked.length,
+                error,
+              });
+            }
+            this.#readFailing = true;
+            return new Map<string, RunOwnershipRecord>();
+          },
+        );
       const due = checked.filter(held => {
         if (live.get(runLivenessKey(held.runId))?.live) held.end(true);
         return this.#held.has(held) && Date.now() - held.renewedAt >= LIVENESS_RENEW_INTERVAL_MS;
