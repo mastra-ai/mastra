@@ -3129,11 +3129,20 @@ export class WorkflowEventProcessor extends EventProcessor {
           'output' in storedResult &&
           typeof storedResult.startedAt === 'number' &&
           typeof storedResult.endedAt === 'number';
+        // Rebuild the record's timing from this step's running record and the run's last write,
+        // as this record replaces the step's record in the parent.
+        const runningRecord = stepResults?.[leafId] as StepResult<any, any, any, any> | undefined;
         const finishedResult: StepResult<any, any, any, any> | undefined =
           snapshot.status === 'success'
             ? isLegacyStepRecord
               ? storedResult
-              : ({ status: 'success', output: storedResult } as StepResult<any, any, any, any>)
+              : {
+                  status: 'success',
+                  output: storedResult,
+                  payload: runningRecord?.payload,
+                  startedAt: runningRecord?.startedAt ?? snapshot.timestamp ?? Date.now(),
+                  endedAt: snapshot.timestamp ?? Date.now(),
+                }
             : undefined;
         if (ranForThisStep && (finishedResult || snapshot.status === 'failed')) {
           const parentContext: ParentWorkflow = {

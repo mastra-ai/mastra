@@ -438,4 +438,12 @@ describe('evented restart after a nested workflow finished, by stored result sha
     expect(result).toMatchObject({ status: 'success', result: { got: output } });
     expect(starts(log, 'inner')).toEqual([]);
   }, 60_000);
+
+  it("keeps the nested step's timing when it hands up the output", async () => {
+    const { result } = await restartWithFinishedChild('timing', n => ({ n: n + 1 }));
+    const record = (result as any).steps?.['shape-child'];
+    expect(record).toMatchObject({ status: 'success', output: { n: 2 }, payload: { n: 1 } });
+    expect(record.startedAt).toEqual(expect.any(Number));
+    expect(record.endedAt).toBeGreaterThanOrEqual(record.startedAt);
+  }, 60_000);
 });
