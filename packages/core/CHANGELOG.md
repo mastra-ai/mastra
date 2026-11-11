@@ -1,5 +1,80 @@
 # @mastra/core
 
+## 1.83.0-alpha.7
+
+### Minor Changes
+
+- Added `buildEnv` and `buildEnvRevision` to `FactorySandboxContext`. Factory uses them to pass a factory's Build environment variables to template builds and setup steps without putting the values in the template identity. A provider should include `buildEnvRevision` (a random id that changes whenever the values change) in its template identity so an edit rebuilds the template. Both fields are optional, so existing providers compile unchanged. ([#29923](https://github.com/mastra-ai/mastra/pull/29923))
+
+- Added `diffResponseMessages` and the `ResponseMessagesCursor` type to `@mastra/core/agent/durable` for durable agent integrations outside core, such as `@mastra/inngest`. They build the step events that carry only the response messages that changed since the previous step, which `observe()` and callers rebuild into the full list. ([#29976](https://github.com/mastra-ai/mastra/pull/29976))
+
+### Patch Changes
+
+- `Mastra.addAgent` now throws `MASTRA_ADD_AGENT_DUPLICATE_KEY` when a different agent is registered under an occupied key instead of silently skipping it. To replace an agent, call the public removal API first: ([#29966](https://github.com/mastra-ai/mastra/pull/29966))
+
+  ```ts
+  // Before: the second agent was silently skipped; the first remained registered.
+  mastra.addAgent(firstAgent, 'shared');
+  mastra.addAgent(secondAgent, 'shared');
+
+  // After: remove the first agent explicitly before registering its replacement.
+  mastra.removeAgent('shared');
+  mastra.addAgent(secondAgent, 'shared');
+  ```
+
+  Re-registering the same agent remains a no-op. Stored-agent rehydration also preserves the registered instance, and controller modes sharing an agent ID remain usable.
+
+- The coding-agent base prompt now says that approving a submitted plan starts it as a goal. Set `planApprovalStartsGoal: false` in the prompt context to say approval switches to Build mode without starting a goal and to leave out the `/goal` command. ([#28037](https://github.com/mastra-ai/mastra/pull/28037))
+
+  ```ts
+  import { buildBasePrompt } from '@mastra/core/coding-agent';
+
+  const prompt = buildBasePrompt({
+    projectPath: '/repo',
+    projectName: 'my-app',
+    platform: 'linux',
+    date: '2026-11-05',
+    mode: 'plan',
+    toolGuidance: '',
+    planApprovalStartsGoal: false,
+  });
+  ```
+
+- Fixed `streamUntilIdle()` on agents created with `createInngestAgent` closing right after `background-task-completed`. When a deferred background task finishes while an until-idle stream is open, the follow-up answer now streams on that same stream instead of waking the thread as a separate run that only reaches memory. ([#29877](https://github.com/mastra-ai/mastra/pull/29877))
+
+- Fixed evented workflows replacing omitted or `null` input with `{}`, matching the default engine. Fixes [#29424](https://github.com/mastra-ai/mastra/issues/29424). ([#29542](https://github.com/mastra-ai/mastra/pull/29542))
+
+  - `start()`, `startAsync()` and `stream()`: an omitted `inputData` now lets the `inputSchema` default apply, and an explicit `null` reaches a nullable `inputSchema`.
+  - Resume: a suspended step gets the same `null` or omitted input it started with.
+  - Failures: a step that fails in a run started with `null` input no longer leaves `start()` waiting forever.
+  - `timeTravel()` to the first step, or to a nested workflow's first step, replays the run's `null` or omitted input. New `inputData` passed to `timeTravel()`, including `null`, replaces the stored input.
+
+  If you relied on that `{}` fallback, pass `inputData: {}` explicitly or add a schema default. Without an `inputSchema` or with `validateInputs: false`, the first step now receives `undefined` instead of `{}` when `inputData` is omitted, as on the default engine.
+
+  ```ts
+  // Before: the evented engine passed {} when inputData was omitted
+  await run.start({});
+
+  // After: pass {} yourself, or give the inputSchema a default
+  await run.start({ inputData: {} });
+  const inputSchema = z.object({ count: z.number() }).default({ count: 0 });
+  ```
+
+- Improved how DurableAgent and EventedAgent store their run stream (`agent.stream.<runId>`). Each step event now carries only the response messages that changed since the previous step, instead of the whole list, so long runs with large tool outputs no longer store each output once per later step. For a DurableAgent run of 40 steps on Redis Streams, the run stream went from 24 MB to 8.6 MB. ([#29975](https://github.com/mastra-ai/mastra/pull/29975))
+
+  - EventedAgent runs also store workflow events that still repeat the run's step results; that growth is tracked in #29370.
+  - Callers and `observe()` still report the full list of response messages for each step, including `observe()` from an offset, and an observer that joins mid-run on a pubsub that keeps no history.
+  - Upgrade the processes that run durable agents and the ones that read their streams together: a reader on an older version reports no response messages for steps published by this version.
+
+- Improved the missing-storage error for memory that has not been registered with Mastra. It now explains how to register an agent to inherit storage or configure storage directly on Memory for standalone use. ([#29972](https://github.com/mastra-ai/mastra/pull/29972))
+
+- Fixed observers of a plain `Agent` run (`agent.observe()`, reconnecting clients) receiving sub-agent progress chunks and the run's error chunks timed by when they were published instead of when they were produced, which could make thread history show an already stored part again. ([#29997](https://github.com/mastra-ai/mastra/pull/29997))
+
+- Improved how a plain `Agent` stores its run stream. Each step event now carries only the response messages that changed since the previous step, so long runs with large tool outputs no longer store each output once per later step. A 40-step run that took 20 MB of Redis now takes about 6.5 MB, and the log grows in line with the run instead of with the square of its steps. ([#29971](https://github.com/mastra-ai/mastra/pull/29971))
+
+  - `agent.observe()` still reports the full list of response messages for each step, including when it starts from an offset.
+  - During a rolling upgrade, an observer on an older version reports no response messages for steps published by the new version, so upgrade the processes that run agents and the ones that observe them together.
+
 ## 1.83.0-alpha.6
 
 ### Patch Changes
