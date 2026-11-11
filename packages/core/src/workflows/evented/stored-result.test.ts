@@ -99,4 +99,17 @@ describe.each(engines)('stored run result ($name engine)', ({ name, createStep, 
     expect(stored?.status).toBe('success');
     expect(stored?.result).toEqual({ x: 4 });
   });
+
+  it('stores no result for a run paused after one step', async () => {
+    const { suspending } = setup();
+    await mastra!.startWorkers();
+
+    const run = await suspending.createRun();
+    const result = await run.start({ inputData: { x: 2 }, perStep: true });
+    expect(result.status).toBe('paused');
+
+    const paused = await suspending.getWorkflowRunById(run.runId);
+    expect(paused?.status).toBe('paused');
+    expect(paused?.result).toBeUndefined();
+  });
 });

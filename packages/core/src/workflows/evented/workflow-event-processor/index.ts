@@ -1350,7 +1350,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         opts: {
           status: finalStatus,
           // The stored result is the workflow output (as on the default engine), not the step record.
-          result: normalizedPrevResult.status === 'success' ? normalizedPrevResult.output : undefined,
+          result:
+            finalStatus === 'success' && normalizedPrevResult.status === 'success'
+              ? normalizedPrevResult.output
+              : undefined,
           activePaths: executionPath,
           activeStepsPath: activeStepsPath,
         },
@@ -3876,6 +3879,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           opts: {
             status: 'suspended',
+            result: undefined,
             suspendedPaths,
             resumeLabels,
             ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
@@ -4413,6 +4417,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               opts: {
                 status: 'suspended',
+                result: undefined,
                 suspendedPaths,
                 resumeLabels: collectedResumeLabels,
                 activePaths: executionPath,
@@ -4674,6 +4679,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           opts: {
             status: 'suspended',
+            result: undefined,
             suspendedPaths,
             resumeLabels,
             activePaths: executionPath,
