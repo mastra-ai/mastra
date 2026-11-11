@@ -4,7 +4,7 @@ import type { ScoringHookInput } from '../evals/types';
 import { getScorerHookEntry, isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import { resolveAgentById } from '../mastra/resolve-agent';
-import { EntityType, resolveExportedSpanId } from '../observability';
+import { EntityType, resolveExportedSpanId, resolveObservabilityContext } from '../observability';
 import type { MastraStorage } from '../storage';
 
 function toScorerTargetEntityType(entityType: string): EntityType | undefined {
@@ -64,7 +64,7 @@ export function createOnScorerHook(mastra: Mastra) {
 
       const { structuredOutput, ...rest } = hookData;
 
-      const currentSpan = hookData.tracingContext?.currentSpan;
+      const currentSpan = resolveObservabilityContext(hookData).tracing.currentSpan;
       const traceId = currentSpan?.isValid ? currentSpan.traceId : undefined;
       // Scores are an observability signal, so they must name a span that reached
       // exporters. Durable agents run their scorers inside a workflow whose spans
@@ -174,13 +174,11 @@ export function redactScorePayload<T extends Record<string, any>>(
     return payload;
   }
 
-  const redacted: Record<string, any> = { ...payload };
-  if (hideInput && redacted.input !== undefined) {
-    redacted.input = REDACTED_SCORE_VALUE;
-  }
-  if (hideOutput) {
-    redacted.output = REDACTED_SCORE_VALUE;
-  }
+  const redacted: Record<string, any> = {
+    ...payload,
+    input: REDACTED_SCORE_VALUE,
+    output: REDACTED_SCORE_VALUE,
+  };
   for (const field of DERIVED_SCORE_FIELDS) {
     if (redacted[field] !== undefined) {
       redacted[field] = typeof redacted[field] === 'string' ? REDACTED_SCORE_VALUE : undefined;

@@ -43,11 +43,20 @@ function streamModel(text: string) {
 }
 
 /** An LLM-judged scorer whose prompt and reason quote the conversation, as real judges do. */
-function createQuotingJudgeScorer() {
+function createQuotingJudgeScorer(transform?: 'input-to-output' | 'output-to-input') {
   return createScorer({
     id: 'helpfulness',
     description: 'Judges whether the reply helped the user',
     judge: { model: streamModel(JSON.stringify({ helpful: true })), instructions: 'You judge helpfulness.' },
+    prepareRun: run => {
+      if (transform === 'input-to-output') {
+        return { ...run, output: { originalOutput: run.output, copiedInput: run.input } };
+      }
+      if (transform === 'output-to-input') {
+        return { ...run, input: { originalInput: run.input, copiedOutput: run.output } };
+      }
+      return run;
+    },
   })
     .analyze({
       description: 'Judge the reply',
@@ -63,7 +72,11 @@ type Variant = 'agent defaultOptions' | 'per-call tracingOptions' | 'durable age
 
 type Hide = { hideInput?: boolean; hideOutput?: boolean };
 
-function setup(variant: Variant, tracingOptions: Hide) {
+function setup(
+  variant: Variant,
+  tracingOptions: Hide,
+  transform?: 'input-to-output' | 'output-to-input',
+) {
   const exporter = new TestExporter();
   const storage = new MockStore();
 
@@ -72,7 +85,7 @@ function setup(variant: Variant, tracingOptions: Hide) {
     name: 'Support',
     instructions: 'Help the customer.',
     model: streamModel(`Your account IBAN is ${REPLY_SECRET}.`),
-    scorers: { helpfulness: { scorer: createQuotingJudgeScorer() } },
+    scorers: { helpfulness: { scorer: createQuotingJudgeScorer(transform) } },
     ...(variant === 'agent defaultOptions' ? { defaultOptions: { tracingOptions } } : {}),
   });
 
@@ -109,8 +122,12 @@ async function waitForScore(storage: MockStore, exporter: TestExporter, runId: s
 
 const HIDE_BOTH: Hide = { hideInput: true, hideOutput: true };
 
-async function runAndScore(variant: Variant, hide: Hide) {
-  const { exporter, storage, agent, callOptions } = setup(variant, hide);
+async function runAndScore(
+  variant: Variant,
+  hide: Hide,
+  transform?: 'input-to-output' | 'output-to-input',
+) {
+  const { exporter, storage, agent, callOptions } = setup(variant, hide, transform);
   const runId = `run-${variant.replace(/\W+/g, '-')}-${JSON.stringify(hide).replace(/\W+/g, '-')}`;
 
   const res = await agent.stream(`Hi, my email is ${USER_SECRET}. What is my IBAN?`, { runId, ...callOptions });
@@ -160,10 +177,7 @@ describe.each(VARIANTS)('live scorer on a hidden agent trace (%s)', variant => {
     expect(JSON.stringify(scoreEvents)).not.toContain(REPLY_SECRET);
   });
 
-  // Durable agents do not apply per-call `tracingOptions.hideInput` to their own model,
-  // step, and processor spans; this happens with or without scorers. Not yet investigated.
-  const itFailsOnDurable = variant === 'durable agent, per-call tracingOptions' ? it.fails : it;
-  itFailsOnDurable('keeps the conversation out of the agent trace', async () => {
+  it('keeps the conversation out of the agent trace', async () => {
     const { exporter } = await runAndScore(variant, HIDE_BOTH);
 
     const scorerTraceId = exporter.getAllSpans().find(span => span.type === SpanType.SCORER_RUN)?.traceId;
@@ -189,39 +203,56 @@ describe.each(VARIANTS)('live scorer on a hidden agent trace (%s)', variant => {
   });
 });
 
-// The scorer trace mixes both sides of the scored run, so one flag must hide all of it,
-// while the stored score keeps the side that was not hidden.
+// The scorer trace and prepared score row can mix both sides of the scored run, so one flag
+// must hide both persisted fields and all scorer observability.
 describe('live scorer on an agent trace with a single hide flag', () => {
   const scorerTraceOf = (exporter: TestExporter) => {
     const scorerRun = exporter.getAllSpans().find(span => span.type === SpanType.SCORER_RUN);
     return exporter.getAllSpans().filter(span => span.traceId === scorerRun?.traceId);
   };
 
-  it('hideOutput keeps the reply out of the score and the whole scorer trace', async () => {
+  it('hideOutput keeps both sides out of the score and the whole scorer trace', async () => {
     const { rows, exporter } = await runAndScore('agent defaultOptions', { hideOutput: true });
 
     expect(rows[0]!.score).toBe(1);
     expect(JSON.stringify(rows[0])).not.toContain(REPLY_SECRET);
-    expect(JSON.stringify(rows[0]!.input)).toContain(USER_SECRET);
+    expect(JSON.stringify(rows[0])).not.toContain(USER_SECRET);
 
     const scorerTrace = scorerTraceOf(exporter);
     expect(scorerTrace.length).toBeGreaterThan(0);
     expect(JSON.stringify(scorerTrace)).not.toContain(REPLY_SECRET);
     expect(JSON.stringify(scorerTrace)).not.toContain(USER_SECRET);
     expect(JSON.stringify(exporter.getScoreEvents())).not.toContain(REPLY_SECRET);
+    expect(JSON.stringify(exporter.getScoreEvents())).not.toContain(USER_SECRET);
   });
 
-  it('hideInput keeps the user message out of the score and the whole scorer trace', async () => {
+  it('hideInput keeps both sides out of the score and the whole scorer trace', async () => {
     const { rows, exporter } = await runAndScore('agent defaultOptions', { hideInput: true });
 
     expect(rows[0]!.score).toBe(1);
     expect(JSON.stringify(rows[0])).not.toContain(USER_SECRET);
-    expect(JSON.stringify(rows[0]!.output)).toContain(REPLY_SECRET);
+    expect(JSON.stringify(rows[0])).not.toContain(REPLY_SECRET);
 
     const scorerTrace = scorerTraceOf(exporter);
     expect(scorerTrace.length).toBeGreaterThan(0);
     expect(JSON.stringify(scorerTrace)).not.toContain(USER_SECRET);
     expect(JSON.stringify(scorerTrace)).not.toContain(REPLY_SECRET);
     expect(JSON.stringify(exporter.getScoreEvents())).not.toContain(USER_SECRET);
+    expect(JSON.stringify(exporter.getScoreEvents())).not.toContain(REPLY_SECRET);
+  });
+
+  it.each([
+    ['hideInput', { hideInput: true }, 'input-to-output'],
+    ['hideOutput', { hideOutput: true }, 'output-to-input'],
+  ] as const)('%s redacts prepared fields that copy data across sides', async (_name, hide, transform) => {
+    const { rows, exporter } = await runAndScore('agent defaultOptions', hide, transform);
+
+    expect(rows[0]!.score).toBe(1);
+    expect(JSON.stringify(rows[0])).not.toContain(USER_SECRET);
+    expect(JSON.stringify(rows[0])).not.toContain(REPLY_SECRET);
+    expect(JSON.stringify(scorerTraceOf(exporter))).not.toContain(USER_SECRET);
+    expect(JSON.stringify(scorerTraceOf(exporter))).not.toContain(REPLY_SECRET);
+    expect(JSON.stringify(exporter.getScoreEvents())).not.toContain(USER_SECRET);
+    expect(JSON.stringify(exporter.getScoreEvents())).not.toContain(REPLY_SECRET);
   });
 });
