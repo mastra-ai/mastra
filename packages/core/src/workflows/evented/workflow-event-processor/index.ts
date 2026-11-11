@@ -210,7 +210,10 @@ type PendingFailure = { error: Error; publishAttempts: number; failRun?: Omit<Pr
 /**
  * Thrown when a delivery waiting for another worker's step lease gives up
  * because this process is shutting down. The delivery is handed back to the
- * transport for another instance, and does not count as a failed attempt.
+ * transport for another instance, and this processor does not record it as a
+ * failed attempt. The transport still counts the delivery; once that count
+ * exhausts the budget while the step's holder runs it, the delivery is
+ * dropped instead of failing the run.
  */
 class DeferredDelivery extends Error {
   constructor() {
@@ -2277,18 +2280,47 @@ export class WorkflowEventProcessor extends EventProcessor {
     const store = await this.#leaseStore(args.workflow);
     if (!store) return UNLEASED_STEP;
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
-    // Every loop iteration runs the body under the same execution path.
-    const iterationCount =
-      step.type === 'loop' ? (args.stepResults?.[leafId]?.metadata?.iterationCount ?? 0) : undefined;
     return acquireStepLease({
       scope: this.mastra,
       store,
       runId: args.runId,
-      key: stepOccurrenceKey(args.runId, args.executionPath, iterationCount),
+      key: this.#stepLeaseKey(args, step),
       handoff,
       claimAfterRelease: args.resumeSteps?.[0] === leafId,
       logger: this.mastra.getLogger(),
     });
+  }
+
+  /** The lease key of the occurrence of `step` that `args` delivers. */
+  #stepLeaseKey(args: Pick<ProcessorArgs, 'runId' | 'executionPath' | 'stepResults'>, step: StepFlowEntry): string {
+    // Every loop iteration runs the body under the same execution path.
+    const iterationCount =
+      step.type === 'loop' ? (args.stepResults?.[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) : undefined;
+    return stepOccurrenceKey(args.runId, args.executionPath, iterationCount);
+  }
+
+  /**
+   * Whether another delivery holds a live lease on the leaf occurrence this
+   * `workflow.step.run` delivers. A hand-off the event carries for that very
+   * lease does not count: the lease is waiting for this delivery then.
+   */
+  async #isStepLeasedElsewhere(event: Event): Promise<boolean> {
+    const data = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
+    if (!data?.workflowId || !data.executionPath?.length) return false;
+    const workflow = this.#resolveLiveWorkflow(data) ?? undefined;
+    const store = await this.#leaseStore(workflow);
+    if (!store || !workflow) return false;
+    const [index, branch] = data.executionPath;
+    const entry: StepFlowEntry | undefined = workflow.stepGraph[index!];
+    const leaf =
+      (entry?.type === 'parallel' || entry?.type === 'conditional') && branch !== undefined
+        ? entry.steps[branch]
+        : entry;
+    if (!leaf) return false;
+    const record = await store.getRunOwnership({ runId: this.#stepLeaseKey(data, leaf) });
+    if (!record?.live) return false;
+    const handoff = data.stepLeaseHandoff;
+    return !(handoff && handoff.key === record.runId && handoff.generation === record.generation);
   }
 
   /** Evaluates the loop condition after an iteration, then starts the next one or leaves the loop. */
@@ -5109,6 +5141,18 @@ export class WorkflowEventProcessor extends EventProcessor {
               return { ok: true };
             }
           }
+        }
+        // Deliveries a shutting-down process deferred while another worker ran the step count
+        // toward the transport's attempt number, though no attempt ran. Failing the run here would
+        // fail a step that is still running; the holder finishes it, and if the holder dies the
+        // recovery sweep restarts the run once its liveness lapses.
+        if (event.type === 'workflow.step.run' && (await this.#isStepLeasedElsewhere(event))) {
+          this.deliveryAttempts.delete(eventKey);
+          this.mastra.getLogger()?.debug('Dropping an exhausted delivery of a step another worker is running', {
+            runId: event.runId,
+            deliveryAttempt: event.deliveryAttempt,
+          });
+          return { ok: true };
         }
         return this.#publishPendingFailure(event, eventKey, {
           error: new Error(`Event ${event.type} exhausted its delivery attempts`),

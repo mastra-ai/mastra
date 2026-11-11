@@ -123,8 +123,13 @@ class ProcessRunLiveness {
     };
   }
 
-  /** Writes the run's liveness key, logging instead of rejecting when the write fails. */
-  #writeOrWarn(runId: string, store: WorkflowsStorage): Promise<void> {
+  /**
+   * Writes the run's liveness key, logging instead of rejecting when the write
+   * fails. Skipped once the process is shutting down: it stops vouching for
+   * its runs then, so they can be recovered once their keys lapse.
+   */
+  async #writeOrWarn(runId: string, store: WorkflowsStorage): Promise<void> {
+    if (this.scope.__shuttingDown) return;
     return this.#write(runId, store).catch(error =>
       this.logger?.warn('Failed to mark a workflow run live', { runId, error }),
     );
@@ -339,6 +344,7 @@ export async function acquireStepLease({
     });
   }
   while (!result.acquired) {
+    if (scope.__shuttingDown) return 'defer';
     await sleep(holdDelay(result.record));
     if (scope.__shuttingDown) return 'defer';
     const current = await store.getRunOwnership({ runId: key });
@@ -350,9 +356,11 @@ export async function acquireStepLease({
 }
 
 /**
- * Counts the step toward the run's liveness, then renews the acquired step
- * lease and returns its handle. The step stops counting when the handle is
+ * Renews the acquired step lease, counts the step toward the run's liveness
+ * and returns the lease handle. The step stops counting when the handle is
  * released, even after a hand-off: the handler that holds it ran until then.
+ * If counting the step throws, the lease is released before the error
+ * propagates.
  */
 async function holdStepLease({
   scope,
@@ -368,7 +376,8 @@ async function holdStepLease({
   logger?: IMastraLogger;
 }): Promise<StepLease> {
   const fence: RunFence = { runId: record.runId, generation: record.generation, ownerId: record.ownerId };
-  const leaveRun = await processLiveness(scope, logger).enter(runId, store);
+  // Renewal starts before the liveness write is awaited: a write that stalls past the TTL must
+  // not let the step lease lapse while this worker still holds it.
   const stopRenewing = renewWorkflowLease({
     store,
     fence,
@@ -379,6 +388,14 @@ async function holdStepLease({
       }),
     onError: error => logger?.warn('Failed to renew workflow step lease', { key: fence.runId, error }),
   });
+  let leaveRun: () => void;
+  try {
+    leaveRun = await processLiveness(scope, logger).enter(runId, store);
+  } catch (error) {
+    stopRenewing();
+    await store.releaseRunOwnership(fence).catch(() => {});
+    throw error;
+  }
   let handedOff = false;
   let released = false;
   return {
