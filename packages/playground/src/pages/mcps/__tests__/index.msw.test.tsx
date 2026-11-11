@@ -101,7 +101,7 @@ describe('MCP servers page — built-in Mastra server', () => {
       useServers({ builtin: openDevServer });
       renderPage();
 
-      expect(await snippetFor('Claude Code')).toBe(`claude mcp add --transport http mastra ${TEST_BASE_URL}/api/mcp`);
+      expect(await snippetFor('Claude Code')).toBe(`claude mcp add --transport http mastra '${TEST_BASE_URL}/api/mcp'`);
     });
 
     it('offers Cursor, VS Code and MCP Inspector configs for the endpoint', async () => {
@@ -115,7 +115,7 @@ describe('MCP servers page — built-in Mastra server', () => {
         servers: { mastra: { type: 'http', url: `${TEST_BASE_URL}/api/mcp` } },
       });
       expect(await snippetFor('MCP Inspector')).toBe(
-        `npx @modelcontextprotocol/inspector --cli ${TEST_BASE_URL}/api/mcp --transport http --method tools/list`,
+        `npx @modelcontextprotocol/inspector --cli '${TEST_BASE_URL}/api/mcp' --transport http --method tools/list`,
       );
     });
 
@@ -150,7 +150,7 @@ describe('MCP servers page — built-in Mastra server', () => {
       renderPage();
 
       expect(await snippetFor('Claude Code')).toBe(
-        `claude mcp add --transport http mastra ${TEST_BASE_URL}/api/mcp --header "Authorization: Bearer <your-token>"`,
+        `claude mcp add --transport http mastra '${TEST_BASE_URL}/api/mcp' --header "Authorization: Bearer <your-token>"`,
       );
       expect(JSON.parse(await snippetFor('Cursor'))).toEqual({
         mcpServers: { mastra: { url: `${TEST_BASE_URL}/api/mcp`, headers: { Authorization: 'Bearer <your-token>' } } },
@@ -196,7 +196,7 @@ describe('MCP servers page — built-in Mastra server', () => {
 
       expect(await within(await findCard()).findByText(`${TEST_BASE_URL}/mastra/tools-mcp`)).not.toBeNull();
       expect(await snippetFor('Claude Code')).toBe(
-        `claude mcp add --transport http mastra ${TEST_BASE_URL}/mastra/tools-mcp`,
+        `claude mcp add --transport http mastra '${TEST_BASE_URL}/mastra/tools-mcp'`,
       );
     });
   });
@@ -207,7 +207,7 @@ describe('MCP servers page — built-in Mastra server', () => {
       renderPage({ baseUrl: `${TEST_BASE_URL}/` });
 
       expect(await within(await findCard()).findByText(`${TEST_BASE_URL}/api/mcp`)).not.toBeNull();
-      expect(await snippetFor('Claude Code')).toBe(`claude mcp add --transport http mastra ${TEST_BASE_URL}/api/mcp`);
+      expect(await snippetFor('Claude Code')).toBe(`claude mcp add --transport http mastra '${TEST_BASE_URL}/api/mcp'`);
     });
   });
 
