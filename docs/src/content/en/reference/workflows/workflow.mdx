@@ -232,7 +232,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             name: 'pruneSnapshot',
             type: '(params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState',
             description:
-              'Optional hook to transform the workflow snapshot immediately before it is persisted. Must return JSON-serializable data and preserve everything the workflow needs to resume (suspended step suspendPayloads, suspendedPaths, executionPath, etc.). On the evented engine it must also keep the status, startedAt and endedAt of each step result, which tell a step event that arrives late whether its step already finished. Used internally by agent runs to keep snapshots minimal; user workflows persist full snapshots by default.',
+              'Optional hook to transform the workflow snapshot immediately before it is persisted. Must return JSON-serializable data and preserve everything the workflow needs to resume (suspended step suspendPayloads, suspendedPaths, executionPath, etc.). On the evented engine it must also keep what tells a step event that arrives late whether its step already finished: the status, startedAt and endedAt of each step result, metadata.iterationCount on a loop body result, the per-item records in suspendPayload.__workflow_meta.foreachOutput on a foreach step result, and activePaths. Used internally by agent runs to keep snapshots minimal; user workflows persist full snapshots by default.',
             isOptional: true,
           },
           {
