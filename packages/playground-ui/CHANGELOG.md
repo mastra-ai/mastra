@@ -1,5 +1,167 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.9
+
+### Patch Changes
+
+- The toggle on pinned Knowledge listings in Studio chat now says how many pages the listing covers: "Show N pages ▾" when collapsed ("Show N+ pages ▾" when the total is unknown), "Hide pages ▴" when open. ([#29987](https://github.com/mastra-ai/mastra/pull/29987))
+
+## 69.0.0-alpha.8
+
+### Minor Changes
+
+- Added RuleCard and RuleLines, composable parts for rules that read as sentences (Where … and … → Move to …). ([#29978](https://github.com/mastra-ai/mastra/pull/29978))
+
+  ```tsx
+  <RuleCard>
+    <RuleCardHeader>
+      <RuleCardStep>If</RuleCardStep>
+      <RuleCardTitle>Closed issues go to Done</RuleCardTitle>
+    </RuleCardHeader>
+    <RuleCardBody>
+      <RuleLines role="group" aria-label="Conditions">
+        <RuleLine>
+          <RuleLineKeyword>Where</RuleLineKeyword>
+          <RuleLineContent>…</RuleLineContent>
+        </RuleLine>
+      </RuleLines>
+    </RuleCardBody>
+    <RuleCardOutcome label="Move to">…</RuleCardOutcome>
+  </RuleCard>
+  ```
+
+- Added an `inline` variant to `CodeEditor` for editing prose in place: no border, background or gutter, and text lines up with the label above it. ([#29978](https://github.com/mastra-ai/mastra/pull/29978))
+
+  ```tsx
+  <CodeEditor variant="inline" language="markdown" value={text} onChange={setText} />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/client-js@1.60.0-alpha.7
+  - @mastra/react@1.15.0-alpha.7
+
+## 69.0.0-alpha.7
+
+### Minor Changes
+
+- Added two-line sidebar rows and a `Sidebar.NavAction` button for row actions. ([#29937](https://github.com/mastra-ai/mastra/pull/29937))
+
+  Pass `description` to `Sidebar.NavLabel` to show a smaller second line under the label, such as a timestamp or a count. The row grows to fit it, its icon lines up with the first line, and its actions move to the top-right corner. When the sidebar collapses to icons, the description is hidden and the row keeps its normal height.
+
+  Use `Sidebar.NavAction` for buttons in a row's `action` slot. It is a 24px ghost icon button whose corners follow the row's rounded edge, so it sits the same distance from the row's top and right edges. Hover-only actions can reveal with `group-hover/nav-row:`.
+
+  ```tsx
+  <Sidebar.NavLink
+    render={
+      <a href="/sessions/1">
+        <Sidebar.NavLabel description={<time dateTime="2026-11-10T10:00:00Z">3h</time>}>
+          Fix flaky login
+        </Sidebar.NavLabel>
+      </a>
+    }
+    action={
+      <Sidebar.NavAction aria-label="Session actions">
+        <MoreHorizontal />
+      </Sidebar.NavAction>
+    }
+  />
+  ```
+
+### Patch Changes
+
+- Removed comments from Factory work items. Cards no longer have a comment feed, mentions, or comment counts, and the mention and activity items are gone from the attention inbox. Slack `aside` messages are still ignored by the agent but are no longer copied onto the card, and Factory no longer mirrors card comments to Slack. ([#29062](https://github.com/mastra-ai/mastra/pull/29062))
+
+  Each card now has a single `description` instead. Set it with `description` on `POST /web/factory/projects/:id/work-items` and `PATCH /web/factory/work-items/:id` (a blank string clears it), or edit it from the card panel. Runs started on the card receive it in a `<work-item-description>` block after the skill instructions, in place of the old `<work-item-feed>` block.
+
+  Breaking changes for API and agent-tool callers:
+
+  - `factory_create_work_item` takes `description` instead of `brief`. `factory_update_work_item` also accepts `description`, and `factory_inspect_work_item` returns it in place of recent comments.
+  - The `/web/factory/work-items/:id/comments` and `/web/factory/projects/:id/mention-roster` routes are removed. `/web/factory/projects/:id/feed-events` stays and still refreshes open boards, but its frames no longer carry a `workItemId`.
+  - The `mention` and `activity` attention kinds are removed.
+  - Work items no longer include `commentCount` or `feedActivityAt`.
+  - Integrations can no longer declare a `feedPublisher`, and `IntegrationContext` no longer has `feed`.
+  - `factoryWorkItemUrl()` no longer accepts `commentId`.
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`08e677f`](https://github.com/mastra-ai/mastra/commit/08e677fdbe36c10118c54c0494c8412019d61955), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/memory@1.41.1-alpha.3
+  - @mastra/client-js@1.60.0-alpha.6
+  - @mastra/ai-sdk@1.12.0-alpha.0
+  - @mastra/react@1.15.0-alpha.6
+
+## 69.0.0-alpha.6
+
+### Minor Changes
+
+- Added `closeOnEscape` to `Sidebar.NavStack.View` so a sidebar view that accompanies a full page can stay open when Escape is pressed. The sidebar now also follows a `minWidth` that changes at runtime: it widens to the new minimum and returns to the user's saved width when the minimum drops, without overwriting that saved width, including when the page first loads with the raised minimum. ([#29881](https://github.com/mastra-ai/mastra/pull/29881))
+
+  ```tsx
+  <Sidebar.Provider minWidth={configuring ? 288 : 200} collapseBelow={200}>
+    <Sidebar.NavStack value={view} onValueChange={setView}>
+      <Sidebar.NavStack.Root>{/* main navigation */}</Sidebar.NavStack.Root>
+      <Sidebar.NavStack.View value="board-config" title="Work" backLabel="Back to board" closeOnEscape={false}>
+        {/* board settings */}
+      </Sidebar.NavStack.View>
+    </Sidebar.NavStack>
+  </Sidebar.Provider>
+  ```
+
+- Added `@mastra/playground-ui/fonts.css`, which loads Mastra's product fonts, Mona Sans for text and Commit Mono for code, and points the font tokens at them. Import it next to the package's other stylesheets instead of bundling font files in each app: ([#29915](https://github.com/mastra-ai/mastra/pull/29915))
+
+  ```css
+  @import '@mastra/playground-ui/fonts.css';
+  ```
+
+  The font files ship inside the package as woff2, split by script, so a page only downloads the characters it renders and an app needs no font dependencies or files of its own.
+
+- Improved text readability with heavier weights. Body copy, table cells and captions now render at weight 465 instead of 400, which read thin on dark surfaces, and menus move from 450 to 465. Labels and headings move from 500 to 515 so they keep standing out, and bold text in markdown from 500 to 550. ([#29743](https://github.com/mastra-ai/mastra/pull/29743))
+
+  Text roles now draw from two weight tokens, `--font-weight-normal` (465) and `--font-weight-medium` (515). Card title roles keep their own 550 and 600 weights. The `font-normal` and `font-medium` utilities resolve to the same tokens, so emphasis stays on one scale. The default body weight is now 465 instead of the browser's 400.
+
+### Patch Changes
+
+- Improved the Switch thumb: it is now a round circle that slides on toggle and stretches slightly on hover, with a more compact track and instant color changes. ([#29902](https://github.com/mastra-ai/mastra/pull/29902))
+
+- Sidebar items now highlight the same area on hover and when selected, and no longer flash a darker pressed state when clicked. Clicking an item goes straight from its hover highlight to the selected highlight. ([#29919](https://github.com/mastra-ai/mastra/pull/29919))
+
+- Improved read-only skill forms: `SkillSimpleForm` shows a locked name (`nameReadOnly`), and the name and description in `readOnly` mode, as plain text under their labels instead of disabled inputs, so a value that can't change no longer looks like a field you can fill in. ([#29881](https://github.com/mastra-ai/mastra/pull/29881))
+
+- Fixed KPI and metrics card groups staying on two columns on wide dashboards in apps that load their own Tailwind CSS after this package's styles. Three cards now share one row from 48rem and four from 56rem there too, as they already did in Studio. ([#29920](https://github.com/mastra-ai/mastra/pull/29920))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`1ac251b`](https://github.com/mastra-ai/mastra/commit/1ac251ba65b5417507d811f18f32c26868e30bb8), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`ec8d9b8`](https://github.com/mastra-ai/mastra/commit/ec8d9b8e7b8c259d96e1f1b2f7be4082cf13fb57), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`6644a82`](https://github.com/mastra-ai/mastra/commit/6644a8274880f217ed7930d2e115e68056a565d6), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/client-js@1.60.0-alpha.5
+  - @mastra/memory@1.41.1-alpha.2
+  - @mastra/react@1.15.0-alpha.5
+  - @mastra/ai-sdk@1.12.0-alpha.0
+
+## 69.0.0-alpha.5
+
+### Patch Changes
+
+- Fixed MCP apps in chat, such as the observability dashboard widget, showing as an opaque box pressed against the surrounding messages. The app viewer now gives its frame the same color scheme as the theme it sends to the app, so the browser no longer paints a solid background behind the app and it sits on the chat background with its own spacing. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- Removed the tool-call style for the retired Factory `source_control_publish_test_check` tool. ([#29888](https://github.com/mastra-ai/mastra/pull/29888))
+
+- Fixed chart cards with a view picker blocking their own actions while the picker was open. You can now pin a widget or open its alerts without closing the view menu first. ([#29906](https://github.com/mastra-ai/mastra/pull/29906))
+
+- Fixed the KPI group on dashboards showing its drag handle and unpin button over the cards' top border at all times. On screens that can hover, the floating controls now only appear when the group is hovered or focused. On touch screens, the drag handle (while rearranging) and the unpin button (while pinned) stay visible so they can still be tapped. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- Metrics card groups of three or more now use three columns from 48rem wide instead of staying on two until 56rem, so three KPIs sit on one row on medium-width dashboards instead of wrapping 2 + 1. Groups of one or two cards keep two columns, and groups of exactly four keep their 2 + 2 layout at that width. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- `DatePicker` now fills the width of its container. Before, it kept its content width and left an empty strip inside a wider popover. Popovers that size to their content look the same. A width class passed through `className` (for example `w-fit`) still replaces the default. ([#29769](https://github.com/mastra-ai/mastra/pull/29769))
+
+  `<Input type="time">` now shows a design-system clock icon in every browser and theme, replacing Chromium's native picker icon and picker. The value is typed or stepped with the arrow keys. `DateTimePicker` and the custom range editor in `DateTimeRangePicker` no longer need to hide the native icon themselves.
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+  - @mastra/ai-sdk@1.12.0-alpha.0
+  - @mastra/client-js@1.60.0-alpha.4
+  - @mastra/react@1.15.0-alpha.4
+
 ## 69.0.0-alpha.4
 
 ### Minor Changes

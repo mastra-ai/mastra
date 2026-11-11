@@ -50,9 +50,10 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
 import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
-export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
   ArtifactEntry,
   ArtifactListing,

@@ -380,30 +380,40 @@ export class GitLabRules {
         ...(mergeRequestKey ? [{ integrationId: 'gitlab', type: 'pull-request', externalId: mergeRequestKey }] : []),
       ],
     });
-    const items = await this.options.storage.list({
+    // The shared list is the cache itself: only the cards handed on to rules are cloned.
+    const items = await this.options.storage.listShared({
       orgId: target.target.orgId,
       factoryProjectId: target.target.factoryProjectId,
     });
+    const own = (card: Card | undefined) => card && structuredClone(card);
     const issueItem = issueSourceKey
-      ? items.find(
-          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === issueSourceKey,
+      ? own(
+          items.find(
+            item =>
+              item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === issueSourceKey,
+          ),
         )
       : undefined;
     const reviewItem = mergeRequestKey
-      ? items.find(
-          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === mergeRequestKey,
+      ? own(
+          items.find(
+            item =>
+              item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === mergeRequestKey,
+          ),
         )
       : undefined;
     // A merge request attached to its issue's card, instead of filed on a card of its own.
     const attachedItem =
-      mergeRequestKey && !reviewItem ? items.find(item => carriesAttachedMergeRequest(item, mergeRequestKey)) : undefined;
+      mergeRequestKey && !reviewItem
+        ? own(items.find(item => carriesAttachedMergeRequest(item, mergeRequestKey)))
+        : undefined;
     const headBranch = string(mergeRequest?.source_branch) ?? '';
     // A card whose session builds on the merge request's branch, in this project.
     const buildsOnBranch = (item: Card) =>
       item.externalSource?.type !== 'pull-request' &&
       !cardInOtherGitLabProject(item, host, projectId) &&
       Object.values(item.sessions).some(session => session.branch === headBranch);
-    const authoringItem = headBranch ? items.find(buildsOnBranch) : undefined;
+    const authoringItem = headBranch ? own(items.find(buildsOnBranch)) : undefined;
     const actorTrusted = await this.#trusted(connectionIds, String(projectId), username);
     const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
     const resolveAuthor = async (

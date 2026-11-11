@@ -140,16 +140,18 @@ describe('custom-only board routing', () => {
       'its only route joins pull requests to existing cards',
       [intakeRouteTo('release', { target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true } })],
     ],
-  ])('offers intake setup while a source is connected but %s', async (_case, intakeRoutes) => {
+  ])('asks for an intake route, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');
-    expect(await within(queued).findByText(/No intake sources/)).toBeVisible();
+    expect(await within(queued).findByText('No intake route sends cards here')).toBeVisible();
     expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
-    expect(within(queued).getByRole('link', { name: 'Connect issue source' })).toHaveAttribute(
+    expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
+    expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
+    expect(within(queued).getByRole('link', { name: 'Add intake route' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/intake',
+      '/factories/fp-1/settings/intake#new-cards',
     );
   });
 
@@ -268,7 +270,7 @@ describe('custom-only board routing', () => {
         metadata: {},
         triageType: null,
         acceptedAt: null,
-        commentCount: 0,
+        description: null,
         revision: 1,
         createdAt: now,
         updatedAt: now,

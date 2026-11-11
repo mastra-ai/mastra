@@ -27,7 +27,6 @@ export function factoryDecisionStatusQueryOptions(
     queryFn: githubProjectId
       ? () => fetchFactoryDecisions(baseUrl, githubProjectId, { statuses, limit: 50 })
       : skipToken,
-    refetchInterval: 2_000,
     staleTime: 1_000,
   });
 }
@@ -70,7 +69,6 @@ export function factoryDecisionHistoryQueryOptions(
       : skipToken,
     initialPageParam: FIRST_DECISION_PAGE,
     getNextPageParam: (lastPage: FactoryDecisionPage) => lastPage.nextCursor,
-    refetchInterval: 5_000,
     staleTime: 2_000,
   });
 }

@@ -13,6 +13,7 @@ import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
 import { BuildStatusBlock } from './environment/BuildStatusBlock';
 import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
+import { AddSandboxEnvButton, SandboxEnvsBlock } from './environment/SandboxEnvsBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { useEnvironmentSave } from './environment/useEnvironmentSave';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -58,6 +59,14 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
         >
           <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
         </WorkspaceSetupBlock>
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="factory"
+        title="Environment variables"
+        action={<AddSandboxEnvButton factoryId={factoryId} />}
+        description="Added to every sandbox in this Factory."
+      >
+        <SandboxEnvsBlock factoryId={factoryId} />
       </SettingsSubsection>
       {canBuild && (
         <SettingsSubsection

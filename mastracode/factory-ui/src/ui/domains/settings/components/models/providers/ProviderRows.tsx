@@ -39,7 +39,7 @@ export function ProviderOptionRow({
   children,
 }: {
   provider: string;
-  label: string | undefined;
+  label: ReactNode;
   children: ReactNode;
 }) {
   return (

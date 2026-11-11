@@ -948,7 +948,6 @@ describe('Factory toolset composition', () => {
   const deps = {
     ...setup().deps,
     workItems: {},
-    comments: {},
     audit: {},
     boards: {},
     feed: {},

@@ -1,5 +1,38 @@
 # @mastra/observability
 
+## 1.24.0-alpha.4
+
+### Patch Changes
+
+- Fixed `MODEL_INFERENCE` spans losing `responseModel` when the model call is recorded from the raw provider stream. The provider names the model that actually served the request in an earlier `response-metadata` chunk, while the raw `finish` chunk carries no model id, so the span was exported without `responseModel` and cost estimation and exporters fell back to the requested model. The serving model is now captured per stream and attached to the span. Fixes [#29779](https://github.com/mastra-ai/mastra/issues/29779). ([#30007](https://github.com/mastra-ai/mastra/pull/30007))
+
+## 1.24.0-alpha.3
+
+### Minor Changes
+
+- Added an explicit opt-in to persist observability data to your own storage alongside Mastra Platform. Built-in storage exporters remain disabled on Platform by default. Local observability domains remain disabled with an initialization warning, even with the opt-in. Set `retainStorageExporterOnPlatform: true` on an observability config to retain `MastraStorageExporter`, including exporters registered later. Deprecated `DefaultExporter` remains disabled on Platform. ([#29737](https://github.com/mastra-ai/mastra/pull/29737))
+
+  ```ts
+  new Observability({
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        retainStorageExporterOnPlatform: true,
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+      },
+    },
+  });
+  ```
+
+  Skipped storage exporters now log a warning explaining how to opt in.
+
+### Patch Changes
+
+- Fixed model call spans exported with no response. Since 1.23.0, `MODEL_INFERENCE` spans had no output, so exporters that send them as the model call (Langfuse, OpenTelemetry, Datadog, PostHog) showed the prompt but not the model's text or tool calls. These spans now carry the response again, after output processors have run, and their duration still stops when the provider finishes. Fixes [#29818](https://github.com/mastra-ai/mastra/issues/29818). ([#29896](https://github.com/mastra-ai/mastra/pull/29896))
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+
 ## 1.24.0-alpha.2
 
 ### Minor Changes

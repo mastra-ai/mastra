@@ -419,7 +419,8 @@
                       },
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -436,7 +437,22 @@
                         "role": "user",
                         "content": "Execute the simpleWorkflow with test input"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-workflow-1",
+                          "toolName": "workflowExecutor",
+                          "args": {
+                            "workflowId": "simpleWorkflow",
+                            "input": {
+                              "input": "test input"
+                            }
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -922,7 +938,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -947,7 +964,11 @@
                         "role": "tool",
                         "content": "[tool-result: workflowExecutor]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 stream response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

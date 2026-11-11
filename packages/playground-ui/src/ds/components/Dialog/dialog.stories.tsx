@@ -581,7 +581,7 @@ export const AddCredits: Story = {
     docs: {
       description: {
         story:
-          'A short form dialog, and the one place the inset `SettingsContainer` is meant for: title and Close in the header, stacked settings rows on an inset panel in the body (an amount field, a switch with a badge, and a sentence of two small fields), and a footer whose status sits left of Cancel and the primary action.',
+          'A short form dialog: title and Close in the header, settings rows in a `SettingsContainer` in the body (an amount field, a switch with a badge, and a sentence of two small fields), and a footer whose status sits left of Cancel and the primary action.',
       },
     },
   },

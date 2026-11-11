@@ -1,4 +1,4 @@
-import type { CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionCursor, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
 import type { WorkItemDbRow, WorkItemStageEntry } from './base.js';
 import { FACTORY_BOARD_ITEMS_SCHEMA, WORK_ITEMS_SCHEMA } from './work-item-schema.js';
@@ -45,12 +45,25 @@ export async function readReviewBoardInUse(
     ...(tables.split ? [FACTORY_BOARD_ITEMS_SCHEMA.name] : []),
     ...(tables.legacy ? [WORK_ITEMS_SCHEMA.name] : []),
   ];
+  // Paged so a project with an open card answers from the first page instead of reading every Review row.
+  const orderBy: [string, 'asc'][] = [['id', 'asc']];
   for (const collection of collections) {
-    const rows = await ops.findMany<{ board: string | null; stages: string[] | null }>(collection, where);
-    if (rows.some(openOnReview)) return true;
+    let cursor: CollectionCursor | undefined;
+    for (;;) {
+      const rows = await ops.findMany<{ id: string; board: string | null; stages: string[] | null }>(
+        collection,
+        where,
+        { orderBy, limit: REVIEW_IN_USE_PAGE, ...(cursor ? { cursor } : {}) },
+      );
+      if (rows.some(openOnReview)) return true;
+      if (rows.length < REVIEW_IN_USE_PAGE) break;
+      cursor = { values: [rows[rows.length - 1]!.id] };
+    }
   }
   return false;
 }
+
+const REVIEW_IN_USE_PAGE = 100;
 
 /**
  * Work's keys, for rows written when Work was the only board: they carry no board, or Work's,

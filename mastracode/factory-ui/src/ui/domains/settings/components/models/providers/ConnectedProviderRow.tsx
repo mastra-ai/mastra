@@ -115,7 +115,7 @@ export function ConnectedProviderRow({
           : undefined
       }
       onSignOut={signOut}
-      onUpdateKey={onUpdateKey}
+      onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
       onRemoveKey={removeKey}
     />
   ) : undefined;
@@ -165,7 +165,7 @@ function CredentialMenu({
   disabled: boolean;
   onSignInAgain: (() => void) | undefined;
   onSignOut: () => void;
-  onUpdateKey: () => void;
+  onUpdateKey: (() => void) | undefined;
   onRemoveKey: () => void;
 }) {
   return (
@@ -185,7 +185,7 @@ function CredentialMenu({
           </>
         ) : (
           <>
-            <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>
+            {onUpdateKey && <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>}
             <DropdownMenu.Item onClick={onRemoveKey}>Remove key</DropdownMenu.Item>
           </>
         )}
