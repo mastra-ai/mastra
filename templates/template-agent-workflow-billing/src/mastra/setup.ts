@@ -3,40 +3,79 @@ import { createBillingStudio } from '../server/studio.js';
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from '../billing/contracts.js';
+import { BillingError, parseInput } from '../billing/contracts.js';
 import { initializeMastraBilling } from '../billing/mastra-setup.js';
 import { billingOnlyServer, enforceBillingBoundary } from '../server/security.js';
-import { weatherResources } from '../weather/resources.js';
-import { weatherConfiguration } from '../weather/configuration.js';
-import { validateWeatherPrompt } from '../weather/observations.js';
 import { readLocalProfiles } from '../local/profiles.js';
 import { configuredOrganizations, billingDatabaseUrl } from './environment.js';
+import { applicationCatalog } from '../resources.js';
+import { materializeResources, validateResourceCatalog } from '../billing/resource-catalog.js';
+import type { ResourceCatalog, ResourceDefinition } from '../billing/resource-catalog.js';
+import { Lifecycle } from '../billing/lifecycle.js';
 export { configuredOrganizations } from './environment.js';
 
-export interface BillingApplicationOptions {
+export interface BillingApplicationOptions<D extends readonly ResourceDefinition[]> {
   readonly autumn?: AutumnProviderOptions;
+  readonly catalog?: ResourceCatalog<D>;
+  readonly createMastra?: (configuration: ConstructorParameters<typeof Mastra>[0]) => Mastra;
 }
-export async function createWeatherApplication(
+type DefaultDefinitions = ReturnType<typeof applicationCatalog>['resources'];
+export function createBillingApplication<const D extends readonly ResourceDefinition[]>(
+  environment: NodeJS.ProcessEnv,
+  options: BillingApplicationOptions<D> & { catalog: ResourceCatalog<D> },
+): ReturnType<typeof buildApplication<D>>;
+export function createBillingApplication(
+  environment?: NodeJS.ProcessEnv,
+  options?: { autumn?: AutumnProviderOptions },
+): ReturnType<typeof buildApplication<DefaultDefinitions>>;
+export async function createBillingApplication(
   environment: NodeJS.ProcessEnv = process.env,
-  options: BillingApplicationOptions = {},
+  options: BillingApplicationOptions<readonly ResourceDefinition[]> = {},
 ) {
-  const organizations = await configuredOrganizations(environment);
-  let initialized: Awaited<ReturnType<typeof initializeMastraBilling>> | undefined;
+  return buildApplication(environment, options.catalog ?? applicationCatalog(environment), options);
+}
+async function buildApplication<const D extends readonly ResourceDefinition[]>(
+  environment: NodeJS.ProcessEnv,
+  catalog: ResourceCatalog<D>,
+  options: BillingApplicationOptions<D>,
+) {
+  const settings = parseInput(
+    z.strictObject({
+      provider: z.enum(['local', 'autumn']),
+      studio: z.enum(['true', 'false']),
+      port: z.coerce.number().int().min(1).max(65535),
+    }),
+    {
+      provider: environment.BILLING_PROVIDER ?? 'local',
+      studio: environment.BILLING_STUDIO_ENABLED ?? 'false',
+      port: environment.BILLING_PORT ?? 4111,
+    },
+  );
+  const root = resolve(environment.BILLING_PROJECT_ROOT ?? environment.MASTRA_PROJECT_ROOT ?? '.');
+  const override: unknown = environment.BILLING_CONFIGURATION
+    ? JSON.parse(environment.BILLING_CONFIGURATION)
+    : undefined;
+  // Validate before identity/storage, factories, recovery, serving or provider calls.
+  let configuration = validateResourceCatalog(catalog, override);
+  if (configuration.provider !== settings.provider) throw new BillingError('invalid_configuration');
+  const lifecycle = new Lifecycle();
   try {
-    const provider = parseInput(identifierSchema, environment.BILLING_PROVIDER ?? 'local');
-    const root = resolve(environment.BILLING_PROJECT_ROOT ?? environment.MASTRA_PROJECT_ROOT ?? '.');
+    const organizations = await configuredOrganizations(environment);
+    lifecycle.own(() => organizations.close());
     const profiles =
-      provider === 'local' && organizations.identity.kind === 'local' ? await readLocalProfiles(root) : null;
+      !options.catalog && settings.provider === 'local' && organizations.identity.kind === 'local'
+        ? await readLocalProfiles(root)
+        : null;
     if (profiles && (!profiles.ready || profiles.databaseUrl !== (await billingDatabaseUrl(environment))))
       throw new BillingError('state_unavailable');
-    const policy = parseInput(z.enum(['task', 'tokens']), environment.WEATHER_WORKFLOW_POLICY ?? 'task');
-    const configuration: unknown = environment.BILLING_CONFIGURATION
-      ? JSON.parse(environment.BILLING_CONFIGURATION)
-      : weatherConfiguration(
-          profiles ? Object.values(profiles.profiles).map(profile => profile!.workspaceId) : undefined,
-          policy,
-        );
-    const resources = weatherResources(environment);
+    if (!options.catalog && !override && profiles)
+      configuration = validateResourceCatalog(
+        applicationCatalog(
+          environment,
+          Object.values(profiles.profiles).map(profile => profile!.workspaceId),
+        ),
+      );
+    const resources = materializeResources(catalog.resources, lifecycle);
     const runtime = await initializeMastraBilling({
       organizations,
       configuration,
@@ -44,36 +83,21 @@ export async function createWeatherApplication(
       workflows: resources.workflows,
       databaseUrl: await billingDatabaseUrl(environment),
       autumn:
-        provider === 'autumn'
+        settings.provider === 'autumn'
           ? (options.autumn ?? {
               secretKey: environment.AUTUMN_SECRET_KEY ?? '',
               bindings: JSON.parse(environment.AUTUMN_BINDINGS ?? 'null'),
             })
           : undefined,
     });
-    initialized = runtime;
-    if (runtime.configuration.provider !== provider) throw new BillingError('invalid_configuration');
-    resources.attach(prompt => runtime.billing.nestedAgent('weather-agent').generate(prompt));
-    const execution = {
-      ...runtime.billing.http,
-      generate: (
-        id: string,
-        prompt: string,
-        context: Parameters<typeof runtime.billing.http.generate>[2],
-        key: string,
-      ) =>
-        runtime.billing.http.generate(
-          id,
-          id === 'weather-agent' ? validateWeatherPrompt(prompt) : prompt,
-          context,
-          key,
-        ),
-    };
-    const studioEnabled =
-      parseInput(z.enum(['true', 'false']), environment.BILLING_STUDIO_ENABLED ?? 'false') === 'true';
-    const studio = studioEnabled ? createBillingStudio(organizations, execution, runtime.commercial) : undefined;
+    lifecycle.own(runtime.close);
+    const execution = runtime.billing.http;
+    const studio =
+      settings.studio === 'true'
+        ? createBillingStudio(organizations, execution, runtime.commercial, resources.actions)
+        : undefined;
     const mastra = enforceBillingBoundary(
-      new Mastra({
+      (options.createMastra ?? (configuration => new Mastra(configuration)))({
         logger: false,
         tools: studio?.tools,
         agents: resources.nativeAgents,
@@ -81,35 +105,21 @@ export async function createWeatherApplication(
         storage: runtime.storage,
         server: {
           host: '127.0.0.1',
-          port: parseInput(z.coerce.number().int().min(1).max(65535), environment.BILLING_PORT ?? 4111),
+          port: settings.port,
           ...billingOnlyServer(organizations, execution, runtime.commercial, studio),
         },
       }),
     );
+    resources.ready(runtime.billing);
     await runtime.startRecovery().ready;
-    return {
-      mastra,
-      organizations,
-      runtime,
-      execution,
-      close: async () => {
-        await runtime.close();
-        organizations.close();
-      },
-    };
+    return { mastra, organizations, runtime, execution, close: () => lifecycle.close() };
   } catch (error) {
-    await initialized?.close();
-    organizations.close();
-    throw error;
+    return lifecycle.fail(error);
   }
 }
-export async function configuredWeatherMastra(
-  environment: NodeJS.ProcessEnv = process.env,
-  options: BillingApplicationOptions = {},
-) {
-  const application = await createWeatherApplication(environment, options);
-  let closing: Promise<void> | undefined;
-  const close = () => (closing ??= application.close());
+export async function configuredMastra(environment: NodeJS.ProcessEnv = process.env) {
+  const application = await createBillingApplication(environment);
+  const close = () => application.close();
   process.once('beforeExit', () => {
     void close();
   });

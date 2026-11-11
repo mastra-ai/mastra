@@ -33,7 +33,7 @@ export class AgentExecution<Agents extends AgentRegistry> {
         request: SafeGenerateOptions & { idempotencyKey: string; billing: BillingContext },
       ): Promise<GenerationResponse<AgentResult<Agents[K]>>> => {
         const { billing, idempotencyKey, ...options } = request;
-        const input = parseInput(generateRequestSchema, { prompt, idempotencyKey });
+        const input = parseInput(generateRequestSchema, { prompt: resource.validatePrompt(prompt), idempotencyKey });
         const safe = parseInput(safeGenerateOptionsSchema, options);
         const parent = this.context.parent.getStore();
         if (parent) {
@@ -89,9 +89,9 @@ export class AgentExecution<Agents extends AgentRegistry> {
         const parent = this.context.parent.getStore();
         if (!parent || (parent.agentDependencies && !parent.agentDependencies.includes(id)))
           throw new BillingError('unsupported');
-        parseInput(z.string().min(1).max(8192), prompt);
+        const parsedPrompt = resource.validatePrompt(parseInput(z.string().min(1).max(8192), prompt));
         const safe = parseInput(safeGenerateOptionsSchema, options);
-        return this.generateNested(resource, prompt, parent, safe);
+        return this.generateNested(resource, parsedPrompt, parent, safe);
       },
     });
   }

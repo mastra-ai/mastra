@@ -112,20 +112,22 @@ const canonical = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+export const autumnCapabilities = Object.freeze({
+  entitlements: true,
+  subscriptions: true,
+  prepaid: true,
+  prepaidAuthority: 'provider-reservations' as const,
+  metered: false,
+  replaySafeUsage: false,
+  reconciliation: 'unverified' as const,
+  checkout: true,
+  portal: true,
+  webhooks: false,
+});
+
 export class AutumnBillingProvider implements BillingProvider {
   readonly id = 'autumn';
-  readonly capabilities = Object.freeze({
-    entitlements: true,
-    subscriptions: true,
-    prepaid: true,
-    prepaidAuthority: 'provider-reservations' as const,
-    metered: false,
-    replaySafeUsage: false,
-    reconciliation: 'unverified' as const,
-    checkout: true,
-    portal: true,
-    webhooks: false,
-  });
+  readonly capabilities = autumnCapabilities;
   readonly reservations: ReservationProtocol;
   private readonly client: Autumn;
   private readonly bindings;

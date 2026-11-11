@@ -1,3 +1,15 @@
+import { OrganizationService } from '../../src/billing/organizations.js';
+import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
+import { LibSQLStore } from '@mastra/libsql';
+import { z } from 'zod';
+import { Hono } from 'hono';
+import { RequestContext } from '@mastra/core/request-context';
+import { EXECUTE_TOOL_ROUTE } from '@mastra/server/handlers/tools';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { createBillingApplication, configuredOrganizations } from '../../src/mastra/setup.js';
+import { resourceAction } from '../../src/billing/resource-catalog.js';
+import type { ResourceCatalog, ResourceDefinition, ResourceDependencies } from '../../src/billing/resource-catalog.js';
+import { billingSocket } from '../support/http.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fork } from 'node:child_process';
 import { readFile, stat, chmod, mkdtemp, rm } from 'node:fs/promises';
@@ -1548,3 +1560,606 @@ describe('billed Mastra runtime', () => {
     }
   });
 });
+
+// Real catalog extension: SQL/Mastra/Hono run normally; only the paid model wire is controlled.
+async function catalogFixture() {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const model = await modelBoundary();
+  cleanups.push(model.close);
+  const environment = {
+    BILLING_DATABASE_URL: database.url,
+    BILLING_PROJECT_ROOT: database.directory,
+    BILLING_MODE: 'local',
+    BILLING_PROVIDER: 'local',
+    BILLING_STUDIO_ENABLED: 'true',
+  };
+  const organizations = await configuredOrganizations(environment);
+  const first = await organizations.provisionLocal({ profileId: 'first', displayName: 'First' });
+  const second = await organizations.provisionLocal({ profileId: 'second', displayName: 'Second' });
+  const firstContext = await organizations.context({ credential: first.credential! });
+  const secondContext = await organizations.context({ credential: second.credential! });
+  const workspaceIds = [firstContext.workspaceId, secondContext.workspaceId];
+  organizations.close();
+  const created: string[] = [];
+  const closed: string[] = [];
+  const inputSchema = z.strictObject({ prompt: z.string().min(1) });
+  const outputSchema = z.strictObject({ answer: z.string() });
+  const agent = (id: string) => {
+    created.push(id);
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'Return the controlled structured answer.',
+      maxRetries: 0,
+      model: { id: 'billing-test/model', url: model.url, apiKey: 'controlled', api: 'chat' },
+    });
+  };
+  const actionExecutions: string[] = [];
+  const transformedCount = resourceAction({
+    id: 'billing-catalog-count',
+    description: 'Read a normalized numeric count.',
+    inputSchema: z.strictObject({ count: z.string().min(1).transform(Number) }),
+    execute: async input => {
+      actionExecutions.push('count');
+      return { count: input.count };
+    },
+  });
+  const transformedLabel = resourceAction({
+    id: 'billing-catalog-label',
+    description: 'Append one label marker.',
+    inputSchema: z.strictObject({
+      label: z
+        .string()
+        .min(1)
+        .transform(label => `${label}!`),
+    }),
+    execute: async input => {
+      actionExecutions.push('label');
+      return { label: input.label };
+    },
+  });
+  const actions = [
+    resourceAction({
+      id: 'billing-catalog-answer',
+      description: 'Generate a billed catalog answer.',
+      inputSchema: z.strictObject({ workspaceId: z.string(), idempotencyKey: z.string(), prompt: z.string() }),
+      execute: async (input, { execution, selected }) =>
+        execution.generate('catalog-answer', input.prompt, await selected(input.workspaceId), input.idempotencyKey),
+    }),
+    transformedCount,
+    transformedLabel,
+  ];
+  const createReport = (dependencies: ResourceDependencies) => {
+    created.push('catalog-report');
+    const prepare = createStep({
+      id: 'prepare',
+      inputSchema,
+      outputSchema: inputSchema,
+      resumeSchema: z.strictObject({ approved: z.literal(true) }),
+      suspendSchema: inputSchema,
+      execute: async ({ inputData, resumeData, suspend }) => (resumeData ? inputData : suspend(inputData)),
+    });
+    const answer = createStep({
+      id: 'answer',
+      inputSchema,
+      outputSchema,
+      execute: async ({ inputData }) => ({
+        answer: (await dependencies.nestedAgent('catalog-answer').generate(inputData.prompt)).text,
+      }),
+    });
+    return createWorkflow({
+      id: 'catalog-report',
+      inputSchema,
+      outputSchema,
+      steps: [prepare, answer],
+      options: { autoRestartActiveRuns: false },
+    })
+      .then(prepare)
+      .then(answer)
+      .commit();
+  };
+  const resources = [
+    {
+      id: 'catalog-answer',
+      kind: 'agent',
+      create: () => agent('catalog-answer'),
+      adapter: {
+        version: 'answer-v1',
+        maxSteps: 1,
+        outputSchema,
+        promptSchema: z.string().transform(prompt => prompt.replace('[normalize]', '[structured]')),
+      },
+      dispose: () => {
+        closed.push('catalog-answer');
+      },
+      operations: ['generate'],
+      measurements: [],
+      policy: { version: 'answer-price-v1', charge: { type: 'credits', meter: 'credits', units: 2 } },
+      actions,
+    },
+    {
+      id: 'catalog-extra',
+      kind: 'agent',
+      create: () => agent('catalog-extra'),
+      adapter: { version: 'extra-v1', maxSteps: 1 },
+      dispose: () => {
+        closed.push('catalog-extra');
+      },
+      operations: ['generate'],
+      measurements: [],
+      policy: { version: 'extra-price-v1', charge: { type: 'credits', meter: 'credits', units: 5 } },
+    },
+    {
+      id: 'catalog-report',
+      kind: 'workflow',
+      create: createReport,
+      adapter: { version: 'report-v1', measurement: 'facade-calls', expectedCalls: [0, 1] },
+      agentDependencies: ['catalog-answer'],
+      dispose: () => {
+        closed.push('catalog-report');
+      },
+      operations: ['start', 'resume', 'cancel'],
+      measurements: [
+        { key: 'tokens', unit: 'tokens', enforceableBound: false },
+        { key: 'input-tokens', unit: 'tokens', enforceableBound: false },
+        { key: 'output-tokens', unit: 'tokens', enforceableBound: false },
+        { key: 'model-calls', unit: 'custom', enforceableBound: true },
+      ],
+      policy: {
+        version: 'report-price-v1',
+        suspendedReservationTtlMs: 1800000,
+        charge: { type: 'credits', meter: 'credits', units: 7 },
+      },
+    },
+  ] as const satisfies readonly ResourceDefinition[];
+  const { resources: _, ...configuration } = billingConfigurationSchema.parse({
+    provider: 'local',
+    resources: [],
+    mappings: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
+    localAccounts: workspaceIds.map(workspaceId => ({
+      workspaceId,
+      meters: [{ key: 'credits', funding: 'prepaid', balance: 100 }],
+    })),
+  });
+  const catalog = { resources, configuration } satisfies ResourceCatalog<typeof resources>;
+  return {
+    database,
+    model,
+    environment,
+    first,
+    second,
+    workspaceIds,
+    catalog,
+    created,
+    closed,
+    actionExecutions,
+    transformedCount,
+    transformedLabel,
+  };
+}
+
+it('catalog extensions execute distinct resources with configured billing policies', async () => {
+  const f = await catalogFixture();
+  let application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  cleanups.push(() => application.close());
+  expect(f.created).toEqual(['catalog-answer', 'catalog-extra', 'catalog-report']);
+  const billing = await application.organizations.context({ credential: f.first.credential! });
+  const other = await application.organizations.context({ credential: f.second.credential! });
+  const first = await application.runtime.billing
+    .agent('catalog-answer')
+    .generate('[structured]', { billing, idempotencyKey: 'catalog-one' });
+  if (first.kind !== 'immediate') throw new Error('Expected immediate generation');
+  const answer: string | undefined = first.projection.object?.answer;
+  expect(answer).toBe('ok');
+  expect(first.billing).toMatchObject({ billedUnits: 2, replayed: false });
+  const extra = await application.runtime.billing
+    .agent('catalog-extra')
+    .generate('[success]', { billing, idempotencyKey: 'catalog-extra' });
+  expect(extra).toMatchObject({ result: { text: 'ok' }, billing: { billedUnits: 5 } });
+  if (extra.kind === 'immediate') {
+    const unstructured: undefined = extra.projection.object;
+    expect(unstructured).toBeUndefined();
+  }
+  const replay = await application.runtime.billing
+    .agent('catalog-answer')
+    .generate('[structured]', { billing, idempotencyKey: 'catalog-one' });
+  expect(replay).toMatchObject({
+    kind: 'replay',
+    result: { object: { answer: 'ok' } },
+    billing: { billedUnits: 2, replayed: true },
+  });
+  const runs = await Promise.all(
+    [billing, other].map((context, index) =>
+      application.runtime.billing
+        .workflow('catalog-report')
+        .createRun({ billing: context, idempotencyKey: `report-${index}` }),
+    ),
+  );
+  const started = await Promise.all(
+    runs.map((run, index) =>
+      run.start({
+        billing: index ? other : billing,
+        idempotencyKey: 'start',
+        inputData: { prompt: `[normalize] parent-${index}` },
+      }),
+    ),
+  );
+  expect(started.map(result => result.result.status)).toEqual(['suspended', 'suspended']);
+  expect(f.model.requests).toHaveLength(2);
+  const completed = await Promise.all(
+    runs.map((run, index) =>
+      run.resume({
+        billing: index ? other : billing,
+        idempotencyKey: 'approve',
+        step: 'prepare',
+        resumeData: { approved: true },
+      }),
+    ),
+  );
+  for (const result of completed) {
+    expect(result).toMatchObject({
+      result: { status: 'success', result: { answer: '{"answer":"ok"}' } },
+      billing: { billedUnits: 7, executionStatus: 'completed' },
+    });
+    if (result.kind === 'immediate') {
+      const typed: string | undefined = result.projection.output?.answer;
+      expect(typed).toBe('{"answer":"ok"}');
+    }
+  }
+  await expect(runs[0].status(other)).rejects.toMatchObject({ code: 'forbidden' });
+  const observer = await independentClient(f.database.url);
+  cleanups.push(() => observer.close());
+  expect(
+    (
+      await observer.execute(
+        'SELECT resource_id, COUNT(*) AS count FROM billing_executions GROUP BY resource_id ORDER BY resource_id',
+      )
+    ).rows,
+  ).toEqual([
+    { resource_id: 'catalog-answer', count: 1n },
+    { resource_id: 'catalog-extra', count: 1n },
+    { resource_id: 'catalog-report', count: 2n },
+  ]);
+  expect(
+    (
+      await observer.execute(
+        'SELECT workspace_id, SUM(billed_units) AS billed FROM billing_executions GROUP BY workspace_id ORDER BY billed',
+      )
+    ).rows,
+  ).toEqual([
+    { workspace_id: other.workspaceId, billed: 7n },
+    { workspace_id: billing.workspaceId, billed: 14n },
+  ]);
+  expect(
+    (
+      await observer.execute(
+        "SELECT execution_id, COUNT(*) AS count FROM billing_measurements WHERE execution_id IN (SELECT id FROM billing_executions WHERE resource_id = 'catalog-report') GROUP BY execution_id ORDER BY execution_id",
+      )
+    ).rows,
+  ).toEqual(
+    runs
+      .map(run => ({ execution_id: run.executionId, count: 4n }))
+      .sort((left, right) => left.execution_id.localeCompare(right.execution_id)),
+  );
+  const nestedRequests = f.model.requests.slice(2).map(request => JSON.stringify(request.body));
+  expect(nestedRequests.some(body => body.includes('[structured] parent-0'))).toBe(true);
+  expect(nestedRequests.some(body => body.includes('[structured] parent-1'))).toBe(true);
+  expect(nestedRequests.join('')).not.toContain('[normalize]');
+  expect(f.model.requests).toHaveLength(4);
+  // Mount the production middleware and real SDK tool route over a socket.
+  const app = new Hono();
+  const configured = application.mastra.getServer()!.middleware!;
+  const middleware = Array.isArray(configured) ? configured[0] : configured;
+  if (typeof middleware !== 'object' || typeof middleware.handler !== 'function')
+    throw new Error('Missing billing boundary');
+  app.use('*', middleware.handler);
+  app.post('/api/tools/:toolId/execute', async context => {
+    const body = await context.req.json();
+    return context.json(
+      await EXECUTE_TOOL_ROUTE.handler({
+        mastra: application.mastra,
+        toolId: context.req.param('toolId'),
+        data: body.data,
+        abortSignal: context.req.raw.signal,
+        requestContext: Object.assign(new RequestContext(), {} as Record<string, unknown>),
+      }),
+    );
+  });
+  const server = await billingSocket(app);
+  cleanups.push(server.close);
+  const toolInput = { workspaceId: billing.workspaceId, idempotencyKey: 'studio-catalog', prompt: '[structured]' };
+  const call = (path: string, credential?: string) =>
+    fetch(server.url + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(credential ? { authorization: `Bearer ${credential}` } : {}) },
+      body: JSON.stringify({ data: toolInput, requestContext: { credential: f.first.credential! } }),
+    });
+  expect((await call('/api/tools/billing-catalog-answer/execute')).status).toBe(401);
+  const denied = await call('/api/tools/billing-catalog-answer/execute', f.second.credential!);
+  expect(await denied.json()).toMatchObject({ error: { code: 'forbidden' } });
+  const tool = await call('/api/tools/billing-catalog-answer/execute', f.first.credential!);
+  expect(tool.status).toBe(200);
+  expect(await tool.json()).toMatchObject({ result: { object: { answer: 'ok' } }, billing: { billedUnits: 2 } });
+  expect((await call('/api/agents/catalog-answer/generate', f.first.credential!)).status).toBe(403);
+  expect(f.model.requests).toHaveLength(5);
+  // F10-REVIEW-001: execute the actual derived Studio SDK tools, whose input validation applies transforms.
+  const actionContext = {
+    execution: application.execution,
+    selected: (workspaceId: string) =>
+      application.organizations.context({ credential: f.first.credential!, workspaceId }),
+  };
+  expect(await f.transformedCount.execute({ count: '2' }, actionContext)).toEqual({ count: 2 });
+  expect(await f.transformedLabel.execute({ label: 'tag' }, actionContext)).toEqual({ label: 'tag!' });
+  const countTool = application.mastra.getTool('billing-catalog-count');
+  const labelTool = application.mastra.getTool('billing-catalog-label');
+  if (!countTool.execute || !labelTool.execute) throw new Error('Missing derived Studio action executors');
+  expect.soft(await countTool.execute({ count: '2' }, {})).toEqual({ count: 2 });
+  expect.soft(await labelTool.execute({ label: 'tag' }, {})).toEqual({ label: 'tag!' });
+  const validExecutions = [...f.actionExecutions];
+  await expect(async () => f.transformedCount.execute({ count: null }, actionContext)).rejects.toBeInstanceOf(
+    z.ZodError,
+  );
+  await expect(async () => f.transformedLabel.execute({ label: null }, actionContext)).rejects.toBeInstanceOf(
+    z.ZodError,
+  );
+  expect(await countTool.execute({ count: null }, {})).toMatchObject({ error: true });
+  expect(await labelTool.execute({ label: null }, {})).toMatchObject({ error: true });
+  expect(f.actionExecutions).toEqual(validExecutions);
+  expect(f.model.requests).toHaveLength(5);
+  if (false) {
+    // Compile-time contract: literal IDs, structured outputs and workflow payloads remain precise.
+    // @ts-expect-error Unknown resource ID cannot enter the facade.
+    application.runtime.billing.agent('missing');
+    // @ts-expect-error Workflows cannot be selected as agents.
+    application.runtime.billing.agent('catalog-report');
+    // @ts-expect-error Structured answer is a string.
+    const invalid: number = first.projection.object!.answer;
+    void invalid;
+    // @ts-expect-error Input must match the workflow schema.
+    await runs[0].start({ billing, idempotencyKey: 'bad', inputData: { prompt: 42 } });
+    // @ts-expect-error Approval must be true.
+    await runs[0].resume({ billing, idempotencyKey: 'bad', step: 'prepare', resumeData: { approved: false } });
+  }
+  const operations = (await observer.execute('SELECT * FROM billing_remote_operations ORDER BY execution_id')).rows;
+  await server.close();
+  const closeOne = application.close();
+  const closeTwo = application.close();
+  expect(closeOne).toBe(closeTwo);
+  await Promise.all([closeOne, closeTwo]);
+  expect(f.closed).toEqual(['catalog-report', 'catalog-extra', 'catalog-answer']);
+  application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  expect((await observer.execute('SELECT * FROM billing_remote_operations ORDER BY execution_id')).rows).toEqual(
+    operations,
+  );
+  const fresh = await application.organizations.context({ credential: f.first.credential! });
+  expect(
+    await application.runtime.billing
+      .agent('catalog-answer')
+      .generate('[structured]', { billing: fresh, idempotencyKey: 'catalog-one' }),
+  ).toMatchObject({ kind: 'replay', billing: { billedUnits: 2, replayed: true } });
+  expect(f.model.requests).toHaveLength(5);
+}, 60_000);
+
+it('invalid catalogs and partial startup fail without external work or leaked lifecycle', async () => {
+  const f = await catalogFixture();
+  const [answer, extra, report] = f.catalog.resources;
+  const invalid: readonly ResourceDefinition[][] = [
+    [answer, answer],
+    [{ ...answer, policy: null } as unknown as ResourceDefinition],
+    [{ ...answer, dispose: 'invalid' } as unknown as ResourceDefinition],
+    [{ ...answer, measurements: undefined } as unknown as ResourceDefinition],
+    [{ ...answer, actions: [{ ...answer.actions[0], id: 'invalid.action' }] }],
+    [{ ...answer, policy: { ...answer.policy, charge: { type: 'credits', meter: 'missing', units: 1 } } }],
+    [{ ...answer, operations: ['start'] }],
+    [{ ...answer, adapter: { ...answer.adapter, maxSteps: 0 } }],
+    [{ ...answer, actions: [...answer.actions, ...answer.actions] }],
+    [{ ...report, agentDependencies: ['missing'] }],
+    [answer, { ...report, agentDependencies: ['catalog-report'] }],
+    [
+      { ...answer, agentDependencies: ['catalog-extra'] },
+      { ...extra, agentDependencies: ['catalog-answer'] },
+    ],
+    [
+      {
+        ...answer,
+        policy: {
+          version: 'bad',
+          charge: { type: 'usage', meter: 'credits', measure: 'tokens', maxUnits: 1, funding: 'metered' },
+        },
+      },
+    ],
+  ];
+  for (const resources of invalid) {
+    await expect(
+      createBillingApplication(f.environment, { catalog: { ...f.catalog, resources } }),
+    ).rejects.toMatchObject({ code: 'invalid_configuration' });
+    expect(f.created).toEqual([]);
+    expect(f.closed).toEqual([]);
+    expect(f.model.requests).toEqual([]);
+  }
+  // Unsupported provider capabilities fail before factories and before opening provider state.
+  await expect(
+    createBillingApplication(
+      { ...f.environment, BILLING_PROVIDER: 'autumn' },
+      {
+        catalog: {
+          ...f.catalog,
+          resources: [
+            {
+              ...answer,
+              policy: {
+                version: 'metered',
+                charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'metered' },
+              },
+            },
+          ],
+          configuration: {
+            ...f.catalog.configuration,
+            provider: 'autumn',
+            localAccounts: [],
+            mappings: {
+              entitlements: [],
+              subscriptions: [],
+              meters: [{ key: 'tasks', unit: 'tasks', funding: ['metered'] }],
+            },
+          },
+        },
+      },
+    ),
+  ).rejects.toMatchObject({ code: 'invalid_configuration' });
+  expect(f.created).toEqual([]);
+  // Factory dependencies cannot resolve before all registrations and persistent snapshots are usable.
+  await expect(
+    createBillingApplication(f.environment, {
+      catalog: {
+        ...f.catalog,
+        resources: [
+          answer,
+          {
+            ...report,
+            create: dependencies => {
+              dependencies.nestedAgent('catalog-answer');
+              return report.create(dependencies);
+            },
+          },
+        ],
+      },
+    }),
+  ).rejects.toMatchObject({ code: 'state_unavailable' });
+  expect(f.closed).toEqual(['catalog-answer']);
+  f.created.length = 0;
+  f.closed.length = 0;
+  let application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  const billing = await application.organizations.context({ credential: f.first.credential! });
+  await application.runtime.billing
+    .agent('catalog-extra')
+    .generate('[success]', { billing, idempotencyKey: 'preserve' });
+  const observer = await independentClient(f.database.url);
+  cleanups.push(() => observer.close());
+  const before = (await observer.execute('SELECT * FROM billing_remote_operations')).rows;
+  expect(before).toHaveLength(1);
+  await application.close();
+  f.closed.length = 0;
+  const startupFailure = new Error('Late catalog factory failure');
+  const cleanupFailure = new Error('Controlled disposer failure');
+  const badCatalog = {
+    ...f.catalog,
+    resources: [
+      answer,
+      {
+        ...extra,
+        dispose: () => {
+          f.closed.push('catalog-extra');
+          throw cleanupFailure;
+        },
+      },
+      {
+        ...report,
+        create: () => {
+          throw startupFailure;
+        },
+      },
+    ],
+  } as const;
+  await expect(createBillingApplication(f.environment, { catalog: badCatalog })).rejects.toMatchObject({
+    cause: startupFailure,
+    errors: [startupFailure, expect.any(AggregateError)],
+  });
+  expect(f.closed).toEqual(['catalog-extra', 'catalog-answer']);
+  expect((await observer.execute('SELECT * FROM billing_remote_operations')).rows).toEqual(before);
+  // Inject only the construction boundary: all SQL, billing, storage and Mastra objects are real.
+  const identityClose = vi.spyOn(OrganizationService.prototype, 'close');
+  const providerClose = vi.spyOn(LocalBillingStorage.prototype, 'close');
+  const snapshotClose = vi.spyOn(LibSQLStore.prototype, 'close');
+  const recoveryStop = vi.spyOn(BillingRecovery.prototype, 'stop');
+  const starts = vi.spyOn(BillingRecovery.prototype, 'start');
+  try {
+    await expect(
+      createBillingApplication(f.environment, {
+        catalog: f.catalog,
+        createMastra: configuration => {
+          const mastra = new Mastra(configuration);
+          expect(mastra.getStorage()).toBeInstanceOf(LibSQLStore);
+          expect(mastra.getWorkflow('catalog-report').id).toBe('catalog-report');
+          throw startupFailure;
+        },
+      }),
+    ).rejects.toBe(startupFailure);
+    expect(identityClose).toHaveBeenCalledTimes(1);
+    expect(providerClose).toHaveBeenCalledTimes(1);
+    expect(snapshotClose).toHaveBeenCalledTimes(1);
+    expect(recoveryStop).toHaveBeenCalledTimes(1);
+    expect(starts).not.toHaveBeenCalled();
+  } finally {
+    identityClose.mockRestore();
+    providerClose.mockRestore();
+    snapshotClose.mockRestore();
+    recoveryStop.mockRestore();
+    starts.mockRestore();
+  }
+  expect((await observer.execute('SELECT * FROM billing_remote_operations')).rows).toEqual(before);
+  application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  const context = await application.organizations.context({ credential: f.first.credential! });
+  const suspended = await application.runtime.billing
+    .workflow('catalog-report')
+    .createRun({ billing: context, idempotencyKey: 'recover-suspension' });
+  expect(
+    await suspended.start({ billing: context, idempotencyKey: 'start', inputData: { prompt: '[structured] expired' } }),
+  ).toMatchObject({ result: { status: 'suspended' }, billing: { settlementStatus: 'reserved' } });
+  await application.close();
+  await observer.execute({
+    sql: 'UPDATE billing_workflow_runs SET expires_at = ? WHERE id = ?',
+    args: [Date.now() - 1, suspended.executionId],
+  });
+  application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  cleanups.push(application.close);
+  const recoveredContext = await application.organizations.context({ credential: f.first.credential! });
+  const recovered = await application.runtime.billing
+    .workflow('catalog-report')
+    .getRun({ billing: recoveredContext, executionId: suspended.executionId });
+  expect(await recovered.status(recoveredContext)).toMatchObject({
+    result: { status: 'canceled' },
+    billing: { billedUnits: 0, settlementStatus: 'released' },
+  });
+  expect(
+    (
+      await observer.execute({
+        sql: 'SELECT terminal_state FROM billing_remote_operations WHERE execution_id = ?',
+        args: [suspended.executionId],
+      })
+    ).rows,
+  ).toEqual([{ terminal_state: 'released' }]);
+  expect(
+    (
+      await observer.execute({
+        sql: 'SELECT * FROM billing_remote_operations WHERE execution_id = ?',
+        args: [String(before[0].execution_id)],
+      })
+    ).rows,
+  ).toEqual(before);
+  expect(f.model.requests).toHaveLength(1);
+  await Promise.all([application.close(), application.close(), application.close()]);
+  f.closed.length = 0;
+  const failingCloseApplication = await createBillingApplication(f.environment, {
+    catalog: {
+      ...f.catalog,
+      resources: [
+        answer,
+        {
+          ...extra,
+          dispose: () => {
+            f.closed.push('catalog-extra');
+            throw cleanupFailure;
+          },
+        },
+        report,
+      ],
+    },
+  });
+  const failedClose = failingCloseApplication.close();
+  expect(failingCloseApplication.close()).toBe(failedClose);
+  await expect(failedClose).rejects.toMatchObject({ errors: [cleanupFailure] });
+  await expect(failingCloseApplication.close()).rejects.toMatchObject({ errors: [cleanupFailure] });
+  expect(f.closed).toEqual(['catalog-report', 'catalog-extra', 'catalog-answer']);
+}, 60_000);

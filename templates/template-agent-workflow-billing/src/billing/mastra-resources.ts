@@ -10,10 +10,15 @@ export type AgentOutput<A> = A extends Agent<string, any, infer Output, any, any
 export type WorkflowInput<W> = W extends Workflow<any, any, any, any, infer Input, any, any, any> ? Input : never;
 export type WorkflowOutput<W> = W extends Workflow<any, any, any, any, any, infer Output, any, any> ? Output : never;
 type WorkflowSteps<W> = W extends Workflow<any, infer Steps, any, any, any, any, any, any> ? Steps[number] : never;
-type StepResume<S> = S extends Step<any, any, any, any, infer Resume, any, any, any> ? Resume : never;
-export type WorkflowResume<W> = {
-  [S in WorkflowSteps<W> as S['id']]: { step: S['id']; resumeData: StepResume<S> };
-}[WorkflowSteps<W>['id']];
+type ResumableStep<S> =
+  S extends Step<infer Id, any, any, any, infer Resume, any, any, any>
+    ? unknown extends Resume
+      ? never
+      : { step: Id; resumeData: Resume }
+    : never;
+export type WorkflowResume<W> = [ResumableStep<WorkflowSteps<W>>] extends [never]
+  ? { step: string; resumeData: unknown }
+  : ResumableStep<WorkflowSteps<W>>;
 export type NativeWorkflowResult<W extends AnyWorkflow> = Awaited<
   ReturnType<Awaited<ReturnType<W['createRun']>>['start']>
 >;
@@ -53,19 +58,30 @@ const limitsSchema = z.strictObject({
   maxOutputTokens: z.number().int().min(1).max(8192).default(512),
 });
 
-export class AgentResource<Output> {
+export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
   readonly limits;
   readonly definition: string;
   constructor(
-    readonly native: AnyAgent,
-    options: { version: string; maxSteps?: number; maxOutputTokens?: number; outputSchema?: z.ZodType<Output, Output> },
+    readonly native: Native,
+    options: {
+      version: string;
+      maxSteps?: number;
+      maxOutputTokens?: number;
+      outputSchema?: z.ZodType<Output, Output>;
+      promptSchema?: z.ZodType<string, string>;
+    },
   ) {
-    const { outputSchema, ...limits } = options;
+    const { outputSchema, promptSchema, ...limits } = options;
+    this.promptSchema = promptSchema;
     this.limits = Object.freeze(parseInput(limitsSchema, limits));
     this.outputSchema = outputSchema;
     this.definition = `agent:${fingerprint(boundedJson({ id: native.id, limits: this.limits, structured: outputSchema !== undefined, maxProcessorRetries: 0, maxRetries: native.maxRetries ?? 0, selection: Array.isArray(native.model) ? 'fallback' : typeof native.model === 'function' ? 'dynamic' : 'static' }))}`;
   }
   readonly outputSchema: z.ZodType<Output, Output> | undefined;
+  readonly promptSchema: z.ZodType<string, string> | undefined;
+  validatePrompt(prompt: string) {
+    return this.promptSchema ? parseInput(this.promptSchema, prompt) : prompt;
+  }
   get enforceableCallBound() {
     return (
       (this.native.maxRetries ?? 0) === 0 &&
@@ -136,11 +152,11 @@ type AgentLimits = { version: string; maxSteps?: number; maxOutputTokens?: numbe
 export function agentResource<A extends AnyAgent, Output>(
   agent: A,
   options: AgentLimits & { outputSchema: z.ZodType<Output, Output> },
-): AgentResource<Output>;
+): AgentResource<Output, A>;
 export function agentResource<A extends AnyAgent>(
   agent: A,
   options: AgentLimits & { outputSchema?: never },
-): AgentResource<AgentOutput<A>>;
+): AgentResource<AgentOutput<A>, A>;
 export function agentResource(agent: AnyAgent, options: AgentLimits & { outputSchema?: z.ZodType<any, any> }) {
   return new AgentResource(agent, options);
 }

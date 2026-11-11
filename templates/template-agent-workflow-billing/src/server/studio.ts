@@ -7,17 +7,15 @@ import { BillingError, identifierSchema } from '../billing/contracts.js';
 import type { BillingHttpGateway } from '../billing/mastra.js';
 import type { OrganizationService } from '../billing/organizations.js';
 import type { CommercialService } from '../billing/commercial.js';
-import { observationsSchema, reportApprovalSchema, weatherPrompt } from '../weather/observations.js';
+import type { ResourceAction } from '../billing/resource-catalog.js';
 
 const selectionSchema = z.strictObject({ workspaceId: identifierSchema });
-const operationSchema = selectionSchema.extend({ idempotencyKey: identifierSchema });
-const runSchema = selectionSchema.extend({ executionId: identifierSchema });
-const resumeSchema = runSchema.extend({ idempotencyKey: identifierSchema, approval: reportApprovalSchema });
 
 export function createBillingStudio(
   organizations: OrganizationService,
   execution: BillingHttpGateway,
   commercial: CommercialService,
+  actions: readonly ResourceAction[],
 ) {
   // Never accept credentials or actor IDs from Studio's editable request context.
   const request = new AsyncLocalStorage<string>();
@@ -41,89 +39,18 @@ export function createBillingStudio(
       inputSchema: selectionSchema,
       execute: input => safely(async () => commercial.usage(await selected(input.workspaceId))),
     }),
-    'billing-weather-summary': createTool({
-      id: 'billing-weather-summary',
-      description:
-        'Summarize supplied weather observations through billing. Returns the summary and receipt. Reuse the same idempotency key and input to replay without another charge.',
-      inputSchema: operationSchema.extend({ observations: observationsSchema }),
-      execute: input =>
-        safely(async () =>
-          execution.generate(
-            'weather-agent',
-            weatherPrompt(input.observations),
-            await selected(input.workspaceId),
-            input.idempotencyKey,
-          ),
-        ),
-    }),
-    'billing-weather-report-start': createTool({
-      id: 'billing-weather-report-start',
-      description:
-        'Draft a weather report and reserve its charge while waiting for approval. Save the returned executionId.',
-      inputSchema: operationSchema.extend({ observations: observationsSchema }),
-      execute: input =>
-        safely(async () => {
-          const billing = await selected(input.workspaceId);
-          const { executionId } = await execution.createRun('weather-report', billing, input.idempotencyKey);
-          return execution.workflowOperation(
-            'weather-report',
-            executionId,
-            'start',
-            billing,
-            input.idempotencyKey,
-            input.observations,
-          );
-        }),
-    }),
-    'billing-weather-report-status': createTool({
-      id: 'billing-weather-report-status',
-      description: 'Read your private weather report and receipt, including after a server restart.',
-      inputSchema: runSchema,
-      execute: input =>
-        safely(async () =>
-          execution.workflowOperation(
-            'weather-report',
-            input.executionId,
-            'status',
-            await selected(input.workspaceId),
-            undefined,
-            null,
-          ),
-        ),
-    }),
-    'billing-weather-report-approve': createTool({
-      id: 'billing-weather-report-approve',
-      description: 'Approve your suspended weather report. Successful completion captures the reservation once.',
-      inputSchema: resumeSchema,
-      execute: input =>
-        safely(async () =>
-          execution.workflowOperation(
-            'weather-report',
-            input.executionId,
-            'resume',
-            await selected(input.workspaceId),
-            input.idempotencyKey,
-            { step: 'approval', resumeData: input.approval },
-          ),
-        ),
-    }),
-    'billing-weather-report-cancel': createTool({
-      id: 'billing-weather-report-cancel',
-      description: 'Cancel your suspended weather report and release its reservation without charging.',
-      inputSchema: runSchema.extend({ idempotencyKey: identifierSchema }),
-      execute: input =>
-        safely(async () =>
-          execution.workflowOperation(
-            'weather-report',
-            input.executionId,
-            'cancel',
-            await selected(input.workspaceId),
-            input.idempotencyKey,
-            {},
-          ),
-        ),
-    }),
   };
+  for (const action of actions) {
+    Object.assign(tools, {
+      [action.id]: createTool({
+        id: action.id,
+        description: action.description,
+        inputSchema: action.inputSchema,
+        // The SDK already applied inputSchema, including its transformations.
+        execute: input => safely(() => action.executeValidated(input, { execution, selected })),
+      }),
+    });
+  }
   const toolIds = new Set(Object.keys(tools));
   const limit = bodyLimit({
     maxSize: 16 * 1024,

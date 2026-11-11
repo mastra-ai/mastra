@@ -12,7 +12,7 @@ import { BillingRecovery } from '../../src/billing/recovery.js';
 import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
 import { independentClient } from '../support/billing.js';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { createWeatherApplication } from '../../src/mastra/setup.js';
+import { createBillingApplication } from '../../src/mastra/setup.js';
 import { createBillingApp } from '../../src/server/billing.js';
 import { billingSocket } from '../support/http.js';
 import { modelBoundary, runtimeFixture, mastraConfiguration, operationBarrier } from '../support/mastra.js';
@@ -220,7 +220,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       ],
     };
     await expect(
-      createWeatherApplication(
+      createBillingApplication(
         {
           BILLING_PROVIDER: 'autumn',
           BILLING_MODE: 'production',
@@ -1626,7 +1626,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       OPENAI_API_KEY: 'controlled',
     };
     const serve = async (bindings = f.options.bindings) => {
-      const application = await createWeatherApplication(environment, { autumn: { ...f.options, bindings } });
+      const application = await createBillingApplication(environment, { autumn: { ...f.options, bindings } });
       cleanups.push(application.close);
       const server = await billingSocket(
         createBillingApp(application.organizations, application.execution, application.runtime.commercial),

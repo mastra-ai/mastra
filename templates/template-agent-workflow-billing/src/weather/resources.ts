@@ -1,11 +1,16 @@
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { agentResource, workflowResource } from '../billing/mastra-resources.js';
-import { observationsSchema, reportApprovalSchema, weatherPrompt } from './observations.js';
-
-export function weatherResources(environment: NodeJS.ProcessEnv = process.env) {
-  const agent = new Agent({
+import { resourceAction } from '../billing/resource-catalog.js';
+import type { ResourceDependencies, ResourceDefinition } from '../billing/resource-catalog.js';
+import { identifierSchema } from '../billing/contracts.js';
+import { observationsSchema, reportApprovalSchema, weatherPrompt, validateWeatherPrompt } from './observations.js';
+const selectionSchema = z.strictObject({ workspaceId: identifierSchema });
+const operationSchema = selectionSchema.extend({ idempotencyKey: identifierSchema });
+const runSchema = selectionSchema.extend({ executionId: identifierSchema });
+const resumeSchema = runSchema.extend({ idempotencyKey: identifierSchema, approval: reportApprovalSchema });
+function createWeatherAgent(environment: NodeJS.ProcessEnv) {
+  return new Agent({
     id: 'weather-agent',
     name: 'Weather Agent',
     instructions:
@@ -19,13 +24,11 @@ export function weatherResources(environment: NodeJS.ProcessEnv = process.env) {
     maxRetries: 0,
     defaultOptions: { providerOptions: { openai: { reasoningEffort: 'none' } } },
   });
+}
+function createWeatherReport(dependencies: ResourceDependencies) {
   const stateSchema = z.strictObject({ observations: observationsSchema, draft: z.string().max(8192) });
   const outputSchema = stateSchema.extend({ report: z.string().max(8192) });
-  let nestedGenerate: ((prompt: string) => Promise<{ text: string }>) | undefined;
-  const generate = async (prompt: string) => {
-    if (!nestedGenerate) throw new Error('Weather billing must be attached before execution.');
-    return nestedGenerate(prompt);
-  };
+  const generate = (prompt: string) => dependencies.nestedAgent('weather-agent').generate(prompt);
   const draft = createStep({
     id: 'draft',
     inputSchema: observationsSchema,
@@ -55,8 +58,9 @@ export function weatherResources(environment: NodeJS.ProcessEnv = process.env) {
       report: (await generate(weatherPrompt(inputData.observations, 'final'))).text,
     }),
   });
-  const workflow = createWorkflow({
+  return createWorkflow({
     id: 'weather-report',
+    steps: [draft, approval, final],
     inputSchema: observationsSchema,
     outputSchema,
     options: { autoRestartActiveRuns: false },
@@ -65,22 +69,133 @@ export function weatherResources(environment: NodeJS.ProcessEnv = process.env) {
     .then(approval)
     .then(final)
     .commit();
-  return {
-    nativeAgents: { 'weather-agent': agent },
-    nativeWorkflows: { 'weather-report': workflow },
-    agents: {
-      'weather-agent': agentResource(agent, { version: 'weather-agent-v1', maxSteps: 1, maxOutputTokens: 400 }),
+}
+const actions = [
+  resourceAction({
+    id: 'billing-weather-summary',
+    description:
+      'Summarize supplied weather observations through billing. Returns the summary and receipt. Reuse the same idempotency key and input to replay without another charge.',
+    inputSchema: operationSchema.extend({ observations: observationsSchema }),
+    execute: async (input, { execution, selected }) =>
+      execution.generate(
+        'weather-agent',
+        weatherPrompt(input.observations),
+        await selected(input.workspaceId),
+        input.idempotencyKey,
+      ),
+  }),
+  resourceAction({
+    id: 'billing-weather-report-start',
+    description:
+      'Draft a weather report and reserve its charge while waiting for approval. Save the returned executionId.',
+    inputSchema: operationSchema.extend({ observations: observationsSchema }),
+    execute: async (input, { execution, selected }) => {
+      const billing = await selected(input.workspaceId);
+      const { executionId } = await execution.createRun('weather-report', billing, input.idempotencyKey);
+      return execution.workflowOperation(
+        'weather-report',
+        executionId,
+        'start',
+        billing,
+        input.idempotencyKey,
+        input.observations,
+      );
     },
-    workflows: {
-      'weather-report': workflowResource(workflow, {
-        version: 'weather-report-v1',
-        agentDependencies: ['weather-agent'],
-        measurement: 'facade-calls',
-        expectedCalls: [1, 1],
-      }),
+  }),
+  resourceAction({
+    id: 'billing-weather-report-status',
+    description: 'Read your private weather report and receipt, including after a server restart.',
+    inputSchema: runSchema,
+    execute: async (input, { execution, selected }) =>
+      execution.workflowOperation(
+        'weather-report',
+        input.executionId,
+        'status',
+        await selected(input.workspaceId),
+        undefined,
+        null,
+      ),
+  }),
+  resourceAction({
+    id: 'billing-weather-report-approve',
+    description: 'Approve your suspended weather report. Successful completion captures the reservation once.',
+    inputSchema: resumeSchema,
+    execute: async (input, { execution, selected }) =>
+      execution.workflowOperation(
+        'weather-report',
+        input.executionId,
+        'resume',
+        await selected(input.workspaceId),
+        input.idempotencyKey,
+        { step: 'approval', resumeData: input.approval },
+      ),
+  }),
+  resourceAction({
+    id: 'billing-weather-report-cancel',
+    description: 'Cancel your suspended weather report and release its reservation without charging.',
+    inputSchema: runSchema.extend({ idempotencyKey: identifierSchema }),
+    execute: async (input, { execution, selected }) =>
+      execution.workflowOperation(
+        'weather-report',
+        input.executionId,
+        'cancel',
+        await selected(input.workspaceId),
+        input.idempotencyKey,
+        {},
+      ),
+  }),
+];
+export function weatherDefinitions(
+  environment: NodeJS.ProcessEnv = process.env,
+  workflowPolicy: 'task' | 'tokens' = 'task',
+) {
+  const measurements = [
+    { key: 'tokens', unit: 'tokens', enforceableBound: false },
+    { key: 'model-calls', unit: 'custom', enforceableBound: true },
+  ] as const;
+  return [
+    {
+      id: 'weather-agent',
+      kind: 'agent',
+      create: () => createWeatherAgent(environment),
+      adapter: {
+        version: 'weather-agent-v1',
+        maxSteps: 1,
+        maxOutputTokens: 400,
+        promptSchema: z.string().superRefine((prompt, context) => {
+          try {
+            validateWeatherPrompt(prompt);
+          } catch {
+            context.addIssue({ code: 'custom', message: 'Invalid weather prompt.' });
+          }
+        }),
+      },
+      operations: ['generate'],
+      measurements,
+      policy: {
+        version: 'weather-agent-v1',
+        access: { subscription: 'weather-access' },
+        charge: { type: 'credits', meter: 'weather-credits', units: 3 },
+      },
+      actions: actions.slice(0, 1),
     },
-    attach: (generate: (prompt: string) => Promise<{ text: string }>) => {
-      nestedGenerate = generate;
+    {
+      id: 'weather-report',
+      kind: 'workflow',
+      create: createWeatherReport,
+      agentDependencies: ['weather-agent'],
+      adapter: { version: 'weather-report-v1', measurement: 'facade-calls', expectedCalls: [1, 1] },
+      operations: ['start', 'resume', 'cancel'],
+      measurements,
+      policy: {
+        version: workflowPolicy === 'task' ? 'weather-report-task-v1' : 'weather-report-tokens-v1',
+        suspendedReservationTtlMs: 1800000,
+        charge:
+          workflowPolicy === 'task'
+            ? { type: 'per-task', meter: 'weather-tasks', units: 1, funding: 'prepaid' }
+            : { type: 'usage', meter: 'weather-tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' },
+      },
+      actions: actions.slice(1),
     },
-  };
+  ] as const satisfies readonly ResourceDefinition[];
 }

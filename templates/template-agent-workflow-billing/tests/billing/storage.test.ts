@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setupLocal } from '../../scripts/setup.js';
-import { createWeatherApplication } from '../../src/mastra/setup.js';
+import { createBillingApplication } from '../../src/mastra/setup.js';
 import { readLocalProfiles } from '../../src/local/profiles.js';
 import { modelBoundary } from '../support/mastra.js';
 import { billingSocket } from '../support/http.js';
@@ -266,7 +266,7 @@ async function developmentFixture() {
   const manifest = await setupLocal(environment);
   const observer = await independentClient(manifest.databaseUrl);
   cleanups.push(() => observer.close());
-  let application = await createWeatherApplication(environment);
+  let application = await createBillingApplication(environment);
   cleanups.push(() => application.close());
   let server = await billingSocket(
     createBillingApp(application.organizations, application.execution, application.runtime.commercial),
@@ -298,7 +298,7 @@ async function developmentFixture() {
     restart: async () => {
       await server.close();
       await application.close();
-      application = await createWeatherApplication(environment);
+      application = await createBillingApplication(environment);
       server = await billingSocket(
         createBillingApp(application.organizations, application.execution, application.runtime.commercial),
       );

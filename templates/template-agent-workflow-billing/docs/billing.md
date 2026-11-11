@@ -46,7 +46,7 @@ Use `--profile member` or `--profile outsider` to try authorization with another
 
 ## Choose a billing policy
 
-Edit [src/weather/configuration.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/configuration.ts). Each resource has an optional access requirement and a charging rule.
+Edit the resource policies in [src/weather/resources.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/resources.ts). Each resource has an optional access requirement and a charging rule.
 
 | Model               | Policy                                                                                                      |
 | ------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -66,14 +66,44 @@ Policy changes apply to new executions. Existing runs keep the policy and reserv
 
 ## Connect your own agents and workflows
 
-The [weather resources](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/resources.ts) and [application setup](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/mastra/setup.ts) provide the complete integration example:
+The [application catalog](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/resources.ts) selects the definitions in [src/weather/resources.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/resources.ts). Each definition owns its ID, native factory, adapter limits/version, billing policy, public actions and declared agent dependencies. Adding a definition derives Mastra, billing and Studio registrations together.
 
-1. Register agents with `agentResource` and workflows with `workflowResource`.
-2. Pass those registrations, the matching billing configuration, and an `OrganizationService` to `initializeMastraBilling`.
-3. Attach the returned storage to the same Mastra instance. Keep both `billingOnlyServer` and `enforceBillingBoundary` so native execution routes cannot bypass billing.
-4. After attaching resources and storage, call `await runtime.startRecovery().ready`. Call `await runtime.close()` during shutdown.
+Create an application with a typed catalog and a server-side provider selection:
 
-From trusted server code, invoke an agent through the billing facade. Here, `runtime` is the result of `initializeMastraBilling`, `organizations` is its organization service, and `credential`, `workspaceId`, and `prompt` come from your authenticated request:
+```ts
+import { applicationCatalog } from './src/resources.js';
+import { createBillingApplication } from './src/mastra/setup.js';
+
+const catalog = applicationCatalog(process.env);
+const application = await createBillingApplication(process.env, { catalog });
+const { runtime, organizations } = application;
+```
+
+For local setup, omit the explicit catalog so the application loads the bundled profile balances. `BILLING_PROVIDER=local` selects persistent simulated accounting. For Autumn, set `BILLING_PROVIDER=autumn`, configure JWT identity, and supply server-side `autumn` options containing the secret and feature/customer bindings. The provider factory map in `src/billing/setup.ts` selects the implementation; resource factories receive no provider SDK.
+
+For example, the included agent definition keeps its charge next to its factory:
+
+```ts
+{
+  id: 'weather-agent',
+  kind: 'agent',
+  create: () => createWeatherAgent(environment),
+  adapter: { version: 'weather-agent-v1', maxSteps: 1, maxOutputTokens: 400 },
+  operations: ['generate'],
+  measurements,
+  policy: {
+    version: 'weather-agent-v1',
+    access: { subscription: 'weather-access' },
+    charge: { type: 'credits', meter: 'weather-credits', units: 3 },
+  },
+}
+```
+
+Keep meter/access mappings and local allowances in the catalog configuration. `BILLING_CONFIGURATION` can configure the bundled resources and commercial/provider bindings; it cannot introduce a factory or action. Invalid IDs, dependencies, cycles, operations, mappings and unsupported policy capabilities reject before factories or provider work. Custom Studio action IDs use letters, digits and hyphens.
+
+The application attaches persistent snapshots and authenticated HTTP/Studio boundaries before enabling the dependency resolver and recovery. Call `await application.close()` during shutdown; repeat and concurrent calls share cleanup, including when a disposer fails.
+
+From trusted server code, invoke an agent through the billing facade. Use `runtime` and `organizations` from the application above. The `credential`, `workspaceId`, and `prompt` come from your authenticated request:
 
 ```ts
 const context = await organizations.context({ credential, workspaceId });
@@ -82,16 +112,30 @@ const response = await runtime.billing.agent('weather-agent').generate(prompt, {
   idempotencyKey: 'summary-123',
 });
 
-console.log(response.billing.billedUnits);
+if (response.kind !== 'nested') console.log(response.billing.billedUnits);
 ```
 
 For the weather agent, `prompt` is JSON containing `{ observations, purpose: 'summary' }`. Use `weatherPrompt` from `src/weather/observations.ts` to construct it.
 
 Workflow access uses `runtime.billing.workflow(resourceId)`: call `createRun`, then `start`. Later, load the run with `getRun` and call `resume`, `status`, or `cancel` with a freshly authenticated billing context. Each write needs its own idempotency key.
 
-For nested agent calls, use `runtime.billing.nestedAgent(resourceId).generate(prompt)` inside the admitted workflow. These calls contribute to the parent execution without a separate charge. Declare the agent in `agentDependencies`. Measured workflows must declare `measurement: 'facade-calls'` and the expected calls per segment, such as `[1, 1]` for one call before approval and one after it. Direct model calls outside this facade are not measured by the integration.
+For the bundled workflow, `observations` is the caller's validated weather input:
 
-Set workflow `autoRestartActiveRuns: false`. Increase the resource version when changing executable code, models, tools, or schemas, and retain compatible definitions for paused runs. Token streaming, time travel, and automatic retries of uncertain work are not supported.
+```ts
+const run = await runtime.billing.workflow('weather-report').createRun({
+  billing: context,
+  idempotencyKey: 'report-123',
+});
+const draft = await run.start({
+  billing: context,
+  idempotencyKey: 'draft-123',
+  inputData: observations,
+});
+```
+
+For nested agent calls, declare `agentDependencies` and use `dependencies.nestedAgent(resourceId).generate(prompt)` inside the admitted workflow factory. These calls contribute to the parent execution without a separate charge. Measured workflows must declare `measurement: 'facade-calls'` and the expected calls per segment, such as `[1, 1]` for one call before approval and one after it. Direct model calls outside this facade are not measured by the integration.
+
+Declare workflow `steps` to retain native resume types, and set `autoRestartActiveRuns: false`. Increase the resource version when changing executable code, models, tools, or schemas, and retain compatible definitions for paused runs. Token streaming, time travel, and automatic retries of uncertain work are not supported.
 
 ## Identity and HTTP access
 

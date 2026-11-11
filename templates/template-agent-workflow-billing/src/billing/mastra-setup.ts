@@ -1,4 +1,5 @@
 import type { AutumnProviderOptions } from './providers/autumn.js';
+import { Lifecycle } from './lifecycle.js';
 import { BillingRecovery } from './recovery.js';
 import { RecoveryStorage } from './storage/recovery.js';
 import { dirname, resolve } from 'node:path';
@@ -56,6 +57,8 @@ export async function initializeMastraBilling<
     configuration: options.configuration,
     autumn: options.autumn,
   });
+  const lifecycle = new Lifecycle();
+  lifecycle.own(commercial.close);
   let commercialStorage: CommercialStorage | undefined;
   let accounting: AccountingStorage | undefined;
   let workflowStorage: WorkflowStorage | undefined;
@@ -65,8 +68,11 @@ export async function initializeMastraBilling<
   try {
     await privateWorkflowFiles(fileURLToPath(workflowUrl));
     accounting = await AccountingStorage.open({ url: files.databaseUrl }, options.organizations.storage);
+    lifecycle.own(() => accounting!.close());
     workflowStorage = await WorkflowStorage.open({ url: files.databaseUrl }, options.organizations.storage);
+    lifecycle.own(() => workflowStorage!.close());
     snapshots = new LibSQLStore({ id: 'billing-workflow-snapshots', url: workflowUrl });
+    lifecycle.own(() => snapshots!.close());
     await snapshots.init();
     await privateWorkflowFiles(fileURLToPath(workflowUrl));
     const billing = new MastraBilling({
@@ -79,6 +85,7 @@ export async function initializeMastraBilling<
       workflows: options.workflows,
     });
     commercialStorage = await CommercialStorage.open({ url: files.databaseUrl }, options.organizations.storage);
+    lifecycle.own(() => commercialStorage!.close());
     const sessions = commercialStorage;
     const commercialService = new CommercialService(
       options.organizations,
@@ -88,15 +95,16 @@ export async function initializeMastraBilling<
     );
     const storage = snapshots;
     const ledger = accounting;
-    const runs = workflowStorage;
+
     recoveryStorage = await RecoveryStorage.open({ url: files.databaseUrl });
+    lifecycle.own(() => recoveryStorage!.close());
     recovery = new BillingRecovery(recoveryStorage, commercial.provider, async () => {
       await billing.expireSuspensions();
       await ledger.recoverFinancial();
     });
+    lifecycle.own(() => recovery!.stop());
     const worker = recovery;
-    const recoveryRecords = recoveryStorage;
-    let closed = false;
+
     return {
       billing,
       recovery: worker,
@@ -105,26 +113,9 @@ export async function initializeMastraBilling<
       commercial: commercialService,
       storage,
       configuration: commercial.configuration,
-      close: async () => {
-        if (closed) return;
-        closed = true;
-        await worker.stop();
-        recoveryRecords.close();
-        sessions.close();
-        ledger.close();
-        runs.close();
-        commercial.close();
-        await storage.close();
-      },
+      close: () => lifecycle.close(),
     };
   } catch (error) {
-    await recovery?.stop();
-    recoveryStorage?.close();
-    commercialStorage?.close();
-    accounting?.close();
-    workflowStorage?.close();
-    commercial.close();
-    await snapshots?.close();
-    throw error;
+    return lifecycle.fail(error);
   }
 }

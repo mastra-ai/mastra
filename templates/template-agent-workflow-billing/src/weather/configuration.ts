@@ -1,42 +1,19 @@
+import { weatherDefinitions } from './resources.js';
 import { billingConfigurationSchema } from '../billing/configuration.js';
 
 export function weatherConfiguration(
   workspaceIds?: string | readonly string[],
   workflowPolicy: 'task' | 'tokens' = 'task',
 ) {
-  const measurements = [
-    { key: 'tokens', unit: 'tokens', enforceableBound: false },
-    { key: 'model-calls', unit: 'custom', enforceableBound: true },
-  ];
   return billingConfigurationSchema.parse({
     provider: 'local',
-    resources: [
-      {
-        id: 'weather-agent',
-        kind: 'agent',
-        operations: ['generate'],
-        measurements,
-        policy: {
-          version: 'weather-agent-v1',
-          access: { subscription: 'weather-access' },
-          charge: { type: 'credits', meter: 'weather-credits', units: 3 },
-        },
-      },
-      {
-        id: 'weather-report',
-        kind: 'workflow',
-        operations: ['start', 'resume', 'cancel'],
-        measurements,
-        policy: {
-          version: workflowPolicy === 'task' ? 'weather-report-task-v1' : 'weather-report-tokens-v1',
-          suspendedReservationTtlMs: 1800000,
-          charge:
-            workflowPolicy === 'task'
-              ? { type: 'per-task', meter: 'weather-tasks', units: 1, funding: 'prepaid' }
-              : { type: 'usage', meter: 'weather-tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' },
-        },
-      },
-    ],
+    resources: weatherDefinitions({}, workflowPolicy).map(({ id, kind, operations, measurements, policy }) => ({
+      id,
+      kind,
+      operations,
+      measurements,
+      policy,
+    })),
     mappings: {
       subscriptions: ['weather-access'],
       meters: [

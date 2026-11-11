@@ -1,3 +1,3 @@
-import { configuredWeatherMastra } from './setup.js';
+import { configuredMastra } from './setup.js';
 
-export const mastra = await configuredWeatherMastra();
+export const mastra = await configuredMastra();

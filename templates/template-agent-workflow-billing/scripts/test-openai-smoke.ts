@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createClient } from '@libsql/client';
 import { setupLocal } from './setup.js';
-import { createWeatherApplication } from '../src/mastra/setup.js';
+import { createBillingApplication } from '../src/mastra/setup.js';
 import { createBillingApp } from '../src/server/billing.js';
 import { weatherPrompt } from '../src/weather/observations.js';
 
@@ -16,7 +16,7 @@ const deadline = setTimeout(() => {
   console.error('OpenAI smoke exceeded its time limit; unverified.');
   process.exit(1);
 }, 120000);
-let application: Awaited<ReturnType<typeof createWeatherApplication>> | undefined;
+let application: Awaited<ReturnType<typeof createBillingApplication>> | undefined;
 let server: ReturnType<typeof createServer> | undefined;
 try {
   // Select only the requested model key. No payment credentials or existing databases are inherited.
@@ -27,7 +27,7 @@ try {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY!,
   };
   const manifest = await setupLocal(environment);
-  application = await createWeatherApplication(environment);
+  application = await createBillingApplication(environment);
   const app = createBillingApp(application.organizations, application.execution, application.runtime.commercial);
   server = createServer(async (request, response) => {
     try {
