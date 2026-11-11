@@ -49,6 +49,12 @@
   initial-value: 1000000px;
 }
 
+@property --corner-min-w {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 1000000px;
+}
+
 /* 1 on an element known to be square (`aspect-square`, `size-full`): no capsule at all. */
 @property --corner-square {
   syntax: '<number>';
@@ -183,7 +189,9 @@
 /* prettier-ignore */
 @utility rounded-full {
   @variant smooth-corners {
-    --_ps: calc((1 - var(--corner-square)) * min(var(--corner-smoothing), max(var(--corner-w) / var(--corner-h) - 1, clamp(0, (var(--corner-h) - var(--corner-w)) / 1px, 1) * var(--corner-smoothing))));
+    /* The fixed width, else the minimum one (a count badge is `h-5 min-w-5`). */
+    --_w: calc(var(--corner-w) + clamp(0, (var(--corner-w) - 999999px) / 1px, 1) * (var(--corner-min-w) - var(--corner-w)));
+    --_ps: calc((1 - var(--corner-square)) * min(var(--corner-smoothing), max(var(--_w) / var(--corner-h) - 1, clamp(0, (var(--corner-h) - var(--_w)) / 1px, 1) * var(--corner-smoothing))));
     border-radius: min(calc(var(--corner-h) / 2 * (1 + 0.12 * var(--_ps) + 0.12 * var(--_ps) * var(--_ps))), max(50%, (var(--corner-h) - 10000px) * 2)) / calc(var(--corner-h) / 2);
     corner-shape: superellipse(calc(1 + 0.1 * var(--_ps) + 0.08 * var(--_ps) * var(--_ps)));
   }
@@ -241,8 +249,8 @@
   --corner-w: calc(var(--spacing) * --value(number));
 }
 @utility min-w-* {
-  --corner-w: --value(--spacing-*, [length]);
-  --corner-w: calc(var(--spacing) * --value(number));
+  --corner-min-w: --value(--spacing-*, [length]);
+  --corner-min-w: calc(var(--spacing) * --value(number));
 }
 /* Width = height by definition, whatever the value (`size-(--cell-size)` included). */
 @utility size-* {
