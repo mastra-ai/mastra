@@ -158,7 +158,18 @@ const stepEventsOf = (published: Event[], runId: string) =>
     )
     .map(event => `${event.type}@${JSON.stringify((event.data as { executionPath?: number[] }).executionPath)}`);
 
-export function describeFinishedOccurrenceCases({ getStorage }: { getStorage: () => MastraStorage }) {
+/**
+ * `getStorage` is the store the test reads. `connect` opens the store a
+ * replica uses, on the same database: a replica that shuts down closes its
+ * store. It defaults to `getStorage`, for stores that close harmlessly.
+ */
+export function describeFinishedOccurrenceCases({
+  getStorage,
+  connect = getStorage,
+}: {
+  getStorage: () => MastraStorage;
+  connect?: () => MastraStorage | Promise<MastraStorage>;
+}) {
   describe('evented step deliveries that arrive after the step finished (#28712)', () => {
     const replicas: Mastra[] = [];
     afterEach(async () => {
@@ -170,7 +181,7 @@ export function describeFinishedOccurrenceCases({ getStorage }: { getStorage: ()
       const { pubsub, published } = recordWorkflowEvents(new EventEmitterPubSub(), intercept);
       const mastra = new Mastra({
         logger: false,
-        storage: getStorage(),
+        storage: await connect(),
         pubsub,
         workflows: { finished: workflow as any },
       });
