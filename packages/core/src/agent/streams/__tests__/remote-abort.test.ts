@@ -10,12 +10,11 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
-import { isMastraTimeoutError, MastraTimeoutError } from '../../../loop/timeout';
 import { Mastra } from '../../../mastra';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { publishAbortRequest, requestAcknowledgedAbort } from '../abort-transport';
+import { requestAcknowledgedAbort } from '../abort-transport';
 import { AGENT_CONTROL_TOPIC } from '../constants';
 import { createAgentStreamPublisher } from '../publisher';
 
@@ -146,19 +145,6 @@ describe('Agent streams remote abort', () => {
     expect(await requestAcknowledgedAbort(pubsub, 'ended-run', 300)).toBe(false);
     expect(publisher.abortSignal.aborted).toBe(false);
     releaseUnsubscribe();
-  });
-
-  it('stops the run with the timeout an abort request carries', async () => {
-    const pubsub = new EventEmitterPubSub();
-    const publisher = createAgentStreamPublisher({ pubsub, runId: 'timed-run', cleanupTimeoutMs: 0 });
-    await pubsub.flush();
-
-    await publishAbortRequest(pubsub, 'timed-run', new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 1000 }));
-
-    await vi.waitFor(() => expect(publisher.abortSignal.aborted).toBe(true));
-    expect(isMastraTimeoutError(publisher.abortSignal.reason)).toBe(true);
-    expect(publisher.abortSignal.reason).toMatchObject({ timeoutType: 'total', timeoutMs: 1000 });
-    await publisher.close();
   });
 
   it('records the owner of a running published run and forgets it once the run ends', async () => {

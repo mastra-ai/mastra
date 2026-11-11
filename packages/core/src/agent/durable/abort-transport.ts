@@ -72,10 +72,10 @@ export async function ensureRemoteAbortListener(
 
   let unsubscribe: () => Promise<void>;
   try {
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, reason => {
+    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
       const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
       if (controller && !controller.signal.aborted) {
-        controller.abort(reason);
+        controller.abort(new Error('Aborted'));
       }
     });
   } catch (error) {

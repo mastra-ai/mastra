@@ -77,7 +77,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
-import type { MastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { matchesRunFence } from '@mastra/core/storage';
@@ -988,9 +987,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * one execution session (stream or resume) and compose it into the registry
    * entry's `abortSignal`, which co-located durable steps read. At the
    * deadline the run is reported failed: the stream gets one
-   * `MastraTimeoutError` and the snapshot rows are deleted. The deadline is
-   * also published as a timeout abort request, so a step on another worker
-   * stops too. Mirrors core
+   * `MastraTimeoutError` and the snapshot rows are deleted. A step on another
+   * worker stops at the same deadline through the timer it arms from the
+   * carried deadline. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
    * Returns the timer teardown (a no-op when no budget is configured) and the
    * segment's absolute deadline, which the segment's event carries to workers.
@@ -1014,9 +1013,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // A worker in this process can abort the shared controller with its own copy of the
       // deadline a tick earlier; that is still this deadline, not a caller abort.
       if (!isMastraTimeoutError(error) || !isMastraTimeoutError(totalTimeout.signal?.reason)) return;
-      // A step running on another worker only sees this process's abort through pubsub. Not
-      // awaited: a slow publish must not hold back the caller's error.
-      void requestRemoteAbort(runId, error);
       // The worker owns span finalization and accumulated usage/output (OBS-754).
       // Ending caller copies here races that finalization.
       await emitError(runId, error);
@@ -1315,9 +1311,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * Best-effort: the local abort has already happened, and a caller asking to
    * stop a run should not get a rejection because the publish failed.
    */
-  async function requestRemoteAbort(runId: string, reason?: MastraTimeoutError): Promise<void> {
+  async function requestRemoteAbort(runId: string): Promise<void> {
     try {
-      await publishAbortRequest(getPubsub(), runId, reason);
+      await publishAbortRequest(getPubsub(), runId);
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent abort request', {
         agentId,
