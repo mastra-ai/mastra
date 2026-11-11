@@ -113,7 +113,7 @@ describe('smooth corners', () => {
     expect(full).toContain('max(var(--_w) / var(--corner-h) - 1');
     expect(full).toContain('corner-shape: superellipse(calc(1 + 0.1 * var(--_ps)');
     // One-sided pills take the infinite radius token, which caps their smoothing to 0.
-    expect(gatedRule(css, '.rounded-t-full:not(._)')).toContain('border-top-left-radius: calc(var(--corner-end-full)');
+    expect(gatedRule(css, '.rounded-t-full:not(._)')).toMatch(/border-top-left-radius: calc\(var\(--corner-end-full\)/);
   });
 
   it('gives `rounded-[inherit]` the inherited shape too, pseudo-elements included', () => {
