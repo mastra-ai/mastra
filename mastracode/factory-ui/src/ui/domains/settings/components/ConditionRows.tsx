@@ -47,10 +47,12 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { CONDITION_OPERATORS, conditionFields } from './conditionFields';
+import { repositoryHint } from '../services/rules';
+import { CONDITION_OPERATORS, VALUE_PLACEHOLDERS, conditionFields } from './conditionFields';
 import type { Facts } from './conditionFields';
 import { MANY, VALUELESS, canNest, emptyRow, fromRule, isGroup, newKey, toRule, valueFor } from './conditionTree';
 import type { Group, Item, Row } from './conditionTree';
+import { narrowSuggestions } from './sourceSuggestions';
 
 const FIELD_ICONS: Record<string, LucideIcon> = {
   'item.labels': Tag,
@@ -81,7 +83,8 @@ function operatorLabel(field: FilterBarField | undefined, operator: string): str
 }
 
 function optionsOf(field: FilterBarField | undefined): FilterBarOption[] | undefined {
-  return Array.isArray(field?.suggestions) ? field.suggestions : undefined;
+  // Nothing to pick from (a project with no repositories yet) reads as no list: the value is typed.
+  return Array.isArray(field?.suggestions) && field.suggestions.length > 0 ? field.suggestions : undefined;
 }
 
 /**
@@ -109,6 +112,8 @@ export function ConditionRows({
 }) {
   const fields = conditionFields(facts, options);
   const [root, setRoot] = useState(() => fromRule(rule));
+  const { rule: current, incomplete } = toRule(root);
+  const hint = repositoryHint(current);
 
   const update = (next: Group) => {
     setRoot(next);
@@ -127,9 +132,14 @@ export function ConditionRows({
         emptyHint={emptyHint}
         onChange={update}
       />
-      {toRule(root).incomplete && (
+      {incomplete && (
         <Txt as="p" variant="caption" tone="muted">
           Finish or remove unfinished conditions to save.
+        </Txt>
+      )}
+      {hint && (
+        <Txt as="p" variant="caption" tone="muted">
+          {hint}
         </Txt>
       )}
     </div>
@@ -142,6 +152,7 @@ function GroupLines({
   group,
   depth,
   fields,
+  limits = [],
   emptyHint,
   onChange,
   onRemove,
@@ -151,6 +162,8 @@ function GroupLines({
   group: Group;
   depth: number;
   fields: FilterBarField[];
+  /** Conditions every card this group tests also meets: those of the AND groups around it. */
+  limits?: Row[];
   /** Only the top group can be empty: a group left empty is removed. */
   emptyHint?: string;
   onChange: (group: Group) => void;
@@ -197,6 +210,9 @@ function GroupLines({
   }
 
   const joiner = group.logic === 'AND' ? 'and' : 'or';
+  // In an AND group, each row also holds for the others; an OR group's rows say nothing about each other.
+  const here =
+    group.logic === 'AND' ? [...limits, ...group.items.filter((item): item is Row => !isGroup(item))] : limits;
   return (
     <RuleLines role={role} aria-label={label}>
       {group.items.map((item, index) => (
@@ -212,6 +228,7 @@ function GroupLines({
                 group={item}
                 depth={depth + 1}
                 fields={fields}
+                limits={here}
                 onChange={next => replace(index, next.items.length > 0 ? next : undefined)}
                 onRemove={() => replace(index, undefined)}
               />
@@ -220,6 +237,7 @@ function GroupLines({
             <ConditionLine
               row={item}
               fields={fields}
+              limits={here.filter(limit => limit !== item)}
               onChange={next => replace(index, next)}
               onRemove={() => replace(index, undefined)}
             />
@@ -243,15 +261,19 @@ function FieldIcon({ id }: { id: string }) {
 function ConditionLine({
   row,
   fields,
+  limits,
   onChange,
   onRemove,
 }: {
   row: Row;
   fields: FilterBarField[];
+  /** The other conditions a card must meet with this one, which can narrow its suggestions. */
+  limits: Row[];
   onChange: (row: Row) => void;
   onRemove: () => void;
 }) {
-  const field = fields.find(candidate => candidate.id === row.field);
+  const listed = fields.find(candidate => candidate.id === row.field);
+  const field = listed && narrowSuggestions(listed, limits);
 
   return (
     <RuleLineContent>
@@ -346,6 +368,23 @@ function BooleanValue({ row, field, onChange }: { row: Row; field: FilterBarFiel
 function ValueControl({ row, field, onChange }: { row: Row; field: FilterBarField; onChange: (row: Row) => void }) {
   const options = optionsOf(field);
   const many = MANY.has(row.operator);
+  const typed = CONDITION_OPERATORS.find(operator => operator.id === row.operator)?.freeText === true;
+  if (options && field.strict === false && !typed) {
+    const values = Array.isArray(row.value)
+      ? row.value.map(String)
+      : row.value === undefined
+        ? []
+        : [String(row.value)];
+    return (
+      <OpenValues
+        options={options.map(option => ({ value: option.value, label: option.label ?? option.value }))}
+        values={values}
+        many={many}
+        placeholder={VALUE_PLACEHOLDERS[field.id] ?? 'Search or type a value'}
+        onChange={next => onChange({ ...row, value: many ? next : next[0] })}
+      />
+    );
+  }
   if (options && many) {
     const values = Array.isArray(row.value) ? row.value.map(String) : [];
     return (
@@ -435,6 +474,84 @@ function ManyValues({
   );
 }
 
+/**
+ * Picks from suggestions or takes any typed value: "Use “acme/next”" adds what was typed. One value, or
+ * several for "is any of"; values the suggestions don't list still show, and stay until removed.
+ */
+function OpenValues({
+  options,
+  values,
+  many,
+  placeholder,
+  onChange,
+}: {
+  options: Choice[];
+  values: string[];
+  many: boolean;
+  placeholder: string;
+  onChange: (values: string[]) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const typed = query.trim();
+  const listed = (value: string) => options.some(option => option.value.toLowerCase() === value.toLowerCase());
+  const chosen = values.map(value => options.find(option => option.value === value) ?? { value, label: value });
+  const items = [
+    ...(typed && !listed(typed) && !values.includes(typed) ? [{ value: typed, label: `Use “${typed}”` }] : []),
+    ...options,
+    ...chosen.filter(choice => !options.includes(choice)),
+  ];
+  const labels = chosen.map(choice => choice.value);
+  const shared = {
+    autoHighlight: true,
+    items,
+    inputValue: query,
+    onInputValueChange: setQuery,
+    itemToStringLabel: (option: Choice) => option.label,
+    isItemEqualToValue: (option: Choice, value: Choice) => option.value === value.value,
+  };
+  const content = (
+    <ComboboxContent>
+      <ComboboxSearch placeholder={placeholder} />
+      <ComboboxEmpty>Type a value to use it.</ComboboxEmpty>
+      <ComboboxList>
+        {(option: Choice) => (
+          <ComboboxItem key={option.value} value={option}>
+            {option.label}
+          </ComboboxItem>
+        )}
+      </ComboboxList>
+    </ComboboxContent>
+  );
+  const summary = (
+    <Txt as="span" variant="caption" className={cn('font-medium', labels.length === 0 && 'text-muted-foreground')}>
+      {labels.length === 0 ? placeholder : listSummary(labels)}
+    </Txt>
+  );
+  if (many) {
+    return (
+      <ComboboxRoot
+        {...shared}
+        multiple
+        value={chosen}
+        onValueChange={next => onChange(next.map(option => option.value))}
+      >
+        <ComboboxTrigger size="sm" aria-label="Values" title={labels.join(', ')} className="w-fit max-w-64">
+          {summary}
+        </ComboboxTrigger>
+        {content}
+      </ComboboxRoot>
+    );
+  }
+  return (
+    <ComboboxRoot {...shared} value={chosen[0] ?? null} onValueChange={next => next && onChange([next.value])}>
+      <ComboboxTrigger size="sm" aria-label="Value" title={labels[0]} className="w-fit max-w-64">
+        {summary}
+      </ComboboxTrigger>
+      {content}
+    </ComboboxRoot>
+  );
+}
+
 function textOf(value: Row['value']): string {
   if (Array.isArray(value)) return value.join(', ');
   return value === undefined ? '' : String(value);
@@ -477,7 +594,7 @@ function TextValue({
       size="sm"
       aria-label="Value"
       type={field.type === 'number' && !many ? 'number' : 'text'}
-      placeholder={many ? 'Values, comma separated' : 'Value'}
+      placeholder={VALUE_PLACEHOLDERS[field.id] ?? (many ? 'Values, comma separated' : 'Value')}
       value={text}
       className="w-48"
       onChange={event => setDraft(event.target.value)}
