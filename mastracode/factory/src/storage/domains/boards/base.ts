@@ -447,11 +447,33 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
    * project has had before is skipped even if its board was deleted since, and a stored board is
    * never rewritten. A project stored before the list was kept counts the boards it has as stored.
    * Reads one row when every key was stored before. Returns the keys it inserted.
+   *
+   * A key in `onlyIntoEmpty` is inserted only into a project that has no boards at all: one that
+   * already has any board, such as one an app stored under that key, is left as it is. The key
+   * is still recorded as stored, so it never goes in later, even after the project's boards are
+   * deleted: that project chose its boards, and Work is never added beside or after them. The
+   * `intoEmpty` boards (an app's, for every project) go first into a project with no boards, so
+   * Factory's own under the same key, or in `onlyIntoEmpty`, then stay out. `actor` is recorded
+   * as the inserted boards' creator.
    */
-  async seedBoards(scope: StoredBoardScope, boards: readonly StoredBoardInput[]): Promise<string[]> {
+  async seedBoards(
+    scope: StoredBoardScope,
+    boards: readonly StoredBoardInput[],
+    options: { actor?: string; onlyIntoEmpty?: readonly string[]; intoEmpty?: readonly StoredBoardInput[] } = {},
+  ): Promise<string[]> {
     const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
     if (marker?.seeded_boards && boards.every(board => marker.seeded_boards!.includes(board.key))) return [];
-    return this.#insertOnce(scope, boards, { actor: DEFAULT_INTAKE_ROUTE_ACTOR, skipSeeded: true });
+    return this.#insertOnce(scope, boards, {
+      actor: options.actor ?? DEFAULT_INTAKE_ROUTE_ACTOR,
+      skipSeeded: true,
+      onlyIntoEmpty: options.onlyIntoEmpty ?? [],
+      intoEmpty: options.intoEmpty ?? [],
+    });
+  }
+
+  /** The keys of the boards Factory stored in the project; null before it kept the list. */
+  async seededBoardKeys(scope: StoredBoardScope): Promise<string[] | null> {
+    return (await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope)))?.seeded_boards ?? null;
   }
 
   /**
@@ -466,7 +488,12 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   async #insertOnce(
     scope: StoredBoardScope,
     boards: readonly StoredBoardInput[],
-    options: { actor: string; skipSeeded: boolean },
+    options: {
+      actor: string;
+      skipSeeded: boolean;
+      onlyIntoEmpty?: readonly string[];
+      intoEmpty?: readonly StoredBoardInput[];
+    },
   ): Promise<string[]> {
     await ensureVersionRow(this.ops, scope);
     return this.#transact(async ops => {
@@ -474,15 +501,19 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
       const present = new Set(rows.map(row => row.board_key));
       const seeded = new Set(marker.seeded_boards ?? present);
+      // The `intoEmpty` boards go into a project with no boards, first; `onlyIntoEmpty` keys then
+      // go in only when nothing is stored yet, so a project holding them gets no default beside them.
+      const candidates = [...(rows.length === 0 ? (options.intoEmpty ?? []) : []), ...boards];
       let position = nextPosition(rows);
       const inserted: string[] = [];
-      for (const board of boards) {
+      for (const board of candidates) {
         if (present.has(board.key) || (options.skipSeeded && seeded.has(board.key))) continue;
+        if (present.size > 0 && options.onlyIntoEmpty?.includes(board.key)) continue;
         await insertBoard(ops, scope, board, { position: position++, actor: options.actor });
         present.add(board.key);
         inserted.push(board.key);
       }
-      const next = [...new Set([...seeded, ...boards.map(board => board.key)])];
+      const next = [...new Set([...seeded, ...candidates.map(board => board.key)])];
       const unchanged = marker.seeded_boards !== null && next.length === marker.seeded_boards.length;
       if (inserted.length === 0 && unchanged) return inserted;
       // Compare-and-set on the version, and every marker write takes a new one: two replicas

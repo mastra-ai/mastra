@@ -1,5 +1,12 @@
 # @mastra/arize
 
+## 1.3.30-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/otel-exporter@1.5.2-alpha.4
+
 ## 1.3.30-alpha.3
 
 ### Patch Changes

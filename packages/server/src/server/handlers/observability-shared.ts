@@ -672,6 +672,7 @@ export type ObservabilityStorageCapabilities = {
   discovery: ObservabilityDiscoveryCapabilities;
   deltaPolling: boolean;
   traceQuery: boolean;
+  traceQueryAggregatedRoots: boolean;
   traceQueryTextSearch: boolean;
   traceQueryRootDuration: boolean;
   traceQueryContextIds: boolean;
@@ -714,6 +715,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryAggregatedRoots: false,
   traceQueryTextSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
@@ -804,6 +806,7 @@ export function getObservabilityStorageCapabilities(
     deltaPolling:
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
+    traceQueryAggregatedRoots: false,
     traceQueryTextSearch:
       traceQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('trace-query-text-search'),
     traceQueryRootDuration:

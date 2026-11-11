@@ -2283,6 +2283,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     payload: 'payload' in persistedChunk ? persistedChunk.payload : undefined,
                     metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
                   });
+                  // The step's text is transcript, not internal state: build it from the same
+                  // chunk memory stores so a redacted reply is never returned unredacted.
+                  if (persistedChunk.type === 'text-delta') {
+                    textDeltas.push((persistedChunk.payload as TextDeltaPayload).text);
+                  }
                 }
 
                 if (STEP_CONTENT_CHUNK_TYPES.has(rawChunk.type)) {
@@ -2293,12 +2298,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // internal state (tool args, finish reason, usage, metadata) is
                 // never affected by display-layer transforms.
                 switch (rawChunk.type) {
-                  case 'text-delta': {
-                    const payload = rawChunk.payload as TextDeltaPayload;
-                    textDeltas.push(payload.text);
-                    break;
-                  }
-
                   case 'tool-call-input-streaming-start': {
                     const tool = toolInputStartToolDef || resolveToolDef(rawChunk.payload.toolName);
                     if (tool && 'onInputStart' in tool) {
@@ -2577,6 +2576,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     payload: 'payload' in r.part ? r.part.payload : undefined,
                     metadata: (r.part as { metadata?: Record<string, unknown> }).metadata,
                   });
+                  if (r.part.type === 'text-delta') textDeltas.push(r.part.payload.text);
                 }
               }
               throwIfInterrupted();

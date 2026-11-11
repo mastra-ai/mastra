@@ -134,6 +134,8 @@ export interface ModelCatalog {
       releaseDate?: string;
     }>
   >;
+  /** Drops cached auth so the next `listAvailableModels` call sees a credential change. */
+  invalidateAvailableModelsCache?: () => void;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
@@ -1087,6 +1089,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
             // Local mode is single-user: scope is meaningless and ignored.
             authStorage.setStoredApiKey(provider, key, envVar);
+            controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
@@ -1163,7 +1166,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-            authStorage.remove(`apikey:${provider}`);
+            authStorage.removeStoredApiKey(provider);
+            controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {

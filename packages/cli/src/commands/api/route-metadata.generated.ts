@@ -2097,6 +2097,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "pagination",
+      "rootSource",
       "textSearch",
       "timeRange",
       "where"
@@ -6051,12 +6052,15 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "datasetId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [
       "baselineId",
       "experimentIds"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "object-property",

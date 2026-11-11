@@ -542,6 +542,25 @@ describe('record-builders', () => {
       });
     });
 
+    it('preserves an explicitly absent feedback author and supplied review status', () => {
+      expect(
+        buildFeedbackRecord({
+          type: 'feedback',
+          feedback: {
+            feedbackId: 'anonymous-feedback',
+            timestamp: new Date(),
+            feedbackType: 'comment',
+            value: 'useful',
+            feedbackUserId: null,
+            userId: 'legacy-user',
+            metadata: { userId: 'metadata-user' },
+            correlationContext: { userId: 'span-user' },
+            reviewStatus: 'reviewed',
+          },
+        }),
+      ).toMatchObject({ feedbackUserId: null, userId: 'span-user', reviewStatus: 'reviewed' });
+    });
+
     it('keeps deprecated feedback source alias support', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');
       const event: FeedbackEvent = {

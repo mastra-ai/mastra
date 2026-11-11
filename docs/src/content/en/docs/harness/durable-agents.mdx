@@ -425,6 +425,42 @@ Recovery can start the same tool call before the previous execution detects owne
 
 Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boot together race to recover the same orphaned runs, but only one claim succeeds per run and the other replicas skip it. This requires a claim that every replica shares: a workflows store that supports run fencing, or a PubSub backend whose lease every replica shares. Without either, gate recovery behind your own leader election or run it from a single replica.
 
+## Database load
+
+Mastra doesn't publish a benchmarked hardware reference for durable agents, so size your database from your own workload. This section covers what drives the load and what to watch.
+
+Each checkpoint upserts the run's full snapshot as JSONB in `mastra_workflow_snapshot`, with one row for the agent workflow and one for its nested execution workflow. The snapshot holds the conversation and every tool result so far, so it grows during a run, and the total bytes a run writes grow faster than its step count. Write load depends on:
+
+- **Checkpoint frequency**: A `createDurableAgent()` agent with `recovery.durableAgents` set to `'off'` (the default) writes few checkpoints. With `'auto'`, it writes a `running` checkpoint at every step. A `createEventedAgent()` agent always writes at every step. See [snapshot persistence](#snapshot-persistence).
+- **Steps per run and payload size**: Every byte a tool returns is written again in each later checkpoint of the run.
+- **Concurrent runs**: Load grows with the number of runs in progress.
+
+To reduce writes and keep crash recovery:
+
+- Give the agent a fixed memory instance, so checkpoints store references to saved messages instead of full copies.
+- Return small tool results, such as IDs or URLs, instead of large documents.
+- Split long tasks into shorter runs.
+
+Each `PostgresStore` opens up to `max` connections, 20 by default, per process. A `pool`, `writePool`, or separate `readPool` you pass in uses its own limit. Add up the limits of every pool that connects to the server, across all replicas and processes, and keep the total below the server's `max_connections` with room for other clients. If you put a transaction-mode pooler such as PgBouncer in front, budget its server-side connections the same way. See [PostgreSQL](/integrations/databases/postgresql).
+
+Every checkpoint upsert leaves a dead row version, and Mastra deletes a finished run's rows, so `mastra_workflow_snapshot` collects dead rows fast. Suspended runs keep their rows. If deletion fails, Mastra logs a `Failed to delete workflow snapshot rows` warning and the rows stay until you delete or [prune](/reference/storage/retention) them. The exception is a `createEventedAgent()` agent on a shared pub/sub transport with storage-backed fencing: it logs `durable execution delivery failed` and retries the delete with the event. Pruning removes snapshots by inactivity, including suspended runs and running runs whose step hasn't written a checkpoint recently. Set `workflowSnapshot.maxAge` longer than your longest expected suspension and your longest step, or leave snapshot pruning off if you can't bound them. Make autovacuum more aggressive for this table. Replace `public` with your `schemaName` if you set one:
+
+```sql
+ALTER TABLE public.mastra_workflow_snapshot SET (
+  autovacuum_vacuum_scale_factor = 0.01,
+  toast.autovacuum_vacuum_scale_factor = 0.01
+);
+```
+
+To decide whether to add capacity or tune the workload, watch:
+
+- `n_dead_tup` and `last_autovacuum` for `mastra_workflow_snapshot` in `pg_stat_user_tables`, and for its TOAST table in `pg_stat_all_tables`, where large snapshots are stored
+- The snapshot upsert's share of `total_exec_time` and `wal_bytes` in `pg_stat_statements`. This requires `pg_stat_statements` in `shared_preload_libraries` (a server restart) and `CREATE EXTENSION pg_stat_statements`
+- WAL bytes per second (`pg_stat_wal`)
+- Active connections compared with the pool `max`
+
+If the snapshot upsert dominates writes, reduce checkpoint size or frequency first. If many unrelated queries are slow, add capacity.
+
 ## Make tools safe to repeat
 
 A durable or evented agent can run the same tool call more than once. A tool call is one request from the model to run a tool. A repeat happens in these situations:

@@ -108,7 +108,7 @@
  * once here, under the same rule.
  */
 import { isDeepStrictEqual } from 'node:util';
-import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2Content } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { Agent } from '../../../agent/agent';
 import type { AgentExecutionOptions } from '../../../agent/agent.types';
@@ -610,14 +610,13 @@ function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModel
     .filter(part => part.type === 'text-delta')
     .map(part => String(part.delta ?? ''))
     .join('');
-  const toolCalls = tape
-    .filter(part => part.type === 'tool-call')
-    .map(part => ({
-      type: 'tool-call' as const,
-      toolCallId: String(part.toolCallId),
-      toolName: String(part.toolName),
-      input: String(part.input ?? '{}'),
-    }));
+  // A streamed `tool-call` part has the same shape as a `doGenerate` tool-call
+  // content part. Passing it through whole keeps fields such as
+  // `providerExecuted`, so `generate()` and `stream()` replay the same
+  // assistant message on the next request.
+  const toolCalls = tape.filter(part => part.type === 'tool-call') as Array<
+    Extract<LanguageModelV2Content, { type: 'tool-call' }>
+  >;
   const finish = tape.find(part => part.type === 'finish');
 
   return {
