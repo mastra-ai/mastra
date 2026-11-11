@@ -23,6 +23,21 @@ export interface BoardSnapshot {
 // version or an evicted list drops its entry with it.
 const cardsJson = new WeakMap<readonly Card[], CardsJson>();
 
+// Each card's JSON, per converter. `listShared` keeps the frozen object of every card a write did
+// not touch, so the body of a new board version encodes only the cards that changed.
+const cardJson = new WeakMap<(item: Card) => unknown, WeakMap<Card, string>>();
+
+function encodeCards(items: readonly Card[], toWire: (item: Card) => unknown): string {
+  let encoded = cardJson.get(toWire);
+  if (!encoded) cardJson.set(toWire, (encoded = new WeakMap()));
+  const parts = items.map(item => {
+    let json = encoded.get(item);
+    if (json === undefined) encoded.set(item, (json = JSON.stringify(toWire(item)) ?? 'null'));
+    return json;
+  });
+  return `[${parts.join(',')}]`;
+}
+
 /**
  * The listing's wire body for one board version and its run activity. Every tab
  * polling an unchanged board shares one serialization and one gzip, and its
@@ -36,7 +51,7 @@ export function boardSnapshot(
 ): BoardSnapshot {
   let cards = cardsJson.get(items);
   if (!cards) {
-    cards = { id: randomUUID(), json: JSON.stringify(items.map(toWire)) };
+    cards = { id: randomUUID(), json: encodeCards(items, toWire) };
     cardsJson.set(items, cards);
   }
   const activity = JSON.stringify([runningSessionIds, parkedSessionIds]);
