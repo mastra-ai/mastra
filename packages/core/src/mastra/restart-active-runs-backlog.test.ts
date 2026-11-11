@@ -16,6 +16,7 @@ import type { Event } from '../events/types';
 import { InMemoryStore } from '../storage/mock';
 import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createStep, createWorkflow } from '../workflows/evented';
+import { restartLeaseKey } from '../workflows/evented/leases';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { Mastra } from './index';
 
@@ -24,15 +25,18 @@ afterEach(async () => {
   await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown({ drainTimeout: 0 })));
 });
 
-/** A pubsub whose broker accepts `workflow.start` events at once but delivers them `delayMs` later. */
-function backloggedPubSub(delayMs: number): PubSub {
+/**
+ * A pubsub whose broker accepts `workflow.start` events at once but delivers them `delayMs` later,
+ * or never when `delayMs` is `'never'` (the worker that took them crashed and nothing redelivers).
+ */
+function backloggedPubSub(delayMs: number | 'never'): PubSub {
   const inner = new EventEmitterPubSub();
   return new Proxy(inner, {
     get(target, prop) {
       if (prop === 'publish') {
         return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
           if (topic !== 'workflows' || event.type !== 'workflow.start') return target.publish(topic, event, options);
-          setTimeout(() => void target.publish(topic, event, options), delayMs);
+          if (delayMs !== 'never') setTimeout(() => void target.publish(topic, event, options), delayMs);
         };
       }
       const value = Reflect.get(target, prop, target);
@@ -62,6 +66,21 @@ async function startReplica(storage: InMemoryStore, name: string, executions: st
   return mastra;
 }
 
+/** Stores a `running` run of `recovered-wf` that stopped before its first step, as a crash leaves it. */
+async function persistActiveRun(storage: InMemoryStore, runId: string) {
+  const store = (await storage.getStore('workflows'))!;
+  await store.persistWorkflowSnapshot({
+    workflowName: 'recovered-wf',
+    runId,
+    snapshot: {
+      ...createEmptyWorkflowSnapshot(runId),
+      status: 'running',
+      activePaths: [],
+      context: { input: {} } as any,
+    },
+  });
+}
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 describe('boot-time recovery of evented runs behind a worker backlog (#28712)', () => {
@@ -69,18 +88,7 @@ describe('boot-time recovery of evented runs behind a worker backlog (#28712)', 
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const runIds = ['orphaned-a', 'orphaned-b', 'orphaned-c', 'orphaned-d'];
-    for (const runId of runIds) {
-      await store.persistWorkflowSnapshot({
-        workflowName: 'recovered-wf',
-        runId,
-        snapshot: {
-          ...createEmptyWorkflowSnapshot(runId),
-          status: 'running',
-          activePaths: [],
-          context: { input: {} } as any,
-        },
-      });
-    }
+    for (const runId of runIds) await persistActiveRun(storage, runId);
     const executions: string[] = [];
     // B's workers only get to the restarts three lease TTLs after B published them.
     const b = await startReplica(storage, 'B', executions, backloggedPubSub(WORKFLOW_RUN_LEASE_TTL_MS * 3));
@@ -99,5 +107,25 @@ describe('boot-time recovery of evented runs behind a worker backlog (#28712)', 
       { timeout: 10_000 },
     );
     expect([...executions].sort()).toEqual(runIds.map(runId => `B:${runId}`).sort());
+  }, 20_000);
+
+  it('lets another replica recover a restart whose worker never started it, once the hold runs out', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    await persistActiveRun(storage, 'orphaned');
+    const executions: string[] = [];
+    const b = await startReplica(storage, 'B', executions, backloggedPubSub('never'));
+    await b.restartAllActiveWorkflowRuns();
+    const restartLease = async () => (await store.getRunOwnership({ runId: restartLeaseKey('orphaned') }))?.live;
+
+    // B keeps its restart lease past one TTL while it waits for a worker.
+    await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 1.5);
+    expect(await restartLease()).toBe(true);
+
+    // No worker ever marks the run live, so B stops renewing and the lease lapses.
+    await vi.waitFor(async () => expect(await restartLease()).toBe(false), { timeout: 10_000, interval: 100 });
+    const c = await startReplica(storage, 'C', executions);
+    await c.restartAllActiveWorkflowRuns();
+    await vi.waitFor(() => expect(executions).toEqual(['C:orphaned']));
   }, 20_000);
 });

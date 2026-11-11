@@ -5396,8 +5396,9 @@ export class Run<
   /**
    * Restarts like {@link Run.restart}, but resolves once a worker took the
    * restarted run over instead of when it finishes, as `startAsync()` does for
-   * `start()`. That is when the claim reports the hand-off, or one lease TTL
-   * after the restart was published, whichever comes first; on an engine that
+   * `start()`. That is when the claim's hold ends (a worker took the run, or
+   * the process is shutting down), or one lease TTL after the restart was
+   * published, whichever comes first; on an engine that
    * runs the restart in the caller, when it finishes. Rejects when the restart
    * is refused (`WORKFLOW_RESTART_RUN_OWNED`) or fails before it is published;
    * later failures are logged. The recovery sweep uses it for evented runs,
@@ -6109,36 +6110,39 @@ export class Run<
       });
     }
 
-    const requestContextToUse = requestContext ?? new RequestContext();
-    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
-      if (!(requestContextToUse as RequestContext).has(key)) {
-        (requestContextToUse as RequestContext).set(key, value);
-      }
-    }
-    const workflowSpan = getOrCreateSpan({
-      type: SpanType.WORKFLOW_RUN,
-      outcome: null,
-      name: `workflow run: '${this.workflowId}'`,
-      entityType: EntityType.WORKFLOW_RUN,
-      entityId: this.workflowId,
-      entityName: this.workflowId,
-      metadata: {
-        resourceId: this.resourceId,
-        runId: this.runId,
-      },
-      tracingPolicy: this.tracingPolicy,
-      tracingOptions,
-      tracingContext: observabilityContext.tracingContext,
-      requestContext: requestContextToUse as RequestContext,
-      mastra: this.#mastra,
-    });
-
-    this.workflowRunSpan = workflowSpan;
-    const traceId = workflowSpan?.externalTraceId;
-    const spanId = workflowSpan?.id;
-
     let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
+    let traceId: string | undefined;
+    let spanId: string | undefined;
+    // Released on every path from here: a claim can hold a renewal timer.
     try {
+      const requestContextToUse = requestContext ?? new RequestContext();
+      for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+        if (!(requestContextToUse as RequestContext).has(key)) {
+          (requestContextToUse as RequestContext).set(key, value);
+        }
+      }
+      const workflowSpan = getOrCreateSpan({
+        type: SpanType.WORKFLOW_RUN,
+        outcome: null,
+        name: `workflow run: '${this.workflowId}'`,
+        entityType: EntityType.WORKFLOW_RUN,
+        entityId: this.workflowId,
+        entityName: this.workflowId,
+        metadata: {
+          resourceId: this.resourceId,
+          runId: this.runId,
+        },
+        tracingPolicy: this.tracingPolicy,
+        tracingOptions,
+        tracingContext: observabilityContext.tracingContext,
+        requestContext: requestContextToUse as RequestContext,
+        mastra: this.#mastra,
+      });
+
+      this.workflowRunSpan = workflowSpan;
+      traceId = workflowSpan?.externalTraceId;
+      spanId = workflowSpan?.id;
+
       result = await this.executionEngine.execute<
         TState,
         TInput,
