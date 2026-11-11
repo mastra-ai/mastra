@@ -43,7 +43,7 @@ const SAFE_ERROR_DETAIL_KEYS = ['statusCode', 'url', 'isRetryable'] as const;
  * identifies the error (id, name, domain, category, stack frames, provider
  * status) and drops the text, which often quotes the hidden data.
  */
-export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo: T): T {
+export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo: T, stackMessage?: string): T {
   if (!errorInfo) return errorInfo;
 
   const { message: _message, stack, details, ...identity } = errorInfo;
@@ -54,7 +54,9 @@ export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo:
   return {
     ...identity,
     message: REDACTED_ERROR_MESSAGE,
-    ...(stack !== undefined ? { stack: redactStackHeader(stack, errorInfo.message, errorInfo.name) } : {}),
+    ...(stack !== undefined
+      ? { stack: redactStackHeader(stack, stackMessage ?? errorInfo.message, errorInfo.name) }
+      : {}),
     ...(safeDetails && Object.keys(safeDetails).length > 0 ? { details: safeDetails } : {}),
   } as T;
 }
@@ -262,6 +264,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     category?: string;
     details?: Record<string, any>;
   };
+  protected errorStackMessage?: string;
   public metadata?: Record<string, any>;
   public requestContext?: Record<string, any>;
   public tags?: string[];
@@ -795,7 +798,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       input: hideInput ? undefined : this.input,
       output: hideOutput ? undefined : this.output,
       // An error's message, stack header and details often quote the data the flags hide.
-      errorInfo: hideInput || hideOutput ? redactErrorInfo(this.errorInfo) : this.errorInfo,
+      errorInfo: hideInput || hideOutput ? redactErrorInfo(this.errorInfo, this.errorStackMessage) : this.errorInfo,
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),

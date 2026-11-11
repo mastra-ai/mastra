@@ -11,6 +11,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
@@ -190,6 +191,35 @@ describe('span errors on a trace that is not hidden', () => {
 
     expect(JSON.stringify(failed.map(span => span.errorInfo))).toContain(SECRET);
   });
+});
+
+it('redacts the complete multiline cause message from a wrapped error stack', () => {
+  const observability = new Observability({
+    configs: { test: { serviceName: 'wrapped-cause-error-it', exporters: [new TestExporter()] } },
+  });
+  const span = observability.getDefaultInstance()!.startSpan({
+    type: SpanType.GENERIC,
+    name: 'wrapped operation',
+    tracingOptions: { hideInput: true },
+  });
+  const cause = new Error(`Tool execution failed\n${SECRET}`);
+  cause.stack = `Error: ${cause.message}\n    at execute (tool.ts:1:1)`;
+
+  span.error({
+    error: new MastraError(
+      {
+        id: 'TOOL_EXECUTION_FAILED',
+        domain: ErrorDomain.TOOL,
+        category: ErrorCategory.USER,
+        text: 'Tool execution failed',
+      },
+      cause,
+    ),
+  });
+
+  const exported = span.exportSpan();
+  expect(exported.errorInfo?.stack).toBe('Error: [REDACTED]\n    at execute (tool.ts:1:1)');
+  expect(JSON.stringify(exported.errorInfo)).not.toContain(SECRET);
 });
 
 describe('redactErrorInfo', () => {
