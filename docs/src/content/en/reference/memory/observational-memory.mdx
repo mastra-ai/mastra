@@ -121,7 +121,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'retrieval',
     type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
-      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
+      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. A vector store that generates embeddings itself needs no `embedder`. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -190,7 +190,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'observeAttachments',
             type: "'auto' | boolean | string[]",
             description:
-              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. The default allowlist is `['image/*', 'application/pdf']`. `true` forwards all attachments. `false` drops all attachments while keeping placeholders visible. `'auto'` uses the provider capabilities registry to decide: attachments are forwarded when the Observer model supports multimodal input, dropped otherwise, and forwarded when no capability data is available for the model. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model. Tool-result attachments are filtered using the same rule.",
+              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. The default allowlist is `['image/*', 'application/pdf']`. `true` forwards all attachments. `false` drops all attachments while keeping placeholders visible. `'auto'` uses the provider capabilities registry to decide: attachments are forwarded when the Observer model supports multimodal input, dropped otherwise, and forwarded when no capability data is available for the model. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model, or when you only want specific file types forwarded. Tool-result attachments are filtered using the same rule.",
             isOptional: true,
             defaultValue: "['image/*', 'application/pdf']",
           },
@@ -586,7 +586,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: 'google/gemini-2.5-flash',
+        model: 'auto',
         observation: {
           messageTokens: 20_000,
           bufferTokens: 5_000,
@@ -624,7 +624,7 @@ export const agent = new Agent({
       observationalMemory: {
         // highlight-start
         observation: {
-          model: 'google/gemini-2.5-flash',
+          model: 'auto',
         },
         reflection: {
           model: '__GATEWAY_OPENAI_MODEL_LUNA__',
@@ -1476,7 +1476,7 @@ Group IDs in search results include the record that holds them (`groupId@recordI
     isOptional: true,
     defaultValue: "'messages'",
     description:
-      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` finds messages by semantic similarity (requires vector store and embedder). `"observations"` pages original observation groups around a search hit.',
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` finds messages by semantic similarity (requires a vector store, plus an embedder unless the store generates embeddings itself). `"observations"` pages original observation groups around a search hit.',
   },
   {
     name: 'groupId',
@@ -1735,7 +1735,7 @@ Group IDs in search results include the record that holds them (`groupId@recordI
 new ModelByInputTokens(config)
 ```
 
-Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets.
+Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets. Each tier needs a concrete model ID, not `"auto"`.
 
 #### Example
 

@@ -139,15 +139,15 @@ Set `model` to use one model for both roles:
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'deepseek/deepseek-reasoner',
+      model: 'deepseek/deepseek-flash',
     },
   },
 })
 ```
 
-Use a model with a large context window (128,000 tokens or more) that's fast enough to run in the background. Mastra has tested `google/gemini-2.5-flash`, `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3` and `glm-4.7`.
+Use a model with a large context window (128,000 tokens or more) that's fast enough to run in the background. Mastra has tested `google/gemini-2.5-flash`, `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__` and `deepseek/deepseek-flash`.
 
-To use a different model per role, set `observation.model` and `reflection.model` instead, and leave the top-level `model` out. Setting both throws. A common split keeps `google/gemini-2.5-flash` as the Observer and uses a model that condenses harder, such as `deepseek/deepseek-v4-flash`, as the Reflector, because Gemini 2.5 Flash keeps so much detail that reflections can stay above the threshold. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
+To use a different model per role, set `observation.model` and `reflection.model` instead, and leave the top-level `model` out. Setting both throws. Some models keep so much detail that their reflections can stay above the threshold; in testing, `google/gemini-2.5-flash` did this. A common split uses a detail-preserving model as the Observer and one that condenses more readily, such as `deepseek/deepseek-flash`, as the Reflector. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
 
 ### Tune automatic selection
 
@@ -191,7 +191,7 @@ const memory = new Memory({
             5_000: 'openrouter/mistralai/ministral-8b-2512',
             20_000: 'openrouter/mistralai/mistral-small-2603',
             40_000: '__GATEWAY_OPENAI_MODEL_LUNA__',
-            1_000_000: 'google/gemini-3.1-flash-lite-preview',
+            1_000_000: '__GATEWAY_GOOGLE_MODEL_FLASH__',
           },
         }),
       },
@@ -199,7 +199,7 @@ const memory = new Memory({
         model: new ModelByInputTokens({
           upTo: {
             20_000: '__GATEWAY_OPENAI_MODEL_LUNA__',
-            100_000: 'google/gemini-2.5-flash',
+            100_000: 'deepseek/deepseek-flash',
           },
         }),
       },
@@ -208,7 +208,7 @@ const memory = new Memory({
 })
 ```
 
-Each `upTo` key is an inclusive upper bound. A call larger than the biggest key throws, so make the last tier cover the largest input you expect.
+Each tier needs a concrete model ID, not `'auto'`. Each `upTo` key is an inclusive upper bound. A call larger than the biggest key throws, so make the last tier cover the largest input you expect.
 
 ### Attachments and text-only Observers
 
@@ -224,7 +224,7 @@ const memory = new Memory({
   options: {
     observationalMemory: {
       observation: {
-        model: 'deepseek/deepseek-reasoner',
+        model: 'deepseek/deepseek-flash',
         observeAttachments: false,
       },
     },
@@ -317,7 +317,7 @@ Observations drop the original wording. With retrieval mode, each observation gr
 
 `retrieval: true` lets the agent browse raw messages, list the resource's threads and read other threads. No vector store is needed.
 
-`retrieval: { vector: true }` adds semantic search over observation groups, using the vector store and embedder configured on `Memory`. New observation groups are indexed in the background as they're created.
+`retrieval: { vector: true }` adds semantic search over observation groups, using the vector store and embedder configured on `Memory`. With a vector store that generates embeddings itself, leave the `embedder` out. See [server-side embeddings](/docs/memory/semantic-recall#server-side-embeddings). New observation groups are indexed in the background as they're created.
 
 ```typescript
 const memory = new Memory({
@@ -340,7 +340,7 @@ See the [recall tool reference](/reference/memory/observational-memory#recall-to
 
 :::warning[Deprecated]
 
-`scope: 'resource'` is deprecated and will be removed in a future release. Mastra logs a warning the first time OM is created with resource scope. Remove the `scope` option to use thread scope, and use [retrieval mode](#retrieval-mode) for cross-thread continuity.
+`scope: 'resource'` is deprecated and will be removed in a future release. Mastra logs a warning the first time OM is created with resource scope. Remove the `scope` option to use thread scope, and use [retrieval mode](#retrieval-mode) for cross-thread continuity. [Knowledge](/docs/knowledge/overview), now in alpha, gives agents shared information across threads and is planned to replace resource scope.
 
 :::
 
