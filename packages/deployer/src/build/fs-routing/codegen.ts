@@ -196,7 +196,8 @@ async function emitAgentEntry(
  * 3. assembles `Agent` instances via `assembleAgentFromFsEntry`, wiring any
  *    declared `subagents/` into the parent (nested up to `MAX_FS_SUBAGENT_DEPTH`),
  * 4. registers them onto the user's `mastra` instance (code-registered agents
- *    win on name collisions), and
+ *    win on name collisions). When that export is a factory, the wrapper
+ *    exports a factory that does this for every instance it returns, and
  * 5. re-exports everything from the user's entry so this module is a drop-in
  *    replacement for the original `#mastra` target.
  *
@@ -250,9 +251,12 @@ export async function generateFsAgentsModule(
   // at `<bundle>/workspace/<name>` wherever the bundle is deployed. Seed files
   // authored under `agents/<name>/workspace/**` are mirrored there at build time.
   // `name` may be a slash-joined path (`<parent>/<child>`) for subagents.
-  // Cloudflare Workers leave `import.meta.url` undefined and have no local
-  // filesystem, so agents there get no default workspace.
-  lines.push(`const __bundleDir = import.meta.url ? __dirname(__fileURLToPath(import.meta.url)) : undefined;`);
+  // Cloudflare Workers have no local filesystem or processes, so agents there
+  // get no default workspace. Their legacy module registry also leaves
+  // `import.meta.url` undefined.
+  lines.push(
+    `const __bundleDir = import.meta.url && globalThis.navigator?.userAgent !== 'Cloudflare-Workers' ? __dirname(__fileURLToPath(import.meta.url)) : undefined;`,
+  );
   lines.push(
     `const __workspaceBasePath = name => __bundleDir === undefined ? undefined : __join(__bundleDir, 'workspace', ...name.split('/'));`,
   );
@@ -297,8 +301,10 @@ export async function generateFsAgentsModule(
     entryExprs.push(expr);
   }
 
-  // Everything below is assembled inside a function so that a `mastra` factory
-  // gets a fresh agent graph on every call instead of sharing one across them.
+  // Agents are assembled per call so each instance a `mastra` factory returns
+  // gets its own. `addAgent` binds an agent to the Mastra that registers it, so
+  // a shared agent would follow whichever request registered it last. Modules
+  // the agents import (config, memory, tools, storage.ts, ...) stay shared.
   lines.push(``);
   lines.push(`function __registerFsPrimitives(__mastra) {`);
   const bodyStart = lines.length;

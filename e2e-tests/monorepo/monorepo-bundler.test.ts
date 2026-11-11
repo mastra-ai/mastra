@@ -121,24 +121,28 @@ class AliasDeployer extends Deployer {
   });
 
   describe('bundler options with file-based agents', { concurrent: false }, () => {
-    // `mastra build` reads options from a generated wrapper when file-based agents exist; the
-    // wrapper has no `new Mastra({...})`, so the `bundler` block was dropped for defaults (#29048).
+    // `mastra build` bundles a generated wrapper when file-based agents exist. The wrapper has no
+    // `new Mastra({...})`, so the `bundler` block was dropped for defaults (#29048), and the
+    // config check and the public directory looked next to the wrapper (#29996).
     it(
-      'applies bundler options from index.ts when the project has file-based agents (#29048)',
+      'reads index.ts and its public directory when the project has file-based agents (#29048, #29996)',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-fs-agents-bundler-${pkgManager}-`));
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
 
           const appDir = join(isolatedFixturePath, 'apps', 'custom');
-          const agentDir = join(appDir, 'src', 'mastra', 'agents', 'fs-helper');
+          const mastraDir = join(appDir, 'src', 'mastra');
+          const agentDir = join(mastraDir, 'agents', 'fs-helper');
           await mkdir(agentDir, { recursive: true });
+          await mkdir(join(mastraDir, 'public'), { recursive: true });
           await Promise.all([
             writeFile(join(agentDir, 'config.ts'), `export default { model: 'openai/gpt-5-mini' };\n`),
             writeFile(join(agentDir, 'instructions.md'), 'You are a helper.\n'),
+            writeFile(join(mastraDir, 'public', 'fs-agents-public.txt'), 'public\n'),
           ]);
 
-          const mastraConfigPath = join(appDir, 'src', 'mastra', 'index.ts');
+          const mastraConfigPath = join(mastraDir, 'index.ts');
           const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
           await writeFile(mastraConfigPath, mastraConfig.replace('bundler: {', 'bundler: {\n    sourcemap: true,'));
 
@@ -147,10 +151,13 @@ class AliasDeployer extends Deployer {
             reject: false,
             env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
           });
-          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+          const buildOutput = `${buildResult.stdout}\n${buildResult.stderr}`;
+          expect(buildResult.exitCode, buildOutput).toBe(0);
+          expect(buildOutput).not.toContain('Invalid Mastra config');
 
           const outputFiles = await readdir(join(appDir, '.mastra', 'output'));
           expect(outputFiles).toContain('index.mjs.map');
+          expect(outputFiles).toContain('fs-agents-public.txt');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
@@ -171,11 +178,9 @@ class AliasDeployer extends Deployer {
           const mastraDir = join(appDir, 'src', 'mastra');
           const agentDir = join(mastraDir, 'agents', 'fs-helper');
           await mkdir(agentDir, { recursive: true });
-          await mkdir(join(mastraDir, 'public'), { recursive: true });
           await Promise.all([
             writeFile(join(agentDir, 'config.ts'), `export default { model: 'openai/gpt-5-mini' };\n`),
-            writeFile(join(agentDir, 'instructions.md'), 'You are a helper.\n'),
-            writeFile(join(mastraDir, 'public', 'fs-agents-public.txt'), 'public\n'),
+            writeFile(join(agentDir, 'instructions.md'), 'You are a fs-agents helper.\n'),
           ]);
 
           const mastraConfigPath = join(mastraDir, 'index.ts');
@@ -198,18 +203,18 @@ class FsAgentsDeployer extends Deployer {
   async deploy(_outputDirectory: string) {}
 }
 `;
-          await writeFile(
-            mastraConfigPath,
-            `${deployerSource}\n${originalConfig
-              .replace(
-                'export const mastra = new Mastra({',
-                'export const mastra = new Mastra({\n  deployer: new FsAgentsDeployer(),',
-              )
-              .replace(
-                "externals: ['bcrypt', '@inner/subpath-only']",
-                "externals: ['bcrypt', '@inner/subpath-only', '@mastra/deployer']",
-              )}`,
-          );
+          const patchedConfig = `${deployerSource}\n${originalConfig
+            .replace(
+              'export const mastra = new Mastra({',
+              'export const mastra = new Mastra({\n  deployer: new FsAgentsDeployer(),',
+            )
+            .replace(
+              "externals: ['bcrypt', '@inner/subpath-only']",
+              "externals: ['bcrypt', '@inner/subpath-only', '@mastra/deployer']",
+            )}`;
+          expect(patchedConfig).toContain('deployer: new FsAgentsDeployer(),');
+          expect(patchedConfig).toContain("'@inner/subpath-only', '@mastra/deployer'");
+          await writeFile(mastraConfigPath, patchedConfig);
 
           const buildResult = await execa(pkgManager, ['build'], {
             cwd: appDir,
@@ -221,14 +226,12 @@ class FsAgentsDeployer extends Deployer {
           expect(buildOutput).not.toContain('Invalid Mastra config');
 
           const outputDir = join(appDir, '.mastra', 'output');
-          const outputFiles = await readdir(outputDir);
-          const output = (
-            await Promise.all(
-              outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
-            )
-          ).join('\n');
+          const outputFiles = (await readdir(outputDir)).filter(file => file.endsWith('.mjs'));
+          const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join(
+            '\n',
+          );
+          expect(output).toContain('You are a fs-agents helper.');
           expect(output).not.toContain('fs-agents-deployer');
-          expect(outputFiles).toContain('fs-agents-public.txt');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
