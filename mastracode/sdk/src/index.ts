@@ -96,7 +96,12 @@ import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
+import {
+  resolveAgentStreamsOff,
+  resolveExperimentalAgent,
+  validateExperimentalAgent,
+  wrapExperimentalAgent,
+} from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -1350,6 +1355,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    ...(resolveAgentStreamsOff() ? { durable: false } : {}),
     // Workspace is wired per-request at the AgentController level (see
     // `config.workspace` below), so opt out of the factory's default local
     // workspace. An explicit `undefined` is required: the factory only builds a
