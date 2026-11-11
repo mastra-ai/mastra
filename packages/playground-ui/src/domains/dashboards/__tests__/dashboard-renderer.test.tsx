@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { PinIcon, PinOffIcon } from 'lucide-react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -40,6 +41,7 @@ import type {
 } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -102,6 +104,30 @@ const note = (id: string, text: string, extra: Partial<DashboardWidget> = {}): D
   ...extra,
 });
 
+/** A host's pin state, as the MCP app's host keeps it: the widget's id says whether it's pinned. */
+type PinningProps = {
+  onPin: (widget: DashboardWidget, isPinned: boolean) => void;
+  isPinned: (widgetId: string) => boolean;
+};
+
+/** Pin buttons from a host's pin state, as a host composes them with `MetricsCard.Action`: waiting for hover, unless pinned. */
+const pinning =
+  ({ onPin, isPinned }: PinningProps) =>
+  (widget: DashboardWidget) => {
+    const pinned = isPinned(widget.id);
+    return (
+      <MetricsCard.Action
+        label={`${pinned ? 'Unpin' : 'Pin'} ${widget.title?.trim() || 'widget'}`}
+        onClick={() => onPin(widget, !pinned)}
+        className={
+          pinned ? undefined : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
+        }
+      >
+        {pinned ? <PinOffIcon /> : <PinIcon />}
+      </MetricsCard.Action>
+    );
+  };
+
 function renderDashboard(
   definition: DashboardDefinition,
   {
@@ -120,10 +146,7 @@ function renderDashboard(
     expand?: DashboardExpand;
     dragHandle?: DashboardRendererProps['dragHandle'];
     alert?: DashboardAlert;
-    pin?: {
-      onPin: NonNullable<DashboardRendererProps['onPin']>;
-      isPinned: NonNullable<DashboardRendererProps['isPinned']>;
-    };
+    pin?: PinningProps;
     scope?: { metrics: MetricsScope; dashboard: DashboardScope };
     environment?: string;
     filterTokens?: { fieldId: string; value: string }[];
@@ -150,7 +173,7 @@ function renderDashboard(
         expand={expand}
         dragHandle={dragHandle}
         alert={alert}
-        {...pin}
+        widgetActions={pin && pinning(pin)}
       />,
     ),
   );
@@ -488,7 +511,7 @@ describe('DashboardRenderer', () => {
       const card = cell(container, kpisWidget.id);
       const handle = await within(card).findByRole('button', { name: `Move ${kpisWidget.id}` }, { timeout: 5000 });
       expect(handle.getAttribute('draggable')).toBe('true');
-      expect(handle.closest('.opacity-0.group-hover\\/kpis\\:opacity-100')).not.toBeNull();
+      expect(handle.closest('.opacity-0.group-hover\\/metrics-card\\:opacity-100')).not.toBeNull();
       // Touch screens can't hover, so the handle stays shown and tappable there.
       expect(handle.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto')).not.toBeNull();
       fireEvent.dragStart(handle);
@@ -537,7 +560,7 @@ describe('DashboardRenderer', () => {
 
   describe('when the host can pin widgets', () => {
     /** A host that owns which widgets are pinned and passes that back down, as the MCP app's host does. */
-    function PinningHost({ widgets, onPin }: { widgets: DashboardWidget[]; onPin: DashboardRendererProps['onPin'] }) {
+    function PinningHost({ widgets, onPin }: { widgets: DashboardWidget[]; onPin: PinningProps['onPin'] }) {
       const [pinned, setPinned] = useState<string[]>([]);
       return (
         <MetricsProvider preset="24h" filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
@@ -545,11 +568,13 @@ describe('DashboardRenderer', () => {
             definition={definition(...widgets)}
             kinds={[noteKind, brokenKind]}
             scope="project"
-            isPinned={id => pinned.includes(id)}
-            onPin={(widget, next) => {
-              onPin?.(widget, next);
-              setPinned(ids => (next ? [...ids, widget.id] : ids.filter(id => id !== widget.id)));
-            }}
+            widgetActions={pinning({
+              isPinned: id => pinned.includes(id),
+              onPin: (widget, next) => {
+                onPin(widget, next);
+                setPinned(ids => (next ? [...ids, widget.id] : ids.filter(id => id !== widget.id)));
+              },
+            })}
           />
         </MetricsProvider>
       );
@@ -558,7 +583,7 @@ describe('DashboardRenderer', () => {
     /** The pin button's name: the widget's title, or "widget" for an untitled one like the KPI group. */
     const pinLabel = (verb: 'Pin' | 'Unpin', widget: DashboardWidget) => `${verb} ${widget.title?.trim() || 'widget'}`;
     /** Whether the button only shows while the card is hovered. */
-    const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0') !== null;
+    const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0, .hidden') !== null;
     /** Whether the button stays shown and tappable on touch screens, which can't hover. */
     const reachableOnTouch = (button: HTMLElement) =>
       button.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto') !== null;
@@ -614,7 +639,7 @@ describe('DashboardRenderer', () => {
       expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
     });
 
-    it('keeps the controls of a KPI group, which float over its border, for hover on screens that can hover, whether pinned or not', async () => {
+    it('keeps the controls of a KPI group, which float over its border, for hover, whether pinned or not', async () => {
       const { container } = renderWithProviders(<PinningHost widgets={[kpisWidget]} onPin={() => {}} />);
       const card = cell(container, kpisWidget.id);
       const pin = await within(card).findByRole('button', { name: pinLabel('Pin', kpisWidget) }, { timeout: 5000 });
@@ -626,8 +651,8 @@ describe('DashboardRenderer', () => {
       const unpin = within(card).getByRole('button', { name: pinLabel('Unpin', kpisWidget) });
       expect(waitsForHover(unpin)).toBe(true);
       expect(unpin.closest('.pointer-events-none')).not.toBeNull();
-      // Touch screens can't hover, so a pinned group keeps its unpin button shown and tappable there.
-      expect(reachableOnTouch(unpin)).toBe(true);
+      // Only the grip stays reachable on touch; the host's buttons wait for hover like the rest.
+      expect(reachableOnTouch(unpin)).toBe(false);
     });
 
     it("shows the host's pinned widgets without a click", async () => {

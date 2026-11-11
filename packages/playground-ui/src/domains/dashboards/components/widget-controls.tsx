@@ -1,5 +1,5 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
-import { BellPlusIcon, PinIcon, PinOffIcon } from 'lucide-react';
+import { BellPlusIcon } from 'lucide-react';
 import { useId } from 'react';
 import {
   OpenErrorsInLogsButton,
@@ -8,11 +8,13 @@ import {
   OpenInThreadsButton,
   OpenInTracesButton,
 } from '../../metrics/components/card-action-buttons';
+import { onCardHover } from '../../metrics/components/on-card-hover';
 import { viewDrilldown, targetScope } from '../lib/definition';
 import type { OnDashboardDrilldown } from '../lib/definition';
-import type { DashboardAlert, DashboardAlertAction, WidgetPin } from '../widget-kind';
+import type { DashboardAlert, DashboardAlertAction } from '../widget-kind';
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 /**
@@ -30,9 +32,9 @@ export function AlertAction({
 }) {
   if ('href' in action) {
     return (
-      <Button variant="ghost" size="icon-sm" tooltip={label} render={<LinkComponent href={action.href} />}>
+      <MetricsCard.Action label={label} className={onCardHover} render={<LinkComponent href={action.href} />}>
         <BellPlusIcon />
-      </Button>
+      </MetricsCard.Action>
     );
   }
   return <DisabledAlertAction label={label} reason={action.disabled} />;
@@ -73,7 +75,7 @@ export function AlertMenu({
   }
   return (
     <DropdownMenu>
-      <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip={label} aria-label={label}>
+      <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip={label} aria-label={label} className={onCardHover}>
         <BellPlusIcon />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="max-w-80">
@@ -113,7 +115,7 @@ function DisabledAlertAction({ label, reason }: { label: string; reason: string 
             aria-label={label}
             aria-disabled="true"
             aria-describedby={reasonId}
-            className="inline-flex"
+            className={onCardHover}
           >
             <Button variant="ghost" size="icon-sm" disabled aria-hidden="true" tabIndex={-1}>
               <BellPlusIcon />
@@ -125,16 +127,6 @@ function DisabledAlertAction({ label, reason }: { label: string; reason: string 
         {reason}
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-/** Pins or unpins the widget; it shows the host's state, not the click. */
-export function PinAction({ isPinned, onPin, name }: WidgetPin) {
-  const label = `${isPinned ? 'Unpin' : 'Pin'} ${name}`;
-  return (
-    <Button variant="ghost" size="icon-sm" tooltip={label} aria-label={label} onClick={() => onPin(!isPinned)}>
-      {isPinned ? <PinOffIcon /> : <PinIcon />}
-    </Button>
   );
 }
 

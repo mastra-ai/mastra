@@ -9,7 +9,6 @@ import { hasDrilldownAction, useDrilldown, viewMenu } from '../../hooks/use-widg
 import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
-import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeTimeseries, timeseriesAlertValues } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
@@ -41,7 +40,7 @@ export function TimeseriesWidget(props: Props) {
     ...menu.heading,
     dragHandle: props.dragHandle,
     onTitleChange: props.onTitleChange,
-    ...pinActions(props.pin),
+    actions: props.actions,
   };
   if (gate.status === 'pending')
     return (
@@ -54,7 +53,7 @@ export function TimeseriesWidget(props: Props) {
 }
 
 function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, results, onRetry }: ViewProps) {
-  // Drilldown, then the alert, then the pin.
+  // Drilldown, then the alert, then the host's actions.
   const heading = withAction(
     own,
     alertAction(alert, widget, view, { page, values: timeseriesAlertValues(view.options) }),

@@ -4,6 +4,7 @@ import {
   dashboardDefinitionEnvelopeSchema,
   migrateDashboardDefinition,
 } from '@mastra/core/storage/dashboards';
+import type { ReactNode } from 'react';
 import { useMetrics } from '../../metrics/hooks/use-metrics';
 import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
@@ -40,21 +41,15 @@ export type DashboardRendererProps = {
    * failed, so there is nothing checked to alert on.
    */
   alert?: DashboardAlert;
+  /**
+   * The host's buttons on each widget's card, after the card's own: `MetricsCard.Action`s, each
+   * deciding whether it waits for the card's hover (e.g. `hidden group-hover/metrics-card:inline-flex`) or stays in view.
+   * Called with the widget as it renders, so only for widgets that parsed; a parsed widget that later
+   * throws keeps them on its error card. No host buttons without it.
+   */
+  widgetActions?: (widget: DashboardWidget) => ReactNode;
   className?: string;
-} & DashboardPinProps;
-
-/** Both or neither: a host that pins widgets says which are pinned, so a pinned one can be unpinned. */
-type DashboardPinProps =
-  | {
-      /**
-       * Pins or unpins a widget, called with the widget and the state the user asked for. The host
-       * owns that state and passes it back through `isPinned`. No pin buttons without it.
-       */
-      onPin: (widget: DashboardWidget, isPinned: boolean) => void;
-      /** Whether the host has a widget pinned, by widget id. */
-      isPinned: (widgetId: string) => boolean;
-    }
-  | { onPin?: never; isPinned?: never };
+};
 
 /** Whether a stored widget's `span` is one the grid lays out. */
 const isDashboardSpan = (span: unknown): span is DashboardSpan => DASHBOARD_WIDGET_SPANS.some(s => s === span);
@@ -76,8 +71,7 @@ export function DashboardRenderer({
   expand,
   kinds = [],
   dragHandle,
-  onPin,
-  isPinned,
+  widgetActions,
   alert,
   className,
 }: DashboardRendererProps) {
@@ -111,20 +105,14 @@ export function DashboardRenderer({
             // Unparsed, the title may be anything; the error card shows it only when it's text.
             const heading = { id: widget.id, title: typeof widget.title === 'string' ? widget.title : undefined };
             const handle = dragHandle?.(widget.id);
-            // Only a widget that parsed can be pinned: the host gets the widget as it renders.
-            const pin =
-              onPin && prepared.ok
-                ? { isPinned: isPinned(widget.id), onPin, name: prepared.widget.title?.trim() || 'widget' }
-                : undefined;
-            const errorPin =
-              pin && prepared.ok ? { ...pin, onPin: (next: boolean) => pin.onPin(prepared.widget, next) } : undefined;
+            const actions = prepared.ok ? widgetActions?.(prepared.widget) : undefined;
             return (
               <DashboardGridCell key={widget.id} id={widget.id} span={spanOf(widget)}>
                 <ErrorBoundary
                   resetKeys={[pageKey, JSON.stringify(widget)]}
                   variant="inline"
                   fallback={({ error }) => (
-                    <WidgetError widget={heading} message={error.message} dragHandle={handle} pin={errorPin} />
+                    <WidgetError widget={heading} message={error.message} dragHandle={handle} actions={actions} />
                   )}
                 >
                   {prepared.ok ? (
@@ -134,7 +122,7 @@ export function DashboardRenderer({
                       onDrilldown={onDrilldown}
                       expand={expand}
                       dragHandle={handle}
-                      pin={pin}
+                      actions={actions}
                       alert={handle ? undefined : alert}
                     />
                   ) : (

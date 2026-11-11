@@ -1,5 +1,5 @@
 import type { DashboardQuery, DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { z } from 'zod/v4';
 import type { ChartCardProps } from '../metrics/components/chart-card';
 import type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
@@ -24,8 +24,11 @@ export type WidgetKindProps<Options> = {
   dragHandle?: MetricsCardDragHandleProps;
   /** Renames the widget from its title; see `StatelessWidgetProps['onTitleChange']`. */
   onTitleChange?: (title: string) => void;
-  /** The widget's pin button, shown with its card's actions: the host can pin widgets. */
-  pin?: WidgetPin;
+  /**
+   * The host's buttons, after the card's own (drilldown, alert): `MetricsCard.Action`s, each deciding
+   * whether it waits for the card's hover (e.g. `hidden group-hover/metrics-card:inline-flex`) or stays in view.
+   */
+  actions?: ReactNode;
   /** The card's Create alert button, for the open view: the host can turn views into alerts. */
   alert?: DashboardAlert;
   /** Whether the widget's queries can run on the page, and their page context once they can. */
@@ -109,15 +112,6 @@ export type WidgetPlanContext<Options> = {
 
 /** A kind's requests, in the order its answers come back; `undefined` slots aren't sent. */
 export type WidgetRequests = (DashboardRequest | undefined)[];
-
-/** A widget's pinned state, as the host holds it, and the call that asks the host to change it. */
-export type WidgetPin = {
-  isPinned: boolean;
-  /** Called with the state the user asked for. */
-  onPin: (isPinned: boolean) => void;
-  /** The widget's name in the button's label ("Pin Agent runs"), so each card's button is told apart. */
-  name: string;
-};
 
 /**
  * Where a chart widget expands to (a host's query page), as the Gateway Overview's cards do: the card

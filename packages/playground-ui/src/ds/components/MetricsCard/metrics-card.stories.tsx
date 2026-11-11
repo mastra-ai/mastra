@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EyeIcon, LogsIcon } from 'lucide-react';
+import { EyeIcon, LogsIcon, StarIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '../Button/Button';
 import { MetricsLineChart } from '../MetricsLineChart';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
 import { ShareBar } from '../ShareBar';
@@ -232,22 +231,46 @@ export const TitleMenu: Story = {
 };
 
 /**
- * `MetricsCard.Actions reveal="hover"`: the buttons appear while the card is hovered or one of
- * them has focus, so a page of cards doesn't read as a page of buttons. Hover the card.
+ * The card is a `group/metrics-card`, so a `MetricsCard.Action` with
+ * `hidden group-hover/metrics-card:inline-flex group-focus-within/metrics-card:inline-flex` appears while
+ * the card is hovered or holds focus, so a page of cards doesn't read as a page of buttons. One that shows a state, like the
+ * star here, stays in view. Hover the card.
  */
 export const ActionsOnHover: Story = {
-  render: () => (
+  render: () => <ActionsOnHoverCard />,
+};
+
+function ActionsOnHoverCard() {
+  const [starred, setStarred] = useState(true);
+  return (
     <div style={{ width: '32rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
           <MetricsCard.Title>Latency</MetricsCard.Title>
-          <MetricsCard.Actions reveal="hover">
-            <Button variant="ghost" size="icon-md" tooltip="View in traces">
+          <MetricsCard.Actions>
+            <MetricsCard.Action
+              label="View in traces"
+              className="hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex"
+            >
               <EyeIcon />
-            </Button>
-            <Button variant="ghost" size="icon-md" tooltip="View errors in logs">
+            </MetricsCard.Action>
+            <MetricsCard.Action
+              label="View errors in logs"
+              className="hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex"
+            >
               <LogsIcon />
-            </Button>
+            </MetricsCard.Action>
+            <MetricsCard.Action
+              label={starred ? 'Unstar Latency' : 'Star Latency'}
+              className={
+                starred
+                  ? undefined
+                  : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
+              }
+              onClick={() => setStarred(!starred)}
+            >
+              <StarIcon className={starred ? 'fill-current' : undefined} />
+            </MetricsCard.Action>
           </MetricsCard.Actions>
           <MetricsCard.Total value="2.6s" />
         </MetricsCard.TopBar>
@@ -262,8 +285,8 @@ export const ActionsOnHover: Story = {
         </MetricsCard.Content>
       </MetricsCard>
     </div>
-  ),
-};
+  );
+}
 
 /**
  * `MetricsCard.Total isLoading`: a skeleton in the value's line box, so the top bar keeps its
