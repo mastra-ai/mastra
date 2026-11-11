@@ -374,10 +374,16 @@ const result = await mastraClient.deleteTraces({
   traceIds: ['trace-1', 'trace-2'],
 })
 
-console.log(result.success)
+if ('accepted' in result) {
+  console.log('Deletion requested')
+} else {
+  console.log(result.success)
+}
 ```
 
 Each request accepts up to 1,000 trace IDs and no tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
+
+The client supports two response shapes: OSS returns `{ success: true }` after its delete operation, while a Platform backend that supports queued batch deletion returns `202 { accepted: true }` after accepting cleanup. Acceptance doesn't mean records have disappeared from reads, so check the response before reporting deletion as complete. Using these client methods with Platform requires a deployment that supports the batch deletion endpoints.
 
 ## Scoring traces
 
@@ -533,6 +539,8 @@ await mastraClient.deleteScores({
   resourceId: 'resource-1',
 })
 ```
+
+Both methods return `{ success: boolean }` from OSS or `{ accepted: true }` from a Platform backend that supports queued batch deletion. See [Deleting traces](#deleting-traces) for response handling. Accepted records can remain readable until cleanup runs. Platform uses authenticated organization/project scope, which request-body scope fields can't override.
 
 ### Listing feedback
 
