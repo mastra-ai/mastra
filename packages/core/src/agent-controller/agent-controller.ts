@@ -439,6 +439,7 @@ export class AgentController<TState = {}> {
     session.permissions.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
       setState: updates => session.state.set(updates as Partial<TState>),
+      onChange: () => session.applyToolPolicyToParkedApprovals(),
     });
     session.subagents.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
@@ -846,6 +847,9 @@ export class AgentController<TState = {}> {
     }
 
     await this.#notifySessionCreated(session);
+    // A run may have parked on approval before this process (or a session-created
+    // hook) installed the rule that allows or denies it.
+    await session.applyToolPolicyToParkedApprovals();
     return session;
   }
 
