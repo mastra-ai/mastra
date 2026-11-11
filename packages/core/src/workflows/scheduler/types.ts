@@ -1,3 +1,4 @@
+import type { ActorSignal } from '../../auth/ee';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
 
 /**
@@ -47,6 +48,14 @@ export type WorkflowScheduleConfig<TInput = unknown, TState = unknown, TRequestC
    * when the workflow does not declare a `requestContextSchema`.
    */
   requestContext?: unknown extends TRequestContext ? Record<string, unknown> : TRequestContext;
+  /**
+   * Trusted system actor for each scheduled run. Scheduled fires carry no end
+   * user, so with fine-grained authorization (FGA) configured, nested
+   * workflows are denied unless the run carries a trusted actor. Requires
+   * `requestContext.organizationId`; the FGA provider's `requireActor` (when
+   * implemented) decides access.
+   */
+  actor?: ActorSignal;
   /**
    * Optional metadata persisted alongside the schedule row.
    */
