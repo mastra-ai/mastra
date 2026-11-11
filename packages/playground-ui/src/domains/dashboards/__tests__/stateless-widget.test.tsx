@@ -32,6 +32,7 @@ import {
 } from './equality-harness';
 import type { Rendered } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -343,12 +344,11 @@ describe('StatelessWidget on its own', () => {
   it.each([
     ['a chart', metricsWidget('agent-runs')],
     ['the KPI group', kpisWidget],
-  ])('reports the definition of %s with each pin and unpin', (_, definition) => {
-    const onPin = vi.fn();
+  ])("shows the host's actions on %s", (_, definition) => {
     const widget = prepared(definition, undefined);
     const plan = planWidget(widget, env, {});
     if (plan.status !== 'ready') throw new Error('not ready');
-    const renderPinned = (isPinned: boolean) => (
+    render(
       <StatelessWidget
         prepared={widget}
         env={env}
@@ -357,22 +357,15 @@ describe('StatelessWidget on its own', () => {
         results={results(plan.requests.length, { isLoading: true, isRefetching: false, isError: false })}
         onRetry={() => {}}
         scope="project"
-        pin={{ isPinned, onPin, name: 'it' }}
-      />
+        actions={
+          <MetricsCard.Action label="Share it" className={onCardHover}>
+            <span />
+          </MetricsCard.Action>
+        }
+      />,
     );
-    const { rerender } = render(renderPinned(false));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pin it' }));
-    expect(onPin).toHaveBeenLastCalledWith(widget.widget, true);
-
-    rerender(renderPinned(true));
-    fireEvent.click(screen.getByRole('button', { name: 'Unpin it' }));
-    expect(onPin).toHaveBeenLastCalledWith(widget.widget, false);
-    expect(onPin.mock.calls[0]?.[0]).toMatchObject({
-      id: definition.id,
-      kind: definition.kind,
-      views: definition.views,
-    });
+    expect(screen.getByRole('button', { name: 'Share it' })).toBeDefined();
   });
 
   it('asks the host to retry from its error card', () => {
