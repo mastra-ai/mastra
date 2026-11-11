@@ -20,7 +20,7 @@ export interface DockerSandboxesOptions extends MastraSandboxOptions {
   id?: string;
   sandboxId?: string;
   image: string;
-  /** Docker Cloud Sandboxes client; defaults to the SDK's configured credentials. */
+  /** Docker Cloud Sandboxes client. Supply an authenticated client for cloud access. */
   client?: Sandboxes;
   /** Environment variables set on a newly created cloud sandbox. */
   environment?: Record<string, string>;
@@ -105,6 +105,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
     }
   }
 
+  /** Run a shell command in the microVM, streaming and retaining bounded output; kill its process if canceled. */
   async executeCommand(command: string, args: string[] = [], options: CommandOptions = {}): Promise<ExecutionResult> {
     throwIfAborted(options.abortSignal, 'command');
     const limit = options.maxRetainedBytes ?? 1024 * 1024;
@@ -161,6 +162,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
     let process: Awaited<ReturnType<Sandbox['processes']['start']>> | undefined;
     let exitCode = -1;
     try {
+      // Keep process creation alive after cancellation so its handle can be killed once the server returns it.
       process = await this.sandbox!.processes.start(
         {
           args: ['sh', '-lc', args.length ? `${command} ${args.map(shellQuote).join(' ')}` : command],
@@ -171,7 +173,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
             ),
           ),
         },
-        { signal: controller.signal },
+        {},
       );
       const running = process;
       const kill = () => {
@@ -179,6 +181,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
       };
       controller.signal.addEventListener('abort', kill, { once: true });
       try {
+        if (controller.signal.aborted) throw createAbortError(controller.signal, 'command');
         const connection = await process.connect(undefined, { signal: controller.signal, reconnect: true });
         try {
           for await (const event of connection) {
@@ -259,6 +262,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
   }
 }
 
+/** Quote a single shell argument without interpreting its contents. */
 function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9._\-/=:@]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;

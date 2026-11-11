@@ -257,6 +257,24 @@ describe('DockerSandboxesSandbox', () => {
     expect(result).toMatchObject({ killed: true, timedOut: kind === 'timeout', success: false });
   });
 
+  it.each(['timeout', 'external abort'])('kills a process created after %s during startup', async kind => {
+    const { sandbox, remote, process } = setup();
+    const abort = new AbortController();
+    let finishStart!: (value: typeof process) => void;
+    remote.processes.start.mockImplementation(() => new Promise<typeof process>(resolve => (finishStart = resolve)));
+    const resultPromise = sandbox.executeCommand('sleep', ['100'], {
+      ...(kind === 'timeout' ? { timeout: 10 } : { abortSignal: abort.signal }),
+    });
+    await vi.waitFor(() => expect(remote.processes.start).toHaveBeenCalledOnce());
+    if (kind === 'timeout') await new Promise(resolve => setTimeout(resolve, 20));
+    else abort.abort();
+    finishStart(process);
+    const result = await resultPromise;
+    expect(process.signal).toHaveBeenCalledWith('kill');
+    expect(process.connect).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ killed: true, timedOut: kind === 'timeout', success: false });
+  });
+
   it('reads and writes files, including explicit permissions', async () => {
     const { sandbox, remote } = setup();
     await sandbox.writeFiles([{ path: '/tmp/nested/key', content: 'secret', mode: 0o600 }]);
