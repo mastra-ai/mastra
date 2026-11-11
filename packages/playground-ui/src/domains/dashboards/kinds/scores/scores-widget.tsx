@@ -9,7 +9,6 @@ import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions
 import { viewTitle } from '../../lib/chrome';
 import type { ViewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
-import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext, DashboardResult } from '../../lib/requests';
 import { scorersOf, shapeScores } from '../../lib/scores';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
@@ -36,7 +35,7 @@ export function ScoresWidget({
   expand,
   dragHandle,
   onTitleChange,
-  pin,
+  actions,
   alert,
 }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
@@ -45,9 +44,9 @@ export function ScoresWidget({
     ...viewTitle(widget, [view], 0, () => {}, expand),
     dragHandle,
     onTitleChange,
-    ...pinActions(pin),
+    actions,
   };
-  // The card, and its pin, stay while the view waits, so a pinned widget can still be unpinned.
+  // The card, and the host's actions, stay while the view waits, so e.g. a pinned widget can still be unpinned.
   if (gate.status === 'pending')
     return <PendingChartCard gate={gate.gate} heading={pendingHeading(heading, gate.gate, alert, widget, view)} />;
   return (

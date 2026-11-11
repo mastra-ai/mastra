@@ -10,16 +10,16 @@ export function feedTopic(orgId: string, factoryProjectId: string): string {
 }
 
 /**
- * One frame for the whole project: `workItemId` names the item whose comments
- * moved, and its absence means only the project's attention did. Never awaited
- * — a slow or dead broker must not hold up the write it describes.
+ * One frame for the whole project: something on the board moved — a card, a
+ * decision, a run, or the attention list. Never awaited — a slow or dead broker
+ * must not hold up the write it describes.
  */
-export function touchFeed(pubsub: PubSub, scope: FeedScope, workItemId?: string): void {
+export function touchFeed(pubsub: PubSub, scope: FeedScope): void {
   pubsub
     .publish(feedTopic(scope.orgId, scope.factoryProjectId), {
       type: 'factory.feed.touched',
-      runId: workItemId ?? scope.factoryProjectId,
-      data: workItemId ? { workItemId } : {},
+      runId: scope.factoryProjectId,
+      data: {},
     })
     .catch((error: unknown) => {
       console.warn('[Factory] Failed to publish a feed touch', {

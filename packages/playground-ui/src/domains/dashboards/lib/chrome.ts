@@ -4,11 +4,11 @@ import type { DashboardExpand } from '../widget-kind';
 
 /**
  * What a widget's card shows in its top bar: `title`, and `titleMenu` with several views or an
- * expand link, plus the widget's own actions (its pin button; always shown once pinned).
+ * expand link, plus its actions: the drilldown, the alert, then the host's.
  */
 export type ViewHeading = Pick<
   ChartCardProps,
-  'title' | 'titleMenu' | 'href' | 'LinkComponent' | 'dragHandle' | 'onTitleChange' | 'actions' | 'persistentActions'
+  'title' | 'titleMenu' | 'href' | 'LinkComponent' | 'dragHandle' | 'onTitleChange' | 'actions'
 >;
 
 /** Filters a gate can't apply, named as the filter bar names them. */

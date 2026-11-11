@@ -44,6 +44,28 @@ export const ConnectionStatus: Story = {
   ),
 };
 
+export const OverlayPlacement: Story = {
+  render: () => (
+    <div className="flex h-64 flex-col justify-end gap-2">
+      <p className="text-body-sm text-muted-foreground">The header floats over this content instead of pushing it.</p>
+      <Composer aria-label="Message composer" className="relative">
+        <ComposerHeader placement="overlay">
+          <ComposerHeaderRow role="status" aria-live="polite">
+            <Spinner size="sm" aria-hidden="true" role="presentation" />
+            <ComposerHeaderContent>Reconnecting…</ComposerHeaderContent>
+          </ComposerHeaderRow>
+        </ComposerHeader>
+        <ComposerRing>
+          <ComposerBox>
+            <ComposerInput aria-label="Message" placeholder="Keep typing while reconnecting" />
+            <ComposerActions />
+          </ComposerBox>
+        </ComposerRing>
+      </Composer>
+    </div>
+  ),
+};
+
 function OwnershipRow() {
   const [owned, setOwned] = useState(false);
 

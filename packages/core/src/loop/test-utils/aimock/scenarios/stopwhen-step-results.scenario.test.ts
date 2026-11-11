@@ -1,12 +1,8 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
-import {
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: what a custom `stopWhen` predicate sees.
@@ -100,22 +96,42 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     expect(seenStepCounts).toEqual([1, 2]);
   });
 
-  const recordToolResults = async () => {
-    const seen: Array<Array<{ toolResults: any[]; content: Array<{ type: string }> }>> = [];
-    const { output } = await runLoopScenario({
+  type SeenStep = {
+    toolResults: any[];
+    staticToolResults: any[];
+    dynamicToolResults: any[];
+    content: Array<{ type: string }>;
+  };
+  const recordToolResults = async (
+    options: Pick<Parameters<typeof runLoopScenario>[0], 'tools' | 'outputProcessors'> = {},
+  ) => {
+    const seen: SeenStep[][] = [];
+    const { output, chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'What should I be doing in Toronto today?',
       tools,
-      stopWhen: (({ steps }: { steps: any[] }) => {
-        seen.push(steps.map(step => ({ toolResults: step.toolResults, content: step.content })));
+      ...options,
+      collectChunks: true,
+      stopWhen: (({ steps }: { steps: SeenStep[] }) => {
+        seen.push(
+          structuredClone(
+            steps.map(({ toolResults, staticToolResults, dynamicToolResults, content }) => ({
+              toolResults,
+              staticToolResults,
+              dynamicToolResults,
+              content,
+            })),
+          ),
+        );
         return false;
       }) as any,
       fixtures: llm => scriptThreeTurns(llm),
     });
     await output.consumeStream();
-    return seen;
+    return { seen, chunks: chunks! };
   };
+  const toolResultParts = (step: SeenStep) => step.content.filter(part => part.type === 'tool-result');
 
   const expectedResults = [
     {
@@ -127,7 +143,7 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
   ];
 
   it('populates toolResults on every step it passes the predicate', async () => {
-    const seen = await recordToolResults();
+    const { seen } = await recordToolResults();
 
     expect(seen.map(steps => steps.length)).toEqual([1, 2]);
     for (const steps of seen) {
@@ -140,30 +156,116 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     }
   });
 
-  // The durable engines rebuild steps from Mastra tool-result chunk payloads
-  // ({ args, result }, no `type`) rather than AI SDK ToolResultParts
-  // ({ type, input, output: { type: 'json', value } }), so a predicate that reads
-  // `output` sees undefined there. Tracked in
-  // https://github.com/mastra-ai/mastra/issues/28519; drop the it.fails once fixed.
-  (isDurableEngineVariant(engine) ? it.fails : it)(
-    'passes toolResults to the predicate as AI SDK tool-result parts',
-    async () => {
-      const seen = await recordToolResults();
+  // stopWhen is typed as an AI SDK StopCondition, so a predicate reads
+  // `toolResults` as AI SDK ToolResultParts ({ type, input, output: { type: 'json', value } }).
+  // The durable engines used to hand it Mastra tool-result chunk payloads
+  // ({ args, result }, no `type`), so a predicate that read `output` never matched (#28519).
+  it('passes toolResults to the predicate as AI SDK tool-result parts', async () => {
+    const { seen } = await recordToolResults();
 
-      expect(seen).toHaveLength(2);
-      for (const steps of seen) {
-        steps.forEach((step, index) => {
-          const { toolCallId, toolName, value } = expectedResults[index]!;
-          expect(step.toolResults[0]).toMatchObject({
-            type: 'tool-result',
-            toolCallId,
-            toolName,
-            output: { type: 'json', value },
-          });
+    expect(seen).toHaveLength(2);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        const { toolCallId, toolName, value } = expectedResults[index]!;
+        expect(step.toolResults[0]).toMatchObject({
+          type: 'tool-result',
+          toolCallId,
+          toolName,
+          output: { type: 'json', value },
         });
-      }
-    },
-  );
+      });
+    }
+  });
+
+  // A user stops the run once a tool reports sunny weather, reading the result
+  // the way the AI SDK documents it (`toolResults[i].output`) (#28519).
+  it('stops when a predicate matches on a tool result output', async () => {
+    const { output, requests, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What should I be doing in Toronto today?',
+      tools,
+      collectChunks: true,
+      stopWhen: (({ steps }: { steps: Array<{ toolResults: Array<{ output?: { value?: unknown } }> }> }) =>
+        steps.some(step =>
+          step.toolResults.some(
+            result => (result.output?.value as { conditions?: string } | undefined)?.conditions === 'sunny',
+          ),
+        )) as any,
+      fixtures: llm => scriptThreeTurns(llm),
+    });
+
+    await output.consumeStream();
+
+    expect(requests).toHaveLength(1);
+    expect(chunks!.filter(chunk => chunk.type === 'step-start')).toHaveLength(1);
+    expect((await output.steps).length).toBe(1);
+  });
+
+  // Every engine builds a step's tool results from its content, the way AI SDK
+  // StepResult does, including the static/dynamic views and the tool input (#28519).
+  it('passes the tool-result parts of each step content, with static and dynamic views', async () => {
+    const { seen } = await recordToolResults();
+
+    expect(seen).toHaveLength(2);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        expect(step.toolResults).toEqual(toolResultParts(step));
+        expect(step.toolResults[0]).toMatchObject({ input: index === 0 ? weatherCall.arguments : planCall.arguments });
+        expect(step.staticToolResults).toEqual(step.toolResults.filter(part => part.dynamic === false));
+        expect(step.dynamicToolResults).toEqual(step.toolResults.filter(part => part.dynamic === true));
+      });
+    }
+  });
+
+  // A tool that throws still produces a tool-result part the model sees, so the
+  // predicate gets it too, with the error as its output.
+  it('passes a failed tool call to the predicate as a tool-result part with error output', async () => {
+    const failingWeather = createTool({
+      id: 'weather',
+      description: 'Get weather for a location',
+      inputSchema: z.object({ location: z.string() }),
+      execute: async () => {
+        throw new Error('weather service unavailable');
+      },
+    });
+
+    const { seen } = await recordToolResults({ tools: { ...tools, weather: failingWeather } });
+
+    expect(seen.length).toBeGreaterThan(0);
+    const [step] = seen[0]!;
+    expect(step!.toolResults).toEqual(toolResultParts(step!));
+    expect(step!.toolResults).toHaveLength(1);
+    expect(step!.toolResults[0]).toMatchObject({
+      type: 'tool-result',
+      toolCallId: 'call_weather',
+      toolName: 'weather',
+    });
+    expect(JSON.stringify(step!.toolResults[0].output)).toContain('weather service unavailable');
+  });
+
+  // An output processor that keeps tool results out of the UI stream does not
+  // keep them from the model, so stopWhen still sees them.
+  it('passes tool results that an output processor kept out of the stream', async () => {
+    const hideToolResults: Processor = {
+      id: 'hide-tool-results',
+      processOutputStream: async ({ part }) => (part.type === 'tool-result' ? null : part),
+    };
+
+    const { seen, chunks } = await recordToolResults({ outputProcessors: [hideToolResults] });
+
+    expect(chunks.some(chunk => chunk.type === 'tool-result')).toBe(false);
+    expect(seen).toHaveLength(2);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        const { toolCallId, value } = expectedResults[index]!;
+        expect(step.toolResults).toEqual(toolResultParts(step));
+        expect(step.toolResults).toEqual([
+          expect.objectContaining({ type: 'tool-result', toolCallId, output: { type: 'json', value } }),
+        ]);
+      });
+    }
+  });
 
   for (const withText of [false, true]) {
     const variant = withText ? ' (text and tool call in one step)' : '';

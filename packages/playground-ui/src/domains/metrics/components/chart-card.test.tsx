@@ -72,6 +72,29 @@ describe('ChartCard', () => {
       expect(topBar?.firstElementChild?.contains(trigger)).toBe(true);
       expect(topBar?.lastElementChild?.textContent).toBe('$12');
     });
+
+    it("leaves the card's actions clickable while the menu is open", async () => {
+      const onPin = vi.fn();
+      render(
+        <ChartCard
+          title="Spend by model"
+          titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
+          actions={
+            <button type="button" onClick={onPin}>
+              Pin
+            </button>
+          }
+        >
+          <div />
+        </ChartCard>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Spend by model' }));
+      await screen.findByRole('menuitemradio', { name: 'By provider' });
+      // A modal menu draws a full-screen backdrop that swallows clicks meant for the card's actions.
+      expect(document.querySelector('[role="presentation"][data-base-ui-inert]')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Pin' }));
+      expect(onPin).toHaveBeenCalledOnce();
+    });
   });
 
   it('adds no legend row to a card that passes no toolbar', () => {

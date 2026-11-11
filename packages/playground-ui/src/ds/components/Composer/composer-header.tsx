@@ -1,23 +1,33 @@
 import { Collapsible } from '@base-ui/react/collapsible';
-import type { ComponentPropsWithoutRef } from 'react';
-import { forwardRef } from 'react';
+import type { ComponentProps } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import './composer-header.css';
 
-export interface ComposerHeaderProps extends ComponentPropsWithoutRef<'div'> {
+export interface ComposerHeaderProps extends ComponentProps<'div'> {
   /** Animate visibility while retaining content through the closing transition. */
   open?: boolean;
+  /**
+   * `stacked` takes space above the composer. `overlay` floats over the content above it so
+   * opening the header never moves the transcript; the parent must be positioned.
+   */
+  placement?: 'stacked' | 'overlay';
 }
 
 /** Optional context above ComposerRing or ComposerBox. Empty rendered content occupies no space. */
-export const ComposerHeader = forwardRef<HTMLDivElement, ComposerHeaderProps>(
-  ({ className, children, open = true, ...props }, ref) => (
+export function ComposerHeader({
+  className,
+  children,
+  open = true,
+  placement = 'stacked',
+  ...props
+}: ComposerHeaderProps) {
+  return (
     <Collapsible.Root
-      ref={ref}
       open={open}
       data-slot="composer-header"
+      data-placement={placement}
       className={cn('composer-header relative isolate mx-auto w-full max-w-3xl', className)}
       {...props}
     >
@@ -30,18 +40,16 @@ export const ComposerHeader = forwardRef<HTMLDivElement, ComposerHeaderProps>(
         </div>
       </Collapsible.Panel>
     </Collapsible.Root>
-  ),
-);
-ComposerHeader.displayName = 'ComposerHeader';
+  );
+}
 
-export interface ComposerHeaderRowProps extends ComponentPropsWithoutRef<'div'> {
+export interface ComposerHeaderRowProps extends ComponentProps<'div'> {
   tone?: 'default' | 'destructive' | 'success';
 }
 
-export const ComposerHeaderRow = forwardRef<HTMLDivElement, ComposerHeaderRowProps>(
-  ({ className, tone = 'default', ...props }, ref) => (
+export function ComposerHeaderRow({ className, tone = 'default', ...props }: ComposerHeaderRowProps) {
+  return (
     <div
-      ref={ref}
       data-slot="composer-header-row"
       className={cn(
         'flex min-w-0 flex-wrap items-center gap-2 [&>svg]:size-icon-sm [&>svg]:shrink-0',
@@ -51,34 +59,25 @@ export const ComposerHeaderRow = forwardRef<HTMLDivElement, ComposerHeaderRowPro
       )}
       {...props}
     />
-  ),
-);
-ComposerHeaderRow.displayName = 'ComposerHeaderRow';
+  );
+}
 
-export type ComposerHeaderContentProps = ComponentPropsWithoutRef<'div'>;
+export type ComposerHeaderContentProps = ComponentProps<'div'>;
 
-export const ComposerHeaderContent = forwardRef<HTMLDivElement, ComposerHeaderContentProps>(
-  ({ className, ...props }, ref) => (
+export function ComposerHeaderContent({ className, ...props }: ComposerHeaderContentProps) {
+  return (
+    <div data-slot="composer-header-content" className={cn('min-w-0 flex-1 wrap-anywhere', className)} {...props} />
+  );
+}
+
+export type ComposerHeaderActionsProps = ComponentProps<'div'>;
+
+export function ComposerHeaderActions({ className, ...props }: ComposerHeaderActionsProps) {
+  return (
     <div
-      ref={ref}
-      data-slot="composer-header-content"
-      className={cn('min-w-0 flex-1 wrap-anywhere', className)}
-      {...props}
-    />
-  ),
-);
-ComposerHeaderContent.displayName = 'ComposerHeaderContent';
-
-export type ComposerHeaderActionsProps = ComponentPropsWithoutRef<'div'>;
-
-export const ComposerHeaderActions = forwardRef<HTMLDivElement, ComposerHeaderActionsProps>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
       data-slot="composer-header-actions"
       className={cn('ml-auto flex max-w-full shrink-0 flex-wrap items-center gap-2', className)}
       {...props}
     />
-  ),
-);
-ComposerHeaderActions.displayName = 'ComposerHeaderActions';
+  );
+}

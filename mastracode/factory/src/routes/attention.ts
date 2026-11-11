@@ -10,14 +10,12 @@ import type { BoardRegistry } from '../boards/index.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 
 import type { LiveSessions } from '../session/live-sessions.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryAttentionKind,
   FactoryAttentionReceiptAction,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { factoryAttentionKey } from '../storage/domains/work-items/base.js';
-import { ActivityAttentionProvider } from './attention-activity.js';
 import { ParkedRunAttentionProvider } from './attention-parked.js';
 import { proposedDecisionAttentionSpec } from './attention-proposed.js';
 import type {
@@ -26,11 +24,7 @@ import type {
   AttentionScope,
   AttentionStreamPosition,
 } from './attention-providers.js';
-import {
-  DecisionAttentionProvider,
-  failedDecisionAttentionSpec,
-  MentionAttentionProvider,
-} from './attention-providers.js';
+import { DecisionAttentionProvider, failedDecisionAttentionSpec } from './attention-providers.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 
 export { factoryDecisionType } from './attention-providers.js';
@@ -38,7 +32,6 @@ export { factoryDecisionType } from './attention-providers.js';
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
   boards: BoardRegistry | ProjectBoardSource;
-  comments: WorkItemCommentsStorage;
   liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
@@ -164,12 +157,10 @@ function receiptRoute(
 }
 
 export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
-  const { workItems, boards, comments, liveSessions } = dependencies;
+  const { workItems, boards, liveSessions } = dependencies;
   const providers: AttentionProvider[] = [
     new DecisionAttentionProvider({ workItems, boards }, failedDecisionAttentionSpec),
     new DecisionAttentionProvider({ workItems, boards }, proposedDecisionAttentionSpec),
-    new MentionAttentionProvider({ workItems, comments }),
-    new ActivityAttentionProvider({ workItems, comments }),
     new ParkedRunAttentionProvider({ workItems, liveSessions }),
   ];
 
@@ -204,7 +195,6 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         const { view, before, search, limit } = query.data;
         const kinds = query.data.kind ?? providers.map(provider => provider.kind);
         await workItems.ensureReady();
-        await comments.ensureReady();
 
         const active = providers.filter(
           provider => kinds.includes(provider.kind) && (!before || before.has(provider.kind)),
@@ -262,7 +252,6 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         if (!query.success) return context.json({ error: 'invalid_cursor' }, 400);
         const { before } = query.data;
         await workItems.ensureReady();
-        await comments.ensureReady();
 
         const now = new Date();
         const active = providers.filter(provider => !before || before.has(provider.kind));

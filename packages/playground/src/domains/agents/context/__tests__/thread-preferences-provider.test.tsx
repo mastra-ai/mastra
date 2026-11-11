@@ -2,7 +2,7 @@ import type { BuilderModelPolicy } from '@mastra/client-js';
 import { useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { HttpHandler } from 'msw';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -12,6 +12,7 @@ import { WorkingMemoryProvider } from '../agent-working-memory-context';
 import { usePlaygroundModel } from '../playground-model-context';
 import { ThreadPreferencesProvider } from '../thread-preferences-provider';
 import {
+  agentModelProviders,
   allowedModels,
   restrictedModels,
   currentUser,
@@ -91,6 +92,7 @@ function mountSession(
   threadId = 'thread-a',
   modelPolicy: BuilderModelPolicy = { active: false },
   modelsHandler?: HttpHandler,
+  providers = allowedModels,
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   client.setQueryData(['builder-settings'], buildBuilderSettings({ modelPolicy }));
@@ -106,7 +108,7 @@ function mountSession(
     modelsHandler ??
       http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
     http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
-    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(allowedModels)),
+    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(providers)),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
     http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
   );
@@ -165,6 +167,41 @@ describe('ThreadPreferencesProvider', () => {
       view.unmount();
       mountSession();
       expect(screen.getByText('gpt-4o-mini:0.9')).toBeTruthy();
+    });
+  });
+
+  describe("when the agent's own model is in the catalog", () => {
+    const openPicker = async () => {
+      mountSession('thread-a', { active: false }, undefined, agentModelProviders);
+      fireEvent.click(await screen.findByRole('button', { name: /Model:.*GPT-4o$/ }));
+      return screen.findByRole('listbox');
+    };
+
+    it("marks the agent's model as the default", async () => {
+      const list = await openPicker();
+
+      const option = within(list).getByRole('option', { name: /^GPT-4o(?! Mini)/ });
+      expect(within(option).getByText('Default')).toBeTruthy();
+    });
+
+    it("drops the override after a reset, so the chat runs on the agent's model", async () => {
+      const bodies: unknown[] = [];
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/stream`, async ({ request }) => {
+          bodies.push(await request.json());
+          return new HttpResponse('data: {"type":"finish","payload":{}}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }),
+      );
+      const list = await openPicker();
+      fireEvent.click(within(list).getByRole('option', { name: /GPT-4o Mini/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /Model:.*GPT-4o Mini/ }));
+      fireEvent.click(await screen.findByRole('option', { name: /Reset to the agent's model/ }));
+
+      fireEvent.click(screen.getByText('Send'));
+      await waitFor(() => expect(bodies).toHaveLength(1));
+      expect(bodies[0]).not.toHaveProperty('model');
     });
   });
 
