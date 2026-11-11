@@ -191,6 +191,10 @@ describe('pinned Knowledge in chat', () => {
       fireEvent.click(within(listing).getByRole('button', { name: 'Show 6 pages' }));
       expect(within(listing).getByTestId('pinned-knowledge-listing').textContent).toBe(listingText);
       expect(within(listing).getByRole('button', { name: 'Hide pages' }).getAttribute('aria-expanded')).toBe('true');
+
+      fireEvent.click(within(listing).getByRole('button', { name: 'Hide pages' }));
+      expect(within(listing).queryByTestId('pinned-knowledge-listing')).toBeNull();
+      expect(within(listing).getByRole('button', { name: 'Show 6 pages' }).getAttribute('aria-expanded')).toBe('false');
     });
 
     it('counts the listed pages, including the ones it says follow, in a collapsed toggle', () => {
