@@ -102,7 +102,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       serializeStack: true, // Include stack in JSON for better debugging in Inngest
       fallbackMessage: 'Unknown workflow error',
     });
-    return errorInstance.toJSON();
+    const serialized = errorInstance.toJSON();
+    const origin = coreObservability.getSpanErrorOrigin?.(errorSource);
+    if (origin) coreObservability.setSpanErrorOrigin?.(serialized, origin);
+    return serialized;
   }
 
   /**
@@ -441,6 +444,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
@@ -528,6 +532,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {

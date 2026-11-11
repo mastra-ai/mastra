@@ -13,6 +13,7 @@ import {
   controlFlowResumeKinds,
   expectControlFlowSegments,
   expectWorkflowOutcome,
+  expectPublicWorkflowError,
   expectNestedWorkflowOutcome,
   expectParallelOutcome,
   expectConditionalOutcome,
@@ -234,6 +235,7 @@ describe('native workflow outcomes across Inngest replay', () => {
       const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
       expect(result.status).toBe(mode === 'error' || mode === 'tripwire' ? 'failed' : 'success');
+      if (mode === 'error') expectPublicWorkflowError(result);
       const store = await getSharedMastra().getStorage()!.getStore('workflows');
       await expect
         .poll(

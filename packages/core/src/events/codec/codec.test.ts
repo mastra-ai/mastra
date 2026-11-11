@@ -60,6 +60,8 @@ describe('codec', () => {
       expect(claimSpanError(error, 'trace', 'tool')).toBeTypeOf('string');
       const transported = roundTrip(new Error('wrapped tool failure', { cause: error })) as Error;
       expect(claimSpanError(transported, 'trace', 'agent')).toBeUndefined();
+      expect(Object.keys(transported)).not.toContain('__mastraSpanErrorOrigin');
+      expect(JSON.stringify(transported)).not.toContain('__mastraSpanErrorOrigin');
     });
     it('round-trips a plain Error', () => {
       const e = new Error('boom');

@@ -19,6 +19,7 @@ import {
 import {
   createOutcomeStep,
   expectWorkflowOutcome,
+  expectPublicWorkflowError,
   expectNestedWorkflowOutcome,
   workflowOutcomeModes,
   createForeachSeed,
@@ -324,7 +325,9 @@ describe('workflow run cancellation tracing', () => {
         expect(host.__getRunTracingContext(run.runId)).toBeUndefined();
         return;
       }
-      expect((await run.start({ inputData: {} })).status).toBe(fail ? 'failed' : 'success');
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe(fail ? 'failed' : 'success');
+      if (fail) expectPublicWorkflowError(result);
       const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
       expectWorkflowOutcome(endedSpans(), fail ? 'error' : 'success');
       // A late cancel cannot rewrite an already completed execution.

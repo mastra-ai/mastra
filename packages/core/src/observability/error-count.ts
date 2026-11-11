@@ -55,7 +55,7 @@ export function getSpanErrorOrigin(error: unknown): SpanErrorOrigin | undefined 
 export function setSpanErrorOrigin(error: object, origin: SpanErrorOrigin): void {
   origins.set(error, origin);
   try {
-    Object.defineProperty(error, key, { value: origin, enumerable: true, configurable: true });
+    Object.defineProperty(error, key, { value: origin, enumerable: false, configurable: true });
   } catch {
     // Frozen errors still work in process through the WeakMap.
   }

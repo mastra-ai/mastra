@@ -15,6 +15,17 @@ export {
   expectedResumeOutcomes,
 } from './workflow-outcome-fixtures';
 
+/** Internal error attribution must not become part of a public workflow response. */
+export function expectPublicWorkflowError(result: { error?: unknown }) {
+  expect(result.error).toBeDefined();
+  expect(Object.keys(result.error as object)).not.toContain('__mastraSpanErrorOrigin');
+  expect(JSON.stringify(result)).not.toContain('__mastraSpanErrorOrigin');
+  const error = result.error as { toJSON?: () => unknown };
+  if (typeof error.toJSON === 'function') {
+    expect(JSON.stringify(error.toJSON())).not.toContain('__mastraSpanErrorOrigin');
+  }
+}
+
 /** Assert exported executions, independently of the transport's public status. */
 export function expectWorkflowOutcome(spans: AnyExportedSpan[], mode: WorkflowOutcomeMode) {
   const expected =

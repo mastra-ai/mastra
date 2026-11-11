@@ -330,6 +330,8 @@ export async function executeStep(
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
             errorOptions: {
               ...workflowTermination(workflowResult),
+              // The nested workflow already reported this failure on its own execution.
+              origin: 'propagated',
               error:
                 workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
               attributes: { status: 'failed' },

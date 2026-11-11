@@ -9,6 +9,7 @@ import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
 import { createObservabilityContext, getResumeTracingContext } from '../observability';
 import { withSpanErrorAttempt } from '../observability/context-storage';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../observability/error-count';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
@@ -432,6 +433,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
@@ -497,6 +499,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
@@ -551,6 +554,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               return await this.wrapDurableOperation(stepId, runStep);
             } catch (error) {
               const failure = getErrorFromUnknown(error, { supportSerialization: false });
+              const origin = getSpanErrorOrigin(error);
+              if (origin) setSpanErrorOrigin(failure, origin);
               params.stepSpan?.recordError?.(failure, { occurrenceId: `${params.stepSpan.id}:attempt:${i}` });
               throw failure;
             }
@@ -628,7 +633,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
-    return errorInstance.toJSON();
+    const serialized = errorInstance.toJSON();
+    const origin = getSpanErrorOrigin(errorSource);
+    if (origin) setSpanErrorOrigin(serialized, origin);
+    return serialized;
   }
 
   protected async fmtReturnValue<TOutput>(
@@ -1380,6 +1388,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           if (result.error) {
             workflowSpan?.error({
               ...workflowTermination(result),
+              // A failed step result is being forwarded, not a new failure in the run itself.
+              origin: 'propagated',
               error: result.error,
               attributes: {
                 status: result.status,
