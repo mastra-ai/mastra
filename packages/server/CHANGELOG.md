@@ -1,5 +1,41 @@
 # @mastra/server
 
+## 1.83.0-alpha.8
+
+### Minor Changes
+
+- Add `PUT /api/observability/feedback/:feedbackId` for complete feedback replacement. Preserve the original ID, trace ID, and timestamp, and include every field to retain. Delayed POST retries keep existing feedback. Unsupported storage versions return 501. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```json
+  {
+    "feedback": {
+      "feedbackId": "feedback-1",
+      "traceId": "trace-123",
+      "timestamp": "2026-11-11T12:00:00.123Z",
+      "feedbackType": "thumbs",
+      "value": -1
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Add shared contracts for opt-in aggregated trace roots. OSS readers remain unsupported. ([#30054](https://github.com/mastra-ai/mastra/pull/30054))
+
+- Forward HTTP-created feedback and scores to configured exporters after local persistence, preserving IDs, timestamps, authors and review status without writing the local record twice. ([#30052](https://github.com/mastra-ai/mastra/pull/30052))
+
+- Fixed custom API routes such as `chatRoute` so a client disconnect stops the agent run and its model request. After garbage collection, the disconnect could stop reaching the run (seen on Node.js 22 and 24), so the model request kept running after the client was gone. Fixes [#29154](https://github.com/mastra-ai/mastra/issues/29154). ([#29617](https://github.com/mastra-ai/mastra/pull/29617))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
+## 1.83.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+
 ## 1.83.0-alpha.6
 
 ### Patch Changes

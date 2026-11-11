@@ -37,7 +37,13 @@ import type { BoardScope } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
-import { LEGACY_REST_PHASE, LEGACY_TRIAGE_PHASE, LEGACY_WORK_BOARD, readReviewBoardInUse } from './legacy-review.js';
+import {
+  LEGACY_REST_PHASE,
+  LEGACY_REVIEW_BOARD,
+  LEGACY_TRIAGE_PHASE,
+  LEGACY_WORK_BOARD,
+  readReviewBoardInUse,
+} from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
@@ -1302,6 +1308,7 @@ export type FactoryBoardScope = Required<BoardScope>;
 /** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
 const LIST_CACHE_MAX_PROJECTS = 100;
+const LIST_DELTA_CLOCK_SKEW_MS = 5_000;
 
 type WorkItemSourceSyncPatch = Partial<
   Pick<WorkItemSourceRow, 'state' | 'labels' | 'author' | 'url' | 'key' | 'metadata'>
@@ -1309,7 +1316,8 @@ type WorkItemSourceSyncPatch = Partial<
 
 export class WorkItemsStorage extends FactoryStorageDomain {
   /** Last full card list per project, valid while the project's board version is unchanged. */
-  readonly #listCache = new Map<string, { version: string; takenAt: number; items: Card[] }>();
+  /** `takenAt` is the last full read; `readFrom` when the latest read, full or delta, began. */
+  readonly #listCache = new Map<string, { version: string; takenAt: number; readFrom: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
@@ -1574,6 +1582,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       expectedRevision,
     }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
   ): Promise<void> {
+    const where = { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId };
+    const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, where);
+    const card = source && { work_item_id: source.work_item_id };
+    // Lock the card's row before its source, the order every card write takes them in.
+    if (card) await ops.updateAtomic(FACTORY_BOARD_ITEMS_SCHEMA.name, card, () => null);
+    let synced = false;
     await ops.updateAtomic<WorkItemSourceDbRecord>(
       FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
       { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
@@ -1583,6 +1597,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         const next = typeof patch === 'function' ? patch(current) : patch;
         if (!next) return null;
+        synced = true;
         const { metadata, ...facts } = next;
         // Raw provider state can be 'closed' while normalized state is 'merged'.
         const nextMetadata =
@@ -1611,6 +1626,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
+    // The card shows these facts but its own row did not move: stamp it so a board reload rereads it.
+    if (card && synced) await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, card, { changed_at: new Date() });
   }
 
   /**
@@ -1999,6 +2016,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItem);
   }
 
+  /**
+   * `previous` updated with the cards changed or deleted since `since`. Reads from a few seconds
+   * earlier so a writer whose clock runs behind this one is still caught.
+   */
+  async #listDelta(orgId: string, factoryProjectId: string, previous: readonly Card[], since: number): Promise<Card[]> {
+    const from = new Date(since - LIST_DELTA_CLOCK_SKEW_MS);
+    const scope = { org_id: orgId, factory_project_id: factoryProjectId };
+    const [rows, tombstones] = await Promise.all([
+      this.#cards(super.ops, { transaction: true }).findMany(scope, {
+        orderBy: [['changed_at', 'asc']],
+        cursor: { values: [from] },
+      }),
+      super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
+        orderBy: [['deleted_at', 'asc']],
+        cursor: { values: [from] },
+      }),
+    ]);
+    if (rows.length === 0 && tombstones.length === 0) return [...previous];
+    const changed = new Map(rows.map(row => [row.id, toWorkItem(row)]));
+    const deleted = new Set(tombstones.map(row => row.id));
+    const items = previous.filter(item => !changed.has(item.id) && !deleted.has(item.id));
+    for (const item of changed.values()) if (!deleted.has(item.id)) items.push(item);
+    return items.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+    );
+  }
+
   /** The project's cards as {@link list} reads them, uncached, through `ops`: a transaction's, to read them in it. */
   async listWith(ops: FactoryStorageOps, { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) {
     return this.#listWithOps(ops, orgId, factoryProjectId);
@@ -2043,13 +2088,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
       return { items: await inFlight.items, cached: true };
     }
-    const read = this.#listWithOps(super.ops, orgId, factoryProjectId).then(deepFreeze);
-    this.#listInFlight.set(key, { version, startedAt: Date.now(), items: read });
+    const startedAt = Date.now();
+    // Within the TTL a version change only needs the cards changed since the last read; the TTL
+    // still forces a full read as a backstop for anything a delta could miss. A board showing
+    // Review cards is read whole: closing its last open one moves the others without writing them.
+    const delta =
+      hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS && !hit.items.some(card => card.board === LEGACY_REVIEW_BOARD);
+    const read = (
+      delta
+        ? this.#listDelta(orgId, factoryProjectId, hit.items, hit.readFrom)
+        : this.#listWithOps(super.ops, orgId, factoryProjectId)
+    ).then(deepFreeze);
+    this.#listInFlight.set(key, { version, startedAt, items: read });
     try {
       const items = await read;
       if (this.#listInFlight.get(key)?.items === read) {
         this.#listCache.delete(key);
-        this.#listCache.set(key, { version, takenAt: Date.now(), items });
+        this.#listCache.set(key, {
+          version,
+          takenAt: delta ? hit.takenAt : Date.now(),
+          readFrom: startedAt,
+          items,
+        });
         if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
           this.#listCache.delete(this.#listCache.keys().next().value!);
         }
@@ -2058,6 +2118,33 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     } finally {
       if (this.#listInFlight.get(key)?.items === read) this.#listInFlight.delete(key);
     }
+  }
+
+  /**
+   * The cards linked to `item` in its project, its parent and its children, newest first as
+   * {@link list} orders them. Read by id and by the parent index, so the cost does not grow with
+   * the board.
+   */
+  async listLinked({ item, limit }: { item: Card; limit: number }): Promise<Card[]> {
+    const cards = this.#cards(this.#db, { transaction: false });
+    const scope = { org_id: item.orgId, factory_project_id: item.factoryProjectId };
+    const [parent, children] = await Promise.all([
+      item.parentWorkItemId ? cards.findOne({ ...scope, id: item.parentWorkItemId }) : null,
+      cards.findMany(
+        { ...scope, parent_work_item_id: item.id },
+        {
+          orderBy: [
+            ['created_at', 'desc'],
+            ['id', 'desc'],
+          ],
+          limit,
+        },
+      ),
+    ]);
+    return (parent ? [parent, ...children] : children)
+      .map(toWorkItem)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1))
+      .slice(0, limit);
   }
 
   async listByIds({

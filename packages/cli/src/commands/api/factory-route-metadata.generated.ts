@@ -358,9 +358,12 @@ export const FACTORY_API_ROUTE_METADATA = {
     "pathParams": [
       "id"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "scope",
+      "sessionId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -542,7 +545,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectApplyDefaultModel",
     "method": "POST",
     "path": "/web/factory/projects/:id/apply-default-model",
-    "description": "Apply the Factory default model to running work and review threads",
+    "description": "Start applying the Factory default model to running work and review threads in the background",
     "pathParams": [
       "id"
     ],
@@ -3416,6 +3419,34 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "id"
       ]
     },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "scope": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "__schema1": {
+          "type": "string",
+          "enum": [
+            "sessions"
+          ]
+        }
+      }
+    },
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -5808,43 +5839,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "modelId": {
           "type": "string"
         },
-        "applied": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "skipped": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "threadId": {
-                "type": "string"
-              },
-              "reason": {
-                "type": "string",
-                "enum": [
-                  "not-running",
-                  "work-item-missing",
-                  "stage-inactive",
-                  "thread-missing",
-                  "mode-unknown",
-                  "apply-failed"
-                ]
-              }
-            },
-            "required": [
-              "threadId",
-              "reason"
-            ]
-          }
+        "status": {
+          "type": "string",
+          "const": "started"
         }
       },
       "required": [
         "modelId",
-        "applied",
-        "skipped"
+        "status"
       ]
     }
   },

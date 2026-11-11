@@ -1,5 +1,56 @@
 # @mastra/code-sdk
 
+## 1.19.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`3b27a10`](https://github.com/mastra-ai/mastra/commit/3b27a10322c7ca39e0676a89deba8d9b0b48ffb7), [`562a451`](https://github.com/mastra-ai/mastra/commit/562a451e2299dc40c4723ff2acb6526aff6b7337), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`8ab6015`](https://github.com/mastra-ai/mastra/commit/8ab6015fb4f3f02803a7c2696920ceff2d2911e6), [`4473677`](https://github.com/mastra-ai/mastra/commit/447367781ce5127a4945dcce95b6372d54d728ff), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f)]:
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/observability@1.24.0-alpha.5
+  - @mastra/client-js@1.60.0-alpha.8
+  - @mastra/pg@1.36.0-alpha.3
+  - @mastra/duckdb@1.19.0-alpha.3
+  - @mastra/mcp@2.9.0-alpha.3
+  - @mastra/libsql@1.30.0-alpha.2
+
+## 1.19.0-alpha.9
+
+### Minor Changes
+
+- Added `MASTRACODE_AGENT_STREAMS=off` to run the code agent without publishing its runs on a resumable stream. Set it to compare a Factory deployment with agent streams on and off without a code change. Any value other than `on`, `off`, or unset fails at startup. ([#30020](https://github.com/mastra-ai/mastra/pull/30020))
+
+  ```sh
+  MASTRACODE_AGENT_STREAMS=off mastra factory dev
+  ```
+
+## 1.19.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`2fe9969`](https://github.com/mastra-ai/mastra/commit/2fe996990088c76ea9db7d1959ab3c09015176f3)]:
+  - @mastra/observability@1.24.0-alpha.4
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 1.19.0-alpha.7
+
+### Patch Changes
+
+- Added the `planApprovalStartsGoal` option to `createMastraCode()`. It defaults to `true`, and the plan-mode prompt tells the agent that approving a plan starts a goal. Set it to `false` for hosts where approval only switches to Build mode, so the agent isn't told a goal will start: ([#28037](https://github.com/mastra-ai/mastra/pull/28037))
+
+  ```ts
+  const { controller, session } = await createMastraCode({ planApprovalStartsGoal: false });
+  ```
+
+  ACP sessions and the headless CLI set it to `false`.
+
+- Reduced Mastra Code memory use when observational memory is on. Observation embeddings now run in a separate worker process, so the embedding model no longer stays in the agent process. The worker loads the model once and reuses it. It exits after five minutes without embedding work, and the next embedding starts a new one. ([#29464](https://github.com/mastra-ai/mastra/pull/29464))
+
+- Fixed long requests ending the run as a "persistent outage" when the provider cut the response stream after accepting the request. One example is the 900-second stream limit on the ChatGPT Codex route. Mastra Code now retries a cut stream on the same account, up to twice per model step. If the stream is still cut, Mastra Code shows the original error. Your accounts are no longer marked unavailable. ([#29462](https://github.com/mastra-ai/mastra/pull/29462))
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/client-js@1.60.0-alpha.7
+
 ## 1.19.0-alpha.6
 
 ### Minor Changes

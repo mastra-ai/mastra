@@ -2459,10 +2459,9 @@ export class MastraFactory {
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
     await this.#environmentBuilds?.probeSchedules();
-    await timedPhase(
-      'finalize.reconcileBoundThreads',
-      () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
-    );
+    // Results written while no process was watching are caught up by the
+    // dispatcher's first tick, in the background. Awaiting that walk here held
+    // boot for one sequential pass over every active binding.
     // A thread's messages move before its run binding does, so a reconcile that
     // overlapped the migration can miss them. Catch up once the bindings moved.
     void this.#sessionResourceMigration

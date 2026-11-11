@@ -58,6 +58,8 @@ function summarizeCard(card: Card) {
 
 Each work item has one board item. Factory's card-to-card parent link is `parentBoardItemId`. Provider sub-issue ancestry is not populated into `card.workItem.parentWorkItemId`; migrated work items leave that field null. Existing card IDs, comments, subscriptions, run bindings, and `/work-items/:id` URLs stay unchanged. The work item gets its own ID. For one release, work-item API responses also retain the legacy top-level title, external source, and merged metadata fields.
 
+`GET /web/factory/projects/:id/work-items` lists a project's cards. Pass `sessionId` to list only the cards holding that session and the cards related to them: a card's parent and children, and a pull request with the card whose session branch it was pushed from. Repeat `sessionId` to list several sessions' cards. Pass `scope=sessions` to list the cards holding any session and the cards related to them, without naming the sessions; it can't be combined with `sessionId`. The response has the same shape in every case, and `runningSessionIds` and `parkedSessionIds` cover only the listed cards.
+
 #### Migration and dry run
 
 Factory keeps the legacy `work_items` table and copies each card into the new tables. Before it starts serving, it copies only open cards. Done and canceled cards are copied in the background afterwards and appear on the board shortly after startup. While that runs, opening a card, or receiving a Linear, Jira, GitHub, GitLab, or incident.io event for it, copies that card on demand, so a reopened issue keeps its original card. Board lists, such as the Done column, fill in as the background copy progresses.

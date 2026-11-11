@@ -457,6 +457,19 @@ const sessionSchema = z.object({
   threadId: z.string().min(1).max(512),
 });
 
+/** Without `sessionId` or `scope`, the list is the whole board. */
+const workItemListQuerySchema = z
+  .object({
+    /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
+    sessionId: z.array(sessionSchema.shape.sessionId).optional(),
+    /** `sessions` narrows the list to the cards that hold any session and the cards related to them. */
+    scope: z.enum(['sessions']).optional(),
+  })
+  .refine(query => !(query.scope && query.sessionId), {
+    path: ['scope'],
+    message: 'Send scope or sessionId, not both',
+  });
+
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
   .union([z.record(z.string(), z.unknown()), z.null()])
@@ -814,25 +827,9 @@ export const FACTORY_ROUTE_CONTRACTS = {
   projectApplyDefaultModel: {
     method: 'POST',
     path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Apply the Factory default model to running work and review threads',
+    description: 'Start applying the Factory default model to running work and review threads in the background',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      modelId: z.string(),
-      applied: z.array(z.string()),
-      skipped: z.array(
-        z.object({
-          threadId: z.string(),
-          reason: z.enum([
-            'not-running',
-            'work-item-missing',
-            'stage-inactive',
-            'thread-missing',
-            'mode-unknown',
-            'apply-failed',
-          ]),
-        }),
-      ),
-    }),
+    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
   },
   projectDelete: {
     method: 'DELETE',
@@ -1021,6 +1018,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/work-items',
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),

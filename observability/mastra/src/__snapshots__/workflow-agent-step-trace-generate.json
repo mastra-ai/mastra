@@ -361,7 +361,8 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "timeToFirstTokenMs": "<ms>"
+                              "timeToFirstTokenMs": "<ms>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-2>",

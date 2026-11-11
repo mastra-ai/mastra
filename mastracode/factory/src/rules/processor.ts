@@ -478,13 +478,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const boards = await this.boards.load(binding);
     const stage = ruleStage(boards, item);
     if (!item || !stage) return;
-    const allItems = await this.options.storage.listShared({
-      orgId: binding.orgId,
-      factoryProjectId: binding.factoryProjectId,
-    });
-    const linked = allItems
-      .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
-      .slice(0, MAX_LINKED_ITEMS);
+    const linked = await this.options.storage.listLinked({ item, limit: MAX_LINKED_ITEMS });
     const board = boardForWorkItem(item);
     const baseValue: ActivePhaseSnapshotBase = {
       status: 'active',
