@@ -38,12 +38,15 @@ describe('factory-triage source branches', () => {
     expect(awaitingApproval).toContain("the `rest` phase appears in the `factory-phase` signal's `Next phases`");
     expect(awaitingApproval).toContain('request a transition to `rest`');
     expect(awaitingApproval).toContain(
-      'If `rest` is not in `Next phases`, report that the board must allow a transition',
+      'If the card is in `triage` but `rest` is not in `Next phases`, report that the board must allow a transition',
     );
     expect(awaitingApproval).toContain('do not request an invalid transition or change the label');
     expect(awaitingApproval).toContain('retain `status: needs approval`');
     expect(awaitingApproval).toContain(
       'If the card is not in `triage`, stop without changing labels or requesting a transition',
+    );
+    expect(awaitingApproval).toContain(
+      'If the handoff or its `Type` is missing, state that in the rationale without inventing a `Type`',
     );
   });
 
