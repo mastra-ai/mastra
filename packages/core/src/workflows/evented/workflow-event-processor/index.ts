@@ -2263,7 +2263,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Unleased steps (no run fencing, or the workflow opted out of recovery) keep running on every delivery.
       const { decision: finished, snapshot } =
         lease === UNLEASED_STEP ? { decision: 'run' as const } : await this.#finishedOccurrence(leafArgs, leaf);
-      if (finished === 'drop') return;
+      if (finished === 'drop') {
+        this.mastra.getLogger()?.debug('Dropping a delivery of a step occurrence that already finished', {
+          workflowId: args.workflowId,
+          runId: args.runId,
+          executionPath: args.executionPath,
+        });
+        return;
+      }
       if (finished !== 'run') {
         this.mastra.getLogger()?.debug('Continuing a workflow run from a step occurrence that already finished', {
           workflowId: args.workflowId,
@@ -2772,8 +2779,9 @@ export class WorkflowEventProcessor extends EventProcessor {
    * executor's dispatch; here entries are only inspected via the `step-entry`
    * accessors. `stepLease` is the occurrence lease the caller holds; a retry
    * hands it to the worker that runs the next attempt. `loadedSnapshot` is the
-   * stored run the caller read after taking the lease, which the step's start
-   * reuses instead of reading the run again.
+   * stored run the caller read after taking the lease. The step's start reuses
+   * it instead of reading the run again, but only when nothing was awaited
+   * between that read and the start (a nested step's authorization reads anew).
    */
   protected async runLeafStep(
     args: ProcessorArgs & {
@@ -5441,6 +5449,12 @@ export class WorkflowEventProcessor extends EventProcessor {
             publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
           });
         }
+        // The dispatch checks the stored run again under the lease; its own logs tell whether it
+        // continued the run or found that the run had moved on meanwhile.
+        this.mastra.getLogger()?.debug('Dispatching an exhausted delivery of a finished step to continue its run', {
+          runId: event.runId,
+          deliveryAttempt: event.deliveryAttempt,
+        });
       }
 
       await this.#dispatch(event);
