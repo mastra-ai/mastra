@@ -462,11 +462,16 @@ describe('ProjectRoutes', () => {
       ]);
       const workItems = {
         listRunBindings: vi.fn().mockResolvedValue(bindings),
-        get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
+        get: vi.fn(async ({ id }: { id: string }) => {
+          if (id === 'item-missing') throw new Error('item lookup failed');
+          return items.get(id) ?? null;
+        }),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
       const controller = {
         getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null),
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const response = await mount(seed, { workItems, controller }).request(
         `/web/factory/projects/${project.id}/apply-default-model`,
@@ -478,6 +483,20 @@ describe('ProjectRoutes', () => {
       await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
       releaseFirstWrite();
       await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() =>
+        expect(info).toHaveBeenCalledWith('[factory] apply-default-model completed', {
+          projectId: project.id,
+          modelId: 'anthropic/claude-opus-4-6',
+          applied: 2,
+          skipped: 5,
+        }),
+      );
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(failingSetSettingOn).toHaveBeenCalledWith({
+        threadId: 'thread-apply-failed',
+        key: 'currentModelId',
+        value: 'anthropic/claude-opus-4-6',
+      });
       expect(setSettingOn).toHaveBeenNthCalledWith(1, {
         threadId: 'thread-applied',
         key: 'currentModelId',
@@ -488,6 +507,83 @@ describe('ProjectRoutes', () => {
         key: 'currentModelId',
         value: 'anthropic/claude-opus-4-6',
       });
+      info.mockRestore();
+      warn.mockRestore();
+    });
+
+    it('rejects overlapping runs and stops writing when the project default changes', async () => {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+      const oldModel = 'anthropic/claude-opus-4-6';
+      const newModel = 'openai/gpt-5.5';
+      await seed.projects.update({ orgId: 'org-1', id: project.id, input: { defaultModelId: oldModel } });
+      let releaseFirstWrite = () => {};
+      const firstWrite = new Promise<void>(resolve => (releaseFirstWrite = resolve));
+      const setSettingOn = vi
+        .fn()
+        .mockImplementationOnce(() => firstWrite)
+        .mockResolvedValue(undefined);
+      const bindings = ['first', 'second'].map(id => ({
+        sessionId: `session-${id}`,
+        threadId: `thread-${id}`,
+        workItemId: `item-${id}`,
+        status: 'active' as const,
+      }));
+      const workItems = {
+        listRunBindings: vi.fn().mockResolvedValue(bindings),
+        get: vi.fn(async () => ({ factoryProjectId: project.id, stages: ['execute'] })),
+      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
+      const controller = {
+        getSession: vi.fn(async () => ({
+          thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn },
+        })),
+      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const app = mount(seed, { workItems, controller });
+      const path = `/web/factory/projects/${project.id}/apply-default-model`;
+
+      const first = await app.request(path, { method: 'POST' });
+      expect(first.status).toBe(202);
+      await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
+      const overlapping = await app.request(path, { method: 'POST' });
+      expect(overlapping.status).toBe(409);
+      expect(await overlapping.json()).toEqual({ error: 'model_apply_in_progress' });
+
+      await seed.projects.update({ orgId: 'org-1', id: project.id, input: { defaultModelId: newModel } });
+      releaseFirstWrite();
+      await vi.waitFor(() =>
+        expect(info).toHaveBeenCalledWith('[factory] apply-default-model completed', {
+          projectId: project.id,
+          modelId: oldModel,
+          applied: 1,
+          skipped: 0,
+        }),
+      );
+      expect(setSettingOn).toHaveBeenCalledTimes(1);
+
+      const retry = await app.request(path, { method: 'POST' });
+      expect(retry.status).toBe(202);
+      expect(await retry.json()).toEqual({ modelId: newModel, status: 'started' });
+      await vi.waitFor(() =>
+        expect(info).toHaveBeenCalledWith('[factory] apply-default-model completed', {
+          projectId: project.id,
+          modelId: newModel,
+          applied: 2,
+          skipped: 0,
+        }),
+      );
+      expect(setSettingOn).toHaveBeenCalledTimes(3);
+      expect(setSettingOn).toHaveBeenNthCalledWith(2, {
+        threadId: 'thread-first',
+        key: 'currentModelId',
+        value: newModel,
+      });
+      expect(setSettingOn).toHaveBeenNthCalledWith(3, {
+        threadId: 'thread-second',
+        key: 'currentModelId',
+        value: newModel,
+      });
+      info.mockRestore();
     });
   });
 

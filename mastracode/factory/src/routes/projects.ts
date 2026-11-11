@@ -229,6 +229,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   readonly #versionControlIntegrationIds: Set<string>;
   #sandboxDescription: FactorySandboxDescription | undefined;
   #settingsSchema: StandardSchemaWithJSON | undefined;
+  readonly #applyingDefaultModel = new Set<string>();
 
   constructor(deps: ProjectRoutesDeps) {
     super(deps);
@@ -700,6 +701,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           }
           const { workItems, controller } = this.deps;
           if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
+          const applyKey = `${tenant.orgId}:${project.id}`;
+          if (this.#applyingDefaultModel.has(applyKey)) return context.json({ error: 'model_apply_in_progress' }, 409);
+          this.#applyingDefaultModel.add(applyKey);
 
           // Do not hold the HTTP request open while visiting every running session: a slow
           // session gateway can take longer than the proxy timeout.
@@ -719,28 +723,30 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               if (seen.has(key)) continue;
               seen.add(key);
 
-              const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
-              if (!item || item.factoryProjectId !== project.id) {
-                skipped++;
-                continue;
-              }
-              // A bound run can still act on its card anywhere short of a terminal phase.
-              const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
-              if (phaseKind === undefined || phaseKind === 'terminal') {
-                skipped++;
-                continue;
-              }
-              const session = await controller.getSession(binding.sessionId);
-              if (!session) {
-                skipped++;
-                continue;
-              }
-              const thread = await session.thread.getById({ threadId: binding.threadId });
-              if (!thread) {
-                skipped++;
-                continue;
-              }
               try {
+                const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+                if (!item || item.factoryProjectId !== project.id) {
+                  skipped++;
+                  continue;
+                }
+                // A bound run can still act on its card anywhere short of a terminal phase.
+                const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
+                if (phaseKind === undefined || phaseKind === 'terminal') {
+                  skipped++;
+                  continue;
+                }
+                const session = await controller.getSession(binding.sessionId);
+                if (!session) {
+                  skipped++;
+                  continue;
+                }
+                const thread = await session.thread.getById({ threadId: binding.threadId });
+                if (!thread) {
+                  skipped++;
+                  continue;
+                }
+                // Stop if the project default changed while this detached run was in progress.
+                if ((await this.#project(tenant.orgId, project.id))?.defaultModelId !== modelId) break;
                 // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
                 await session.thread.setSettingOn({
                   threadId: binding.threadId,
@@ -759,9 +765,13 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               applied,
               skipped,
             });
-          })().catch(error => {
-            console.error('[factory] apply-default-model failed', { projectId: project.id, modelId, error });
-          });
+          })()
+            .catch(error => {
+              console.error('[factory] apply-default-model failed', { projectId: project.id, modelId, error });
+            })
+            .finally(() => {
+              this.#applyingDefaultModel.delete(applyKey);
+            });
 
           return context.json({ modelId, status: 'started' }, 202);
         },
