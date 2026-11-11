@@ -488,8 +488,9 @@ export class MastraPlatformExporter extends BaseExporter {
     const collectorEndpoint =
       kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
     const url = new URL(`/api/observability/${kind === 'score' ? 'scores' : 'feedback'}`, collectorEndpoint);
+    // Full endpoint overrides take precedence over projectId for collector batches too.
     const projectId =
-      this.platformConfig.projectId ?? new URL(collectorEndpoint).pathname.match(/\/projects\/([^/]+)\/ai\//)?.[1];
+      new URL(collectorEndpoint).pathname.match(/\/projects\/([^/]+)\/ai\//)?.[1] ?? this.platformConfig.projectId;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.platformConfig.accessToken}`,
       'Content-Type': 'application/json',

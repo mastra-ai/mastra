@@ -505,18 +505,27 @@ describe('Resolved record delivery boundaries', () => {
     const scoreReceiver = await collector();
     const instance = exporter(feedbackReceiver.endpoint, {
       accessToken: 'api-key',
+      projectId: 'project-1',
       feedbackEndpoint: `${feedbackReceiver.endpoint}/prefix/projects/project-2/ai/feedback/publish`,
       scoresEndpoint: `${scoreReceiver.endpoint}/prefix/projects/project-2/ai/scores/publish`,
     });
     await instance.onFeedbackEvent(feedback());
     await instance.onScoreEvent(score());
+    await instance.onFeedbackEvent(feedback({}));
+    await instance.onScoreEvent(score({}));
     await instance.shutdown();
-    expect(feedbackReceiver.bodies[0]!.path).toBe('/api/observability/feedback');
-    expect(scoreReceiver.bodies[0]!.path).toBe('/api/observability/scores');
-    for (const receiver of [feedbackReceiver, scoreReceiver]) {
-      expect(receiver.bodies).toHaveLength(1);
-      expect(receiver.bodies[0]!.headers.authorization).toBe('Bearer api-key');
-      expect(receiver.bodies[0]!.headers['x-mastra-project-id']).toBe('project-2');
+    for (const [receiver, kind] of [
+      [feedbackReceiver, 'feedback'],
+      [scoreReceiver, 'scores'],
+    ] as const) {
+      expect(receiver.bodies).toHaveLength(2);
+      expect(receiver.bodies.map(body => body.path).sort()).toEqual([
+        `/api/observability/${kind}`,
+        `/prefix/projects/project-2/ai/${kind}/publish`,
+      ]);
+      const direct = receiver.bodies.find(body => body.path.startsWith('/api/'))!;
+      expect(direct.headers.authorization).toBe('Bearer api-key');
+      expect(direct.headers['x-mastra-project-id']).toBe('project-2');
     }
   });
 
