@@ -277,9 +277,6 @@ jobs:
       # Installs core and its workspace dependencies from the E2E registry into disposable
       # consumers: published @mastra/mcp 1.x (the compatibility floor for the core MCP
       # contract) and the core-native suspend/resume fixture.
-      - name: Build core (TEMP for old compat.sh)
-        run: pnpm turbo --filter "@mastra/core" build
-
       - name: Test core against published MCP 1.x and the core-native fixture
         run: pnpm --filter "@mastra/mcp" test:compat
         env:
