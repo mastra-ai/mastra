@@ -373,6 +373,56 @@ export function describeFinishedOccurrenceCases({
       expect(executions).toEqual(['reused', 'between', 'reused']);
     }, 20_000);
 
+    /** Runs `first` then `second` to success on replica A and returns the run and A's step messages. */
+    async function finishTwoSteps() {
+      const executions: string[] = [];
+      const build = (replica: string) =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+          .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+          .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+          .commit();
+      const a = await startReplica(build('A'));
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+      const first = a.published.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
+      return { executions, build, run, first };
+    }
+
+    it('drops a finished step redelivered while another worker holds its lease, without waiting for it', async () => {
+      const { executions, build, run, first } = await finishTwoSteps();
+      // Another worker holds the first step's lease, for longer than this test may wait.
+      const store = (await getStorage().getStore('workflows'))!;
+      await store.claimRunOwnership({
+        runId: stepOccurrenceKey(run.runId, [0]),
+        ownerId: 'other-worker',
+        leaseMs: 60_000,
+        force: true,
+      });
+      const b = await startReplica(build('B'));
+
+      const outcome = await Promise.race([
+        redeliver(b, first),
+        new Promise(resolve => setTimeout(() => resolve('still waiting'), 5_000)),
+      ]);
+
+      expect(outcome).toEqual({ ok: true });
+      expect(executions).toEqual(['A:first', 'A:second']);
+      expect(stepEventsOf(b.published, run.runId)).toEqual([]);
+    }, 20_000);
+
+    it('drops a finished step whose redelivery exhausted its attempts, leaving the run successful', async () => {
+      const { executions, build, run, first } = await finishTwoSteps();
+      const b = await startReplica(build('B'));
+
+      expect(await b.mastra.handleWorkflowEvent({ ...structuredClone(first), deliveryAttempt: 10 })).toEqual({
+        ok: true,
+      });
+
+      expect(executions).toEqual(['A:first', 'A:second']);
+      expect(b.published.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
+      expect((await storedRun(run.runId))?.status).toBe('success');
+    }, 20_000);
+
     it('runs every retry of a failing step', async () => {
       let attempts = 0;
       const workflow = createWorkflow({
