@@ -278,7 +278,7 @@ Each request uses the origin of its configured feedback or score endpoint and th
 
 The exporter retries `404 TRACE_NOT_FOUND`, `404 SPAN_NOT_FOUND`, and `503 ANCHOR_LOOKUP_UNAVAILABLE` responses. Delivery stops after six attempts or 30 seconds, whichever comes first. Backoff starts at 500 milliseconds, doubles up to four seconds, and honors longer `Retry-After` delays within the deadline. Other HTTP errors, network failures, and timeouts are logged and dropped. `maxRetries` applies only to collector batches.
 
-Any successful HTTP response completes delivery without waiting for the record to become readable. `flush()` and `shutdown()` wait for pending requests and retries alongside buffered telemetry. Incoming records that need context resolution also trigger a telemetry flush so buffered traces can reach Platform. Collector quota pauses don't suppress these individual requests.
+Any successful HTTP response completes delivery without waiting for the record to become readable. `flush()` and `shutdown()` wait for pending requests and retries alongside buffered telemetry. When a record needs context resolution, the exporter flushes buffered telemetry to help its trace reach Platform and sends the individual request even if collector uploads are paused by quota exhaustion.
 
 This behavior applies to events received by the exporter. It doesn't change whether other APIs resolve context locally or notify exporters.
 
