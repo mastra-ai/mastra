@@ -20,6 +20,7 @@ import {
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   diffResponseMessages,
+  AGENT_STREAM_TOPIC,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   getRunRegistryEntry,
@@ -483,10 +484,13 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 try {
                   const list = new MessageList({}).deserialize(state.messageListState);
                   const producer = `inngest:${state.runId}:${inngestRunId ?? ''}`;
-                  const result = diffResponseMessages(
-                    previousCursor?.producer === producer ? previousCursor : { producer },
-                    list.get.response.aiV5.model(),
-                  );
+                  let sent: ResponseMessagesCursor | { producer: string } =
+                    previousCursor?.producer === producer ? previousCursor : { producer };
+                  // A reader that attaches mid-run on a bus that keeps no history can only place whole lists.
+                  if ('fingerprints' in sent && !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(state.runId))) {
+                    sent = { ...sent, fingerprints: [] };
+                  }
+                  const result = diffResponseMessages(sent, list.get.response.aiV5.model());
                   deferredChunk.payload._durableResponseMessagesDiff = result.diff;
                   cursor = result.cursor;
                 } catch (error) {

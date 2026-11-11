@@ -133,6 +133,10 @@ class WorkflowEventPolicyPubSub extends PubSub {
     return this.pubsub.supportsOffsets;
   }
 
+  override __replaysTopic(topic: string): boolean {
+    return this.pubsub.__replaysTopic(topic);
+  }
+
   getHistory(topic: string, offset?: number): Promise<Event[]> {
     return this.pubsub.getHistory(topic, offset);
   }

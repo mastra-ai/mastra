@@ -160,6 +160,10 @@ class InngestAgentPubSubRouter extends PubSub {
     return this.defaultPubsub.supportsOffsets && this.getAgentPubsub().supportsOffsets;
   }
 
+  override __replaysTopic(topic: string): boolean {
+    return this.resolve(topic).__replaysTopic(topic);
+  }
+
   getHistory(topic: string, offset?: number): Promise<Event[]> {
     return this.resolve(topic).getHistory(topic, offset);
   }
