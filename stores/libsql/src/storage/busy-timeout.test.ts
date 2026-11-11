@@ -1,13 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { createClient } from '@libsql/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveClient, DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import { LibSQLStore } from './index';
 
-type TestClient = ReturnType<typeof createClient>;
+type TestClient = ReturnType<typeof resolveClient>;
 
 const getClient = (store: LibSQLStore): TestClient => (store as unknown as { client: TestClient }).client;
 
@@ -38,17 +37,21 @@ describe('LibSQL busy_timeout configuration', () => {
     }
   });
 
-  it('keeps a custom connectionTimeoutMs after the workflows domain initializes', async () => {
-    const store = new LibSQLStore({
-      id: 'busy-custom',
+  it('does not override a custom busy_timeout when the workflows domain initializes', async () => {
+    const client = resolveClient({
       url: `file:${path.join(tmpDir, 'custom.db')}`,
       connectionTimeoutMs: 1234,
     });
+    const execute = vi.spyOn(client, 'execute');
+    const store = new LibSQLStore({ id: 'busy-custom', client, connectionTimeoutMs: 1234 });
+
     try {
       await store.init();
       await store.getStore('workflows');
 
-      expect(await readBusyTimeout(getClient(store))).toBe(1234);
+      await expect.poll(() => execute.mock.calls.some(([statement]) => String(statement).includes('synchronous'))).toBe(true);
+      expect(execute.mock.calls.map(([statement]) => String(statement))).not.toContain('PRAGMA busy_timeout = 10000;');
+      expect(await readBusyTimeout(client)).toBe(1234);
     } finally {
       await store.close();
     }
