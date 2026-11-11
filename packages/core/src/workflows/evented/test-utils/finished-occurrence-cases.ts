@@ -448,29 +448,33 @@ export function describeFinishedOccurrenceCases({
       expect(executions).toEqual(['A:first', 'B:second']);
     }, 20_000);
 
-    it('continues such a run once the lease another worker held on the step expires', async () => {
+    it("continues a run whose worker stopped after saving a step result once another worker's lease on the step expires", async () => {
       const { executions, build, run, original } = await crashAfterSavingFirst();
-      // Another worker took the first step's lease to continue the run, and stopped too.
+      const b = await startReplica(build('B'));
+      // Another worker took the first step's lease to continue the run, and stopped too. The
+      // redelivery has to wait for that lease to expire instead of being dropped, so the lease
+      // must still be live when the redelivery arrives.
       const store = (await getStorage().getStore('workflows'))!;
+      const key = stepOccurrenceKey(run.runId, [0]);
       const { record } = await store.claimRunOwnership({
-        runId: stepOccurrenceKey(run.runId, [0]),
+        runId: key,
         ownerId: 'stopped-worker',
         leaseMs: 300,
         force: true,
       });
+      expect((await store.getRunOwnership({ runId: key }))?.live).toBe(true);
 
-      const b = await startReplica(build('B'));
       expect(await redeliver(b, original)).toEqual({ ok: true });
 
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
       expect(executions).toEqual(['A:first', 'B:second']);
       // B continued the run under the step's lease, which it took over from the stopped worker.
-      const lease = await store.getRunOwnership({ runId: stepOccurrenceKey(run.runId, [0]) });
+      const lease = await store.getRunOwnership({ runId: key });
       expect(lease?.ownerId).not.toBe('stopped-worker');
       expect(lease?.generation).toBeGreaterThan(record!.generation);
     }, 20_000);
 
-    it('continues such a run when the delivery of the saved step used up its attempts', async () => {
+    it("continues a run whose worker stopped after saving a step result when the step's redelivery used up its attempts", async () => {
       const { executions, build, run, original } = await crashAfterSavingFirst();
 
       const b = await startReplica(build('B'));
