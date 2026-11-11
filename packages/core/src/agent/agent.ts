@@ -842,6 +842,9 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
  * @see [Agent documentation](https://mastra.ai/docs/agents/overview)
  * if packaged docs are unavailable.
  */
+/** Tool sources slower than this are named on the `agent:prepare-tools` span. */
+const SLOW_TOOL_SOURCE_MS = 100;
+
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -7599,22 +7602,26 @@ export class Agent<
     let modelSnapshot: Promise<MastraLanguageModel | MastraLegacyLanguageModel> | undefined;
     const getResolvedModel = () => (modelSnapshot ??= Promise.resolve(model ?? this.getModel({ requestContext })));
 
-    // One span per tool source, so a trace shows which source makes a run wait before its first model call.
+    // Tool sources resolve before the first model call; name the slow ones so a trace shows what held the run up.
     const prepareSpan = observabilityContext.tracingContext?.currentSpan?.createChildSpan({
       type: SpanType.GENERIC,
       name: 'agent:prepare-tools',
     });
+    const slowSourcesMs: Record<string, number> = {};
     const traced = async <T extends object>(source: string, list: () => Promise<T>): Promise<T> => {
-      const span = prepareSpan?.createChildSpan({ type: SpanType.GENERIC, name: `tools:${source}` });
+      const startedAt = Date.now();
       try {
-        const result = await list();
-        span?.end({ output: { count: Object.keys(result).length } });
-        return result;
+        return await list();
       } catch (error) {
-        const failure = error instanceof Error ? error : new Error(String(error));
-        span?.error({ error: failure, endSpan: true });
-        prepareSpan?.error({ error: failure, endSpan: true });
+        prepareSpan?.error({
+          error: error instanceof Error ? error : new Error(String(error)),
+          endSpan: true,
+          metadata: { failedSource: source, slowSourcesMs },
+        });
         throw error;
+      } finally {
+        const elapsed = Date.now() - startedAt;
+        if (elapsed >= SLOW_TOOL_SOURCE_MS) slowSourcesMs[source] = elapsed;
       }
     };
 
@@ -7828,7 +7835,12 @@ export class Agent<
       ...requestResolvedTools,
       ...inputProcessorLoadedTools,
     };
-    prepareSpan?.end({ output: { toolCount: Object.keys(allTools).length } });
+    prepareSpan?.end({
+      output: {
+        toolCount: Object.keys(allTools).length,
+        ...(Object.keys(slowSourcesMs).length > 0 ? { slowSourcesMs } : {}),
+      },
+    });
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));

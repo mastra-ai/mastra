@@ -1,8 +1,10 @@
 {
   "__structure__": [
     "agent_run: \"agent run: 'test-agent'\"",
+    "├── generic: \"agent:prepare-tools\"",
     "├── processor_run: \"input processor: validator\"",
     "│   └── agent_run: \"agent run: 'validator-agent'\"",
+    "│       ├── generic: \"agent:prepare-tools\"",
     "│       └── model_generation: \"llm: 'mock-model-id'\"",
     "│           └── model_step: \"step: 0\"",
     "│               ├── processor_run: \"llm request processor: provider-history-compat\"",
@@ -17,6 +19,7 @@
     "│       └── model_chunk: \"chunk: 'text'\"",
     "└── processor_run: \"output processor: summarizer\"",
     "    └── agent_run: \"agent run: 'summarizer-agent'\"",
+    "        ├── generic: \"agent:prepare-tools\"",
     "        └── model_generation: \"llm: 'mock-model-id'\"",
     "            └── model_step: \"step: 0\"",
     "                ├── processor_run: \"llm request processor: provider-history-compat\"",
@@ -57,6 +60,27 @@
         {
           "span": {
             "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "agent:prepare-tools",
+            "type": "generic",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "test-agent",
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
+            "output": {
+              "toolCount": 0
+            }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-3>",
             "traceId": "<trace-1>",
             "name": "input processor: validator",
             "type": "processor_run",
@@ -107,14 +131,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-3>",
+                "id": "<span-4>",
                 "traceId": "<trace-1>",
                 "name": "agent run: 'validator-agent'",
                 "type": "agent_run",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-2>",
+                "parentId": "<span-3>",
                 "entityType": "agent",
                 "entityId": "validator-agent",
                 "attributes": {
@@ -137,14 +161,35 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-4>",
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
+                    "name": "agent:prepare-tools",
+                    "type": "generic",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-4>",
+                    "entityType": "agent",
+                    "entityId": "validator-agent",
+                    "metadata": {
+                      "runId": "<runId-2>",
+                      "environment": "test"
+                    },
+                    "output": {
+                      "toolCount": 0
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-6>",
                     "traceId": "<trace-1>",
                     "name": "llm: 'mock-model-id'",
                     "type": "model_generation",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "agent",
                     "entityId": "validator-agent",
                     "attributes": {
@@ -200,14 +245,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-5>",
+                        "id": "<span-7>",
                         "traceId": "<trace-1>",
                         "name": "step: 0",
                         "type": "model_step",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-4>",
+                        "parentId": "<span-6>",
                         "entityType": "agent",
                         "entityId": "validator-agent",
                         "attributes": {
@@ -258,14 +303,14 @@
                       "children": [
                         {
                           "span": {
-                            "id": "<span-6>",
+                            "id": "<span-8>",
                             "traceId": "<trace-1>",
                             "name": "llm request processor: provider-history-compat",
                             "type": "processor_run",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-5>",
+                            "parentId": "<span-7>",
                             "entityType": "input_processor",
                             "entityId": "provider-history-compat",
                             "attributes": {
@@ -303,14 +348,14 @@
                         },
                         {
                           "span": {
-                            "id": "<span-7>",
+                            "id": "<span-9>",
                             "traceId": "<trace-1>",
                             "name": "llm request processor: unsupported-file-handler",
                             "type": "processor_run",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-5>",
+                            "parentId": "<span-7>",
                             "entityType": "input_processor",
                             "entityId": "unsupported-file-handler",
                             "attributes": {
@@ -348,14 +393,14 @@
                         },
                         {
                           "span": {
-                            "id": "<span-8>",
+                            "id": "<span-10>",
                             "traceId": "<trace-1>",
                             "name": "inference: 0",
                             "type": "model_inference",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-5>",
+                            "parentId": "<span-7>",
                             "entityType": "agent",
                             "entityId": "validator-agent",
                             "attributes": {
@@ -404,14 +449,14 @@
                         },
                         {
                           "span": {
-                            "id": "<span-9>",
+                            "id": "<span-11>",
                             "traceId": "<trace-1>",
                             "name": "chunk: 'text'",
                             "type": "model_chunk",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-5>",
+                            "parentId": "<span-7>",
                             "entityType": "agent",
                             "entityId": "validator-agent",
                             "attributes": {
@@ -437,7 +482,7 @@
         },
         {
           "span": {
-            "id": "<span-10>",
+            "id": "<span-12>",
             "traceId": "<trace-1>",
             "name": "llm: 'mock-model-id'",
             "type": "model_generation",
@@ -500,14 +545,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-11>",
+                "id": "<span-13>",
                 "traceId": "<trace-1>",
                 "name": "step: 0",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-10>",
+                "parentId": "<span-12>",
                 "entityType": "agent",
                 "entityId": "test-agent",
                 "attributes": {
@@ -558,14 +603,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-12>",
+                    "id": "<span-14>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-11>",
+                    "parentId": "<span-13>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
@@ -603,14 +648,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-13>",
+                    "id": "<span-15>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: unsupported-file-handler",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-11>",
+                    "parentId": "<span-13>",
                     "entityType": "input_processor",
                     "entityId": "unsupported-file-handler",
                     "attributes": {
@@ -648,14 +693,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-14>",
+                    "id": "<span-16>",
                     "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-11>",
+                    "parentId": "<span-13>",
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
@@ -704,14 +749,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-15>",
+                    "id": "<span-17>",
                     "traceId": "<trace-1>",
                     "name": "chunk: 'text'",
                     "type": "model_chunk",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-11>",
+                    "parentId": "<span-13>",
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
@@ -733,7 +778,7 @@
         },
         {
           "span": {
-            "id": "<span-16>",
+            "id": "<span-18>",
             "traceId": "<trace-1>",
             "name": "output processor: summarizer",
             "type": "processor_run",
@@ -788,14 +833,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-17>",
+                "id": "<span-19>",
                 "traceId": "<trace-1>",
                 "name": "agent run: 'summarizer-agent'",
                 "type": "agent_run",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-16>",
+                "parentId": "<span-18>",
                 "entityType": "agent",
                 "entityId": "summarizer-agent",
                 "attributes": {
@@ -818,14 +863,35 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-18>",
+                    "id": "<span-20>",
+                    "traceId": "<trace-1>",
+                    "name": "agent:prepare-tools",
+                    "type": "generic",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-19>",
+                    "entityType": "agent",
+                    "entityId": "summarizer-agent",
+                    "metadata": {
+                      "runId": "<runId-3>",
+                      "environment": "test"
+                    },
+                    "output": {
+                      "toolCount": 0
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-21>",
                     "traceId": "<trace-1>",
                     "name": "llm: 'mock-model-id'",
                     "type": "model_generation",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-17>",
+                    "parentId": "<span-19>",
                     "entityType": "agent",
                     "entityId": "summarizer-agent",
                     "attributes": {
@@ -881,14 +947,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-19>",
+                        "id": "<span-22>",
                         "traceId": "<trace-1>",
                         "name": "step: 0",
                         "type": "model_step",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-18>",
+                        "parentId": "<span-21>",
                         "entityType": "agent",
                         "entityId": "summarizer-agent",
                         "attributes": {
@@ -939,14 +1005,14 @@
                       "children": [
                         {
                           "span": {
-                            "id": "<span-20>",
+                            "id": "<span-23>",
                             "traceId": "<trace-1>",
                             "name": "llm request processor: provider-history-compat",
                             "type": "processor_run",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-19>",
+                            "parentId": "<span-22>",
                             "entityType": "input_processor",
                             "entityId": "provider-history-compat",
                             "attributes": {
@@ -984,14 +1050,14 @@
                         },
                         {
                           "span": {
-                            "id": "<span-21>",
+                            "id": "<span-24>",
                             "traceId": "<trace-1>",
                             "name": "llm request processor: unsupported-file-handler",
                             "type": "processor_run",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-19>",
+                            "parentId": "<span-22>",
                             "entityType": "input_processor",
                             "entityId": "unsupported-file-handler",
                             "attributes": {
@@ -1029,14 +1095,14 @@
                         },
                         {
                           "span": {
-                            "id": "<span-22>",
+                            "id": "<span-25>",
                             "traceId": "<trace-1>",
                             "name": "inference: 0",
                             "type": "model_inference",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-19>",
+                            "parentId": "<span-22>",
                             "entityType": "agent",
                             "entityId": "summarizer-agent",
                             "attributes": {
@@ -1085,14 +1151,14 @@
                         },
                         {
                           "span": {
-                            "id": "<span-23>",
+                            "id": "<span-26>",
                             "traceId": "<trace-1>",
                             "name": "chunk: 'text'",
                             "type": "model_chunk",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-19>",
+                            "parentId": "<span-22>",
                             "entityType": "agent",
                             "entityId": "summarizer-agent",
                             "attributes": {

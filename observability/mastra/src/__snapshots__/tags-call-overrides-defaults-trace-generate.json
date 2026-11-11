@@ -1,6 +1,7 @@
 {
   "__structure__": [
     "agent_run: \"agent run: 'test-agent-merge-tags'\"",
+    "├── generic: \"agent:prepare-tools\"",
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    └── model_step: \"step: 0\"",
     "        ├── processor_run: \"llm request processor: provider-history-compat\"",
@@ -43,6 +44,28 @@
         {
           "span": {
             "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "agent:prepare-tools",
+            "type": "generic",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "test-agent-merge-tags",
+            "metadata": {
+              "runId": "<runId-1>",
+              "source": "call",
+              "environment": "test"
+            },
+            "output": {
+              "toolCount": 0
+            }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-3>",
             "traceId": "<trace-1>",
             "name": "llm: 'mock-model-id'",
             "type": "model_generation",
@@ -106,14 +129,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-3>",
+                "id": "<span-4>",
                 "traceId": "<trace-1>",
                 "name": "step: 0",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-2>",
+                "parentId": "<span-3>",
                 "entityType": "agent",
                 "entityId": "test-agent-merge-tags",
                 "attributes": {
@@ -165,14 +188,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-4>",
+                    "id": "<span-5>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
@@ -211,14 +234,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-5>",
+                    "id": "<span-6>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: unsupported-file-handler",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "input_processor",
                     "entityId": "unsupported-file-handler",
                     "attributes": {
@@ -257,14 +280,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-6>",
+                    "id": "<span-7>",
                     "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "agent",
                     "entityId": "test-agent-merge-tags",
                     "attributes": {
@@ -314,14 +337,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-7>",
+                    "id": "<span-8>",
                     "traceId": "<trace-1>",
                     "name": "chunk: 'text'",
                     "type": "model_chunk",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "agent",
                     "entityId": "test-agent-merge-tags",
                     "attributes": {

@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 describe('agent setup tracing', () => {
-  it('records how long each tool source and the thread load take before the first model call', async () => {
+  it('records how long the tool sources and the thread load take before the first model call', async () => {
     const exporter = new EndedSpans();
     observability = new Observability({ configs: { test: { serviceName: 'agent-setup', exporters: [exporter] } } });
     const lookup = createTool({
@@ -61,7 +61,7 @@ describe('agent setup tracing', () => {
       memory: new MockMemory(),
       // A slow dynamic tool source, like one that lists an MCP server's tools on every run.
       tools: async () => {
-        await new Promise(resolve => setTimeout(resolve, 60));
+        await new Promise(resolve => setTimeout(resolve, 150));
         return { lookup };
       },
     });
@@ -73,15 +73,14 @@ describe('agent setup tracing', () => {
 
     const [run] = exporter.named("agent run: 'setup'");
     const [prepare] = exporter.named('agent:prepare-tools');
-    const [assigned] = exporter.named('tools:assigned');
     const [thread] = exporter.named('agent:load-thread');
     expect(run).toBeDefined();
     expect(prepare?.parentSpanId).toBe(run!.id);
-    expect(assigned?.parentSpanId).toBe(prepare!.id);
-    expect(assigned!.endTime!.getTime() - assigned!.startTime.getTime()).toBeGreaterThanOrEqual(50);
-    expect(assigned!.output).toEqual({ count: 1 });
-    expect(prepare!.output).toMatchObject({ toolCount: expect.any(Number) });
-    expect(exporter.named('tools:workspace')).toHaveLength(1);
+    const prepared = prepare!.output as { toolCount: number; slowSourcesMs?: Record<string, number> };
+    expect(prepared.toolCount).toBeGreaterThanOrEqual(1);
+    // Only the slow source is named; the fast ones stay out of the span.
+    expect(Object.keys(prepared.slowSourcesMs ?? {})).toEqual(['assigned']);
+    expect(prepared.slowSourcesMs!.assigned).toBeGreaterThanOrEqual(140);
     expect(thread?.traceId).toBe(run!.traceId);
     expect(thread!.output).toEqual({ created: true });
   });
