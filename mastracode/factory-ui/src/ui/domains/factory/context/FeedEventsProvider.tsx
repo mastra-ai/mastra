@@ -42,6 +42,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     const cardsKey = queryKeys.workItems(factoryProjectId);
     const boardKeys = [
       cardsKey,
+      queryKeys.boardFacts(factoryProjectId),
       queryKeys.factoryDecisionsRoot(factoryProjectId),
       queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
     ];

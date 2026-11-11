@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useQuery } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { act, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
@@ -14,6 +15,8 @@ import {
   useSessionWorkItemsQuery,
   useTransitionWorkItemMutation,
   useWorkItemsQuery,
+  workItemActivityQueryOptions,
+  workItemStartersQueryOptions,
 } from '../../../../../hooks/useWorkItems';
 import { createQueryClient } from '../../../../../query-client';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
@@ -460,6 +463,58 @@ describe('FeedEventsProvider, on a session page', () => {
 
     releaseBoard();
     await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    await waitForMutationsIdle(rendered.client);
+  });
+});
+
+describe('FeedEventsProvider, on a draft page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps the starter counts and the activity current when the board changes', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const board = { untriaged: 1, cards: 1 };
+    server.use(
+      stream.handler,
+      http.get(`${BOARD_URL}/starters`, () =>
+        HttpResponse.json({
+          failed: 0,
+          changesRequested: 0,
+          review: { count: 0 },
+          undecided: 0,
+          untriaged: board.untriaged,
+          unplannedBugs: 0,
+          stale: 0,
+        }),
+      ),
+      http.get(`${BOARD_URL}/activity`, () => HttpResponse.json({ total: board.cards, createdAt: [], doneAt: [] })),
+    );
+    const rendered = renderHookWithProviders(
+      () => ({
+        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
+        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    const shown = () => ({
+      untriaged: rendered.result.current.starters.data?.untriaged,
+      cards: rendered.result.current.activity.data?.total,
+    });
+    await waitFor(() => expect(shown()).toEqual({ untriaged: 1, cards: 1 }));
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+
+    board.untriaged = 2;
+    board.cards = 2;
+    stream.push();
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
+
+    await waitFor(() => expect(shown()).toEqual({ untriaged: 2, cards: 2 }));
     await waitForMutationsIdle(rendered.client);
   });
 });

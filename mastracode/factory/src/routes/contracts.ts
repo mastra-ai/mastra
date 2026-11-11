@@ -470,6 +470,31 @@ const workItemListQuerySchema = z
     message: 'Send scope or sessionId, not both',
   });
 
+const countSchema = z.number().int().nonnegative();
+
+/** What the draft page's starter buttons count on the project's default board. */
+export const workItemStartersResponseSchema = z.object({
+  failed: countSchema,
+  changesRequested: countSchema,
+  review: z.object({ count: countSchema, oldestOpenedAt: z.string().optional() }),
+  undecided: countSchema,
+  untriaged: countSchema,
+  unplannedBugs: countSchema,
+  sweep: z.object({ area: z.string(), count: countSchema }).optional(),
+  stale: countSchema,
+});
+
+export const workItemActivityQuerySchema = z.object({
+  since: z.iso.datetime({ offset: true }).transform(since => Date.parse(since)),
+});
+
+/** When the project's cards were created and completed since an instant, and how many cards it has in all. */
+export const workItemActivityResponseSchema = z.object({
+  total: countSchema,
+  createdAt: z.array(z.string()),
+  doneAt: z.array(z.string()),
+});
+
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
   .union([z.record(z.string(), z.unknown()), z.null()])
@@ -1024,6 +1049,21 @@ export const FACTORY_ROUTE_CONTRACTS = {
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
     }),
+  },
+  workItemStarters: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/starters',
+    description: 'Count the cards behind each new-session starter on the default board',
+    pathSchema: projectPathSchema,
+    responseSchema: workItemStartersResponseSchema,
+  },
+  workItemActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/activity',
+    description: 'List when cards were created and completed since an instant',
+    pathSchema: projectPathSchema,
+    querySchema: workItemActivityQuerySchema,
+    responseSchema: workItemActivityResponseSchema,
   },
   workItemCreate: {
     method: 'POST',

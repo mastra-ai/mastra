@@ -11,7 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardFlow, boardPhaseOutcomes, isPullRequestCard } from '../boards/index.js';
+import { boardFlow, boardPhaseOutcomes, DEFAULT_BOARD_ID, isPullRequestCard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -57,6 +57,13 @@ import { boardSnapshot, matchesEtag, scopedSnapshot } from './board-snapshot.js'
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
+import { workItemActivity } from './work-item-activity.js';
+import {
+  CARD_DECISION_PAGE_SIZE,
+  CARD_DECISION_STATUSES,
+  cardsWithFailedRun,
+  workItemStarters,
+} from './work-item-starters.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -503,6 +510,56 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           return c.json({
             metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
           });
+        },
+      }),
+
+      // ── What the draft page's starter buttons count on the default board ────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemStarters.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemStarters.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [cards, boards, { decisions }] = await Promise.all([
+            workItems.listShared(project),
+            this.#boards.load(project),
+            workItems.listDeferredDecisionPage({
+              ...project,
+              statuses: [...CARD_DECISION_STATUSES],
+              limit: CARD_DECISION_PAGE_SIZE,
+            }),
+          ]);
+          return c.json(
+            workItemStarters({
+              board: boards.get(DEFAULT_BOARD_ID),
+              // Counted on the cards as clients receive them: the rules read `metadata`, which on the
+              // wire is the work item's facts with the card's own on top. Copying them here keeps one merge rule.
+              cards: cards.map(toWireWorkItem),
+              failedCardIds: cardsWithFailedRun(decisions),
+              now: Date.now(),
+            }),
+          );
+        },
+      }),
+
+      // ── When cards were created and completed, for the draft page's band ────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemActivity.querySchema.safeParse({
+            since: context.req.query('since'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_activity_since' }, 400);
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [cards, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
+          return c.json(workItemActivity(cards, boards, query.data.since));
         },
       }),
 

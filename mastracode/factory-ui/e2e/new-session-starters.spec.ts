@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { http, HttpResponse } from 'msw';
 
-import { workItem } from '../src/ui/__tests__/workBoardStubs';
 import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from '../src/ui/pages/__tests__/fixtures/draftRoute';
 import { server } from './ui/msw-server';
 import { TEST_BASE_URL } from './ui/render';
@@ -10,38 +8,13 @@ import { TEST_BASE_URL } from './ui/render';
 const NEW_SESSION = `/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`;
 const CREATED = '2026-10-01T00:00:00.000Z';
 
-const intake = Array.from({ length: 7 }, (_, index) => ({
-  ...workItem(`intake-${index}`, `Intake card ${index}`, CREATED, CREATED),
-  stages: ['intake'],
-}));
-
-const fiveKinds = [
-  ...intake,
-  ...['leak', 'recall', 'threads'].map(id => ({
-    ...workItem(`area-${id}`, `Area card ${id}`, CREATED, CREATED),
-    triageType: 'feature request',
-    metadata: { labels: ['Observability, tracing and evaluation scorers'] },
-  })),
-  { ...workItem('bug', 'Crash on save', CREATED, CREATED), triageType: 'bug' },
-  { ...workItem('stuck', 'Stuck card', CREATED, CREATED), stages: ['execute'] },
-];
-
-const failedRun = {
-  id: 'decision-stuck',
-  evaluationId: 'evaluation-1',
-  workItemId: 'stuck',
-  type: 'startSession',
-  role: 'work',
-  source: null,
-  status: 'failed',
-  attempts: 3,
-  failureOccurrence: 1,
-  failureCode: null,
-  canRetry: true,
-  lastError: 'Sandbox quota exceeded',
-  createdAt: CREATED,
-  updatedAt: CREATED,
-  completedAt: CREATED,
+/** A board with five kinds of work waiting, one of them an area with a long name. */
+const fiveKinds = {
+  failed: 1,
+  undecided: 4,
+  untriaged: 7,
+  unplannedBugs: 1,
+  sweep: { area: 'Observability, tracing and evaluation scorers', count: 3 },
 };
 
 const drafts = [
@@ -132,7 +105,7 @@ test.describe('New session page', () => {
   test.afterEach(() => server.resetHandlers());
 
   test.beforeEach(async ({ context, baseURL }) => {
-    stubDraftRoute({ workItems: intake });
+    stubDraftRoute({ starters: { untriaged: 7 } });
     await context.route(
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
@@ -175,12 +148,7 @@ test.describe('New session page', () => {
   test('lays five cards out three over two, two by two on a phone, with no text drawn over the art', async ({
     page,
   }) => {
-    stubDraftRoute({ workItems: fiveKinds });
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-        HttpResponse.json({ decisions: [failedRun] }),
-      ),
-    );
+    stubDraftRoute({ starters: fiveKinds });
     await page.clock.setFixedTime(new Date('2026-10-27T12:00:00Z'));
     await page.goto(NEW_SESSION);
     const list = page.getByRole('list', { name: 'Start from the board' });
@@ -200,9 +168,10 @@ test.describe('New session page', () => {
     const busySlot = 23;
     const arrived = '2026-10-24T09:00:00.000Z';
     stubDraftRoute({
-      workItems: [
-        ...intake,
-        ...['a', 'b'].map(id => ({ ...workItem(`new-${id}`, `New card ${id}`, arrived, arrived), stages: ['intake'] })),
+      cards: [
+        ...Array.from({ length: 7 }, () => ({ createdAt: CREATED })),
+        { createdAt: arrived },
+        { createdAt: arrived },
       ],
     });
     await page.clock.setFixedTime(new Date('2026-10-27T12:00:00Z'));

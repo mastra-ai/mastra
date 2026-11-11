@@ -2494,6 +2494,136 @@ describe('run activity on the work-item listing', () => {
   });
 });
 
+describe('GET /web/factory/projects/:id/work-items/starters', () => {
+  const startersPath = () => `/web/factory/projects/${PROJECT_ID}/work-items/starters`;
+  const create = async (overrides: Record<string, unknown>) =>
+    (await (await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides))).json())
+      .workItem;
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', startersPath(), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', startersPath())).status).toBe(404);
+  });
+
+  it('counts the cards behind each starter on the default board', async () => {
+    const issue = (externalId: string) => ({ integrationId: 'github', type: 'issue', externalId });
+    await create({ externalSource: issue('1'), metadata: { labels: ['bug', 'Memory'] } });
+    await create({ externalSource: issue('2'), metadata: { labels: ['Memory'] } });
+    await create({ externalSource: issue('3'), stages: ['intake'], sessions: { triage: run.execute } });
+    await create({
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+      metadata: { number: 7, state: 'open', sourceCreatedAt: '2030-01-10T00:00:00.000Z' },
+    });
+    vi.useFakeTimers({ now: new Date('2030-01-12T00:00:00.000Z'), toFake: ['Date'] });
+
+    const res = await json('GET', startersPath());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      failed: 0,
+      changesRequested: 0,
+      review: { count: 1, oldestOpenedAt: '2030-01-10T00:00:00.000Z' },
+      undecided: 1,
+      untriaged: 2,
+      unplannedBugs: 1,
+      sweep: { area: 'Memory', count: 2 },
+      stale: 0,
+    });
+  });
+
+  it('counts an open card whose newest run decision failed', async () => {
+    const card = await create({});
+    const now = new Date(Date.now() + 1_000);
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: card.id,
+      ingress: { identity: 'failing-run', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: 'failing-run' }],
+      causalChain: [],
+      now,
+    });
+    expect((await (await json('GET', startersPath())).json()).failed).toBe(0);
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    await seed.workItems.failDeferredDecision({
+      id: claimed!.id,
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Sandbox quota exceeded',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+
+    expect((await (await json('GET', startersPath())).json()).failed).toBe(1);
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/activity', () => {
+  const activityPath = (since: string) =>
+    `/web/factory/projects/${PROJECT_ID}/work-items/activity?since=${encodeURIComponent(since)}`;
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    const since = '2026-06-01T00:00:00.000Z';
+    expect((await json('GET', activityPath(since), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', activityPath(since))).status).toBe(404);
+  });
+
+  it('lists when cards were created and completed since the instant, and counts every card', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-10T12:00:00.000Z'), toFake: ['Date'] });
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    vi.setSystemTime(new Date('2026-06-16T09:00:00.000Z'));
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
+      board: 'work',
+      stage: 'done',
+      expectedRevision: workItem.revision,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
+      cause: 'board_drag',
+    });
+
+    const res = await json('GET', activityPath('2026-06-12T00:00:00.000Z'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      total: 2,
+      createdAt: ['2026-06-15T12:00:00.000Z'],
+      doneAt: ['2026-06-16T09:00:00.000Z'],
+    });
+  });
+
+  it.each([
+    ['no instant', ''],
+    ['a date without a time', '?since=2026-06-12'],
+    ['text that is not an instant', '?since=last-week'],
+  ])('refuses %s rather than guessing a window', async (_case, query) => {
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/activity${query}`);
+
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('GET /web/factory/projects/:id/health/thresholds', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/health/thresholds`, undefined, null)).status).toBe(

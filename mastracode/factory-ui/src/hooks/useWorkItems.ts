@@ -11,9 +11,13 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, queryKeys } from '../api/keys';
+import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
+import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import {
   createWorkItem,
   deleteWorkItem,
+  fetchWorkItemActivity,
+  fetchWorkItemStarters,
   listWorkItems,
   transitionWorkItem,
   updateWorkItem,
@@ -72,6 +76,27 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
       ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, scope && { scope })
       : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** What the draft page's starter buttons count: the server counts, so the page never loads the board for them. */
+export function workItemStartersQueryOptions(baseUrl: string, factoryProjectId: string) {
+  return queryOptions({
+    queryKey: queryKeys.workItemStarters(factoryProjectId),
+    queryFn: ({ signal }) => fetchWorkItemStarters(baseUrl, factoryProjectId, signal),
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** When cards were created and completed over `period`, for the activity band. */
+export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: string, period: ActivityPeriod) {
+  const depth = activityDepth(period);
+  return queryOptions({
+    queryKey: queryKeys.workItemActivity(factoryProjectId, depth),
+    queryFn: ({ signal }) => fetchWorkItemActivity(baseUrl, factoryProjectId, activityStart(depth, Date.now()), signal),
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
   });
 }
