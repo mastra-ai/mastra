@@ -6,11 +6,12 @@ import { bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
 import { DrilldownAction } from '../../components/widget-controls';
 import { hasDrilldownAction, useDrilldown, viewMenu } from '../../hooks/use-widget-views';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
 import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
-import { shapeTimeseries } from '../../lib/timeseries';
+import { shapeTimeseries, timeseriesAlertValues } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
 import { answersById } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
@@ -36,12 +37,28 @@ export function TimeseriesWidget(props: Props) {
     props.expand,
   );
   const { view } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
-  if (gate.status === 'pending') return <PendingChartCard gate={gate.gate} heading={heading} />;
+  const heading = {
+    ...menu.heading,
+    dragHandle: props.dragHandle,
+    onTitleChange: props.onTitleChange,
+    ...pinActions(props.pin),
+  };
+  if (gate.status === 'pending')
+    return (
+      <PendingChartCard
+        gate={gate.gate}
+        heading={pendingHeading(heading, gate.gate, props.alert, props.widget, view)}
+      />
+    );
   return <TimeseriesView {...props} view={view} heading={heading} page={gate.page} />;
 }
 
-function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onRetry }: ViewProps) {
+function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, results, onRetry }: ViewProps) {
+  // Drilldown, then the alert, then the pin.
+  const heading = withAction(
+    own,
+    alertAction(alert, widget, view, { page, values: timeseriesAlertValues(view.options) }),
+  );
   const { options } = view;
   const sent = results.filter(r => r !== undefined);
   const hasTraceQueries = view.queries.some(q => q.source === 'traceAggregate' || q.source === 'spanAggregate');
@@ -71,6 +88,7 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onR
       : [{ label: s.label, value: format.value(s.rangeTotal), color: chartColor(s.color) }],
   );
   const withRangeTotals = options.series.some(s => s.rangeTotal !== undefined);
+  const failed = sent.filter(r => r.isError);
 
   const layout = {
     ...heading,
@@ -82,7 +100,9 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onR
     ) : (
       heading.actions
     ),
-    total: withRangeTotals ? rangeTotals : undefined,
+    // Range totals per series; with no series in the range, one plain 0. None while a request
+    // failed, so no total sits beside the error.
+    total: !withRangeTotals || failed.length ? undefined : rangeTotals.length ? rangeTotals : format.value(0),
     isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
@@ -91,7 +111,6 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onR
     ),
   };
 
-  const failed = sent.filter(r => r.isError);
   if (failed.length) {
     return (
       <ChartCard {...layout}>
@@ -101,11 +120,8 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onR
   }
 
   const totalFormat = FORMATTERS[options.total?.format ?? options.format];
-  const total =
-    options.total &&
-    (typeof options.total.value === 'object' && 'peak' in options.total.value && !shaped.total
-      ? '—'
-      : totalFormat.value(shaped.total ?? 0));
+  // An empty range totals 0, a peak included, like the cards around it.
+  const total = options.total && totalFormat.value(shaped.total ?? 0);
 
   const chart = {
     data: shaped.data,
@@ -125,7 +141,7 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onR
 
   return (
     <ChartCard {...layout} total={layout.total ?? total} isUpdating={sent.some(r => r.isRefetching)}>
-      <ChartArea isEmpty={!isLoading && shaped.empty} emptyMessage={options.emptyMessage}>
+      <ChartArea isEmpty={!isLoading && shaped.empty}>
         {options.chart === 'stackedBar' ? (
           <MetricsStackedBarChart {...chart} />
         ) : (

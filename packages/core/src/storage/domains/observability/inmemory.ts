@@ -128,6 +128,11 @@ export interface TraceEntry {
 
 /** In-memory implementation of ObservabilityStorage for testing and development. */
 export class ObservabilityInMemory extends ObservabilityStorage {
+  /** In-memory observability data is local to this process. */
+  public override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -2366,6 +2371,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         ),
       ),
     };
+  }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.db.feedbackRecords.find(record => record.feedbackId === feedbackId) ?? null;
   }
 
   async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {

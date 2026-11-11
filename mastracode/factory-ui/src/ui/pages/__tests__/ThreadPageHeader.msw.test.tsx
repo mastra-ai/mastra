@@ -315,11 +315,12 @@ describe('ThreadPage header', () => {
     const { sessionGate } = stubThreadRoute({ gateSession: true });
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
 
-    expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
 
     sessionGate.resolve();
-    await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
   });
 });

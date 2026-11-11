@@ -4,8 +4,9 @@ import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
 
 import { scopeTitle } from '../lib/pageAddress';
-import { knowledgePageRefIndex } from '../lib/pageRefs';
+import { knowledgePageRefIndex, noteMentionTarget } from '../lib/pageRefs';
 import type { KnowledgePageRefIndex } from '../lib/pageRefs';
+import { KnowledgePagesByRef } from '../lib/pagesByRefContext';
 import { parseRecordSegments } from '../lib/recordText';
 import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '../lib/remarkKnowledgeLinks';
 import type {
@@ -98,7 +99,7 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
       <button
         type="button"
         data-testid="knowledge-body-link"
-        className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
+        className="rounded bg-badge-blue-subtle px-1 text-left font-medium wrap-anywhere text-badge-blue-foreground hover:underline"
         onClick={() => links.onPageClick(target)}
       >
         {target.name}
@@ -108,7 +109,7 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
     <KnowledgeTooltip label="No loaded page has this address">
       <span
         data-testid="knowledge-body-link-unresolved"
-        className="rounded border border-dashed border-border px-1 text-muted-foreground"
+        className="rounded border border-dashed border-border px-1 wrap-anywhere text-muted-foreground"
       >
         {ref}
       </span>
@@ -161,12 +162,15 @@ function PageLink({
   );
 }
 
-const refIndexes = new WeakMap<ReadonlyMap<string, KnowledgePagePayload>, KnowledgePageRefIndex>();
+type PageMap = ReadonlyMap<string, KnowledgePagePayload>;
+const refIndexes = new WeakMap<PageMap, WeakMap<PageMap, KnowledgePageRefIndex>>();
 
-/** One ref index per loaded-pages map, shared by every note drawn from it. */
-function loadedRefIndex(pagesById: ReadonlyMap<string, KnowledgePagePayload>): KnowledgePageRefIndex {
-  let index = refIndexes.get(pagesById);
-  if (!index) refIndexes.set(pagesById, (index = knowledgePageRefIndex(pagesById.values())));
+/** One ref index per loaded-pages map (and pages fetched by ref), shared by every note drawn from it. */
+function loadedRefIndex(pagesById: PageMap, byRef: PageMap): KnowledgePageRefIndex {
+  let forPages = refIndexes.get(pagesById);
+  if (!forPages) refIndexes.set(pagesById, (forPages = new WeakMap()));
+  let index = forPages.get(byRef);
+  if (!index) forPages.set(byRef, (index = knowledgePageRefIndex(pagesById.values(), byRef)));
   return index;
 }
 
@@ -190,12 +194,9 @@ export function KnowledgeNoteItem({
   /** A tighter layout for popups. */
   compact?: boolean;
 }) {
-  const refIndex = loadedRefIndex(pagesById);
+  const refIndex = loadedRefIndex(pagesById, useContext(KnowledgePagesByRef));
   // Only a page the server resolved the mention to is linked, however the ref is written.
-  const mentionTarget = (ref: string) => {
-    const target = refIndex.resolve(ref);
-    return target && note.mentions.includes(target.id) ? target : undefined;
-  };
+  const mentionTarget = (ref: string) => noteMentionTarget(refIndex, pagesById, note.mentions, ref);
   const scopeLabel = (id: string) => {
     const scopePage = pagesById.get(id);
     return scopePage?.address ?? scopePage?.name ?? id;
@@ -223,31 +224,33 @@ export function KnowledgeNoteItem({
             </Txt>
           ) : null}
         </div>
-        <p className="text-ui-md break-words text-foreground">
+        <p className="text-ui-md wrap-anywhere text-foreground">
           {parseRecordSegments(note.text).map((segment, index) => {
             if (segment.type === 'text') return <span key={index}>{segment.value}</span>;
             const target = mentionTarget(segment.value);
             return target ? (
-              <button
-                key={index}
-                type="button"
-                className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
-                onClick={() => onPageClick(target)}
-              >
-                {segment.value}
-              </button>
+              <KnowledgeTooltip key={index} label={segment.value}>
+                <button
+                  type="button"
+                  data-testid="knowledge-note-link"
+                  className="rounded bg-badge-blue-subtle px-1 text-left font-medium wrap-anywhere text-badge-blue-foreground hover:underline"
+                  onClick={() => onPageClick(target)}
+                >
+                  {target.name}
+                </button>
+              </KnowledgeTooltip>
             ) : (
-              <span key={index} className="font-medium">
+              <span key={index} className="font-medium wrap-anywhere">
                 {segment.value}
               </span>
             );
           })}
         </p>
         {note.stampScopeIds.length > 0 ? (
-          <div className="flex flex-wrap gap-1" aria-label="Stamped to">
+          <div className="flex min-w-0 flex-wrap gap-1" aria-label="Stamped to">
             {note.stampScopeIds.map(id => (
-              <Badge key={id} variant="neutral" size="xs">
-                {scopeLabel(id)}
+              <Badge key={id} variant="neutral" size="xs" title={scopeLabel(id)}>
+                <span className="truncate">{scopeLabel(id)}</span>
               </Badge>
             ))}
           </div>
@@ -310,9 +313,15 @@ export function KnowledgePageDetail({
   const path = knowledgePagePath(page, ancestors);
 
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
-  const refIndex = useMemo(
-    () => knowledgePageRefIndex([...pagesById.values(), ...ancestors, page]),
+  // Core's `related` leaves out the page and its ancestors, so notes mentioning them resolve against these too.
+  const notePages = useMemo(
+    () => new Map([...pagesById, ...[...ancestors, page].map(entry => [entry.id, entry] as const)]),
     [pagesById, ancestors, page],
+  );
+  const pagesByRef = useContext(KnowledgePagesByRef);
+  const refIndex = useMemo(
+    () => knowledgePageRefIndex([...pagesById.values(), ...ancestors, page], pagesByRef),
+    [pagesById, ancestors, page, pagesByRef],
   );
   const bodyLinks = useMemo(() => ({ index: refIndex, onPageClick }), [refIndex, onPageClick]);
 
@@ -408,7 +417,7 @@ export function KnowledgePageDetail({
                     <KnowledgeNoteItem
                       key={note.id}
                       note={note}
-                      pagesById={pagesById}
+                      pagesById={notePages}
                       onPageClick={onPageClick}
                       highlighted={highlighted}
                       itemRef={
@@ -437,7 +446,7 @@ export function KnowledgePageDetail({
                   <KnowledgeNoteItem
                     key={note.id}
                     note={note}
-                    pagesById={pagesById}
+                    pagesById={notePages}
                     onPageClick={onPageClick}
                     showPage
                     compact

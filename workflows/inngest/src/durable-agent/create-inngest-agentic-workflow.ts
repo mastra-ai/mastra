@@ -1,4 +1,4 @@
-import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
+import { buildDeferredStepFinishChunk, durableStopConditionSteps } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
   createDurableGoalStep,
@@ -9,7 +9,9 @@ import {
   DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
+  emitAbortEvent,
   emitChunkEvent,
+  emitErrorEvent,
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
@@ -17,6 +19,8 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  diffResponseMessages,
+  AGENT_STREAM_TOPIC,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   getRunRegistryEntry,
@@ -30,20 +34,27 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableToolCallInput,
+  ResponseMessagesCursor,
 } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
+import type { Mastra } from '@mastra/core/mastra';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
+import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
+import { RESUME_CLAIM_DISPATCH_LEASE_MS } from '../durable-event-payload';
 import { init } from '../index';
 import { agentLoopTermination, generationUsage } from '../observability-compat';
+import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
+import type { InngestWorkflow } from '../workflow';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
 // persisted so a finished run's snapshot replaces its stale suspended one and
@@ -145,7 +156,87 @@ export const InngestDurableStepIds = {
   AGENTIC_LOOP: `${INNGEST_ENGINE_PREFIX}:${DurableStepIds.AGENTIC_LOOP}`,
 } as const;
 
+/** Run ownership key of the claim an InngestAgent resume holds on the loop run. */
+export const resumeClaimKey = (runId: string) => `${InngestDurableStepIds.AGENTIC_LOOP}:resume-claim:${runId}`;
+
+/**
+ * The store a resume claim lives in. A claim needs an atomic status change and a lease, so a
+ * claim whose resume died can be taken over; without both, resumes are not claimed at all.
+ */
+export async function resumeClaimStore(mastra: Mastra | undefined) {
+  const store = await mastra?.getStorage()?.getStore('workflows');
+  if (!store?.supportsConcurrentUpdates?.()) return undefined;
+  const fencing = await Promise.resolve()
+    .then(() => store.supportsRunFencing())
+    .catch(() => false);
+  return fencing ? store : undefined;
+}
+
+export const setLoopStatus = (
+  store: NonNullable<Awaited<ReturnType<typeof resumeClaimStore>>>,
+  runId: string,
+  status: WorkflowRunState['status'],
+  expectedStatus: WorkflowRunState['status'],
+) =>
+  store.updateWorkflowState({
+    workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+    runId,
+    opts: { status, expectedStatus },
+  });
+
+/**
+ * Ends a resumed segment Inngest failed or cancelled, which never reaches the finalize step that
+ * would: marks the run failed or canceled, ends its stream and releases its claim. The run is not
+ * parked again, since a nested segment Inngest did not cancel can still be running its tools.
+ */
+function createResumeClaimReleaseFunction(inngest: Inngest, workflow: InngestWorkflow) {
+  const loopEvent = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
+  return inngest.createFunction(
+    {
+      id: `${loopEvent}.resume-claim-release`,
+      triggers: [
+        { event: 'inngest/function.failed', if: `event.data.event.name == '${loopEvent}'` },
+        { event: 'inngest/function.cancelled', if: `event.data.event.name == '${loopEvent}'` },
+      ],
+    },
+    async ({ event }) => {
+      const original = (event.data as { event?: { data?: Record<string, any> } }).event?.data;
+      const claim: RunFence | undefined = original?.resume?.claim;
+      const mastra = workflow.mastra;
+      const store = await resumeClaimStore(mastra);
+      if (!original?.runId || !claim || !store) return;
+      // Fails once finalize released the claim or a later resume took it over. A renewed claim also
+      // keeps a takeover out until this release is done.
+      const held = await store.renewRunOwnership({ ...claim, leaseMs: RESUME_CLAIM_DISPATCH_LEASE_MS });
+      if (!held.renewed) return;
+      const cancelled = event.name === 'inngest/function.cancelled';
+      await setLoopStatus(store, original.runId, cancelled ? 'canceled' : 'failed', 'running');
+      const defaultPubsub = new InngestPubSub(inngest, workflow.id, mastra?.getLogger?.());
+      const pubsub = workflow.__getPubsubFactory()?.(defaultPubsub) ?? defaultPubsub;
+      try {
+        if (cancelled) {
+          await emitAbortEvent(pubsub, original.runId, { steps: [], text: '' });
+        } else {
+          const message = (event.data as { error?: { message?: string } }).error?.message;
+          await emitErrorEvent(pubsub, original.runId, new Error(message ?? 'The resumed agent run failed.'));
+        }
+      } catch (error) {
+        mastra?.getLogger?.()?.warn?.(`[InngestAgent] run ${original.runId} failed to publish its end`, error);
+      }
+      await store.releaseRunOwnership(claim);
+    },
+  );
+}
+
 export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
+  const workflow = createAgenticLoopWorkflow(options);
+  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
+  const inngestWorkflow = workflow as unknown as InngestWorkflow;
+  inngestWorkflow.__addHostFunctions([createResumeClaimReleaseFunction(options.inngest, inngestWorkflow)]);
+  return workflow;
+}
+
+function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions) {
   const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS, retries } = options;
   const { createWorkflow } = init(inngest);
 
@@ -370,7 +461,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const state = inputData as IterationState;
         const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+        const { step, inngestRunId } = engine as { step: BaseContext<Inngest>['step']; inngestRunId?: string };
 
         const emitStepFinish = async (isContinued: boolean) => {
           if (state.lastStepResult) {
@@ -380,16 +471,38 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
             // Carry the step's response messages so `onStepFinish(event).response.messages` and
-            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
-            try {
-              const list = new MessageList({}).deserialize(state.messageListState);
-              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
-            } catch (error) {
-              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
-            }
-            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
-              await emitChunkEvent(pubsub, state.runId, deferredChunk);
-            });
+            // `output.steps[i].response.messages` match the regular loop (#26780), as core does:
+            // only the part that changed since the previous step-finish, which readers rebuild. The
+            // diff is built inside the memoized step, so replays reuse it rather than recompute it,
+            // and the cursor it returns travels with the iteration state. Each Inngest function run
+            // (the first one, and each resume) starts with the whole list.
+            const previousCursor = state.responseMessagesCursor;
+            const nextCursor: ResponseMessagesCursor | null = await step.run(
+              `emit-step-finish-${state.runId}-${state.iterationCount}`,
+              async () => {
+                let cursor: ResponseMessagesCursor | null = null;
+                try {
+                  const list = new MessageList({}).deserialize(state.messageListState);
+                  const producer = `inngest:${state.runId}:${inngestRunId ?? ''}`;
+                  let sent: ResponseMessagesCursor | { producer: string } =
+                    previousCursor?.producer === producer ? previousCursor : { producer };
+                  // A reader that attaches mid-run on a bus that keeps no history can only place whole lists.
+                  if ('fingerprints' in sent && !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(state.runId))) {
+                    sent = { ...sent, fingerprints: [] };
+                  }
+                  const result = diffResponseMessages(sent, list.get.response.aiV5.model());
+                  deferredChunk.payload._durableResponseMessagesDiff = result.diff;
+                  cursor = result.cursor;
+                } catch (error) {
+                  mastra
+                    ?.getLogger?.()
+                    ?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+                }
+                await emitChunkEvent(pubsub, state.runId, deferredChunk);
+                return cursor;
+              },
+            );
+            if (nextCursor) state.responseMessagesCursor = nextCursor;
           }
         };
 
@@ -435,8 +548,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             return false;
           }
           // Hand stopWhen the full step content stream.steps reports, not the
-          // compacted snapshot records (tool-result outputs restored).
-          const steps = expandDurableSteps(state.accumulatedSteps) as any;
+          // compacted snapshot records, with AI SDK tool-result parts as toolResults.
+          const steps = durableStopConditionSteps(state.accumulatedSteps) as any;
           const conditions = await Promise.all(
             (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
               try {
@@ -500,7 +613,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               steps: state.accumulatedSteps,
             },
           });
-          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+          const textRewritten = !!lastStep && finishResult.outputTextChanged;
+          if (lastStep && finishResult.outputTextChanged) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;
           }
@@ -643,6 +757,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
+              ...(textRewritten && { textRewritten }),
             });
           }
 

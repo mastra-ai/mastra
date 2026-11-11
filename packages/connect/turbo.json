@@ -22,9 +22,15 @@
       "inputs": ["package.json"]
     },
     "generate:provider-docs": {
-      // Regenerates the docs provider-toolsets reference from src/providers.
+      // Regenerates Connect provider docs (reference, generated integration pages, partials)
+      // from src/providers and scripts/provider-docs-metadata.ts.
       // Writes outside the package (docs/), so it cannot be cached.
-      "inputs": ["src/providers/**", "scripts/generate-provider-docs.ts"],
+      "inputs": [
+        "src/providers/**",
+        "scripts/generate-provider-docs.ts",
+        "scripts/provider-docs-lib.ts",
+        "scripts/provider-docs-metadata.ts"
+      ],
       "cache": false
     }
   }

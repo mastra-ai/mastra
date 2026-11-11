@@ -338,7 +338,8 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "timeToFirstTokenMs": "<ms>"
+                              "timeToFirstTokenMs": "<ms>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
@@ -353,7 +354,11 @@
                                 "role": "user",
                                 "content": "Hello from workflow"
                               }
-                            ]
+                            ],
+                            "output": {
+                              "text": "Mock V2 stream response",
+                              "toolCalls": []
+                            }
                           }
                         },
                         {

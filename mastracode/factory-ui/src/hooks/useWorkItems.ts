@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { queryKeys } from '../api/keys';
+import { cardMoveMutationKey, queryKeys } from '../api/keys';
 import {
   createWorkItem,
   deleteWorkItem,
@@ -62,11 +62,7 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
-    // Relationships can be created by GitHub ingestion or another open tab.
-    // Keep thread-page counterpart links current without requiring a reload.
-    refetchInterval: 5_000,
-    // Cards move autonomously (rule transitions, agent runs); polling pauses
-    // while the tab is hidden, so refresh immediately on return.
+    // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
   });
 }
@@ -164,7 +160,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
-  const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
+  const mutationKey = cardMoveMutationKey(factoryProjectId);
   const mutation = useMutation({
     mutationKey,
     mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
@@ -227,8 +223,11 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
           };
         }),
       );
-      // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
-      // move pending until the card shows that run, so its button never reappears in between.
+    },
+    // Landed or not, the board skipped its card reads while this was in flight, so it re-reads here.
+    // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
+    // move pending until the card shows that run, so its button never reappears in between.
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),

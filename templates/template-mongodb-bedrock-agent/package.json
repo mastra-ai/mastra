@@ -25,10 +25,10 @@
     "@mastra/mongodb": "^1.12.1",
     "@mastra/observability": "^1.16.0",
     "@mastra/rag": "^2.4.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.60.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
     "ai": "^5.0.0",
     "patch-package": "^8.0.1",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -38,5 +38,25 @@
     "typescript": "^5.9.0",
     "undici": "^7.30.1",
     "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "@mastra/core": {
+      "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.28",
+      "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.33",
+      "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.1"
+    },
+    "compression": "1.8.2",
+    "image-size": "2.0.4",
+    "@modelcontextprotocol/sdk": {
+      "@hono/node-server": "2.1.6"
+    },
+    "@hono/node-server": "2.1.6",
+    "chat": "4.44.0",
+    "rimraf": {
+      "glob": "14.0.4"
+    },
+    "readdir-glob": {
+      "minimatch": "11.0.5"
+    }
   }
 }

@@ -1,5 +1,11 @@
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { applyMcpRequestAuth, redactStreamChunk, serializeStreamChunk } from '@mastra/server/server-adapter';
+import {
+  applyMcpRequestAuth,
+  cancelReaderOnResponseClose,
+  redactStreamChunk,
+  serializeStreamChunk,
+  writeWithBackpressure,
+} from '@mastra/server/server-adapter';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -137,6 +143,7 @@ export class StreamingInterceptor implements NestInterceptor {
     const hasFullStream = data !== null && typeof data === 'object' && 'fullStream' in data;
     const stream = hasFullStream ? (data as { fullStream: ReadableStream }).fullStream : (data as ReadableStream);
     const reader = stream.getReader();
+    const readerCancel = cancelReaderOnResponseClose(reader, response);
     const unregisterSse = streamFormat === 'sse' ? this.shutdownService.registerSseClient(response) : null;
     let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -158,7 +165,7 @@ export class StreamingInterceptor implements NestInterceptor {
 
         if (value) {
           if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
-            response.write(value);
+            await writeWithBackpressure(response, value);
             continue;
           }
 
@@ -175,10 +182,10 @@ export class StreamingInterceptor implements NestInterceptor {
           }
 
           if (streamFormat === 'sse') {
-            response.write(`data: ${serialized.json}\n\n`);
+            await writeWithBackpressure(response, `data: ${serialized.json}\n\n`);
           } else {
             // Use record separator (\x1E) for stream format
-            response.write(serialized.json + '\x1E');
+            await writeWithBackpressure(response, serialized.json + '\x1E');
           }
         }
       }
@@ -188,6 +195,7 @@ export class StreamingInterceptor implements NestInterceptor {
         this.logger.error('Stream error:', error);
       }
     } finally {
+      readerCancel.dispose();
       if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
       }
@@ -222,14 +230,16 @@ export class StreamingInterceptor implements NestInterceptor {
 
     if (fetchResponse.body) {
       const reader = fetchResponse.body.getReader();
+      const readerCancel = cancelReaderOnResponseClose(reader, response);
 
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          response.write(value);
+          await writeWithBackpressure(response, value);
         }
       } finally {
+        readerCancel.dispose();
         response.end();
       }
     } else {

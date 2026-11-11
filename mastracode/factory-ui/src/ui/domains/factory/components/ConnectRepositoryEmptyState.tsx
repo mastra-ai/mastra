@@ -5,18 +5,14 @@ import { Link } from 'react-router';
 
 import { settingsSectionPath } from '../../settings/settingsSections';
 
-export function ConnectRepositoryEmptyState({ factoryId, review }: { factoryId: string; review: boolean }) {
+export function ConnectRepositoryEmptyState({ factoryId }: { factoryId: string }) {
   return (
     <EmptyState
       variant="fill"
       as="h2"
       iconSlot={<GitBranch />}
-      titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
-      descriptionSlot={
-        review
-          ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
-          : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
-      }
+      titleSlot="Connect a repository to start intake"
+      descriptionSlot="Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build."
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'repositories')} className={buttonVariants({ variant: 'primary' })}>
           Open Repository settings

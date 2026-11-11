@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { MoreHorizontal } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 
@@ -18,16 +18,13 @@ export function SessionActionsMenu({
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
+          <Sidebar.NavAction
             aria-label={`Session actions for ${name}`}
             disabled={disabled}
-            className="group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex pointer-fine:hidden"
+            className="group-focus-within/nav-row:flex group-hover/nav-row:flex data-[popup-open]:flex pointer-fine:hidden"
           >
             <MoreHorizontal />
-          </Button>
+          </Sidebar.NavAction>
         }
       />
       <DropdownMenu.Content anchor={anchor} align="end">

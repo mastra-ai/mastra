@@ -997,9 +997,9 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-#### Durable stored agents
+#### Resumable streams for stored agents
 
-Set `durable` to run the agent as a [durable agent](/docs/harness/durable-agents) once the server hydrates it. Pass `true` to accept the defaults, or an object to tune the durable loop:
+Set `durable` to configure [resumable streams](/docs/agents/resumable-streams) on the hydrated plain agent. Pass `true` to enable streams, `false` to disable them, or an object to tune stream cleanup:
 
 ```typescript
 const agent = await mastraClient.createStoredAgent({
@@ -1010,11 +1010,11 @@ const agent = await mastraClient.createStoredAgent({
     provider: 'openai',
     name: 'gpt-5.4',
   },
-  durable: { maxSteps: 50, cleanupTimeoutMs: 0 },
+  durable: { cleanupTimeoutMs: 0 },
 })
 ```
 
-Only serializable options are accepted. The durable cache and pubsub are inherited from the server's `Mastra` instance. If it has no distributed cache or pubsub configured, durability is process-local. Automatic recovery is still configured in code through `recovery.durableAgents`.
+Only serializable options are accepted, with cache and pubsub inherited from the server's `Mastra` instance. Existing stored agents with `durable: true` also use this field for resumable streams only. To retain durable execution and checkpoint recovery, register a code agent wrapped with `createDurableAgent({ agent })`.
 
 ### `getStoredAgent()`
 

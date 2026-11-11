@@ -1,5 +1,132 @@
 # mastracode
 
+## 0.50.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`2fe9969`](https://github.com/mastra-ai/mastra/commit/2fe996990088c76ea9db7d1959ab3c09015176f3)]:
+  - @mastra/observability@1.24.0-alpha.4
+  - @mastra/code-sdk@1.19.0-alpha.8
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 0.50.0-alpha.7
+
+### Minor Changes
+
+- Approving a plan now starts it as a goal. The plan approval prompt offers only **Approve** and **Request changes**; the separate **Use as /goal** option is gone. When no goal judge model is configured, the current model judges the plan goal instead of prompting for one. ([#28037](https://github.com/mastra-ai/mastra/pull/28037))
+
+- Added text selection in the prompt input box. Shift+arrow keys select characters and lines, Shift+Alt or Shift+Ctrl with ←/→ select by word, and Shift+Home/End select to the line edges; Backspace, typing and pasting then work on the selection like they do after a mouse drag. Keyboard selection works with the Mouse setting off. ([#29994](https://github.com/mastra-ai/mastra/pull/29994))
+
+  With input box mouse mode on, a double click selects the word under the pointer, a triple click selects the line and dragging after a double click grows the selection by whole words. Like a drag, these copy the selected text to the clipboard.
+
+### Patch Changes
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`210458a`](https://github.com/mastra-ai/mastra/commit/210458a144ac5a934663db7bfe6cc650c0d2adaa), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`ac40e76`](https://github.com/mastra-ai/mastra/commit/ac40e762db7b6614076273221aae6681945f9da1), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/code-sdk@1.19.0-alpha.7
+
+## 0.50.0-alpha.6
+
+### Patch Changes
+
+- Removed comments from Factory work items. Cards no longer have a comment feed, mentions, or comment counts, and the mention and activity items are gone from the attention inbox. Slack `aside` messages are still ignored by the agent but are no longer copied onto the card, and Factory no longer mirrors card comments to Slack. ([#29062](https://github.com/mastra-ai/mastra/pull/29062))
+
+  Each card now has a single `description` instead. Set it with `description` on `POST /web/factory/projects/:id/work-items` and `PATCH /web/factory/work-items/:id` (a blank string clears it), or edit it from the card panel. Runs started on the card receive it in a `<work-item-description>` block after the skill instructions, in place of the old `<work-item-feed>` block.
+
+  Breaking changes for API and agent-tool callers:
+
+  - `factory_create_work_item` takes `description` instead of `brief`. `factory_update_work_item` also accepts `description`, and `factory_inspect_work_item` returns it in place of recent comments.
+  - The `/web/factory/work-items/:id/comments` and `/web/factory/projects/:id/mention-roster` routes are removed. `/web/factory/projects/:id/feed-events` stays and still refreshes open boards, but its frames no longer carry a `workItemId`.
+  - The `mention` and `activity` attention kinds are removed.
+  - Work items no longer include `commentCount` or `feedActivityAt`.
+  - Integrations can no longer declare a `feedPublisher`, and `IntegrationContext` no longer has `feed`.
+  - `factoryWorkItemUrl()` no longer accepts `commentId`.
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`023455e`](https://github.com/mastra-ai/mastra/commit/023455e2d45ba13aef1880364985c949308ae015), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`08e677f`](https://github.com/mastra-ai/mastra/commit/08e677fdbe36c10118c54c0494c8412019d61955), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`04803ea`](https://github.com/mastra-ai/mastra/commit/04803ea00e168759ed3e28ce8a65977df7355df9), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/code-sdk@1.19.0-alpha.6
+  - @mastra/memory@1.41.1-alpha.3
+  - @mastra/mcp@2.9.0-alpha.3
+  - @mastra/schema-compat@1.3.18-alpha.0
+
+## 0.50.0-alpha.5
+
+### Patch Changes
+
+- Deleting a saved key in `/api-keys` now goes back to the key from your environment if the saved key overrode one, instead of leaving the provider without a key. ([#29432](https://github.com/mastra-ai/mastra/pull/29432))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`b3801a7`](https://github.com/mastra-ai/mastra/commit/b3801a79d35090231cc6e57752739f0e238d5a01), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`ec8d9b8`](https://github.com/mastra-ai/mastra/commit/ec8d9b8e7b8c259d96e1f1b2f7be4082cf13fb57), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`6644a82`](https://github.com/mastra-ai/mastra/commit/6644a8274880f217ed7930d2e115e68056a565d6), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`6563e7a`](https://github.com/mastra-ai/mastra/commit/6563e7abfc5afa8ede43c668be018edeabe8db65), [`92f9771`](https://github.com/mastra-ai/mastra/commit/92f9771a0fefaf6e23541ac702850da63bfe4ef9)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/code-sdk@1.19.0-alpha.5
+  - @mastra/memory@1.41.1-alpha.2
+  - @mastra/libsql@1.30.0-alpha.2
+  - @mastra/mcp@2.9.0-alpha.2
+
+## 0.50.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`e628d52`](https://github.com/mastra-ai/mastra/commit/e628d52a2ebbf1522c7cad51e31619feac97cac2), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+  - @mastra/observability@1.24.0-alpha.3
+  - @mastra/libsql@1.30.0-alpha.1
+  - @mastra/duckdb@1.19.0-alpha.2
+  - @mastra/code-sdk@1.19.0-alpha.4
+  - @mastra/mcp@2.9.0-alpha.1
+
+## 0.50.0-alpha.3
+
+### Minor Changes
+
+- With the **Mouse** setting in `/settings` at **Input box only** or **Dialogs + input box**, typing or editing in the input box captures the mouse: click to move the cursor, drag to select text (the selection is copied to your clipboard), and type, paste, or press Backspace to replace or remove the selection. The right side of the status line shows `mouse mode: auto` while the mouse is captured and `mouse mode: off` while the terminal has it. ([#29701](https://github.com/mastra-ai/mastra/pull/29701))
+
+  The mouse goes back to the terminal when you send a message, scroll the mouse wheel, or click outside the input box, so the terminal's own scrolling and text selection come back as soon as you reach for them (that first wheel tick or click is used up handing the mouse back).
+
+- Added opt-in mouse support. Pick **Mouse** in `/settings` and choose **Dialogs only**, **Input box only**, or **Dialogs + input box** (it's **Off** by default, so the terminal keeps the mouse). ([#29701](https://github.com/mastra-ai/mastra/pull/29701))
+
+  With dialogs on, click a row in the model picker, `/threads`, `/github`, `/login`, `/mcp`, `/settings`, or another list dialog to choose it. A click does the same as Enter (in multi-choice questions it toggles the checkbox). Click a slash command suggestion to fill it in, scroll with the mouse wheel to move the highlight, and hover to see which row a click will pick. The mouse is only captured while a dialog or suggestion list is open, so scrolling back and selecting text in the conversation work as before.
+
+### Patch Changes
+
+- Updated dependencies [[`6bd8cc4`](https://github.com/mastra-ai/mastra/commit/6bd8cc4c05bc09bb7b8d798ae0f684f79e9c8736), [`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`6bc7614`](https://github.com/mastra-ai/mastra/commit/6bc7614a8f4355d17184d29f798f13e1d70609cd), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`7b912d2`](https://github.com/mastra-ai/mastra/commit/7b912d293d50bb91e34c6e1c75e315fb6adaf125), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`5e63a3b`](https://github.com/mastra-ai/mastra/commit/5e63a3b59de455b3a016840a557576dc5191053f), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`94d6258`](https://github.com/mastra-ai/mastra/commit/94d62580788929e783913433c574b6727f09356b), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`f6bd808`](https://github.com/mastra-ai/mastra/commit/f6bd8089ba5e43b3c1216d982b04ee0027ddea84), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/code-sdk@1.19.0-alpha.3
+  - @mastra/core@1.83.0-alpha.3
+  - @mastra/memory@1.41.1-alpha.1
+  - @mastra/pg@1.36.0-alpha.2
+  - @mastra/observability@1.24.0-alpha.2
+  - @mastra/fastembed@1.3.7-alpha.0
+  - @mastra/libsql@1.30.0-alpha.0
+  - @mastra/mcp@2.9.0-alpha.1
+
+## 0.50.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.83.0-alpha.2
+  - @mastra/code-sdk@1.19.0-alpha.2
+
+## 0.50.0-alpha.1
+
+### Minor Changes
+
+- Added Mistral Voxtral as a speech-to-text provider for voice input. Pick `mistral` in `/voice` and set `MISTRAL_API_KEY` (or add a key with `/api-keys`) to dictate with `voxtral-mini-latest`. ([#29363](https://github.com/mastra-ai/mastra/pull/29363))
+
+  Fixed voice input with Groq and the other OpenAI-compatible hosts failing with "No API key provided for speech model" when `OPENAI_API_KEY` was not set.
+
+  Fixed voice input with NEAR AI ignoring `NEARAI_API_KEY`. `NEAR_AI_API_KEY` is no longer read; rename it to `NEARAI_API_KEY`.
+
+### Patch Changes
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`592a907`](https://github.com/mastra-ai/mastra/commit/592a9071cae12ef7d1defa5f7942f1a9cbdaa340), [`3cf319b`](https://github.com/mastra-ai/mastra/commit/3cf319b5af74aeebb1b70bd29ec539fbd2af4bb8), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`544224c`](https://github.com/mastra-ai/mastra/commit/544224c38f61d08a0b9952d202366fb3c6cc5bd9), [`a873e2d`](https://github.com/mastra-ai/mastra/commit/a873e2df4335b4cd7d50d4d2d26b166f976af9e3), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`defb820`](https://github.com/mastra-ai/mastra/commit/defb82048f6e78bde95c10ffa0ca36f20d714f41), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`83b6997`](https://github.com/mastra-ai/mastra/commit/83b6997a2ac9e2a3d94bcfe4de181b32a26cf7c6), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f79db0d`](https://github.com/mastra-ai/mastra/commit/f79db0de42bc8205fe62b39c1fe78932661b5e14), [`e14e5df`](https://github.com/mastra-ai/mastra/commit/e14e5dfb7a50422ef84e3623c823d8b782dec330), [`8d07b0b`](https://github.com/mastra-ai/mastra/commit/8d07b0b293812d84c3f45c2806eb53ed45f58324), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+  - @mastra/code-sdk@1.19.0-alpha.1
+  - @mastra/mcp@2.9.0-alpha.1
+  - @mastra/pg@1.36.0-alpha.1
+  - @mastra/duckdb@1.19.0-alpha.1
+  - @mastra/observability@1.23.2-alpha.1
+  - @mastra/libsql@1.30.0-alpha.0
+
 ## 0.49.1-alpha.0
 
 ### Patch Changes

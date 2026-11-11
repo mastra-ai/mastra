@@ -60,10 +60,15 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     const pubsub = new EventEmitterPubSub();
     const serverCache = new InMemoryServerCache();
     // Reading the bus before registration resolves it against the agent's own default bus.
-    const agentA = resolveBeforeRegistering ? createDurableAgent({ agent: makeAgent() }) : makeAgent();
+    const agentA = createDurableAgent({ agent: makeAgent() });
     if (resolveBeforeRegistering) void (agentA as DurableAgent).pubsub;
     const mastraA = new Mastra({ agents: { agent: agentA }, pubsub, cache: serverCache, logger: false });
-    const mastraB = new Mastra({ agents: { agent: makeAgent() }, pubsub, cache: serverCache, logger: false });
+    const mastraB = new Mastra({
+      agents: { agent: createDurableAgent({ agent: makeAgent() }) },
+      pubsub,
+      cache: serverCache,
+      logger: false,
+    });
     return {
       a: mastraA.getAgent('agent') as unknown as DurableAgent,
       b: mastraB.getAgent('agent') as unknown as DurableAgent,

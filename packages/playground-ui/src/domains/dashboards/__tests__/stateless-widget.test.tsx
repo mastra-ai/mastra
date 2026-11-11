@@ -340,6 +340,41 @@ describe('StatelessWidget on its own', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  it.each([
+    ['a chart', metricsWidget('agent-runs')],
+    ['the KPI group', kpisWidget],
+  ])('reports the definition of %s with each pin and unpin', (_, definition) => {
+    const onPin = vi.fn();
+    const widget = prepared(definition, undefined);
+    const plan = planWidget(widget, env, {});
+    if (plan.status !== 'ready') throw new Error('not ready');
+    const renderPinned = (isPinned: boolean) => (
+      <StatelessWidget
+        prepared={widget}
+        env={env}
+        state={{}}
+        onStateChange={() => {}}
+        results={results(plan.requests.length, { isLoading: true, isRefetching: false, isError: false })}
+        onRetry={() => {}}
+        scope="project"
+        pin={{ isPinned, onPin, name: 'it' }}
+      />
+    );
+    const { rerender } = render(renderPinned(false));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pin it' }));
+    expect(onPin).toHaveBeenLastCalledWith(widget.widget, true);
+
+    rerender(renderPinned(true));
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin it' }));
+    expect(onPin).toHaveBeenLastCalledWith(widget.widget, false);
+    expect(onPin.mock.calls[0]?.[0]).toMatchObject({
+      id: definition.id,
+      kind: definition.kind,
+      views: definition.views,
+    });
+  });
+
   it('asks the host to retry from its error card', () => {
     const onRetry = vi.fn();
     const widget = prepared(metricsWidget('breakdown'), undefined);
@@ -358,6 +393,45 @@ describe('StatelessWidget on its own', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /retry/i }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  describe('renaming from the title', () => {
+    function renderRenamable(definition: DashboardWidget, onTitleChange: (title: string) => void) {
+      const widget = prepared(definition, undefined);
+      const plan = planWidget(widget, env, {});
+      if (plan.status !== 'ready') throw new Error('not ready');
+      render(
+        <StatelessWidget
+          prepared={widget}
+          env={env}
+          state={{}}
+          onStateChange={() => {}}
+          results={results(plan.requests.length, { isLoading: true, isRefetching: false, isError: false })}
+          onRetry={() => {}}
+          scope="project"
+          onTitleChange={onTitleChange}
+        />,
+      );
+    }
+
+    it("reports a timeseries widget's new title", () => {
+      const onTitleChange = vi.fn();
+      const [runs] = metricsWidget('agent-runs').views;
+      if (!runs) throw new Error('METRICS_DASHBOARD changed shape');
+      renderRenamable({ ...metricsWidget('agent-runs'), title: 'Agent runs', views: [runs] }, onTitleChange);
+
+      const title = screen.getByRole('textbox', { name: 'Widget title' });
+      expect(title).toHaveProperty('value', 'Agent runs');
+      title.focus();
+      fireEvent.change(title, { target: { value: 'Runs this week' } });
+      fireEvent.keyDown(title, { key: 'Enter' });
+      expect(onTitleChange).toHaveBeenCalledWith('Runs this week');
+    });
+
+    it('keeps the view menu of a widget with several views', () => {
+      renderRenamable(metricsWidget('agent-runs'), vi.fn());
+      expect(screen.queryByRole('textbox', { name: 'Widget title' })).toBeNull();
+    });
   });
 });
 

@@ -24,7 +24,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
-import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { announcePullRequest } from '../channel-thread-announcements.js';
@@ -33,7 +32,6 @@ import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
 import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
-import { SlackFeedPublisher } from './feed-publisher.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
 import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
 import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
@@ -292,14 +290,11 @@ export class SlackIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       sourceControls,
       modelDefaults: ctx.storage.modelDefaults,
+      modelCredentials: ctx.storage.modelCredentials,
+      voiceSettings: ctx.storage.voiceSettings,
       workItems: ctx.runtime?.workItems,
-      feed: ctx.feed,
       adapterOptions: this.#adapterOptions,
     });
-  }
-
-  feedPublisher(ctx: IntegrationContext): WorkItemFeedPublisher {
-    return new SlackFeedPublisher({ controller: ctx.controller });
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

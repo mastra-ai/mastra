@@ -1,23 +1,27 @@
+import type { ComponentType, SVGProps } from 'react';
+
 import type { KnowledgePagePayload } from '../pageTypes';
 
-import { GithubIcon, GoogleIcon, LinearIcon, SlackIcon } from '@/ds/icons';
+import { ConfluenceIcon, GithubIcon, GoogleIcon, LinearIcon, NotionIcon, SlackIcon, ZendeskIcon } from '@/ds/icons';
 
-const SOURCES = {
+type KnowledgeSource = { label: string; icon?: ComponentType<SVGProps<SVGSVGElement>> };
+
+const SOURCES: Record<string, KnowledgeSource> = {
   linear: { label: 'Linear', icon: LinearIcon },
+  notion: { label: 'Notion', icon: NotionIcon },
+  confluence: { label: 'Confluence', icon: ConfluenceIcon },
+  zendesk: { label: 'Zendesk', icon: ZendeskIcon },
+  fireflies: { label: 'Fireflies' },
   github: { label: 'GitHub', icon: GithubIcon },
   slack: { label: 'Slack', icon: SlackIcon },
   google: { label: 'Google', icon: GoogleIcon },
 };
 
-function isSource(prefix: string): prefix is keyof typeof SOURCES {
-  return Object.hasOwn(SOURCES, prefix);
-}
-
 /** The source an imported scope came from, read from its address prefix (`linear:…`). */
 export function scopeSource(page: KnowledgePagePayload) {
   if (!page.isScope || !page.address) return undefined;
   const prefix = page.address.slice(0, page.address.indexOf(':'));
-  return isSource(prefix) ? SOURCES[prefix] : undefined;
+  return Object.hasOwn(SOURCES, prefix) ? SOURCES[prefix] : undefined;
 }
 
 /** A scope's readable name: an imported scope named only by its address reads as its source, e.g. "Linear". */

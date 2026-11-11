@@ -3,6 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { ProjectRepository, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 
 interface SourceControlSettingsRoutesOptions {
@@ -54,7 +55,7 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
       method: 'GET',
       requiresAuth: false,
       handler: async raw => {
-        const c = raw as Context;
+        const c = loose(raw);
         const loaded = await loadRepository(c, options);
         if (loaded instanceof Response) return loaded;
         return c.json({
@@ -67,7 +68,7 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
       method: 'POST',
       requiresAuth: false,
       handler: async raw => {
-        const c = raw as Context;
+        const c = loose(raw);
         const loaded = await loadRepository(c, options);
         if (loaded instanceof Response) return loaded;
         let body: Record<string, unknown>;

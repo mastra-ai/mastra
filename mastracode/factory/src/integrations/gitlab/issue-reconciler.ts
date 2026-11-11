@@ -1,4 +1,5 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntakeIssue } from '../../capabilities/intake.js';
 import type { Card } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
@@ -127,7 +128,7 @@ export function attachGitLabIssueReconciler(
     intake: gitlab.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
-    isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
+    isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => {
       const issueIid = identityForItem(item)?.issueIid;
       return issueIid ? String(issueIid) : undefined;

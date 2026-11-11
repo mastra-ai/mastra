@@ -9,7 +9,13 @@ import type {
   SpanQueryResponse,
   TraceQueryPredicate,
 } from '@mastra/core/storage';
-import type { ClientOptions, GetObservabilityCapabilitiesResponse, ListFeedbackResponse } from '../types';
+import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
+  ClientOptions,
+  GetObservabilityCapabilitiesResponse,
+  ListFeedbackResponse,
+} from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 import type {
@@ -500,6 +506,11 @@ export class Observability extends BaseResource {
   // Scores (observability storage)
   // --------------------------------------------------------------------------
 
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.request(`/observability/scores/${encodeURIComponent(id)}`);
+  }
+
   /**
    * Retrieves a paginated list of scores with optional filtering and sorting.
    */
@@ -581,6 +592,11 @@ export class Observability extends BaseResource {
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
+
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.request(`/observability/feedback/${encodeURIComponent(id)}`);
+  }
 
   /**
    * Retrieves a paginated list of feedback with optional filtering and sorting.
