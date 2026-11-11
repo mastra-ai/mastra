@@ -3,6 +3,8 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import { runLivenessKey } from './step-lease';
+import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
 function createSleepingWorkflow({
@@ -70,6 +72,8 @@ async function startSleepingRun({
   });
 
   await runtime.stopWorkers();
+  // The stopped runtime stands for a process that went away; the liveness its last step wrote lapses.
+  await abandonLease(storage, runLivenessKey(runId));
   return workflowsStore;
 }
 

@@ -30,7 +30,7 @@ import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
-import { stepOccurrenceKey } from './step-lease';
+import { runLivenessKey, stepOccurrenceKey } from './step-lease';
 import { abandonLease } from './test-utils/abandon-lease';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';
@@ -2118,6 +2118,7 @@ describe('Workflow (Evented Engine Specific)', () => {
                 },
               });
             }
+            await abandonLease(fixture.storage, runLivenessKey(fixture.run.runId), runLivenessKey(childRunId));
           }
           fixture.deliveries.length = 0;
           fixture.publish.mockClear();
@@ -2221,6 +2222,7 @@ describe('Workflow (Evented Engine Specific)', () => {
                 },
               });
             }
+            await abandonLease(fixture.storage, runLivenessKey(fixture.run.runId), runLivenessKey(childRunId));
           }
           fixture.fga.require.mockClear();
           fixture.publish.mockClear();
