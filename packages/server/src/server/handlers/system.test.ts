@@ -18,6 +18,9 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryAggregatedRoots: false,
+  traceQueryTextSearch: false,
+  spanQueryTextSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
   traceQueryContextFields: false,
@@ -41,6 +44,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   spanAggregateModelDimensions: false,
   aggregateTimeToFirstMeasures: false,
   feedback: false,
+  feedbackReplacement: false,
 };
 
 type MockStorage = {

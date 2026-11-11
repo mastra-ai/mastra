@@ -132,6 +132,8 @@ import type {
 import type { SignalWriteOptions } from './resources/signal-writes';
 import type { Body, PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
   ListFeedbackResponse,
   ClientOptions,
   McpServerEventStreamFrame,
@@ -1404,7 +1406,8 @@ export class MastraClient extends BaseResource {
    * Deletes traces by ID, cascading to all associated spans and trace-linked
    * signal events (scores, feedback, metrics, logs). Signals without a trace ID
    * are untouched. On ClickHouse-backed stores, reads may briefly return
-   * deleted rows until the delete is fully applied.
+   * deleted rows until the delete is fully applied. A supporting Platform backend
+   * returns `{ accepted: true }` after queueing cleanup, before records disappear.
    */
   deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.observability.deleteTraces(params);
@@ -1428,6 +1431,11 @@ export class MastraClient extends BaseResource {
   // Scores
   // --------------------------------------------------------------------------
 
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.observability.getScore(id);
+  }
+
   /** Retrieves a paginated list of observability scores. */
   listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
     return this.observability.listScores(params);
@@ -1438,7 +1446,10 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params, options);
   }
 
-  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  /**
+   * Deletes score records by scoreId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
     return this.observability.deleteScores(params);
   }
@@ -1467,6 +1478,11 @@ export class MastraClient extends BaseResource {
   // Feedback
   // --------------------------------------------------------------------------
 
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.observability.getFeedback(id);
+  }
+
   /** Retrieves a paginated list of feedback records. */
   listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
     return this.observability.listFeedback(params);
@@ -1482,7 +1498,10 @@ export class MastraClient extends BaseResource {
     return this.observability.replaceFeedback(params, options);
   }
 
-  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  /**
+   * Deletes feedback records by feedbackId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
     return this.observability.deleteFeedback(params);
   }

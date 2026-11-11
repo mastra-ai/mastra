@@ -299,6 +299,52 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
+### Managed PostgreSQL and connection poolers
+
+`PostgresStore` connects to managed PostgreSQL providers with the connection string they give you. No provider-specific package is required.
+
+`init()` runs all schema changes on a single connection, so it works through transaction-mode connection poolers such as PgBouncer. You can use the provider's pooled connection string and let Mastra create the schema on startup.
+
+#### Separate schema initialization
+
+If the runtime database role can't create tables or indexes, run `init()` once during deployment with a role that can:
+
+```typescript title="scripts/init-storage.ts"
+import { PostgresStore } from '@mastra/pg'
+
+const storage = new PostgresStore({
+  id: 'pg-storage-init',
+  connectionString: process.env.DATABASE_ADMIN_URL,
+})
+
+try {
+  await storage.init()
+  // Only needed if the application uses Knowledge
+  await storage.initKnowledge()
+} finally {
+  await storage.close()
+}
+```
+
+The runtime role needs read and write access to the tables this script creates. See [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html).
+
+Then set `disableInit: true` on the runtime store so it skips schema creation:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'pg-storage',
+    connectionString: process.env.DATABASE_URL,
+    disableInit: true,
+  }),
+})
+```
+
+`disableInit: true` also makes explicit `init()` calls a no-op, so leave it off the store in the deployment script.
+
 ### Using an Existing Pool
 
 If you already have a `pg.Pool` in your application (e.g., shared with an ORM or for Row Level Security), you can pass it directly to `PostgresStore`:
@@ -375,7 +421,7 @@ This approach is intended for advanced scenarios where low-level access is requi
 
 When using `PostgresStore` in Next.js applications, [Hot Module Replacement (HMR)](https://nextjs.org/docs/architecture/fast-refresh) during development can cause multiple storage instances to be created, resulting in this warning:
 
-```
+```text
 WARNING: Creating a duplicate database object for the same connection.
 ```
 

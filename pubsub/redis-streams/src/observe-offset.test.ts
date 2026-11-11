@@ -5,15 +5,10 @@
  * the observer a second time, and an offset past the end of a finished
  * run must deliver nothing.
  *
- * Covers both engines with a Redis server cache, and the durable engine with
- * the default in-memory server cache (its single process numbers every frame).
- *
- * The evented engine with the default in-memory server cache is a known
- * limitation: its step executor publishes unnumbered frames on a cross-process
- * pubsub (per-process counters would disagree), and an unnumbered frame cannot
- * be skipped by position, so the observer still receives frames from before
- * the offset. That row pins the one-time warning CachingPubSub logs instead,
- * and that the observation still closes.
+ * Covers both engines with both a Redis server cache and the default in-memory
+ * server cache. With the in-memory cache, both engines run every step in this
+ * process. Evented step frames are numbered because they extend the run log
+ * the caller started with its `start` frame.
  *
  * Requires a Redis server at REDIS_URL; the model is served by AIMock.
  */
@@ -56,10 +51,10 @@ async function collect(stream: AsyncIterable<any>, timeoutMs = 15_000): Promise<
 }
 
 const matrix = [
-  { engine: 'durable', cache: 'default', numbered: true },
-  { engine: 'durable', cache: 'redis', numbered: true },
-  { engine: 'evented', cache: 'redis', numbered: true },
-  { engine: 'evented', cache: 'default', numbered: false },
+  { engine: 'durable', cache: 'default' },
+  { engine: 'durable', cache: 'redis' },
+  { engine: 'evented', cache: 'redis' },
+  { engine: 'evented', cache: 'default' },
 ] as const;
 
 describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_REDIS_TESTS === '1')(
@@ -76,7 +71,7 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       await llm.stop();
     });
 
-    describe.each(matrix)('$engine engine, $cache server cache', ({ engine, cache, numbered }) => {
+    describe.each(matrix)('$engine engine, $cache server cache', ({ engine, cache }) => {
       let mastra: Mastra;
       let durable: any;
       let cacheClient: ReturnType<typeof createClient> | undefined;
@@ -87,16 +82,10 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       const notNumberedWarnings = () =>
         warn.mock.calls.filter(([message]) => String(message).includes('are not numbered'));
 
-      /** Numbered frames resume exactly at the offset; unnumbered ones warn once and still close. */
+      /** Numbered frames resume exactly at the offset. */
       const expectResumed = (resumed: Frame[], expected: Frame[]) => {
-        if (numbered) {
-          expect(resumed).toEqual(expected);
-          expect(notNumberedWarnings()).toHaveLength(0);
-        } else {
-          expect(notNumberedWarnings()).toHaveLength(1);
-          expect(notNumberedWarnings()[0]![0]).toContain('RedisServerCache');
-          expect(resumed.at(-1)?.type).toBe('finish');
-        }
+        expect(resumed).toEqual(expected);
+        expect(notNumberedWarnings()).toHaveLength(0);
       };
 
       beforeEach(async () => {

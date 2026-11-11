@@ -30,6 +30,8 @@ export type {
   MiddlewareHandler,
   DescribeRouteOptions,
   ServerConfig,
+  ServerConfigInput,
+  ApiRouteInput,
 } from './types';
 export {
   MastraAuthProvider,

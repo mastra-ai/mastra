@@ -2,7 +2,6 @@ import { viewMenu } from '../../hooks/use-widget-views';
 import { alertAction, withAction } from '../../lib/alert-actions';
 import { unsupportedMessage } from '../../lib/chrome';
 import type { BlockedFields } from '../../lib/gate';
-import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
 import { isValueColumn, parseColumns } from '../../lib/table';
 import type { TableOptions } from '../../lib/table';
@@ -45,7 +44,15 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
             .map(c => ({ label: c.label, value: c.options.value })),
         },
   );
-  const heading = withAction({ ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) }, alert);
+  const heading = withAction(
+    {
+      ...menu.heading,
+      dragHandle: props.dragHandle,
+      onTitleChange: props.onTitleChange,
+      actions: props.actions,
+    },
+    alert,
+  );
 
   if (unsupported) {
     return (

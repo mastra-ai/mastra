@@ -97,7 +97,11 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
-export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
+export {
+  getRunStreamSlot,
+  getScopeStreamSlot,
+  untilIdleHandlesBackgroundTask,
+} from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
@@ -125,6 +129,15 @@ export { __resetExecutionFencesForTests } from './execution-fence';
 // Shared thread-stream runtime, so durable-agent integrations outside core
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
 export { agentThreadStreamRuntime } from '../thread-stream-runtime';
+
+// Per-segment abort controller, shared with durable-agent integrations outside core
+export { createRunAbortController, type RunAbortController } from './run-abort';
+
+// Run bus + replay cache resolution, shared with durable-agent integrations outside core
+export { AgentStreamBus } from '../streams/bus';
+
+// Step-finish response message diffs, shared with durable-agent integrations outside core
+export { diffResponseMessages, type ResponseMessagesCursor } from '../streams/response-messages';
 
 // Stream adapter for pubsub-based streaming
 export {

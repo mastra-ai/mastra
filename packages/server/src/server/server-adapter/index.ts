@@ -19,11 +19,13 @@ import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
+import { CustomRouteMatcher } from '../auth/custom-route-matcher';
 import {
   authorizeAuthenticatedUser,
   coreAuthMiddleware,
   findMatchingCustomRoute,
   isCustomRoutePublic,
+  isProtectedCustomRoute,
   pathMatchesPattern,
 } from '../auth/helpers';
 import {
@@ -54,6 +56,7 @@ export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
+export { cancelReaderOnResponseClose, writeWithBackpressure } from './stream-disconnect';
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
@@ -273,6 +276,60 @@ function isExpectedResponseCloseError(error: unknown): boolean {
     code === 'ERR_STREAM_WRITE_AFTER_END' ||
     code === 'ERR_STREAM_PREMATURE_CLOSE'
   );
+}
+
+/**
+ * Returns `response` with a pass-through body that holds the re-dispatched
+ * custom route `request` until that body is fully read, errors or is cancelled.
+ *
+ * `new Request(url, { signal })` gives the request its own signal and forwards
+ * the outer abort to it through a listener that only weakly references the
+ * request's controller (nodejs/undici#4068). Once a custom route returns a
+ * streaming Response, nothing else holds that inner Request, so a GC can drop
+ * it and a client disconnect never reaches `c.req.raw.signal` (#29154).
+ *
+ * The reference lives on the body because the body is reachable exactly while
+ * an adapter is still sending the response. Anything reachable from the outer
+ * signal (a WeakMap keyed by it, or an abort listener on it) would leak instead:
+ * undici's request finalizer holds the outer signal strongly while the inner
+ * controller is alive, so signal -> request -> controller -> signal is never
+ * collected when the signal never aborts, as after a normal Express response.
+ * An abort ends or cancels the body, which releases the request too.
+ */
+function retainRequestWhileBodyIsOpen(response: Response, request: Request): Response {
+  const source = response.body;
+  if (!source) return response;
+
+  const reader = source.getReader();
+  const retained: { request?: Request } = { request };
+  const release = () => {
+    retained.request = undefined;
+  };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            release();
+            controller.close();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          release();
+          controller.error(error);
+        }
+      },
+      cancel(reason) {
+        release();
+        return reader.cancel(reason);
+      },
+    },
+    // Read from the route's body only when the adapter asks for a chunk.
+    { highWaterMark: 0 },
+  );
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
 function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
@@ -520,6 +577,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         executionCtx?: ExecutionContext,
       ) => Promise<Response>)
     | null = null;
+  /** Mirrors the custom-route app's router so auth can ask which route a request runs. */
+  private customRouteMatcher: CustomRouteMatcher<{
+    method: string;
+    path: string;
+    handlerCount: number;
+    route: HonoCustomApiRoute;
+  }> | null = null;
 
   /**
    * Whether custom (non-schema) API routes were registered. Adapters use this
@@ -767,6 +831,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       request?: Request;
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
+      /** Overrides the server's custom route auth map for this check. */
+      customRouteAuthConfig?: Map<string, boolean>;
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     // Determine which auth config to use based on request type
@@ -810,7 +876,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       getHeader: context.getHeader,
       mastra: this.mastra,
       authConfig: authConfig as any,
-      customRouteAuthConfig: this.customRouteAuthConfig,
+      customRouteAuthConfig: context.customRouteAuthConfig ?? this.customRouteAuthConfig,
       requestContext: context.requestContext,
       rawRequest:
         context.request ??
@@ -1199,6 +1265,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     });
 
     // Register each custom route
+    const matcherEntries: Array<{ method: string; path: string; handlerCount: number; route: HonoCustomApiRoute }> = [];
     for (const route of routes) {
       const handler =
         'handler' in route && route.handler
@@ -1214,6 +1281,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       }
 
       const allHandlers = [...middlewares, handler];
+      matcherEntries.push({ method: route.method, path: route.path, handlerCount: allHandlers.length, route });
       if (route.method === 'ALL') {
         app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
       } else {
@@ -1229,7 +1297,78 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // alive after the response is sent. Without this third arg, serverless
     // runtimes freeze the invocation on return and kill any in-flight work.
     this.customRouteHandler = async (request, env, executionCtx) => app.fetch(request, env, executionCtx);
+    this.customRouteMatcher = new CustomRouteMatcher(matcherEntries);
     return true;
+  }
+
+  /**
+   * Returns the custom route the custom-route app will run for `url` (the same URL
+   * passed to `handleCustomRouteRequest`), with its decoded path params, or
+   * undefined if none will.
+   */
+  protected matchCustomRoute(
+    url: string,
+    method: string,
+  ): { route: HonoCustomApiRoute; params: Record<string, string> } | undefined {
+    if (!this.customRouteMatcher) return undefined;
+    try {
+      const match = this.customRouteMatcher.matchUrl(url, method);
+      return match ? { route: match.entry.route, params: match.params } : undefined;
+    } catch {
+      // The custom-route app can't parse or route this request either.
+      return undefined;
+    }
+  }
+
+  /**
+   * Works out what auth applies to a request before it's forwarded to the
+   * custom-route app. The route that decides is the one the app will dispatch
+   * `dispatchUrl` to, not the route the outer framework matched, because the two
+   * routers can disagree on precedence, case, trailing slashes and encoding.
+   *
+   * `requestPath` is the path passed to `checkRouteAuth`. When the dispatched route
+   * requires auth, the returned `customRouteAuthConfig` marks that path protected so
+   * the auth middleware can't skip auth on it. `fallbackRoute` is used when the app
+   * won't dispatch the request (it 404s and nothing runs); pass the framework's own
+   * route when there is one so its auth still applies.
+   */
+  protected resolveCustomRouteAuth(
+    dispatchUrl: string,
+    method: string,
+    requestPath: string,
+    fallbackRoute?: HonoCustomApiRoute,
+  ): {
+    match?: { route: HonoCustomApiRoute; params: Record<string, string> };
+    requiresAuth: boolean;
+    serverRoute: ServerRoute;
+    customRouteAuthConfig?: Map<string, boolean>;
+  } {
+    const match = this.matchCustomRoute(dispatchUrl, method);
+    const route = match?.route ?? fallbackRoute;
+
+    const requiresAuth = route
+      ? (this.customRouteAuthConfig?.get(`${route.method}:${route.path}`) ?? route.requiresAuth !== false)
+      : isProtectedCustomRoute(requestPath, method, this.customRouteAuthConfig);
+
+    const serverRoute: ServerRoute = {
+      method: (route?.method ?? method) as any,
+      path: route?.path ?? requestPath,
+      responseType: 'json',
+      handler: async () => {},
+      // An explicit requiresAuth: true keeps its meaning; otherwise the auth middleware
+      // decides from the path, which the map below forces to protected.
+      requiresAuth: requiresAuth ? (route?.requiresAuth === true ? true : undefined) : false,
+      requiresPermission: route?.requiresPermission,
+      fga: route?.fga,
+    };
+
+    let customRouteAuthConfig: Map<string, boolean> | undefined;
+    if (requiresAuth) {
+      customRouteAuthConfig = new Map(this.customRouteAuthConfig ?? []);
+      customRouteAuthConfig.set(`${method.toUpperCase()}:${requestPath}`, true);
+    }
+
+    return { match, requiresAuth, serverRoute, customRouteAuthConfig };
   }
 
   /**
@@ -1277,7 +1416,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const response = await this.customRouteHandler(request, { requestContext }, executionCtx);
 
     if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
-    return response;
+    return signal ? retainRequestWhileBodyIsOpen(response, request) : response;
   }
 
   /**

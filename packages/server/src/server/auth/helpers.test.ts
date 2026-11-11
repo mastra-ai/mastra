@@ -9,6 +9,7 @@ import {
   canAccessPublicly,
   checkRules,
   coreAuthMiddleware,
+  findMatchingCustomRoute,
   isCustomRoutePublic,
   isDevPlaygroundRequest,
   isProtectedCustomRoute,
@@ -62,6 +63,39 @@ describe('auth helpers', () => {
         expect(pathMatchesPattern('/api/v1/123', '/api/:version/:id')).toBe(true);
         expect(pathMatchesPattern('/api/v1/', '/api/:version/:id')).toBe(false);
       });
+    });
+  });
+
+  describe('findMatchingCustomRoute security', () => {
+    it('does not treat dots in a static path as regex wildcards', () => {
+      const routes = [
+        { path: '/a.b', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/axb', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/axb', 'GET', routes)?.route.path).toBe('/axb');
+      expect(findMatchingCustomRoute('/a.b', 'GET', routes)?.route.path).toBe('/a.b');
+      expect(pathMatchesPattern('/axb', '/a.b')).toBe(false);
+    });
+
+    it('decodes path params before returning them for FGA', () => {
+      const routes = [
+        { path: '/docs/:docId', method: 'GET', handler: async () => new Response('ok'), requiresAuth: true },
+      ] as any;
+
+      const match = findMatchingCustomRoute('/docs/%6fpen', 'GET', routes);
+      expect(match?.params).toEqual({ docId: 'open' });
+    });
+
+    it('matches case-sensitively, like Hono', () => {
+      const routes = [
+        { path: '/admin', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/Admin', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/admin', 'GET', routes)?.route.path).toBe('/admin');
+      expect(findMatchingCustomRoute('/Admin', 'GET', routes)?.route.path).toBe('/Admin');
+      expect(findMatchingCustomRoute('/ADMIN', 'GET', routes)).toBeUndefined();
     });
   });
 
@@ -155,6 +189,49 @@ describe('auth helpers', () => {
       expect(await checkRules(rules, '/api/public/file.jpg', 'GET', {})).toBe(true);
     });
 
+    it('should not fall through to a later rule when a matching condition returns false', async () => {
+      const layered: MastraAuthConfig['rules'] = [
+        { path: '/api/admin/*', condition: (user: any) => user?.role === 'admin', allow: true },
+        { path: '/api/*', allow: true },
+      ];
+      expect(await checkRules(layered, '/api/admin/dashboard', 'GET', { role: 'user' })).toBe(false);
+      expect(await checkRules(layered, '/api/admin/dashboard', 'GET', { role: 'admin' })).toBe(true);
+      expect(await checkRules(layered, '/api/agents', 'GET', { role: 'user' })).toBe(true);
+    });
+
+    it('should await async conditions', async () => {
+      const asyncRule = (condition: (user: any) => Promise<boolean>): MastraAuthConfig['rules'] => [
+        { path: '/api/admin/*', condition },
+        { path: '/api/*', allow: true },
+      ];
+      expect(
+        await checkRules(
+          asyncRule(async () => true),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(true);
+      expect(
+        await checkRules(
+          asyncRule(async () => false),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(false);
+      expect(
+        await checkRules(
+          asyncRule(async () => {
+            throw new Error('boom');
+          }),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(false);
+    });
+
     it('should deny access when no rules match', async () => {
       expect(await checkRules(rules, '/api/other/resource', 'GET', {})).toBe(false);
     });
@@ -235,13 +312,23 @@ describe('auth helpers', () => {
   });
 
   describe('isCustomRoutePublic', () => {
-    it('should let an overlapping protected pattern win over an earlier public pattern', () => {
+    it('follows the route Hono dispatches when patterns overlap', () => {
+      // Hono runs the first registered match, so the public '/custom/*' serves
+      // '/custom/private/123' and the later protected route never runs for it.
       const config = new Map<string, boolean>([
         ['GET:/custom/*', false],
         ['GET:/custom/private/:id', true],
       ]);
-      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(false);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(true);
       expect(isCustomRoutePublic('/custom/other', 'GET', config)).toBe(true);
+
+      const reversed = new Map<string, boolean>([
+        ['GET:/custom/private/:id', true],
+        ['GET:/custom/*', false],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', reversed)).toBe(false);
+      expect(isProtectedCustomRoute('/custom/private/123', 'GET', reversed)).toBe(true);
+      expect(isCustomRoutePublic('/custom/other', 'GET', reversed)).toBe(true);
     });
 
     it('should return false when customRouteAuthConfig is undefined', () => {

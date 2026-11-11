@@ -63,6 +63,56 @@ describe('describeRunError', () => {
     });
   });
 
+  it('names the Mastra Gateway and offers to add credits when its credits run out', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
+      statusCode: 402,
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({
+      title: 'Out of Mastra Gateway credits',
+      recoveries: ['credits', 'continue', 'model'],
+    });
+  });
+
+  it('recognizes the gateway by the host it called when its reply names no gateway', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left.",
+      statusCode: 402,
+      url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      requestBodyValues: { model: 'anthropic/claude-opus-5-5' },
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({
+      title: 'Out of Mastra Gateway credits',
+      recoveries: ['credits', 'continue', 'model'],
+    });
+  });
+
+  it('recognizes the gateway host on a provider error the run wrapped', () => {
+    const wrapped = {
+      name: 'Error',
+      message: "You don't have inference credits left.",
+      cause: {
+        name: 'AI_APICallError',
+        message: "You don't have inference credits left.",
+        statusCode: 402,
+        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      },
+    };
+    expect(describeRunError(wrapped)).toMatchObject({ title: 'Out of Mastra Gateway credits' });
+  });
+
+  it('keeps a look-alike host a provider quota error', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left.",
+      statusCode: 402,
+      url: 'https://gateway-api.mastra.ai.example.com/v1/chat/completions',
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({ title: 'Provider quota exhausted' });
+  });
+
   it('quotes a plain-text body the provider sent instead of JSON', () => {
     const textBody = {
       name: 'AI_APICallError',

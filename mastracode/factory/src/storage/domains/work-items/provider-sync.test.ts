@@ -7,7 +7,6 @@ import { MastraFactory } from '../../../factory.js';
 import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import { migrateWorkItemSplit } from '../../../work-items/split-migration.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
-import { WorkItemCommentsStorage } from '../comments/base.js';
 import { externalSourceKey } from './base.js';
 import { Cards } from './cards.js';
 import { FACTORY_BOARD_ITEMS_SCHEMA } from './work-item-schema.js';
@@ -21,7 +20,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: 'sync-test', url: ':memory:' });
-    const { workItems, comments } = await createFactoryStorageForTests(storage);
+    const { workItems } = await createFactoryStorageForTests(storage);
     const orgId = randomUUID();
     const scope = { orgId, factoryProjectId: 'project', userId: 'user' };
     const { item } = await workItems.upsert({
@@ -43,7 +42,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
           metadata: { state: 'closed', labels: ['fixed'], author: 'maintainer' },
         },
       });
-    return { storage, workItems, comments, scope, item, sync };
+    return { storage, workItems, scope, item, sync };
   }
 
   async function separateReplica(storage: Awaited<ReturnType<typeof setup>>['storage']) {
@@ -61,7 +60,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const replica = {
       storage: replicaStorage,
       workItems: replicaStorage.registerDomain(new replicaBase.WorkItemsStorage()),
-      comments: replicaStorage.registerDomain(new WorkItemCommentsStorage()),
     };
     onTestFinished(() => replicaStorage.close());
     await replicaStorage.init();
@@ -440,130 +438,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     },
   );
 
-  it('does not restore a deleted comment count when an older recount finishes after another replica', async () => {
-    const { storage, workItems, comments, scope, item } = await setup();
-    const writer = backend === 'postgres' ? (await separateReplica(storage)).comments : comments;
-    const itemScope = { ...scope, workItemId: item.id };
-    const comment = await comments.create({
-      ...itemScope,
-      author: { kind: 'user', id: scope.userId },
-      body: 'Delete while the first recount is paused',
-    });
-    let resume = () => {};
-    let counted = () => {};
-    const paused = new Promise<void>(resolve => {
-      resume = resolve;
-    });
-    const observed = new Promise<void>(resolve => {
-      counted = resolve;
-    });
-    const count = comments.countForWorkItem.bind(comments);
-    const trace = vi.spyOn(comments, 'countForWorkItem').mockImplementationOnce(async input => {
-      const result = await count(input);
-      counted();
-      await paused;
-      return result;
-    });
-    onTestFinished(() => {
-      resume();
-      trace.mockRestore();
-    });
-    const oldRecount = comments.refreshWorkItemFeedActivity(itemScope);
-    await observed;
-    const deletedAt = new Date(comment.updatedAt.getTime() + 10_000);
-    await writer.softDelete({ orgId: scope.orgId, commentId: comment.id, deletedBy: scope.userId, now: deletedAt });
-    await writer.refreshWorkItemFeedActivity(itemScope);
-    resume();
-    await oldRecount;
-    expect((await workItems.listShared(scope))[0]).toMatchObject({ commentCount: 0, revision: item.revision });
-    expect(await storage.ops.findOne('factory_board_items', { id: item.id })).toMatchObject({
-      comment_count: 0,
-      feed_activity_at: deletedAt,
-    });
-  });
-
-  it('transitions and retires sessions without reading comment rows', async () => {
-    const { storage, workItems, comments, scope, item } = await setup();
-    const withSession = await workItems.update({
-      ...scope,
-      id: item.id,
-      patch: { sessions: { builder: { sessionId: 'retired', branch: 'factory/test', threadId: 'thread' } } },
-    });
-    await comments.create({
-      ...scope,
-      workItemId: item.id,
-      author: { kind: 'user', id: scope.userId },
-      body: 'A comment that must not be loaded during a transition',
-    });
-    await comments.refreshWorkItemFeedActivity({ ...scope, workItemId: item.id });
-
-    const reads = [vi.spyOn(storage.ops, 'findMany')];
-    const transact = storage.withTransaction.bind(storage);
-    const transactions = vi.spyOn(storage, 'withTransaction').mockImplementation(run =>
-      transact(ops => {
-        reads.push(vi.spyOn(ops, 'findMany'));
-        return run(ops);
-      }),
-    );
-    onTestFinished(() => {
-      transactions.mockRestore();
-      for (const read of reads) read.mockRestore();
-    });
-    const transition = await workItems.commitTransition({
-      ...scope,
-      workItemId: item.id,
-      expectedRevision: withSession!.item.revision,
-      destinationStage: 'planning',
-      actorId: scope.userId,
-      ingress: { identity: 'comment-free-transition', triggerType: 'human', transitionId: 'transition' },
-      configVersion: 'rules-v1',
-      causalChain: [],
-      evaluation: { outcome: 'accepted', decisions: [] },
-    });
-    expect(transition).toMatchObject({ status: 'committed', item: { stages: ['planning'], commentCount: 1 } });
-    expect(await workItems.clearSessionReferences({ orgId: scope.orgId, sessionId: 'retired' })).toBe(1);
-    expect((await workItems.list(scope))[0]).toMatchObject({ stages: ['planning'], sessions: {}, commentCount: 1 });
-    expect(reads.flatMap(read => read.mock.calls).filter(([table]) => table === 'work_item_comments')).toEqual([]);
-  });
-
-  it('refreshes cached comment counts and keeps the feed clock internal through edits and the last deletion', async () => {
-    const { storage, workItems, comments, scope, item } = await setup();
-    const itemScope = { ...scope, workItemId: item.id };
-    expect((await workItems.listShared(scope))[0]).toMatchObject({ commentCount: 0 });
-    expect(item).not.toHaveProperty('feedActivityAt');
-    const comment = await comments.create({
-      ...itemScope,
-      author: { kind: 'user', id: scope.userId },
-      body: 'First comment',
-    });
-    await comments.refreshWorkItemFeedActivity(itemScope);
-    expect((await workItems.listShared(scope))[0]).toMatchObject({ commentCount: 1, revision: item.revision });
-    expect(await storage.ops.findOne('factory_board_items', { id: item.id })).toMatchObject({
-      comment_count: 1,
-      feed_activity_at: comment.updatedAt,
-    });
-    const editedAt = new Date('2031-01-01T00:00:00Z');
-    await comments.edit({ orgId: scope.orgId, commentId: comment.id, body: 'Edited comment', now: editedAt });
-    await comments.refreshWorkItemFeedActivity(itemScope);
-    expect((await workItems.listShared(scope))[0]).toMatchObject({ commentCount: 1, revision: item.revision });
-    expect(await storage.ops.findOne('factory_board_items', { id: item.id })).toMatchObject({
-      comment_count: 1,
-      feed_activity_at: editedAt,
-    });
-    const deletedAt = new Date('2032-01-01T00:00:00Z');
-    await comments.softDelete({ orgId: scope.orgId, commentId: comment.id, deletedBy: scope.userId, now: deletedAt });
-    await comments.refreshWorkItemFeedActivity(itemScope);
-    expect((await workItems.listShared(scope))[0]).toMatchObject({
-      commentCount: 0,
-      revision: item.revision,
-      updatedAt: item.updatedAt,
-    });
-    expect(await storage.ops.findOne('factory_board_items', { id: item.id })).toMatchObject({
-      comment_count: 0,
-      feed_activity_at: deletedAt,
-    });
-  });
-
   it('deduplicates sources per project without persisting or enforcing legacy cross-project claims', async () => {
     const { storage, workItems, scope, item } = await setup();
     const input = { title: item.title, externalSource: item.externalSource! };
@@ -590,11 +464,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
             expect(row).not.toHaveProperty(column);
           }
         }
-        for (const column of [
-          'kind',
-          'claim_key',
-          ...(table === 'factory_board_items' ? [] : ['comment_count', 'feed_activity_at']),
-        ])
+        for (const column of ['kind', 'claim_key', 'comment_count', 'feed_activity_at'])
           expect(row).not.toHaveProperty(column);
       }
     }

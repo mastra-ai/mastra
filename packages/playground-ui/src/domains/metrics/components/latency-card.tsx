@@ -40,12 +40,6 @@ const VIEWS = [
   { value: 'tools', label: TITLE.tools },
 ] as const;
 
-const EMPTY_NOUN: Record<LatencyEntity, string> = {
-  agents: 'agent runs',
-  workflows: 'workflow runs',
-  tools: 'tool calls',
-};
-
 /** P50, P95 and P99 durations of agent runs, workflow runs or tool calls; a point opens its traces. */
 export type LatencyCardProps = {
   /** Called from the "View in Traces" button with the entity type of the open tab. */
@@ -82,13 +76,8 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
   }
 
   return (
-    <ChartCard
-      {...layout}
-      total={peak > 0 ? formatDuration(peak) : '—'}
-      isLoading={isLoading}
-      isUpdating={isPlaceholderData}
-    >
-      <ChartArea isEmpty={!isLoading && peak === 0} emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}>
+    <ChartCard {...layout} total={formatDuration(peak)} isLoading={isLoading} isUpdating={isPlaceholderData}>
+      <ChartArea isEmpty={!isLoading && peak === 0}>
         <MetricsLineChart
           lineStyle="thin"
           data={data}

@@ -329,6 +329,110 @@ describe('DurableAgent background tasks via stream()', () => {
     cleanup();
   });
 
+  it('preserves a completed background result when another tool in the same step finishes later', async () => {
+    let completeBackground!: () => void;
+    const backgroundCompleted = new Promise<void>(resolve => {
+      completeBackground = resolve;
+    });
+    const researchTool = createTool({
+      id: 'research',
+      description: 'Research a topic',
+      inputSchema: z.object({ topic: z.string() }),
+      background: { enabled: true },
+      execute: async () => {
+        completeBackground();
+        return { summary: 'Research complete' };
+      },
+    });
+    let sawTerminalResultBeforeMapping = false;
+    const reviewTool = createTool({
+      id: 'review',
+      description: 'Review a topic',
+      inputSchema: z.object({ topic: z.string() }),
+      execute: async () => {
+        await backgroundCompleted;
+        await vi.waitFor(() => {
+          const parts = [...globalRunRegistry.values()].flatMap(
+            entry => entry.messageList?.get.all.db().flatMap(message => message.content?.parts ?? []) ?? [],
+          );
+          expect(
+            parts.find(part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'bg-call')
+              ?.toolInvocation?.result,
+          ).toEqual({ summary: 'Research complete' });
+        });
+        sawTerminalResultBeforeMapping = true;
+        return { reviewed: true };
+      },
+    });
+    const { model } = makeScriptedModel([
+      () =>
+        convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'bg-call',
+            toolName: 'research',
+            input: '{"topic":"AI"}',
+            providerExecuted: false,
+          },
+          {
+            type: 'tool-call',
+            toolCallId: 'sync-call',
+            toolName: 'review',
+            input: '{"topic":"AI"}',
+            providerExecuted: false,
+          },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+        ]),
+      textResponse('Done'),
+    ]);
+    const agent = new Agent({
+      id: 'bg-mapping-race-agent',
+      name: 'BG mapping race agent',
+      instructions: 'Review research',
+      model: model as LanguageModelV2,
+      tools: { research: researchTool, review: reviewTool },
+      backgroundTasks: { tools: { research: true } },
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    const localMastra = new Mastra({
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+      agents: { 'bg-mapping-race-agent': durableAgent as any },
+    });
+    await localMastra.startWorkers();
+
+    const { runId, cleanup } = await durableAgent.stream('Review the research');
+    await vi.waitFor(() => {
+      const parts =
+        globalRunRegistry
+          .get(runId)
+          ?.messageList?.get.all.db()
+          .flatMap(message => message.content?.parts ?? []) ?? [];
+      expect(
+        parts.some(
+          part =>
+            part.type === 'tool-invocation' &&
+            part.toolInvocation?.toolCallId === 'sync-call' &&
+            part.toolInvocation?.state === 'result',
+        ),
+      ).toBe(true);
+    });
+    expect(sawTerminalResultBeforeMapping).toBe(true);
+    const parts =
+      globalRunRegistry
+        .get(runId)
+        ?.messageList?.get.all.db()
+        .flatMap(message => message.content?.parts ?? []) ?? [];
+    expect(
+      parts.find(part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'bg-call')
+        ?.toolInvocation?.result,
+    ).toEqual({ summary: 'Research complete' });
+    cleanup();
+  });
+
   it('does not flush the bg task result to memory when the run is readOnly', async () => {
     const memory = new MockMemory();
     const researchTool = createTool({

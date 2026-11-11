@@ -27,6 +27,8 @@ export interface AvailableModelsFilter {
 
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
+  serverVersions: () => ['server-versions'] as const,
+  serverStatus: () => ['server-status'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
@@ -44,6 +46,8 @@ export const queryKeys = {
     ['factory', 'environment-builds', factoryProjectId ?? null] as const,
   factoryEnvironmentBuild: (factoryProjectId: string | undefined, buildId: string | undefined) =>
     ['factory', 'environment-build', factoryProjectId ?? null, buildId ?? null] as const,
+  factorySandboxEnvs: (factoryProjectId: string | undefined) =>
+    ['factory', 'sandbox-envs', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
@@ -59,8 +63,8 @@ export const queryKeys = {
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
-  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined, board: string | undefined) =>
-    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null, board ?? null] as const,
+  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined) =>
+    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null] as const,
   gitlabIssue: (baseUrl: string, factoryProjectId: string | undefined, issueId: string | undefined) =>
     ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
   gitlabPulls: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined) =>
@@ -81,6 +85,7 @@ export const queryKeys = {
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
+  connectTools: () => ['connect-tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssuesAll: () => ['jira', 'issues'] as const,
   jiraIssues: (factoryProjectId: string | undefined) =>
@@ -96,21 +101,9 @@ export const queryKeys = {
     ['incidentio', 'issue', factoryProjectId ?? null, issueRef ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
-  intakeLabelRoutes: (factoryProjectId: string | undefined) =>
-    ['intake', 'label-routes', factoryProjectId ?? null] as const,
+  intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  /** Every comment read, all work items — the catch-up target after a stream drop. */
-  workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
-  /** Every comment read for a work item — the invalidation target for a feed event. */
-  workItemCommentsRoot: (workItemId: string | undefined) =>
-    [...queryKeys.workItemCommentsAll(), workItemId ?? null] as const,
-  // Page size is baked into the service, so feed surfaces share one cache entry
-  // per anchor: a deep link opens on a different first page than a plain read.
-  workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
-    [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
-  factoryMembers: (factoryProjectId: string | undefined) =>
-    ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
@@ -131,6 +124,7 @@ export const queryKeys = {
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
+  mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
@@ -210,3 +204,6 @@ export const queryKeys = {
       ...(limit === undefined ? [] : [limit]),
     ] as const,
 } as const;
+
+export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'transition-work-item', factoryProjectId] as const;

@@ -140,14 +140,15 @@ describe('Board source and Linear project filters', () => {
     stubSources();
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual']);
+    // Pull requests are offered while a code host is connected: they replace the retired Review board.
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual', 'Pull requests']);
   });
 
   it('keeps a saved filter on a disconnected source labelled and selectable', async () => {
     stubSources();
     const view = renderBoard('?source=gitlab');
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual', 'Pull requests']);
     expect(screen.getByRole('menuitemcheckbox', { name: 'GitLab' })).toHaveAttribute('aria-checked', 'true');
   });
 

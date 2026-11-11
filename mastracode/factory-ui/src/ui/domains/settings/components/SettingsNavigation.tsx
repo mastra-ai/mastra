@@ -3,9 +3,9 @@ import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
-  BookOpen,
   Bot,
   Brain,
+  Bug,
   Building2,
   Cable,
   CircleUserRound,
@@ -13,7 +13,7 @@ import {
   Inbox,
   Palette,
   SlidersHorizontal,
-  SquareKanban,
+  Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -57,8 +57,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'connections',
         label: SETTINGS_SECTION_LABELS.connections,
         icon: Cable,
-        searchText:
-          'personal organization connections connected accounts slack integrations github gitlab tokens pat mcp claude chatgpt',
+        searchText: 'personal organization connections connected accounts slack integrations github gitlab tokens pat',
       },
     ],
   },
@@ -81,10 +80,10 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
-        id: 'skills',
-        label: SETTINGS_SECTION_LABELS.skills,
-        icon: BookOpen,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
+        id: 'tools',
+        label: SETTINGS_SECTION_LABELS.tools,
+        icon: Wrench,
+        searchText: 'tools mastra connect connections integrations sessions platform project approval',
       },
       {
         id: 'behavior',
@@ -109,14 +108,8 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
-      },
-      {
-        id: 'board',
-        label: SETTINGS_SECTION_LABELS.board,
-        icon: SquareKanban,
         searchText:
-          'work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
+          'work intake sources tasks issues pull requests github gitlab linear jira incident feed sync connect routes routing new cards board catch-all',
       },
       {
         id: 'factory',
@@ -124,6 +117,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Building2,
         searchText:
           'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'debug',
+        label: SETTINGS_SECTION_LABELS.debug,
+        icon: Bug,
+        searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
   },

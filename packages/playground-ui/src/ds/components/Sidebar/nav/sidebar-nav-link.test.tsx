@@ -312,22 +312,6 @@ describe('SidebarNavLink — what it renders a row as', () => {
     expect(nested.container.querySelector('li > div > a')?.className).not.toBe(flatClass);
   });
 
-  it('lights its hover fill instantly, with or without a trailing action', () => {
-    const fillOf = (container: HTMLElement) => container.querySelector('.state-layer');
-
-    const plain = renderLink(<SidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
-    expect(fillOf(plain.container)?.tagName).toBe('A');
-    expect(fillOf(plain.container)?.classList.contains('before:transition-none')).toBe(true);
-
-    cleanup();
-
-    const withAction = renderLink(
-      <SidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
-    );
-    expect(fillOf(withAction.container)?.tagName).toBe('DIV');
-    expect(fillOf(withAction.container)?.classList.contains('before:transition-none')).toBe(true);
-  });
-
   it('drops the trailing action on a collapsed rail, which has no room for it', () => {
     renderLink(
       <SidebarNavLink

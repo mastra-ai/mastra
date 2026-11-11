@@ -201,6 +201,8 @@ export function setupKeyboardShortcuts(
   // normal messages as signals during active runs; this preserves manual FIFO
   // queueing for slash commands, image messages, and messages the user wants to
   // hold until the current run finishes.
+  if (state.mouseController) state.mouseController.onInputMouseModeChange = () => updateStatusLine(state);
+
   state.editor.onAction('queueFollowUp', () => {
     if (isGoalJudgeInputLocked(state)) {
       showGoalJudgeInputLockInfo(state);
@@ -221,6 +223,7 @@ export function setupKeyboardShortcuts(
 
     state.editor.addToHistory(text);
     state.editor.setText('');
+    state.mouseController?.setInputMouseMode(false);
     callbacks.queueFollowUpMessage(text);
     return true;
   });

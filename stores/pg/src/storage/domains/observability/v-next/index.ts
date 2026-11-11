@@ -433,6 +433,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
         ...traceQueryOps.contextFieldFeatures,
         ...traceQueryOps.timingFeatures,
@@ -462,6 +463,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'feedback-replacement',
       'trace-query-context-ids',
       ...traceQueryOps.contextFieldFeatures,
       ...traceQueryOps.timingFeatures,
@@ -654,6 +656,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    await this.#run('REPLACE_FEEDBACK', () =>
+      feedbackOps.replaceFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
+  }
+
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     await this.#run('CREATE_FEEDBACK', () =>
       feedbackOps.createFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
@@ -706,6 +714,17 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return this.#run('GET_SCORE_BY_ID', () => scoresOps.getScoreById(this.#readClient, this.#schema, scoreId), {
       scoreId,
     });
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.#run(
+      'GET_FEEDBACK_BY_ID',
+      // Single-feedback reads supply accepted identities after writes and must not lag behind them.
+      () => feedbackOps.getFeedbackById(this.#client, this.#schema, feedbackId),
+      {
+        feedbackId,
+      },
+    );
   }
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {

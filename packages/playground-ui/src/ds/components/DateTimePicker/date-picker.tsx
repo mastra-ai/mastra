@@ -17,9 +17,10 @@ export function DatePicker({ className, classNames, showOutsideDays = true, comp
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn('w-fit p-3 [--cell-size:--spacing(8)]', className)}
+      className={cn('w-full p-3 [--cell-size:--spacing(8)]', className)}
       classNames={{
-        root: cn('w-fit', defaults.root),
+        // Width lives on className alone so a caller's width class can replace it.
+        root: defaults.root,
         months: cn('relative flex flex-col gap-6 sm:flex-row', defaults.months),
         month: cn('flex w-full flex-col gap-2', defaults.month),
         // The nav overlays the caption row, so a two-month grid gets one ‹ on the far
@@ -31,15 +32,15 @@ export function DatePicker({ className, classNames, showOutsideDays = true, comp
         button_previous: cn(navButton, defaults.button_previous),
         button_next: cn(navButton, defaults.button_next),
         month_caption: cn('flex h-(--cell-size) items-center justify-center', defaults.month_caption),
-        caption_label: cn('text-label font-medium text-foreground select-none', defaults.caption_label),
+        caption_label: cn('text-label text-foreground select-none', defaults.caption_label),
         month_grid: cn('w-full border-collapse', defaults.month_grid),
         weekdays: cn('flex', defaults.weekdays),
         weekday: cn(
-          'flex size-(--cell-size) items-center justify-center text-caption text-muted-foreground select-none',
+          'flex size-(--cell-size) grow items-center justify-center text-caption text-muted-foreground select-none',
           defaults.weekday,
         ),
         week: cn('mt-0.5 flex w-full', defaults.week),
-        day: cn('group/day relative size-(--cell-size) p-0 text-center select-none', defaults.day),
+        day: cn('group/day relative size-(--cell-size) grow p-0 text-center select-none', defaults.day),
         // The band is painted on the cells, behind the day buttons: half a cell behind
         // each end, a full cell behind the days between, rounded at the week's edges and
         // where the month ends (next to a hidden spill-over day).
@@ -98,7 +99,7 @@ function CalendarDayButton({ className, day: _day, modifiers, ...props }: React.
       type="button"
       data-today={modifiers.today || undefined}
       className={cn(
-        'relative flex size-(--cell-size) items-center justify-center rounded-full text-body-sm text-foreground',
+        'relative mx-auto flex size-(--cell-size) items-center justify-center rounded-full text-body-sm text-foreground',
         'outline-none focus-visible:ring-2 focus-visible:ring-border-focus',
         'not-disabled:hover:bg-fill-hover',
         // Today: a dot under the number, so it never competes with a selection.
