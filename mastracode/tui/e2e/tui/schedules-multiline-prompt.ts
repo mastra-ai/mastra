@@ -73,6 +73,11 @@ export const schedulesMultilinePromptScenario: McE2eScenario = {
     });
   },
   async run({ terminal, runtime }) {
+    // Picker rows are truncated to the overlay width, and the label's length depends on the
+    // clock ("next at 16:00:00 (in 5s)" vs "next at Nov 12 00:00:00 (in 59m 59s)"). A fixed wide
+    // terminal leaves room for the longest label plus the whole summary, whatever the time or
+    // MC_E2E_COLUMNS. Newlines in a summary still break a row at any width.
+    terminal.resize(160, 40);
     runtime.startLiveOutput(terminal);
 
     await expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })).toBeVisible();
