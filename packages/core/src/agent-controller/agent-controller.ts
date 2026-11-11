@@ -1527,7 +1527,7 @@ export class AgentController<TState = {}> {
           threads = candidates.slice(0, boundedLimit);
           break;
         }
-        size += pageSize;
+        size *= 2;
       }
     }
 

@@ -85,9 +85,10 @@ describe('AgentController.queryThreads({ limit })', () => {
     ]);
     const controller = await createController(storage);
     const listThreads = vi.spyOn(memory, 'listThreads');
-    vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue(
-      Object.assign(Object.create(memory), { listThreadsPaginatesInMemory: true }) as MemoryStorage,
-    );
+    vi.spyOn(controller, 'getMemoryStorage').mockResolvedValue({
+      listThreads: memory.listThreads.bind(memory),
+      listThreadsPaginatesInMemory: true,
+    } as MemoryStorage);
 
     expect((await controller.queryThreads({ resourceId: 'r', limit: 1 })).map(t => t.id)).toEqual(['parent']);
     expect(listThreads).toHaveBeenCalledTimes(1);
@@ -174,10 +175,10 @@ describe('AgentController.queryThreads({ limit })', () => {
   });
 });
 
-it('pages past a run of newer forks in one or two reads', async () => {
+it('doubles the prefix while paging past a run of newer forks', async () => {
   const storage = new InMemoryStore();
   const memory = await seed(storage, [
-    ...Array.from({ length: 60 }, (_, i) => ({
+    ...Array.from({ length: 160 }, (_, i) => ({
       id: `fork${i}`,
       updatedAt: new Date(Date.UTC(2026, 0, 2, 1, i)),
       metadata: { forkedSubagent: true, projectPath: '/a' },
@@ -200,6 +201,7 @@ it('pages past a run of newer forks in one or two reads', async () => {
   expect(calls).toMatchObject([
     { page: 0, perPage: 50 },
     { page: 0, perPage: 100 },
+    { page: 0, perPage: 200 },
   ]);
 });
 
