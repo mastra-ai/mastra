@@ -8532,7 +8532,8 @@ export class Agent<
 
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    // The run may have been aborted while the snapshot was loading or validating; recheck with no await before claiming.
+    // The run may have been aborted while the snapshot was loading or validating: recheck the
+    // in-process fence synchronously here, before the storage read below.
     this.#throwIfRunAborted(runId);
     // Another runtime may have aborted the run and left a durable `canceled` record. The guarded
     // claim below would fail on it anyway, but that surfaces a misleading "already claimed" error.
