@@ -259,9 +259,8 @@ function createSession(
   const controller = {
     createSession: vi.fn(async () => session),
     // Bindings run under the Factory resource; the session is found by its own id only.
-    getSession: vi.fn(
-      async (sessionId: string): Promise<typeof session | undefined> =>
-        sessionId === 'session-1' ? session : undefined,
+    getSession: vi.fn(async (sessionId: string): Promise<typeof session | undefined> =>
+      sessionId === 'session-1' ? session : undefined,
     ),
     // Empty registry by default: the level-triggered timeout check sees no run.
     listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
@@ -548,6 +547,27 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce();
 
     expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+  });
+
+  it('catches up on bound-thread tool results on its first loop after start, with no local activity', async () => {
+    // Boot no longer awaits a reconcile; this first pass covers results written while no process watched.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const reconcileToolResults = vi.fn(async () => {});
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
+      storage,
+      reconcileToolResults,
+    });
+
+    dispatcher.start();
+    try {
+      await vi.waitFor(() => expect(reconcileToolResults).toHaveBeenCalledOnce());
+    } finally {
+      await dispatcher.stop();
+    }
   });
 
   it('throttles the reconcile walk, coalesces overlapping runs, and never blocks claiming', async () => {

@@ -3268,11 +3268,11 @@ describe('MastraFactory.finalize', () => {
       // Both used to wait for the migration, so the server never listened until it finished.
       await factory.prepare();
       await factory.finalize();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
 
-      // Its messages moved before its run binding did, so the boot reconcile may have missed them.
+      // Its messages moved before its run binding did, so an earlier reconcile may have missed them.
       finish(1);
-      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledOnce());
     } finally {
       sessionMigrationOverride.current = undefined;
       reconcile.mockRestore();
@@ -3289,7 +3289,21 @@ describe('MastraFactory.finalize', () => {
       // The real migration over an empty store; give its background job time to settle.
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(finalizeSettled).toHaveBeenCalledOnce();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
+    } finally {
+      reconcile.mockRestore();
+    }
+  });
+
+  it('finishes booting without waiting for a bound-thread reconcile', async () => {
+    // A walk over hundreds of active bindings took ~75s and pushed boot past the health check.
+    const reconcile = vi
+      .spyOn(FactoryPhaseStateProcessor.prototype, 'reconcileAllBoundThreads')
+      .mockImplementation(() => new Promise(() => {}));
+    try {
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await factory.prepare();
+      await expect(factory.finalize()).resolves.toBeUndefined();
     } finally {
       reconcile.mockRestore();
     }
