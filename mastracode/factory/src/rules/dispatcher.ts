@@ -1717,11 +1717,13 @@ export class FactoryDecisionDispatcher {
   ) {
     const issueId = decision.metadata?.linearIssueId;
     if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
-    const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
+    const items = await this.#storage.listShared({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
     const cards = items.filter(
       item => item.externalSource?.integrationId === 'linear' && item.workItem.metadata?.linearIssueId === issueId,
     );
-    return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
+    const card = cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0];
+    // The shared list is the cache itself: hand on a copy of the card.
+    return card ? structuredClone(card) : null;
   }
 
   async #upsertLinkedItem(
