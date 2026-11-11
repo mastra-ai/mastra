@@ -2247,7 +2247,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     const iterationCount =
       step.type === 'loop' ? (args.stepResults?.[leafId]?.metadata?.iterationCount ?? 0) : undefined;
     return acquireStepLease({
+      scope: this.mastra,
       store,
+      runId: args.runId,
       key: stepOccurrenceKey(args.runId, args.executionPath, iterationCount),
       handoff,
       claimAfterRelease: args.resumeSteps?.[0] === leafId,

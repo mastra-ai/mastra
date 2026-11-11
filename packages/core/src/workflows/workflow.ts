@@ -5417,10 +5417,13 @@ export class Run<
   }
 
   /**
-   * Claims the run before `restart()` drives it again. Returns a handle that is released once the
-   * restarted execution settles, or the current owner when another process still drives the run.
+   * Claims the run before `restart()` drives it again from `_snapshot`, the stored run state the
+   * restart starts from. Returns a handle that is released once the restarted execution settles,
+   * or the current owner when another process still drives the run.
    */
-  protected async claimRestartOwnership(): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
+  protected async claimRestartOwnership(
+    _snapshot: WorkflowRunState,
+  ): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
     return this.#claimOwnership(false);
   }
 
@@ -6030,7 +6033,7 @@ export class Run<
 
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
 
-    const ownership = await this.claimRestartOwnership();
+    const ownership = await this.claimRestartOwnership(snapshot);
     if (!('release' in ownership)) {
       throw new MastraError({
         id: 'WORKFLOW_RESTART_RUN_OWNED',

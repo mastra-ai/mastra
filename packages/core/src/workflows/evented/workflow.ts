@@ -1947,15 +1947,21 @@ export class EventedRun<
 
   /**
    * Evented runs hold no run lease while they execute: the workers running
-   * their steps hold step leases instead. `restart()` only takes a short lease
-   * so that of several concurrent restarts (one per booting replica) a single
-   * one publishes.
+   * their steps hold step leases and keep the run's liveness key fresh.
+   * `restart()` is refused while that key, or the key of a nested run a
+   * running step drives, is live. Otherwise it takes a short lease so that of
+   * several concurrent restarts (one per booting replica) a single one
+   * publishes.
    */
-  protected override async claimRestartOwnership(): Promise<
-    WorkflowRunOwnership | { owner: RunOwnershipRecord | null }
-  > {
+  protected override async claimRestartOwnership(
+    snapshot: WorkflowRunState,
+  ): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
     if (!this.#restartable) return { release: async () => {} };
-    return claimEventedRestart({ store: await this.mastra?.getStorage()?.getStore('workflows'), runId: this.runId });
+    return claimEventedRestart({
+      store: await this.mastra?.getStorage()?.getStore('workflows'),
+      runId: this.runId,
+      snapshot,
+    });
   }
 
   private completeWorkflowTracing(
