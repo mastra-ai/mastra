@@ -77,8 +77,10 @@ function createProjectPathResolver(projectPath: string): (path: string) => strin
   };
 }
 
-const GIT_OBJECT_CACHE_LIMIT = 10_000;
+// Keys count towards the limit too: a path a folder lacks is cached as an empty listing.
+const GIT_OBJECT_CACHE_MAX_CHARS = 16 * 1024 * 1024;
 const gitObjectOutputs = new Map<string, string>();
+let gitObjectCacheChars = 0;
 
 // The cache is shared by every checkout in the process, so a read is kept only once it is known to
 // match its id: git checks the tree it is asked to list, and `matchesId` covers what git does not check.
@@ -98,8 +100,13 @@ function gitObjectRead(
     });
     if (!matchesId(raw)) return null;
     const output = raw.toString('utf-8');
-    if (gitObjectOutputs.size >= GIT_OBJECT_CACHE_LIMIT) gitObjectOutputs.delete(gitObjectOutputs.keys().next().value!);
     gitObjectOutputs.set(key, output);
+    gitObjectCacheChars += key.length + output.length;
+    for (const [oldest, evicted] of gitObjectOutputs) {
+      if (gitObjectCacheChars <= GIT_OBJECT_CACHE_MAX_CHARS) break;
+      gitObjectOutputs.delete(oldest);
+      gitObjectCacheChars -= oldest.length + evicted.length;
+    }
     return output;
   } catch {
     return null;
@@ -112,6 +119,7 @@ function blobMatchesId(id: string, content: Buffer): boolean {
 }
 
 function createGitRefLookup(projectPath: string, ref: string) {
+  // Resolved on first use and kept, so a lookup reads the ref as it stood then: build one per model step.
   let trees: string[] | undefined;
   const resolveTrees = (): string[] => {
     // A ref name never holds a space or control character, and each line of the batch below names

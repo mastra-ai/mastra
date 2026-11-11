@@ -157,6 +157,8 @@ describe('git-ref instruction readers', () => {
   let repo: string;
 
   const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { stdio: 'ignore' });
+  const gitOutput = (args: string[], input?: string) =>
+    execFileSync('git', ['-C', repo, ...args], { encoding: 'utf-8', input }).trim();
   const loadAtRef = (baseRef = 'main', workingDir = repo) =>
     loadSessionInstructions({ workingDir, untrustedCheckout: true, baseRef, skipGlobal: true }).map(
       source => source.content,
@@ -411,6 +413,21 @@ describe('git-ref instruction readers', () => {
     expect(contentReads()).toEqual([]);
   });
 
+  it('keeps the shared cache within its size limit by reading the oldest file again', () => {
+    // 17 files of 1 MB each against a 16 MB limit.
+    const paths = Array.from({ length: 17 }, (_, index) => join(repo, `dir${index}`, 'AGENTS.md'));
+    paths.forEach((path, index) => write(path, `${index}`.padEnd(1_000_000, '.')));
+    git('add', ...paths);
+    git('commit', '-m', 'large instruction files');
+    const reader = createGitRefReminderReader(repo, 'main');
+    paths.forEach(path => reader.readFile(path));
+    vi.mocked(execFileSync).mockClear();
+    reader.readFile(paths[16]!);
+    expect(objectReads()).toEqual([]);
+    reader.readFile(paths[0]!);
+    expect(contentReads()).toHaveLength(1);
+  });
+
   it('falls back to the local ref per file when origin/<ref> lacks it', () => {
     git('rm', '--cached', 'AGENTS.md');
     git('commit', '-m', 'drop instructions');
@@ -446,12 +463,11 @@ describe('git-ref instruction readers', () => {
     git('commit', '-am', 'shared');
     const clone = join(root, 'clone');
     execFileSync('git', ['clone', '--quiet', '--no-checkout', repo, clone], { stdio: 'ignore' });
-    const blob = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD:AGENTS.md'], { encoding: 'utf-8' }).trim();
-    const replacement = execFileSync('git', ['-C', repo, 'hash-object', '-w', '--stdin'], {
-      encoding: 'utf-8',
-      input: 'INJECTED through a replace ref',
-    }).trim();
-    git('replace', blob, replacement);
+    git(
+      'replace',
+      gitOutput(['rev-parse', 'HEAD:AGENTS.md']),
+      gitOutput(['hash-object', '-w', '--stdin'], 'INJECTED through a replace ref'),
+    );
     expect([loadAtRef(), loadAtRef('main', clone)]).toEqual([
       ['instructions both checkouts share'],
       ['instructions both checkouts share'],
@@ -464,8 +480,6 @@ describe('git-ref instruction readers', () => {
     rmSync(file, { force: true });
     writeFileSync(file, deflateSync(Buffer.concat([Buffer.from(`${type} ${body.length}\0`), body])));
   };
-  const gitOutput = (args: string[], input?: string) =>
-    execFileSync('git', ['-C', repo, ...args], { encoding: 'utf-8', input }).trim();
 
   it("keeps a tampered file object in one checkout out of every checkout's instructions", () => {
     writeFileSync(join(repo, 'AGENTS.md'), 'instructions with a tampered copy');
