@@ -1,9 +1,11 @@
 import type { IMastraLogger } from '../../logger';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
+import { runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { ClaimRunOwnershipResult, RunFence, RunOwnershipRecord } from '../../storage/run-fencing';
 import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS, renewWorkflowLease } from '../run-ownership';
 import type { WorkflowRunOwnership } from '../run-ownership';
 import type { WorkflowRunState } from '../types';
+import { isQueuedForeachIteration } from './workflow-event-processor/loop';
 
 /**
  * Lease key of one step occurrence: the run, the step's execution path (which
@@ -32,12 +34,31 @@ export function runLivenessKey(runId: string): string {
 
 /** The process a step runs in, as seen by the liveness bookkeeping. */
 export interface LivenessScope {
-  /** True once the process started shutting down; it stops renewing liveness then. */
+  /** True once the process started shutting down; it stops renewing liveness and waiting for leases then. */
   readonly __shuttingDown: boolean;
 }
 
 // Liveness writes one renewal tick sends at once, so a process driving many runs does not flood the store.
 const LIVENESS_RENEW_CONCURRENCY = 8;
+// Reads one restart check sends at once while it walks a run's nested runs.
+const NESTED_RUN_READ_CONCURRENCY = 8;
+// A renew interval configured close to the TTL would leave no margin for a missed tick.
+const LIVENESS_RENEW_INTERVAL_MS = Math.max(
+  1,
+  Math.min(WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, Math.floor(WORKFLOW_RUN_LEASE_TTL_MS / 3)),
+);
+
+/** Runs `task` over `items`, at most `concurrency` at a time. */
+async function forEachBounded<T>(items: T[], concurrency: number, task: (item: T) => Promise<void>): Promise<void> {
+  const queue = [...items];
+  const next = async (): Promise<void> => {
+    const item = queue.shift();
+    if (item === undefined) return;
+    await task(item);
+    return next();
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, next));
+}
 
 /**
  * Keeps the liveness key of every run with a leaf step running in one process
@@ -46,12 +67,12 @@ const LIVENESS_RENEW_CONCURRENCY = 8;
  */
 class ProcessRunLiveness {
   readonly #ownerId = globalThis.crypto.randomUUID();
-  /** Leaf steps running in this process, per run. */
-  readonly #active = new Map<string, number>();
+  /** Leaf steps running in this process per run, and the store the run's leaves last used. */
+  readonly #active = new Map<string, { count: number; store: WorkflowsStorage }>();
   /**
    * When each run's last successful write started; the key holds a full TTL
-   * from about then. Outlives the run's last leaf until the next renewal tick,
-   * so the quick steps that follow it do not write again.
+   * from about then. Kept for a renew interval after the run's last leaf, so
+   * the quick steps that follow it do not write again.
    */
   readonly #lastWriteAt = new Map<string, number>();
   readonly #writing = new Map<string, Promise<void>>();
@@ -59,41 +80,54 @@ class ProcessRunLiveness {
 
   constructor(
     readonly scope: LivenessScope,
-    readonly store: WorkflowsStorage,
     readonly logger?: IMastraLogger,
   ) {}
 
   /**
-   * Counts a leaf step of `runId` as running here, writing the run's liveness
-   * key unless this process wrote it within a renew interval, and returns the
-   * function that counts the leaf out again.
-   *
-   * The step does not wait for the write. Its step lease already keeps a
-   * second delivery of it from running, and waiting would let the steps that
-   * find the key fresh overtake the one writing it, changing the order in
-   * which concurrent steps (foreach items, parallel branches) start.
+   * Marks `runId` live and waits for the write, unless this process wrote it
+   * within a renew interval. The run's first step event is published after
+   * this, so a run is never `running` in storage without a live key.
    */
-  enter(runId: string): () => void {
-    this.#active.set(runId, (this.#active.get(runId) ?? 0) + 1);
-    if (!this.#timer) {
-      this.#timer = setInterval(() => void this.#renew(), WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS);
-      this.#timer.unref?.();
-    }
-    if (this.#age(runId) >= WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS) void this.#writeOrWarn(runId);
+  async markLive(runId: string, store: WorkflowsStorage): Promise<void> {
+    this.#ensureTimer();
+    if (this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) await this.#writeOrWarn(runId, store);
+  }
+
+  /**
+   * Counts a leaf step of `runId` as running here and returns the function
+   * that counts it out again. Writes the run's liveness key unless this
+   * process wrote it within a renew interval.
+   *
+   * The leaf waits only for this process's first write of the run, or for a
+   * write already in flight. A leaf that found the key fresh would otherwise
+   * overtake one waiting on a later write, changing the order in which
+   * concurrent steps (foreach items, parallel branches) start. Later writes
+   * need no wait: the key is still live, and the step lease keeps a second
+   * delivery of the step from running.
+   */
+  async enter(runId: string, store: WorkflowsStorage): Promise<() => void> {
+    const active = this.#active.get(runId);
+    this.#active.set(runId, { count: (active?.count ?? 0) + 1, store });
+    this.#ensureTimer();
+    const inFlight = this.#writing.get(runId);
+    if (inFlight) await inFlight.catch(() => {});
+    else if (!this.#lastWriteAt.has(runId)) await this.#writeOrWarn(runId, store);
+    else if (this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) void this.#writeOrWarn(runId, store);
     let left = false;
     return () => {
       if (left) return;
       left = true;
-      const remaining = (this.#active.get(runId) ?? 1) - 1;
-      if (remaining > 0) this.#active.set(runId, remaining);
+      const current = this.#active.get(runId);
+      if (current && current.count > 1) current.count--;
       else this.#active.delete(runId);
-      if (this.#active.size === 0) this.#stopTimer();
     };
   }
 
   /** Writes the run's liveness key, logging instead of rejecting when the write fails. */
-  #writeOrWarn(runId: string): Promise<void> {
-    return this.#write(runId).catch(error => this.logger?.warn('Failed to mark a workflow run live', { runId, error }));
+  #writeOrWarn(runId: string, store: WorkflowsStorage): Promise<void> {
+    return this.#write(runId, store).catch(error =>
+      this.logger?.warn('Failed to mark a workflow run live', { runId, error }),
+    );
   }
 
   /** Milliseconds since this process last wrote the run's liveness key; infinite when it never did. */
@@ -101,10 +135,12 @@ class ProcessRunLiveness {
     return Date.now() - (this.#lastWriteAt.get(runId) ?? -Infinity);
   }
 
-  /** Stops the renewal timer; the next leaf start creates it again. */
-  #stopTimer() {
-    clearInterval(this.#timer);
-    this.#timer = undefined;
+  /** Starts the renewal timer unless it runs. */
+  #ensureTimer() {
+    if (this.#timer) return;
+    // Created outside the triggering step's fence scope, which the timer would otherwise carry into every tick.
+    this.#timer = runOutsideRunFenceScope(() => setInterval(() => void this.#renew(), LIVENESS_RENEW_INTERVAL_MS));
+    this.#timer.unref?.();
   }
 
   /**
@@ -114,11 +150,11 @@ class ProcessRunLiveness {
    * nothing. A failed write leaves the last write time alone, so the next
    * leaf start or tick tries again.
    */
-  #write(runId: string): Promise<void> {
+  #write(runId: string, store: WorkflowsStorage): Promise<void> {
     const inFlight = this.#writing.get(runId);
     if (inFlight) return inFlight;
     const startedAt = Date.now();
-    const write = this.store
+    const write = store
       .claimRunOwnership({
         runId: runLivenessKey(runId),
         ownerId: this.#ownerId,
@@ -131,28 +167,27 @@ class ProcessRunLiveness {
     return write;
   }
 
-  /** One renewal tick: rewrites every active run's key that is half a renew interval old or more. */
+  /**
+   * One renewal tick: forgets runs with no running leaf whose last write is a
+   * renew interval old, rewrites the key of every active run that is half an
+   * interval old, and stops the timer once nothing is left to track.
+   */
   async #renew() {
     // A process shutting down stops vouching for its runs, so they can be recovered once the keys lapse.
     if (this.scope.__shuttingDown) {
-      this.#stopTimer();
       this.#active.clear();
       this.#lastWriteAt.clear();
-      return;
     }
     for (const runId of this.#lastWriteAt.keys()) {
-      if (!this.#active.has(runId) && this.#age(runId) >= WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS) {
-        this.#lastWriteAt.delete(runId);
-      }
+      if (!this.#active.has(runId) && this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) this.#lastWriteAt.delete(runId);
     }
-    const due = [...this.#active.keys()].filter(runId => this.#age(runId) >= WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS / 2);
-    const renewNext = async (): Promise<void> => {
-      const runId = due.shift();
-      if (runId === undefined) return;
-      await this.#writeOrWarn(runId);
-      return renewNext();
-    };
-    await Promise.all(Array.from({ length: Math.min(LIVENESS_RENEW_CONCURRENCY, due.length) }, renewNext));
+    if (this.#active.size === 0 && this.#lastWriteAt.size === 0) {
+      clearInterval(this.#timer);
+      this.#timer = undefined;
+      return;
+    }
+    const due = [...this.#active].filter(([runId]) => this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS / 2);
+    await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, ([runId, { store }]) => this.#writeOrWarn(runId, store));
   }
 }
 
@@ -164,8 +199,19 @@ class ProcessRunLiveness {
  */
 const livenessByProcess = new WeakMap<LivenessScope, ProcessRunLiveness>();
 
-/** Counts a leaf step of `runId` toward the liveness the process `scope` keeps fresh. See {@link ProcessRunLiveness.enter}. */
-function trackRunLiveness({
+/** The liveness bookkeeping of the process `scope` stands for. */
+function processLiveness(scope: LivenessScope, logger?: IMastraLogger): ProcessRunLiveness {
+  let liveness = livenessByProcess.get(scope);
+  if (!liveness) livenessByProcess.set(scope, (liveness = new ProcessRunLiveness(scope, logger)));
+  return liveness;
+}
+
+/**
+ * Marks `runId` live before its first step event is published, so a booting
+ * instance does not restart a run that is just starting. See
+ * {@link ProcessRunLiveness.markLive}.
+ */
+export function markRunLive({
   scope,
   store,
   runId,
@@ -175,10 +221,8 @@ function trackRunLiveness({
   store: WorkflowsStorage;
   runId: string;
   logger?: IMastraLogger;
-}): () => void {
-  let liveness = livenessByProcess.get(scope);
-  if (!liveness) livenessByProcess.set(scope, (liveness = new ProcessRunLiveness(scope, store, logger)));
-  return liveness.enter(runId);
+}): Promise<void> {
+  return processLiveness(scope, logger).markLive(runId, store);
 }
 
 /** The claim a same-key follow-up event carries so its receiver can take the lease over. */
@@ -191,17 +235,29 @@ export interface StepLeaseHandoff {
 export interface StepLease {
   /**
    * Stops renewing and returns the claim to attach to the follow-up event.
-   * Release becomes a no-op: the receiver takes the lease over instead.
+   * The lease stays this worker's until {@link StepLease.confirmHandOff}, so a
+   * follow-up that is never published is released like any other lease.
    */
   handOff(): StepLeaseHandoff | undefined;
+  /** The follow-up carrying the claim was published: release becomes a no-op. */
+  confirmHandOff(): void;
   /** Stops renewing and releases the lease unless it was handed off or superseded. */
   release(): Promise<void>;
 }
 
 /** Lease for steps that run without one (no run fencing, or the workflow opted out of recovery). */
-export const UNLEASED_STEP: StepLease = { handOff: () => undefined, release: async () => {} };
+export const UNLEASED_STEP: StepLease = {
+  handOff: () => undefined,
+  confirmHandOff: () => {},
+  release: async () => {},
+};
 
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+/** Waits `ms` without keeping the process alive for it. */
+const sleep = (ms: number) =>
+  new Promise<void>(resolve => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
 
 /**
  * How long a delivery waits before checking a live holder again. Waking before
@@ -215,8 +271,15 @@ function holdDelay(holder: RunOwnershipRecord | null): number {
 }
 
 /**
- * Claims the lease of one step occurrence for this worker. Resolves to
- * `undefined` when the delivery must be acknowledged without running the step.
+ * Outcome of {@link acquireStepLease}: the lease, `'drop'` when the delivery
+ * must be acknowledged without running the step, or `'defer'` when the process
+ * is shutting down and the broker should hand the delivery to another
+ * instance.
+ */
+export type StepLeaseClaim = StepLease | 'drop' | 'defer';
+
+/**
+ * Claims the lease of one step occurrence for this worker.
  *
  * A delivery carrying `handoff` adopts the lease its publisher still holds.
  * Once another worker adopted it, the delivery is a duplicate: it is dropped
@@ -227,7 +290,8 @@ function holdDelay(holder: RunOwnershipRecord | null): number {
  * that lease expires, so a message redelivered after its worker crashed still
  * runs. If the holder releases instead, it ran the occurrence and the delivery
  * is dropped, unless `claimAfterRelease` marks it as a new attempt of the same
- * occurrence, such as a resume of the step the holder suspended.
+ * occurrence, such as a resume of the step the holder suspended. A process
+ * shutting down stops waiting and defers the delivery.
  *
  * While the lease is held the step counts toward the run's liveness key (see
  * {@link runLivenessKey}), which `scope`, the process running the step, keeps
@@ -249,16 +313,21 @@ export async function acquireStepLease({
   handoff?: StepLeaseHandoff;
   claimAfterRelease: boolean;
   logger?: IMastraLogger;
-}): Promise<StepLease | undefined> {
+}): Promise<StepLeaseClaim> {
   const ownerId = globalThis.crypto.randomUUID();
   const claim = (options: { force: boolean; expectedGeneration?: number }) =>
     store.claimRunOwnership({ runId: key, ownerId, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS, ...options });
 
-  if (handoff?.key === key) {
+  if (handoff && handoff.key !== key) {
+    logger?.warn('Ignoring a workflow step lease hand-off made for another step occurrence', {
+      key,
+      handoffKey: handoff.key,
+    });
+  } else if (handoff) {
     const adopted = await claim({ force: true, expectedGeneration: handoff.generation });
     if (adopted.acquired) return holdStepLease({ scope, store, runId, record: adopted.record, logger });
     // An expired lease means the worker that adopted it crashed: claim it below like any redelivery.
-    if (adopted.record && (adopted.record.live || !adopted.record.leaseExpiresAt)) return undefined;
+    if (adopted.record && (adopted.record.live || !adopted.record.leaseExpiresAt)) return 'drop';
   }
 
   let result: ClaimRunOwnershipResult = await claim({ force: false });
@@ -271,8 +340,9 @@ export async function acquireStepLease({
   }
   while (!result.acquired) {
     await sleep(holdDelay(result.record));
+    if (scope.__shuttingDown) return 'defer';
     const current = await store.getRunOwnership({ runId: key });
-    if (current && !current.leaseExpiresAt && !claimAfterRelease) return undefined;
+    if (current && !current.leaseExpiresAt && !claimAfterRelease) return 'drop';
     // Racing waiters that read the same record resolve to one winner.
     result = await claim({ force: false, expectedGeneration: current?.generation ?? 0 });
   }
@@ -284,7 +354,7 @@ export async function acquireStepLease({
  * lease and returns its handle. The step stops counting when the handle is
  * released, even after a hand-off: the handler that holds it ran until then.
  */
-function holdStepLease({
+async function holdStepLease({
   scope,
   store,
   runId,
@@ -296,9 +366,9 @@ function holdStepLease({
   runId: string;
   record: RunOwnershipRecord;
   logger?: IMastraLogger;
-}): StepLease {
+}): Promise<StepLease> {
   const fence: RunFence = { runId: record.runId, generation: record.generation, ownerId: record.ownerId };
-  const leaveRun = trackRunLiveness({ scope, store, runId, logger });
+  const leaveRun = await processLiveness(scope, logger).enter(runId, store);
   const stopRenewing = renewWorkflowLease({
     store,
     fence,
@@ -309,18 +379,21 @@ function holdStepLease({
       }),
     onError: error => logger?.warn('Failed to renew workflow step lease', { key: fence.runId, error }),
   });
-  let settled = false;
+  let handedOff = false;
+  let released = false;
   return {
     handOff() {
       stopRenewing();
-      settled = true;
       return { key: fence.runId, generation: fence.generation };
+    },
+    confirmHandOff() {
+      handedOff = true;
     },
     async release() {
       stopRenewing();
       leaveRun();
-      if (settled) return;
-      settled = true;
+      if (handedOff || released) return;
+      released = true;
       try {
         await store.releaseRunOwnership(fence);
       } catch (error) {
@@ -332,6 +405,26 @@ function holdStepLease({
 
 // Nested workflows nest a few levels at most; the bound only stops a corrupt snapshot from looping.
 const MAX_NESTED_RUN_DEPTH = 16;
+
+/**
+ * The nested runs a running step result still drives: its own nested run, or
+ * the nested runs of the foreach items that have not finished.
+ */
+function runningNestedRunIds(result: { status?: unknown; metadata?: unknown; output?: unknown } | undefined): string[] {
+  if (result?.status !== 'running') return [];
+  const metadata = result.metadata as
+    | { nestedRunId?: string; foreachNestedRunIds?: Record<string, string> }
+    | undefined;
+  const items = metadata?.foreachNestedRunIds;
+  if (!items) return metadata?.nestedRunId ? [metadata.nestedRunId] : [];
+  const output = result.output;
+  return Object.entries(items)
+    .filter(([index]) => {
+      const slot = Array.isArray(output) ? output[Number(index)] : undefined;
+      return slot === null || slot === undefined || isQueuedForeachIteration(slot);
+    })
+    .map(([, nestedRunId]) => nestedRunId);
+}
 
 /**
  * The liveness lease of the run, or of a nested run one of its running steps
@@ -349,18 +442,13 @@ async function findLiveRun(
     const record = await store.getRunOwnership({ runId: runLivenessKey(runId) });
     if (record?.live && (!earliest || record.leaseExpiresAt! < earliest.leaseExpiresAt!)) earliest = record;
     if (depth >= MAX_NESTED_RUN_DEPTH) return;
-    for (const [stepId, result] of Object.entries(context ?? {})) {
-      if (result?.status !== 'running') continue;
-      const metadata = result.metadata as
-        | { nestedRunId?: string; foreachNestedRunIds?: Record<string, string> }
-        | undefined;
-      const nestedRunIds = new Set([metadata?.nestedRunId, ...Object.values(metadata?.foreachNestedRunIds ?? {})]);
-      for (const nestedRunId of nestedRunIds) {
-        if (!nestedRunId) continue;
-        const nested = await store.loadWorkflowSnapshot({ workflowName: stepId, runId: nestedRunId });
-        await visit(nestedRunId, nested?.context, depth + 1);
-      }
-    }
+    const nested = Object.entries(context ?? {}).flatMap(([stepId, result]) =>
+      runningNestedRunIds(result).map(nestedRunId => ({ stepId, nestedRunId })),
+    );
+    await forEachBounded(nested, NESTED_RUN_READ_CONCURRENCY, async ({ stepId, nestedRunId }) => {
+      const snapshot = await store.loadWorkflowSnapshot({ workflowName: stepId, runId: nestedRunId });
+      await visit(nestedRunId, snapshot?.context, depth + 1);
+    });
   };
   await visit(runId, context, 0);
   return earliest;

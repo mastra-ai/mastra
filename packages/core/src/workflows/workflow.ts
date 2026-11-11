@@ -5916,6 +5916,11 @@ export class Run<
     });
   }
 
+  /**
+   * Drives a stored run again from its active steps after its process stopped. A finished run
+   * returns its stored result. Throws `WORKFLOW_RESTART_RUN_OWNED` when
+   * {@link Run.claimRestartOwnership} finds the run still driven by another process.
+   */
   protected async _restart({
     requestContext,
     outputWriter,

@@ -109,7 +109,7 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
-import { claimEventedRestart } from './step-lease';
+import { claimEventedRestart, markRunLive } from './step-lease';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -1914,6 +1914,7 @@ export class EventedRun<
   TInput = unknown,
   TOutput = unknown,
 > extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
+  /** Creates the handle of one evented run. `EventedWorkflow.createRun` builds it. */
   constructor(params: {
     workflowId: string;
     runId: string;
@@ -1935,7 +1936,11 @@ export class EventedRun<
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
     tracingPolicy?: TracingPolicy;
-    /** Whether the recovery sweep restarts this run, so `restart()` takes a lease. */
+    /**
+     * Whether the recovery sweep restarts this run, so its steps are leased and `restart()`
+     * checks its liveness. Separate from `recoverable`, which makes `Run` hold a run lease for
+     * the whole execution: an evented run is executed by workers, not by this caller.
+     */
     restartable?: boolean;
   }) {
     super(params);
@@ -1944,6 +1949,18 @@ export class EventedRun<
   }
 
   #restartable: boolean;
+
+  /**
+   * Marks the run live before this caller makes it `running` in storage, so a
+   * booting instance's sweep does not restart it before a worker picks up its
+   * first step.
+   */
+  async #markLive(): Promise<void> {
+    if (!this.#restartable || !this.mastra) return;
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    if (!store || !(await store.supportsRunFencing())) return;
+    await markRunLive({ scope: this.mastra, store, runId: this.runId, logger: this.mastra.getLogger() });
+  }
 
   /**
    * Evented runs hold no run lease while they execute: the workers running
@@ -2068,6 +2085,7 @@ export class EventedRun<
     });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await this.#markLive();
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
@@ -2219,6 +2237,7 @@ export class EventedRun<
     });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await this.#markLive();
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
@@ -2456,6 +2475,7 @@ export class EventedRun<
   }
 
   async #claimResume(workflowsStore: WorkflowsStorage): Promise<void> {
+    await this.#markLive();
     const claimed = await workflowsStore.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,

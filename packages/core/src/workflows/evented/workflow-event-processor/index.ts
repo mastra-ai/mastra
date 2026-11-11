@@ -25,6 +25,7 @@ import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { SpanType, getResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
+import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import {
   coverNestedRun,
   isRunFenceConflictError,
@@ -69,8 +70,8 @@ import {
   withoutAuthToken,
 } from '../helpers';
 import { StepExecutor } from '../step-executor';
-import { acquireStepLease, stepOccurrenceKey, UNLEASED_STEP } from '../step-lease';
-import type { StepLease, StepLeaseHandoff } from '../step-lease';
+import { acquireStepLease, markRunLive, stepOccurrenceKey, UNLEASED_STEP } from '../step-lease';
+import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../step-lease';
 import {
   evaluateLoopCondition,
   failedLoopStep,
@@ -205,6 +206,18 @@ type ControlAtDispatch = { ready?: boolean; missedAborts?: number };
 
 /** A `workflow.fail` still to publish. `failRun` overrides the run of the event that failed. */
 type PendingFailure = { error: Error; publishAttempts: number; failRun?: Omit<ProcessorArgs, 'workflow'> };
+
+/**
+ * Thrown when a delivery waiting for another worker's step lease gives up
+ * because this process is shutting down. The delivery is handed back to the
+ * transport for another instance, and does not count as a failed attempt.
+ */
+class DeferredDelivery extends Error {
+  constructor() {
+    super('Deferred a workflow step delivery while shutting down');
+    this.name = 'DeferredDelivery';
+  }
+}
 
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
@@ -1216,6 +1229,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
 
+    // Every start, resume, restart and nested run passes here before its first step event is
+    // published. Marking it live first keeps a booting instance from restarting it in the gap
+    // before that step takes its lease, also when the start message sat in the queue for long.
+    const leaseStore = await this.#leaseStore(workflow);
+    if (leaseStore)
+      await markRunLive({ scope: this.mastra, store: leaseStore, runId, logger: this.mastra.getLogger() });
+
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
     const requiresGuardedSnapshot =
       workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
@@ -1923,6 +1943,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  /**
+   * Handles a `workflow.step.run` event: routes control entries (parallel,
+   * conditional, foreach, sleep) to their dispatchers, ends the run past its
+   * last entry, and runs a leaf step under that step occurrence's lease.
+   */
   protected async processWorkflowStepRun(args: ProcessorArgs, control: ControlAtDispatch = {}) {
     const {
       workflow,
@@ -2218,7 +2243,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     const { stepLeaseHandoff, ...leafArgs } = args;
     const leaf = step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
     const lease = await this.#acquireStepLease(leafArgs, leaf, stepLeaseHandoff);
-    if (!lease) return;
+    if (lease === 'drop') return;
+    if (lease === 'defer') throw new DeferredDelivery();
     try {
       return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease);
     } finally {
@@ -2227,21 +2253,29 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * The workflows store when `workflow` runs take step leases and liveness:
+   * the store supports run fencing and the recovery sweep restarts the
+   * workflow's runs. Otherwise `undefined`, and its steps run unleased.
+   */
+  async #leaseStore(workflow: Workflow | undefined): Promise<WorkflowsStorage | undefined> {
+    if (!workflow || workflow.type === 'processor' || workflow.options?.autoRestartActiveRuns === false) return;
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    return store && (await store.supportsRunFencing()) ? store : undefined;
+  }
+
+  /**
    * Takes the lease of the leaf step occurrence `args` delivers, so a step
    * runs on one worker at a time even when several deliveries of it are in
-   * flight (a restart from another replica, a broker redelivery). Resolves to
-   * `undefined` when the delivery must be dropped. Workflows the recovery
-   * sweep never restarts, and stores without run fencing, run unleased.
+   * flight (a restart from another replica, a broker redelivery). See
+   * {@link acquireStepLease} for when a delivery is dropped or deferred.
    */
   async #acquireStepLease(
     args: Omit<ProcessorArgs, 'stepLeaseHandoff'>,
     step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
     handoff: StepLeaseHandoff | undefined,
-  ): Promise<StepLease | undefined> {
-    const { workflow } = args;
-    if (workflow.type === 'processor' || workflow.options?.autoRestartActiveRuns === false) return UNLEASED_STEP;
-    const store = await this.mastra.getStorage()?.getStore('workflows');
-    if (!store || !(await store.supportsRunFencing())) return UNLEASED_STEP;
+  ): Promise<StepLeaseClaim> {
+    const store = await this.#leaseStore(args.workflow);
+    if (!store) return UNLEASED_STEP;
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
     // Every loop iteration runs the body under the same execution path.
     const iterationCount =
@@ -3662,7 +3696,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (retryDelay > 0) {
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       }
-      return this.mastra.pubsub.publish('workflows', {
+      await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.run',
         runId,
         data: {
@@ -3684,6 +3718,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           outputOptions,
         },
       });
+      stepLease.confirmHandOff();
+      return;
     }
 
     if (step.type === 'loop' && stepResult.status === 'suspended') {
@@ -5084,6 +5120,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
+      if (err instanceof DeferredDelivery) return { ok: false, retry: true };
       if (isWorkflowStepConflictError(err) && (err.reason === 'stale' || err.reason === 'completed')) {
         this.deliveryAttempts.delete(eventKey);
         return { ok: true };
