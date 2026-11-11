@@ -1483,18 +1483,19 @@ export class AgentController<TState = {}> {
     } else {
       // Forked subagent threads are dropped after the read, so keep paging until
       // `limit` threads remain or the resource runs out.
-      threads = [];
-      for (let page = 0; threads.length < limit; page++) {
+      // Keyed by id: a thread updated between pages can move up and be read twice.
+      const byId = new Map<string, StorageThreadType>();
+      for (let page = 0; byId.size < limit; page++) {
         const result = await memoryStorage.listThreads({
           filter,
           perPage: limit,
           page,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
-        threads.push(...result.threads.filter(keep));
+        for (const thread of result.threads) if (keep(thread) && !byId.has(thread.id)) byId.set(thread.id, thread);
         if (!result.hasMore) break;
       }
-      threads = threads.slice(0, limit);
+      threads = [...byId.values()].slice(0, limit);
     }
 
     return threads.map((thread: StorageThreadType) => ({
