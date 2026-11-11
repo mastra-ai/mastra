@@ -1,5 +1,48 @@
 # @mastra/client-js
 
+## 1.60.0-alpha.8
+
+### Minor Changes
+
+- Add shared contracts for opt-in aggregated trace roots. OSS readers remain unsupported. ([#30054](https://github.com/mastra-ai/mastra/pull/30054))
+
+- Support OSS feedback replacement requests and the `feedbackReplacement` capability. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```typescript
+  await client.replaceFeedback({
+    feedback: {
+      feedbackId: 'feedback-1',
+      traceId: 'trace-123',
+      timestamp: '2026-11-11T12:00:00.123Z',
+      feedbackType: 'thumbs',
+      value: -1,
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `deleteTraces`, `deleteScores`, and `deleteFeedback` return types to include `{ accepted: true }` from supporting Platform backends. Acceptance means cleanup is queued, not completed. OSS deletion responses remain unchanged. ([#30051](https://github.com/mastra-ai/mastra/pull/30051))
+
+  Callers that read `result.success` must first narrow the response:
+
+  ```typescript
+  const result = await client.deleteFeedback({ feedbackIds: ['feedback-1'] });
+
+  // Before
+  console.log(result.success);
+
+  // After
+  if ('accepted' in result) {
+    console.log('Deletion requested');
+  } else {
+    console.log(result.success);
+  }
+  ```
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
 ## 1.60.0-alpha.7
 
 ### Patch Changes
