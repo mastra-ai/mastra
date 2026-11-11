@@ -1,3 +1,4 @@
+import { NotFoundError } from '@docker/sandboxes';
 import type { Sandboxes } from '@docker/sandboxes';
 import { SandboxAbortError } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
@@ -116,6 +117,57 @@ describe('DockerSandboxesSandbox', () => {
     expect(sandbox.status).toBe('pending');
   });
 
+  it('recreates a VM removed after the first start and runs commands on the replacement', async () => {
+    const { sandbox, client, remote } = setup();
+    expect(await sandbox.start()).toEqual({ outcome: 'created' });
+    await sandbox._stop();
+    const replacement = { ...remote, name: 'sandboxes/replacement' };
+    replacement.waitUntilRunning = vi.fn().mockResolvedValue(replacement);
+    client.get.mockRejectedValue(new NotFoundError({ code: 'not_found', message: 'sandbox not found' }, 404));
+    client.create.mockResolvedValue(replacement);
+
+    expect((await sandbox.executeCommand('echo', ['recovered'])).success).toBe(true);
+    expect(client.get).toHaveBeenCalledWith(remote.name);
+    expect(client.create).toHaveBeenCalledTimes(2);
+    expect(sandbox.sandboxId).toBe(replacement.name);
+    expect(replacement.processes.start).toHaveBeenCalledWith(
+      expect.objectContaining({ args: ['sh', '-lc', 'echo recovered'] }),
+      expect.anything(),
+    );
+  });
+
+  it('does not recreate a missing explicitly selected VM or hide other lookup failures', async () => {
+    const { client } = setup();
+    const direct = new DockerSandboxesSandbox({
+      id: 'stable-id',
+      sandboxId: 'sandboxes/remote-id',
+      image: 'ubuntu:24.04',
+      client: client as unknown as Sandboxes,
+    });
+    const missing = new NotFoundError({ code: 'not_found', message: 'sandbox not found' }, 404);
+    client.get.mockRejectedValue(missing);
+    await expect(direct.start()).rejects.toBe(missing);
+    expect(client.create).not.toHaveBeenCalled();
+
+    const transient = setup();
+    await transient.sandbox.start();
+    await transient.sandbox._stop();
+    const failure = new Error('API unavailable');
+    transient.client.get.mockRejectedValue(failure);
+    await expect(transient.sandbox.start()).rejects.toBe(failure);
+    expect(transient.client.create).toHaveBeenCalledOnce();
+  });
+
+  it('does not reconnect to a deleting VM with the same logical ID', async () => {
+    const { sandbox, client, remote } = setup(true);
+    remote.status = 'deleting';
+    const replacement = { ...remote, name: 'sandboxes/replacement', status: 'running' };
+    replacement.waitUntilRunning = vi.fn().mockResolvedValue(replacement);
+    client.create.mockResolvedValue(replacement);
+    expect(await sandbox.start()).toEqual({ outcome: 'created' });
+    expect(sandbox.sandboxId).toBe(replacement.name);
+  });
+
   it('streams command output and respects the retention limit', async () => {
     const { sandbox, remote, connection } = setup();
     const stdout = vi.fn();
@@ -144,9 +196,11 @@ describe('DockerSandboxesSandbox', () => {
     const { sandbox, remote } = setup();
     await sandbox.executeCommand('ls -la | head -3 && echo "done" > /tmp/out');
     await sandbox.executeCommand('printf', ['%s\n', "it's $HOME"]);
+    await sandbox.executeCommand('npm run build', ['--silent']);
     expect(remote.processes.start.mock.calls.map(([request]) => request.args)).toEqual([
       ['sh', '-lc', 'ls -la | head -3 && echo "done" > /tmp/out'],
       ['sh', '-lc', `printf '%s\n' 'it'\\''s $HOME'`],
+      ['sh', '-lc', 'npm run build --silent'],
     ]);
   });
 

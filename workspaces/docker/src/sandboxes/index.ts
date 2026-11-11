@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
-import { Sandboxes } from '@docker/sandboxes';
+import { NotFoundError, Sandboxes } from '@docker/sandboxes';
 import type { Sandbox } from '@docker/sandboxes';
 import { MastraSandbox, SandboxNotReadyError, validateSandboxFileMode } from '@mastra/core/workspace';
 import type {
@@ -36,6 +36,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
   private readonly ownsClient: boolean;
   private readonly image: string;
   private readonly environment?: Record<string, string>;
+  private readonly pinnedSandboxId: boolean;
   private remoteId?: string;
   private sandbox?: Sandbox;
   private createdAt = new Date();
@@ -44,6 +45,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
     super({ ...options, name: 'Docker Sandboxes' });
     this.id = options.id ?? randomUUID();
     this.remoteId = options.sandboxId;
+    this.pinnedSandboxId = options.sandboxId != null;
     this.image = options.image;
     this.environment = options.environment;
     this.ownsClient = !options.client;
@@ -55,9 +57,18 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
   }
 
   protected async find(): Promise<Sandbox | undefined> {
-    if (this.remoteId) return this.client.get(this.remoteId);
+    if (this.remoteId) {
+      try {
+        return await this.client.get(this.remoteId);
+      } catch (error) {
+        if (!(error instanceof NotFoundError) || this.pinnedSandboxId) throw error;
+        this.remoteId = undefined;
+        this.sandbox = undefined;
+      }
+    }
     for await (const sandbox of this.client.all()) {
-      if (sandbox.displayName === this.id) return sandbox;
+      if (sandbox.displayName === this.id && sandbox.status !== 'deleting' && sandbox.status !== 'deleted')
+        return sandbox;
     }
     return undefined;
   }
@@ -150,7 +161,7 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
     try {
       process = await this.sandbox!.processes.start(
         {
-          args: ['sh', '-lc', args.length ? [command, ...args].map(shellQuote).join(' ') : command],
+          args: ['sh', '-lc', args.length ? `${command} ${args.map(shellQuote).join(' ')}` : command],
           workingDir: options.cwd ?? this.workingDirectory,
           env: Object.fromEntries(
             Object.entries({ ...this.getEnv(), ...options.env }).filter(
