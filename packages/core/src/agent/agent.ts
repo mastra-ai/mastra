@@ -3093,6 +3093,10 @@ export class Agent<
       }
     }
 
+    // Record which agent resolved this memory so the missing-storage diagnostic can
+    // name it. Optional so memory objects that don't extend MastraMemory still work.
+    resolvedMemory.__setAgentName?.(this.name);
+
     if (this.#mastra && resolvedMemory) {
       resolvedMemory.__registerMastra(this.#mastra);
 
