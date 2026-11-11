@@ -54,7 +54,12 @@ import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
-import { attachGithubReconciler, attachGithubRules, openPullRequestLister } from './rules.js';
+import {
+  attachGithubPullRequestDiscovery,
+  attachGithubReconciler,
+  attachGithubRules,
+  openPullRequestLister,
+} from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import type { GitIdentity } from './sandbox.js';
 import {
@@ -1335,12 +1340,10 @@ export class GithubIntegration implements FactoryIntegration {
     if (!pullRequestEnabled && !issueEnabled) return [];
 
     const reconcile = pullRequestEnabled
-      ? attachGithubReconciler(
-          this,
-          ctx,
-          input => this.fetchPullRequestState(input),
-          openPullRequestLister(this.versionControl),
-        )
+      ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+      : undefined;
+    const discover = pullRequestEnabled
+      ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
       : undefined;
     const issues = issueEnabled
       ? attachGithubIssueReconciler(
@@ -1350,19 +1353,22 @@ export class GithubIntegration implements FactoryIntegration {
           input => this.listOpenIssueStates(input),
         )
       : undefined;
-    if (!reconcile && !issues) return [];
+    if (!reconcile && !issues && !discover) return [];
 
     const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
     const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
     const issueIntervalMs =
       reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const discoveryIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS);
     return [
       new GithubReconcileWorker({
         ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
+        ...(discover ? { discover } : {}),
         sourceControl: ctx.storage.sourceControl,
         ...(intervalMs ? { intervalMs } : {}),
         ...(issueIntervalMs ? { issueIntervalMs } : {}),
+        ...(discoveryIntervalMs ? { discoveryIntervalMs } : {}),
       }),
     ];
   }

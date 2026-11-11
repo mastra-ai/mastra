@@ -60,7 +60,12 @@ import type {
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from '../../github/routes.js';
-import { attachGithubReconciler, attachGithubRules, openPullRequestLister } from '../../github/rules.js';
+import {
+  attachGithubPullRequestDiscovery,
+  attachGithubReconciler,
+  attachGithubRules,
+  openPullRequestLister,
+} from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
 import type { GitIdentity } from '../../github/sandbox.js';
 import {
@@ -254,6 +259,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #issueReconcileEnabled: boolean;
   readonly #pullRequestReconcileIntervalMs: number | undefined;
   readonly #issueReconcileIntervalMs: number | undefined;
+  readonly #pullRequestDiscoveryIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
@@ -618,6 +624,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+    this.#pullRequestDiscoveryIntervalMs = reconcileInterval(
+      process.env.MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS,
+    );
   }
 
   /** Commit authorship follows the Platform App's authoritative writer identity. */
@@ -886,12 +895,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
         reconcileFactoryState: this.#pullRequestReconcileEnabled
-          ? attachGithubReconciler(
-              this,
-              ctx,
-              input => this.fetchPullRequestState(input),
-              openPullRequestLister(this.versionControl),
-            )
+          ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+          : undefined,
+        discoverPullRequests: this.#pullRequestReconcileEnabled
+          ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(
@@ -905,6 +912,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
         issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+        pullRequestDiscoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs,
         // Resolved lazily: workers are constructed before versionControl
         // storage is initialized, and the worker only reads these slices once
         // it is running.
@@ -1127,6 +1135,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ...(this.#pullRequestReconcileIntervalMs === undefined
             ? {}
             : { intervalMs: this.#pullRequestReconcileIntervalMs }),
+          ...(this.#pullRequestDiscoveryIntervalMs === undefined
+            ? {}
+            : { discoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs }),
         },
         issues: {
           enabled: this.#issueReconcileEnabled,
