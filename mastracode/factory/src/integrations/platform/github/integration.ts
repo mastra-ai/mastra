@@ -186,9 +186,9 @@ const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
  * How long a minted repository-scoped token may be reused. GitHub
  * installation tokens live ~60 minutes. A session re-mints the token it
  * installed after `GITHUB_TOKEN_REFRESH_AFTER_MS` (30 minutes), so a token
- * served from this cache is at most 55 minutes old when it is replaced.
+ * served from this cache is at most 50 minutes old when it is replaced.
  */
-const REPOSITORY_ACCESS_CACHE_TTL_MS = 25 * 60_000;
+const REPOSITORY_ACCESS_CACHE_TTL_MS = 20 * 60_000;
 /**
  * How long a collaborator permission lookup may be reused. The reconcile
  * sweep re-stamps every open card's author and the event tail gates every

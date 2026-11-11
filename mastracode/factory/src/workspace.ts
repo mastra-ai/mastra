@@ -76,7 +76,7 @@ import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './wor
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 // GitHub installation tokens live 60 minutes and minted access is cached for
-// up to 25, so replace an installed token well before it can expire. An
+// up to 20, so replace an installed token well before it can expire. An
 // installed org PAT does not expire this way and is never age-refreshed.
 const GITHUB_TOKEN_REFRESH_AFTER_MS = 30 * 60_000;
 const isGithubTokenStale = (registration: { tokenIssuedAt: number; patInstalled: boolean }): boolean =>

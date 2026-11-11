@@ -1104,7 +1104,7 @@ describe('PlatformGithubIntegration', () => {
       expect(fetchImpl).toHaveBeenCalledTimes(1);
 
       // Expired grants re-mint through the platform.
-      vi.advanceTimersByTime(25 * 60_000 + 1_000);
+      vi.advanceTimersByTime(20 * 60_000 + 1_000);
       await integration.versionControl.getRepositoryAccess(input);
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     } finally {
