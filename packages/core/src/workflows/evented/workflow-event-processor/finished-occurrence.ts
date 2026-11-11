@@ -13,6 +13,7 @@ const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire'])
  */
 export type FinishedOccurrence = 'run' | 'drop' | { continueFrom: StepResult<any, any, any, any> };
 
+/** Whether two execution paths name the same position in the step graph. */
 function samePath(a: number[] | undefined, b: number[]): boolean {
   return !!a && a.length === b.length && a.every((index, depth) => index === b[depth]);
 }
