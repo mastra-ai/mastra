@@ -2060,6 +2060,29 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
+  /**
+   * The cards linked to `item` in its project: its parent, then its newest children. Read by id
+   * and by the parent index, so the cost does not grow with the board.
+   */
+  async listLinked({ item, limit }: { item: Card; limit: number }): Promise<Card[]> {
+    const cards = this.#cards(this.#db, { transaction: false });
+    const scope = { org_id: item.orgId, factory_project_id: item.factoryProjectId };
+    const [parent, children] = await Promise.all([
+      item.parentWorkItemId ? cards.findOne({ ...scope, id: item.parentWorkItemId }) : null,
+      cards.findMany(
+        { ...scope, parent_work_item_id: item.id },
+        {
+          orderBy: [
+            ['created_at', 'desc'],
+            ['id', 'desc'],
+          ],
+          limit,
+        },
+      ),
+    ]);
+    return (parent ? [parent, ...children] : children).slice(0, limit).map(toWorkItem);
+  }
+
   async listByIds({
     orgId,
     factoryProjectId,
