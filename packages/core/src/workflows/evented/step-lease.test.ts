@@ -265,6 +265,7 @@ async function restartOutcome(replica: { workflow: Built }, runId: string) {
   );
 }
 
+/** Waits `ms`, for the tests that must let a lease TTL pass. */
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 describe('evented step leases (#28712)', () => {
