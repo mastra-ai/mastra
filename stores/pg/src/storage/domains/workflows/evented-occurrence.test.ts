@@ -318,6 +318,58 @@ describe('Postgres evented occurrence replay', () => {
     }
   }, 8_000);
 
+  it('runs a step once when a duplicate is delivered while the first delivery still runs it', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const store = (await storage.getStore('workflows'))!;
+    const gate = Promise.withResolvers<void>();
+    let executions = 0;
+    const workflow = createWorkflow({ id: `live-duplicate-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+      .then(
+        createStep({
+          id: 'slow',
+          inputSchema: schema,
+          outputSchema: schema,
+          execute: async ({ inputData }) => {
+            executions++;
+            await gate.promise;
+            return inputData;
+          },
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+    await mastra.startWorkers();
+    const claim = store.claimRunOwnership.bind(store);
+    const refused = Promise.withResolvers<void>();
+    const claims = vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+      const result = await claim(args);
+      if (args.runId.includes('::step:') && !result.acquired) refused.resolve();
+      return result;
+    });
+    try {
+      const run = await workflow.createRun();
+      const result = run.start({ inputData: { n: 1 } });
+      await expect.poll(() => executions).toBe(1);
+      const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
+      const key = `workflow-step-run:${run.runId}:${original.id}`;
+      await driver.pubsub.releaseLease(key, (await driver.pubsub.getLeaseOwner(key))!);
+      // The duplicate finds the first delivery's step lease live and waits for it.
+      const duplicate = driver.redeliverEvent(original);
+      await refused.promise;
+      gate.resolve();
+      // It checks the lease again within one renew interval of the release, then drops itself.
+      await duplicate;
+      expect(await result).toMatchObject({ status: 'success', result: { n: 1 } });
+      expect(executions).toBe(1);
+    } finally {
+      gate.resolve();
+      claims.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 20_000);
+
   it('continues a suspended loop after approval without stranding the next iteration', async () => {
     const driver = new RedeliveryDriver();
     const schema = z.object({ n: z.number() });
@@ -777,7 +829,7 @@ describe('Postgres evented occurrence replay', () => {
       void run.start({ inputData: { n: 0 } });
       await saved;
       interrupted.mockRestore();
-      // The worker that lost the next step's message stops, and the run's liveness lapses.
+      // With no step of the run running anywhere, its liveness lapses.
       await abandonLease(storage, runLivenessKey(run.runId));
       const restarted = await workflow.createRun({ runId: run.runId });
       const result = restarted.restart();
