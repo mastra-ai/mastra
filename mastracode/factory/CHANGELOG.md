@@ -1,5 +1,27 @@
 # @mastra/factory
 
+## 0.28.0-alpha.10
+
+### Patch Changes
+
+- Open boards stay fast on large projects. After a card changes, Factory now rereads only the cards that changed or were deleted instead of the whole board, and still does a full read at least once a minute. ([#30041](https://github.com/mastra-ai/mastra/pull/30041))
+
+- Sessions in environments with several repositories now sync the other repositories side by side instead of one after another, so a session starts in roughly the time of its slowest repository rather than the sum of all of them. Setup commands still run one at a time. ([#30029](https://github.com/mastra-ai/mastra/pull/30029))
+
+- Sessions that start at the same time now share one GitHub token mint per repository instead of each minting their own, so busy projects stop hitting the Platform's per-installation mint rate limit and skipping repository syncs. ([#30032](https://github.com/mastra-ai/mastra/pull/30032))
+
+- Checking whether a project still uses its retired Review board now reads Review cards a page at a time and stops at the first open one, instead of loading every Review row on each card read or write. ([#30037](https://github.com/mastra-ai/mastra/pull/30037))
+
+- Updated Factory's browser tab icon and session status icons to a rounded tile, matching the rounded corners used across the rest of the UI. ([#30040](https://github.com/mastra-ai/mastra/pull/30040))
+
+- Factory sessions bound to a card no longer read every card on the board on each model step to find the card's parent and children. Those are now read directly, so busy boards stay fast while cards change. ([#30034](https://github.com/mastra-ai/mastra/pull/30034))
+
+- Updated dependencies [[`b244478`](https://github.com/mastra-ai/mastra/commit/b24447862682a03b0ac3675005fcbeed6a2676b8), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/connect@1.3.2-alpha.3
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/code-sdk@1.19.0-alpha.10
+  - @mastra/mcp@2.9.0-alpha.3
+
 ## 0.28.0-alpha.9
 
 ### Patch Changes

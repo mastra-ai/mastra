@@ -1,5 +1,52 @@
 # @mastra/observability
 
+## 1.24.0-alpha.5
+
+### Minor Changes
+
+- Add feedback replacement delivery through supporting exporters. `MastraPlatformExporter` sends PUT requests, while storage exporters persist their copies independently. Flush and shutdown drain pending replacements. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```typescript
+  await observability.replaceFeedback({
+    traceId: 'trace-123',
+    feedback: {
+      feedbackId: 'feedback-1',
+      timestamp: new Date('2026-11-11T12:00:00.123Z'),
+      feedbackType: 'thumbs',
+      value: -1,
+    },
+  });
+  ```
+
+- Added support for exporting feedback and scores that need trace details from Platform. The exporter retries while waiting for a trace to arrive, and `flush()` and `shutdown()` wait for pending deliveries to finish. ([#30048](https://github.com/mastra-ai/mastra/pull/30048))
+
+  ```typescript
+  import { MastraPlatformExporter } from '@mastra/observability';
+
+  const exporter = new MastraPlatformExporter();
+  await exporter.onFeedbackEvent({
+    type: 'feedback',
+    feedback: {
+      feedbackId: crypto.randomUUID(),
+      timestamp: new Date(),
+      traceId: 'existing-trace-id',
+      feedbackType: 'comment',
+      feedbackSource: 'user',
+      value: 'actionable',
+    },
+  });
+  await exporter.flush();
+  ```
+
+### Patch Changes
+
+- Fix feedback and score delivery so each exporter handles its own destination. Missing local traces no longer prevent remote export, and storage lookup retries are included in flush and shutdown. ([#30052](https://github.com/mastra-ai/mastra/pull/30052))
+
+  Keep HTTP create responses independent of custom exporter delivery while including pending delivery in flush and shutdown.
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
 ## 1.24.0-alpha.4
 
 ### Patch Changes
