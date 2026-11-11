@@ -1,13 +1,16 @@
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { resolveExperimentalAgent } from '../../experimental-agent.js';
 import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
+  checkProfileProviderMismatch,
   expandHome,
+  getProfileProvider,
+  setProfileProvider,
   getCustomProviderId,
   loadSettings,
   migrateAccountPreferences,
@@ -1466,6 +1469,21 @@ describe('expandHome', () => {
     ['/tmp/~profile', '/tmp/~profile'],
   ])('expands only the current user home in %s', (path, expected) => {
     expect(expandHome(path)).toBe(expected);
+  });
+});
+
+describe('profile provider markers with saved home paths', () => {
+  it('reads and writes the marker under the home directory for a saved ~/ profile', () => {
+    const dir = mkdtempSync(join(homedir(), 'mc-profile-marker-'));
+    const profile = `~/${basename(dir)}/browser-profile`;
+    try {
+      setProfileProvider(profile, 'stagehand');
+      expect(readFileSync(join(dir, 'browser-profile', '.mastra-provider'), 'utf-8')).toBe('stagehand');
+      expect(getProfileProvider(profile)).toBe('stagehand');
+      expect(checkProfileProviderMismatch(profile, 'agent-browser')).toBe('stagehand');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1554,7 +1554,7 @@ const PROFILE_PROVIDER_MARKER = '.mastra-provider';
  * Returns the provider name if the marker exists, undefined otherwise.
  */
 export function getProfileProvider(profilePath: string): BrowserProvider | undefined {
-  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  const markerPath = join(expandHome(profilePath), PROFILE_PROVIDER_MARKER);
   if (!existsSync(markerPath)) {
     return undefined;
   }
@@ -1574,9 +1574,10 @@ export function getProfileProvider(profilePath: string): BrowserProvider | undef
  * Creates the directory if it doesn't exist.
  */
 export function setProfileProvider(profilePath: string, provider: BrowserProvider): void {
-  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
-  if (!existsSync(profilePath)) {
-    mkdirSync(profilePath, { recursive: true });
+  const expandedProfilePath = expandHome(profilePath);
+  const markerPath = join(expandedProfilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(expandedProfilePath)) {
+    mkdirSync(expandedProfilePath, { recursive: true });
   }
   writeFileSync(markerPath, provider, 'utf-8');
 }
