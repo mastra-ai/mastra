@@ -17,7 +17,8 @@ describe('Workflow start', () => {
       inputData: { name: 'John', age: 30 },
     });
 
-    expectTypeOf(result).toExtend<Promise<WorkflowRunResult>>();
+    // start() only acknowledges the run; startAsync() returns the result
+    expectTypeOf(result).toEqualTypeOf<Promise<{ message: string }>>();
   });
 
   it('should accept resourceId and runId', async () => {

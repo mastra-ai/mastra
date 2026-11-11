@@ -861,9 +861,8 @@ describe('Thread', () => {
       Object.defineProperty(files[2], 'text', { value: async () => 'discard' });
       const mounted = renderThread([]);
       fireEvent.click(await screen.findByRole('button', { name: 'Add attachment' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (!input) throw new Error('File picker input is missing');
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+      const input = screen.getByLabelText('Files');
       fireEvent.change(input, { target: { files } });
       await screen.findByRole('button', { name: 'Preview settings.ini' });
       await screen.findByRole('button', { name: 'Preview discard.txt' });
@@ -948,14 +947,14 @@ describe('Thread', () => {
         fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
         if (inspection === 'file classification') {
-          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-          const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
-          if (!picker) throw new Error('File picker is missing');
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+          const picker = screen.getByLabelText('Files');
           const file = new File(['pending file contents'], 'notes.unknown');
           Object.defineProperty(file, 'text', { value: async () => 'pending file contents' });
           fireEvent.change(picker, { target: { files: [file] } });
           expect(probe).toHaveBeenCalledOnce();
         } else {
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
           const input = await screen.findByLabelText('Public URL');
           fireEvent.change(input, { target: { value: url } });
           const form = input.closest('form');
@@ -1004,9 +1003,8 @@ describe('Thread', () => {
       const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-      const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (!picker) throw new Error('File picker is missing');
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+      const picker = screen.getByLabelText('Files');
       fireEvent.change(picker, { target: { files: [new File([new Uint8Array([80, 75, 3, 4])], 'leads.xlsx')] } });
       await screen.findByRole('button', { name: 'Remove leads.xlsx' });
 
@@ -1110,6 +1108,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
       const input = await screen.findByLabelText('Public URL');
       fireEvent.change(input, { target: { value: url } });
       const form = input.closest('form');
@@ -1134,6 +1133,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
       const input = await screen.findByLabelText('Public URL');
       fireEvent.change(input, { target: { value: url } });
       const form = input.closest<HTMLFormElement>('form');
@@ -1146,7 +1146,7 @@ describe('Thread', () => {
     });
   });
 
-  it('attaches a URL from the popover without sending the chat message', async () => {
+  it('attaches a URL from the menu dialog without sending the chat message', async () => {
     const captured: Captured[] = [];
     server.use(
       ...baseHandlers(),
@@ -1168,6 +1168,8 @@ describe('Thread', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
     });
 
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
+
     const urlInput = await screen.findByLabelText('Public URL');
     await act(async () => {
       fireEvent.change(urlInput, { target: { value: 'https://files.example.com/pic.png' } });
@@ -1180,14 +1182,14 @@ describe('Thread', () => {
       await new Promise(resolve => setTimeout(resolve, 80));
     });
 
-    // The attachment chip row appears and the popover closes.
+    // The attachment chip row appears and the dialog closes.
     await waitFor(() => {
       expect(screen.getByTestId('composer-attachments')).toBeTruthy();
     });
     await waitFor(() => {
       expect(screen.queryByLabelText('Public URL')).toBeFalsy();
     });
-    // Submitting the popover form must not bubble into the composer form and send a chat message.
+    // Submitting the dialog form must not bubble into the composer form and send a chat message.
     expect(captured).toHaveLength(0);
   });
 

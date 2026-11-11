@@ -16,7 +16,7 @@ export function TeammateSessionLine() {
   const canTakeOwnership = session.capabilities?.takeOwnership === true && factoryId !== undefined;
 
   return (
-    <div className="flex min-w-0 items-center gap-2 px-3">
+    <div className="flex min-w-0 items-center gap-1.5">
       {owner && (
         <div aria-hidden="true">
           <Avatar name={owner.name} src={owner.avatarUrl} size="xs" />

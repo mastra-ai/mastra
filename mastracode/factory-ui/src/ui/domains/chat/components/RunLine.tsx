@@ -49,7 +49,7 @@ export function RunLine({ state, live, onSettled }: { state: LineState; live: bo
             <ActivityIcon className="[&_svg]:size-4">
               <AgentIndicator state={pose} />
             </ActivityIcon>
-            <ActivityLabel className="text-body font-medium">{label}</ActivityLabel>
+            <ActivityLabel className="text-subheading">{label}</ActivityLabel>
             {detail && <ActivityDetail className="text-body-sm">{detail}</ActivityDetail>}
           </ActivityHeader>
         </Activity>

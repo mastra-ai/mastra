@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -55,7 +55,6 @@ describe('LinearRules', () => {
       boards,
       transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion: 'factory-config-v1' }),
       intakeRoutes: storedBoards,
-      isAutoRunEnabled: async () => false,
       ownerId: 'linear-close-routes',
     });
     const linearIssue = {
@@ -96,16 +95,7 @@ describe('LinearRules', () => {
     });
   });
 
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: 'proj-release', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: 'proj-gone',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed issue on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -114,11 +104,10 @@ describe('LinearRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { 'proj-release': 'release', 'proj-gone': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 
@@ -317,7 +306,7 @@ describe('LinearRules', () => {
     const linearRules = resolveLinearRules({ issueObserved: () => decision });
     const { project, service, workItems } = await setup(
       { issueObserved: () => decision },
-      createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+      boardRegistryOf([createTestBoard()]),
     );
     const input = { orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] };
     await expect(service.ingest(input)).resolves.toEqual({ status: 'committed', ingested: 1 });
@@ -327,7 +316,7 @@ describe('LinearRules', () => {
       projects: { get: async () => project },
       storage: workItems,
       configVersion: 'replacement-config',
-      boards: createBoardRegistry({ includeDefaultBoards: false }),
+      boards: boardRegistryOf([]),
       linearRules,
     });
     await expect(restarted.ingest(input)).resolves.toEqual({ status: 'replayed', ingested: 1 });
@@ -647,8 +636,8 @@ describe('LinearRules', () => {
           building: {
             title: 'Building',
             kind: 'working',
-            role: 'work',
-            outcomes: { done: 'shipped', canceled: 'dropped' },
+            runner: { context: 'work' },
+            nextPhases: ['shipped', 'dropped'],
           },
           shipped: { title: 'Shipped', kind: 'terminal' },
           dropped: { title: 'Dropped', kind: 'terminal' },
@@ -682,7 +671,7 @@ describe('LinearRules', () => {
         type: 'transition' as const,
         board: context.board ?? '',
         stage:
-          context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+          context.issue.stateType === 'canceled' && context.phase?.nextPhases.includes('dropped')
             ? 'dropped'
             : 'shipped',
         idempotencyKey: 'delivery-closed',
@@ -700,7 +689,7 @@ describe('LinearRules', () => {
       });
       expect(issueClosed.mock.calls[0]?.[0]).toMatchObject({
         board: 'delivery',
-        phase: { id: 'building', kind: 'working', role: 'work', outcomes: ['done', 'canceled'] },
+        phase: { id: 'building', kind: 'working', context: 'work', nextPhases: ['shipped', 'dropped'] },
       });
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
         { decision: { type: 'transition', board: 'delivery', stage: 'dropped' } },

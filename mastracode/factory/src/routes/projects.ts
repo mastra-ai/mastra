@@ -8,9 +8,12 @@ import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/wor
 import type { Context } from 'hono';
 
 import type { ProjectBoardCache } from '../boards/project-boards.js';
+import { createBoardRegistry } from '../boards/registry.js';
+import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
+import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type {
@@ -25,7 +28,6 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
-import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectListRepository } from './contracts.js';
@@ -200,15 +202,19 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
-  boards?: Pick<ProjectBoardCache, 'describe'>;
+  boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
 }
 
-/** Provider output is shown to the user; strip any clone credential from it first. */
-function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
+/**
+ * Provider output is shown to the user; strip any clone credential and any
+ * Build variable value from it first.
+ */
+function redactBuild<T extends { error?: string; logs?: string[] }>(build: T, buildEnv?: Record<string, string>): T {
+  const redact = (text: string) => maskSandboxEnvValues(redactCredentials(text), buildEnv);
   return {
     ...build,
-    ...(build.error !== undefined ? { error: redactCredentials(build.error) } : {}),
-    ...(build.logs ? { logs: build.logs.map(redactCredentials) } : {}),
+    ...(build.error !== undefined ? { error: redact(build.error) } : {}),
+    ...(build.logs ? { logs: build.logs.map(redact) } : {}),
   };
 }
 
@@ -477,7 +483,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const read = await capability.runner.readContext(project.id);
           if (!read) return context.json({ error: 'no_environment' }, 404);
           const builds = await capability.builds.list(read.ctx, read.settings);
-          return context.json({ builds: builds.map(redactBuild) });
+          return context.json({ builds: builds.map(build => redactBuild(build, read.ctx.buildEnv)) });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
@@ -508,7 +514,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               return context.json({ error: 'Build not found' }, 404);
             }
           }
-          return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
+          const build = await capability.builds.get(read.ctx, read.settings, buildId);
+          return context.json({ build: redactBuild(build, read.ctx.buildEnv) });
         },
       }),
     ];
@@ -589,8 +596,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
-          // The project's first board load retries anything this misses.
-          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+          // A new project gets today's Work, without Triage; a project that existed before keeps the
+          // Work it had. The project's first board load retries anything this misses, with Work as
+          // it was for older projects, as this one can't be told apart from them by then.
+          await this.deps.boards?.seedNewProject({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
             console.warn('[factory] could not store the boards of a new project:', error);
           });
           return context.json({ project }, 201);
@@ -646,8 +655,16 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               403,
             );
           }
-          // Plans are approved per board (`exitTool.autoApprove`); the old project switch is ignored.
-          const { autoApprovePlans: _ignored, ...input } = parsedBody.data;
+          // Retired project switches an old client may still send: the board owns automation now
+          // (`autoStart`, `exitTool.autoApprove`, a self-review phase), and the review skill decides
+          // whether to publish its test check.
+          const {
+            autoApprovePlans: _plans,
+            autoRunEnabled: _autoRun,
+            reviewTestChecksEnabled: _testChecks,
+            selfReviewEnabled: _selfReview,
+            ...input
+          } = parsedBody.data;
           const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
@@ -687,6 +704,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
             binding => binding.status === 'active',
           );
+          const boards =
+            (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
+            createBoardRegistry();
           const seen = new Set<string>();
           const applied: string[] = [];
           const skipped: Array<{
@@ -710,7 +730,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
               continue;
             }
-            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+            // A bound run can still act on its card anywhere short of a terminal phase.
+            const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
+            if (phaseKind === undefined || phaseKind === 'terminal') {
               skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
               continue;
             }

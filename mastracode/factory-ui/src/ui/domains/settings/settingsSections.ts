@@ -9,12 +9,11 @@ export type SettingsSection =
   | 'connections'
   | 'repositories'
   | 'intake'
-  | 'board'
   | 'models'
   | 'memory'
-  | 'skills'
   | 'tools'
-  | 'behavior';
+  | 'behavior'
+  | 'debug';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   account: 'My account',
@@ -23,12 +22,11 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   connections: 'Connections',
   repositories: 'Repositories',
   intake: 'Work Intake',
-  board: 'Work board',
   models: 'Models',
   memory: 'Memory',
-  skills: 'Skills',
   tools: 'Tools',
   behavior: 'Behavior',
+  debug: 'Debug',
 };
 
 export const MODEL_DEFAULTS_ANCHORS = {

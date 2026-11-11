@@ -25,20 +25,20 @@ import {
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
 import {
-  WORK_ITEM_ACTIVITY_SCHEMA,
-  WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
-  WORK_ITEM_COMMENTS_SCHEMA,
-} from '../comments/schema.js';
-import {
   BoardScopes,
   bumpBoardVersions,
+  CARD_TABLES,
+  DECISION_TABLES,
   FACTORY_BOARD_VERSIONS_SCHEMA,
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
+import type { BoardScope } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
+import { LEGACY_REST_PHASE, LEGACY_TRIAGE_PHASE, LEGACY_WORK_BOARD, readReviewBoardInUse } from './legacy-review.js';
+import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
   WorkItemDbRecord,
@@ -296,12 +296,7 @@ export interface FactoryDeferredDecisionRecord {
   updatedAt: Date;
 }
 
-export type FactoryAttentionKind =
-  | 'automation-failed'
-  | 'automation-proposed'
-  | 'mention'
-  | 'activity'
-  | 'agent-waiting';
+export type FactoryAttentionKind = 'automation-failed' | 'automation-proposed' | 'agent-waiting';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
@@ -323,16 +318,6 @@ export interface FactoryAttentionReceiptRecord extends FactoryAttentionIdentity 
   createdAt: Date;
   updatedAt: Date;
 }
-
-/** Stages in which a bound run can still act on its work item. */
-export const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set([
-  'intake',
-  'triage',
-  'planning',
-  'execute',
-  'review',
-  'pr-review',
-]);
 
 interface SetAttentionReceiptInput {
   orgId: string;
@@ -364,15 +349,6 @@ function proposalReceiptFilter(orgId: string, factoryProjectId: string, decision
     source_id: identity.sourceId,
     occurrence: identity.occurrence,
   };
-}
-
-export function factoryMentionAttentionIdentity(commentId: string): FactoryAttentionIdentity {
-  return { kind: 'mention', sourceId: commentId, occurrence: 0 };
-}
-
-/** Collapsed per work item, so the occurrence is what a new comment bumps. */
-export function factoryActivityAttentionIdentity(workItemId: string, occurrence: number): FactoryAttentionIdentity {
-  return { kind: 'activity', sourceId: workItemId, occurrence };
 }
 
 /** Dated by the park itself, so an answer and a new park never share a receipt. */
@@ -540,6 +516,8 @@ export interface Card extends BoardItemRow {
   externalSource: ExternalWorkItemSource | null;
   parentWorkItemId: string | null;
   title: string;
+  /** What the card is about, in the words of whoever filed it; handed to agent runs at kickoff. */
+  description: string | null;
 }
 
 export interface BoardItemRow {
@@ -557,8 +535,8 @@ export interface BoardItemRow {
   triageType: FactoryTriageType | null;
   /**
    * When a person first committed this item to the Factory, by starting a run
-   * on it or releasing one that was proposed. Projects that withhold auto-run
-   * are asking to decide what the Factory picks up, not to approve each step of
+   * on it or releasing one that was proposed. Boards whose phases don't start
+   * on their own are asking to decide what the Factory picks up, not to approve each step of
    * work they already asked for, so runs on an armed item skip the gate.
    */
   autonomyArmedAt: Date | null;
@@ -568,8 +546,6 @@ export interface BoardItemRow {
    * agents may advance the item through Planning and Execute on their own.
    */
   acceptedAt: Date | null;
-  /** Denormalized visible comment count, maintained by the comments domain via recount. */
-  commentCount: number;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -581,6 +557,7 @@ export interface CreateWorkItemInput {
   externalSource?: ExternalWorkItemSource | null;
   parentWorkItemId?: string | null;
   title: string;
+  description?: string | null;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
@@ -590,6 +567,7 @@ export interface UpdateWorkItemInput {
   board?: string;
   parentWorkItemId?: string | null;
   title?: string;
+  description?: string | null;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
@@ -699,6 +677,7 @@ export interface WorkItemDbRow extends Record<string, unknown> {
   claim_key: string | null;
   parent_work_item_id: string | null;
   title: string;
+  description: string | null;
   stages: WorkItemStage[];
   stage_history: WorkItemStageEntry[];
   sessions: WorkItemSessions;
@@ -707,8 +686,6 @@ export interface WorkItemDbRow extends Record<string, unknown> {
   autonomy_armed_at: Date | null;
   plans_preapproved_at: Date | null;
   accepted_at: Date | null;
-  comment_count: number;
-  feed_activity_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -784,6 +761,7 @@ function toWorkItem(row: WorkItemDbRow): Card {
     externalSource: row.external_source,
     parentWorkItemId: row.parent_work_item_id,
     title: row.title,
+    description: row.description ?? null,
     stages: row.stages,
     stageHistory: row.stage_history,
     sessions: row.sessions,
@@ -791,7 +769,6 @@ function toWorkItem(row: WorkItemDbRow): Card {
     triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
     acceptedAt: row.accepted_at ?? null,
-    commentCount: row.comment_count ?? 0,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -806,6 +783,7 @@ function patchColumns(changes: Partial<Card>): Partial<WorkItemDbRow> {
     ...(changes.board !== undefined ? { board: changes.board } : {}),
     ...(changes.parentWorkItemId !== undefined ? { parent_work_item_id: changes.parentWorkItemId } : {}),
     ...(changes.title !== undefined ? { title: changes.title } : {}),
+    ...(changes.description !== undefined ? { description: changes.description } : {}),
     ...(changes.stages !== undefined ? { stages: changes.stages } : {}),
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
@@ -847,6 +825,15 @@ export class WorkItemUpdateConflictError extends Error {
 
   constructor(readonly reason: 'board' | 'revision') {
     super(`Work item ${reason} precondition failed`);
+  }
+}
+
+/** The source a caller tried to attach already belongs to another work item in the project. */
+export class WorkItemSourceConflictError extends Error {
+  readonly code = 'work_item_source_conflict';
+
+  constructor(readonly ownerWorkItemId: string) {
+    super(`The source already belongs to work item ${ownerWorkItemId}.`);
   }
 }
 
@@ -934,6 +921,7 @@ function applyUpdate({
     ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
     ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
     ...(input.stages !== undefined
       ? {
           stages: input.stages,
@@ -1237,13 +1225,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   };
 }
 function attentionReceiptKind(value: unknown): FactoryAttentionKind {
-  if (
-    value === 'automation-failed' ||
-    value === 'automation-proposed' ||
-    value === 'mention' ||
-    value === 'activity' ||
-    value === 'agent-waiting'
-  ) {
+  if (value === 'automation-failed' || value === 'automation-proposed' || value === 'agent-waiting') {
     return value;
   }
   throw new Error(`Unsupported attention receipt kind '${String(value)}'.`);
@@ -1305,11 +1287,8 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   };
 }
 
-/** The project whose attention list a write just changed. */
-export interface FactoryAttentionScope {
-  orgId: string;
-  factoryProjectId: string;
-}
+/** The project whose board a committed card or decision write just changed. */
+export type FactoryBoardScope = Required<BoardScope>;
 
 /** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
@@ -1324,7 +1303,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listCache = new Map<string, { version: string; takenAt: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
-  #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
   #isTerminal: (item: Card) => boolean = () => false;
@@ -1345,17 +1324,41 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#split.pending;
   }
 
+  /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
+  readonly #reviewRedundant = new Set<string>();
+
+  /** {@link reviewBoardInUse} through `ops`, so a caller inside a transaction reads within it. */
+  readonly #reviewInUse: ReviewBoardInUse = async (ops, scope) => {
+    const key = `${scope.orgId}\0${scope.factoryProjectId}`;
+    if (this.#reviewRedundant.has(key)) return false;
+    const inUse = await readReviewBoardInUse(ops, scope, {
+      split: !this.#legacyMode,
+      // Legacy cards not copied yet still count.
+      legacy: this.#legacyMode || this.#split.pending,
+    });
+    if (!inUse) this.#reviewRedundant.add(key);
+    return inUse;
+  };
+
+  /**
+   * Whether the project still uses the retired Review board: it holds a card stored on Review
+   * that isn't Done or Canceled. Such a project keeps the board and its cards stay on it; in any
+   * other project Review is redundant and its cards read as Work.
+   */
+  reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
+    return this.#reviewInUse(this.#db, scope);
+  }
+
   constructor() {
     super('work-items');
   }
 
   /**
-   * Wired once at boot. Every write below that changes what this project's
-   * attention list projects announces it here — the one place a new such write
-   * has to remember, since clients stop polling while their stream is up.
+   * Wired once at boot. Fires after a committed write changes what a board shows of a card
+   * or a deferred decision, so open boards refetch instead of polling.
    */
-  onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
-    this.#attentionChanged = listener;
+  onBoardChanged(listener: (scope: FactoryBoardScope) => void): void {
+    this.#boardChanged = listener;
   }
 
   /**
@@ -1413,8 +1416,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     this.#legacyMode = process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run';
-    // The comment schemas are co-registered so the delete cascade below can
-    // purge feed rows regardless of domain init order.
     await this.ensureCollections([
       WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEMS_SCHEMA,
@@ -1425,9 +1426,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
       ...FACTORY_GOVERNANCE_SCHEMAS,
-      WORK_ITEM_COMMENTS_SCHEMA,
-      WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
-      WORK_ITEM_ACTIVITY_SCHEMA,
       FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA,
     ]);
     if (this.#legacyMode && (await super.ops.findOne(FACTORY_BOARD_ITEMS_SCHEMA.name, {}))) {
@@ -1516,21 +1514,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * LibSQL), else in a transaction of its own.
    */
   #cards(ops: FactoryStorageOps, { transaction }: { transaction: boolean }): Cards {
-    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode);
-    return new Cards(ops, false, {
-      copy: async rows => {
-        if (transaction) {
-          await copyLegacyRows(ops, rows);
-          return;
-        }
-        try {
-          await this.#withTransaction(tx => copyLegacyRows(tx, rows));
-        } catch (error) {
-          // A concurrent first copy won (its retry lost again); the re-read finds its rows.
-          if (!(error instanceof UniqueViolationError)) throw error;
-        }
+    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
+    return new Cards(
+      ops,
+      false,
+      {
+        copy: async rows => {
+          if (transaction) {
+            await copyLegacyRows(ops, rows);
+            return;
+          }
+          try {
+            await this.#withTransaction(tx => copyLegacyRows(tx, rows));
+          } catch (error) {
+            // A concurrent first copy won (its retry lost again); the re-read finds its rows.
+            if (!(error instanceof UniqueViolationError)) throw error;
+          }
+        },
       },
-    });
+      this.#reviewInUse,
+    );
   }
 
   /** Validation reads the split tables only, so a parent still in legacy is copied first. */
@@ -1599,6 +1602,65 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
+  }
+
+  /**
+   * File one more external record on an existing card: a pull request on the
+   * issue card it fixes. The card's primary source stays first, so the card keeps
+   * reading as the issue. Attaching a source the card already holds is a no-op
+   * (`attached: false`); one another card holds throws
+   * {@link WorkItemSourceConflictError}. Later state for the attached record goes
+   * through {@link syncWorkItemSource}, never {@link syncCard}, which writes the
+   * primary source.
+   */
+  async attachSource({
+    orgId,
+    id,
+    source,
+    metadata,
+    expectedRevision,
+  }: {
+    orgId: string;
+    id: string;
+    source: ExternalWorkItemSource;
+    metadata: Record<string, unknown> | null;
+    expectedRevision?: number;
+  }): Promise<{ item: Card; attached: boolean } | null> {
+    let result: Awaited<ReturnType<Cards['attachSource']>>;
+    try {
+      result = await this.#withTransaction(async ops => {
+        const cards = new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
+        const attached = await cards.attachSource(
+          { org_id: orgId, id },
+          { external_source: source, metadata, now: new Date() },
+          expectedRevision,
+        );
+        if (attached?.ownerWorkItemId) throw new WorkItemSourceConflictError(attached.ownerWorkItemId);
+        if (attached?.revisionConflict) throw new WorkItemUpdateConflictError('revision');
+        return attached;
+      });
+    } catch (error) {
+      // A concurrent attach or upsert of the same record won the unique index.
+      if (error instanceof UniqueViolationError && error.collection === FACTORY_WORK_ITEM_SOURCES_SCHEMA.name) {
+        // Sources are unique per project, so another project's copy of the record is no owner here.
+        const card = await new Cards(this.#db, this.#legacyMode, undefined, this.#reviewInUse).findOne({
+          org_id: orgId,
+          id,
+        });
+        const owner = card
+          ? await this.#db.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {
+              org_id: orgId,
+              factory_project_id: card.factory_project_id,
+              source_key: externalSourceKey(source),
+            })
+          : null;
+        if (owner && card && owner.work_item_id === card.work_item?.id)
+          return { item: toWorkItem(card), attached: false };
+        throw new WorkItemSourceConflictError(owner?.work_item_id ?? 'unknown');
+      }
+      throw error;
+    }
+    return result ? { item: toWorkItem(result.row), attached: result.attached } : null;
   }
 
   /** Apply source facts and their process stamps in one transaction. */
@@ -1694,18 +1756,32 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
     // Outside a transaction a resolved write has committed, so its wake can go out at once.
+    const cards = trackBoardWrites(ops, CARD_TABLES, async scope => {
+      await bumpBoardVersions(ops, [scope]);
+      this.#announceBoard(scope);
+    });
     return trackClaimableWrites(
-      trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope])),
+      trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
       scope => this.#claimableWork(scope),
     );
   }
 
-  /** `storage.withTransaction`, bumping the board version of every project it wrote once it commits. */
+  /** Only legacy dry-run writes name no project, and no feed is keyed by org alone. */
+  #announceBoard(scope: BoardScope): void {
+    if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+  }
+
+  /** `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits. */
   async #withTransaction<T>(
     fn: (ops: FactoryStorageOps) => Promise<T>,
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
     const changed = new BoardScopes();
+    const touched = new BoardScopes();
+    const cardWritten = (scope: BoardScope) => {
+      changed.add(scope);
+      touched.add(scope);
+    };
     let queued = new Map<string, FactoryClaimableWorkScope>();
     const run = () => {
       // A retried transaction starts over: wakes queued by the rolled-back attempt never committed.
@@ -1713,8 +1789,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return this.storage.withTransaction(
         ops =>
           fn(
-            trackClaimableWrites(trackBoardWrites(ops, changed.add), scope =>
-              queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+            trackClaimableWrites(
+              trackBoardWrites(trackBoardWrites(ops, CARD_TABLES, cardWritten), DECISION_TABLES, touched.add),
+              scope => queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
             ),
           ),
         options,
@@ -1736,6 +1813,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
       for (const scope of queued.values()) this.#claimableWork(scope);
     }
+    for (const scope of touched.values()) this.#announceBoard(scope);
     return result;
   }
 
@@ -1910,6 +1988,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return rows.map(toWorkItem);
+  }
+
+  /** The project's cards as {@link list} reads them, uncached, through `ops`: a transaction's, to read them in it. */
+  async listWith(ops: FactoryStorageOps, { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) {
+    return this.#listWithOps(ops, orgId, factoryProjectId);
   }
 
   /**
@@ -2686,35 +2769,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return Boolean(decision) && parked;
     }
     // A parked session has no row here; the route checks it against the live registry.
-    if (identity.kind === 'agent-waiting') return true;
-    if (identity.kind === 'activity') {
-      // Occurrence-exact: a bump since the read makes that receipt stale, and
-      // the route answers 409. Scoped to this user or every badge would skew.
-      const activity = await ops.findOne('work_item_activity', {
-        work_item_id: identity.sourceId,
-        participant_id: userId,
-        org_id: orgId,
-        factory_project_id: factoryProjectId,
-        occurrence: identity.occurrence,
-      });
-      return activity !== null;
-    }
-    if (identity.occurrence !== 0) return false;
-    const mention = await ops.findOne('work_item_comment_mentions', {
-      comment_id: identity.sourceId,
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      mentioned_kind: 'user',
-      mentioned_id: userId,
-    });
-    if (!mention) return false;
-    const comment = await ops.findOne('work_item_comments', {
-      id: identity.sourceId,
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      deleted_at: null,
-    });
-    return comment !== null;
+    return true;
   }
 
   async #setAttentionReceiptWithOps(
@@ -2856,11 +2911,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
-    if (!row) return null;
-    const record = toDeferredDecision(row);
-    // A retryable failure surfaces nothing; only a terminal one mints an item.
-    if (input.terminal) this.#attentionChanged(record);
-    return record;
+    return row ? toDeferredDecision(row) : null;
   }
 
   /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
@@ -2885,10 +2936,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (!proposed || !row) return null;
-    const record = toDeferredDecision(row);
-    this.#attentionChanged(record);
-    return record;
+    return proposed && row ? toDeferredDecision(row) : null;
   }
 
   /**
@@ -2904,7 +2952,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
     approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const approved = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2932,8 +2980,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       return record;
     });
-    if (approved) this.#attentionChanged(approved);
-    return approved;
   }
 
   /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
@@ -2995,7 +3041,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
     patch: Partial<GovernanceDbRow>,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const settled = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let updated = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3010,8 +3056,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
       return toDeferredDecision(row);
     });
-    if (settled) this.#attentionChanged(settled);
-    return settled;
   }
 
   async #supersedeFailedDecision({
@@ -3025,7 +3069,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string;
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
-    const resolved = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let resolved = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3046,8 +3090,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (resolved) this.#attentionChanged(resolved);
-    return resolved;
   }
 
   async supersedeTerminalDecisionsForWorkItem(input: {
@@ -3066,10 +3108,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * left alone. Returns the cards moved; a second run finds none.
    */
   async returnHeldTriageCards(): Promise<Card[]> {
-    // Cards filed before boards were recorded carry no board; outside pull requests they are Work cards.
+    // A one-time migration of rows written when Work was the only board, so it reads Work's phase
+    // keys (`triage`, `intake`) by name. Cards filed before boards were recorded carry no board;
+    // outside pull requests they are Work cards.
     const held = (
       await this.#cards(this.#db, { transaction: false }).findMany({
-        board: { in: ['work', null] },
+        board: { in: [LEGACY_WORK_BOARD, null] },
         triage_type: { in: FACTORY_TRIAGE_TYPES.filter(type => type !== 'bug') },
         accepted_at: null,
       })
@@ -3078,8 +3122,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       .filter(
         item =>
           item.stages.length === 1 &&
-          item.stages[0] === 'triage' &&
-          (item.board === 'work' || item.externalSource?.type !== 'pull-request'),
+          item.stages[0] === LEGACY_TRIAGE_PHASE &&
+          (item.board === LEGACY_WORK_BOARD || item.externalSource?.type !== 'pull-request'),
       );
     if (held.length === 0) return [];
     // A binding stays active after its run ends until the stale-binding sweep, so the triage
@@ -3104,7 +3148,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         factoryProjectId: item.factoryProjectId,
         workItemId: item.id,
         expectedRevision: item.revision,
-        destinationStage: 'intake',
+        destinationStage: LEGACY_REST_PHASE,
         actorId: HELD_CARD_SWEEP_ACTOR,
         ingress: { identity, triggerType: 'factory.boot', transitionId: identity },
         configVersion: HELD_CARD_SWEEP_ACTOR,
@@ -3126,7 +3170,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const retriedRecord = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let retried = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3160,8 +3204,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (retriedRecord) this.#attentionChanged(retriedRecord);
-    return retriedRecord;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */
@@ -3519,6 +3561,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             source_key: externalSourceKey(create.externalSource),
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
+            description: create.description ?? null,
             stages: create.stages ?? [],
             stage_history: applyStageTransition([], [], create.stages ?? [], input.userId, now),
             sessions: stampSessions({ [input.role]: input.session }, input.userId),
@@ -3694,6 +3737,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             reuseMode === 'non-stage'
               ? {
                   title: input.title,
+                  description: input.description,
                   parentWorkItemId: input.parentWorkItemId ?? undefined,
                   metadata: input.metadata,
                 }
@@ -3723,7 +3767,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (reused) return reused;
 
     const now = new Date();
-    const stages = input.stages ?? ['intake'];
+    // Legacy writers omit stages; they only ever filed onto the default board's resting phase.
+    const stages = input.stages ?? [LEGACY_REST_PHASE];
     if (input.parentWorkItemId != null) {
       await this.#copyLegacyParent(ops, orgId, input.parentWorkItemId);
       validateParentRelation(await this.#listWithOps(ops, orgId, factoryProjectId), undefined, input.parentWorkItemId);
@@ -3736,6 +3781,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       source_key: key,
       parent_work_item_id: input.parentWorkItemId ?? null,
       title: input.title,
+      description: input.description ?? null,
       stages,
       stage_history: stages.map(stage => ({ stage, enteredAt: now.toISOString(), by: userId })),
       sessions: stampSessions(input.sessions ?? {}, userId),
@@ -3869,44 +3915,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Feed rows die with their work item: orphan mention rows would keep
-   * projecting attention items that deep-link to a card that no longer exists.
-   */
-  async #purgeFeedState(
-    ops: FactoryStorageOps,
-    { orgId, factoryProjectId, workItemId }: { orgId: string; factoryProjectId: string; workItemId: string },
-  ): Promise<void> {
-    // Paged harvest: this runs inside the delete transaction and a long-lived
-    // item can carry thousands of comments — never materialize them all.
-    const where = { org_id: orgId, factory_project_id: factoryProjectId, work_item_id: workItemId };
-    while (true) {
-      const comments = await ops.findMany<{ id: string } & Record<string, unknown>>('work_item_comments', where, {
-        limit: ATTENTION_RECEIPT_QUERY_BATCH_SIZE,
-      });
-      if (comments.length === 0) break;
-      const commentIds = comments.map(comment => comment.id);
-      await ops.deleteMany('factory_attention_receipts', {
-        org_id: orgId,
-        factory_project_id: factoryProjectId,
-        kind: 'mention',
-        source_id: { in: commentIds },
-      });
-      await ops.deleteMany('work_item_comments', { ...where, id: { in: commentIds } });
-      if (comments.length < ATTENTION_RECEIPT_QUERY_BATCH_SIZE) break;
-    }
-    await ops.deleteMany('work_item_comment_mentions', where);
-    // Activity is keyed on the item, so one statement covers every occurrence
-    // and every participant.
-    await ops.deleteMany('factory_attention_receipts', {
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      kind: 'activity',
-      source_id: workItemId,
-    });
-    await ops.deleteMany('work_item_activity', where);
-  }
-
-  /**
    * Make a session follow a work item. Idempotent: following again keeps the
    * first subscription, including its reason (filing beats a later subscribe).
    */
@@ -4023,12 +4031,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const candidate = await this.#cards(this.#db, { transaction: false }).findOne(where);
     if (!candidate) return null;
 
-    const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
       const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
       const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
       if (deleted === 0) return null;
-      await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
       if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
@@ -4043,7 +4050,5 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
-    if (removed) this.#attentionChanged(removed);
-    return removed;
   }
 }

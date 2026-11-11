@@ -1268,7 +1268,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // When a stored config is an override for a code agent, adding it would create a
     // duplicate entry under a different key (agent.id vs config key), causing the list
     // endpoint to show the agent as "stored" instead of "code".
-    if (!this.getCodeDefinedAgent(storedAgent.id)) {
+    if (!this.getCodeDefinedAgent(storedAgent.id) && this.mastra?.listAgents()[storedAgent.id]?.source !== 'stored') {
       this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
       this._registeredStoredAgentIds.add(storedAgent.id);
     }

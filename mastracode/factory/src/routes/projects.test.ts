@@ -5,6 +5,8 @@ import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/w
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
+import { boardDefinitionOf } from '../boards/stored-board.js';
+import { workBoard } from '../boards/work.js';
 import { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { scheduleIdFor } from '../environment/build-schedule.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../environment/build-workflow.js';
@@ -88,7 +90,6 @@ describe('ProjectRoutes', () => {
         integrationId: 'jira',
         sourceId: '10000',
         factoryProjectId,
-        board: 'work',
         labels,
       });
     await bind(platform.id, null);
@@ -135,7 +136,46 @@ describe('ProjectRoutes', () => {
     expect(updated).not.toHaveProperty('slackWorkItemsEnabled');
   });
 
-  it('accepts and ignores the retired autoApprovePlans switch from an old client', async () => {
+  it('accepts and ignores the retired automation switches from an old client, and changes no board', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await seed.boards.insertIfMissing(scope, boardDefinitionOf(workBoard), 'factory');
+    const boardBefore = await seed.boards.get(scope, 'work');
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // An old Board settings toggle still gets a 200, so it does not show an error; the board's
+    // phases own automation now, so nothing is stored or returned.
+    for (const field of ['autoApprovePlans', 'autoRunEnabled', 'selfReviewEnabled']) {
+      const alone = await patch({ [field]: true });
+      expect(alone.status, field).toBe(200);
+      expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(field);
+
+      const mixed = await patch({ name: `Renamed ${field}`, [field]: true });
+      expect(mixed.status, field).toBe(200);
+      const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+      expect(updated.name).toBe(`Renamed ${field}`);
+      expect(updated).not.toHaveProperty(field);
+    }
+    expect(await seed.projects.retiredAutomationSettings({ orgId: 'org-1', id: project.id })).toEqual({
+      autoRunEnabled: false,
+      selfReviewEnabled: false,
+    });
+    expect(await seed.boards.get(scope, 'work')).toEqual(boardBefore);
+  });
+
+  it('accepts and ignores the retired reviewTestChecksEnabled switch from an old client', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
     const app = new Hono();
@@ -151,19 +191,20 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify(body),
       });
 
-    // An old Board settings toggle still gets a 200, so it does not show an error; plans
-    // are approved per board now, so nothing is stored or returned.
-    const alone = await patch({ autoApprovePlans: true });
+    // The review skill decides whether to publish its test check, so the old toggle
+    // gets a 200 and changes nothing.
+    const alone = await patch({ reviewTestChecksEnabled: true });
     expect(alone.status).toBe(200);
     expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(
-      'autoApprovePlans',
+      'reviewTestChecksEnabled',
     );
 
-    const mixed = await patch({ name: 'Renamed', autoApprovePlans: true });
+    const mixed = await patch({ name: 'Renamed', reviewTestChecksEnabled: false });
     expect(mixed.status).toBe(200);
     const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
     expect(updated.name).toBe('Renamed');
-    expect(updated).not.toHaveProperty('autoApprovePlans');
+    expect(updated).not.toHaveProperty('reviewTestChecksEnabled');
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).not.toHaveProperty('reviewTestChecksEnabled');
   });
 
   it('requires an organization and scopes project access by organization', async () => {
@@ -1522,6 +1563,8 @@ describe('ProjectRoutes', () => {
         readonly starts: Array<{ sessionId: string; settings: Settings }> = [];
         readonly reads: Array<{ buildId: string; heads: Record<string, string | undefined> }> = [];
         withHistory = false;
+        /** Extra provider output, as a user's setup command might print it. */
+        printed = '';
         readonly builds: FactorySandboxBuilds<Settings> = {
           start: async (ctx, settings) => {
             this.starts.push({ sessionId: ctx.sessionId, settings });
@@ -1532,7 +1575,9 @@ describe('ProjectRoutes', () => {
               buildId,
               heads: { api: await ctx.resolveHead!('https://github.com/acme/api.git') },
             });
-            return { buildId, status: 'ready', templateId: 'tpl-1' };
+            return this.printed
+              ? { buildId, status: 'failed', error: `setup failed: ${this.printed}`, logs: [this.printed] }
+              : { buildId, status: 'ready', templateId: 'tpl-1' };
           },
           list: async () =>
             this.withHistory
@@ -1545,6 +1590,16 @@ describe('ProjectRoutes', () => {
                     logs: ['git clone https://x-access-token:ghs_secret@github.com/acme/api.git', 'fatal: 403'],
                   },
                   { buildId: 'tpl%201:b', status: 'ready' as const, templateId: 'tpl-1' },
+                  ...(this.printed
+                    ? [
+                        {
+                          buildId: 'tpl-1:build-2',
+                          status: 'failed' as const,
+                          error: this.printed,
+                          logs: [this.printed],
+                        },
+                      ]
+                    : []),
                 ]
               : [],
         };
@@ -1585,6 +1640,7 @@ describe('ProjectRoutes', () => {
           {
             sandbox,
             projects: seed.projects,
+            sandboxEnvs: seed.sandboxEnvs,
             sourceControl: {
               storage: github,
               versionControl: { getRepositoryAccess: async () => ({ token: 't', cloneUrl: 'u' }) as never },
@@ -1621,6 +1677,37 @@ describe('ProjectRoutes', () => {
       const until = async (check: () => Promise<boolean>) => {
         for (let i = 0; i < 100 && !(await check()); i += 1) await new Promise(r => setTimeout(r, 20));
       };
+
+      it('masks Build variable values in provider build errors and logs', async () => {
+        const { app, project, sandbox, seed } = await seedBuilding();
+        await seed.sandboxEnvs.set(
+          'org-1',
+          project.id,
+          { name: 'NPM_TOKEN', value: 'npm-sentinel-77', appliesTo: 'build' },
+          'user-1',
+        );
+        sandbox.withHistory = true;
+        sandbox.printed = 'auth failed for npm-sentinel-77';
+
+        const history = await app.request(`/web/factory/projects/${project.id}/environment/builds`);
+        expect(history.status).toBe(200);
+        const historyText = await history.text();
+        expect(historyText).not.toContain('npm-sentinel-77');
+        expect(JSON.parse(historyText).builds.at(-1)).toEqual({
+          buildId: 'tpl-1:build-2',
+          status: 'failed',
+          error: 'auth failed for ***',
+          logs: ['auth failed for ***'],
+        });
+
+        const detail = await app.request(
+          `/web/factory/projects/${project.id}/environment/builds/${encodeURIComponent('tpl-1:build-2')}`,
+        );
+        expect(detail.status).toBe(200);
+        const detailText = await detail.text();
+        expect(detailText).not.toContain('npm-sentinel-77');
+        expect(JSON.parse(detailText).build).toMatchObject({ error: 'setup failed: auth failed for ***' });
+      });
 
       it('reports triggers and the last build on GET without calling the provider', async () => {
         const { app, project, sandbox } = await seedBuilding();

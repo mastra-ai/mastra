@@ -35,20 +35,15 @@ import type {
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
 } from '../../storage/domains/channel-identity/base.js';
-import type { FactoryActorExternalIdentity } from '../../storage/domains/comments/actor.js';
-import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
-import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { ExternalWorkItemSource, Card as FactoryCard, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
 import { markNewChannelSession } from './channel-session-link-processor.js';
 
-import { resolveEmojiShortcodes } from './emoji.js';
-import { slackCommentSource } from './feed-publisher.js';
 import { slackRunErrorCard } from './run-error-card.js';
 import { transcribeVoiceClips, voiceClipFailureCard } from './voice-clips.js';
 import type { VoiceClipDeps, VoiceClipFactories } from './voice-clips.js';
@@ -96,10 +91,7 @@ interface SlackChannelDeps extends VoiceClipDeps {
    * on the thread and never re-resolved. Unset → the factory default, as before.
    */
   modelDefaults?: ModelDefaultsStorage;
-  /**
-   * Factory work-items domain, used to find the card a Slack thread already
-   * has so an `aside` can land on it. New threads never create cards.
-   */
+  /** Factory work-items domain, used to resolve which run binding owns a Slack thread. */
   workItems?: WorkItemsStorage;
   /**
    * Factory projects domain. When provided (alongside `accountLinks`), a
@@ -111,11 +103,6 @@ interface SlackChannelDeps extends VoiceClipDeps {
    * transcribe a voice clip.
    */
   projects?: FactoryProjectsStorage;
-  /**
-   * Work-item feed. With it (and `workItems`), an `aside` lands as a comment on
-   * the card the thread already has. Unset → asides stay ignored, as before.
-   */
-  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
 }
@@ -169,18 +156,25 @@ type LinkedSenderResult =
   | { status: 'linked'; link: ChannelAccountLink; key: ChannelAccountLinkKey };
 
 /**
- * Resolve the sender's account link, posting an ephemeral "connect your
- * account" card (visible only to the sender) linking into the web UI's
- * Slack-connect flow when they're unlinked.
+ * Resolve the sender's account link, replying in the thread with a "connect
+ * your account" card linking into the web UI's Slack-connect flow when
+ * they're unlinked. When the sender addressed the agent (a mention or a DM)
+ * the reply is public, and mentions the sender in channels, so they get
+ * notified and everyone else in the thread can see why the agent didn't pick
+ * up the message. Other chatter in a subscribed thread only gets an ephemeral
+ * card, so an unlinked teammate isn't publicly pinged for every reply.
  */
 export async function resolveLinkedSender({
   thread,
   message,
   accountLinks,
+  addressed = true,
 }: {
   thread: HandlerThread;
   message: HandlerMessage;
   accountLinks?: ChannelIdentityStorage;
+  /** Whether the sender addressed the agent (mention or DM). */
+  addressed?: boolean;
 }): Promise<LinkedSenderResult> {
   if (!accountLinks) return { status: 'ungated' };
   const platform = thread.adapter.name;
@@ -195,9 +189,14 @@ export async function resolveLinkedSender({
   const publicUrl = webPublicUrl();
   // A public origin is all the card needs. The link carries no identity: the
   // web app authenticates the visitor, then Slack's OIDC flow proves which
-  // Slack account they control. Without an origin, still block, just no card.
+  // Slack account they control, so posting it publicly leaks nothing. Without
+  // an origin, still block, just no card.
   if (publicUrl) {
-    await thread.postEphemeral(message.author, buildConnectCard(publicUrl, thread), { fallbackToDM: true });
+    if (addressed) {
+      await thread.post(buildConnectCard(publicUrl, thread, message.author.userId));
+    } else {
+      await thread.postEphemeral(message.author, buildConnectCard(publicUrl, thread), { fallbackToDM: true });
+    }
   }
   return { status: 'blocked' };
 }
@@ -209,11 +208,12 @@ const retryHint = (thread: HandlerThread) => (thread.isDM ? 'message me again' :
  * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
  * runs the OIDC flow and Slack itself asserts the (team, user) pair.
  */
-function buildConnectCard(publicUrl: string, thread: HandlerThread) {
+function buildConnectCard(publicUrl: string, thread: HandlerThread, mentionUserId?: string) {
+  const greeting = mentionUserId && !thread.isDM ? `${thread.mentionUser(mentionUserId)} ` : '';
   return Card({
     title: 'Connect your account',
     children: [
-      CardText(`Connect your account to use this agent, then ${retryHint(thread)}.`),
+      CardText(`${greeting}Connect your Slack account to this Factory to use this agent, then ${retryHint(thread)}.`),
       Actions([
         LinkButton({
           url: `${publicUrl}/connect/slack`,
@@ -578,7 +578,7 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * its thread reaches the controller.
  *
  * Without this a Slack session runs on the SDK's built-in mode default
- * (`openai/gpt-5.5`), so a factory configured for any other provider fails every
+ * (`openai/gpt-5.6-sol`), so a factory configured for any other provider fails every
  * message with a missing-credentials error. The web kickoff has always applied
  * the factory default; this brings Slack to the same footing.
  *
@@ -860,10 +860,12 @@ async function gateDispatch(
   message: HandlerMessage,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-  options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
+  options: { requireInternalThread: boolean; internalThread?: InternalThread; addressed?: boolean } = {
+    requireInternalThread: false,
+  },
 ): Promise<DispatchGate | null> {
   const { accountLinks, projects } = deps;
-  const sender = await resolveLinkedSender({ thread, message, accountLinks });
+  const sender = await resolveLinkedSender({ thread, message, accountLinks, addressed: options.addressed });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
   if (sender.status === 'linked' && accountLinks) {
@@ -921,31 +923,6 @@ async function gateDispatch(
     };
   }
   return {};
-}
-
-/**
- * A channel id and a `ts` name a thread only inside the workspace that issued
- * them, so the team scopes the card's key — without it two workspaces could
- * hold one key and an aside would land on another tenant's card.
- */
-export function slackThreadSource(thread: HandlerThread, teamId?: string): ExternalWorkItemSource {
-  return {
-    integrationId: thread.adapter.name,
-    type: 'slack-thread',
-    ...(teamId ? { workspaceId: teamId } : {}),
-    externalId: thread.id,
-  };
-}
-
-/** Cards written before the key carried a team are still keyed bare. */
-async function findThreadWorkItem(
-  workItems: WorkItemsStorage,
-  thread: HandlerThread,
-  teamId?: string,
-): Promise<FactoryCard | null> {
-  const scoped = await workItems.getBySource(slackThreadSource(thread, teamId));
-  if (scoped || !teamId) return scoped;
-  return workItems.getBySource(slackThreadSource(thread));
 }
 
 function preDispatchErrorDetails(error: unknown): { message: string; cause?: { message: string } } {
@@ -1045,7 +1022,7 @@ async function transcribeBatch(
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   return async (thread, message, defaultHandler, ctx) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
-    // Unlinked → post the ephemeral Connect card and stop; no session/run is
+    // Unlinked → post the Connect card and stop; no session/run is
     // created (which would otherwise be tenant-less and fail credential
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
@@ -1068,60 +1045,6 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   };
 }
 
-/**
- * An `aside` never reaches the agent, but it is still part of the conversation:
- * record it on the card the thread already has. The link is resolved here rather
- * than through `gateDispatch`, which posts a Connect card an aside must not
- * trigger. Best-effort — nothing here may surface in the Slack thread.
- */
-async function ingestAside(
-  thread: HandlerThread,
-  message: HandlerMessage,
-  { feed, workItems, accountLinks }: SlackChannelDeps,
-): Promise<void> {
-  if (!feed || !workItems) return;
-  const body = resolveEmojiShortcodes(message.text.replace(/^aside\b[,:]?\s*/i, '').trim());
-  if (!body) return;
-  try {
-    const teamId = slackTeamId(message);
-    const workItem = await findThreadWorkItem(workItems, thread, teamId);
-    if (!workItem) return;
-
-    const external: FactoryActorExternalIdentity = {
-      platform: thread.adapter.name,
-      ...(teamId ? { teamId } : {}),
-      messageId: message.id,
-      userId: message.author.userId,
-      userName: message.author.userName,
-      fullName: message.author.fullName,
-      isBot: message.author.isBot,
-    };
-    const link =
-      accountLinks && teamId
-        ? await accountLinks.getAccountLink({
-            platform: external.platform,
-            externalTeamId: teamId,
-            externalUserId: external.userId,
-          })
-        : null;
-
-    const result = await feed.createComment({
-      orgId: workItem.orgId,
-      workItemId: workItem.id,
-      author: actorFromChannelAuthor(external, link),
-      body,
-      occurredAt: message.metadata.dateSent,
-      externalSource: slackCommentSource(thread.id, message.id, teamId),
-    });
-    if (result.status !== 'created') {
-      console.warn('[slack] aside not ingested', { thread: thread.id, messageTs: message.id, status: result.status });
-    }
-  } catch (error) {
-    // Slack was acked before this handler ran, so a lost aside is never redelivered.
-    console.warn('[slack] aside ingest failed', { thread: thread.id, messageTs: message.id, error });
-  }
-}
-
 export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
 
@@ -1130,7 +1053,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // `aside` as its own leading word lets humans talk in a subscribed
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
-      if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
+      if (/^aside\b/i.test(message.text)) return;
       // Looked up once here for the mute check and the access gate below.
       const internalThread = await findInternalThread(ctx.mastra, thread);
       // A muted thread ignores everything that doesn't tag the bot, and the
@@ -1141,7 +1064,11 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation). Mute and unmute pass the same gate, so only
       // someone allowed to prompt this session can change what it listens to.
-      const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true, internalThread }).catch(
+      const gate = await gateDispatch(thread, message, deps, ctx, {
+        requireInternalThread: true,
+        internalThread,
+        addressed: thread.isDM || !!message.isMention,
+      }).catch(
         async (error: unknown) => {
           await reportPreDispatchError(thread, message, ctx, error);
           return null;

@@ -128,6 +128,11 @@ export interface TraceEntry {
 
 /** In-memory implementation of ObservabilityStorage for testing and development. */
 export class ObservabilityInMemory extends ObservabilityStorage {
+  /** In-memory observability data is local to this process. */
+  public override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {

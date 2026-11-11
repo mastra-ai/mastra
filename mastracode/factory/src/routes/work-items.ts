@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { boardFlow, boardPhaseOutcomes } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -24,11 +25,10 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { WorkItemSource } from '../rules/types.js';
+import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -65,8 +65,6 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a card filed without a board. */
   intakeRoutes?: IntakeRoutesReader;
-  /** Comments domain — backs the mention attention provider. */
-  comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -347,6 +345,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               title: board.name,
               ...(board.description !== undefined ? { description: board.description } : {}),
               initialPhase: board.initialPhase,
+              flow: catalogFlow(boardFlow(board)),
               phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
                 id: phaseId,
                 name: phase.name,
@@ -359,6 +358,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                       role: phase.runner.context,
                       context: phase.runner.context,
                       ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
+                      ...(phase.runner.goal ? { goal: { ...phase.runner.goal } } : {}),
                       autoStart: phase.autoStart === true,
                       ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
                       ...(phase.exitTool
@@ -372,6 +372,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                             },
                           }
                         : {}),
+                      ...(phase.tools ? { tools: [...phase.tools] } : {}),
                     }
                   : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
@@ -420,7 +421,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
+          const boards = await this.#boards.load({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({
+            metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
+          });
         },
       }),
 
@@ -485,7 +492,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       ...buildAttentionRoutes({
         workItems,
         boards: this.#boards,
-        comments: this.deps.comments,
         liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
@@ -753,4 +759,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       }),
     ];
   }
+}
+
+/** A board's loop parts, by phase key, as the catalog reports them. */
+function catalogFlow(flow: FactoryRuleBoardFlow) {
+  return {
+    ...(flow.triage ? { triage: flow.triage } : {}),
+    ...(flow.build ? { build: flow.build } : {}),
+    ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
+    ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
+    ...(flow.completed ? { completed: flow.completed.phase } : {}),
+    ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
+  };
 }

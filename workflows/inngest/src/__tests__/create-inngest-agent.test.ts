@@ -434,6 +434,27 @@ describe('createInngestAgent observe-replay wiring', () => {
     },
   );
 
+  // Steps send whole response lists when an observer that attaches mid-run can't read the run's
+  // earlier events, so the router must answer for the bus that carries the agent's stream.
+  it.each([
+    ['keeps', {}, true],
+    ['keeps no', { cache: false as const }, false],
+  ])('tells steps the agent stream %s history', (_, options, replays) => {
+    const durableAgent = createInngestAgent({
+      agent: makeAgent(`replay-routing-${replays}`),
+      inngest,
+      pubsub: new EventEmitterPubSub(),
+      ...options,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const routed = workflow.__getPubsubFactory()(new EventEmitterPubSub());
+    expect(routed.__replaysTopic(AGENT_STREAM_TOPIC('run'))).toBe(replays);
+    // Other topics follow the workflow's own bus.
+    expect(routed.__replaysTopic('workflow.events.v2.run')).toBe(false);
+  });
+
   it('routes workflow agent topics through the configured pubsub exactly once', async () => {
     const customPubsub = new EventEmitterPubSub();
     const customPublish = vi.spyOn(customPubsub, 'publish');

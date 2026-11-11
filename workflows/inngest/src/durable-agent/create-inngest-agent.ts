@@ -160,6 +160,10 @@ class InngestAgentPubSubRouter extends PubSub {
     return this.defaultPubsub.supportsOffsets && this.getAgentPubsub().supportsOffsets;
   }
 
+  override __replaysTopic(topic: string): boolean {
+    return this.resolve(topic).__replaysTopic(topic);
+  }
+
   getHistory(topic: string, offset?: number): Promise<Event[]> {
     return this.resolve(topic).getHistory(topic, offset);
   }
@@ -2007,6 +2011,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
+        // Step-finish events carry only the response messages that changed; start from the full list.
+        replayResponseMessagesBeforeOffset: true,
         initialToolCalls,
         messageId: crypto.randomUUID(),
         resumedText,
@@ -2269,6 +2275,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        replayResponseMessagesBeforeOffset: true,
         idleTimeoutMs: observeOptions?.idleTimeoutMs,
         isAlive: observeOptions?.isAlive,
         structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
@@ -2288,8 +2295,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
       Object.defineProperty(output, 'fullStream', {
         configurable: true,
-        get() {
-          const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
+        get(this: typeof output) {
+          // `this` is the real instance (the destructurable proxy reads getters
+          // with its target as receiver); the proxy itself can't reach private fields.
+          const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
           return new ReadableStream<ChunkType<TOutput>>({
             async pull(controller) {
               let result: Awaited<ReturnType<typeof reader.read>>;

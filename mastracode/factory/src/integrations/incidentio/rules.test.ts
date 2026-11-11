@@ -41,16 +41,7 @@ async function setup(overrides?: IncidentioRuleOverrides, boards = createBoardRe
 }
 
 describe('IncidentioRules', () => {
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: 'src-1', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: 'src-2', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: 'src-3',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed follow-up to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed follow-up on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -59,11 +50,10 @@ describe('IncidentioRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { 'src-1': 'release', 'src-3': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 

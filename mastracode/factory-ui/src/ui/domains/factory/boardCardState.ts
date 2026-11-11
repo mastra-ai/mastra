@@ -27,7 +27,7 @@ export interface BoardCardStateInput {
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
-  moving?: { stage: string; label: string };
+  moving?: { stage: string; label: string; completes?: boolean };
   /** Status text for the window between the click and the session mutation. */
   preparing?: string;
   retryRequested?: boolean;
@@ -96,7 +96,7 @@ function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
 function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
   const { moving } = input;
   if (moving) {
-    const statusLabel = moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…`;
+    const statusLabel = moving.completes ? `Marking ${moving.label.toLowerCase()}…` : `Moving to ${moving.label}…`;
     return { statusLabel, progressLabel: 'Moving…' };
   }
   if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: 'Starting…' };
@@ -138,7 +138,7 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.held) {
-    return { kind: 'held', label: 'Triaged and waiting for you' };
+    return { kind: 'held', label: 'Held for your go-ahead' };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };

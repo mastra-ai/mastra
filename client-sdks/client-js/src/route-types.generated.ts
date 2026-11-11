@@ -3892,6 +3892,10 @@ type Shared_Type_69 = {
   deltaPolling: boolean;
   /** Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead. */
   traceQuery: boolean;
+  /** Literal substring search across any span in a trace */
+  traceQueryTextSearch: boolean;
+  /** Literal substring search within individual spans */
+  spanQueryTextSearch: boolean;
   /** `durationMs` predicates in trace and thread queries */
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
@@ -10775,6 +10779,7 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 // Route: POST /observability/traces/query
 // ============================================================================
 export type PostObservabilityTracesQuery_Body = {
+  textSearch?: string | undefined;
   timeRange: {
     from: string;
     to: string;
@@ -11118,6 +11123,7 @@ export type PostObservabilitySpansQuery_Body = {
     to: string;
   };
   where?: InputShared_Auxiliary_231 | undefined;
+  textSearch?: string | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
     direction: 'asc' | 'desc';
@@ -22065,6 +22071,8 @@ export interface PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Ro
 // ============================================================================
 export type PostDatasetsDatasetIdCompare_PathParams = GetDatasetsDatasetId_PathParams;
 
+export type PostDatasetsDatasetIdCompare_QueryParams = GetDatasetsDatasetId_QueryParams;
+
 export type PostDatasetsDatasetIdCompare_Body =
   | {
       /** IDs of the experiments to compare (2 to 10). Each one gets a result entry per item. */
@@ -22098,7 +22106,11 @@ export type PostDatasetsDatasetIdCompare_Response = {
 
 export type PostDatasetsDatasetIdCompare_Request = Simplify<
   (PostDatasetsDatasetIdCompare_PathParams extends never ? {} : { params: PostDatasetsDatasetIdCompare_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsDatasetIdCompare_QueryParams extends never
+      ? {}
+      : {} extends PostDatasetsDatasetIdCompare_QueryParams
+        ? { query?: PostDatasetsDatasetIdCompare_QueryParams }
+        : { query: PostDatasetsDatasetIdCompare_QueryParams }) &
     (PostDatasetsDatasetIdCompare_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdCompare_Body
@@ -22108,7 +22120,7 @@ export type PostDatasetsDatasetIdCompare_Request = Simplify<
 
 export interface PostDatasetsDatasetIdCompare_RouteContract {
   pathParams: PostDatasetsDatasetIdCompare_PathParams;
-  queryParams: never;
+  queryParams: PostDatasetsDatasetIdCompare_QueryParams;
   body: PostDatasetsDatasetIdCompare_Body;
   request: PostDatasetsDatasetIdCompare_Request;
   response: PostDatasetsDatasetIdCompare_Response;

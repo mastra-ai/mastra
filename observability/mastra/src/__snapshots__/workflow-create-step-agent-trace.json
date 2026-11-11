@@ -382,7 +382,11 @@
                                 "role": "user",
                                 "content": "test query"
                               }
-                            ]
+                            ],
+                            "output": {
+                              "text": "Test response from agent",
+                              "toolCalls": []
+                            }
                           }
                         },
                         {

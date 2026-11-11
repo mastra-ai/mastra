@@ -1,8 +1,14 @@
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { EventEmitterPubSub } from '@mastra/core/events';
+import { InMemoryStore } from '@mastra/core/storage';
+import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { feedTopic } from '../feed-events.js';
 import type { LiveSession } from './live-sessions.js';
-import { LiveSessions } from './live-sessions.js';
+import { LiveSessions, liveSessionsTouchingTheFeed } from './live-sessions.js';
 
 function fakeController() {
   const created: ((session: LiveSession) => void)[] = [];
@@ -21,13 +27,17 @@ function fakeController() {
   };
 }
 
-function fakeSession(id: string, running: { value: boolean } = { value: false }, factoryProjectId = 'project-1') {
+function fakeSession(
+  id: string,
+  running: { value: boolean } = { value: false },
+  factoryProjectId: string | null = 'project-1',
+) {
   const listeners = new Set<(event: AgentControllerEvent) => void>();
   const pendingSuspensions = new Map<string, { toolName: string }>();
   const session: LiveSession = {
     identity: { getId: () => id },
     run: { isRunning: () => running.value },
-    state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId }) },
+    state: { get: () => ({ factoryOrgId: 'org-1', ...(factoryProjectId ? { factoryProjectId } : {}) }) },
     displayState: { get: () => ({ pendingSuspensions }) },
     subscribe: listener => {
       listeners.add(listener);
@@ -45,6 +55,7 @@ function fakeSession(id: string, running: { value: boolean } = { value: false },
       pendingSuspensions.delete(toolCallId);
       emit({ type: 'tool_suspension_cancelled', toolCallId, toolName: 'ask_user', reason: 'answered' });
     },
+    start: () => emit({ type: 'agent_start' }),
     end: (reason: 'complete' | 'suspended') => {
       if (reason !== 'suspended') pendingSuspensions.clear();
       emit({ type: 'agent_end', reason });
@@ -140,24 +151,27 @@ describe('LiveSessions', () => {
     ]);
   });
 
-  it('announces every park, answer and finished turn, and stops once the session is gone', () => {
+  it('announces every run start, park, answer and finished turn, and stops once the session is gone', () => {
     const controller = fakeController();
     const registry = new LiveSessions(controller);
     const fake = fakeSession('session-1');
     controller.create(fake.session);
     const changed = vi.fn();
-    registry.onParkedChanged(changed);
+    registry.onRunChanged(changed);
 
+    fake.start();
     fake.park('call-1', 'ask_user');
     fake.end('suspended');
     fake.answer('call-1');
+    fake.start();
     fake.end('complete');
-    expect(changed).toHaveBeenCalledTimes(3);
+    expect(changed).toHaveBeenCalledTimes(5);
     expect(changed).toHaveBeenLastCalledWith(fake.session);
 
     controller.delete(fake.session);
+    expect(changed).toHaveBeenCalledTimes(6);
     fake.park('call-2', 'ask_user');
-    expect(changed).toHaveBeenCalledTimes(3);
+    expect(changed).toHaveBeenCalledTimes(6);
   });
 
   it('announces a parked session going away, so the inbox drops its item', () => {
@@ -166,12 +180,83 @@ describe('LiveSessions', () => {
     const fake = fakeSession('session-1');
     controller.create(fake.session);
     const changed = vi.fn();
-    registry.onParkedChanged(changed);
+    registry.onRunChanged(changed);
 
     fake.park('call-1', 'ask_user');
     controller.delete(fake.session);
 
-    expect(changed).toHaveBeenCalledTimes(2);
     expect(registry.parkedIn('project-1')).toEqual([]);
+  });
+});
+
+describe('LiveSessions on a real controller', () => {
+  // The controller resets a session's run before it tells anyone the session is gone,
+  // so by then the registry can no longer ask the session whether it was running.
+  it('announces a session deleted while its run is in flight, so other boards drop its running marker', async () => {
+    let inFlight = false;
+    const model = new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(stream) {
+            stream.enqueue({ type: 'stream-start', warnings: [] });
+            inFlight = true;
+            // Never finishes: only the deletion ends this run.
+          },
+        }),
+      }),
+    });
+    const controller = new AgentController({
+      id: 'code',
+      storage: new InMemoryStore(),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({ id: 'agent', name: 'agent', instructions: 'test', model }),
+        },
+      ],
+    });
+    await controller.init();
+    const eventBus = new EventEmitterPubSub();
+    const registry = liveSessionsTouchingTheFeed(controller, eventBus, { getBySessionId: async () => null });
+    const frames: unknown[] = [];
+    await eventBus.subscribe(feedTopic('org-1', 'project-1'), event => frames.push(event));
+    const session = await controller.createSession({
+      id: 'session-1',
+      resourceId: 'resource-1',
+      tags: { factoryOrgId: 'org-1', factoryProjectId: 'project-1' },
+    });
+    await session.thread.create();
+    void session.sendMessage({ content: 'go' }).catch(() => {});
+    await vi.waitFor(() => expect(inFlight && registry.isRunning('session-1')).toBe(true));
+    // The run's own start frame has landed; only the deletion can add another.
+    await vi.waitFor(() => expect(frames.length).toBeGreaterThan(0));
+    const framesBeforeDeletion = frames.length;
+
+    await controller.deleteSession({ sessionId: 'session-1' });
+
+    expect(registry.isRunning('session-1')).toBe(false);
+    await vi.waitFor(() => expect(frames).toHaveLength(framesBeforeDeletion + 1));
+  });
+});
+
+describe('liveSessionsTouchingTheFeed', () => {
+  it('touches the feed of a session whose state names no Factory, read from its row', async () => {
+    const controller = fakeController();
+    const eventBus = new EventEmitterPubSub();
+    const rows = {
+      getBySessionId: async (sessionId: string) =>
+        sessionId === 'session-1' ? { orgId: 'org-1', factoryProjectId: 'project-1' } : null,
+    };
+    liveSessionsTouchingTheFeed(controller, eventBus, rows);
+    const frames: unknown[] = [];
+    await eventBus.subscribe(feedTopic('org-1', 'project-1'), event => frames.push(event));
+    const recovered = fakeSession('session-1', { value: false }, null);
+    controller.create(recovered.session);
+
+    recovered.start();
+
+    await vi.waitFor(() => expect(frames).toHaveLength(1));
   });
 });
