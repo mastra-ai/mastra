@@ -24,6 +24,7 @@ import {
   getStaticallyLoadedInstructionPaths,
   loadAgentInstructions,
 } from './agent-instructions.js';
+import { loadGitRefInstructions } from './git-ref-instructions.js';
 
 function write(path: string, content: string): void {
   mkdirSync(join(path, '..'), { recursive: true });
@@ -171,8 +172,8 @@ describe('git-ref instruction readers', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('loadAgentInstructions serves project content from the ref, never the working tree', () => {
-    const reader = createGitRefInstructionReader(repo, 'main');
+  it('loadAgentInstructions serves project content from the ref, never the working tree', async () => {
+    const reader = createGitRefInstructionReader(repo, await loadGitRefInstructions(repo, 'main'));
     const sources = loadAgentInstructions(repo, undefined, reader);
 
     expect(sources).toEqual([
@@ -185,31 +186,34 @@ describe('git-ref instruction readers', () => {
     ]);
   });
 
-  it('reports files as absent when the ref does not exist', () => {
-    const reader = createGitRefInstructionReader(repo, 'no-such-branch');
+  it('reports files as absent when the ref does not exist', async () => {
+    const reader = createGitRefInstructionReader(repo, await loadGitRefInstructions(repo, 'no-such-branch'));
     expect(loadAgentInstructions(repo, undefined, reader)).toEqual([]);
   });
 
-  it('reports working-tree-only files as absent at the ref', () => {
+  it('reports working-tree-only files as absent at the ref', async () => {
     writeFileSync(join(repo, 'CLAUDE.md'), 'INJECTED new file');
     git('rm', '--cached', 'AGENTS.md');
     git('commit', '-m', 'remove instructions');
 
-    const reader = createGitRefInstructionReader(repo, 'main');
+    const reader = createGitRefInstructionReader(repo, await loadGitRefInstructions(repo, 'main'));
     expect(loadAgentInstructions(repo, undefined, reader)).toEqual([]);
   });
 
   it.each(['alias', 'canonical'] as const)(
     'keeps %s project roots isolated when tool paths use the other spelling',
-    projectSpelling => {
+    async projectSpelling => {
       const alias = join(root, 'repo-alias');
       symlinkSync(repo, alias, 'junction');
       const canonical = realpathSync(repo);
       const projectPath = projectSpelling === 'alias' ? alias : canonical;
       const toolRoot = projectSpelling === 'alias' ? canonical : alias;
       const instruction = join(toolRoot, 'AGENTS.md');
-      const reader = createGitRefReminderReader(projectPath, 'main');
-      const staticReader = createGitRefInstructionReader(projectPath, 'main');
+      const reader = createGitRefReminderReader(projectPath, await loadGitRefInstructions(projectPath, 'main'));
+      const staticReader = createGitRefInstructionReader(
+        projectPath,
+        await loadGitRefInstructions(projectPath, 'main'),
+      );
 
       expect(reader.pathExists(instruction)).toBe(true);
       expect(reader.isDirectory(toolRoot)).toBe(true);
@@ -218,19 +222,25 @@ describe('git-ref instruction readers', () => {
       writeFileSync(join(repo, 'CLAUDE.md'), 'INJECTED new file');
       expect(reader.pathExists(join(toolRoot, 'CLAUDE.md'))).toBe(false);
       expect(() => reader.readFile(join(toolRoot, 'CLAUDE.md'))).toThrow();
-      const missingRef = createGitRefReminderReader(projectPath, 'missing-ref');
+      const missingRef = createGitRefReminderReader(
+        projectPath,
+        await loadGitRefInstructions(projectPath, 'missing-ref'),
+      );
       expect(missingRef.pathExists(instruction)).toBe(false);
       expect(() => missingRef.readFile(instruction)).toThrow();
     },
   );
 
-  it('resolves missing and symlinked checkout descendants relative to the trusted project root', () => {
+  it('resolves missing and symlinked checkout descendants relative to the trusted project root', async () => {
     write(join(repo, 'nested', 'AGENTS.md'), 'trusted nested instructions');
     git('add', 'nested');
     git('commit', '-m', 'nested instructions');
     const alias = join(root, 'repo-alias');
     symlinkSync(repo, alias, 'junction');
-    const reader = createGitRefReminderReader(realpathSync(repo), 'main');
+    const reader = createGitRefReminderReader(
+      realpathSync(repo),
+      await loadGitRefInstructions(realpathSync(repo), 'main'),
+    );
     rmSync(join(repo, 'nested'), { recursive: true });
     expect(reader.pathExists(join(alias, 'nested', 'AGENTS.md'))).toBe(true);
     expect(reader.isDirectory(join(alias, 'nested'))).toBe(true);
@@ -281,7 +291,8 @@ describe('git-ref instruction readers', () => {
             'memory',
           );
         addListing(messageList, toolRoot);
-        const reader = createGitRefReminderReader(projectPath, 'main');
+        const instructions = await loadGitRefInstructions(projectPath, 'main');
+        const reader = createGitRefReminderReader(projectPath, instructions);
         const injector = new AgentsMDInjector({
           getReader: () => reader,
           getIgnoredInstructionPaths: () =>
@@ -289,7 +300,7 @@ describe('git-ref instruction readers', () => {
               ? getStaticallyLoadedInstructionPaths(
                   projectPath,
                   undefined,
-                  createGitRefInstructionReader(projectPath, 'main'),
+                  createGitRefInstructionReader(projectPath, instructions),
                 )
               : [],
         });
@@ -313,7 +324,7 @@ describe('git-ref instruction readers', () => {
       const canonical = realpathSync(repo);
       const messageList = new MessageList();
       addListing(messageList, join(alias, 'nested'));
-      const reader = createGitRefReminderReader(canonical, 'main');
+      const reader = createGitRefReminderReader(canonical, await loadGitRefInstructions(canonical, 'main'));
       expect(reader.getPathIdentity(join(alias, 'nested', 'AGENTS.md'))).toBe(join(canonical, 'nested', 'AGENTS.md'));
       const injector = new AgentsMDInjector({
         getReader: () => reader,
@@ -332,17 +343,17 @@ describe('git-ref instruction readers', () => {
     },
   );
 
-  it('includes canonical project-root paths in static instruction deduplication', () => {
+  it('includes canonical project-root paths in static instruction deduplication', async () => {
     const alias = join(root, 'repo-alias');
     symlinkSync(repo, alias, 'junction');
-    const reader = createGitRefInstructionReader(alias, 'main');
+    const reader = createGitRefInstructionReader(alias, await loadGitRefInstructions(alias, 'main'));
     const paths = getStaticallyLoadedInstructionPaths(alias, undefined, reader);
     expect(paths).toContain(join(alias, 'AGENTS.md'));
     expect(paths).toContain(join(realpathSync(repo), 'AGENTS.md'));
   });
 
-  it('reminder reader resolves project paths at the ref and falls back to fs outside the project', () => {
-    const reader = createGitRefReminderReader(repo, 'main');
+  it('reminder reader resolves project paths at the ref and falls back to fs outside the project', async () => {
+    const reader = createGitRefReminderReader(repo, await loadGitRefInstructions(repo, 'main'));
 
     expect(reader.pathExists(join(repo, 'AGENTS.md'))).toBe(true);
     expect(reader.readFile(join(repo, 'AGENTS.md'))).toBe('trusted base instructions');

@@ -17,6 +17,7 @@ import { resolveProviderWebSearchRoute } from '../model.js';
 import { loadSessionInstructions, formatInstructionSource, AGENT_INSTRUCTIONS_HEADING } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
+import type { GitRefInstructions } from './git-ref-instructions.js';
 import { modelSpecificPrompts } from './model.js';
 import { planModePrompt } from './plan.js';
 import { buildToolGuidance } from './tool-guidance.js';
@@ -38,6 +39,8 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   submitPlanAvailable?: boolean;
   currentDate: string;
   workingDir: string;
+  /** An untrusted session's project instructions, read from its base ref (see `loadSessionBaseRefInstructions`). */
+  baseRefInstructions?: GitRefInstructions;
 }
 
 const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
@@ -160,14 +163,14 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // project-scope files off the working tree: their AGENTS.md is
   // attacker-writable and would otherwise land in the system prompt as
   // trusted configuration. When the session carries a trusted base ref, the
-  // project instructions are served from that ref instead (`git show`);
-  // without one, project-scope files are skipped entirely. Home-directory
+  // project instructions are served from that ref instead
+  // (`ctx.baseRefInstructions`); without one, project-scope files are skipped
+  // entirely. Home-directory
   // (global) instructions belong to whoever owns the machine, so hosts that
   // run sessions for someone else opt out of them entirely.
   // A host booting several checkouts under one working directory names them
   // as `instructionRoots`, so each checkout's own files load.
   const configDir = ctx.state?.configDir as string | undefined;
-  const baseRef = typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined;
   const instructionRoots = Array.isArray(ctx.state?.instructionRoots)
     ? (ctx.state.instructionRoots as string[])
     : undefined;
@@ -181,7 +184,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
         instructionRoots,
         configDir,
         untrustedCheckout: ctx.state?.untrustedCheckout === true,
-        baseRef,
+        baseRefInstructions: ctx.baseRefInstructions,
         skipGlobal: ctx.state?.skipGlobalInstructions === true,
       })
     : [];

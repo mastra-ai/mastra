@@ -25,7 +25,6 @@ import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/l
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement } from '@mastra/core/notifications';
 import {
-  AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
   CyberRefusalHandler,
   isBadRequestError,
@@ -74,12 +73,8 @@ import {
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { createPlanMode } from './agents/modes/plan.js';
-import {
-  createGitRefReminderReader,
-  instructionSourcePaths,
-  loadSessionInstructions,
-  sessionInstructionRoots,
-} from './agents/prompts/agent-instructions.js';
+import { GitRefInstructionsCache } from './agents/prompts/git-ref-instructions.js';
+import { createInstructionReminders } from './agents/prompts/instruction-reminders.js';
 import { builtinSubagents } from './agents/subagents/index.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
@@ -193,24 +188,6 @@ const isTransientServerStatus = (status: number) => status >= 500 && status < 60
  * by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls each
  * matcher at every level of the cause chain.
  */
-/**
- * Read the session state fields the AgentsMDInjector callbacks need from the
- * controller request context (set by hosts like the factory review flow).
- */
-function getInjectorSessionState(
-  requestContext: { get: (key: string) => unknown } | undefined,
-): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string; instructionRoots?: string[] } | undefined {
-  const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{
-        untrustedCheckout?: boolean;
-        baseRef?: string;
-        projectPath?: string;
-        instructionRoots?: string[];
-      }>
-    | undefined;
-  return agentControllerContext?.getState();
-}
-
 function isTransientConnectionError(error: unknown): boolean {
   if (!error) return false;
 
@@ -607,6 +584,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Every session this controller has live, whose resources this process
   // dispatches notifications for.
   const liveSessions = new Set<Session<MastraCodeState>>();
+  // What each live session has read from its base ref, dropped with the session.
+  const gitRefInstructionsCaches = new Map<string, GitRefInstructionsCache>();
   const sessionRouter = {
     getSession: (sessionId: string) => controller.getSession(sessionId),
     listLiveSessions: () => liveSessions,
@@ -1235,55 +1214,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ...staticConfiguredInputProcessors,
     new PlanRejectionAbortProcessor(),
     ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
-    new AgentsMDInjector({
-      // Untrusted checkouts (review sessions on PR branches) must not have
-      // the working tree's instruction files injected as system reminders —
-      // those files are attacker-writable content, not configuration. When
-      // the session carries a trusted base ref, reminders are served from
-      // that ref instead (see getReader); without one they are disabled.
-      isEnabled: ({ requestContext }) => {
-        const state = getInjectorSessionState(requestContext);
-        return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
-      },
-      // Resolve relative tool paths against the session checkout (not the host
-      // process cwd) and never surface instruction files from outside it.
-      getBasePath: ({ requestContext }) => getInjectorSessionState(requestContext)?.projectPath ?? project.rootPath,
-      getReader: ({ requestContext }) => {
-        const state = getInjectorSessionState(requestContext);
-        if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
-        const projectPath = state?.projectPath ?? project.rootPath;
-        const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
-        const reader = createGitRefReminderReader(primary!, state.baseRef);
-        if (primary === projectPath) return reader;
-        // The base ref covers the session's own checkout only; the other
-        // checkouts under the working directory are never read off disk.
-        const outsidePrimary = (filePath: string) => {
-          const inProject = path.relative(projectPath, filePath);
-          const inPrimary = path.relative(primary!, filePath);
-          const under = (rel: string) => rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
-          return under(inProject) && !under(inPrimary);
-        };
-        return {
-          ...reader,
-          pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
-          isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
-        };
-      },
-      getIgnoredInstructionPaths: ({ requestContext }) => {
-        const state = getInjectorSessionState(requestContext);
-        const projectPath = state?.projectPath ?? project.rootPath;
-        // Same sources, through the same readers, as the static prompt, so the
-        // dedup stays consistent on untrusted checkouts and across roots.
-        const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
-        const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
-        const sources = loadSessionInstructions({
-          workingDir: projectPath,
-          instructionRoots: state?.instructionRoots,
-          untrustedCheckout: untrusted,
-          baseRef: untrusted ? state?.baseRef : undefined,
-        });
-        return instructionSourcePaths(sources, roots);
-      },
+    createInstructionReminders({
+      rootPath: project.rootPath,
+      gitRefInstructionsCache: sessionId => gitRefInstructionsCaches.get(sessionId),
     }),
   ];
 
@@ -1390,6 +1323,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         planApprovalStartsGoal: config?.planApprovalStartsGoal,
         plansDir: config?.plansDir,
         disabledTools: config?.disabledTools,
+        gitRefInstructionsCache: sessionId => gitRefInstructionsCaches.get(sessionId),
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
@@ -1881,9 +1815,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   controller.onSessionCreated(session => {
     liveSessions.add(session);
+    gitRefInstructionsCaches.set(session.identity.getId(), new GitRefInstructionsCache());
   });
   controller.onSessionDeleted(session => {
     liveSessions.delete(session);
+    gitRefInstructionsCaches.delete(session.identity.getId());
   });
 
   const sessionPeerCleanup = new WeakMap<Session<MastraCodeState>, () => void>();

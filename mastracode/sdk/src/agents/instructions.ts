@@ -3,6 +3,8 @@ import type { MastraCodeComposedState, MastraCodeState } from '../schema.js';
 import { detectCommonBinariesAsync } from '../utils/binaries.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import { prepareProviderWebSearchRoute } from './model.js';
+import { loadSessionBaseRefInstructions } from './prompts/agent-instructions.js';
+import type { GitRefInstructionsCache } from './prompts/git-ref-instructions.js';
 import type { PromptContext, PromptSection } from './prompts/index.js';
 import { buildFullPromptSections, joinPromptSections } from './prompts/index.js';
 
@@ -15,6 +17,7 @@ export async function getDynamicInstructions({
   planApprovalStartsGoal,
   plansDir,
   disabledTools,
+  gitRefInstructionsCache,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
@@ -25,6 +28,7 @@ export async function getDynamicInstructions({
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
   disabledTools?: readonly string[];
+  gitRefInstructionsCache?: (sessionId: string) => GitRefInstructionsCache | undefined;
 }): Promise<string> {
   return joinPromptSections(
     await getDynamicInstructionSections({
@@ -36,6 +40,7 @@ export async function getDynamicInstructions({
       planApprovalStartsGoal,
       plansDir,
       disabledTools,
+      gitRefInstructionsCache,
     }),
   );
 }
@@ -54,6 +59,7 @@ export async function getDynamicInstructionSections({
   planApprovalStartsGoal,
   plansDir,
   disabledTools,
+  gitRefInstructionsCache,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
@@ -67,6 +73,8 @@ export async function getDynamicInstructionSections({
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
   disabledTools?: readonly string[];
+  /** A live session's base-ref instructions; without it an untrusted session reads its base ref from git on every call. */
+  gitRefInstructionsCache?: (sessionId: string) => GitRefInstructionsCache | undefined;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -78,15 +86,29 @@ export async function getDynamicInstructionSections({
   // server's own cwd/branch must never leak into a session's prompt.
   const projectPath = state?.projectPath ?? '';
   const modelId = agentControllerContext?.session?.modelId || undefined;
-  // The web search guidance reads tenant credentials in deployed Factory; prepare them first if needed.
-  await prepareProviderWebSearchRoute(modelId, { requestContext });
+  const sessionId = agentControllerContext?.sessionId;
+  const [gitBranch, commonBinaries, baseRefInstructions] = await Promise.all([
+    projectPath ? getCurrentGitBranchAsync(projectPath) : undefined,
+    detectCommonBinariesAsync(),
+    loadSessionBaseRefInstructions(
+      {
+        workingDir: projectPath,
+        instructionRoots: state?.instructionRoots,
+        untrustedCheckout: state?.untrustedCheckout,
+        baseRef: state?.baseRef,
+      },
+      sessionId ? gitRefInstructionsCache?.(sessionId) : undefined,
+    ),
+    // The web search guidance reads tenant credentials in deployed Factory; prepare them first if needed.
+    prepareProviderWebSearchRoute(modelId, { requestContext }),
+  ]);
 
   const promptCtx: PromptContext = {
     projectPath,
     projectName: state?.projectName ?? '',
-    gitBranch: projectPath ? ((await getCurrentGitBranchAsync(projectPath)) ?? state?.gitBranch) : undefined,
+    gitBranch: projectPath ? (gitBranch ?? state?.gitBranch) : undefined,
     platform: process.platform,
-    commonBinaries: await detectCommonBinariesAsync(),
+    commonBinaries,
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
     modelId,
@@ -96,6 +118,7 @@ export async function getDynamicInstructionSections({
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,
     workingDir: projectPath,
+    baseRefInstructions,
     state,
     hostInstructions,
     hasSubagents,

@@ -18,7 +18,8 @@ vi.mock('../../onboarding/settings.js', async importOriginal => ({
   loadSettings: () => ({}),
 }));
 
-vi.mock('../prompts/agent-instructions.js', () => ({
+vi.mock('../prompts/agent-instructions.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../prompts/agent-instructions.js')>()),
   loadSessionInstructions: vi.fn(() => []),
   formatAgentInstructions: vi.fn(() => ''),
 }));

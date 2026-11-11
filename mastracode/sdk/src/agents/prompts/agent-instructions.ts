@@ -3,11 +3,12 @@
  * Prefers AGENTS.md over CLAUDE.md when multiple exist at the same location.
  */
 
-import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../../constants.js';
+import { loadGitRefInstructions } from './git-ref-instructions.js';
+import type { GitRefInstructions, GitRefInstructionsCache } from './git-ref-instructions.js';
 
 // Filenames to check, in order of preference
 const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'];
@@ -79,35 +80,26 @@ function createProjectPathResolver(projectPath: string): (path: string) => strin
 /**
  * Create a reader that serves instruction files from a git ref instead of the
  * working tree. Paths are still addressed as working-tree paths under
- * `projectPath`; content comes from `git show <ref>:<relpath>` so an untrusted
- * checkout (e.g. a PR branch under review) cannot influence what is loaded.
- * Tries `origin/<ref>` first (remote truth), then the local ref. Any git
- * failure (missing ref, missing file, no repo) reports the file as absent.
+ * `projectPath`; content comes from the ref's instructions (see
+ * `loadGitRefInstructions`) so an untrusted checkout (e.g. a PR branch under
+ * review) cannot influence what is loaded. A file the ref does not have, or a
+ * ref git could not read, reports the file as absent.
  */
-export function createGitRefInstructionReader(projectPath: string, ref: string): InstructionFileReader {
+export function createGitRefInstructionReader(
+  projectPath: string,
+  instructions: GitRefInstructions,
+): InstructionFileReader {
   const toRelative = createProjectPathResolver(projectPath);
   const show = (path: string): string | null => {
     const rel = toRelative(path);
-    if (!rel) return null;
-    for (const candidate of [`origin/${ref}`, ref]) {
-      try {
-        return execFileSync('git', ['-C', projectPath, 'show', `${candidate}:${rel}`], {
-          encoding: 'utf-8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-          maxBuffer: 1024 * 1024,
-        });
-      } catch {
-        // Ref or file missing at this candidate — try the next one.
-      }
-    }
-    return null;
+    return rel ? instructions.read(rel) : null;
   };
   return {
-    ref,
+    ref: instructions.ref,
     exists: path => show(path) !== null,
     read: path => {
       const content = show(path);
-      if (content === null) throw new Error(`Not found at ref ${ref}: ${path}`);
+      if (content === null) throw new Error(`Not found at ref ${instructions.ref}: ${path}`);
       return content;
     },
   };
@@ -118,34 +110,24 @@ export function createGitRefInstructionReader(projectPath: string, ref: string):
  * paths under `projectPath` from a trusted git ref. Paths outside the project
  * fall back to the operator machine's filesystem (those are trusted); paths
  * inside the project are only ever resolved against the ref, never the
- * working tree, so an untrusted checkout cannot feed content in.
+ * working tree, so an untrusted checkout cannot feed content in. Inside the
+ * project only directories and instruction files exist, which is all the
+ * reminder channel asks about.
  */
 export function createGitRefReminderReader(
   projectPath: string,
-  ref: string,
+  instructions: GitRefInstructions,
 ): {
   pathExists: (path: string) => boolean;
   isDirectory: (path: string) => boolean;
   readFile: (path: string) => string;
   getPathIdentity: (path: string) => string;
 } {
-  const gitReader = createGitRefInstructionReader(projectPath, ref);
+  const gitReader = createGitRefInstructionReader(projectPath, instructions);
   const toRelative = createProjectPathResolver(projectPath);
   const canonicalRoot = realpathOrResolved(projectPath);
-  const objectType = (rel: string): string | null => {
-    if (rel === '') return 'tree'; // project root
-    for (const candidate of [`origin/${ref}`, ref]) {
-      try {
-        return execFileSync('git', ['-C', projectPath, 'cat-file', '-t', `${candidate}:${rel}`], {
-          encoding: 'utf-8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-        }).trim();
-      } catch {
-        // Ref or object missing at this candidate — try the next one.
-      }
-    }
-    return null;
-  };
+  // The project root is a directory whatever the ref holds.
+  const objectType = (rel: string) => (rel === '' ? 'tree' : instructions.typeOf(rel));
   return {
     pathExists: path => {
       const rel = toRelative(path);
@@ -281,32 +263,51 @@ export function sessionInstructionRoots(workingDir: string, instructionRoots?: r
 }
 
 /**
+ * The base-ref instructions an untrusted session's project files are served
+ * from. `undefined` for a trusted session, and for an untrusted one without a
+ * base ref (which loads no project files).
+ */
+export async function loadSessionBaseRefInstructions(
+  {
+    workingDir,
+    instructionRoots,
+    untrustedCheckout,
+    baseRef,
+  }: { workingDir: string; instructionRoots?: readonly string[]; untrustedCheckout?: boolean; baseRef?: unknown },
+  cache?: GitRefInstructionsCache,
+): Promise<GitRefInstructions | undefined> {
+  if (untrustedCheckout !== true || typeof baseRef !== 'string' || !workingDir) return undefined;
+  const [primary] = sessionInstructionRoots(workingDir, instructionRoots);
+  return cache ? cache.load(primary!, baseRef) : loadGitRefInstructions(primary!, baseRef);
+}
+
+/**
  * The instruction files a session's system prompt carries. Global files load
  * once (unless `skipGlobal`), then each instruction root's project files, in
  * root order. An untrusted checkout never reads project files off the working
- * tree: with a `baseRef` the first root (the session's own checkout) is served
- * from that ref and the other roots are skipped; without one no project files
- * load.
+ * tree: with `baseRefInstructions` (see `loadSessionBaseRefInstructions`) the
+ * first root (the session's own checkout) is served from that ref and the
+ * other roots are skipped; without them no project files load.
  */
 export function loadSessionInstructions({
   workingDir,
   instructionRoots,
   configDir,
   untrustedCheckout = false,
-  baseRef,
+  baseRefInstructions,
   skipGlobal = false,
 }: {
   workingDir: string;
   instructionRoots?: readonly string[];
   configDir?: string;
   untrustedCheckout?: boolean;
-  baseRef?: string;
+  baseRefInstructions?: GitRefInstructions;
   skipGlobal?: boolean;
 }): InstructionSource[] {
   const [primary, ...others] = sessionInstructionRoots(workingDir, instructionRoots);
   const primaryReader = untrustedCheckout
-    ? baseRef
-      ? createGitRefInstructionReader(primary!, baseRef)
+    ? baseRefInstructions
+      ? createGitRefInstructionReader(primary!, baseRefInstructions)
       : { exists: () => false, read: () => '' }
     : undefined;
   const sources = loadAgentInstructions(primary!, configDir, primaryReader, { skipGlobal });
