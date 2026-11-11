@@ -6,7 +6,7 @@ import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../../../../packages/core/src/request-context';
 import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
-import { runLivenessKey, stepOccurrenceKey } from '../../../../../../packages/core/src/workflows/evented/leases';
+import { runLivenessKey } from '../../../../../../packages/core/src/workflows/evented/leases';
 import { abandonLease } from '../../../../../../packages/core/src/workflows/evented/test-utils/abandon-lease';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
 import { connectionString, TEST_CONFIG } from '../../test-utils';
@@ -270,11 +270,15 @@ describe('Postgres evented occurrence replay', () => {
         return { n: inputData.n + 1 };
       },
     });
+    // Without step leases both deliveries run side by side and the completion guard picks the
+    // winner. With leases the duplicate waits instead, and a holder whose lease was taken over
+    // drops its follow-up rather than continuing.
     const workflow = createWorkflow({
       id: `loop-race-${randomUUID()}`,
       inputSchema: schema,
       outputSchema: schema,
       stateSchema: schema,
+      options: { autoRestartActiveRuns: false },
     })
       .dountil(body, async ({ inputData }) => inputData.n >= 2)
       .commit();
@@ -301,9 +305,6 @@ describe('Postgres evented occurrence replay', () => {
       const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
       const key = `workflow-step-run:${run.runId}:${original.id}`;
       await driver.pubsub.releaseLease(key, (await driver.pubsub.getLeaseOwner(key))!);
-      // A duplicate only runs beside the first delivery once the first one's step lease
-      // lapsed, as it does when that worker stalls past the lease TTL.
-      await abandonLease(storage, stepOccurrenceKey(run.runId, [0], 0));
       await driver.redeliverEvent(original);
       expect(swallowed).toBe(true);
       release();

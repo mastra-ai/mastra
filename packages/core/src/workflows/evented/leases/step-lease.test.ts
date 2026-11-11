@@ -21,6 +21,7 @@ import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
+import { abandonLease } from '../test-utils/abandon-lease';
 import {
   Num,
   crash,
@@ -212,6 +213,45 @@ describe('evented step leases (#28712)', () => {
     expect(attemptsAt[1]! - attemptsAt[0]!).toBeLessThan(
       WORKFLOW_RUN_LEASE_TTL_MS - WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS,
     );
+  }, 20_000);
+
+  it('continues a run once from the replica that took over a step whose holder stalled past its lease', async () => {
+    const storage = new InMemoryStore();
+    const tracked = track({ blocks: ['a'] });
+    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
+    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
+    let delivery: Event | undefined;
+    const stepEnds: string[] = [];
+    for (const [name, replica] of [
+      ['A', a],
+      ['B', b],
+    ] as const) {
+      await replica.pubsub.subscribe('workflows', event => {
+        if (event.type === 'workflow.step.run') {
+          delivery ??= structuredClone(event);
+        }
+
+        if (event.type === 'workflow.step.end') {
+          stepEnds.push(name);
+        }
+      });
+    }
+    const run = await a.workflow.createRun();
+    void run.start({ inputData: { n: 1 } });
+    await tracked.allBlocked;
+
+    // A stalls past its lease, and the broker redelivers its message to B, which runs the step.
+    await abandonLease(storage, stepOccurrenceKey(run.runId, [0]));
+    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 2 })).toEqual({ ok: true });
+    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
+
+    // A's step finishes afterwards; shutting A down waits for its handler.
+    tracked.release();
+    await a.mastra.shutdown();
+
+    expect(tracked.executions).toEqual(['A:a', 'B:a']);
+    expect(stepEnds).toEqual(['B']);
+    expect(await runStatus(storage, run.runId)).toBe('success');
   }, 20_000);
 
   it('runs a redelivered step once the lease of its crashed worker expires', async () => {

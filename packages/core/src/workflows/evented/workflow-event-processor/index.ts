@@ -3657,6 +3657,18 @@ export class WorkflowEventProcessor extends EventProcessor {
     } finally {
       releaseControl?.();
     }
+
+    // Another delivery took this occurrence over while the step ran: it runs the step again and
+    // publishes what follows, so this holder's step end, retry or cancel would be a duplicate.
+    if (await stepLease.superseded()) {
+      this.mastra.getLogger()?.warn('Dropped the result of a workflow step whose lease another worker took over', {
+        runId,
+        stepId: leafId,
+        executionPath,
+      });
+      return;
+    }
+
     requestContext = Object.fromEntries(rc.entries());
     if (guardStart) {
       stepResult.metadata = { ...stepResult.metadata, startedBy: args.eventId };

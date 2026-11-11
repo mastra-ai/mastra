@@ -31,12 +31,19 @@ export interface StepLease {
   confirmHandOff(): void;
   /** Stops renewing and releases the lease unless it was handed off or superseded. */
   release(): Promise<void>;
+  /**
+   * Whether another delivery took the lease over, so it runs the step again
+   * and owns what follows it. Call it before handing the lease off: a
+   * completed hand-off supersedes the lease too.
+   */
+  superseded(): Promise<boolean>;
 }
 
 /** Lease for steps that run without one (no run fencing, or the workflow opted out of recovery). */
 export const UNLEASED_STEP: StepLease = {
   handOff: () => undefined,
   confirmHandOff: () => {},
+  superseded: async () => false,
   release: async () => {},
 };
 
@@ -233,6 +240,19 @@ async function holdStepLease({
         await store.releaseRunOwnership(fence);
       } catch (error) {
         logger?.warn('Failed to release workflow step lease', { key: fence.runId, error });
+      }
+    },
+    async superseded() {
+      // Read rather than taken from a failed renewal: renewal notices a takeover only on its next
+      // tick, and some stores refuse to renew an expired lease nobody else claimed.
+      try {
+        const current = await store.getRunOwnership({ runId: fence.runId });
+        // A missing row (pruned) or an expired one still ours has no other holder to defer to.
+        return current !== null && (current.ownerId !== fence.ownerId || current.generation !== fence.generation);
+      } catch (error) {
+        // When the store cannot answer, the step's result is published as it would be without a lease.
+        logger?.warn('Failed to check the lease of a finished workflow step', { key: fence.runId, error });
+        return false;
       }
     },
   };
