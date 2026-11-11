@@ -182,6 +182,9 @@ describe('resume-label propagation', () => {
       expect(snapshot?.resumeLabels?.['nested-approve']).toBeDefined();
       // The stepId should point to the outer step that wraps the nested workflow
       expect(snapshot?.resumeLabels?.['nested-approve']?.stepId).toBe('inner-wf');
+      // ...and the label should carry the full path down to the step that suspended,
+      // so a caller can resume exactly that step.
+      expect(snapshot?.resumeLabels?.['nested-approve']?.path).toEqual(['inner-wf', 'inner-approval']);
     });
 
     it('stores the nested suspend payload with the label metadata', async () => {
@@ -205,6 +208,79 @@ describe('resume-label propagation', () => {
       const innerResult = snapshot?.context?.['inner-wf'] as any;
       expect(innerResult?.status).toBe('suspended');
       expect(innerResult?.suspendPayload?.msg).toBe('approve gadget');
+    });
+  });
+
+  describe('deeply nested workflow: label carries the full path', () => {
+    const leafStep = createStep({
+      id: 'leaf',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+      suspendSchema: z.object({ msg: z.string() }),
+      resumeSchema: z.object({ ok: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          await suspend({ msg: `approve ${inputData.item}` }, { resumeLabel: 'deep-approve' });
+          return { item: inputData.item, ok: false };
+        }
+        return { item: inputData.item, ok: resumeData.ok };
+      },
+    });
+
+    const innerWorkflow = createWorkflow({
+      id: 'depth-inner-wf',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+      steps: [leafStep],
+      options: { validateInputs: false },
+    })
+      .then(leafStep)
+      .commit();
+
+    const midWorkflow = createWorkflow({
+      id: 'mid-wf',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+      steps: [innerWorkflow],
+      options: { validateInputs: false },
+    })
+      .then(innerWorkflow)
+      .commit();
+
+    const topWorkflow = createWorkflow({
+      id: 'top-wf',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+      steps: [midWorkflow],
+      options: { validateInputs: false },
+    })
+      .then(midWorkflow)
+      .commit();
+
+    it('records the full nested path and resumes by it', async () => {
+      const storage = new MockStore();
+      new Mastra({
+        logger: false,
+        storage,
+        workflows: { 'top-wf': topWorkflow, 'mid-wf': midWorkflow, 'depth-inner-wf': innerWorkflow },
+      });
+
+      const run = await topWorkflow.createRun();
+      const start = await run.start({ inputData: { item: 'sprocket' } });
+      expect(start.status).toBe('suspended');
+
+      const store = await storage.getStore('workflows');
+      const snapshot = await store?.loadWorkflowSnapshot({
+        workflowName: 'top-wf',
+        runId: run.runId,
+      });
+
+      const label = snapshot?.resumeLabels?.['deep-approve'];
+      expect(label?.stepId).toBe('mid-wf');
+      expect(label?.path).toEqual(['mid-wf', 'depth-inner-wf', 'leaf']);
+
+      const result = await run.resume({ step: label!.path, resumeData: { ok: true } });
+      expect(result.status).toBe('success');
     });
   });
 });

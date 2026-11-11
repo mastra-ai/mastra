@@ -18,6 +18,7 @@ import type {
   StepResult,
   TimeTravelContext,
   TimeTravelExecutionParams,
+  WorkflowResumeLabel,
   WorkflowRunState,
 } from './types';
 
@@ -213,16 +214,100 @@ export async function validateStepRequestContext({
   return { validationError };
 }
 
-export function getResumeLabelsByStepId(
-  resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>,
-  stepId: string,
-) {
+export function getResumeLabelsByStepId(resumeLabels: Record<string, WorkflowResumeLabel>, stepId: string) {
   return Object.entries(resumeLabels)
     .filter(([_, value]) => value.stepId === stepId)
-    .reduce<Record<string, { stepId: string; foreachIndex?: number }>>((acc, [key, value]) => {
+    .reduce<Record<string, WorkflowResumeLabel>>((acc, [key, value]) => {
       acc[key] = value;
       return acc;
     }, {});
+}
+
+/**
+ * The paths of the steps suspended in a snapshot, in the shape `resume()` accepts: a nested
+ * workflow contributes its own step id followed by the path recorded on its suspension.
+ */
+export function getSuspendedStepPaths(snapshot: WorkflowRunState | null | undefined): string[][] {
+  const suspendedStepPaths: string[][] = [];
+
+  Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId]) => {
+    // Check if this step has nested workflow suspension data
+    const stepResult = snapshot?.context?.[stepId];
+    if (stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
+      const stepRes = stepResult as any;
+      if (stepRes.status === 'suspended') {
+        const nestedPath = stepRes.suspendPayload?.__workflow_meta?.path;
+        if (nestedPath && Array.isArray(nestedPath)) {
+          // For nested workflows, combine the parent step ID with the nested path
+          suspendedStepPaths.push([stepId, ...nestedPath]);
+        } else {
+          // For single-level suspension, just use the step ID
+          suspendedStepPaths.push([stepId]);
+        }
+      }
+    }
+  });
+
+  return suspendedStepPaths;
+}
+
+/**
+ * Rejects a resume that names a nested workflow step while that nested run has several suspended
+ * steps and neither an inner step nor a label says which one to resume. Without this the nested
+ * step picks one (or fails) mid-run instead of the resume being rejected up front (#29782).
+ *
+ * The nested run's snapshot is only read, and the check is skipped when it can't be read, so the
+ * resume then behaves exactly as it did before.
+ */
+export async function assertNestedResumeIsUnambiguous({
+  snapshot,
+  steps,
+  loadSnapshot,
+  workflowId,
+  runId,
+}: {
+  snapshot: WorkflowRunState;
+  steps: string[];
+  loadSnapshot?: (args: { workflowName: string; runId: string }) => Promise<WorkflowRunState | null>;
+  workflowId: string;
+  runId: string;
+}) {
+  const [stepId] = steps;
+  if (!stepId || !loadSnapshot) {
+    return;
+  }
+
+  const stepResult = snapshot.context?.[stepId] as
+    | { status?: string; suspendPayload?: { __workflow_meta?: Record<string, any> } }
+    | undefined;
+  const meta = stepResult?.suspendPayload?.__workflow_meta;
+
+  // Only a suspended nested workflow has a nested run to look into. A foreach result keeps one
+  // payload per iteration under `foreachOutput`, and those resumes pick an iteration instead.
+  if (stepResult?.status !== 'suspended' || !meta?.runId || meta.foreachOutput) {
+    return;
+  }
+
+  const nestedSnapshot = await loadSnapshot({ workflowName: stepId, runId: meta.runId });
+  if (!nestedSnapshot) {
+    return;
+  }
+
+  const nestedStepPaths = getSuspendedStepPaths(nestedSnapshot);
+  if (nestedStepPaths.length < 2) {
+    return;
+  }
+
+  const pathStrings = nestedStepPaths.map(path => `[${[stepId, ...path].join(', ')}]`);
+  throw new MastraError({
+    id: 'WORKFLOW_RESUME_AMBIGUOUS_NESTED_STEP',
+    domain: ErrorDomain.MASTRA_WORKFLOW,
+    category: ErrorCategory.USER,
+    text:
+      `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+      'Please specify which step to resume using the "step" parameter with the full path, or resume with a "label".',
+    details: { workflowId, runId, stepId, suspendedPaths: pathStrings.join(', ') },
+  });
 }
 
 export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {

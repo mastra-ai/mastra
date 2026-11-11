@@ -120,22 +120,22 @@ const labels = getWorkflowResumeLabels(state)
   },
   {
     name: 'getSuspendedStep',
-    type: '() => { stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> } | undefined',
+    type: '() => { stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; path?: string[]; foreachIndex?: number }> } | undefined',
     description: 'Returns the first suspended step.',
   },
   {
     name: 'getSuspendedSteps',
-    type: '() => Array<{ stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> }>',
+    type: '() => Array<{ stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; path?: string[]; foreachIndex?: number }> }>',
     description: 'Returns all suspended steps.',
   },
   {
     name: 'getResumeLabel',
-    type: '(label: string) => { stepId: string; foreachIndex?: number } | undefined',
+    type: '(label: string) => { stepId: string; path?: string[]; foreachIndex?: number } | undefined',
     description: 'Returns a resume label by name.',
   },
   {
     name: 'getResumeLabels',
-    type: '() => Record<string, { stepId: string; foreachIndex?: number }>',
+    type: '() => Record<string, { stepId: string; path?: string[]; foreachIndex?: number }>',
     description: 'Returns all resume labels.',
   },
 ]}

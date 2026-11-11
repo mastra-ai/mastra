@@ -1,4 +1,4 @@
-import type { StepFlowEntry, StepResult } from '../..';
+import type { StepFlowEntry, StepResult, WorkflowResumeLabel } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
@@ -204,7 +204,7 @@ export async function processWorkflowForEach(
   const targetLen = (prevResult as any)?.output?.length ?? 0;
 
   const publishSuspendedState = async (suspendedForEachIndex: number | undefined) => {
-    const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+    const collectedResumeLabels: Record<string, WorkflowResumeLabel> = {};
     let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
     for (const iterResult of currentResult.output) {
       if (iterResult?.status === 'suspended') {
@@ -219,7 +219,7 @@ export async function processWorkflowForEach(
 
     const suspendMeta: {
       foreachIndex?: number;
-      resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
     } = {
       foreachIndex: suspendedForEachIndex,
     };

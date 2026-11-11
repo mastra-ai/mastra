@@ -43,6 +43,7 @@ import type {
   StepResult,
   StepSuccess,
   TimeTravelExecutionParams,
+  WorkflowResumeLabel,
   WorkflowRunState,
   WorkflowRunStatus,
   WorkflowStateTracingContext,
@@ -1642,14 +1643,18 @@ export class WorkflowEventProcessor extends EventProcessor {
       const propagatedPath =
         suspendedStepId && existingPath[0] !== suspendedStepId ? [suspendedStepId, ...existingPath] : existingPath;
 
-      const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+      const resumeLabels: Record<string, WorkflowResumeLabel> = {};
 
-      const nestedResumeLabels = prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
+      const nestedResumeLabels: Record<string, WorkflowResumeLabel> =
+        prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
 
-      for (const label of Object.keys(nestedResumeLabels)) {
+      for (const [label, labelData] of Object.entries(nestedResumeLabels)) {
         resumeLabels[label] = {
+          // The label belongs to a step inside the nested run; the parent stores this result
+          // under this step's id, so the full path to the suspension starts here.
           stepId: parentWorkflow.stepId,
-          foreachIndex: nestedResumeLabels[label].foreachIndex,
+          path: [parentWorkflow.stepId, ...(labelData.path ?? [labelData.stepId])],
+          foreachIndex: labelData.foreachIndex,
         };
       }
 
@@ -3501,7 +3506,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     let skippedCount = 0;
     const allResults: Record<string, any> = {};
     const suspendedPaths: Record<string, number[]> = {};
-    const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+    const resumeLabels: Record<string, WorkflowResumeLabel> = {};
 
     branchEntry.steps.forEach((branch, idx) => {
       if (!isSingleStepEntry(branch)) {
@@ -3581,7 +3586,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeSteps,
           parentWorkflow,
           stepResults: { ...stepResults, __state: currentState },
-          prevResult: { status: 'suspended' } as any,
+          prevResult: {
+            status: 'suspended',
+            // A suspended parallel branch has no single step result to reuse, but the parent
+            // propagation reads the aggregated resume labels from this metadata. Without it
+            // the labels of steps suspended in a nested workflow never reach the parent
+            // snapshot (#29782).
+            ...(parentWorkflow && Object.keys(resumeLabels).length > 0
+              ? { suspendPayload: { __workflow_meta: { resumeLabels } } }
+              : {}),
+          } as any,
           activeStepsPath,
           requestContext,
           actor,
@@ -4010,7 +4024,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         if (suspendedCount > 0) {
           // Some iterations are suspended - emit workflow suspend
           // Build aggregated suspend metadata from all suspended iterations
-          const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+          const collectedResumeLabels: Record<string, WorkflowResumeLabel> = {};
           // suspendedPaths maps stepId -> executionPath, using the step ID (not stepId[index])
           const suspendedPaths: Record<string, number[]> = {
             [getEntryId(step.step)]: [executionPath[0]!],
@@ -4321,7 +4335,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
 
       // Extract resume labels from suspend payload metadata
-      const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
+      const resumeLabels: Record<string, WorkflowResumeLabel> =
         prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
 
       // Check shouldPersistSnapshot option - default to true if not specified

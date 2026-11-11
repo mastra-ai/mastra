@@ -956,6 +956,74 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: labels of steps suspended inside a nested workflow carry the full resume path
+  {
+    const approvalAAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend({ waitingFor: 'a' }, { resumeLabel: 'approve-a' });
+      }
+      return { approvedBy: 'a' };
+    });
+    const approvalBAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend({ waitingFor: 'b' }, { resumeLabel: 'approve-b' });
+      }
+      return { approvedBy: 'b' };
+    });
+
+    const approvalA = createStep({
+      id: 'approval-a',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ approvedBy: z.string() }),
+      suspendSchema: z.object({ waitingFor: z.string() }),
+      resumeSchema: z.object({}),
+      execute: approvalAAction,
+    });
+
+    const approvalB = createStep({
+      id: 'approval-b',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ approvedBy: z.string() }),
+      suspendSchema: z.object({ waitingFor: z.string() }),
+      resumeSchema: z.object({}),
+      execute: approvalBAction,
+    });
+
+    const nestedWorkflow = createWorkflow({
+      id: 'nested-parallel-labels-inner',
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        'approval-a': z.object({ approvedBy: z.string() }),
+        'approval-b': z.object({ approvedBy: z.string() }),
+      }),
+      options: { validateInputs: false },
+    })
+      .parallel([approvalA, approvalB])
+      .commit();
+
+    const mainWorkflow = createWorkflow({
+      id: 'nested-parallel-labels-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        'approval-a': z.object({ approvedBy: z.string() }),
+        'approval-b': z.object({ approvedBy: z.string() }),
+      }),
+      options: { validateInputs: false },
+    });
+
+    mainWorkflow.then(nestedWorkflow).commit();
+
+    workflows['nested-parallel-labels-workflow'] = {
+      workflow: mainWorkflow,
+      nestedWorkflowId: 'nested-parallel-labels-inner',
+      mocks: { approvalAAction, approvalBAction },
+      resetMocks: () => {
+        approvalAAction.mockClear();
+        approvalBAction.mockClear();
+      },
+    };
+  }
+
   // Test: should handle basic suspend and resume in a dountil workflow
   {
     let iterationCount = 0;
@@ -2945,6 +3013,18 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
 export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
   const { execute } = ctx;
 
+  /**
+   * Read the resume labels an engine persisted for a run. Labels live in the run snapshot, which
+   * every engine writes, unlike `outputOptions.includeResumeLabels`, which only some engines
+   * attach to the result.
+   */
+  const readResumeLabels = async (workflowName: string, runId: string) => {
+    const storage = ctx.getStorage?.();
+    const workflowsStore = await storage?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName, runId });
+    return snapshot?.resumeLabels;
+  };
+
   describe('Suspend and Resume', () => {
     it('should return the correct runId', async () => {
       const { workflow, mocks } = registry!['suspend-resume-runid-workflow']!;
@@ -3954,6 +4034,86 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         expect(mocks.otherAction).toHaveBeenCalledTimes(2); // Called on initial + resume
         expect(mocks.finalAction).toHaveBeenCalledTimes(1);
         expect(mocks.lastAction).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeNestedLabelPath || !ctx.resume || !ctx.getStorage)(
+      'should carry the full nested path on labels of steps suspended in a nested workflow',
+      async () => {
+        const { workflow, nestedWorkflowId } = registry!['nested-parallel-labels-workflow']!;
+
+        const runId = `nested-parallel-labels-paths-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, {}, { runId });
+
+        expect(startResult.status).toBe('suspended');
+        expect(startResult.steps[nestedWorkflowId]).toMatchObject({ status: 'suspended' });
+
+        // Each label names the nested workflow (for backwards compatibility) plus the
+        // full path down to the step that actually suspended.
+        const resumeLabels = await readResumeLabels(workflow.id, runId);
+        expect(resumeLabels?.['approve-a']).toMatchObject({
+          stepId: nestedWorkflowId,
+          path: [nestedWorkflowId, 'approval-a'],
+        });
+        expect(resumeLabels?.['approve-b']).toMatchObject({
+          stepId: nestedWorkflowId,
+          path: [nestedWorkflowId, 'approval-b'],
+        });
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeNestedLabelPath || !ctx.resume || !ctx.getStorage)(
+      'should resume only the labelled step of a nested workflow using its label path',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['nested-parallel-labels-workflow']!;
+        resetMocks?.();
+
+        const runId = `nested-parallel-labels-resume-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, {}, { runId });
+        expect(startResult.status).toBe('suspended');
+        expect(mocks.approvalAAction).toHaveBeenCalledTimes(1);
+        expect(mocks.approvalBAction).toHaveBeenCalledTimes(1);
+
+        // Capture both paths before resuming: resuming one step can clear the other label
+        // on some engines (#29781), so the second resume must not re-read the snapshot.
+        const resumeLabels = await readResumeLabels(workflow.id, runId);
+        const approvalBPath = resumeLabels?.['approve-b']?.path;
+        const approvalAPath = resumeLabels?.['approve-a']?.path;
+        expect(approvalBPath).toBeDefined();
+        expect(approvalAPath).toBeDefined();
+
+        // Resuming by the label's path resumes only `approval-b`; `approval-a` stays suspended.
+        const afterB = await ctx.resume!(workflow, { runId, step: approvalBPath, resumeData: {} });
+        expect(afterB.status).toBe('suspended');
+        expect(mocks.approvalBAction).toHaveBeenCalledTimes(2); // initial + resume
+        expect(mocks.approvalAAction).toHaveBeenCalledTimes(1);
+
+        const afterA = await ctx.resume!(workflow, { runId, step: approvalAPath, resumeData: {} });
+        expect(afterA.status).toBe('success');
+        expect(mocks.approvalAAction).toHaveBeenCalledTimes(2); // initial + resume
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeNestedLabelPath || !ctx.resume)(
+      'should reject an ambiguous nested resume before executing and leave the run suspended',
+      async () => {
+        const { workflow, nestedWorkflowId } = registry!['nested-parallel-labels-workflow']!;
+
+        const runId = `nested-parallel-labels-ambiguous-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, {}, { runId });
+        expect(startResult.status).toBe('suspended');
+
+        // Two inner steps are suspended, so naming only the nested workflow is ambiguous.
+        await expect(ctx.resume!(workflow, { runId, step: nestedWorkflowId, resumeData: {} })).rejects.toThrow(
+          /Multiple suspended steps/,
+        );
+
+        // The run is still suspended (not failed), so a labelled resume still works.
+        const afterB = await ctx.resume!(workflow, { runId, label: 'approve-b', resumeData: {} });
+        expect(afterB.status).toBe('suspended');
       },
     );
 
