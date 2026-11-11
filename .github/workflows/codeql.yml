@@ -69,6 +69,12 @@ jobs:
       contents: read
       security-events: read
     steps:
+      # Marks this run as one that reports an unfinished scan, so later scans can tell it from
+      # runs of the earlier version of this workflow, which skipped cancelled scans silently.
+      - name: Note that the scan did not finish
+        if: needs.analyze.result == 'cancelled'
+        run: echo "The scan was cancelled or timed out; reporting it as a failure."
+
       - name: Compare with the previous scan of main
         id: state
         env:
@@ -85,22 +91,27 @@ jobs:
             exit 0
           fi
 
-          # Prints "<analyze> <notified> <checked_from>" for a run or attempt: analyze is failure
-          # (also when it was cancelled or timed out), success, ignored when it has no Analyze
-          # jobs, or unreadable when its jobs could not be read;
+          # Prints "<analyze> <notified> <checked_from>" for a run or attempt: analyze is failure,
+          # success, ignored when it has no Analyze jobs or was cancelled without its notify job
+          # noting it (an earlier version of this workflow skipped those silently), or unreadable
+          # when its jobs could not be read;
           # notified is yes when its notify job passed, which means it read the alerts it was due
           # to report; checked_from is when that notify job started, before it read the alerts
           # (- when unknown).
           run_state() {
             local jobs conclusions analyze=ignored notified=no checked_from
             if ! jobs=$(gh api --paginate "$1/jobs?per_page=100" \
-              --jq '.jobs[] | "\(.name)\t\(.conclusion)\t\(.started_at // "-")"' 2>/dev/null); then
+              --jq '.jobs[] | "\(.name)\t\(.conclusion)\t\(.started_at // "-")\t\([.steps[]? | select(.name == "Note that the scan did not finish" and .conclusion == "success")] | length)"' 2>/dev/null); then
               echo "unreadable no -"
               return 0
             fi
             conclusions=$(awk -F'\t' '$1 ~ /^Analyze/ {print $2}' <<< "$jobs")
-            if grep -qxE 'failure|timed_out|cancelled' <<< "$conclusions"; then
+            if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
               analyze=failure
+            elif grep -qx cancelled <<< "$conclusions"; then
+              if awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $4 > 0 {f=1} END {exit !f}' <<< "$jobs"; then
+                analyze=failure
+              fi
             elif [ -n "$conclusions" ]; then
               analyze=success
             fi
