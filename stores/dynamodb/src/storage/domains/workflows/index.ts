@@ -82,6 +82,8 @@ function toRunOwnershipRecord(item: RunOwnerItem): RunOwnershipRecord {
 // Maximum retry attempts for optimistic locking conflicts
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 50;
+// BatchGetItem accepts at most 100 keys per call.
+const BATCH_GET_MAX_KEYS = 100;
 
 export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   /**
@@ -272,6 +274,44 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       return await this.#readRunOwner(runId);
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /**
+   * Reads the records with one strongly consistent BatchGetItem per 100 runs,
+   * the most one call accepts. Keys DynamoDB leaves unprocessed (throttling,
+   * response size) are read again with backoff.
+   */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+    try {
+      const owners = this.service.entities.workflow_run_owner!;
+      for (let start = 0; start < ids.length; start += BATCH_GET_MAX_KEYS) {
+        let pending = ids.slice(start, start + BATCH_GET_MAX_KEYS);
+        for (let attempt = 0; pending.length > 0; attempt++) {
+          if (attempt > MAX_RETRIES) {
+            throw new Error(`DynamoDB left ${pending.length} run ownership reads unprocessed`);
+          }
+          if (attempt > 0) await new Promise(resolve => setTimeout(resolve, BASE_DELAY_MS * 2 ** (attempt - 1)));
+          const { data, unprocessed } = (await owners
+            .get(pending.map(runId => this.#runOwnerKey(runId)))
+            .go({ consistent: true })) as { data: RunOwnerItem[]; unprocessed: { run_id: string }[] };
+          for (const item of data) records.set(item.run_id, toRunOwnershipRecord(item));
+          pending = unprocessed.map(key => key.run_id);
+        }
+      }
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
     }
   }
 
