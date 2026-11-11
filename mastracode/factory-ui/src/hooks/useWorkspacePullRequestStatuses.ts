@@ -4,7 +4,12 @@ import {
   listPullRequestSubscriptions,
   pullRequestSubscriptionsQueryKey,
 } from '../ui/domains/factory/services/githubSubscriptions';
-import type { ChangeRequestProvider } from '../ui/domains/factory/services/githubSubscriptions';
+import type {
+  ChangeRequestProvider,
+  PullRequestSubscription,
+} from '../ui/domains/factory/services/githubSubscriptions';
+
+export type LivePullRequestStatus = PullRequestSubscription['status'];
 
 export const WORKSPACE_PR_STATUS_POLL_MS = 5_000;
 
@@ -17,7 +22,7 @@ export interface WorkspacePullRequestTarget {
   knownMerged: boolean;
 }
 
-export function useWorkspacePullRequestMerges({
+export function useWorkspacePullRequestStatuses({
   baseUrl,
   targets,
   enabled,
@@ -25,7 +30,7 @@ export function useWorkspacePullRequestMerges({
   baseUrl: string;
   targets: WorkspacePullRequestTarget[];
   enabled: boolean;
-}): Record<string, boolean> {
+}): Record<string, LivePullRequestStatus | undefined> {
   const queries = useQueries({
     queries: targets.map(target =>
       queryOptions({
@@ -47,22 +52,15 @@ export function useWorkspacePullRequestMerges({
     ),
   });
 
-  const mergedBySessionId: Record<string, boolean> = {};
+  // The subscription's state when the check has it, otherwise only what the item already knows.
+  const statusBySessionId: Record<string, LivePullRequestStatus | undefined> = {};
   targets.forEach((target, index) => {
-    if (!enabled) {
-      mergedBySessionId[target.sessionId] = target.knownMerged;
-      return;
-    }
-
-    const query = queries[index];
-    if (!query?.isSuccess) {
-      mergedBySessionId[target.sessionId] = target.knownMerged;
-      return;
-    }
-
-    const subscription = query.data.find(candidate => candidate.pullRequestNumber === target.pullRequestNumber);
-    mergedBySessionId[target.sessionId] = subscription ? subscription.status === 'merged' : target.knownMerged;
+    const query = enabled ? queries[index] : undefined;
+    const subscription = query?.isSuccess
+      ? query.data.find(candidate => candidate.pullRequestNumber === target.pullRequestNumber)
+      : undefined;
+    statusBySessionId[target.sessionId] = subscription?.status ?? (target.knownMerged ? 'merged' : undefined);
   });
 
-  return mergedBySessionId;
+  return statusBySessionId;
 }
