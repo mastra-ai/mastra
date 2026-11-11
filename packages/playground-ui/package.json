@@ -196,6 +196,8 @@
     "@codemirror/view": "^6.43.15",
     "@dagrejs/dagre": "^1.1.8",
     "@hello-pangea/dnd": "^18.0.1",
+    "@json-render/core": "0.22.0",
+    "@json-render/react": "0.22.0",
     "@lezer/common": "^1.5.4",
     "@lezer/highlight": "^1.2.5",
     "@lukeed/uuid": "^2.0.1",

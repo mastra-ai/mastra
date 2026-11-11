@@ -965,4 +965,99 @@ describe('MessageRow', () => {
       expect(screen.getByText('current-task-list')).toBeTruthy();
     });
   });
+
+  describe('when the agent composed a json-render interface', () => {
+    const patch = (op: 'add' | 'replace', path: string, value: unknown) =>
+      ({ type: 'data-spec', data: { type: 'patch', patch: { op, path, value } } }) as never;
+
+    // The parts JsonRenderProcessor saves for a ```spec block, one patch per line the model wrote.
+    const launchStatus = (): MastraDBMessage =>
+      baseMessage({
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Here is where the launch stands.' },
+            patch('add', '/root', 'main'),
+            patch('add', '/elements/main', { type: 'Card', props: { title: 'Launch' }, children: ['signups', 'team'] }),
+            patch('add', '/elements/signups', {
+              type: 'Metric',
+              props: { label: 'Signups', value: '1,204', changePct: 12, comparison: 'vs last week' },
+              children: [],
+            }),
+            patch('add', '/state/team', []),
+            patch('add', '/state/team/-', { name: 'Ana' }),
+            patch('add', '/state/team/-', { name: 'Bo' }),
+            patch('add', '/elements/team', {
+              type: 'Stack',
+              props: { direction: 'horizontal' },
+              repeat: { statePath: '/team', key: 'name' },
+              children: ['member'],
+            }),
+            patch('add', '/elements/member', { type: 'Badge', props: { text: { $item: 'name' } }, children: [] }),
+          ],
+        },
+      });
+
+    // Memory saves the spec parts before the reply's text, while the live stream has the text first.
+    it.each([
+      ['while it streams', (parts: unknown[]) => parts],
+      ['once reloaded from memory', (parts: unknown[]) => [...parts.slice(1), parts[0]]],
+    ])('shows the prose above the interface %s', (_, order) => {
+      const message = launchStatus();
+      renderRow({ ...message, content: { ...message.content, parts: order(message.content.parts) as never } });
+
+      const prose = screen.getByText('Here is where the launch stands.');
+      const card = screen.getByText('Launch');
+      expect(prose.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('renders the interface with design-system components, next to the prose', () => {
+      renderRow(launchStatus());
+
+      expect(screen.getByText('Here is where the launch stands.')).toBeTruthy();
+      expect(screen.getByText('Launch')).toBeTruthy();
+      expect(screen.getByText('Signups')).toBeTruthy();
+      expect(screen.getByText('1,204')).toBeTruthy();
+      expect(screen.getByText('Ana')).toBeTruthy();
+      expect(screen.getByText('Bo')).toBeTruthy();
+    });
+
+    it('renders the interface once, however many patches built it', () => {
+      renderRow(launchStatus());
+
+      expect(screen.getAllByText('Launch')).toHaveLength(1);
+    });
+
+    it('keeps a streamed list as the model wrote it once the reply has re-rendered', () => {
+      // Each streamed chunk hands the row a new parts array holding the same part objects.
+      const message = launchStatus();
+      const nextChunk = () => ({ ...message, content: { ...message.content, parts: [...message.content.parts] } });
+      const { rerender, unmount } = render(<MessageRow message={message} />, { wrapper: Providers });
+      rerender(<MessageRow message={nextChunk()} />);
+      rerender(<MessageRow message={nextChunk()} />);
+      // Reopening the thread mounts the row again from the same parts.
+      unmount();
+      render(<MessageRow message={nextChunk()} />, { wrapper: Providers });
+
+      expect(screen.getAllByText('Ana')).toHaveLength(1);
+      expect(screen.getAllByText('Bo')).toHaveLength(1);
+    });
+
+    it('shows nothing for an interface whose patches have not reached the root yet', () => {
+      renderRow(
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Working on it.' },
+              patch('add', '/elements/main', { type: 'Card', props: { title: 'Launch' }, children: [] }),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getByText('Working on it.')).toBeTruthy();
+      expect(screen.queryByText('Launch')).toBeNull();
+    });
+  });
 });

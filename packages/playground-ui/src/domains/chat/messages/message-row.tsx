@@ -32,6 +32,8 @@ import type { DataMessagePart } from '@/domains/chat/tools/tool-card';
 import { badgeStatus, isSettledState } from '@/domains/chat/tools/tool-card-kind';
 import type { ToolCardContext } from '@/domains/chat/tools/tool-card-kind';
 import { collectToolGroups } from '@/domains/chat/tools/tool-groups';
+import { JsonRenderInterface } from '@/domains/json-render/json-render-interface';
+import { buildInterfaceSpec, isSpecPart } from '@/domains/json-render/spec-parts';
 import { useRevealedParts } from '@/ds/components/ai/message-reveal';
 import { ToolCallGroup } from '@/ds/components/ai/tool-call';
 import { Arriving } from '@/ds/components/Arrival';
@@ -154,6 +156,8 @@ export const MessageRow = memo(function MessageRow({
   const isRunning = running.isRunning && running.activeRunId !== undefined && metadata?.runId === running.activeRunId;
   const { data: mcpAppTools } = useMcpAppTools();
   const parts = dbMessage?.content.parts ?? NO_PARTS;
+  const specParts = useMemo(() => parts.filter(isSpecPart), [parts]);
+  const interfaceSpec = useMemo(() => buildInterfaceSpec(specParts), [specParts]);
   const revealed = useRevealedParts(parts, isStreaming(parts));
   const shownParts = isProse(parts, metadata) ? revealed : parts;
   const revealing = shownParts !== parts;
@@ -218,11 +222,15 @@ export const MessageRow = memo(function MessageRow({
     };
     return {
       Reasoning: part => <ReasoningPartRenderer part={part} />,
-      Data: part => (
-        <Arriving>
-          <DataPartRenderer part={part} />
-        </Arriving>
-      ),
+      Data: part => {
+        // Spec parts render as one interface after the reply, see below.
+        if (isSpecPart(part)) return null;
+        return (
+          <Arriving>
+            <DataPartRenderer part={part} />
+          </Arriving>
+        );
+      },
       ToolInvocation: renderTool,
       DynamicTool: renderTool,
       Error: (part: MastraErrorPart) => (
@@ -327,6 +335,12 @@ export const MessageRow = memo(function MessageRow({
     >
       <ChatRunningContext.Provider value={{ ...running, isRunning }}>
         <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+        {/* Memory saves spec parts before the text, so the interface goes after the reply rather than at a part's position. */}
+        {interfaceSpec && (
+          <Arriving>
+            <JsonRenderInterface spec={interfaceSpec} />
+          </Arriving>
+        )}
       </ChatRunningContext.Provider>
     </Message>
   );
