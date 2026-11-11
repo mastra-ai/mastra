@@ -259,8 +259,9 @@ function createSession(
   const controller = {
     createSession: vi.fn(async () => session),
     // Bindings run under the Factory resource; the session is found by its own id only.
-    getSession: vi.fn(async (sessionId: string): Promise<typeof session | undefined> =>
-      sessionId === 'session-1' ? session : undefined,
+    getSession: vi.fn(
+      async (sessionId: string): Promise<typeof session | undefined> =>
+        sessionId === 'session-1' ? session : undefined,
     ),
     // Empty registry by default: the level-triggered timeout check sees no run.
     listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
