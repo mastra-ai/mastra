@@ -4594,6 +4594,40 @@ describe('factory environment sandbox context', () => {
       warn.mockRestore();
     });
 
+    it('syncs the other repositories side by side instead of one after another, keeping their order in the state', async () => {
+      const { resolver } = environmentFixture({
+        links: [
+          ...twoLinks,
+          { id: 'link-4', repositoryId: 'repository-4', slug: 'octocat/site', position: 4, inEnvironment: true },
+        ],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const started: string[] = [];
+      const release: Array<() => void> = [];
+      mocks.syncEnvironmentRepository.mockImplementation(async (_sandbox: unknown, dir: string) => {
+        started.push(dir);
+        await new Promise<void>(resolve => release.push(resolve));
+        return { outcome: 'created' as const, branch: 'factory/issue-7' };
+      });
+
+      const booted = boot(resolver);
+      await vi.waitFor(() => expect(started).toEqual(['/home/user/docs', '/home/user/site']));
+      for (const resolve of release) resolve();
+      await booted;
+
+      expect(peekSessionEnvironment('session-a')?.repositories.map(repo => repo.slug)).toEqual([
+        'octocat/hello',
+        'octocat/docs',
+        'octocat/site',
+      ]);
+      mocks.syncEnvironmentRepository.mockReset();
+      mocks.syncEnvironmentRepository.mockImplementation(async () => ({
+        outcome: 'created' as const,
+        branch: 'factory/issue-7',
+      }));
+    });
+
     it('records the environment for teardown even when the workspace setup command fails', async () => {
       const { resolver } = environmentFixture({ links: twoLinks });
       addProject({ setupCommand: 'pnpm i' });
