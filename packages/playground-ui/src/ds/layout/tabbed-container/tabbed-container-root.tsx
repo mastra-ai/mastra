@@ -19,10 +19,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/c
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-export type TabbedContainerSearchProps = Pick<
-  SearchInputProps,
-  'debounceMs' | 'defaultValue' | 'label' | 'placeholder'
-> & {
+export type TabbedContainerSearchProps = Pick<SearchInputProps, 'debounceMs' | 'label' | 'placeholder'> & {
+  value: string;
   onSearch: (search: string) => void;
 };
 

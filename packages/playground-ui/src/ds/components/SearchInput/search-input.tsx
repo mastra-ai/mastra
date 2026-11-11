@@ -25,15 +25,23 @@ type SearchInputBaseProps = Omit<
 };
 
 /**
- * Controlled (`value`, reported on every keystroke) or keeping its own text (`defaultValue`,
- * optionally reported after `debounceMs`). To reset a field that keeps its own text, remount it
- * with a `key`.
+ * Controlled by `value` (it follows every change the parent makes, e.g. a URL change or a Reset)
+ * or keeping its own text from `defaultValue`. Either way `debounceMs` delays `onValueChange`
+ * while typing; a controlled field shows what was typed until the parent's value moves.
  */
 export type SearchInputProps = SearchInputBaseProps &
-  (
-    | { value: string; defaultValue?: never; debounceMs?: never }
-    | { value?: never; defaultValue?: string; debounceMs?: number }
-  );
+  ({ value: string; defaultValue?: never } | { value?: never; defaultValue?: string }) & {
+    debounceMs?: number;
+  };
+
+type Draft = { text: string; over: string };
+
+/** What the field shows: its own text, or the parent's value unless a draft was typed over it. */
+function shownText({ value, ownText, draft }: { value?: string; ownText: string; draft?: Draft }) {
+  if (value === undefined) return ownText;
+  if (draft?.over === value) return draft.text;
+  return value;
+}
 
 /**
  * A search field: an `InputGroup` with a search icon and a clear button, nothing styled of its
@@ -53,8 +61,13 @@ export function SearchInput({
   ...inputProps
 }: SearchInputProps) {
   const [ownText, setOwnText] = useState(defaultValue);
-  const text = value ?? ownText;
-  const hasButton = Boolean(onClose || text);
+  // Typed text waiting on the debounce, and the parent's value it was typed over. It shows only
+  // while that value hasn't moved: once the parent takes the text, or changes it some other way,
+  // the field follows the parent again.
+  const [draft, setDraft] = useState<Draft>();
+  const text = shownText({ value, ownText, draft });
+  const editable = !inputProps.disabled && !inputProps.readOnly;
+  const hasButton = Boolean(onClose || (text && editable));
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedChange = useDebouncedCallback(onValueChange, debounceMs);
 
@@ -73,9 +86,11 @@ export function SearchInput({
   const change = (next: string) => {
     setOwnText(next);
     if (next && debounceMs > 0) {
+      if (value !== undefined) setDraft({ text: next, over: value });
       debouncedChange(next);
       return;
     }
+    setDraft(undefined);
     debouncedChange.cancel();
     onValueChange(next);
   };
@@ -104,7 +119,7 @@ export function SearchInput({
         <InputGroupButton
           aria-label={onClose ? 'Close search' : 'Clear search'}
           onClick={() => {
-            change('');
+            if (editable) change('');
             if (onClose) onClose();
             else inputRef.current?.focus();
           }}

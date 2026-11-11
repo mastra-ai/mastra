@@ -22,8 +22,8 @@ export function ScorersToolbar({
   onReset,
   hasActiveFilters,
 }: ScorersToolbarProps) {
-  // Remount the search on Reset so a typed-but-uncommitted term is dropped even when the
-  // controlled `search` value is already '' (SearchInput keeps its own text).
+  // Remount the search on Reset so a typed-but-uncommitted term is dropped: when `search` is
+  // already '', Reset doesn't change it, so the field would keep showing the pending text.
   const [searchKey, setSearchKey] = useState(0);
 
   const handleReset = () => {
@@ -43,7 +43,7 @@ export function ScorersToolbar({
             key={searchKey}
             label="Search scorers"
             placeholder="Search by scorer name"
-            defaultValue={search}
+            value={search}
             onValueChange={onSearchChange}
           />
         </div>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -165,6 +165,53 @@ describe('SearchInput that collapses', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
 
     expect(input.value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+  });
+});
+
+describe('SearchInput controlled and debounced', () => {
+  function UrlSearch({ initial }: { initial: string }) {
+    const [value, setValue] = useState(initial);
+    return (
+      <>
+        <SearchInput label="Search agents" value={value} onValueChange={setValue} debounceMs={300} />
+        <button type="button" onClick={() => setValue('from url')}>
+          Navigate
+        </button>
+        <output>{value}</output>
+      </>
+    );
+  }
+
+  it('shows what is typed, then reports it after the pause', () => {
+    vi.useFakeTimers();
+    render(<UrlSearch initial="" />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
+
+    fireEvent.change(input, { target: { value: 'chef' } });
+    expect(input.value).toBe('chef');
+    expect(screen.getByRole('status').textContent).toBe('');
+
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.getByRole('status').textContent).toBe('chef');
+    expect(input.value).toBe('chef');
+    vi.useRealTimers();
+  });
+
+  it('follows a change the parent makes, such as a URL change', () => {
+    render(<UrlSearch initial="chef" />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Navigate' }));
+
+    expect(input.value).toBe('from url');
+  });
+});
+
+describe('SearchInput that cannot be edited', () => {
+  it.each(['disabled', 'readOnly'] as const)('offers no clear button when %s', prop => {
+    render(<SearchInput label="Search agents" defaultValue="chef" onValueChange={vi.fn()} {...{ [prop]: true }} />);
+
     expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
   });
 });

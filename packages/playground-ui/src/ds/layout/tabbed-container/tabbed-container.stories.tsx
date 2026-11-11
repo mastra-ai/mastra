@@ -174,7 +174,7 @@ export const SearchAndFilter: Story = {
             search={{
               label: 'Search runs',
               placeholder: 'Search runs',
-              defaultValue: runSearch,
+              value: runSearch,
               onSearch: setRunSearch,
             }}
             filter={{
@@ -256,7 +256,7 @@ export const SearchPerTab: Story = {
             search={{
               label: 'Search runs',
               placeholder: 'Search runs',
-              defaultValue: runSearch,
+              value: runSearch,
               onSearch: setRunSearch,
             }}
           >
@@ -282,7 +282,7 @@ export const SearchPerTab: Story = {
             search={{
               label: 'Search scores',
               placeholder: 'Search scorers',
-              defaultValue: scoreSearch,
+              value: scoreSearch,
               onSearch: setScoreSearch,
             }}
           >
@@ -356,7 +356,7 @@ export const OverflowAndClosable: Story = {
                 onClose={closeTab(tab.value)}
                 search={
                   tab.value === 'runs'
-                    ? { label: 'Search runs', placeholder: 'Search runs', defaultValue: search, onSearch: setSearch }
+                    ? { label: 'Search runs', placeholder: 'Search runs', value: search, onSearch: setSearch }
                     : undefined
                 }
               >
