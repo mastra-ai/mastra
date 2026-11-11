@@ -51,7 +51,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const sessions = useGlobalSearchSessions(searchableFactoryId);
   const [query, setQuery] = useState('');
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
-  const workItems = useGlobalSearchWorkItems(searchableFactoryId, query, intake.candidates, sessions.repositories);
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId, query, intake.candidates);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const catalog = useBoardCatalog(searchableFactoryId);
   const defaultBoard = catalog.data?.find(board => board.id === DEFAULT_BOARD_ID);
@@ -61,7 +61,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     kind: boardIdOf({}),
     currentUserId,
     onFailure: toastFailureAfterPaletteCloses,
-    items: workItems.items,
+    items: workItems.loaded,
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { effectByItem } = useItemDecisions(searchableFactoryId);
@@ -71,18 +71,18 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const sessionGroups = createSessionSearchGroups({
     factoryId,
     repositories: sessions.repositories,
-    workItems: workItems.items,
+    workItems: workItems.withSessions,
   });
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
-    workItems: workItems.items,
+    workItems: workItems.unstarted,
     candidates: workItems.candidates,
     boards: catalog.data,
   });
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,
     review: sessionGroups.review.length,
-    items: unstartedItems.length,
+    items: workItems.count,
     user: sessionGroups.user.length,
     factories: factories.length,
   });

@@ -9,7 +9,7 @@
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
-import { RequestError, requestJson } from './request';
+import { requestJson } from './request';
 
 export type WorkItemSource =
   | 'github-issue'
@@ -298,49 +298,38 @@ export interface BoardSnapshot {
   runningSessionIds: string[];
   /** Sessions parked on a tool until someone answers, read live with the cards. */
   parkedSessionIds: string[];
+  /** How many cards matched a `started: 'false'` read, of which `workItems` holds the first. */
+  total?: number;
 }
 
 /**
- * List the org's work items for a Factory project: the whole board, or with `only` the cards
- * holding that session (`sessionId`) or any session (`scope`), and the cards related to them.
+ * List the org's work items for a Factory project: the whole board, or with `only` a part of it.
+ * `sessionId` and `scope: 'sessions'` ask for the cards holding that session or any session, with
+ * the cards related to them; `started: 'false'` for the most recently updated cards holding no
+ * session whose text has every word of `q`; `source` for the cards filed from those source ids or URLs.
  */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-  only?: { sessionId: string } | { scope: 'sessions' },
+  only?: { sessionId: string } | { scope: 'sessions' } | { started: 'false'; q: string } | { source: string[] },
 ): Promise<BoardSnapshot> {
-  const query = only ? `?${new URLSearchParams(only)}` : '';
+  const params = only && new URLSearchParams('source' in only ? only.source.map(source => ['source', source]) : only);
   const data = await requestJson<{
     workItems: WireWorkItem[];
     runningSessionIds?: string[];
     parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${query}`, { signal });
+    total?: number;
+  }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${params ? `?${params}` : ''}`,
+    { signal },
+  );
   return {
     workItems: data.workItems.map(fromWireWorkItem),
     runningSessionIds: data.runningSessionIds ?? [],
     parkedSessionIds: data.parkedSessionIds ?? [],
+    ...(data.total === undefined ? {} : { total: data.total }),
   };
-}
-
-/** The few cards a search needs: the best matches for `query`, plus every card that carries one of `keys`. */
-export async function searchWorkItems(
-  baseUrl: string,
-  factoryProjectId: string,
-  search: { query: string; keys: readonly string[] },
-  signal?: AbortSignal,
-): Promise<WorkItem[]> {
-  const params = new URLSearchParams([['q', search.query], ...search.keys.map(key => ['key', key])]);
-  const path = `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/search`;
-  try {
-    return (await requestJson<{ workItems: WireWorkItem[] }>(`${path}?${params}`, { signal })).workItems.map(
-      fromWireWorkItem,
-    );
-  } catch (error) {
-    // A server from before this route answers 404: read its whole board, as search did until now.
-    if (!(error instanceof RequestError) || error.status !== 404) throw error;
-    return (await listWorkItems(baseUrl, factoryProjectId, signal)).workItems;
-  }
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

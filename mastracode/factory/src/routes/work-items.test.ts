@@ -497,34 +497,6 @@ describe('POST /web/factory/projects/:id/work-items', () => {
   });
 });
 
-describe('GET /web/factory/projects/:id/work-items/search', () => {
-  it('returns the cards that match what is typed and the cards asked for by key, not the board', async () => {
-    for (let number = 1; number <= 60; number += 1) {
-      const url = `https://github.com/acme/app/issues/${number}`;
-      await json(
-        'POST',
-        `/web/factory/projects/${PROJECT_ID}/work-items`,
-        createBody({
-          title: number % 2 ? `Fix the login flow ${number}` : `Rework the palette ${number}`,
-          metadata: { number },
-          externalSource: { integrationId: 'github', type: 'issue', externalId: String(number), url },
-        }),
-      );
-    }
-    const search = async (query: string): Promise<Array<{ title: string }>> =>
-      (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/search?${query}`)).json()).workItems;
-
-    const typed = await search('q=PALETTE');
-    expect(typed).toHaveLength(20);
-    expect(typed.every(card => card.title.startsWith('Rework the palette'))).toBe(true);
-    expect((await search('q=%237')).map(card => card.title)).toEqual(['Fix the login flow 7']);
-
-    const keyed = await search(`q=palette&key=${encodeURIComponent('https://github.com/acme/app/issues/3')}`);
-    expect(keyed).toHaveLength(21);
-    expect(keyed[0].title).toBe('Fix the login flow 3');
-  });
-});
-
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
   it('serves normalized source facts on create, list and update while retaining the legacy wire fields', async () => {
@@ -2519,6 +2491,165 @@ describe('run activity on the work-item listing', () => {
 
       expect(res.status).toBe(400);
     });
+  });
+
+  describe('the cards holding no session (?started=false)', () => {
+    const unstarted = async (query = '') => {
+      const res = await buildApp(orgUser).request(`${boardPath()}?started=false${query}`);
+      const body = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json());
+      return { titles: body.workItems.map(item => item.title), total: body.total };
+    };
+    const rename = (card: { id: string }, title: string) =>
+      json('PATCH', `/web/factory/work-items/${card.id}`, { title });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('lists the cards holding no session, most recently updated first, and counts them', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') });
+      await startRun('session-mine');
+      const oldest = await createCard('1', { title: 'Oldest card' });
+      vi.setSystemTime(new Date('2026-11-01T10:01:00Z'));
+      await createCard('2', { title: 'Middle card' });
+      vi.setSystemTime(new Date('2026-11-01T10:02:00Z'));
+      await createCard('3', { title: 'Newest card' });
+      vi.setSystemTime(new Date('2026-11-01T10:03:00Z'));
+      await json('PATCH', `/web/factory/work-items/${oldest.id}`, { metadata: { note: 'looked at' } });
+
+      expect(await unstarted()).toEqual({
+        titles: ['Oldest card', 'Newest card', 'Middle card'],
+        total: 3,
+      });
+    });
+
+    it('finds a card by every word typed, in any case, in its title, its key, its number or its source id', async () => {
+      await createCard('github:7:issue:12', { title: 'Fix the login flow', metadata: { number: 12 } });
+      await createCard('github:7:issue:345', { title: 'Rework the login palette', metadata: { number: 345 } });
+      await createCard('linear:issue-uuid', {
+        title: 'Tidy the settings page',
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:issue-uuid' },
+        metadata: { identifier: 'ENG-77' },
+      });
+
+      expect((await unstarted('&q=LOGIN%20fix')).titles).toEqual(['Fix the login flow']);
+      expect((await unstarted('&q=%2312')).titles).toEqual(['Fix the login flow']);
+      expect((await unstarted('&q=34')).titles).toEqual(['Rework the login palette']);
+      expect((await unstarted('&q=issue:345')).titles).toEqual(['Rework the login palette']);
+      expect((await unstarted('&q=eng-77')).titles).toEqual(['Tidy the settings page']);
+      expect(await unstarted('&q=fix%20palette')).toEqual({ titles: [], total: 0 });
+      expect((await unstarted('&q=login')).total).toBe(2);
+    });
+
+    it('never lists a card holding a session, whatever is typed', async () => {
+      await startRun('session-mine');
+      await createCard('1', { title: 'Work nobody started' });
+
+      expect(await unstarted('&q=work')).toEqual({ titles: ['Work nobody started'], total: 1 });
+    });
+
+    it('sends the first 20 matches unless told a limit, with the count of every match', async () => {
+      for (let number = 1; number <= 23; number += 1) {
+        await createCard(String(number), { title: number % 2 ? `Palette ${number}` : `Login ${number}` });
+      }
+
+      const all = await unstarted();
+      expect(all.titles).toHaveLength(20);
+      expect(all.total).toBe(23);
+      const typed = await unstarted('&q=palette&limit=5');
+      expect(typed.titles).toHaveLength(5);
+      expect(typed.titles.every(title => title.startsWith('Palette'))).toBe(true);
+      expect(typed.total).toBe(12);
+      expect((await unstarted('&limit=500')).titles).toHaveLength(23);
+    });
+
+    it('answers 304 while nothing changed, and sends the count again once only it changed', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') });
+      const older = await createCard('1', { title: 'Palette, older' });
+      vi.setSystemTime(new Date('2026-11-01T10:01:00Z'));
+      await createCard('2', { title: 'Palette, newer' });
+      const path = `${boardPath()}?started=false&q=palette&limit=1`;
+      const app = buildApp(orgUser);
+      const first = await app.request(path);
+      const etag = first.headers.get('etag')!;
+      expect(await first.json()).toMatchObject({ workItems: [{ title: 'Palette, newer' }], total: 2 });
+
+      const unchanged = await app.request(path, { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+
+      // The card that was past the limit stops matching: the listed card is the same, the count is not.
+      await rename(older, 'Login');
+      const changed = await app.request(path, { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect(await changed.json()).toMatchObject({ workItems: [{ title: 'Palette, newer' }], total: 1 });
+    });
+  });
+
+  describe('the cards filed from given sources (?source=)', () => {
+    const sourcePath = (...sources: string[]) =>
+      `${boardPath()}?${sources.map(source => `source=${encodeURIComponent(source)}`).join('&')}`;
+
+    it('lists the cards filed from a source named by its id or its URL, whatever sessions they hold', async () => {
+      const byId = await createCard('github:7:issue:12');
+      const byUrl = await createCard('github-issue:13', {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:13',
+          url: 'https://github.com/acme/app/issues/13',
+        },
+      });
+      const started = await createCard('github:7:pull-request:14');
+      await json('PATCH', `/web/factory/work-items/${started.id}`, {
+        sessions: { review: { sessionId: 'session-review', branch: 'factory/pr-14', threadId: 'thread-review' } },
+      });
+      await createCard('github:7:issue:99');
+
+      const res = await buildApp(orgUser).request(
+        sourcePath(
+          'github:7:issue:12',
+          'https://github.com/acme/app/issues/13',
+          'github:7:pull-request:14',
+          'github:7:issue:404',
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id).toSorted()).toEqual(
+        [byId.id, byUrl.id, started.id].toSorted(),
+      );
+      expect(body).not.toHaveProperty('total');
+    });
+
+    it('lists nothing when no card is filed from the sources', async () => {
+      await createCard('github:7:issue:12');
+
+      expect(await listedIds(await buildApp(orgUser).request(sourcePath('github:7:issue:404')))).toEqual([]);
+    });
+  });
+
+  it.each([
+    ['a wish for the started cards', '?started=true', 'invalid_started'],
+    ['unstarted cards combined with a scope', '?started=false&scope=sessions', 'invalid_started'],
+    ['unstarted cards combined with session ids', '?started=false&sessionId=session-mine', 'invalid_started'],
+    ['typed text without started=false', '?q=login', 'invalid_search'],
+    ['typed text with a scope', '?scope=sessions&q=login', 'invalid_search'],
+    ['typed text longer than 200 characters', `?started=false&q=${'a'.repeat(201)}`, 'invalid_search'],
+    ['a blank source', '?source=', 'invalid_source'],
+    ['a source longer than 512 characters', `?source=${'a'.repeat(513)}`, 'invalid_source'],
+    ['more than 100 sources', `?${Array.from({ length: 101 }, (_, i) => `source=s${i}`).join('&')}`, 'invalid_source'],
+    ['sources combined with a scope', '?source=github-issue:1&scope=sessions', 'invalid_source'],
+    ['sources combined with unstarted cards', '?source=github-issue:1&started=false', 'invalid_source'],
+    ['sources combined with session ids', '?source=github-issue:1&sessionId=session-mine', 'invalid_source'],
+  ])('refuses %s rather than sending the whole board', async (_case, query, error) => {
+    await createCard('github-issue:1');
+
+    const res = await buildApp(orgUser).request(`${boardPath()}${query}`);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error });
   });
 });
 
