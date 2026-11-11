@@ -32,6 +32,27 @@ describe('factory-triage source branches', () => {
     );
   });
 
+  it('returns already-triaged labeled cards in Triage to Intake without clearing their label', () => {
+    const awaitingApproval = content.split('**Awaiting approval:**')[1]?.split('\n\n')[0];
+    expect(awaitingApproval).toContain('already in the `triage` phase');
+    expect(awaitingApproval).toContain('request a transition to the `rest` phase');
+    expect(awaitingApproval).toContain('retain `status: needs approval`');
+    expect(awaitingApproval).toContain(
+      'If the card is not in `triage`, stop without changing labels or requesting a transition',
+    );
+  });
+
+  it('lets explicit board Planning routes apply to all authors, including untrusted authors', () => {
+    const routing = content
+      .split('**A board that waives the approval wait:**')[1]
+      ?.split('\n- When the item is already past triage')[0];
+    expect(routing).toContain('explicit routing criteria');
+    expect(routing).toContain('`effort:low` or `effort:medium`');
+    expect(routing).toContain('regardless of author trust');
+    expect(routing).toContain('takes precedence over the default `rest` route');
+    expect(routing).not.toContain('Everything else still rests: an untrusted author');
+  });
+
   it('keeps the GitHub and Linear branches', () => {
     expect(content).toContain('`github_upsert_factory_triage_comment`');
     expect(content).toContain('`linear_get_issue`');
