@@ -68,6 +68,8 @@ describe('smooth corners', () => {
       'h-5',
       'h-control-md',
       'size-6',
+      'w-4',
+      'aspect-square',
     ]);
   });
 
@@ -100,35 +102,13 @@ describe('smooth corners', () => {
     expect(top).not.toContain('bottom');
   });
 
-  it('turns pills into capsules but leaves known circles round', () => {
-    const full = css.slice(css.indexOf('.rounded-full:not(._)'));
-    expect(full).toMatch(
-      /\.rounded-full:not\(\._\) \{\s*border-radius: calc\(infinity \* 1px\);\s*corner-shape: round;/,
-    );
-    // Capsule with an unknown height, never on a circle.
-    expect(full).toContain("&:where(:not([class^='size-'], [class*=' size-'], .aspect-square, [data-shape='icon']");
-    expect(full).toContain('/ 10000px');
-    // Capsule with a known height, capped at half the width.
-    expect(full).toContain("[class~='h-full']");
-    expect(full).toContain('min(calc(var(--corner-box) / 2 *');
-    // Vertical pills stay round.
-    expect(gatedRule(css, '.rounded-t-full:not(._)')).toContain('corner-top-left-shape: round');
-  });
-
-  it('writes each one-sided capsule corner as a valid `horizontal vertical` pair', () => {
-    for (const side of ['l', 'r']) {
-      const start = css.indexOf(`.rounded-${side}-full:not(._) {`);
-      const rules = css.slice(start, css.indexOf(`.rounded-${side}-full {`, start));
-      const corners = [...rules.matchAll(/border-[a-z]+-[a-z]+-radius: ([^;]+);/g)]
-        .map(([, value = '']) => value)
-        .filter(value => value !== 'calc(infinity * 1px)');
-      expect(corners.length).toBeGreaterThan(0);
-      for (const value of corners) {
-        // `h / v` is shorthand-only; a longhand that holds it is invalid and dropped.
-        expect(value).toMatch(/\) (50%|10000px)$/);
-        expect(value).not.toMatch(/var\(--corner-box\) \d/);
-      }
-    }
+  it('makes `rounded-full` a capsule that turns into a circle on a square', () => {
+    const full = gatedRule(css, '.rounded-full:not(._)') ?? '';
+    // Smoothing capped by width / height - 1: 0 on a square, so q = 1 and the shape is round.
+    expect(full).toContain('max(var(--corner-w) / var(--corner-box) - 1');
+    expect(full).toContain('corner-shape: superellipse(calc(1 + 0.1 * var(--_ps)');
+    // One-sided pills take the infinite radius token, which caps their smoothing to 0.
+    expect(rulesFor(css, '.rounded-t-full')).toContain('border-top-left-radius: var(--radius-full)');
   });
 
   it('gives `rounded-[inherit]` the inherited shape too, pseudo-elements included', () => {
@@ -136,10 +116,13 @@ describe('smooth corners', () => {
     expect(rulesFor(css, '.before\\:rounded-\\[inherit\\]::before')).toContain('corner-shape: inherit');
   });
 
-  it('records a fixed height as the corner box for the cap', () => {
+  it('records the sizes a class fixes', () => {
     expect(rulesFor(css, '.h-5')).toContain('--corner-box: calc(var(--spacing) * 5)');
     expect(rulesFor(css, '.h-control-md')).toContain('--corner-box: var(--spacing-control-md)');
     expect(rulesFor(css, '.size-6')).toContain('--corner-box: calc(var(--spacing) * 6)');
+    expect(rulesFor(css, '.size-6')).toContain('--corner-w: calc(var(--spacing) * 6)');
+    expect(rulesFor(css, '.w-4')).toContain('--corner-w: calc(var(--spacing) * 4)');
+    expect(rulesFor(css, '.aspect-square')).toContain('--corner-w: var(--corner-box)');
   });
 
   // An inherited radius is the parent's enlarged one: drawn round, it would bulge.

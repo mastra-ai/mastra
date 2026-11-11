@@ -57,6 +57,7 @@
   /* Icon-mode is a circle, so its width moves with its height or it renders as a pill. */
   [data-slot='buttons-group'] > [data-shape='icon'] {
     width: var(--segment-height);
+    --corner-w: var(--segment-height);
   }
 
   /* The glyph rung: an `<Icon>` wrapper, or the bare `<svg>` a label-less button passes as

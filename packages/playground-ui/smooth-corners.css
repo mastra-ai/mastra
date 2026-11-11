@@ -1,35 +1,25 @@
 /* Smooth corners: Figma's corner smoothing (what Lisse / corne.rs draws) built into the
- * `rounded-*` utilities. `rounded-md`, `rounded-t-xl`, `rounded-[7px]`… keep their radius and
- * draw a smooth corner, set by one page-wide value on `:root`: `--corner-smoothing`
- * (0 = round, 0.65 = Lisse's default).
+ * `rounded-*` utilities, set by one page-wide value, `--corner-smoothing` (0 = round).
+ * Radii stay what the class says. Ships uncompiled as `@mastra/playground-ui/smooth-corners.css`:
+ * `components.css` imports it; an app with its own Tailwind imports it after `theme.css`.
  *
- * Ships uncompiled as `@mastra/playground-ui/smooth-corners.css`. `components.css` imports
- * it; an app that compiles its own Tailwind imports it after `theme.css`.
+ * Everything is behind the `smooth-corners` variant, so Safari (no `corner-shape`) and Firefox
+ * (parses it but paints round; drop that clause once it doesn't) keep today's corners. Its
+ * `:not(._)` beats Tailwind's own `rounded-*`, emitted after these, so every side and corner is
+ * redefined too (`rounded-xl rounded-t-none` must still flatten the top).
  *
- * Everything that changes a corner is behind the `smooth-corners` variant: browsers without
- * `corner-shape` (Safari) and Firefox, whose Nightly accepts it but still paints round
- * corners, keep today's round corners. Drop the Firefox clause once it paints the shapes.
- * The variant's `:not(._)` adds one class of specificity: Tailwind emits its own `rounded-*`
- * rules after these, so the whole family (sides and corners) is redefined to keep
- * `rounded-xl rounded-t-none` working. Logical sides (`rounded-s-*`) aren't redefined.
+ * Math: Figma starts the curve (1 + s)·R from the corner, so the radius becomes (1 + s)·R and
+ * the curve a superellipse of exponent 2 + 2.823s − 0.451s² (≤1.3% of R off); CSS takes its
+ * log2. As in Figma, s is capped so the curve fits: s ≤ (box / 2) / R − 1, the box being the
+ * short side that `h-*`, `size-*` and `min-h-*` record (or `[--corner-box:20px]`).
  *
- * The math: Figma starts the curve (1 + s)·R from the corner, so the radius becomes
- * (1 + s)·R and the curve a superellipse with exponent n = 2 + 2.823s − 0.451s² (≤1.3% of R
- * off Figma's path); `superellipse(K)` takes K = log2(n). Like Figma, smoothing is capped so
- * the curve fits half the box: s ≤ (box / 2) / R − 1, with the short side recorded in
- * `--corner-box` by `h-*`, `size-*` and `min-h-*` (or `[--corner-box:20px]`).
+ * `rounded-full` is a capsule: each end stretched by q along the flat side, nearly round. Its
+ * smoothing is capped by width / height − 1 the same way, so a square (`size-*`, `h-N w-N`,
+ * `aspect-square`) is an exact circle and a near-square pill eases into one. Unknown sizes take
+ * the full capsule, so a circle sized by padding needs `aspect-square`.
  *
- * Pills (`rounded-full`, `rounded-l/r-full`) become capsules: an end stretched along the flat
- * side by q, with a nearly round shape. With an unknown height that's q·N / N (N huge, the
- * browser scales it down to R = height / 2); with a plain `h-*` it's capped at half the width,
- * so a near-square pill eases back to a circle. Known circles (`size-*`, `aspect-square`,
- * lone icon buttons, the segmented-control thumb, avatar badges) stay round.
- *
- * Component CSS that sets a radius itself uses `calc(R * var(--corner-scale, 1))` and
- * `corner-shape: var(--corner-shape, round)`. `border-radius: inherit` needs
- * `corner-shape: inherit` too, or it draws the parent's larger radius as a circle.
- *
- * `prettier-ignore`: Prettier's Tailwind plugin rewrites `--radius-*` to `--radius- *`. */
+ * Component CSS uses `calc(R * var(--corner-scale, 1))` with `corner-shape: var(--corner-shape,
+ * round)`, and pairs `border-radius: inherit` with `corner-shape: inherit`. */
 
 @custom-variant smooth-corners {
   @supports (corner-shape: superellipse(2)) and (width: calc(1px * (10px / 5px))) and (not (-moz-orient: inline)) {
@@ -39,12 +29,22 @@
   }
 }
 
-/* The element's short side, for the cap. Not inherited: a badge's 20px must not cap what's
- * inside it. */
+/* The element's height and width where a class fixes them. Not inherited. */
 @property --corner-box {
   syntax: '<length>';
   inherits: false;
-  initial-value: 100000px;
+  initial-value: 20000px;
+}
+
+@property --corner-w {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 1000000px;
+}
+
+/* `rounded-*-full` goes through the rules below: an infinite radius caps smoothing to 0. */
+@theme {
+  --radius-full: calc(infinity * 1px);
 }
 
 :root {
@@ -56,11 +56,6 @@
     --corner-scale: calc(1 + var(--corner-smoothing));
     --corner-shape: superellipse(
       log(calc(2 + 2.823 * var(--corner-smoothing) - 0.451 * var(--corner-smoothing) * var(--corner-smoothing)), 2)
-    );
-    /* A capsule end: how far it stretches along the flat side, and its shape. */
-    --_pill-q: calc(1 + 0.12 * var(--corner-smoothing) + 0.12 * var(--corner-smoothing) * var(--corner-smoothing));
-    --_pill-shape: superellipse(
-      calc(1 + 0.1 * var(--corner-smoothing) + 0.08 * var(--corner-smoothing) * var(--corner-smoothing))
     );
   }
 }
@@ -166,183 +161,77 @@
   }
 }
 
-/* Pills. Each one-sided corner is a `horizontal vertical` pair: `h / v` is shorthand-only.
- * `:where()` keeps the capsule rules as weak as the round one, so component rules that
- * flatten a seam still win. Capsule with an unknown height: anything but a known circle.
- * With a known height: a plain `h-*` rung (not arbitrary, computed or keyword heights), and
- * not a ButtonsGroup segment (the group sets its own rung). */
-
+/* The capsule. A width under the height is a lower bound (`min-w-0`), so it counts as unknown.
+ * Horizontal radius: q·h/2, capped at half the width when the height is known; with an
+ * unknown height (20000px) it's 10000px·q / 10000px, which the browser scales to the height. */
 /* prettier-ignore */
 @utility rounded-full {
   @variant smooth-corners {
-    border-radius: calc(infinity * 1px);
-    corner-shape: round;
-
-    &:where(:not([class^='size-'], [class*=' size-'], .aspect-square, [data-shape='icon']:not([data-slot='buttons-group'] > :not(:only-child)), [data-slot='segmented-control-thumb'], [data-slot='avatar-badge'])) {
-      border-radius: calc(10000px * var(--_pill-q)) / 10000px;
-      corner-shape: var(--_pill-shape);
-    }
-
-    &:where(:is([class^='h-'], [class*=' h-']):not([class^='h-['], [class*=' h-['], [class^='h-('], [class*=' h-('], [class~='h-full'], [class~='h-auto'], [class~='h-fit'], [class~='h-screen'], [class~='h-dvh'], [class~='h-svh'], [class~='h-min'], [class~='h-max'], [class~='h-px'], [data-slot='buttons-group'] > *)) {
-      border-radius: min(calc(var(--corner-box) / 2 * var(--_pill-q)), 50%) / 50%;
-      corner-shape: var(--_pill-shape);
-    }
+    --_ps: min(var(--corner-smoothing), max(var(--corner-w) / var(--corner-box) - 1, clamp(0, (var(--corner-box) - var(--corner-w)) / 1px, 1) * var(--corner-smoothing)));
+    border-radius: min(calc(var(--corner-box) / 2 * (1 + 0.12 * var(--_ps) + 0.12 * var(--_ps) * var(--_ps))), max(50%, (var(--corner-box) - 10000px) * 2)) / calc(var(--corner-box) / 2);
+    corner-shape: superellipse(calc(1 + 0.1 * var(--_ps) + 0.08 * var(--_ps) * var(--_ps)));
   }
 }
 
-/* prettier-ignore */
-@utility rounded-l-full {
-  @variant smooth-corners {
-    border-top-left-radius: calc(infinity * 1px);
-    border-bottom-left-radius: calc(infinity * 1px);
-    corner-top-left-shape: round;
-    corner-bottom-left-shape: round;
-
-    &:where(:not([class^='size-'], [class*=' size-'], .aspect-square, [data-shape='icon']:not([data-slot='buttons-group'] > :not(:only-child)), [data-slot='segmented-control-thumb'], [data-slot='avatar-badge'])) {
-      border-top-left-radius: calc(10000px * var(--_pill-q)) 10000px;
-      border-bottom-left-radius: calc(10000px * var(--_pill-q)) 10000px;
-      corner-top-left-shape: var(--_pill-shape);
-      corner-bottom-left-shape: var(--_pill-shape);
-    }
-
-    &:where(:is([class^='h-'], [class*=' h-']):not([class^='h-['], [class*=' h-['], [class^='h-('], [class*=' h-('], [class~='h-full'], [class~='h-auto'], [class~='h-fit'], [class~='h-screen'], [class~='h-dvh'], [class~='h-svh'], [class~='h-min'], [class~='h-max'], [class~='h-px'], [data-slot='buttons-group'] > *)) {
-      border-top-left-radius: min(calc(var(--corner-box) / 2 * var(--_pill-q)), 50%) 50%;
-      border-bottom-left-radius: min(calc(var(--corner-box) / 2 * var(--_pill-q)), 50%) 50%;
-      corner-top-left-shape: var(--_pill-shape);
-      corner-bottom-left-shape: var(--_pill-shape);
-    }
-  }
-}
-
-/* prettier-ignore */
-@utility rounded-r-full {
-  @variant smooth-corners {
-    border-top-right-radius: calc(infinity * 1px);
-    border-bottom-right-radius: calc(infinity * 1px);
-    corner-top-right-shape: round;
-    corner-bottom-right-shape: round;
-
-    &:where(:not([class^='size-'], [class*=' size-'], .aspect-square, [data-shape='icon']:not([data-slot='buttons-group'] > :not(:only-child)), [data-slot='segmented-control-thumb'], [data-slot='avatar-badge'])) {
-      border-top-right-radius: calc(10000px * var(--_pill-q)) 10000px;
-      border-bottom-right-radius: calc(10000px * var(--_pill-q)) 10000px;
-      corner-top-right-shape: var(--_pill-shape);
-      corner-bottom-right-shape: var(--_pill-shape);
-    }
-
-    &:where(:is([class^='h-'], [class*=' h-']):not([class^='h-['], [class*=' h-['], [class^='h-('], [class*=' h-('], [class~='h-full'], [class~='h-auto'], [class~='h-fit'], [class~='h-screen'], [class~='h-dvh'], [class~='h-svh'], [class~='h-min'], [class~='h-max'], [class~='h-px'], [data-slot='buttons-group'] > *)) {
-      border-top-right-radius: min(calc(var(--corner-box) / 2 * var(--_pill-q)), 50%) 50%;
-      border-bottom-right-radius: min(calc(var(--corner-box) / 2 * var(--_pill-q)), 50%) 50%;
-      corner-top-right-shape: var(--_pill-shape);
-      corner-bottom-right-shape: var(--_pill-shape);
-    }
-  }
-}
-
-/* Vertical and single-corner pills stay round. */
-@utility rounded-t-full {
-  @variant smooth-corners {
-    border-top-left-radius: calc(infinity * 1px);
-    border-top-right-radius: calc(infinity * 1px);
-    corner-top-left-shape: round;
-    corner-top-right-shape: round;
-  }
-}
-
-@utility rounded-b-full {
-  @variant smooth-corners {
-    border-bottom-left-radius: calc(infinity * 1px);
-    border-bottom-right-radius: calc(infinity * 1px);
-    corner-bottom-left-shape: round;
-    corner-bottom-right-shape: round;
-  }
-}
-
-@utility rounded-tl-full {
-  @variant smooth-corners {
-    border-top-left-radius: calc(infinity * 1px);
-    corner-top-left-shape: round;
-  }
-}
-
-@utility rounded-tr-full {
-  @variant smooth-corners {
-    border-top-right-radius: calc(infinity * 1px);
-    corner-top-right-shape: round;
-  }
-}
-
-@utility rounded-bl-full {
-  @variant smooth-corners {
-    border-bottom-left-radius: calc(infinity * 1px);
-    corner-bottom-left-shape: round;
-  }
-}
-
-@utility rounded-br-full {
-  @variant smooth-corners {
-    border-bottom-right-radius: calc(infinity * 1px);
-    corner-bottom-right-shape: round;
-  }
-}
-
-/* `rounded-[inherit]` (with any variant, `before:` included) takes the parent's enlarged
- * radius, so it takes its shape too: `[inherit]` becomes `corner-shape: inherit`, and any
- * other arbitrary value is an invalid shape the browser drops. Kept apart from the rules
- * above (Tailwind would otherwise keep their shape for `[inherit]` and drop the radius), and
- * ungated: browsers reject `::before:not(._)`. */
+/* `rounded-[inherit]` (any variant, `before:` included) inherits the parent's enlarged radius,
+ * so it inherits the shape too; any other arbitrary value is an invalid shape the browser drops.
+ * Separate from the rules above, and ungated: browsers reject `::before:not(._)`. */
 @utility rounded-* {
   corner-shape: --value([*]);
 }
-
 @utility rounded-t-* {
   corner-top-left-shape: --value([*]);
   corner-top-right-shape: --value([*]);
 }
-
 @utility rounded-b-* {
   corner-bottom-left-shape: --value([*]);
   corner-bottom-right-shape: --value([*]);
 }
-
 @utility rounded-l-* {
   corner-top-left-shape: --value([*]);
   corner-bottom-left-shape: --value([*]);
 }
-
 @utility rounded-r-* {
   corner-top-right-shape: --value([*]);
   corner-bottom-right-shape: --value([*]);
 }
-
 @utility rounded-tl-* {
   corner-top-left-shape: --value([*]);
 }
-
 @utility rounded-tr-* {
   corner-top-right-shape: --value([*]);
 }
-
 @utility rounded-bl-* {
   corner-bottom-left-shape: --value([*]);
 }
-
 @utility rounded-br-* {
   corner-bottom-right-shape: --value([*]);
 }
 
-/* Fixed and minimum heights record the short side for the cap. A wrapping control
- * (`h-auto min-h-control-md`) gets a little less smoothing than Lisse would, never more. */
+/* Sizes a class fixes. A minimum stands in for the size: menu rows are `h-auto min-h-*`, count
+ * badges `h-5 min-w-5`. */
 @utility h-* {
   --corner-box: --value(--spacing-*, [length]);
   --corner-box: calc(var(--spacing) * --value(number));
 }
-
-@utility size-* {
-  --corner-box: --value(--spacing-*, [length]);
-  --corner-box: calc(var(--spacing) * --value(number));
-}
-
 @utility min-h-* {
   --corner-box: --value(--spacing-*, [length]);
   --corner-box: calc(var(--spacing) * --value(number));
+}
+@utility w-* {
+  --corner-w: --value(--spacing-*, [length]);
+  --corner-w: calc(var(--spacing) * --value(number));
+}
+@utility min-w-* {
+  --corner-w: --value(--spacing-*, [length]);
+  --corner-w: calc(var(--spacing) * --value(number));
+}
+@utility size-* {
+  --corner-box: --value(--spacing-*, [length]);
+  --corner-box: calc(var(--spacing) * --value(number));
+  --corner-w: --value(--spacing-*, [length]);
+  --corner-w: calc(var(--spacing) * --value(number));
+}
+@utility aspect-square {
+  --corner-w: var(--corner-box);
 }
