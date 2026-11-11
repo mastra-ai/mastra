@@ -2,7 +2,12 @@ import type { IMastraLogger } from '../../logger';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import { runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { ClaimRunOwnershipResult, RunFence, RunOwnershipRecord } from '../../storage/run-fencing';
-import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS, renewWorkflowLease } from '../run-ownership';
+import {
+  WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS,
+  WORKFLOW_RUN_LEASE_TTL_MS,
+  renewWorkflowLease,
+  repeatAfterSettled,
+} from '../run-ownership';
 import type { WorkflowRunOwnership } from '../run-ownership';
 import type { WorkflowRunState } from '../types';
 import { isQueuedForeachIteration } from './workflow-event-processor/loop';
@@ -76,7 +81,8 @@ class ProcessRunLiveness {
    */
   readonly #lastWriteAt = new Map<string, number>();
   readonly #writing = new Map<string, Promise<void>>();
-  #timer?: ReturnType<typeof setInterval>;
+  /** Stops the renewal timer; set while it runs. */
+  #stopTimer?: () => void;
 
   constructor(
     readonly scope: LivenessScope,
@@ -142,10 +148,14 @@ class ProcessRunLiveness {
 
   /** Starts the renewal timer unless it runs. */
   #ensureTimer() {
-    if (this.#timer) return;
+    if (this.#stopTimer) return;
+    // Not setInterval: it fires on schedule while the previous tick's writes are still pending, so a
+    // slow store would get a new round of writes on top of the old ones. The next tick starts one
+    // interval after this one settles.
     // Created outside the triggering step's fence scope, which the timer would otherwise carry into every tick.
-    this.#timer = runOutsideRunFenceScope(() => setInterval(() => void this.#renew(), LIVENESS_RENEW_INTERVAL_MS));
-    this.#timer.unref?.();
+    this.#stopTimer = runOutsideRunFenceScope(() =>
+      repeatAfterSettled(() => this.#renew(), LIVENESS_RENEW_INTERVAL_MS),
+    );
   }
 
   /**
@@ -187,8 +197,8 @@ class ProcessRunLiveness {
       if (!this.#active.has(runId) && this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS) this.#lastWriteAt.delete(runId);
     }
     if (this.#active.size === 0 && this.#lastWriteAt.size === 0) {
-      clearInterval(this.#timer);
-      this.#timer = undefined;
+      this.#stopTimer?.();
+      this.#stopTimer = undefined;
       return;
     }
     const due = [...this.#active].filter(([runId]) => this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS / 2);

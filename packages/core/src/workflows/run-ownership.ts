@@ -13,9 +13,44 @@ export interface WorkflowRunOwnership {
 const UNFENCED: WorkflowRunOwnership = { release: async () => {} };
 
 /**
+ * Runs `tick` `intervalMs` after it starts, then again `intervalMs` after
+ * each run of it settles, until the returned function is called. A tick that
+ * is running when the chain is stopped finishes, and nothing runs after it.
+ * The timer is unref'd and stays the one created here, so every tick runs in
+ * the async context this function was called in.
+ */
+export function repeatAfterSettled(tick: () => Promise<void>, intervalMs: number): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout>;
+  const arm = () => {
+    timer = setTimeout(() => void run(), intervalMs);
+    timer.unref?.();
+  };
+  const run = async () => {
+    try {
+      await tick();
+    } finally {
+      // Runtimes whose timers are plain numbers (Workers, browsers) have no refresh(); a new
+      // timer created here inherits this callback's context, which is the first timer's.
+      if (!stopped) {
+        const { refresh } = timer as { refresh?: () => unknown };
+        if (refresh) refresh.call(timer);
+        else arm();
+      }
+    }
+  };
+  arm();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+}
+
+/**
  * Renews the lease `fence` holds every {@link WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS}
- * until the returned function is called. Stops by itself after the first
- * renewal that finds the claim superseded, reporting it through `onLost`.
+ * until the returned function is called, counting each interval from the end
+ * of the previous renewal. Stops by itself after the first renewal that finds
+ * the claim superseded, reporting it through `onLost`.
  */
 export function renewWorkflowLease({
   store,
@@ -28,18 +63,21 @@ export function renewWorkflowLease({
   onLost: (owner: RunOwnershipRecord | null) => void;
   onError: (error: unknown) => void;
 }): () => void {
-  const heartbeat = setInterval(() => {
-    store
-      .renewRunOwnership({ ...fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS })
-      .then(result => {
-        if (result.renewed) return;
-        clearInterval(heartbeat);
-        onLost(result.record);
-      })
-      .catch(onError);
+  // Not setInterval: it fires on schedule while the previous renewal is still pending, so a slow
+  // store would get concurrent renewals piling up, and an older one could land after a newer one.
+  // Waiting for each renewal stretches the gap to the interval plus one write, still well inside
+  // the TTL (the interval defaults to a third of it).
+  const stop = repeatAfterSettled(async () => {
+    try {
+      const result = await store.renewRunOwnership({ ...fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
+      if (result.renewed) return;
+      stop();
+      onLost(result.record);
+    } catch (error) {
+      onError(error);
+    }
   }, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS);
-  heartbeat.unref?.();
-  return () => clearInterval(heartbeat);
+  return stop;
 }
 
 /**

@@ -21,7 +21,8 @@ import type { Event } from '../../events/types';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage/mock';
 import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../run-ownership';
-import { runLivenessKey, stepOccurrenceKey } from './step-lease';
+import { acquireStepLease, runLivenessKey, stepOccurrenceKey } from './step-lease';
+import type { StepLease } from './step-lease';
 import { abandonLease } from './test-utils/abandon-lease';
 import { createStep, createWorkflow } from '.';
 
@@ -1034,5 +1035,40 @@ describe('evented step leases (#28712)', () => {
     expect(await lease(runLivenessKey(optedOutRun.runId))).toBeNull();
     expect(await lease(stepOccurrenceKey(leasedRun.runId, [0]))).toMatchObject({ live: false });
     expect(await lease(runLivenessKey(leasedRun.runId))).toMatchObject({ live: true });
+  });
+
+  it('writes no more run liveness while an earlier liveness write is still pending', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = (await new InMemoryStore().getStore('workflows'))!;
+      const scope = { __shuttingDown: false };
+      const claim = store.claimRunOwnership.bind(store);
+      const stalled = Promise.withResolvers<void>();
+      const livenessWrites: Record<string, number> = {};
+      // The store stalls on the second liveness write of run `slow`.
+      vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+        if (args.runId.endsWith('::live')) {
+          livenessWrites[args.runId] = (livenessWrites[args.runId] ?? 0) + 1;
+          if (args.runId === runLivenessKey('slow') && livenessWrites[args.runId] === 2) {
+            await stalled.promise;
+          }
+        }
+        return claim(args);
+      });
+      const hold = (runId: string) =>
+        acquireStepLease({ scope, store, runId, key: stepOccurrenceKey(runId, [0]), claimAfterRelease: false });
+      const leases = [await hold('slow'), await hold('fast')] as StepLease[];
+
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 4);
+
+      // The tick waiting on `slow` holds the next one back, so `fast` is not written again meanwhile.
+      expect(livenessWrites[runLivenessKey('slow')]).toBe(2);
+      expect(livenessWrites[runLivenessKey('fast')]).toBe(2);
+
+      stalled.resolve();
+      await Promise.all(leases.map(lease => lease.release()));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

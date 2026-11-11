@@ -168,7 +168,8 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     );
   }, 15_000);
   it('keeps renewing the lease of a run that outlives the lease TTL', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    // The lease renews on a setTimeout chain.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     const storage = new InMemoryStore();
     const executions: string[] = [];
     let finish!: () => void;
