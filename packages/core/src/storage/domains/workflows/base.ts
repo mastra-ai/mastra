@@ -128,7 +128,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * the map. A Map, not a plain object, because run ids are caller-chosen
    * strings such as `__proto__`.
    *
-   * The default reads the runs one by one, a few at a time, so every adapter
+   * The default reads each run separately, at most 8 at once, so every adapter
    * that implements `getRunOwnership` supports it.
    * Adapters with a batch read override it with one query (or one per chunk of
    * ids when the backend caps a request).
@@ -406,6 +406,21 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }): Promise<WorkflowRunStatus | null> {
     const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
     return snapshot?.status ?? null;
+  }
+
+  /**
+   * Whether `listWorkflowRuns` filters, orders and pages in the backend by `createdAt`. An
+   * adapter returns true only when, given `perPage` and `page`, it returns the runs that match
+   * every filter ordered by `createdAt` newest first (ties in any order), with `fromDate` and
+   * `toDate` applied inclusively and the page cut in the same query, without reading the
+   * other runs. The order must follow the stored `createdAt`, not insertion order or another key.
+   *
+   * The boot-time recovery sweep pages through such adapters by `createdAt`. It reads every
+   * other adapter's active runs once in full, since a page from them costs a full read anyway
+   * or could skip runs.
+   */
+  listsWorkflowRunsByCreatedAt(): boolean {
+    return false;
   }
 
   /** Adapters that support run journals list runs of both versions. */

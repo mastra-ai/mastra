@@ -31,6 +31,40 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
     beforeEach(async () => {
       await workflowsStorage.dangerouslyClearAll();
     });
+    // The recovery sweep pages through stores that claim listsWorkflowRunsByCreatedAt() by createdAt,
+    // and a store that ordered by insertion instead would make it skip runs on every sweep.
+    it('pages by stored createdAt, newest first, when the store says it does', async ctx => {
+      if (!workflowsStorage.listsWorkflowRunsByCreatedAt()) return ctx.skip();
+      const workflowName = `created-at-order-${randomUUID()}`;
+      const base = Date.now() - 60_000;
+      // Written out of creation order, the way a writer that took its createdAt earlier commits later.
+      for (const i of [2, 0, 4, 1, 3]) {
+        const { snapshot } = createSampleWorkflowSnapshot('running');
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId: `run-${i}`,
+          snapshot: { ...snapshot, runId: `run-${i}` },
+          createdAt: new Date(base + i * 1_000),
+        });
+      }
+      const { snapshot: finished } = createSampleWorkflowSnapshot('success');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId: 'run-finished',
+        snapshot: { ...finished, runId: 'run-finished' },
+        createdAt: new Date(base + 10_000),
+      });
+
+      const page = async (toDate?: Date) =>
+        (
+          await workflowsStorage.listWorkflowRuns({ workflowName, status: 'running', toDate, perPage: 2, page: 0 })
+        ).runs.map(run => run.runId);
+      expect(await page()).toEqual(['run-4', 'run-3']);
+      // toDate is inclusive.
+      expect(await page(new Date(base + 2_000))).toEqual(['run-2', 'run-1']);
+      expect(await page(new Date(base + 500))).toEqual(['run-0']);
+    });
+
     it('returns empty array when no workflows exist', async () => {
       const { runs, total } = await workflowsStorage.listWorkflowRuns();
       expect(runs).toEqual([]);

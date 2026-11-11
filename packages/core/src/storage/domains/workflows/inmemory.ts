@@ -315,6 +315,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return true;
   }
 
+  /** Filtering and sorting the in-process map costs no storage reads, so a page is as cheap as in a database. */
+  listsWorkflowRunsByCreatedAt(): boolean {
+    return true;
+  }
+
   private ownershipRecord(runId: string): RunOwnershipRecord | null {
     const owner = this.db.runOwners.get(runId);
     if (!owner) return null;
