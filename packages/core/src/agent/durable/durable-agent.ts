@@ -2410,6 +2410,17 @@ export class DurableAgent<
   }
 
   /**
+   * Called immediately before a run's initial input is persisted. Subclasses can
+   * take execution ownership here so a run that will be rejected never writes a
+   * user message to the thread.
+   * @internal
+   */
+  protected async beforePersistInitialInput(
+    _runId: string,
+    _workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<void> {}
+
+  /**
    * Execute the durable workflow.
    *
    * Subclasses override this method to customize how the workflow is executed:
@@ -3278,7 +3289,22 @@ export class DurableAgent<
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
-    // 1a. Prepare for durable execution (non-durable phase)
+    // 1a. Reserve the thread before preparing the run.
+    //
+    // Preparation runs the input-processor chain, which loads the thread's
+    // stored messages into this run's transcript. On a busy thread that read
+    // must happen after the live run has saved its reply; otherwise this run
+    // models a transcript that still ends at the previous user message, and it
+    // persists its own user message ahead of the previous run's assistant
+    // message. registerRun below supersedes this reservation (same runId).
+    const threadStreamPubSub = this.getPubSub();
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as unknown as Agent<any, any, any, any>,
+      { memory: options?.memory, requestContext, runId },
+      threadStreamPubSub,
+    );
+
+    // 1b. Prepare for durable execution (non-durable phase)
     let preparation: PreparationResult<TOutput>;
     try {
       preparation = await prepareForDurableExecution<TOutput>({
@@ -3295,7 +3321,9 @@ export class DurableAgent<
         durableAgentName: this.name,
       });
     } catch (error) {
-      // The run never started: drop its owner record rather than leave it behind.
+      // The run never started: release the thread reservation and drop its owner
+      // record rather than leave either behind.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
       await executionFence.settle(async () => {});
       throw error;
     }
@@ -3306,7 +3334,7 @@ export class DurableAgent<
     registryEntry.executionFence = executionFence;
     this.#runInputs.set(executionFence, workflowInput);
 
-    // 1b. Install the abort controller for this run. The controller is owned
+    // 1c. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
     // and the durable LLM-execution step reads `abortSignal` off the registry
     // to thread it into the model call + abort short-circuits. If the caller
@@ -3429,71 +3457,84 @@ export class DurableAgent<
     });
     streamCleanup = createdStreamCleanup;
 
-    // 4. Wait for subscription to be ready, then execute workflow
-    // This prevents race conditions where events are published before subscription
-    const workflowExecution = executionFence.run(() =>
-      ready
-        .then(async () => {
-          if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
-          // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
-          // Only the initial stream() path emits 'start'; resume() does not.
-          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
-            type: 'start',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { id: workflowInput.agentId, messageId },
-          });
-          if (this.__getGoalConfig()) {
-            await beginGoalActivity({
-              mastra: this.#mastra,
-              agentId: workflowInput.agentId,
-              threadId,
+    let workflowExecution: Promise<void>;
+    try {
+      // 4. Wait for subscription to be ready, then execute workflow
+      // This prevents race conditions where events are published before subscription
+      workflowExecution = executionFence.run(() =>
+        ready
+          .then(async () => {
+            if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
+            // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+            // Only the initial stream() path emits 'start'; resume() does not.
+            await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
+              type: 'start',
               runId,
-              requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+              from: ChunkFrom.AGENT,
+              payload: { id: workflowInput.agentId, messageId },
             });
-          }
-          let result: { status?: string } | void;
-          try {
-            await this.persistInitialInput(runId, workflowInput);
-            result = await this.executeWorkflow(runId, workflowInput);
-          } finally {
-            await stopGoalActivity({ agentId: workflowInput.agentId, runId });
-          }
-          if (closeOnPersistedSuspend && result?.status === 'suspended') {
-            // The workflow result is the persisted suspension boundary. Deliver
-            // buffered events (including onSuspended) before closing the stream.
-            await this.pubsub.flush();
-            await waitForEventDelivery();
-            detachStream();
-          }
-        })
-        .catch(error =>
-          this.settleExecution(runId, executionFence, {
-            error: this.workflowExecutionError(error, 'Workflow execution failed'),
-          }),
-        ),
-    );
-    const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
-    if (trackedEntry) {
-      trackedEntry.workflowExecution = workflowExecution;
-    }
+            if (this.__getGoalConfig()) {
+              await beginGoalActivity({
+                mastra: this.#mastra,
+                agentId: workflowInput.agentId,
+                threadId,
+                runId,
+                requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+              });
+            }
+            let result: { status?: string } | void;
+            try {
+              // Take execution ownership before the user message is persisted so a
+              // run that will be rejected never writes to the thread.
+              await this.beforePersistInitialInput(runId, workflowInput);
+              await this.persistInitialInput(runId, workflowInput);
+              result = await this.executeWorkflow(runId, workflowInput);
+            } finally {
+              await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+            }
+            if (closeOnPersistedSuspend && result?.status === 'suspended') {
+              // The workflow result is the persisted suspension boundary. Deliver
+              // buffered events (including onSuspended) before closing the stream.
+              await this.pubsub.flush();
+              await waitForEventDelivery();
+              detachStream();
+            }
+          })
+          .catch(error =>
+            this.settleExecution(runId, executionFence, {
+              error: this.workflowExecutionError(error, 'Workflow execution failed'),
+            }),
+          ),
+      );
+      const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
+      if (trackedEntry) {
+        trackedEntry.workflowExecution = workflowExecution;
+      }
 
-    // 4b. Register with the thread-stream runtime so subscribeToThread /
-    // sendMessage subscribers receive run-registered events and stream parts.
-    // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
-    // CachingPubSub (this.pubsub) which carries durable workflow chunks.
-    await agentThreadStreamRuntime.registerRun(
-      this as unknown as Agent<any, any, any, any>,
-      output,
-      options as AgentExecutionOptions<TOutput>,
-      this.getPubSub(),
-      {
-        continuation: closeOnSuspend ? undefined : 'across-suspension',
-        generation: executionFence.generation,
-        ownershipLost: () => executionFence.isLost(),
-        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
-      },
-    );
+      // 4b. Register with the thread-stream runtime so subscribeToThread /
+      // sendMessage subscribers receive run-registered events and stream parts.
+      // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
+      // CachingPubSub (this.pubsub) which carries durable workflow chunks.
+      // Registration supersedes the thread reservation taken above (same runId)
+      // and owns its cleanup from then on.
+      await agentThreadStreamRuntime.registerRun(
+        this as unknown as Agent<any, any, any, any>,
+        output,
+        options as AgentExecutionOptions<TOutput>,
+        threadStreamPubSub,
+        {
+          continuation: closeOnSuspend ? undefined : 'across-suspension',
+          generation: executionFence.generation,
+          ownershipLost: () => executionFence.isLost(),
+          stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+        },
+      );
+    } catch (error) {
+      // Release the reservation taken above so a failed setup does not block
+      // subsequent runs on this thread. registerRun supersedes it on success.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
+      throw error;
+    }
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
     // explicit call and the auto-cleanup timer release the same resources.
@@ -4868,7 +4909,17 @@ export class DurableAgent<
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
-    // 1a. Prepare for durable execution (non-durable phase)
+    // 1a. Reserve the thread before preparing the run — see stream() above.
+    // Preparation loads the thread's stored messages, so on a busy thread it
+    // must run after the live run has saved its reply.
+    const threadStreamPubSub = this.getPubSub();
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as unknown as Agent<any, any, any, any>,
+      { memory: options?.memory, requestContext, runId },
+      threadStreamPubSub,
+    );
+
+    // 1b. Prepare for durable execution (non-durable phase)
     let preparation: PreparationResult<TOutput>;
     try {
       preparation = await prepareForDurableExecution<TOutput>({
@@ -4886,7 +4937,9 @@ export class DurableAgent<
         durableAgentName: this.name,
       });
     } catch (error) {
-      // The run never started: drop its owner record rather than leave it behind.
+      // The run never started: release the thread reservation and drop its owner
+      // record rather than leave either behind.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
       await executionFence.settle(async () => {});
       throw error;
     }
@@ -4897,7 +4950,7 @@ export class DurableAgent<
     registryEntry.executionFence = executionFence;
     this.#runInputs.set(executionFence, workflowInput);
 
-    // 1b. Install the abort controller for this run. The controller is owned
+    // 1c. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
     // and the durable LLM-execution step reads `abortSignal` off the registry
     // to thread it into the model call + abort short-circuits. If the caller
@@ -4997,45 +5050,55 @@ export class DurableAgent<
       messageList,
     });
 
-    // 4. Wait for subscription to be ready, then execute workflow
-    // This prevents race conditions where events are published before subscription
-    const workflowExecution = executionFence.run(() =>
-      ready
-        .then(async () => {
-          if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
-          // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
-          // Only the initial generate()/stream() path emits 'start'; resume() does not.
-          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
-            type: 'start',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { id: workflowInput.agentId, messageId },
-          });
-          if (this.__getGoalConfig()) {
-            await beginGoalActivity({
-              mastra: this.#mastra,
-              agentId: workflowInput.agentId,
-              threadId,
+    try {
+      // 4. Wait for subscription to be ready, then execute workflow
+      // This prevents race conditions where events are published before subscription
+      const workflowExecution = executionFence.run(() =>
+        ready
+          .then(async () => {
+            if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
+            // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+            // Only the initial generate()/stream() path emits 'start'; resume() does not.
+            await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
+              type: 'start',
               runId,
-              requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+              from: ChunkFrom.AGENT,
+              payload: { id: workflowInput.agentId, messageId },
             });
-          }
-          try {
-            await this.persistInitialInput(runId, workflowInput);
-            return await this.executeWorkflow(runId, workflowInput);
-          } finally {
-            await stopGoalActivity({ agentId: workflowInput.agentId, runId });
-          }
-        })
-        .catch(error =>
-          this.settleExecution(runId, executionFence, {
-            error: this.workflowExecutionError(error, 'Workflow execution failed'),
-          }),
-        ),
-    );
-    const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
-    if (trackedEntry) {
-      trackedEntry.workflowExecution = workflowExecution;
+            if (this.__getGoalConfig()) {
+              await beginGoalActivity({
+                mastra: this.#mastra,
+                agentId: workflowInput.agentId,
+                threadId,
+                runId,
+                requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+              });
+            }
+            try {
+              // Take execution ownership before the user message is persisted so a
+              // run that will be rejected never writes to the thread.
+              await this.beforePersistInitialInput(runId, workflowInput);
+              await this.persistInitialInput(runId, workflowInput);
+              return await this.executeWorkflow(runId, workflowInput);
+            } finally {
+              await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+            }
+          })
+          .catch(error =>
+            this.settleExecution(runId, executionFence, {
+              error: this.workflowExecutionError(error, 'Workflow execution failed'),
+            }),
+          ),
+      );
+      const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
+      if (trackedEntry) {
+        trackedEntry.workflowExecution = workflowExecution;
+      }
+    } catch (error) {
+      // Release the reservation taken above so a failed setup does not block
+      // subsequent runs on this thread.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
+      throw error;
     }
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
@@ -5066,6 +5129,9 @@ export class DurableAgent<
       }
       return fullOutput;
     } finally {
+      // generate() does not register a thread run, so nothing supersedes the
+      // reservation taken before persist — release it when the run settles.
+      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
       // Keep the registry entry alive on suspend so `resumeGenerate()` can
       // pick it up. Auto-cleanup is scheduled by FINISH/ERROR/ABORT paths.
       if (!suspended) {
