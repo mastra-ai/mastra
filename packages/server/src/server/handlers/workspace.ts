@@ -175,7 +175,14 @@ async function getWorkspaceById(
     // A stored agent's workspace is as private as the agent: treat it as missing for callers who can't see the agent.
     const entry = typeof mastra.listWorkspaces === 'function' ? mastra.listWorkspaces()[workspaceId] : undefined;
     if (entry?.source === 'agent' && entry.agentId) {
-      if (!(await isAgentWorkspaceVisible(mastra, entry.agentId, requestContext))) return undefined;
+      if (
+        !(await isAgentWorkspaceVisible(
+          mastra,
+          { agentId: entry.agentId, agentSource: entry.agentSource },
+          requestContext,
+        ))
+      )
+        return undefined;
     }
     return workspace;
   }
@@ -210,9 +217,16 @@ async function getSkillsById(
 /**
  * Agents register their workspace once used, so a registered workspace can belong to a stored agent the caller can't
  * see. Editing a stored agent unregisters it from Mastra but leaves its workspace registered, so an agent that isn't
- * registered is checked against its stored record. Lookup errors hide the workspace.
+ * registered is checked against its stored record. With no record, a workspace a stored agent registered is hidden:
+ * its agent was deleted, and an async workspace factory can still register it after the delete's cleanup. Lookup
+ * errors hide the workspace.
  */
-async function isAgentWorkspaceVisible(mastra: any, agentId: string, requestContext: RequestContext): Promise<boolean> {
+async function isAgentWorkspaceVisible(
+  mastra: any,
+  entry: { agentId: string; agentSource?: string },
+  requestContext: RequestContext,
+): Promise<boolean> {
+  const { agentId } = entry;
   try {
     let agent;
     try {
@@ -228,8 +242,9 @@ async function isAgentWorkspaceVisible(mastra: any, agentId: string, requestCont
     const record = await agentsStore?.getById(agentId);
     if (record) {
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
+      return true;
     }
-    return true;
+    return entry.agentSource !== 'stored';
   } catch {
     return false;
   }
@@ -328,7 +343,12 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
           const agentId: string | undefined = (entry as any).agentId;
           const agentName: string | undefined = (entry as any).agentName;
           // Agents register their workspace here once used; skip those of stored agents the caller can't see.
-          if (source === 'agent' && agentId && !(await isAgentWorkspaceVisible(mastra, agentId, requestContext))) {
+          const agentSource: string | undefined = (entry as any).agentSource;
+          if (
+            source === 'agent' &&
+            agentId &&
+            !(await isAgentWorkspaceVisible(mastra, { agentId, agentSource }, requestContext))
+          ) {
             continue;
           }
 
