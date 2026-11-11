@@ -814,6 +814,9 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
   return { ...options, hooks: definedToolHooks(options.hooks) };
 }
 
+/** Tool sources slower than this are named on the `agent:prepare-tools` span. */
+const SLOW_TOOL_SOURCE_MS = 100;
+
 /**
  * Creates an AI agent that generates and streams responses, with optional tools,
  * memory, and voice capabilities.
@@ -842,9 +845,6 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
  * @see [Agent documentation](https://mastra.ai/docs/agents/overview)
  * if packaged docs are unavailable.
  */
-/** Tool sources slower than this are named on the `agent:prepare-tools` span. */
-const SLOW_TOOL_SOURCE_MS = 100;
-
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
