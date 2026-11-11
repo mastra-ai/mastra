@@ -94,6 +94,26 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
+export function allSessionWorkItemsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.allSessionWorkItems(factoryProjectId),
+    queryFn: factoryProjectId
+      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { scope: 'sessions' })
+      : skipToken,
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * The cards holding any session, with the cards related to them and the sessions parked on
+ * them: what the sidebar reads instead of the board.
+ */
+export function useAllSessionWorkItemsQuery(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(allSessionWorkItemsQueryOptions(baseUrl, factoryProjectId));
+}
+
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
 export function useParkedSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();

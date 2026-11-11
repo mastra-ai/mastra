@@ -18,7 +18,7 @@ import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/u
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
-import { boardQueryOptions } from '../hooks/useWorkItems';
+import { allSessionWorkItemsQueryOptions, boardQueryOptions } from '../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
@@ -85,7 +85,7 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
   void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(boardQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(allSessionWorkItemsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   prefetchSessionRuns(services, factoryId);
 };
@@ -93,9 +93,12 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
 export const prefetchBoard: Prefetch = (services, { params }) => {
   const { factoryId } = params;
   if (!factoryId) return;
+  const { queryClient, api } = services;
+  // The page's largest read leaves with the Factory list, not once it answers: waiting to hear a
+  // repository is linked would start every board a round trip later.
+  void queryClient.query(boardQueryOptions(api.baseUrl, factoryId)).catch(noop);
   whenFactoryListed(services, factoryId, factory => {
     if (!hasLinkedRepository(factory)) return;
-    const { queryClient, api } = services;
     void queryClient.query(intakeConfigQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(intakeBindingsQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(githubStatusQueryOptions(api.baseUrl)).catch(noop);
@@ -112,6 +115,14 @@ export const prefetchComposer: Prefetch = ({ queryClient, api }, { params }) => 
   void queryClient.query(factoryProjectQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(defaultModelQueryOptions(api.client)).catch(noop);
   void queryClient.query(providersQueryOptions(api.client)).catch(noop);
+};
+
+/** A draft offers the board's cards as starters, and its activity, around the composer. */
+export const prefetchDraft: Prefetch = (services, args) => {
+  prefetchComposer(services, args);
+  const { factoryId } = args.params;
+  if (!factoryId) return;
+  void services.queryClient.query(boardQueryOptions(services.api.baseUrl, factoryId)).catch(noop);
 };
 
 export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, request }) => {

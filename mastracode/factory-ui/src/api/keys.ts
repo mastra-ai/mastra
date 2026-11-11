@@ -104,9 +104,11 @@ export const queryKeys = {
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  // Under the board's key: whatever refreshes or rewrites the board's cards reaches a session's too.
+  // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
+  allSessionWorkItems: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>

@@ -13,6 +13,7 @@ import { builtinBoardCatalog, releaseBoard } from '../../../e2e/ui/board-catalog
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
 import { createQueryClient } from '../../query-client';
 import { factory, signedIn, signedOut } from '../domains/auth/components/__tests__/fixtures/auth';
 import { createAppRoutes } from '../router';
@@ -39,7 +40,7 @@ const STARTED_BY_THE_PAGE = [
 // Settings sections load their own data once they render; only their code starts early.
 const SETTINGS_SECTION_DATA = [/^GET \/api\/agent-controller\/code\/sessions\/factory-1$/];
 const REREAD_ONCE_THE_FEED_CONNECTS = [
-  /^GET \/web\/factory\/projects\/[^/]+\/work-items$/,
+  /^GET \/web\/factory\/projects\/[^/]+\/work-items\b/,
   /^GET \/web\/factory\/projects\/[^/]+\/decisions\b/,
   /^GET \/api\/agent-controller\/code\/active-runs$/,
 ];
@@ -61,8 +62,9 @@ function renderApp(
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project: listed })),
+    // A chosen model, so a draft keeps its starters: they read the board its loader starts.
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({ github: { enabled: true, sourceIds: null }, linear: { enabled: false, sourceIds: [] } }),
@@ -161,8 +163,10 @@ describe('Opening Factory', () => {
       [...new Set(sent)].filter(url => sent.filter(other => other === url).length > timesNeeded(url)),
       'requests sent more often than the page needs',
     ).toEqual([]);
-    const unread = prefetched.filter(query => query.getObserversCount() === 0).map(query => query.queryHash);
-    expect(unread, 'queries started for the page but never read by it').toEqual([]);
+    const unread = prefetched.filter(query => query.getObserversCount() === 0).map(query => query.queryKey);
+    // The board leaves with the Factory list, so before the list can say no repository is linked to show it.
+    const boardBeforeRepository = listed === emptyFactory ? [queryKeys.workItems('factory-1')] : [];
+    expect(unread, 'queries started for the page but never read by it').toEqual(boardBeforeRepository);
   });
 
   it('loads the Factory list during the sign-in check from a link without a Factory', async () => {

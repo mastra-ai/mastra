@@ -4,7 +4,7 @@ import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useAllSessionWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
@@ -28,8 +28,7 @@ export function useSessionListRows(
   const { pathname } = useLocation();
   const query = useWorkspacesQuery(factoryId);
   const factory = useFactoryQuery(factoryId);
-  const workItems = useWorkItemsQuery(factoryId);
-  const parkedSessions = useParkedSessions(factoryId);
+  const sessionCards = useAllSessionWorkItemsQuery(factoryId);
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const viewer = useFactoryAuth().data?.user;
@@ -47,15 +46,16 @@ export function useSessionListRows(
   };
   if (!factoryId) return { rows: [], ...loadState };
 
-  const workItemBySessionId = sessionWorkItemIndex(workItems.data ?? []);
+  const workItemBySessionId = sessionWorkItemIndex(sessionCards.data?.workItems ?? []);
+  const parkedSessionIds = sessionCards.data?.parkedSessionIds ?? [];
   const factoryRows = (query.data?.workspaces ?? []).flatMap(session => {
     const workItem = workItemBySessionId.get(session.sessionId);
     const running = runningById[session.sessionId] === true;
     const active = session.sessionId === routeSessionId;
-    const boardStillUnknown = workItem ? !catalog.isFetched : !workItems.isFetched;
+    const boardStillUnknown = workItem ? !catalog.isFetched : !sessionCards.isFetched;
     if (boardStillUnknown && !active && !running) return [];
     const attention =
-      parkedSessions.has(session.sessionId) ||
+      parkedSessionIds.includes(session.sessionId) ||
       (workItem !== undefined &&
         itemAwaitsPerson(proposalByItem.get(workItem.item.id), effectByItem.get(workItem.item.id)));
     return [

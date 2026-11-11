@@ -2297,21 +2297,22 @@ describe('run activity on the work-item listing', () => {
     });
   });
 
+  const boardPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+  const listedIds = async (res: Response) =>
+    FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json()).workItems.map(item => item.id);
+  const createCard = async (externalId: string, overrides: Record<string, unknown> = {}): Promise<{ id: string }> => {
+    const res = await json(
+      'POST',
+      boardPath(),
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId }, ...overrides }),
+    );
+    const { workItem } = await res.json();
+    return workItem;
+  };
+
   describe('one session’s cards (?sessionId=)', () => {
-    const boardPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
     const scopedPath = (...sessionIds: string[]) =>
       `${boardPath()}?${sessionIds.map(sessionId => `sessionId=${encodeURIComponent(sessionId)}`).join('&')}`;
-    const listedIds = async (res: Response) =>
-      FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json()).workItems.map(item => item.id);
-    const createCard = async (externalId: string, overrides: Record<string, unknown> = {}): Promise<{ id: string }> => {
-      const res = await json(
-        'POST',
-        boardPath(),
-        createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId }, ...overrides }),
-      );
-      const { workItem } = await res.json();
-      return workItem;
-    };
 
     it('lists the card that holds the session, and the activity of that card only', async () => {
       const mine = await startRun('session-mine');
@@ -2397,6 +2398,96 @@ describe('run activity on the work-item listing', () => {
       await startRun('session-mine');
 
       const res = await buildApp(orgUser).request(`${boardPath()}?sessionId=`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('the cards sessions hold (?scope=sessions)', () => {
+    const sessionsPath = () => `${boardPath()}?scope=sessions`;
+
+    it('lists every card a session holds with its activity, in board order, without the cards no session holds', async () => {
+      const first = await startRun('session-first');
+      await createCard('unstarted');
+      const second = await startRun('session-second');
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+      const app = buildApp(
+        orgUser,
+        undefined,
+        undefined,
+        new Set(['session-first']),
+        undefined,
+        new Set(['session-second']),
+      );
+
+      const res = await app.request(sessionsPath());
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
+        board.filter(id => id === first.id || id === second.id),
+      );
+      expect(body.runningSessionIds).toEqual(['session-first']);
+      expect(body.parkedSessionIds).toEqual(['session-second']);
+    });
+
+    it('brings the pull request pushed from a session’s branch, though no session holds it', async () => {
+      const mine = await startRun('session-mine');
+      const pullRequest = await createCard('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        metadata: { number: 7, headBranch: 'factory/session-mine' },
+      });
+      await createCard('unrelated');
+
+      const res = await buildApp(orgUser).request(sessionsPath());
+
+      expect((await listedIds(res)).toSorted()).toEqual([mine.id, pullRequest.id].toSorted());
+    });
+
+    it('answers 304 through writes to cards no session holds, and sends the list again once a held card changes', async () => {
+      const mine = await startRun('session-mine');
+      const unstarted = await createCard('unstarted');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(sessionsPath())).headers.get('etag')!;
+
+      await json('PATCH', `/web/factory/work-items/${unstarted.id}`, { title: 'Renamed elsewhere' });
+      const unchanged = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+      expect(await unchanged.text()).toBe('');
+
+      await json('PATCH', `/web/factory/work-items/${mine.id}`, { title: 'Renamed' });
+      const changed = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect((await changed.json()).workItems[0].title).toBe('Renamed');
+    });
+
+    it('sends the list again each time a run starts or stops on an unchanged card', async () => {
+      await startRun('session-mine');
+      const running = new Set<string>();
+      const app = buildApp(orgUser, undefined, undefined, running);
+      const idle = (await app.request(sessionsPath())).headers.get('etag')!;
+
+      running.add('session-mine');
+      const started = await app.request(sessionsPath(), { headers: { 'if-none-match': idle } });
+      expect(started.status).toBe(200);
+      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
+
+      running.delete('session-mine');
+      const stopped = await app.request(sessionsPath(), {
+        headers: { 'if-none-match': started.headers.get('etag')! },
+      });
+      expect(stopped.status).toBe(200);
+      expect((await stopped.json()).runningSessionIds).toEqual([]);
+    });
+
+    it.each([
+      ['an unknown scope', '?scope=everything'],
+      ['a scope combined with session ids', '?scope=sessions&sessionId=session-mine'],
+    ])('refuses %s rather than guessing which cards to send', async (_case, query) => {
+      await startRun('session-mine');
+
+      const res = await buildApp(orgUser).request(`${boardPath()}${query}`);
 
       expect(res.status).toBe(400);
     });
