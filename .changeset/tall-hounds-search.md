@@ -6,14 +6,15 @@ Added hooks to cancel background tasks and to manage background processes in a w
 
 ```tsx
 import { useCancelBackgroundTask } from '@mastra/react/hooks/agents';
-import { useKillSandboxProcess, useSandboxProcesses } from '@mastra/react/hooks/workspace';
+import { useKillSandboxProcess, useSandboxProcess, useSandboxProcesses } from '@mastra/react/hooks/workspace';
 
 const cancel = useCancelBackgroundTask();
 const { data } = useSandboxProcesses({ workspaceId, threadId, queryOptions: { refetchInterval: 2000 } });
-const kill = useKillSandboxProcess({ workspaceId });
+const output = useSandboxProcess({ workspaceId, pid, threadId, tail: 100 });
+const kill = useKillSandboxProcess();
 
 cancel.mutate(taskId);
-kill.mutate({ pid: data.processes[0].pid, threadId });
+kill.mutate({ workspaceId, pid: data.processes[0].pid, threadId });
 ```
 
 `useBackgroundTaskStream` now keeps each task's latest output chunks on `task.output` instead of dropping them. Set `maxOutputChunks` to change how many are kept (200 by default).

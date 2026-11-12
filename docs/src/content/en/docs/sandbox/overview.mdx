@@ -269,7 +269,7 @@ const workspace = new Workspace({
 
 These callbacks fire for all background processes started by the agent through `execute_command`.
 
-Each callback receives the process `pid` and, when available, the `toolCallId`, `agentId`, `threadId`, `resourceId`, and `runId` of the call that started it, so you can route an exit notice back to the right conversation. `onExit` also gets `killedByAbort`, which is `true` when the process stopped because the run's abort signal fired, and `false` when it exited on its own or was stopped with `kill_process`.
+Each callback receives the process `pid` and, when available, the `toolCallId`, `agentId`, `threadId`, `resourceId`, and `runId` of the call that started it, so you can route an exit notice back to the right conversation. `onExit` also gets `killedByAbort`, which is `true` when the process stopped because the run's abort signal fired, and `killedOnRequest`, which is `true` when it was stopped with `kill_process`, the [kill route](#inspect-and-stop-processes-over-http), or `sandbox.processes.kill()`. Both are `false` when the process exited on its own.
 
 By default, background processes inherit the agent's abort signal and stop when the agent disconnects. Set `abortSignal` to a custom signal, or use `null` or `false` when the process should continue after the request ends.
 
@@ -286,11 +286,13 @@ const workspace = new Workspace({
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
   tools: {
     [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      backgroundProcesses: { notifyAgent: true },
+      backgroundProcesses: { notifyAgent: true, abortSignal: null },
     },
   },
 })
 ```
+
+Set `abortSignal: null` with it. With the default signal, aborting the run kills the process, and that exit sends no notification.
 
 If a run is active on the thread, the notification reaches it on its next step. If the thread is idle, the agent wakes and runs a turn to report the result. Mastra doesn't send a notification for a process that was stopped on purpose: with `kill_process`, with the kill route below, by the run's abort signal, or because the sandbox is shutting down.
 
@@ -300,10 +302,10 @@ The notification needs a run with a memory thread and resource, and an agent reg
 
 Each process that `execute_command` starts records the thread, resource, and tool call of the run that started it. The Mastra server uses them to scope these routes:
 
-| Route | Does |
+| Route | Description |
 | - | - |
 | `GET /api/workspaces/:workspaceId/sandbox/processes` | Lists the sandbox's processes, including exited processes whose output hasn't been read. |
-| `GET /api/workspaces/:workspaceId/sandbox/processes/:pid` | Returns a process's status and retained output without releasing an exited process. The agent can still read it with `get_process_output`. |
+| `GET /api/workspaces/:workspaceId/sandbox/processes/:pid` | Returns a process's status and retained output without releasing an exited process. The agent can still read it with `get_process_output`. Pass `tail` to get only the last N lines. |
 | `POST /api/workspaces/:workspaceId/sandbox/processes/:pid/kill` | Stops a process and releases its output. |
 
 All three accept `threadId` and `resourceId` query parameters to filter by the run that started the process. A request whose authenticated user has a resource ID only sees that resource's processes. Listing and reading need the `workspaces:read` permission, and killing needs `workspaces:write`.
@@ -325,7 +327,9 @@ await workspace.killSandboxProcess(server.pid, { threadId: 'thread-1' })
 
 In React, `useSandboxProcesses`, `useSandboxProcess`, and `useKillSandboxProcess` from `@mastra/react/hooks/workspace` wrap the same calls.
 
-For a [sandbox resolved per request](#sandboxes-per-user-or-thread), the server resolves the sandbox from the request context, with the requested `threadId` and `resourceId` set as `MASTRA_THREAD_ID_KEY` and `MASTRA_RESOURCE_ID_KEY`. A `sandboxCacheKey` that reads either key finds the sandbox the agent used. Without `sandboxCacheKey`, the routes return `404`: every request would get a new sandbox that doesn't hold the agent's processes.
+The routes never create or start a sandbox. A sandbox that isn't running lists no processes, and reading or killing one of its processes returns `404`.
+
+For a [sandbox resolved per request](#sandboxes-per-user-or-thread), the routes only find a sandbox that an agent run already created and cached under its `sandboxCacheKey`. The key is computed from the request context, with the requested `threadId` and `resourceId` set as `MASTRA_THREAD_ID_KEY` and `MASTRA_RESOURCE_ID_KEY`, so pass the ID your `sandboxCacheKey` reads. When nothing is cached under the key, or the workspace has no `sandboxCacheKey`, the routes return `404`.
 
 ## Lifecycle and persistence
 

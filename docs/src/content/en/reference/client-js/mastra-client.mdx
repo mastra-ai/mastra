@@ -198,6 +198,12 @@ You can also pass `requestContext` as a `Record<string, any>`.
       "Cancels a pending, running, or suspended [background task](/docs/harness/background-tasks#cancel-a-task-from-a-client) and returns it. A task that already finished is returned unchanged. Rejects with `404` when the task doesn't exist or belongs to another resource.",
   },
   {
+    name: 'getWorkspace(workspaceId)',
+    type: 'Workspace',
+    description:
+      'Returns a workspace resource for its filesystem, search, skills, and sandbox process routes. The rows below are methods on it.',
+  },
+  {
     name: 'getWorkspace(workspaceId).listSandboxProcesses(params?)',
     type: 'Promise<ListSandboxProcessesResponse>',
     description:
@@ -207,7 +213,7 @@ You can also pass `requestContext` as a `Record<string, any>`.
     name: 'getWorkspace(workspaceId).getSandboxProcess(pid, params?)',
     type: 'Promise<SandboxProcessOutputResponse>',
     description:
-      "Returns a background process's status and retained `stdout` and `stderr`. Reading it here doesn't release an exited process, so the agent can still read it with `get_process_output`.",
+      "Returns a background process's status and retained `stdout` and `stderr`. Pass `params.tail` to get only the last N lines. Reading it here doesn't release an exited process, so the agent can still read it with `get_process_output`.",
   },
   {
     name: 'getWorkspace(workspaceId).killSandboxProcess(pid, params?)',

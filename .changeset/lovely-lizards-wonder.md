@@ -9,6 +9,6 @@ await client.cancelBackgroundTask(taskId);
 
 const workspace = client.getWorkspace('my-workspace');
 const { processes } = await workspace.listSandboxProcesses({ threadId });
-const { stdout } = await workspace.getSandboxProcess(processes[0].pid, { threadId });
+const { stdout } = await workspace.getSandboxProcess(processes[0].pid, { threadId, tail: 100 });
 await workspace.killSandboxProcess(processes[0].pid, { threadId });
 ```

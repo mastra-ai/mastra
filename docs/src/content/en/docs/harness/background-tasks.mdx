@@ -422,7 +422,7 @@ console.log(task.status) // 'cancelled'
 
 In React, `useCancelBackgroundTask()` from `@mastra/react/hooks/agents` wraps the same call.
 
-A cancelled task doesn't write a result into the thread, and the agent isn't notified. The tool call keeps the placeholder it returned when the task started.
+A cancelled task doesn't write a result into the thread, and the agent isn't notified. The tool call keeps the placeholder it returned when the task started, and its `providerMetadata.mastra.backgroundTask.status` becomes `cancelled`, so a chat that reloads the thread doesn't show it as running.
 
 ## Lifecycle callbacks
 
