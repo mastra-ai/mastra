@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -11,6 +10,8 @@ import { isDurableEngineVariant } from '../types';
 
 type ToolCallFixture = { id: string; name: string; arguments: Record<string, unknown> };
 type StepResponse = { toolCalls: ToolCallFixture[] } | { content: string };
+
+let testCount = 0;
 
 /**
  * An AgentController decides tool approval from the session's permission rules (#30131).
@@ -44,7 +45,8 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     // A run from an earlier test can still reach the shared mock after its controller is
     // destroyed, so fixtures match this test's prompt. Each step answers once the calls of
     // the steps before it are in the history and its own calls are not.
-    const marker = `[${randomUUID()}]`;
+    // A counter rather than randomUUID(), which the test setup stubs to the same value in every test.
+    const marker = `[approval-policy-${engine}-${++testCount}]`;
     const ownRequest = (req: ChatCompletionRequest | null) => requestText(req).includes(marker);
     const callIds = (response: StepResponse) =>
       'toolCalls' in response ? response.toolCalls.map(call => call.id) : [];
