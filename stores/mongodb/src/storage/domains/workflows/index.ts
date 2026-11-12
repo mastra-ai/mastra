@@ -47,6 +47,37 @@ const NOT_LIVE: Filter<RunClaimDocument> = {
   $or: [{ leaseExpiresAt: null }, { $expr: { $lte: ['$leaseExpiresAt', '$$NOW'] } }],
 };
 
+/**
+ * Fields a `listWorkflowRuns({ summary: true })` document carries: the run columns plus the
+ * snapshot fields a summary returns, so the rest of the snapshot is never sent.
+ */
+const SUMMARY_PROJECTION = {
+  workflow_name: 1,
+  run_id: 1,
+  resourceId: 1,
+  createdAt: 1,
+  updatedAt: 1,
+  'snapshot.status': 1,
+  'snapshot.timestamp': 1,
+  'snapshot.parentWorkflow.workflowId': 1,
+  'snapshot.parentWorkflow.runId': 1,
+};
+
+/**
+ * Builds the reduced snapshot of a `SUMMARY_PROJECTION` document: `status`, `timestamp`, and
+ * `parentWorkflow` only for nested runs (a stored `null` parent is dropped).
+ */
+function summarySnapshot(projected: Document | undefined): WorkflowRunState {
+  const snapshot: Record<string, unknown> = { status: projected?.status, timestamp: projected?.timestamp };
+  const parent = projected?.parentWorkflow;
+
+  if (parent?.workflowId && parent.runId) {
+    snapshot.parentWorkflow = { workflowId: parent.workflowId, runId: parent.runId };
+  }
+
+  return snapshot as unknown as WorkflowRunState;
+}
+
 function toRunOwnershipRecord(doc: Document): RunOwnershipRecord {
   return {
     runId: doc._id,
@@ -595,6 +626,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     const options = args || {};
     try {
@@ -622,7 +657,9 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       let total = 0;
 
-      let cursor = collection.find(query).sort({ createdAt: -1 });
+      let cursor = collection
+        .find(query, options.summary ? { projection: SUMMARY_PROJECTION } : undefined)
+        .sort({ createdAt: -1 });
       if (options.page !== undefined && typeof options.perPage === 'number') {
         // Validate page is non-negative
         if (options.page < 0) {
@@ -653,7 +690,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       const results = await cursor.toArray();
 
-      const runs = results.map(row => this.parseWorkflowRun(row));
+      const runs = results.map(row => this.parseWorkflowRun(row, { summary: options.summary }));
 
       return {
         runs,
@@ -731,8 +768,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
   }
 
-  private parseWorkflowRun(row: any): WorkflowRun {
-    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+  /**
+   * Maps a document to a workflow run. With `summary`, the document comes from
+   * `SUMMARY_PROJECTION` and its snapshot holds only the projected fields.
+   */
+  private parseWorkflowRun(row: any, { summary }: { summary?: boolean } = {}): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = summary ? summarySnapshot(row.snapshot) : (row.snapshot as string);
     if (typeof parsedSnapshot === 'string') {
       try {
         parsedSnapshot = typeof row.snapshot === 'string' ? safelyParseJSON(row.snapshot as string) : row.snapshot;
