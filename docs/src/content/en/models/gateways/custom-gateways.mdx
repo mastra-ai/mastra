@@ -645,7 +645,7 @@ By default, **Studio** lists every external model provider (such as OpenAI, Anth
 AUTO_BLOCK_EXTERNAL_PROVIDERS=true
 ```
 
-When this variable is set to `true` or `1`, Mastra returns only the providers from gateways you register yourself. The static provider registry and the built-in gateways (`models.dev`, `netlify`, and `mastra`) are hidden from the model picker. This is useful when you route all model traffic through a single private gateway and don't want the other providers to appear. The variable only changes what Studio lists. It doesn't stop agents from calling other providers in code.
+When this variable is set to `true` or `1`, Mastra returns only the providers from gateways you register yourself. The static provider registry and the built-in gateways (`models.dev`, `netlify`, and `mastra`) are hidden from the model picker. This is useful when you route all model traffic through a single private gateway and don't want the other providers to appear. The filter applies to the server's `GET /agents/providers` endpoint, which Studio uses for the model picker, so API clients don't see the external providers either. It only changes which providers are listed. It doesn't stop agents from calling other providers in code.
 
 With this variable set and no custom gateway registered, the model picker is empty. Register at least one custom gateway to expose its models.
 
