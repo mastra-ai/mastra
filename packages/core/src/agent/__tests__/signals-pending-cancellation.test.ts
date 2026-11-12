@@ -2101,6 +2101,110 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it('keeps a run that took the thread again while the lease was being read', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const pubsub = new ControlledLeasePubSub();
+      const scope = { resourceId: 'retaken-remote', threadId: 'retaken-remote' };
+      const key = `${scope.resourceId}\u0000${scope.threadId}`;
+      const runId = 'retaken-remote-run';
+      const model = createTextStreamModel('too early');
+      const agent = new Agent({
+        id: 'retaken-remote',
+        name: 'Retaken remote',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+        pubsub,
+      });
+      const follower = new AgentThreadStreamRuntime();
+      const observer = await follower.subscribeToThread(agent, scope, pubsub);
+      let resumed: Awaited<ReturnType<typeof follower.subscribeToThread>> | undefined;
+      const tick = async () => {
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        await pubsub.flush();
+        await nextTick();
+      };
+      try {
+        pubsub.owners.set(key, 'old-remote-run');
+        await pubsub.publish(agentThreadStreamTopicForKey(key), {
+          type: 'agent.thread-stream',
+          runId: 'old-remote-run',
+          data: {
+            type: 'run-registered',
+            runId: 'old-remote-run',
+            streamId: 'old-stream',
+            streamSeq: 1,
+            agentId: agent.id,
+          },
+        });
+        await vi.waitFor(() => expect(observer.activeRunId()).toBe('old-remote-run'));
+        await follower.queueMessage(agent, 'wait for me', scope, pubsub).accepted;
+        pubsub.owners.set(key, runId);
+        await pubsub.publish(agentThreadStreamTopicForKey(key), {
+          type: 'agent.thread-stream',
+          runId: 'old-remote-run',
+          data: { type: 'run-completed', runId: 'old-remote-run', streamId: 'old-stream' },
+        });
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === runId)).toBe(true),
+        );
+        await pubsub.publish(agentThreadStreamTopicForKey(key), {
+          type: 'agent.thread-stream',
+          runId,
+          data: { type: 'run-registered', runId, streamId: 'remote-stream', streamSeq: 1, agentId: agent.id },
+        });
+        await vi.waitFor(() => expect(observer.activeRunId()).toBe(runId));
+        observer.unsubscribe();
+        pubsub.owners.delete(key);
+        await tick();
+
+        // The second missing-lease read is in flight when the run takes the thread again on a new stream.
+        resumed = await follower.subscribeToThread(agent, scope, pubsub);
+        await pubsub.flush();
+        await new Promise(resolve => setTimeout(resolve, 20));
+        const readOwner = pubsub.getLeaseOwner.bind(pubsub);
+        let releaseRead!: () => void;
+        const readHeld = new Promise<void>(resolve => {
+          releaseRead = resolve;
+        });
+        let readStarted!: () => void;
+        const started = new Promise<void>(resolve => {
+          readStarted = resolve;
+        });
+        let holdNext = true;
+        pubsub.getLeaseOwner = async (leaseKey: string) => {
+          const owner = await readOwner(leaseKey);
+          if (!holdNext) return owner;
+          holdNext = false;
+          readStarted();
+          await readHeld;
+          return owner;
+        };
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        await started;
+        pubsub.owners.set(key, runId);
+        await pubsub.publish(agentThreadStreamTopicForKey(key), {
+          type: 'agent.thread-stream',
+          runId,
+          data: { type: 'run-registered', runId, streamId: 'resumed-stream', streamSeq: 1, agentId: agent.id },
+        });
+        await pubsub.flush();
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(resumed.activeRunId()).toBe(runId);
+        releaseRead();
+        await pubsub.flush();
+        await nextTick();
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        expect(resumed.activeRunId()).toBe(runId);
+        expect(model.doStreamCalls).toHaveLength(0);
+      } finally {
+        resumed?.unsubscribe();
+        observer.unsubscribe();
+        follower.resetForTests();
+      }
+    });
+
     it('counts a slow lease read once when the next check comes due before it returns', async () => {
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       const { scope, pubsub, model, stream, getStreamCount, deliver, releaseFollowUp, cleanup } =

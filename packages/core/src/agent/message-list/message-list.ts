@@ -2983,6 +2983,9 @@ export class MessageList {
       const signal = message.content.metadata?.signal as { createdAt?: string } | undefined;
       if (signal?.createdAt === before) signal.createdAt = message.createdAt.toISOString();
       this.updateLastCreatedAt(message);
+      // A message already saved under its old time must be saved again under the new one.
+      if (this.newResponseMessagesPersisted.has(message)) this.newResponseMessages.add(message);
+      else if (this.newUserMessagesPersisted.has(message)) this.newUserMessages.add(message);
       moved = true;
     }
     if (moved) this.sortMessages();

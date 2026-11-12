@@ -128,4 +128,20 @@ describe('input stamped in the same millisecond as the stored history it follows
 
     expect(list.get.all.db().map(message => message.id)).toEqual(['h0', 'h1', 'h2', 'a', 'b', 'response']);
   });
+
+  it('saves a message again when later history moves it after it was saved', () => {
+    const tie = new Date('2026-11-01T09:03:24.929Z').getTime();
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(stored('input', 'user', 'input', new Date(tie)), 'input');
+    list.add(stored('h0', 'assistant', 'h0', new Date(tie)), 'memory');
+    expect(list.drainUnsavedMessagesForSave().messages.map(m => [m.id, m.createdAt.getTime()])).toEqual([
+      ['input', tie + 1],
+    ]);
+
+    list.add(stored('h1', 'assistant', 'h1', new Date(tie + 1)), 'memory');
+
+    expect(list.drainUnsavedMessagesForSave().messages.map(m => [m.id, m.createdAt.getTime()])).toEqual([
+      ['input', tie + 2],
+    ]);
+  });
 });

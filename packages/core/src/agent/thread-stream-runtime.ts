@@ -3428,6 +3428,7 @@ export class AgentThreadStreamRuntime {
     const checkLease = async () => {
       const forwarded = state.forwardedIdleSignalsByThread.get(key);
       if (!forwarded) return;
+      const streamBeforeRead = state.activeThreadStreamIds.get(key);
       // Bounded, so a read that never returns frees the in-flight guard and the next tick retries.
       const owner = await this.#readLeaseOwnerInTime(provider, key);
       const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
@@ -3440,7 +3441,9 @@ export class AgentThreadStreamRuntime {
       for (const runId of ended) {
         if (this.#requeueUnadmittedForwards(state, key, runId)) {
           // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
-          // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting.
+          // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting. A run that
+          // registered here, or a new stream that took the slot while the lease was read, is not that remote run.
+          if (state.threadRunsById.has(runId) || state.activeThreadStreamIds.get(key) !== streamBeforeRead) continue;
           if (state.activeThreadRunIds.get(key) === runId) {
             state.activeThreadRunIds.delete(key);
             state.activeThreadStreamIds.delete(key);
