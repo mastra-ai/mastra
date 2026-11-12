@@ -17,16 +17,18 @@ export interface FactoryApprovalToolDependencies {
   messaging: () => Promise<FactoryMessaging | null>;
 }
 
-/** The parts of a live session an answer needs: its open approval gates. */
+/** The parts of a live session an answer needs: the calls it waits on, and how each is answered. */
 interface ApprovalGateSession {
-  approval: { isArmed(filter: { toolCallId: string }): boolean };
+  approval: { list(): Array<{ toolCallId: string; toolName: string }> };
+  displayState: {
+    get(): { pendingSuspensions: Map<string, { toolCallId: string; toolName: string; resumeSchema?: string }> };
+  };
   respondToToolApproval(input: {
     decision: 'approve' | 'decline';
     toolCallId: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string };
   }): { accepted: true } | { accepted: false; reason: string };
-  suspensions: { resolve(filter: { toolCallId: string }): { toolName: string } | undefined };
   respondToToolSuspension(input: {
     resumeData: { action: 'approved' | 'rejected'; feedback?: string };
     toolCallId: string;
@@ -34,40 +36,86 @@ interface ApprovalGateSession {
   }): Promise<void>;
 }
 
+/** A tool call waiting for a yes or no, and which of the session's two channels answers it. */
+interface WaitingApproval {
+  toolCallId: string;
+  toolName: string;
+  /** `gate`: the call has not run yet. `resume`: the tool paused itself to ask. */
+  channel: 'gate' | 'resume';
+}
+
 /**
- * Answer the call a live session waits on, for a caller already allowed to. The answered
- * run carries on as the session's owner whoever answers: a phase session keeps one identity
- * from kickoff to finish, and a resume never runs with no user.
+ * Whether a paused tool asks for a decision rather than a typed answer: its resume
+ * data is an object whose `action` is `approved` or `rejected`. A question to the
+ * person (free text, a choice) does not fit, and is answered in the session itself.
+ */
+function resumesOnDecision(resumeSchema: string | undefined): boolean {
+  if (!resumeSchema) return false;
+  try {
+    const actions: unknown = (JSON.parse(resumeSchema) as { properties?: { action?: { enum?: unknown } } }).properties
+      ?.action?.enum;
+    return Array.isArray(actions) && actions.includes('approved') && actions.includes('rejected');
+  } catch {
+    return false;
+  }
+}
+
+function waitingApprovals(live: ApprovalGateSession): WaitingApproval[] {
+  return [
+    ...live.approval.list().map(({ toolCallId, toolName }) => ({ toolCallId, toolName, channel: 'gate' as const })),
+    // Keyed by run address, not tool call id: read the id off each entry.
+    ...[...live.displayState.get().pendingSuspensions.values()]
+      .filter(suspension => resumesOnDecision(suspension.resumeSchema))
+      .map(({ toolCallId, toolName }) => ({ toolCallId, toolName, channel: 'resume' as const })),
+  ];
+}
+
+/**
+ * Approve or decline a tool call a live session waits on, for a caller already allowed
+ * to. Any tool can wait this way; with no `toolCallId` the session's only waiting call
+ * is answered. The answered run carries on as the session's owner whoever answers: a
+ * phase session keeps one identity from kickoff to finish, and a resume never runs with
+ * no user.
  */
 export async function answerParkedCall(
   deps: Pick<FactoryApprovalToolDependencies, 'messaging'>,
   input: {
     session: { sessionId: string; userId: string; orgId: string };
-    toolCallId: string;
+    toolCallId?: string;
     decision: 'approve' | 'decline';
     declineReason: string;
   },
-): Promise<void> {
-  const { session, toolCallId, decision, declineReason } = input;
+): Promise<{ toolCallId: string; toolName: string }> {
+  const { session, decision, declineReason } = input;
   const messaging = await deps.messaging();
   if (!messaging) throw new Error('Answering approvals is not available on this server.');
   const live = (await messaging.controller.getSession(session.sessionId)) as ApprovalGateSession | null;
-  const parkedPlan = live?.suspensions.resolve({ toolCallId })?.toolName === 'submit_plan';
-  if (!live || (!parkedPlan && !live.approval.isArmed({ toolCallId }))) {
+  const waiting = live ? waitingApprovals(live) : [];
+  const matches = input.toolCallId ? waiting.filter(call => call.toolCallId === input.toolCallId) : waiting;
+  const [call] = matches;
+  if (!live || !call) {
     throw new Error(
-      'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +
-        'Message the session with factory_signal_session if it should try again.',
+      input.toolCallId
+        ? 'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +
+            'Message the session with factory_signal_session if it should try again.'
+        : 'This session is not waiting on an approval. Open it to see what it needs.',
     );
   }
+  if (matches.length > 1) {
+    throw new Error(
+      `This session waits on ${matches.length} approvals (${matches.map(match => `${match.toolName}: ${match.toolCallId}`).join(', ')}). Name the toolCallId to answer.`,
+    );
+  }
+  const { toolCallId, toolName } = call;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
-  if (parkedPlan) {
+  if (call.channel === 'resume') {
     await live.respondToToolSuspension({
       resumeData: decision === 'approve' ? { action: 'approved' } : { action: 'rejected', feedback: declineReason },
       toolCallId,
       requestContext,
     });
-    return;
+    return { toolCallId, toolName };
   }
   const result = live.respondToToolApproval({
     decision,
@@ -76,6 +124,7 @@ export async function answerParkedCall(
     ...(decision === 'decline' ? { declineContext: { reason: declineReason } } : {}),
   });
   if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
+  return { toolCallId, toolName };
 }
 
 /** Answers a tool call another session holds for approval. Only a signed-in person's turn may answer. */
@@ -86,9 +135,10 @@ export function createFactoryApprovalTools(
   const answer = createTool({
     id: 'factory_answer_approval',
     description: [
-      'Approve or decline a tool call a session you follow is waiting on, as you.',
+      'Approve or decline a tool call a session you follow is waiting on.',
+      'The decision is recorded as yours; the run carries on as the owner of the session that asked.',
       'A `factory-session` notification of kind `approval` names the session, tool, arguments and toolCallId;',
-      'a `blocked` notice for a session parked on submit_plan names the toolCallId of the plan to approve or decline.',
+      'a `blocked` notice for a session parked on a tool that waits for approval names the toolCallId to approve or decline.',
       'Answer only what the person in this conversation agreed to; decline with a reason the session will see.',
     ].join(' '),
     inputSchema: z

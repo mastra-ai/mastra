@@ -160,13 +160,13 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
   return body.title;
 }
 
-/** Approve or decline the plan a card's phase session waits on. Its owner, an admin, or anyone following the card may. */
-export async function answerParkedPlan(
+/** Approve or decline the tool call a card's phase session waits on. Its owner, an admin, or anyone following the card may. */
+export async function answerParkedApproval(
   baseUrl: string,
   sessionId: string,
   decision: 'approve' | 'decline',
 ): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/parked-plan`, {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/parked-approval`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -174,7 +174,7 @@ export async function answerParkedPlan(
   });
   if (res.ok) return;
   const body: { error?: string } = await res.json().catch(() => ({}));
-  throw new Error(body.error ?? `Failed to answer the plan (${res.status})`);
+  throw new Error(body.error ?? `Failed to answer the approval (${res.status})`);
 }
 
 export type UserSessionVisibility = FactoryUserSession['visibility'];

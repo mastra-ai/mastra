@@ -1,10 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryApprovalTools } from './approval-tools.js';
+import { answerParkedCall, createFactoryApprovalTools } from './approval-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
 const WORKER = '00000000-0000-4000-8000-000000000001';
 const ITEM = 'item-1';
+
+/** How each paused tool says what it resumes on, as the session reports it. */
+const RESUME_SCHEMAS: Record<string, string> = {
+  submit_plan: JSON.stringify({
+    type: 'object',
+    properties: { action: { type: 'string', enum: ['approved', 'rejected'] }, feedback: { type: 'string' } },
+    required: ['action'],
+  }),
+  sign_off: JSON.stringify({
+    type: 'object',
+    properties: { action: { type: 'string', enum: ['approved', 'rejected'] } },
+    required: ['action'],
+  }),
+  ask_user: JSON.stringify({ anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] }),
+};
 
 const scope: FactoryToolScope = {
   orgId: 'org-1',
@@ -36,9 +51,22 @@ function setup({
   const respondToToolApproval = vi.fn((_input: unknown) => ({ accepted: true as const }));
   const respondToToolSuspension = vi.fn(async (_input: unknown) => {});
   const session = {
-    approval: { isArmed: vi.fn(() => armed) },
+    approval: { list: () => (armed ? [{ toolCallId: 'call-1', toolName: 'factory_transition_work_item' }] : []) },
     respondToToolApproval,
-    suspensions: { resolve: vi.fn(() => (parkedTool ? { toolName: parkedTool } : undefined)) },
+    displayState: {
+      get: () => ({
+        pendingSuspensions: new Map(
+          parkedTool
+            ? [
+                [
+                  'run-address',
+                  { toolCallId: 'call-1', toolName: parkedTool, resumeSchema: RESUME_SCHEMAS[parkedTool] },
+                ],
+              ]
+            : [],
+        ),
+      }),
+    },
     respondToToolSuspension,
   };
   const record = vi.fn();
@@ -99,7 +127,18 @@ describe('factory_answer_approval', () => {
     );
   });
 
-  it('does not answer other parked tools, like ask_user', async () => {
+  it('approves any tool that paused itself for a yes or no, not only a plan', async () => {
+    const { answer, respondToToolApproval, respondToToolSuspension } = setup({ armed: false, parkedTool: 'sign_off' });
+
+    await expect(answer({ decision: 'approve' })).resolves.toMatchObject({ answered: 'approve' });
+
+    expect(respondToToolApproval).not.toHaveBeenCalled();
+    expect(respondToToolSuspension).toHaveBeenCalledWith(
+      expect.objectContaining({ resumeData: { action: 'approved' }, toolCallId: 'call-1' }),
+    );
+  });
+
+  it('does not answer a tool waiting on a typed answer, like ask_user', async () => {
     const { answer, respondToToolSuspension } = setup({ armed: false, parkedTool: 'ask_user' });
 
     await expect(answer({ decision: 'approve' })).rejects.toThrow(/Nothing is waiting/);
@@ -107,7 +146,7 @@ describe('factory_answer_approval', () => {
   });
 
   it('approves the call a followed work session is holding, and audits it as the person', async () => {
-    const { answer, session, respondToToolApproval, record } = setup();
+    const { answer, respondToToolApproval, record } = setup();
 
     await expect(answer({ decision: 'approve' })).resolves.toEqual({
       answered: 'approve',
@@ -115,10 +154,13 @@ describe('factory_answer_approval', () => {
       toolCallId: 'call-1',
     });
 
-    expect(session.approval.isArmed).toHaveBeenCalledWith({ toolCallId: 'call-1' });
     expect(respondToToolApproval).toHaveBeenCalledWith(
       expect.objectContaining({ decision: 'approve', toolCallId: 'call-1' }),
     );
+    const { requestContext } = respondToToolApproval.mock.calls[0]![0] as {
+      requestContext: { get(key: string): unknown };
+    };
+    expect(requestContext.get('user')).toEqual({ workosId: 'someone-else', organizationId: 'org-1' });
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'user-1',
@@ -145,6 +187,10 @@ describe('factory_answer_approval', () => {
         declineContext: { reason: 'Keep it in triage.' },
       }),
     );
+    const { requestContext } = respondToToolApproval.mock.calls[0]![0] as {
+      requestContext: { get(key: string): unknown };
+    };
+    expect(requestContext.get('user')).toEqual({ workosId: 'someone-else', organizationId: 'org-1' });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.dismissed' }));
   });
 
@@ -182,5 +228,45 @@ describe('factory_answer_approval', () => {
     respondToToolApproval.mockReturnValueOnce({ accepted: false, reason: 'aborting' } as never);
     await expect(answer({ decision: 'approve' })).rejects.toThrow('not accepted (aborting)');
     expect(record).not.toHaveBeenCalled();
+  });
+});
+
+describe('answering without naming the tool call', () => {
+  const session = { sessionId: WORKER, userId: 'someone-else', orgId: 'org-1' };
+  const answerOnly = (live: unknown) =>
+    answerParkedCall(
+      { messaging: async () => ({ controller: { getSession: async () => live } }) as never },
+      { session, decision: 'approve', declineReason: 'No.' },
+    );
+
+  it('answers the one call that is waiting', async () => {
+    const { session: live, respondToToolApproval } = setup();
+
+    await expect(answerOnly(live)).resolves.toEqual({
+      toolCallId: 'call-1',
+      toolName: 'factory_transition_work_item',
+    });
+    expect(respondToToolApproval).toHaveBeenCalledOnce();
+  });
+
+  it('asks which call to answer when several are waiting, answering none', async () => {
+    const { session: live, respondToToolApproval, respondToToolSuspension } = setup({ parkedTool: 'sign_off' });
+    live.displayState.get = () => ({
+      pendingSuspensions: new Map([
+        ['run-address', { toolCallId: 'call-2', toolName: 'sign_off', resumeSchema: RESUME_SCHEMAS.sign_off }],
+      ]),
+    });
+
+    await expect(answerOnly(live)).rejects.toThrow(
+      'This session waits on 2 approvals (factory_transition_work_item: call-1, sign_off: call-2). Name the toolCallId to answer.',
+    );
+    expect(respondToToolApproval).not.toHaveBeenCalled();
+    expect(respondToToolSuspension).not.toHaveBeenCalled();
+  });
+
+  it('says to open the session when it waits on no approval', async () => {
+    const { session: live } = setup({ armed: false, parkedTool: 'ask_user' });
+
+    await expect(answerOnly(live)).rejects.toThrow('This session is not waiting on an approval. Open it');
   });
 });

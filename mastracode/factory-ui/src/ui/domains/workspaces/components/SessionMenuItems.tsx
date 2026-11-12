@@ -16,8 +16,8 @@ export function SessionMenuItems({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
-  onAnswerPlan,
-  answeringPlan,
+  onAnswerApproval,
+  answeringApproval,
   visibility,
   onVisibilityChange,
   changingVisibility,
@@ -30,8 +30,8 @@ export function SessionMenuItems({
   onDelete?: () => void;
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
-  onAnswerPlan?: (decision: 'approve' | 'decline') => void;
-  answeringPlan?: boolean;
+  onAnswerApproval?: (decision: 'approve' | 'decline') => void;
+  answeringApproval?: boolean;
   visibility?: 'org' | 'private';
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   changingVisibility?: boolean;
@@ -51,15 +51,15 @@ export function SessionMenuItems({
         </Menu.Item>
       ))}
       <Menu.Separator />
-      {onAnswerPlan ? (
+      {onAnswerApproval ? (
         <>
-          <Menu.Item disabled={answeringPlan} onClick={() => onAnswerPlan('approve')}>
+          <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('approve')}>
             <Check />
-            Approve plan
+            Approve
           </Menu.Item>
-          <Menu.Item disabled={answeringPlan} onClick={() => onAnswerPlan('decline')}>
+          <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('decline')}>
             <X />
-            Decline plan
+            Decline
           </Menu.Item>
           <Menu.Separator />
         </>

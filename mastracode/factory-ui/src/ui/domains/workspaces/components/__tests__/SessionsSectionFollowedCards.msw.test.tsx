@@ -3,11 +3,11 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../../api/types';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { WorkItem, WorkItemSessionRef } from '../../../factory/services/workItems';
@@ -51,6 +51,12 @@ const requesterSession = {
   ...session('requester-session', 'Ask for a login fix', 'user/session-requester'),
   followedWorkItemIds: ['fix-login'],
 };
+// A teammate asked for the docs from their own shared session. The viewer follows nothing there.
+const teammateSession = {
+  ...session('teammate-session', 'Teammate asks for docs', 'user/session-teammate'),
+  userId: 'user-teammate',
+  followedWorkItemIds: ['write-docs'],
+};
 const scratchSession = {
   ...session('scratch-session', 'Scratch notes', 'user/session-scratch'),
   followedWorkItemIds: [],
@@ -93,13 +99,22 @@ beforeEach(() => {
   localStorage.removeItem('mastracode.pinnedSessions');
   parkedSessionIds = [];
   answers = [];
+  // The viewer is signed in as `user-1`, so sessions of other people read as teammates'.
+  window.__MASTRACODE_CONFIG__ = { authEnabled: true };
   stubSessionsFactory(factoryId, [projectRepositoryId]);
   server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({
+        authEnabled: true,
+        authenticated: true,
+        user: { userId: 'user-1', name: 'Romain', email: 'romain@example.com' },
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, () =>
       HttpResponse.json(workBoardCatalog satisfies BoardCatalogResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/sessions`, () =>
-      HttpResponse.json({ sessions: [planSession, docsSession, requesterSession, scratchSession] }),
+      HttpResponse.json({ sessions: [planSession, docsSession, requesterSession, teammateSession, scratchSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json({
@@ -110,12 +125,16 @@ beforeEach(() => {
         parkedSessionIds,
       }),
     ),
-    http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/parked-plan`, async ({ request, params }) => {
+    http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/parked-approval`, async ({ request, params }) => {
       answers.push({ sessionId: String(params.sessionId), body: await request.json() });
       parkedSessionIds = [];
-      return HttpResponse.json({ answered: 'approve', sessionId: params.sessionId, toolCallId: 'call_plan' });
+      return HttpResponse.json({ answered: 'approve', sessionId: params.sessionId, toolCallId: 'call_release' });
     }),
   );
+});
+
+afterEach(() => {
+  delete window.__MASTRACODE_CONFIG__;
 });
 
 function renderSection() {
@@ -159,7 +178,7 @@ describe("Sessions sidebar links a card's phase sessions to the session that ask
     expect(within(listItem(scratch)).queryByRole('list')).not.toBeInTheDocument();
   });
 
-  it('marks the asking session as waiting on you while the followed card waits on a plan approval', async () => {
+  it('marks the asking session as waiting on you while the followed card waits on an approval', async () => {
     parkedSessionIds = [planSession.sessionId];
     renderSection();
 
@@ -167,14 +186,15 @@ describe("Sessions sidebar links a card's phase sessions to the session that ask
     expect(screen.queryByRole('status', { name: 'Scratch notes waiting on you' })).not.toBeInTheDocument();
   });
 
-  it("approves the waiting plan from the asking session's menu, answering the card's phase session", async () => {
+  it("approves what the card waits on from the asking session's menu, answering the card's phase session", async () => {
     parkedSessionIds = [planSession.sessionId];
     const user = userEvent.setup();
-    renderSection();
+    const { client } = renderSection();
     await screen.findByRole('status', { name: 'Ask for a login fix waiting on you' });
 
     await user.click(screen.getByRole('button', { name: 'Session actions for Ask for a login fix' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Approve plan' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Approve' }));
+    await waitForMutationsIdle(client);
 
     await waitFor(() => expect(answers).toEqual([{ sessionId: 'plan-session', body: { decision: 'approve' } }]));
     await waitFor(() =>
@@ -182,7 +202,35 @@ describe("Sessions sidebar links a card's phase sessions to the session that ask
     );
   });
 
-  it('offers no plan approval on a session whose followed card is not waiting', async () => {
+  it("declines it from the same menu, answering the card's phase session", async () => {
+    parkedSessionIds = [planSession.sessionId];
+    const user = userEvent.setup();
+    const { client } = renderSection();
+    await screen.findByRole('status', { name: 'Ask for a login fix waiting on you' });
+
+    await user.click(screen.getByRole('button', { name: 'Session actions for Ask for a login fix' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Decline' }));
+    await waitForMutationsIdle(client);
+
+    expect(answers).toEqual([{ sessionId: 'plan-session', body: { decision: 'decline' } }]);
+  });
+
+  it("does not ask the viewer to answer for a card only a teammate's session follows", async () => {
+    parkedSessionIds = [docsSession.sessionId];
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('link', { name: 'Teammate asks for docs' });
+    // The card's own session still shows it is waiting; the teammate's row makes no claim on the viewer.
+    await screen.findByRole('status', { name: 'Write docs waiting on you' });
+
+    expect(screen.queryByRole('status', { name: 'Teammate asks for docs waiting on you' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Session actions for Teammate asks for docs' }));
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    expect(screen.queryByRole('menuitem', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Decline' })).not.toBeInTheDocument();
+  });
+
+  it('offers no approval on a session whose followed card is not waiting', async () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByRole('link', { name: 'Ask for a login fix' });
@@ -190,6 +238,6 @@ describe("Sessions sidebar links a card's phase sessions to the session that ask
     await user.click(screen.getByRole('button', { name: 'Session actions for Ask for a login fix' }));
 
     await screen.findByRole('menuitem', { name: 'Pin session' });
-    expect(screen.queryByRole('menuitem', { name: 'Approve plan' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Approve' })).not.toBeInTheDocument();
   });
 });

@@ -12,10 +12,12 @@ import {
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { RequestContext } from '@mastra/core/request-context';
+import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { buildSourceControlSessionRoutes } from '../routes/source-control-sessions.js';
 import {
@@ -89,20 +91,33 @@ async function sessionStorage(backend: string) {
   const schemaName = `approval_answer_${randomUUID().replaceAll('-', '')}`;
   const storage = new PostgresStore({ id: 'approval-answer', connectionString: postgresUrl!, schemaName });
   stops.push(async () => {
-    await storage.pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    // The resumed run can still be saving its last messages; Postgres aborts one side, so ask again.
+    await vi.waitFor(() => storage.pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`), { timeout: 10_000 });
     await storage.close();
   });
   return storage;
 }
 
+/** What the phase session's run stops on, and the tool call that holds it. */
+const PARKED = {
+  /** The plan tool pauses itself and resumes on the answer. */
+  plan: { toolCallId: 'call_plan', toolName: 'submit_plan' },
+  /** A board's own tool that may not run until a person agrees. */
+  release: { toolCallId: 'call_release', toolName: 'ship_release' },
+  /** A question to the person: an answer, not a yes or no. */
+  question: { toolCallId: 'call_question', toolName: 'ask_user' },
+} as const;
+
 /**
- * A card's phase session, owned by one person, parks on `submit_plan`. The person who asked
- * for the work follows the card from their own session and approves the plan from there.
+ * A card's phase session, owned by one person, stops on a tool call that waits for approval.
+ * The person who asked for the work follows the card from their own session and answers there.
  */
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
-  'a parked plan approved from a session following the card (%s)',
+  'a tool call waiting for approval, answered from a session following the card (%s)',
   backend => {
-    async function parkedPhaseSession(options?: { ownedByFactory?: boolean }) {
+    async function parkedPhaseSession(options?: { ownedByFactory?: boolean; parkedOn?: keyof typeof PARKED }) {
+      const parkedOn = options?.parkedOn ?? 'plan';
+      const parked = PARKED[parkedOn];
       const settingsPath = path.join(directory, 'settings.json');
       writeFileSync(
         settingsPath,
@@ -115,11 +130,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       mkdirSync(plansDir, { recursive: true });
       const planPath = path.join(plansDir, 'fix.md');
       writeFileSync(planPath, '# Fix\n\n1. Do it.\n');
+      const toolArguments = {
+        plan: { path: planPath },
+        release: { version: '1.2.0' },
+        question: { question: 'Which branch should this target?' },
+      }[parkedOn];
       mock.on(
         { sequenceIndex: 0 },
-        { toolCalls: [{ id: 'call_plan', name: 'submit_plan', arguments: JSON.stringify({ path: planPath }) }] },
+        { toolCalls: [{ id: parked.toolCallId, name: parked.toolName, arguments: JSON.stringify(toolArguments) }] },
       );
-      mock.onMessage(/.*/, { content: 'Implementing the approved plan.' });
+      mock.onMessage(/.*/, { content: 'Carrying on.' });
+      const shipped: string[] = [];
 
       const code = await createMastraCode({
         cwd: directory,
@@ -136,6 +157,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         disableGithubSignals: true,
         createInitialThread: false,
         plansDir,
+        // Tools run unasked by default; this session asks a person first, as a gated Factory tool does.
+        ...(parkedOn === 'release' ? { initialState: { yolo: false } } : {}),
+        extraTools: {
+          ship_release: createTool({
+            id: 'ship_release',
+            description: 'Ship a release. A person approves each one.',
+            inputSchema: z.object({ version: z.string() }),
+            requireApproval: true,
+            execute: async ({ version }) => {
+              shipped.push(version);
+              return { shipped: version };
+            },
+          }),
+        },
       });
       stops.push(() => code.controller.shutdown?.());
 
@@ -244,12 +279,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       session.subscribe(event => {
         if (event.type === 'error') errors.push(event.error.message);
       });
-      await session.mode.switch({ modeId: 'plan' });
+      if (parkedOn === 'plan') await session.mode.switch({ modeId: 'plan' });
       void session.sendMessage({ content: 'Plan the fix.', requestContext: ownerContext() }).catch(() => {});
-      await vi.waitFor(
-        () => expect(session.suspensions.resolve({ toolCallId: 'call_plan' })?.toolName).toBe('submit_plan'),
-        { timeout: 30_000 },
-      );
+      /** The tool the run is stopped on, however it stopped. */
+      const waitingOn = () =>
+        session.suspensions.resolve({ toolCallId: parked.toolCallId })?.toolName ??
+        session.approval.list().find(gate => gate.toolCallId === parked.toolCallId)?.toolName;
+      await vi.waitFor(() => expect(waitingOn()).toBe(parked.toolName), { timeout: 30_000 });
       expect(errors).toEqual([]);
 
       const scope: FactoryToolScope = {
@@ -275,7 +311,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           tools.factory_answer_approval as unknown as {
             execute: (input: unknown, context: unknown) => Promise<unknown>;
           }
-        ).execute({ sessionId: phase.sessionId, toolCallId: 'call_plan', decision }, {});
+        ).execute({ sessionId: phase.sessionId, toolCallId: parked.toolCallId, decision }, {});
       /** The web app, signed in as `viewer`. */
       const web = (viewer: string) => {
         const app = new Hono();
@@ -303,11 +339,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         );
         return app;
       };
-      const answerOnWeb = (viewer: string, decision: 'approve' | 'decline') =>
-        web(viewer).request(`/web/user-sessions/${phase.sessionId}/parked-plan`, {
+      const answerOnWeb = (viewer: string, decision: 'approve' | 'decline', toolCallId?: string) =>
+        web(viewer).request(`/web/user-sessions/${phase.sessionId}/parked-approval`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ decision }),
+          body: JSON.stringify({ decision, ...(toolCallId ? { toolCallId } : {}) }),
         });
       return {
         answer,
@@ -322,6 +358,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         phase,
         owner,
         profileLookups,
+        waitingOn,
+        shipped,
+        sourceControl,
       };
     }
 
@@ -394,15 +433,84 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     });
 
     it('refuses a teammate who neither owns the session nor follows its card, and leaves the plan waiting', async () => {
-      const { answerOnWeb, session, audit } = await parkedPhaseSession();
+      const { answerOnWeb, waitingOn, audit } = await parkedPhaseSession();
       const requestsBefore = mock.getRequests().length;
 
       const response = await answerOnWeb(STRANGER, 'approve');
 
       expect(response.status).toBe(403);
-      expect(session.suspensions.resolve({ toolCallId: 'call_plan' })?.toolName).toBe('submit_plan');
+      expect(waitingOn()).toBe('submit_plan');
       expect(mock.getRequests().length).toBe(requestsBefore);
       expect(audit).toEqual([]);
+    });
+
+    // Approval belongs to the tool, not to plans: a board's own tool that waits for a person is
+    // answered the same way, from the same places, and the run carries on as its owner.
+    it.each(['tool', 'web'] as const)(
+      'lets the person who asked approve a tool call that is not a plan, and the run carries on as its owner (%s)',
+      async surface => {
+        const { answer, answerOnWeb, errors, audit, shipped } = await parkedPhaseSession({ parkedOn: 'release' });
+        const requestsBefore = mock.getRequests().length;
+        resolved = [];
+
+        if (surface === 'tool') {
+          await answer('approve');
+        } else {
+          const response = await answerOnWeb(REQUESTER, 'approve');
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({ answered: 'approve', ...PARKED.release });
+        }
+
+        await vi.waitFor(() => expect(shipped).toEqual(['1.2.0']), { timeout: 30_000 });
+        await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
+        expect(errors).toEqual([]);
+        expect([...new Set(resolved.map(tenant => tenant?.userId))]).toEqual([OWNER]);
+        expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
+      },
+    );
+
+    it('declines a tool call that is not a plan from the web, so the tool never runs', async () => {
+      const { answerOnWeb, errors, shipped, waitingOn } = await parkedPhaseSession({ parkedOn: 'release' });
+      const requestsBefore = mock.getRequests().length;
+
+      const response = await answerOnWeb(REQUESTER, 'decline', PARKED.release.toolCallId);
+
+      expect(response.status).toBe(200);
+      await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
+      expect(waitingOn()).toBeUndefined();
+      expect(shipped).toEqual([]);
+      expect(errors).toEqual([]);
+    });
+
+    it('leaves a question for the person to answer in the session, rather than approving it', async () => {
+      const { answerOnWeb, waitingOn, audit } = await parkedPhaseSession({ parkedOn: 'question' });
+      const requestsBefore = mock.getRequests().length;
+
+      const response = await answerOnWeb(REQUESTER, 'approve');
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: 'This session is not waiting on an approval. Open it to see what it needs.',
+      });
+      expect(waitingOn()).toBe('ask_user');
+      expect(mock.getRequests().length).toBe(requestsBefore);
+      expect(audit).toEqual([]);
+    });
+
+    // A follow belongs to the session that made it. Once that session is handed to someone else,
+    // the new owner is the one who asked, and the previous owner no longer answers through it.
+    it('follows the session to its new owner when the following session is handed over', async () => {
+      const { answerOnWeb, waitingOn, sourceControl, requesterSessionId } = await parkedPhaseSession();
+      await sourceControl.sessions.transferOwner({
+        sessionId: requesterSessionId,
+        expectedUserId: REQUESTER,
+        toUserId: STRANGER,
+      });
+
+      expect((await answerOnWeb(REQUESTER, 'approve')).status).toBe(403);
+      expect(waitingOn()).toBe('submit_plan');
+
+      expect((await answerOnWeb(STRANGER, 'approve')).status).toBe(200);
     });
 
     it("tells the web app which cards each session follows, so it can list a card's sessions under it", async () => {

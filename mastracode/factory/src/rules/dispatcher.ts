@@ -188,9 +188,11 @@ function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
+  const failure = factoryDispatchFailureMetadata(failureCode);
   return (
     attempts >= (failureCode === 'run_incomplete' ? 2 : MAX_ATTEMPTS) ||
-    !factoryDispatchFailureMetadata(failureCode).canRetry
+    !failure.canRetry ||
+    failure.autoRetry === false
   );
 }
 

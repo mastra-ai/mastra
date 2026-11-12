@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createTestBoard, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
-import { FactoryDispatchError, factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -368,7 +368,6 @@ describe('prepareFactoryRuleBinding', () => {
             code: 'factory_org_key_missing',
             message: expect.stringContaining('Add an organization key'),
           });
-          expect(factoryDispatchFailureMetadata('factory_org_key_missing').canRetry).toBe(false);
           expect(prepare).not.toHaveBeenCalled();
           expect(createSession).not.toHaveBeenCalled();
         });

@@ -269,8 +269,9 @@ function orderCardRows(
 
 /**
  * Ties each session to the phase sessions of the cards it follows. Those sessions stay the
- * card's: the row links to them, takes on "waiting on you" while one is parked, and lists
- * them under itself when child sessions are revealed.
+ * card's: the row links to them and lists them under itself when child sessions are revealed.
+ * While one is parked the row reads "waiting on you", but only for a viewer who can answer:
+ * the row is their session, or a session of theirs follows the same card.
  */
 export function linkFollowedCards(
   rows: readonly SessionListRow[],
@@ -278,6 +279,11 @@ export function linkFollowedCards(
   parkedSessions: ReadonlySet<string>,
   { revealChildSessions = false }: OneRowPerCardOptions = {},
 ): SessionListRow[] {
+  const viewerFollows = new Set(
+    rows.flatMap(row => (row.ownedByViewer ? (row.session.followedWorkItemIds ?? []) : [])),
+  );
+  const waitsOnViewer = (cardRow: SessionListRow) =>
+    parkedSessions.has(cardRow.session.sessionId) && cardRow.itemId !== undefined && viewerFollows.has(cardRow.itemId);
   return rows.map(row => {
     const followed = new Set(row.session.followedWorkItemIds);
     if (followed.size === 0) return row;
@@ -288,16 +294,14 @@ export function linkFollowedCards(
         cardRow.session.sessionId !== row.session.sessionId,
     );
     if (linked.length === 0) return row;
-    const waiting = linked.find(cardRow => parkedSessions.has(cardRow.session.sessionId));
+    const waiting = linked.find(waitsOnViewer);
     return {
       ...row,
       ...(waiting ? { status: 'waiting' as const, waitingSessionId: waiting.session.sessionId } : {}),
       ...(revealChildSessions
         ? {
             childRows: linked.map(cardRow =>
-              parkedSessions.has(cardRow.session.sessionId)
-                ? { ...cardRow, waitingSessionId: cardRow.session.sessionId }
-                : cardRow,
+              waitsOnViewer(cardRow) ? { ...cardRow, waitingSessionId: cardRow.session.sessionId } : cardRow,
             ),
           }
         : {}),

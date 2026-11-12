@@ -106,8 +106,12 @@ async function sessionManagePermission(
   return (await auth.isOrganizationAdmin(c, session.orgId)) ? 'allowed' : 'forbidden';
 }
 
-const parkedPlanAnswerSchema = z
-  .object({ decision: z.enum(['approve', 'decline']), reason: z.string().trim().min(1).max(1000).optional() })
+const parkedApprovalAnswerSchema = z
+  .object({
+    decision: z.enum(['approve', 'decline']),
+    reason: z.string().trim().min(1).max(1000).optional(),
+    toolCallId: z.string().trim().min(1).max(200).optional(),
+  })
   .strict();
 
 /** Whether the viewer asked for the card's work: they filed it, or a session of theirs follows it. */
@@ -121,8 +125,13 @@ async function followsCard(
   const item = await workItems.get({ orgId: tenant.orgId, id: workItemId });
   if (!item) return false;
   if (item.createdBy === tenant.userId) return true;
+  // A follow belongs to its session, and a session can change hands: ask who owns it now.
   const followers = await workItems.listWorkItemSubscribers({ orgId: tenant.orgId, workItemId });
-  return followers.some(follower => follower.userId === tenant.userId);
+  for (const sessionId of new Set(followers.map(follower => follower.sessionId))) {
+    const following = (await resolveSession(options.sourceControls, sessionId))?.session;
+    if (following?.orgId === tenant.orgId && following.userId === tenant.userId) return true;
+  }
+  return false;
 }
 
 function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean {
@@ -604,17 +613,22 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         });
       },
     }),
-    // Approve or decline the plan a card's phase session is parked on, from the card or a
+    // Approve or decline the tool call a card's phase session waits on, from the card or a
     // session following it. The session's owner and org admins may; so may the person who
     // filed the card and anyone whose session follows it. The run carries on as its owner.
-    registerApiRoute('/web/user-sessions/:sessionId/parked-plan', {
+    registerApiRoute('/web/user-sessions/:sessionId/parked-approval', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
-        const body = parkedPlanAnswerSchema.safeParse(await c.req.json().catch(() => null));
-        if (!body.success) return c.json({ error: 'decision must be "approve" or "decline".' }, 400);
+        const body = parkedApprovalAnswerSchema.safeParse(await c.req.json().catch(() => null));
+        if (!body.success) {
+          return c.json(
+            { error: 'Send a decision of "approve" or "decline", and optionally a reason and toolCallId.' },
+            400,
+          );
+        }
         const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
         const session = match?.session;
         if (!session) return c.json({ error: 'Session not found' }, 404);
@@ -636,24 +650,23 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
         const controller = options.controller;
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
-        const live = await controller.getSession(session.sessionId);
-        // Keyed by run address, not tool call id: read the id off the entry.
-        const parked = [...(live?.displayState.get().pendingSuspensions.values() ?? [])].find(
-          suspension => suspension.toolName === 'submit_plan',
-        );
-        if (!parked)
-          return c.json({ error: 'This session is not waiting on a plan. Open it to see what it needs.' }, 409);
-        const { toolCallId } = parked;
         const { decision, reason } = body.data;
+        let answered: { toolCallId: string; toolName: string };
         try {
-          await answerParkedCall(
+          answered = await answerParkedCall(
             { messaging: async () => ({ controller }) as never },
-            { session, toolCallId, decision, declineReason: reason ?? 'Declined from the card.' },
+            {
+              session,
+              ...(body.data.toolCallId ? { toolCallId: body.data.toolCallId } : {}),
+              decision,
+              declineReason: reason ?? 'Declined from the card.',
+            },
           );
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 409);
         }
-        options.audit?.record({
+        const { toolCallId, toolName } = answered;
+        await options.audit?.record({
           orgId: session.orgId,
           actorId: resolved.tenant.userId,
           actorType: 'human',
@@ -663,9 +676,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             { type: 'session', id: session.sessionId },
             ...(binding ? [{ type: 'work_item' as const, id: binding.workItemId }] : []),
           ],
-          metadata: { toolCallId, sessionId: session.sessionId, decision, cause: 'web' },
+          metadata: { toolCallId, toolName, sessionId: session.sessionId, decision, cause: 'web' },
         });
-        return c.json({ answered: decision, sessionId: session.sessionId, toolCallId });
+        return c.json({ answered: decision, sessionId: session.sessionId, toolCallId, toolName });
       },
     }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
