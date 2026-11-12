@@ -19,7 +19,11 @@ import { MockStore } from '../storage/mock';
 import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createWorkflow } from '../workflows';
 import type { Workflow } from '../workflows';
+import { sharedBroker } from './test-utils/shared-broker';
 import { Mastra } from './index';
+
+// The runs these tests store were just written, so without a zero grace the rule would leave them for later.
+const stopped = { workflowGraceMs: 0 };
 
 /** Stores a `running` run of `workflowName`, as a process that crashed mid-run leaves it. */
 async function persistActiveRun(storage: MockStore, workflowName: string, runId: string) {
@@ -62,6 +66,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       storage,
       workflows: { userWorkflow },
       agents: { durable },
+      recovery: stopped,
     });
 
     // Same instance that addAgent() registered via getDurableWorkflows().
@@ -99,6 +104,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       logger: false,
       storage,
       workflows: { optedOutWorkflow, defaultWorkflow },
+      recovery: stopped,
     });
 
     const optedOut = await stubActiveRun(storage, optedOutWorkflow, 'opted-out-run-1');
@@ -120,7 +126,12 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       outputSchema: z.object({}),
     }).commit();
     const storage = new MockStore();
-    const mastra = new Mastra({ logger: false, storage, workflows: { workflow }, recovery });
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { workflow },
+      recovery: { ...recovery, ...stopped },
+    });
 
     for (let i = 0; i < runCount; i++) {
       await persistActiveRun(storage, workflow.id, `run-${i}`);
@@ -217,7 +228,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       outputSchema: z.object({}),
     }).commit();
     const storage = new MockStore();
-    const mastra = new Mastra({ logger: false, storage, workflows: { goneWorkflow, liveWorkflow } });
+    const mastra = new Mastra({ logger: false, storage, workflows: { goneWorkflow, liveWorkflow }, recovery: stopped });
     await stubActiveRun(storage, goneWorkflow, 'gone-run');
     const live = await stubActiveRun(storage, liveWorkflow, 'live-run');
 
@@ -248,6 +259,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       logger: false,
       storage,
       workflows: { corruptWorkflow, liveWorkflow },
+      recovery: stopped,
     });
     const corrupt = await stubActiveRun(storage, corruptWorkflow, 'corrupt-run');
     const live = await stubActiveRun(storage, liveWorkflow, 'live-run');
@@ -273,10 +285,20 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     expect(new Mastra({ logger: false }).recoveryConfig).toEqual({
       workflows: 'auto',
       workflowConcurrency: 5,
+      // The in-process pubsub is the default.
+      workflowGraceMs: 2_000,
       durableAgents: 'off',
     });
     expect(
       new Mastra({ logger: false, recovery: { workflows: 'off', workflowConcurrency: 0 } }).recoveryConfig,
     ).toMatchObject({ workflows: 'off', workflowConcurrency: 1 });
+  });
+
+  it('defaults the recovery grace period to a minute when events go through a broker', () => {
+    const broker = sharedBroker();
+    expect(new Mastra({ logger: false, pubsub: broker.connect() }).recoveryConfig.workflowGraceMs).toBe(60_000);
+    expect(
+      new Mastra({ logger: false, pubsub: broker.connect(), recovery: { workflowGraceMs: 0 } }).recoveryConfig,
+    ).toMatchObject({ workflowGraceMs: 0 });
   });
 });
