@@ -269,13 +269,13 @@ describe('issues route', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('returns an empty page when there is no saved intake config', async () => {
+  it('treats an org with no saved intake config as Jira intake turned off', async () => {
     seed = await createFactoryStorageForTests();
 
     const res = await buildApp(org1()).request('/web/jira/issues');
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'jira_intake_disabled' });
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 

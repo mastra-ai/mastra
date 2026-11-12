@@ -17,7 +17,6 @@ import type { RouteObject } from 'react-router';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
-import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
 import { useBoardCatalog } from '../hooks/useBoardCatalog';
@@ -37,7 +36,9 @@ import {
   prefetchFactories,
   prefetchFactoryLayout,
   prefetchRuleDecisions,
+  prefetchRetiredReviewBoard,
   prefetchSidebar,
+  retiredReviewBoardSearch,
 } from './routeLoaders';
 import type { Prefetch, RouteLoaderServices } from './routeLoaders';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
@@ -135,10 +136,7 @@ function RetiredReviewBoardRedirect() {
   if (catalog.isPending) return null;
   if (catalog.data?.some(board => board.id === 'review'))
     return <Navigate to={`../boards/review${search}`} relative="path" replace />;
-  const params = new URLSearchParams(search);
-  // Picked sources widen the filter, so any other source would show cards the Review board never held.
-  params.set('source', PULL_REQUEST_SOURCE_FILTER);
-  return <Navigate to={`../work?${params}`} relative="path" replace />;
+  return <Navigate to={`../work?${retiredReviewBoardSearch(search)}`} relative="path" replace />;
 }
 
 function FactoryHomeRedirect() {
@@ -266,7 +264,11 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'new-board', ...lazyRoute(NewBoardPage) },
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
                         // The Review board was retired: new pull requests live on Work.
-                        { path: 'review', element: <RetiredReviewBoardRedirect />, ...loadOnEntry(prefetchBoard) },
+                        {
+                          path: 'review',
+                          element: <RetiredReviewBoardRedirect />,
+                          ...loadOnEntry(prefetchRetiredReviewBoard),
+                        },
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'work/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
