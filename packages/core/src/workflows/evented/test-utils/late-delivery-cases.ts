@@ -235,34 +235,38 @@ export function describeLateDeliveryCases({
       expect(attempts).toBe(3);
     }, 20_000);
 
-    it('fails the run without another attempt when a restart finds the final failure saved', async () => {
-      let attempts = 0;
-      const build = () =>
-        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, retryConfig: { attempts: 2 } })
-          .then(
-            createStep({
-              id: 'broken',
-              inputSchema: Num,
-              outputSchema: Num,
-              execute: async () => {
-                attempts++;
-                throw new Error('always fails');
-              },
-            }),
-          )
-          .commit();
-      // The final failure's step end sits in A's broker queue past a lease TTL.
-      const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [0]));
-      const a = await startReplica(build(), fromA.intercept);
-      const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      startInBackground(run, { n: 1 });
-      await fromA.firstHeld;
-      await waitUntilOrphaned(run.runId);
+    it.each([2, 0])(
+      'fails the run without another attempt when a restart finds the final failure saved (%i retries)',
+      async retries => {
+        let attempts = 0;
+        const build = () =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, retryConfig: { attempts: retries } })
+            .then(
+              createStep({
+                id: 'broken',
+                inputSchema: Num,
+                outputSchema: Num,
+                execute: async () => {
+                  attempts++;
+                  throw new Error('always fails');
+                },
+              }),
+            )
+            .commit();
+        // The final failure's step end sits in A's broker queue past a lease TTL.
+        const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [0]));
+        const a = await startReplica(build(), fromA.intercept);
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await fromA.firstHeld;
+        await waitUntilOrphaned(run.runId);
 
-      const b = await startReplica(build());
-      expect((await (await b.workflow.createRun({ runId: run.runId })).restart()).status).toBe('failed');
-      expect(attempts).toBe(3);
-    }, 20_000);
+        const b = await startReplica(build());
+        expect((await (await b.workflow.createRun({ runId: run.runId })).restart()).status).toBe('failed');
+        expect(attempts).toBe(retries + 1);
+      },
+      20_000,
+    );
 
     it('still runs every attempt of a step that fails before it succeeds', async () => {
       let attempts = 0;

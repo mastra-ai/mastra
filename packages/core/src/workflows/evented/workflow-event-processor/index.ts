@@ -3396,13 +3396,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     // A restart of an attempt that was running continues its attempt count, so a step that keeps
     // failing still runs out of retries when its worker crashes between them.
     // A store with step guards keeps the failed attempt saved, with its own count, instead of
-    // the retry it handed off: the restart runs the attempt after it.
+    // the retry it handed off: the restart runs the attempt after it. A first attempt records no
+    // count.
     const storedAttempt = stepResults?.[leafId];
     const storedCount: number | undefined = storedAttempt?.metadata?.retryCount;
     const retryCount: number =
       args.retryCount ??
       (restart && storedAttempt?.status === 'running' ? storedCount : undefined) ??
-      (restart && storedAttempt?.status === 'failed' && storedCount !== undefined ? storedCount + 1 : undefined) ??
+      (restart && storedAttempt?.status === 'failed' ? (storedCount ?? 0) + 1 : undefined) ??
       0;
 
     if (!isExecutableStep(step)) {
