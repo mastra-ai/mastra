@@ -654,7 +654,7 @@ export const boardPhasesResponseSchema = z.object({
   /** Cards of the board that match the view, each counted once: a card in two phases is one. */
   matchingTotal: countSchema,
   /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
-  workItems: z.array(cardSchema).optional(),
+  workItems: z.array(cardSchema.extend({ version: z.string() })).optional(),
   /** Among the named cards. */
   runningSessionIds: z.array(z.string()),
   parkedSessionIds: z.array(z.string()),

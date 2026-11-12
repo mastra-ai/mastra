@@ -2500,8 +2500,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "author"
                 ],
                 "additionalProperties": {}
+              },
+              "version": {
+                "type": "string"
               }
             },
+            "required": [
+              "version"
+            ],
             "additionalProperties": {}
           }
         },
