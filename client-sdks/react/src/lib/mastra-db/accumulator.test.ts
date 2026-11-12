@@ -1335,6 +1335,34 @@ describe('accumulateChunk - background tasks', () => {
     expect(meta.runningBackgroundTasksCount).toBeUndefined();
   });
 
+  // Providers reuse tool-call ids across turns, so the newest call with the id can be a later one.
+  it("background-task-cancelled marks the cancelled task's call when a later call reused its id", () => {
+    const placeholder = (taskId: string) =>
+      ({
+        type: 'tool-result',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: {
+          toolCallId: 'tc-1',
+          result: `Background task started. Task ID: ${taskId}`,
+          providerMetadata: { mastra: { backgroundTask: { taskId, status: 'running' } } },
+        },
+      }) as unknown as ChunkType;
+    // Two turns loaded from history, each holding a call `tc-1` that ran its own task.
+    const turn = (messageId: string, taskId: string) =>
+      reduce([startChunk(messageId), toolCallChunk('tc-1', 'longRun', {}), placeholder(taskId)]);
+    const history = [...turn('asst-1', 'bg-1'), ...turn('asst-2', 'bg-2')];
+
+    const out = reduce([bgTaskCancelledChunk('tc-1', 'bg-1')], streamMeta(), history);
+
+    const statusOf = (messageIndex: number) =>
+      (out[messageIndex]!.content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart)
+        .providerMetadata?.mastra;
+    expect(out).toHaveLength(2);
+    expect(statusOf(0)).toEqual({ backgroundTask: { taskId: 'bg-1', status: 'cancelled' } });
+    expect(statusOf(1)).toEqual({ backgroundTask: { taskId: 'bg-2', status: 'running' } });
+  });
+
   it("background-task-cancelled for a call this conversation doesn't hold changes nothing", () => {
     const initial = reduce([startChunk(), toolCallChunk('tc-1', 'longRun', {}), bgTaskProgressChunk(1)]);
     const out = reduce([bgTaskCancelledChunk('tc-other', 'bg-other')], streamMeta(), initial);
