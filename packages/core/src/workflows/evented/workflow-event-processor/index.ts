@@ -1289,8 +1289,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       }) ?? true;
 
     // Only starts pass here (liveness is entered for every event). A run that reuses the ID of a
-    // run whose end deleted its snapshot must not be read as that ended run.
-    const leaseStore = await this.#leaseStore(workflow);
+    // run whose end deleted its snapshot must not be read as that ended run: its `start()` saved a
+    // new run record first. A late copy of the ended run's own start finds no record and keeps
+    // the marker, so its steps are dropped.
+    const leaseStore = existingRun ? await this.#leaseStore(workflow) : undefined;
     if (leaseStore) {
       await this.#clearRunEnded(leaseStore, runId);
     }

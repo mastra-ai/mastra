@@ -423,5 +423,28 @@ export function describeLateEndCases({
       expect(executions).toEqual(['first', 'second']);
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
+
+    it('runs no step when the start of a run whose end deleted its snapshot arrives again', async ({ skip }) => {
+      // A store with step guards saves a run row at every start even when snapshots are declined,
+      // so the late start runs against that row instead of the ended marker.
+      if ((await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards()) {
+        skip();
+      }
+
+      const executions: string[] = [];
+      const a = await startReplica(keepsNoSnapshot(executions));
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+      await expect.poll(async () => await storedRun(run.runId)).toBeNull();
+      const start = a.delivered.find(event => event.type === 'workflow.start')!;
+
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(keepsNoSnapshot(executions), fromB.intercept);
+      expect(await redeliver(b, start)).toEqual({ ok: true });
+      await fromB.drain(b);
+
+      expect(executions).toEqual(['first', 'second']);
+      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+    }, 20_000);
   });
 }
