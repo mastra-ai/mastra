@@ -27,6 +27,7 @@ import type { MemoryStorage } from '../storage/domains/memory/base';
 import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
 import { validateStorageMetadataFilter } from '../storage/utils';
+import type { RequireToolApproval } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace } from '../workspace/workspace';
 
@@ -2348,11 +2349,21 @@ export class AgentController<TState = {}> {
     // session state so the controller's `stateSchema` never sees it.
     const channelAutoApprove =
       this.#channels?.__isAutoApproveResource(context?.resourceId ?? session.identity.getResourceId()) === true;
+    const threadId = context?.threadId ?? session.thread.getId();
+    // Gate only the calls the session policy does not already allow, so allowed
+    // tools run without a suspend/resume round trip. The 'called' strategy then
+    // parallelizes a step's calls unless one of them actually needs approval or
+    // can suspend, instead of serializing on every registered suspendable tool.
+    const requireToolApproval: RequireToolApproval =
+      isYolo || channelAutoApprove
+        ? false
+        : ({ toolName }) => session.resolveToolApproval(toolName, threadId ?? undefined) !== 'allow';
     const shared: SharedRunOptions = {
       maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
-      requireToolApproval: !isYolo && !channelAutoApprove,
-      onStepFinish: this.createUsageRecorder(context?.threadId ?? session.thread.getId()),
+      requireToolApproval,
+      toolCallConcurrency: { strategy: 'called' },
+      onStepFinish: this.createUsageRecorder(threadId),
     };
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier

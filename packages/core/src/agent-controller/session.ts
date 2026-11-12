@@ -6369,7 +6369,6 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
     const activeTools = this.machinery.resolveModeActiveTools(runModeId);
@@ -6380,7 +6379,6 @@ export class Session<TState = unknown> {
       runId,
       toolCallId,
       approved: true,
-      requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
@@ -6460,7 +6458,6 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
     const activeTools = this.machinery.resolveModeActiveTools(runModeId);
@@ -6472,7 +6469,6 @@ export class Session<TState = unknown> {
       toolCallId,
       approved: false,
       declineContext,
-      requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
