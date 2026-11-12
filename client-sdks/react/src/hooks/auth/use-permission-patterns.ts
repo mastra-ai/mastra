@@ -1,5 +1,5 @@
 import type { MastraClient, PermissionPattern } from '@mastra/client-js';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraQueryOptions } from '../shared/query-options';
@@ -41,6 +41,9 @@ export const usePermissionPatterns = ({
     // permissions if the pattern set is empty.
     retry: false,
     staleTime: Infinity,
+    // A changed connection (Settings) makes a new client and so a new key. Keep the last answer while the
+    // new one loads, so guards keep the page up instead of blanking it on every save.
+    placeholderData: keepPreviousData,
     ...queryOptions,
   });
 

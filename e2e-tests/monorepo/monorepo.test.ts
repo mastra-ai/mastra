@@ -696,6 +696,19 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
 });
 `,
         );
+        // The workspace package dynamically imports an optional peer that is not installed anywhere. It is declared
+        // only in `peerDependenciesMeta`, so pnpm does not look it up in the registry during install.
+        await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optional-peer.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+import { loadOptionalPeer } from '@inner/optional-peer-host';
+
+export const optionalPeerRoute = registerApiRoute('/optional-peer', {
+  method: 'GET',
+  handler: async c => c.json({ peer: await loadOptionalPeer() }),
+});
+`,
+        );
         await writeFile(
           join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
           `import { registerApiRoute } from '@mastra/core/server';
@@ -727,11 +740,11 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
             )
             .replace(
               "import { testRoute } from '@/api/route/test';",
-              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';\nimport { optionalPeerRoute } from '@/api/route/optional-peer';",
             )
             .replace(
               /apiRoutes: \[\s*testRoute,/,
-              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute,',
+              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute, optionalPeerRoute,',
             ),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
@@ -1082,6 +1095,17 @@ export const mastra = new Mastra({
       const res = await fetch(`http://localhost:${port}/transitive-only`);
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'dependent:leaf' });
+    });
+
+    it('should leave an uninstalled optional peer out of the output instead of installing it as latest', async () => {
+      const outputPackageJson = JSON.parse(
+        await readFile(join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json'), 'utf-8'),
+      );
+      expect(outputPackageJson.dependencies).not.toHaveProperty('@inner/missing-optional-peer');
+
+      const res = await fetch(`http://localhost:${port}/optional-peer`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ peer: 'missing' });
     });
   });
 

@@ -7,6 +7,7 @@
  */
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { claimSpanError } from '../../../observability/error-count';
 import { MessageList } from '../../message-list';
 import type { TripwireData } from '../../trip-wire';
 
@@ -26,6 +27,12 @@ import {
 } from './serialize-state';
 
 describe('createWorkflowInput input tripwires (COR-1481)', () => {
+  it('preserves the origin of a wrapped tool failure through durable serialization', () => {
+    const error = Object.freeze(new Error('tool failed'));
+    expect(claimSpanError(error, 'trace', 'tool')).toBeTypeOf('string');
+    const transported = JSON.parse(JSON.stringify(serializeError(new Error('wrapper', { cause: error }))));
+    expect(claimSpanError(transported, 'trace', 'agent')).toBeUndefined();
+  });
   function serializeTripwire(inputTripwire: TripwireData) {
     return createWorkflowInput({
       runId: 'blocked-run',

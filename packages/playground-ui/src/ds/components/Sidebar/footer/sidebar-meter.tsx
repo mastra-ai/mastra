@@ -162,7 +162,7 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
       data-state={state}
       className={cn(
         'relative isolate flex flex-col justify-center overflow-hidden rounded-lg border border-border bg-background px-3',
-        href && cn(surfaceStateLayerStyle, 'before:transition-none'),
+        href && surfaceStateLayerStyle,
         className,
       )}
       style={{ height: CARD_HEIGHT }}

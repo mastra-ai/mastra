@@ -104,12 +104,19 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
         cwd: monorepoDir,
       });
 
-      for (const file of packageFiles) {
-        const content = readFileSync(join(monorepoDir, file), 'utf8');
+      const manifests = packageFiles.map(file => ({
+        file,
+        parsed: JSON.parse(readFileSync(join(monorepoDir, file), 'utf8')),
+      }));
+      const workspaceNames = new Set(manifests.map(({ parsed }) => parsed?.name).filter(Boolean));
 
-        const parsed = JSON.parse(content);
-        if (parsed?.peerDependencies?.['@mastra/core']) {
-          parsed.peerDependencies['@mastra/core'] = 'workspace:*';
+      for (const { file, parsed } of manifests) {
+        // Snapshot versions (0.0.0-<tag>-<timestamp>) never satisfy a published peer range, and `mastra dev`
+        // warns about every mismatched @mastra/* peer, so point internal peers at the snapshot itself.
+        for (const peer of Object.keys(parsed?.peerDependencies || {})) {
+          if (peer.startsWith('@mastra/') && workspaceNames.has(peer)) {
+            parsed.peerDependencies[peer] = 'workspace:*';
+          }
         }
 
         // convert all workspace dependencies to *

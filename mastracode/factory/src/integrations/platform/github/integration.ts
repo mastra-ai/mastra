@@ -89,6 +89,21 @@ import type { PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
 
+/** Why Platform withheld a personal-account installation from this org's credentials. */
+type PlatformHiddenPersonalInstallReason = 'personal_install_requires_single_member_org';
+
+/**
+ * Status reason for a settled installation list. A personal install Platform withholds would otherwise
+ * read as "nothing installed", so say so; any usable installation still means ready.
+ */
+function githubStatusReason(
+  hasUsableInstallation: boolean,
+  hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason,
+): 'ready' | 'personal_install_hidden' | 'not_connected' {
+  if (hasUsableInstallation) return 'ready';
+  return hiddenPersonalInstallReason ? 'personal_install_hidden' : 'not_connected';
+}
+
 type PlatformGithubInstallation = {
   installationId: number;
   accountLogin: string;
@@ -778,7 +793,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           });
         }
 
-        const [installations, userConnection] = await Promise.all([
+        const [{ installations, hiddenPersonalInstallReason }, userConnection] = await Promise.all([
           this.#syncInstallations(tenant.orgId, tenant.userId),
           this.#fetchUserConnection(tenant.userId),
         ]);
@@ -793,7 +808,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           })),
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
-          reason: installations.length > 0 ? 'ready' : 'not_connected',
+          reason: githubStatusReason(installations.length > 0, hiddenPersonalInstallReason),
           diagnostics: this.diagnostics(),
         });
       },
@@ -882,15 +897,22 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
-    const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
-      'GET',
-      `${API_PREFIX}/github-app/installations`,
-    );
+  async #syncInstallations(
+    orgId: string,
+    userId: string,
+  ): Promise<{
+    installations: SourceControlInstallation[];
+    hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason;
+  }> {
+    const result = await this.#client.request<{
+      installations: PlatformGithubInstallation[];
+      /** Platform sends null when it withholds nothing. */
+      hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason | null;
+    }>('GET', `${API_PREFIX}/github-app/installations`);
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
     );
-    return Promise.all(
+    const installations = await Promise.all(
       usableInstallations.map(installation =>
         this.versionControl.registerInstallation({
           orgId,
@@ -903,6 +925,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }),
       ),
     );
+    return { installations, hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? undefined };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

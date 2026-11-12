@@ -123,8 +123,17 @@ export interface SessionWorktreeInfo {
   mainRepoPath?: string;
 }
 
+/**
+ * Why SessionStart fired: `startup` when Mastra Code starts, `thread_change` when the
+ * session binds a different thread later (its first message creates one, `/new`, or a
+ * thread is resumed).
+ */
+export type SessionStartSource = 'startup' | 'thread_change';
+
 export interface HookStdinSession extends HookStdinBase {
   hook_event_name: 'SessionStart' | 'SessionEnd';
+  /** Set on SessionStart only. */
+  source?: SessionStartSource;
   /**
    * Set only when the session's project directory is a git worktree, so a hook
    * can provision or tear down per-worktree resources (a database, a bucket, a
