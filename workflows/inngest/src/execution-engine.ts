@@ -70,6 +70,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
     private parentStream?: { workflowId: string; runId: string },
+    /** Inngest's id for this function run: stable across its replays, new for each resume. */
+    private inngestRunId?: string,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -294,7 +296,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Provide Inngest step primitive in engine context
    */
   getEngineContext(): Record<string, any> {
-    return { step: this.inngestStep };
+    return { step: this.inngestStep, inngestRunId: this.inngestRunId };
   }
 
   /**

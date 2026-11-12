@@ -141,6 +141,21 @@ describe('DockerFactorySandbox', () => {
     expect(tuned.dockerfile).toBe(direct.dockerfile);
   });
 
+  it('keeps Factory build env out of the image and its identity', async () => {
+    const withBuild = { ...context(), buildEnv: { NPM_TOKEN: 'sentinel-docker' }, buildEnvRevision: 'rev-a' };
+    for (const sandbox of [
+      new DockerFactorySandbox(),
+      new DockerFactorySandbox({ template: { buildEnv: { TURBO_TOKEN: 't' } } }),
+    ]) {
+      const plain = await sandbox.template(context(), {})!();
+      const built = await sandbox.template(withBuild, {})!();
+      expect(built.templateId).toBe(plain.templateId);
+      expect(built.dockerfile).toBe(plain.dockerfile);
+      expect(built.dockerfile).not.toContain('sentinel-docker');
+      expect(built.dockerfile).not.toContain('rev-a');
+    }
+  });
+
   it('returns no template for a session without repositories', () => {
     expect(new DockerFactorySandbox().template({ sessionId: 's', getRepositoryAccess: undefined }, {})).toBeUndefined();
   });

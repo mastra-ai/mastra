@@ -96,11 +96,16 @@ export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSet
     // The template clones under the same directory the sandbox runs in.
     const templateWorkingDirectory = ctx.workingDirectory ?? workingDirectory ?? workingDir;
     const owner = settings.owner ?? defaults?.owner;
+    // Docker template builds don't receive Factory build variables yet: the
+    // template's own `buildEnv` bakes values into the image and its identity,
+    // and the value-safe secret step would drop setup outputs outside the repo.
     const {
       resolveHead: _resolveHead,
       sessionId: _sessionId,
       sandboxId: _sandboxId,
       repoFullName: _name,
+      buildEnv: _buildEnv,
+      buildEnvRevision: _buildEnvRevision,
       ...rest
     } = ctx;
     return createDockerRepoTemplate({

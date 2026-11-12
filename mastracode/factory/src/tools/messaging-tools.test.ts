@@ -860,6 +860,26 @@ describe('side session tools', () => {
     });
   });
 
+  it('lists a run parked on a tool prompt as parked while it is still in flight', async () => {
+    const env = setup();
+    const controller = (await env.deps.messaging())!.controller as unknown as { getSession: ReturnType<typeof vi.fn> };
+    controller.getSession.mockImplementation(async (resourceId: string) => ({
+      thread: { getId: () => `thread-${resourceId}` },
+      stream: { isActive: () => true },
+      model: { get: () => '' },
+    }));
+    env.deps.liveSessions = () => ({
+      parked: sessionId => (sessionId === 'session-side' ? { toolName: 'submit_plan', suspendedAt: 0 } : undefined),
+      parkedIn: () => [],
+    });
+
+    const { sessions } = (await env.run(USER, 'factory_list_side_sessions', {})) as {
+      sessions: Array<{ sessionId: string; state: string }>;
+    };
+    expect(sessions.find(session => session.sessionId === 'session-side')?.state).toBe('parked');
+    expect(sessions.find(session => session.sessionId === 'session-side-muted')?.state).toBe('running');
+  });
+
   it('mutes a side session’s reports without stopping it, then resubscribes', async () => {
     const env = setup();
 
@@ -928,7 +948,6 @@ describe('Factory toolset composition', () => {
   const deps = {
     ...setup().deps,
     workItems: {},
-    comments: {},
     audit: {},
     boards: {},
     feed: {},

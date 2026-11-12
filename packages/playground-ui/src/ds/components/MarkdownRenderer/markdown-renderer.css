@@ -33,7 +33,7 @@
   .mastra-markdown :is(h1, h2, h3, h4, h5, h6) {
     margin: 1.6em 0 0.6em;
     color: var(--foreground);
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     letter-spacing: -0.012em;
     line-height: 1.35;
   }
@@ -54,9 +54,11 @@
     font-size: 1em;
   }
 
+  /* Markdown has one bold. Inside prose it has no size or colour change to lean on, so it
+     needs a bigger step than the strong weight (515) gives over regular text (465). */
   .mastra-markdown strong {
     color: var(--foreground);
-    font-weight: 500;
+    font-weight: 550;
   }
 
   .mastra-markdown em {

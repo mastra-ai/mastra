@@ -159,7 +159,12 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
     case 'get': {
       const { doc, hasMore } = await getLiveCacheDoc(ctx, request.key, now);
       if (hasMore) return { ok: true, result: null, hasMore: true };
-      if (!doc || doc.kind !== 'value') return { ok: true, result: null };
+      if (!doc) return { ok: true, result: null };
+      // Counters written by `increment` and `listPushIndexed` read back as
+      // numbers, as in the other server caches; replay uses them to find
+      // holes in the log and to detect a restarted log.
+      if (doc.kind === 'counter') return { ok: true, result: doc.counter ?? 0 };
+      if (doc.kind !== 'value') return { ok: true, result: null };
       return { ok: true, result: decodeValue(doc.value ?? 'null') };
     }
 

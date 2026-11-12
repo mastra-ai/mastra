@@ -53,23 +53,25 @@ describe('SkillSimpleForm', () => {
   });
 
   describe('when only the name is locked', () => {
-    it('locks the name and keeps description and instructions editable', () => {
+    it('shows the name as text, not a field, and keeps description and instructions editable', () => {
       const { container } = render(<EditableForm nameReadOnly />);
 
-      expect((screen.getByDisplayValue(skill.name) as HTMLInputElement).disabled).toBe(true);
+      expect(screen.getByRole('group', { name: 'Name' }).textContent).toContain(skill.name);
+      expect(screen.queryByDisplayValue(skill.name)).toBeNull();
       expect((screen.getByDisplayValue(skill.description) as HTMLInputElement).disabled).toBe(false);
       expect(container.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('true');
     });
   });
 
   describe('when the skill is read-only', () => {
-    it('renders the instructions as formatted markdown and locks the fields', () => {
+    it('renders the instructions as formatted markdown and shows name and description as text', () => {
       const { container } = render(<EditableForm readOnly />);
 
       expect(screen.getByRole('heading', { name: 'Release notes' }).tagName).toBe('H1');
       expect(container.querySelector('.cm-content')).toBeNull();
-      expect((screen.getByDisplayValue(skill.name) as HTMLInputElement).disabled).toBe(true);
-      expect((screen.getByDisplayValue(skill.description) as HTMLInputElement).disabled).toBe(true);
+      expect(screen.getByRole('group', { name: 'Name' }).textContent).toContain(skill.name);
+      expect(screen.getByRole('group', { name: 'Description' }).textContent).toContain(skill.description);
+      expect(screen.queryAllByRole('textbox')).toHaveLength(0);
     });
   });
 });

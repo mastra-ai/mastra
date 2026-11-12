@@ -4,17 +4,21 @@ import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { buildFactorySessionRow, buildUserSessionRow } from '../services/sessionRows';
-import type { SessionListRow } from '../services/sessionRows';
+import { pageLoadsBoard } from '../../factory/pageLoadsBoard';
+import { buildFactorySessionRow, buildUserSessionRow, oneRowPerCard } from '../services/sessionRows';
+import type { OneRowPerCardOptions, SessionListRow } from '../services/sessionRows';
 import { sessionWorkItemIndex } from '../services/sessionWorkItems';
 import { usePinnedSessions } from './usePinnedSessions';
 
-export function useSessionListRows(factoryId: string | undefined): {
+export function useSessionListRows(
+  factoryId: string | undefined,
+  options: OneRowPerCardOptions = {},
+): {
   rows: SessionListRow[];
   hasRepositories: boolean;
   loaded: boolean;
@@ -25,8 +29,7 @@ export function useSessionListRows(factoryId: string | undefined): {
   const { pathname } = useLocation();
   const query = useWorkspacesQuery(factoryId);
   const factory = useFactoryQuery(factoryId);
-  const workItems = useWorkItemsQuery(factoryId);
-  const parkedSessions = useParkedSessions(factoryId);
+  const sessionCards = useSidebarWorkItemsQuery(factoryId, pageLoadsBoard(pathname));
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const viewer = useFactoryAuth().data?.user;
@@ -44,12 +47,15 @@ export function useSessionListRows(factoryId: string | undefined): {
   };
   if (!factoryId) return { rows: [], ...loadState };
 
-  const workItemBySessionId = sessionWorkItemIndex(workItems.data ?? []);
+  const workItemBySessionId = sessionWorkItemIndex(sessionCards.data?.workItems ?? []);
+  const parkedSessions = new Set(sessionCards.data?.parkedSessionIds);
   const factoryRows = (query.data?.workspaces ?? []).flatMap(session => {
     const workItem = workItemBySessionId.get(session.sessionId);
     const running = runningById[session.sessionId] === true;
     const active = session.sessionId === routeSessionId;
-    const boardStillUnknown = workItem ? !catalog.isFetched : !workItems.isFetched;
+    // While the sidebar moves between its two lists, the other one still says which sessions hold no card.
+    const cardsStillUnknown = !sessionCards.isFetched && !sessionCards.isPlaceholderData;
+    const boardStillUnknown = workItem ? !catalog.isFetched : cardsStillUnknown;
     if (boardStillUnknown && !active && !running) return [];
     const attention =
       parkedSessions.has(session.sessionId) ||
@@ -80,11 +86,12 @@ export function useSessionListRows(factoryId: string | undefined): {
       pullRequest: workItem?.pullRequest,
       factoryId,
       pathname,
+      routeSessionId,
       running: runningById[session.sessionId] === true,
       pinned: pinnedSessions.has(session.sessionId),
       viewer,
     });
   });
 
-  return { rows: [...factoryRows, ...userRows], ...loadState };
+  return { rows: [...oneRowPerCard(factoryRows, catalog.data, options), ...userRows], ...loadState };
 }

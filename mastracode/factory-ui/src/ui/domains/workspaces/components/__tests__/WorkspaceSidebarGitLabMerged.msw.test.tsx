@@ -113,7 +113,10 @@ describe('Workspace sidebar GitLab merge status', () => {
     const { githubSubscriptionRequests } = stubSidebar('merged');
     renderSection();
 
-    expect(await screen.findByRole('img', { name: 'Merge request merged for Review loader' })).toBeInTheDocument();
+    // The card is the merge request, so its leading icon carries the state and the link describes it.
+    expect(
+      await screen.findByRole('link', { name: 'Review loader', description: /^Merged merge request/ }),
+    ).toBeInTheDocument();
     expect(githubSubscriptionRequests).not.toHaveBeenCalled();
   });
 
@@ -123,6 +126,8 @@ describe('Workspace sidebar GitLab merge status', () => {
 
     await screen.findByText('Review loader');
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(screen.queryByRole('img', { name: 'Merge request merged for Review loader' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Review loader', description: /^Merged merge request/ }),
+    ).not.toBeInTheDocument();
   });
 });
