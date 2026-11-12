@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 import type { CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
@@ -6,7 +7,7 @@ import { WORK_ITEM_PROVIDER_ADAPTERS, workItemProviderAdapter } from '../../../w
 import type { ExternalWorkItemSource } from './base.js';
 import type { BoardScope } from './board-version.js';
 import { FACTORY_WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SOURCES_SCHEMA } from './work-item-schema.js';
-import type { WorkItemDbRecord, WorkItemSourceDbRecord } from './work-item-schema.js';
+import type { WorkItemDbRecord, WorkItemSourceDbRecord, WorkItemSourceRow } from './work-item-schema.js';
 
 /**
  * An intake candidate is an open external record with no card: a work item and its source row,
@@ -89,6 +90,27 @@ export function candidateMarker(source: WorkItemSourceDbRecord): Partial<WorkIte
  * card is left to the card's own sync. Throws `UniqueViolationError` when another writer stores
  * the same record first; the caller retries in a new transaction.
  */
+/** Equal as stored JSON: a backend may hand an object back with its keys in another order. */
+function sameJson(left: unknown, right: unknown): boolean {
+  const stored = (value: unknown): unknown => JSON.parse(JSON.stringify(value ?? null));
+  return isDeepStrictEqual(stored(left), stored(right));
+}
+
+/** Whether storing the record again would change nothing, judged from a candidate already read. */
+export function candidateIsCurrent(
+  stored: {
+    title: string;
+    source: Pick<WorkItemSourceRow, 'url' | 'key' | 'state' | 'labels' | 'author' | 'metadata'>;
+  },
+  input: Pick<CandidateInput, 'source' | 'title' | 'metadata'>,
+): boolean {
+  const facts = workItemProviderAdapter(input.source).toSource(input.source, input.metadata);
+  if (!facts || stored.title !== input.title) return false;
+  return (['url', 'key', 'state', 'labels', 'author', 'metadata'] as const).every(column =>
+    sameJson(stored.source[column], facts[column]),
+  );
+}
+
 export async function storeCandidate(ops: FactoryStorageOps, input: CandidateInput): Promise<CandidateWrite> {
   const facts = workItemProviderAdapter(input.source).toSource(input.source, input.metadata);
   if (!facts) throw new Error('An intake candidate needs an external source.');
@@ -155,8 +177,8 @@ export async function storeCandidate(ops: FactoryStorageOps, input: CandidateInp
       const description = input.description === undefined ? work.description : input.description;
       if (work.title !== input.title || (work.description ?? null) !== (description ?? null))
         renamed = { title: input.title, description };
-      const same = (Object.keys(next) as (keyof typeof next)[]).every(
-        column => JSON.stringify(current[column] ?? null) === JSON.stringify(next[column] ?? null),
+      const same = (Object.keys(next) as (keyof typeof next)[]).every(column =>
+        sameJson(current[column], next[column]),
       );
       if (same && !renamed) return null;
       changed = true;

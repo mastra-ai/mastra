@@ -8,7 +8,7 @@ import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import { GitLabApiError } from './api.js';
 import { decodeIssueReference, encodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
-import { buildGitLabRoutes } from './routes.js';
+import { buildGitLabRoutes, listedIssueEvent, listedMergeRequestEvents } from './routes.js';
 
 function buildApp(
   gitlab: GitLabIntegrationBase,
@@ -105,14 +105,19 @@ describe('GitLab UI routes', () => {
     expect(body.pullRequests[0].externalId).toMatch(/^gitlab-pr:/);
     expect(target).toHaveBeenCalledWith({ orgId: 'org1', repositoryId: 'repo-1' });
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ includeDrafts: false, cursor: '1' }));
-    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'Merge Request Hook',
-      instanceHost: 'gitlab.com',
-      payload: expect.objectContaining({
-        project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
-        object_attributes: expect.objectContaining({ iid: 5, action: 'open', author: { username: 'rhys' } }),
+    // The list is a read: the intake pass offers merge requests to the rules.
+    expect(ingest).not.toHaveBeenCalled();
+    const listed = (await list.mock.results[0]!.value).pullRequests[0]!;
+    expect(listedMergeRequestEvents({ host: 'gitlab.com', projectId: 10, projectPath: 'acme/app' }, listed)).toEqual([
+      expect.objectContaining({
+        event: 'Merge Request Hook',
+        instanceHost: 'gitlab.com',
+        payload: expect.objectContaining({
+          project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
+          object_attributes: expect.objectContaining({ iid: 5, action: 'open', author: { username: 'rhys' } }),
+        }),
       }),
-    }));
+    ]);
   });
 
   it('reports direct server configuration without exposing credentials', async () => {
@@ -369,15 +374,19 @@ describe('GitLab UI routes', () => {
     expect(response.status).toBe(200);
     expect(decodeIssueReference(body.issues[0].externalId)).toMatchObject({ projectId: '10', issueIid: 42 });
     expect(gitlab.intake.listIssues).toHaveBeenCalledWith(expect.objectContaining({ sourceIds: [sourceId] }));
-    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
+    // The list is a read: the intake pass offers issues to the rules.
+    expect(ingest).not.toHaveBeenCalled();
+    const listed = (await vi.mocked(gitlab.intake.listIssues).mock.results[0]!.value).issues;
+    const events = listed.map(listedIssueEvent);
+    expect(events[0]).toEqual(expect.objectContaining({
       event: 'Issue Hook',
       payload: expect.objectContaining({
         project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
         object_attributes: expect.objectContaining({ iid: 42, action: 'open', author: { username: 'grace' } }),
       }),
     }));
-    expect(ingest.mock.calls[0]?.[0].payload.object_attributes.assignees).toBeUndefined();
-    expect(ingest.mock.calls[1]?.[0].payload.object_attributes.author).toBeUndefined();
+    expect((events[0]?.payload.object_attributes as Record<string, unknown>).assignees).toBeUndefined();
+    expect((events[1]?.payload.object_attributes as Record<string, unknown>).author).toBeUndefined();
   });
 
   it('loads details only for a selected GitLab source routed to the caller-owned Factory', async () => {

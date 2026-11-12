@@ -62,7 +62,7 @@ describe('IncidentioIntegration', () => {
     vi.stubEnv('MASTRACODE_INCIDENT_IO_RECONCILE_INTERVAL_MS', '60000');
     const integration = new IncidentioIntegration({ apiKey: 'incident-key' });
     const workers = integration.workers({
-      storage: { projects: { listAll: async () => [] } },
+      storage: { projects: { listAll: async () => [] }, generic: { settings: {} } },
       runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
     } as never) as unknown as Array<{ name: string; config: { intervalMs?: number } }>;
 
@@ -77,7 +77,7 @@ describe('IncidentioIntegration', () => {
 
     expect(
       integration.workers({
-        storage: { projects: { listAll: async () => [] } },
+        storage: { projects: { listAll: async () => [] }, generic: { settings: {} } },
         runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
       } as never),
     ).toEqual([]);

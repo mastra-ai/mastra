@@ -9,9 +9,11 @@ import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { withIntakePass } from '../../intake-pass.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.js';
 import { resolveLinearRules } from '../../linear/default-rules.js';
+import { attachLinearIntakePass } from '../../linear/intake-pass.js';
 import type {
   LinearConnectionCheck,
   LinearIntegration,
@@ -403,7 +405,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     if (!pollingEnabled && !reconcileEnabled) return [];
 
     const ingest = attachLinearRules(this, ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
+    const reconcile = reconcileEnabled
+      ? withIntakePass(attachLinearIssueReconciler(this, ctx), attachLinearIntakePass(this, ctx))
+      : undefined;
     const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];
@@ -453,7 +457,6 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
         projects: ctx.storage.projects,
-        ingestFactoryIssues: attachLinearRules(this, ctx),
         workItems: ctx.runtime?.workItems,
         boards: ctx.runtime?.boards,
       }).filter(route => !route.path.startsWith('/auth/linear/')),

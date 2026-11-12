@@ -48,8 +48,11 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { runIntakePassesForLink } from '../intake-pass.js';
+import type { IntakePass } from '../intake-pass.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
+import { attachGithubIntakePasses, withGithubIntakePasses } from './intake-pass.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -395,6 +398,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
+  #intakePasses: IntakePass[] = [];
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
   /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
@@ -1298,6 +1302,7 @@ export class GithubIntegration implements FactoryIntegration {
     this.#storage = ctx.storage;
     const ingestFactoryEvent = attachGithubRules(this, ctx);
     this.#ingestFactoryEvent = ingestFactoryEvent;
+    this.#intakePasses = attachGithubIntakePasses(this, ctx);
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -1322,6 +1327,7 @@ export class GithubIntegration implements FactoryIntegration {
    */
   async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
     await ingestLinkedRepositoryBacklog({ github: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
+    await runIntakePassesForLink(this.#intakePasses, this.sourceControlStorage, args);
   }
 
   /**
@@ -1345,7 +1351,7 @@ export class GithubIntegration implements FactoryIntegration {
     const discover = pullRequestEnabled
       ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
       : undefined;
-    const issues = issueEnabled
+    const issueSweep = issueEnabled
       ? attachGithubIssueReconciler(
           this,
           ctx,
@@ -1353,6 +1359,7 @@ export class GithubIntegration implements FactoryIntegration {
           input => this.listOpenIssueStates(input),
         )
       : undefined;
+    const issues = withGithubIntakePasses(issueSweep, attachGithubIntakePasses(this, ctx));
     if (!reconcile && !issues && !discover) return [];
 
     const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);

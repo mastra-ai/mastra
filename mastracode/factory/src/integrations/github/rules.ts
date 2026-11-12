@@ -53,6 +53,7 @@ import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
+import { settleGithubIntakeEvent } from './intake-candidates.js';
 import type { GithubRepositoryPermission } from './integration.js';
 import { isRepositoryPullRequest } from './pull-request-source.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -2331,7 +2332,14 @@ export function attachGithubRules(
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
   const rules = new GithubRules(options);
-  return event => rules.ingest(event);
+  return async event => {
+    const result = await rules.ingest(event);
+    // The rules' outcome stands whether or not the candidate was stored; the hourly pass repairs it.
+    await settleGithubIntakeEvent(options, event).catch(error => {
+      console.warn('[Mastra Factory] Failed to update the GitHub intake candidates', { error });
+    });
+    return result;
+  };
 }
 
 export function attachGithubReconciler(

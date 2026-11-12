@@ -63,7 +63,6 @@ function buildApp(
     authEnabled?: boolean;
     withIncidentio?: boolean;
     withIntake?: boolean;
-    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
   } = {},
 ) {
   const app = new Hono();
@@ -77,7 +76,6 @@ function buildApp(
       incidentio: (options.withIncidentio ?? true) ? incidentio : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
-      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues as never } : {}),
     }),
   );
   return app;
@@ -239,40 +237,18 @@ describe('issues route', () => {
     expect(res.status).toBe(400);
   });
 
-  it('ingests a board-scoped listing through the Factory rules', async () => {
+  it('serves a board-scoped listing as a read that files nothing', async () => {
     await bind(INCIDENTIO_FOLLOW_UPS_SOURCE_ID, projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
 
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/incidentio/issues?factoryProjectId=${projectA}`,
-    );
+    const res = await buildApp(org1()).request(`/web/incidentio/issues?factoryProjectId=${projectA}`);
 
     expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId: projectA,
-      issues: [
-        expect.objectContaining({
-          id: 'incidentio:follow-up:01HFOLLOWUP',
-          identifier: 'INC-42',
-          stateType: 'unstarted',
-          assignee: 'Grace Hopper',
-          author: 'Ada Lovelace',
-          sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
-        }),
-      ],
-    });
-  });
-
-  it('does not ingest an unscoped listing', async () => {
-    await bind(INCIDENTIO_FOLLOW_UPS_SOURCE_ID, projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/incidentio/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).not.toHaveBeenCalled();
+    expect((await res.json()).issues).toEqual([expect.objectContaining({ identifier: 'INC-42' })]);
+    // The server's intake pass files cards and keeps the candidates; the list only reads.
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: projectA })).toEqual([]);
+    expect(
+      (await seed.workItems.listIntakeCandidates({ orgId: 'org1', factoryProjectId: projectA, limit: 10 })).candidates,
+    ).toEqual([]);
   });
 });
 

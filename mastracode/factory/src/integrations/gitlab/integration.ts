@@ -23,6 +23,8 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { runIntakePassesForLink, withIntakePass } from '../intake-pass.js';
+import type { IntakePass } from '../intake-pass.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildGitLabAgentTools } from './agent-tools.js';
 import {
@@ -35,6 +37,7 @@ import {
 import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
+import { attachGitLabIntakePasses } from './intake-pass.js';
 import { attachGitLabReconciler } from './reconciler.js';
 import { gitlabReconciliationEnabled, gitlabReconciliationInterval } from './reconciliation-config.js';
 import { buildGitLabRoutes, ingestLinkedGitLabRepositoryBacklog } from './routes.js';
@@ -114,6 +117,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   #integrationStorage: GitLabSubscriptionStorage | undefined;
   #auth: RouteAuth | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGitLabRules>;
+  #intakePasses: IntakePass[] = [];
   readonly #orgIdByResourceId = new Map<string, string | null>();
   readonly rules: GitLabEventRules;
 
@@ -342,7 +346,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!gitlabReconciliationEnabled()) return [];
-    const reconcile = attachGitLabReconciler(this, ctx);
+    const reconcile = withIntakePass(attachGitLabReconciler(this, ctx), ...attachGitLabIntakePasses(this, ctx));
     if (!reconcile) return [];
     const intervalMs = gitlabReconciliationInterval();
     return [
@@ -356,6 +360,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGitLabRules(this, ctx);
     this.#ingestFactoryEvent = ingestFactoryEvent;
+    this.#intakePasses = attachGitLabIntakePasses(this, ctx);
     return buildGitLabRoutes({
       gitlab: this,
       auth: ctx.auth,
@@ -370,6 +375,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
 
   async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
     await ingestLinkedGitLabRepositoryBacklog({ gitlab: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
+    if (this.sourceControlStorage) await runIntakePassesForLink(this.#intakePasses, this.sourceControlStorage, args);
   }
 
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {

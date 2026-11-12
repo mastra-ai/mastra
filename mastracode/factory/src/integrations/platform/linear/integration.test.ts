@@ -8,6 +8,7 @@ import { createBoardRegistry } from '../../../boards/index.js';
 import { createStateSigner } from '../../../state-signing.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
+import { attachLinearIntakePass } from '../../linear/intake-pass.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -1316,7 +1317,7 @@ describe('PlatformLinearIntegration', () => {
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('attaches Linear rules to fetched Platform issues', async () => {
+  it('offers a new Platform issue to the Linear rules from the intake pass, not from the list', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
@@ -1348,7 +1349,7 @@ describe('PlatformLinearIntegration', () => {
       orgId: 'org-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
-    // Board reads only ingest sources explicitly bound to the project.
+    // The pass only reads sources explicitly bound to the project.
     await seed.intake.setBinding({
       orgId: 'org-1',
       userId: 'user-1',
@@ -1385,6 +1386,11 @@ describe('PlatformLinearIntegration', () => {
     const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
 
     expect(response.status).toBe(200);
+    expect(onEvent).not.toHaveBeenCalled();
+
+    const summary = await attachLinearIntakePass(integration, context)!();
+
+    expect(summary).toMatchObject({ failed: 0 });
     expect(onEvent).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -26,6 +26,7 @@ import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.js';
 import { IncidentioApiClient, IncidentioApiError } from '../../incidentio/api.js';
 import { resolveIncidentioRules } from '../../incidentio/default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from '../../incidentio/default-rules.js';
+import { attachIncidentioIntakePass } from '../../incidentio/intake-pass.js';
 import {
   createIncidentioIntake,
   INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
@@ -37,7 +38,7 @@ import {
   incidentioReconciliationInterval,
 } from '../../incidentio/reconciliation-config.js';
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
-import { attachIncidentioRules } from '../../incidentio/rules.js';
+import { withIntakePass } from '../../intake-pass.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { PlatformApiClientConfig } from '../api-client.js';
@@ -493,7 +494,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!incidentioReconciliationEnabled()) return [];
-    const reconcile = attachIncidentioIssueReconciler(this, ctx);
+    const reconcile = withIntakePass(attachIncidentioIssueReconciler(this, ctx), attachIncidentioIntakePass(this, ctx));
     if (!reconcile) return [];
     const intervalMs = incidentioReconciliationInterval();
     return [
@@ -517,7 +518,6 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
       mode: 'platform',
       auth: ctx.auth,
       intake: ctx.storage.intake,
-      ingestFactoryIssues: attachIncidentioRules(this, ctx),
     });
   }
 

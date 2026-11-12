@@ -36,14 +36,15 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { withIntakePass } from '../intake-pass.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
 import { resolveLinearRules } from './default-rules.js';
+import { attachLinearIntakePass } from './intake-pass.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
 import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
-import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -1149,7 +1150,7 @@ export class LinearIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!linearIssueReconciliationEnabled()) return [];
-    const reconcile = attachLinearIssueReconciler(this, ctx);
+    const reconcile = withIntakePass(attachLinearIssueReconciler(this, ctx), attachLinearIntakePass(this, ctx));
     if (!reconcile) return [];
     const intervalMs = linearIssueReconciliationInterval();
     return [
@@ -1174,7 +1175,6 @@ export class LinearIntegration implements FactoryIntegration {
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
       projects: ctx.storage.projects,
-      ingestFactoryIssues: attachLinearRules(this, ctx),
       workItems: ctx.runtime?.workItems,
       boards: ctx.runtime?.boards,
     });

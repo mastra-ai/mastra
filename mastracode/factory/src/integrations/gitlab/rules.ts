@@ -41,6 +41,7 @@ import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GitLabEventRules } from './default-rules.js';
+import { mergeRequestSourceKey, settleGitLabIntakeEvent } from './intake-candidates.js';
 import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
 
@@ -209,10 +210,6 @@ function carriesAttachedMergeRequest(item: Card, mergeRequestKey: string): boole
     item.externalSource?.type !== 'pull-request' &&
     pullRequestSources(item).some(source => source.integrationId === 'gitlab' && source.externalId === `pull-request:${mergeRequestKey}`)
   );
-}
-
-function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
-  return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
 }
 
 async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -961,5 +958,13 @@ export function attachGitLabRules(
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
   });
-  return event => rules.ingest(event);
+  const candidates = { storage: context.runtime.workItems, sourceControl: context.storage.sourceControl };
+  return async event => {
+    const result = await rules.ingest(event);
+    // The rules' outcome stands whether or not the candidate was removed; the next pass repairs it.
+    await settleGitLabIntakeEvent(candidates, event).catch(error => {
+      console.warn('[Mastra Factory] Failed to update the GitLab intake candidates', { error });
+    });
+    return result;
+  };
 }

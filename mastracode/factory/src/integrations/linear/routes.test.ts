@@ -71,7 +71,6 @@ function buildApp(
   options: {
     signer?: StateSigner | null;
     authEnabled?: boolean;
-    ingestFactoryIssues?: Parameters<typeof buildLinearRoutes>[0]['ingestFactoryIssues'];
   } = {},
 ) {
   const app = new Hono();
@@ -88,7 +87,6 @@ function buildApp(
       stateSigner: options.signer === undefined ? stateSigner : (options.signer ?? undefined),
       intake: seed.intake,
       projects: seed.projects,
-      ingestFactoryIssues: options.ingestFactoryIssues,
       workItems: seed.workItems,
     }),
   );
@@ -266,9 +264,8 @@ describe('issues route', () => {
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
   });
 
-  it('ingests fetched issues for the active Factory project onto Work', async () => {
+  it('lists the issues of the active Factory project and files nothing', async () => {
     await connect();
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
     await createProject(factoryProjectId);
     await seed.intake.setBinding({
@@ -277,22 +274,20 @@ describe('issues route', () => {
       sourceId: 'proj-1',
       factoryProjectId,
     });
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/linear/issues?factoryProjectId=${factoryProjectId}`,
-    );
+    const res = await buildApp(org1()).request(`/web/linear/issues?factoryProjectId=${factoryProjectId}`);
 
     expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId,
-      issues: expect.arrayContaining([
-        expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42', assignee: 'ada', creator: 'grace' }),
-      ]),
-    });
+    expect((await res.json()).issues).toEqual([
+      expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42', assignee: 'ada', creator: 'grace' }),
+    ]);
+    // The list is a read: the server's intake pass files cards and keeps the candidates.
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId })).toEqual([]);
+    expect(
+      (await seed.workItems.listIntakeCandidates({ orgId: 'org1', factoryProjectId, limit: 10 })).candidates,
+    ).toEqual([]);
   });
 
-  it('ingests a projectless team-sourced issue onto Work', async () => {
+  it('lists a projectless issue under the team source that routes it', async () => {
     await connect();
     const teamSourceId = 'linear-team:team-1';
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
@@ -331,21 +326,13 @@ describe('issues route', () => {
       ],
       nextCursor: null,
     });
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
 
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/linear/issues?factoryProjectId=${factoryProjectId}`,
-    );
+    const res = await buildApp(org1()).request(`/web/linear/issues?factoryProjectId=${factoryProjectId}`);
 
     expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId,
-      issues: expect.arrayContaining([
-        expect.objectContaining({ id: 'issue-9', identifier: 'ENG-99', sourceId: teamSourceId }),
-      ]),
-    });
+    expect((await res.json()).issues).toEqual([
+      expect.objectContaining({ id: 'issue-9', identifier: 'ENG-99', sourceId: teamSourceId }),
+    ]);
   });
 
   describe('Factory project scoping', () => {
@@ -369,19 +356,15 @@ describe('issues route', () => {
       });
     });
 
-    it('resolves attribution across all sources before ingesting the requested project', async () => {
+    it('resolves attribution across all sources before listing the requested project', async () => {
       await seedProjects(2);
       await bind('proj-1', projectA);
       await bind('proj-2', projectB);
-      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
 
-      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-        `/web/linear/issues?factoryProjectId=${projectA}`,
-      );
+      const res = await buildApp(org1()).request(`/web/linear/issues?factoryProjectId=${projectA}`);
 
       expect(res.status).toBe(200);
       expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
-      expect(ingestFactoryIssues).toHaveBeenCalledWith(expect.objectContaining({ factoryProjectId: projectA }));
     });
 
     it('does not route a selected-project issue through a team bound to another Factory project', async () => {
@@ -421,11 +404,8 @@ describe('issues route', () => {
       const listIssues = vi
         .spyOn(linear.intake, 'listIssues')
         .mockResolvedValue({ issues: [projectIssue, teamIssue], nextCursor: null });
-      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
 
-      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-        `/web/linear/issues?factoryProjectId=${projectB}`,
-      );
+      const res = await buildApp(org1()).request(`/web/linear/issues?factoryProjectId=${projectB}`);
 
       expect(res.status).toBe(200);
       expect(listIssues).toHaveBeenCalledWith(
@@ -438,39 +418,25 @@ describe('issues route', () => {
         issues: [expect.objectContaining({ id: 'issue-2', sourceId: teamSourceId })],
         nextCursor: null,
       });
-      expect(ingestFactoryIssues).toHaveBeenCalledWith(
-        expect.objectContaining({
-          factoryProjectId: projectB,
-          issues: [expect.objectContaining({ id: 'issue-2', sourceId: teamSourceId })],
-        }),
-      );
     });
-    it('does not ingest another project sources when its board is viewed', async () => {
+    it('does not list another project sources when its board is viewed', async () => {
       await seedProjects(2);
       await bind('proj-1', projectA);
-      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
 
-      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-        `/web/linear/issues?factoryProjectId=${projectB}`,
-      );
+      const res = await buildApp(org1()).request(`/web/linear/issues?factoryProjectId=${projectB}`);
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ issues: [], nextCursor: null });
       expect(listActiveLinearIssues).not.toHaveBeenCalled();
-      expect(ingestFactoryIssues).not.toHaveBeenCalled();
     });
 
-    it('ingests nothing for unbound sources, even when the org has a single project', async () => {
+    it('lists nothing for unbound sources, even when the org has a single project', async () => {
       await seedProjects(1);
-      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
 
-      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-        `/web/linear/issues?factoryProjectId=${projectA}`,
-      );
+      const res = await buildApp(org1()).request(`/web/linear/issues?factoryProjectId=${projectA}`);
 
       expect(await res.json()).toEqual({ issues: [], nextCursor: null });
       expect(listActiveLinearIssues).not.toHaveBeenCalled();
-      expect(ingestFactoryIssues).not.toHaveBeenCalled();
     });
 
     it('lists every selected source when no Factory project is in play', async () => {
@@ -485,14 +451,10 @@ describe('issues route', () => {
 
   it('rejects malformed Factory project identifiers before fetching issues', async () => {
     await connect();
-    const ingestFactoryIssues = vi.fn();
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      '/web/linear/issues?factoryProjectId=not-a-uuid',
-    );
+    const res = await buildApp(org1()).request('/web/linear/issues?factoryProjectId=not-a-uuid');
 
     expect(res.status).toBe(400);
     expect(listActiveLinearIssues).not.toHaveBeenCalled();
-    expect(ingestFactoryIssues).not.toHaveBeenCalled();
   });
 
   it('forwards the pagination cursor', async () => {

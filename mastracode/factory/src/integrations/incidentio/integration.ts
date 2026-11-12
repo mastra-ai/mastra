@@ -6,16 +6,17 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { withIntakePass } from '../intake-pass.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildIncidentioAgentTools } from './agent-tools.js';
 import { IncidentioApiClient } from './api.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from './default-rules.js';
+import { attachIncidentioIntakePass } from './intake-pass.js';
 import { createIncidentioIntake } from './intake.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
 import { incidentioReconciliationEnabled, incidentioReconciliationInterval } from './reconciliation-config.js';
 import { buildIncidentioRoutes } from './routes.js';
-import { attachIncidentioRules } from './rules.js';
 
 export interface IncidentioIntegrationConfig {
   apiKey?: string;
@@ -148,7 +149,7 @@ export class IncidentioIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!incidentioReconciliationEnabled()) return [];
-    const reconcile = attachIncidentioIssueReconciler(this, ctx);
+    const reconcile = withIntakePass(attachIncidentioIssueReconciler(this, ctx), attachIncidentioIntakePass(this, ctx));
     if (!reconcile) return [];
     const intervalMs = incidentioReconciliationInterval();
     return [
@@ -171,7 +172,6 @@ export class IncidentioIntegration implements FactoryIntegration {
       mode: 'api-key',
       auth: ctx.auth,
       intake: ctx.storage.intake,
-      ingestFactoryIssues: attachIncidentioRules(this, ctx),
     });
   }
 

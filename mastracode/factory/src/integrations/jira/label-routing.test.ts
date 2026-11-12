@@ -1,8 +1,8 @@
 /**
  * One Jira project feeding several factories, split by label (FACT-440), end
- * to end on both Jira paths: real bindings storage, the real route and
- * integration code, and real card filing, with only Jira itself faked at the
- * HTTP edge (it evaluates the JQL each factory sends).
+ * to end on both Jira paths: real bindings storage, the real intake pass,
+ * route and integration code, and real card filing, with only Jira itself
+ * faked at the HTTP edge (it evaluates the JQL each factory sends).
  */
 import type { ApiRoute } from '@mastra/core/server';
 import { Hono } from 'hono';
@@ -15,13 +15,13 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import type { IntegrationContext } from '../base.js';
+import type { IntakePass } from '../intake-pass.js';
 import { encodeIssueReference, encodeSourceId, PlatformJiraIntegration } from '../platform/jira/integration.js';
 import { buildPlatformJiraRoutes } from '../platform/jira/routes.js';
-import { resolveJiraRules } from './default-rules.js';
+import { attachJiraIntakePass } from './intake-pass.js';
 import { JiraIntegration } from './integration.js';
 import { buildJiraRoutes } from './routes.js';
-import { JiraRules } from './rules.js';
-import type { JiraRulesIngress } from './rules.js';
 import { jiraIssuePayload, matchesJql } from './test-utils.js';
 import type { FakeJiraIssue } from './test-utils.js';
 
@@ -69,7 +69,7 @@ interface JiraPath {
   sourceId: string;
   /** The `issueRef` the board passes to the single-issue route. */
   issueRef(key: string): string;
-  routes(seed: FactoryStorageTestSeed, ingest: (input: JiraRulesIngress) => Promise<unknown>): ApiRoute[];
+  build(seed: FactoryStorageTestSeed): { jira: JiraIntegration | PlatformJiraIntegration; routes: ApiRoute[] };
 }
 
 const paths: JiraPath[] = [
@@ -77,7 +77,7 @@ const paths: JiraPath[] = [
     name: 'direct Jira',
     sourceId: OPS.projectId,
     issueRef: key => key,
-    routes(seed, ingest) {
+    build(seed) {
       vi.stubGlobal(
         'fetch',
         vi.fn(async (input: URL | string, init?: RequestInit) => {
@@ -91,20 +91,17 @@ const paths: JiraPath[] = [
         email: 'ops@acme.test',
         apiToken: 't',
       });
-      return buildJiraRoutes({
+      return {
         jira,
-        auth: fakeRouteAuth(),
-        intake: seed.intake,
-        workItems: seed.workItems,
-        ingestFactoryIssues: ingest,
-      });
+        routes: buildJiraRoutes({ jira, auth: fakeRouteAuth(), intake: seed.intake, workItems: seed.workItems }),
+      };
     },
   },
   {
     name: 'Platform Jira',
     sourceId: encodeSourceId('a1b_acme', OPS.projectId),
     issueRef: key => encodeIssueReference({ connectionId: 'a1b_acme', issueId: key, projectId: OPS.projectId }),
-    routes(seed, ingest) {
+    build(seed) {
       vi.stubGlobal(
         'fetch',
         vi.fn(async (input: URL | string, init?: RequestInit) => {
@@ -130,14 +127,16 @@ const paths: JiraPath[] = [
       const jira = new PlatformJiraIntegration({
         clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
       });
-      return buildPlatformJiraRoutes({
+      return {
         jira,
-        auth: fakeRouteAuth(),
-        intake: seed.intake,
-        workItems: seed.workItems,
-        appDbConfigured: true,
-        ingestFactoryIssues: ingest,
-      });
+        routes: buildPlatformJiraRoutes({
+          jira,
+          auth: fakeRouteAuth(),
+          intake: seed.intake,
+          workItems: seed.workItems,
+          appDbConfigured: true,
+        }),
+      };
     },
   },
 ];
@@ -152,26 +151,25 @@ afterEach(() => {
 describe.each(paths)('Jira project shared by label — $name', path => {
   let seed: FactoryStorageTestSeed;
   let app: Hono;
+  let intakePass: IntakePass;
   let factories: Record<'platform' | 'payments' | 'mobile', string>;
 
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-05T09:00:00.000Z'));
     seed = await createFactoryStorageForTests();
-    const rules = new JiraRules({
-      projects: seed.projects,
-      storage: seed.workItems,
-      configVersion: 'factory-config-v1',
-      boards: createBoardRegistry(),
-      jiraRules: resolveJiraRules(),
-    });
+    const { jira, routes } = path.build(seed);
+    intakePass = attachJiraIntakePass(jira, {
+      storage: { generic: seed.integrations.forIntegration('jira'), projects: seed.projects, intake: seed.intake },
+      runtime: { configVersion: 'factory-config-v1', workItems: seed.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext)!;
     app = new Hono();
     app.use('*', async (c, next) => {
       c.set('factoryAuthUser' as never, { workosId: 'u1', organizationId: 'org1' } as never);
       await next();
     });
     mountApiRoutes(app, [
-      ...path.routes(seed, input => rules.ingest(input)),
+      ...routes,
       ...new ProjectRoutes({
         auth: fakeRouteAuth(),
         projects: seed.projects,
@@ -205,7 +203,9 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     await bind(factories.mobile, ['mobile', 'ios']);
   });
 
+  /** The server's intake pass over one factory, then the list its board would read. */
   const poll = async (factoryProjectId: string) => {
+    expect(await intakePass({ orgId: 'org1', factoryProjectId })).toMatchObject({ failed: 0 });
     const response = await app.request(`/web/jira/issues?factoryProjectId=${factoryProjectId}`);
     expect(response.status).toBe(200);
     return ((await response.json()) as { issues: Array<{ identifier: string }> }).issues.map(issue => issue.identifier);

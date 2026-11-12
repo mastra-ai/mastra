@@ -38,6 +38,7 @@ import type {
 import type { RouteAuth } from '../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { withIntakePass } from '../intake-pass.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { adfToText } from './adf.js';
 import { buildJiraAgentTools } from './agent-tools.js';
@@ -47,10 +48,10 @@ import type { JiraEventRules, JiraRuleOverrides } from './default-rules.js';
 import { resolveJiraRules } from './default-rules.js';
 import { buildIntakeJql, unfilteredJiraScopes } from './intake-jql.js';
 import type { JiraIntakeScope } from './intake-jql.js';
+import { attachJiraIntakePass, jiraIssueIngress } from './intake-pass.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
-import { attachJiraRules } from './rules.js';
 
 /** Deployment-global Jira Cloud credentials. All credential fields are required. */
 export interface JiraIntegrationConfig {
@@ -305,6 +306,12 @@ export class JiraIntegration implements FactoryIntegration {
     return { issues: page.issues, nextCursor: page.nextCursor };
   }
 
+  /** One page of the scopes' active issues as the rules take them, for the intake pass. */
+  async listIntakeIssues(cursor: string | undefined, scopes: JiraIntakeScope[]) {
+    const page = await this.listActiveIssues(cursor, scopes);
+    return { ...page, issues: page.issues.map(issue => jiraIssueIngress(issue.id, issue, null)) };
+  }
+
   /**
    * One page of active issues (status category not Done), most recently
    * updated first, optionally narrowed to the given project scopes and labels.
@@ -448,7 +455,6 @@ export class JiraIntegration implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage.intake,
       workItems: ctx.runtime?.workItems,
-      ingestFactoryIssues: attachJiraRules(this, ctx),
     });
   }
 
@@ -459,7 +465,7 @@ export class JiraIntegration implements FactoryIntegration {
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!jiraReconciliationEnabled()) return [];
-    const reconcile = attachJiraIssueReconciler(this, ctx);
+    const reconcile = withIntakePass(attachJiraIssueReconciler(this, ctx), attachJiraIntakePass(this, ctx));
     if (!reconcile) return [];
     const intervalMs = jiraReconciliationInterval();
     return [

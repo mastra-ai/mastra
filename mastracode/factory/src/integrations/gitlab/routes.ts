@@ -10,6 +10,7 @@ import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { GitLabApiError } from './api.js';
+import { mergeRequestSourceKey } from './intake-candidates.js';
 import {
   decodeIssueReference,
   decodeSourceId,
@@ -90,10 +91,6 @@ function positiveId(value: string | undefined): number | null {
   return value && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(number) ? number : null;
 }
 
-function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
-  return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
-}
-
 const LINKED_BACKLOG_MAX_PAGES = 5;
 const POLLED_ACTOR = '__factory_poll__';
 
@@ -129,7 +126,7 @@ function listedMergeRequestEvent(
   };
 }
 
-function listedMergeRequestEvents(
+export function listedMergeRequestEvents(
   project: { host: string; projectId: number; projectPath: string },
   pr: PullRequest,
 ): ParsedGitLabWebhook[] {
@@ -152,7 +149,7 @@ function listedMergeRequestEvents(
   ];
 }
 
-function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
+export function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
   const source = decodeSourceId(issue.sourceId ?? '');
   const projectId = source && positiveId(source.projectId);
   const iid = positiveId(issue.id);
@@ -438,12 +435,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               includeDrafts: false,
               cursor: String(page),
             });
-            await ingestListedEvents(
-              result.pullRequests.flatMap(pr =>
-                listedMergeRequestEvents({ host: linked.host, projectId, projectPath: linked.repository.slug }, pr),
-              ),
-              options.ingestFactoryEvent,
-            );
             return c.json({
               pullRequests: result.pullRequests.map(pr => ({
                 number: Number(pr.id),
@@ -550,7 +541,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               sourceIds,
               cursor: c.req.query('after')?.trim() || undefined,
             });
-            await ingestListedEvents(result.issues.map(listedIssueEvent), options.ingestFactoryEvent);
             return c.json({
               ...result,
               issues: result.issues.map(issue => {

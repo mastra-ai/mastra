@@ -51,6 +51,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
 import { resolveGithubRules } from '../../github/default-rules.js';
+import { attachGithubIntakePasses, withGithubIntakePasses } from '../../github/intake-pass.js';
 import type {
   GithubIntegration,
   GithubRepositoryPermission,
@@ -77,6 +78,8 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
+import { runIntakePassesForLink } from '../../intake-pass.js';
+import type { IntakePass } from '../../intake-pass.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -265,6 +268,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
+  #intakePasses: IntakePass[] = [];
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
@@ -718,6 +722,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGithubRules(this, ctx);
     this.#ingestFactoryEvent = ingestFactoryEvent;
+    this.#intakePasses = attachGithubIntakePasses(this, ctx);
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -754,6 +759,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       ...args,
       ingestFactoryEvent: this.#ingestFactoryEvent,
     });
+    await runIntakePassesForLink(this.#intakePasses, this.storage, args);
   }
 
   #statusRoute(ctx: IntegrationContext): ApiRoute {
@@ -924,11 +930,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
-          ? attachGithubIssueReconciler(
-              this,
-              ctx,
-              input => this.fetchIssueState(input),
-              input => this.listOpenIssueStates(input),
+          ? withGithubIntakePasses(
+              attachGithubIssueReconciler(
+                this,
+                ctx,
+                input => this.fetchIssueState(input),
+                input => this.listOpenIssueStates(input),
+              ),
+              attachGithubIntakePasses(this, ctx),
             )
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,

@@ -46,7 +46,7 @@ describe('PlatformIncidentioIntegration', () => {
       clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' },
     });
     const workers = integration.workers({
-      storage: { projects: { listAll: async () => [] } },
+      storage: { projects: { listAll: async () => [] }, generic: { settings: {} } },
       runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
     } as never);
 

@@ -65,7 +65,7 @@ afterEach(() => {
 describe('JiraIntegration workers', () => {
   it('registers a Jira issue reconciliation worker, matching the Platform integration', () => {
     const workers = integration().workers({
-      storage: { projects: { listAll: async () => [] } },
+      storage: { projects: { listAll: async () => [] }, generic: { settings: {} } },
       runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
     } as never);
 
@@ -76,7 +76,7 @@ describe('JiraIntegration workers', () => {
     vi.stubEnv('MASTRACODE_JIRA_RECONCILE_ENABLED', 'false');
     try {
       const workers = integration().workers({
-        storage: { projects: { listAll: async () => [] } },
+        storage: { projects: { listAll: async () => [] }, generic: { settings: {} } },
         runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
       } as never);
 

@@ -21,6 +21,7 @@ import type {
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { withIntakePass } from '../../intake-pass.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
@@ -29,9 +30,9 @@ import type { JiraEventRules, JiraRuleOverrides } from '../../jira/default-rules
 import { resolveJiraRules } from '../../jira/default-rules.js';
 import { buildIntakeJql, unfilteredJiraScopes } from '../../jira/intake-jql.js';
 import type { JiraIntakeScope } from '../../jira/intake-jql.js';
+import { attachJiraIntakePass, jiraIssueIngress } from '../../jira/intake-pass.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
-import { attachJiraRules } from '../../jira/rules.js';
 import { logPlatformInfo, PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { PlatformApiClientConfig } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
@@ -264,6 +265,12 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   async #listIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const page = await this.listActiveIssues(input.cursor, unfilteredJiraScopes(input.sourceIds ?? []), input.labels);
     return { issues: page.issues, nextCursor: page.nextCursor };
+  }
+
+  /** One page of the scopes' active issues as the rules take them, for the intake pass. */
+  async listIntakeIssues(cursor: string | undefined, scopes: JiraIntakeScope[]) {
+    const page = await this.listActiveIssues(cursor, scopes);
+    return { ...page, issues: page.issues.map(issue => jiraIssueIngress(issue.externalId, issue, issue.site)) };
   }
 
   /**
@@ -509,7 +516,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!jiraReconciliationEnabled()) return [];
-    const reconcile = attachJiraIssueReconciler(this, ctx);
+    const reconcile = withIntakePass(attachJiraIssueReconciler(this, ctx), attachJiraIntakePass(this, ctx));
     if (!reconcile) return [];
     const intervalMs = jiraReconciliationInterval();
     return [
@@ -528,7 +535,6 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       intake: ctx.storage.intake,
       workItems: ctx.runtime?.workItems,
       appDbConfigured: Boolean(ctx.factoryStorage),
-      ingestFactoryIssues: attachJiraRules(this, ctx),
     });
   }
 

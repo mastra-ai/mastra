@@ -22,13 +22,12 @@ import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { IncidentioApiError } from './api.js';
-import type { IncidentioRulesIngress } from './rules.js';
+import { incidentioFollowUpIngress } from './intake-pass.js';
 
 type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ITEM_REF_RE = /^incidentio:(?:follow-up|incident):[\w-]+$/;
-const FOLLOW_UP_PREFIX = 'incidentio:follow-up:';
 
 /**
  * Non-secret diagnostic snapshot of every incident.io feature gate, mirroring
@@ -57,12 +56,6 @@ export interface MountIncidentioRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  /**
-   * Factory rules ingress for observed follow-ups. When present, a
-   * board-scoped listing also materializes new cards through the incident.io
-   * event rules — the same automatic intake Linear and Jira have.
-   */
-  ingestFactoryIssues?: (input: IncidentioRulesIngress) => Promise<unknown>;
 }
 
 /**
@@ -138,23 +131,6 @@ function incidentioFetchError(c: RouteContext, err: unknown) {
     );
   }
   return c.json({ error: 'incidentio_fetch_failed', message: err instanceof Error ? err.message : String(err) }, 502);
-}
-
-interface IncidentioIssuePayload {
-  id: string;
-  identifier: string;
-  title: string;
-  url: string;
-  author: string | null;
-  state: string;
-  stateType: string;
-  priorityLabel: string;
-  assignee: string | null;
-  incident: string | null;
-  labels: string[];
-  createdAt: string;
-  updatedAt: string;
-  sourceId: string | null;
 }
 
 /**
@@ -261,40 +237,9 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
             sourceIds,
             ...(after ? { cursor: after } : {}),
           });
-          const issuePayload: IncidentioIssuePayload[] = [];
-          for (const item of page.items) {
-            const externalId = item.source.externalId;
-            // Incidents stay out of intake even when a stale binding selects
-            // the incidents source — only follow-ups are served.
-            if (!externalId.startsWith(FOLLOW_UP_PREFIX)) continue;
-            const metadata = item.metadata ?? {};
-            const identifier = typeof metadata.identifier === 'string' ? metadata.identifier : externalId;
-            const titlePrefix = `${identifier}: `;
-            issuePayload.push({
-              id: externalId,
-              identifier,
-              title: item.title.startsWith(titlePrefix) ? item.title.slice(titlePrefix.length) : item.title,
-              url: item.source.url ?? '',
-              author: typeof metadata.author === 'string' ? metadata.author : null,
-              state: item.status ?? '',
-              stateType: typeof metadata.stateType === 'string' ? metadata.stateType : '',
-              priorityLabel: typeof metadata.priority === 'string' ? metadata.priority : '',
-              assignee: item.assignee ?? null,
-              incident: typeof metadata.incidentioIncidentId === 'string' ? metadata.incidentioIncidentId : null,
-              labels: item.labels ?? [],
-              createdAt: item.createdAt ?? '',
-              updatedAt: item.updatedAt ?? '',
-              sourceId: item.sourceId || null,
-            });
-          }
-          if (factoryProjectId && boundSourceIds && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload,
-            });
-          }
+          // Incidents stay out of intake even when a stale binding selects
+          // the incidents source — only follow-ups are served.
+          const issuePayload = page.items.flatMap(item => incidentioFollowUpIngress(item) ?? []);
           return c.json({ issues: issuePayload, nextCursor: page.nextCursor });
         } catch (err) {
           return incidentioFetchError(loose(c), err);
