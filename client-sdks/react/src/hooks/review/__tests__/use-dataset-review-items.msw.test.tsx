@@ -271,6 +271,69 @@ describe('useReviewItems', () => {
       expect(result.current.hasNextPage).toBe(false);
     });
 
+    it('stops loading hidden review pages when the sentinel is detached', async () => {
+      let observer: IntersectionObserverCallback | undefined;
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(callback: IntersectionObserverCallback) {
+            observer = callback;
+          }
+          observe() {}
+          disconnect() {}
+        },
+      );
+      const requests: number[] = [];
+      let finishNextPage: (() => void) | undefined;
+      server.use(
+        http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, async ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          requests.push(page);
+          if (page === 1) await new Promise<void>(resolve => (finishNextPage = resolve));
+          const results = manyResults(
+            1000,
+            Array.from({ length: 1000 }, (_, index) => index),
+          );
+          return HttpResponse.json({
+            results: results.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: results.length, page, perPage, hasMore: (page + 1) * perPage < results.length },
+          });
+        }),
+      );
+
+      const { result } = renderHook(() => useInfiniteReviewItems({ experiments: [experiment] }), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.data).toHaveLength(100));
+      const sentinel = document.createElement('div');
+      act(() => result.current.setEndOfListElement(sentinel));
+      const bounds = sentinel.getBoundingClientRect();
+      act(() =>
+        observer?.(
+          [
+            {
+              isIntersecting: true,
+              target: sentinel,
+              boundingClientRect: bounds,
+              intersectionRect: bounds,
+              intersectionRatio: 1,
+              rootBounds: null,
+              time: 0,
+            },
+          ],
+          {} as IntersectionObserver,
+        ),
+      );
+      await waitFor(() => expect(requests).toEqual([0, 1]));
+
+      act(() => result.current.setEndOfListElement(null));
+      await act(async () => finishNextPage?.());
+      await waitFor(() => expect(result.current.data).toHaveLength(200));
+      expect(requests).toEqual([0, 1]);
+    });
+
     it('keeps every pending result when a review is completed while the next page loads', async () => {
       vi.stubGlobal(
         'IntersectionObserver',
