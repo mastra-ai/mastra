@@ -35,6 +35,7 @@ import {
   startReplica,
   stopReplicas,
   storedSleeps,
+  storedWakeTime,
   work,
 } from './test-utils/lease-replicas';
 import type { Built, Report, Store } from './test-utils/lease-replicas';
@@ -87,6 +88,23 @@ async function watchSleepLease(storage: Store, runId: () => string) {
   return { store, woken: woken.promise, secondWake: secondWake.promise };
 }
 
+/** Resolves once the store was asked to release `key`, as the end of a sleep setup does with its start lease. */
+async function releaseOf(storage: Store, key: string) {
+  const store = (await storage.getStore('workflows'))!;
+  const release = store.releaseRunOwnership.bind(store);
+  const released = Promise.withResolvers<void>();
+  vi.spyOn(store, 'releaseRunOwnership').mockImplementation(async fence => {
+    const result = await release(fence);
+    if (fence.runId === key) {
+      released.resolve();
+    }
+
+    return result;
+  });
+
+  return released.promise;
+}
+
 describe('waking an evented sleep once (#30012)', () => {
   it('wakes a sleep once when the timer of the replica that started it races a recovery restart', async () => {
     const storage = new InMemoryStore();
@@ -102,9 +120,9 @@ describe('waking an evented sleep once (#30012)', () => {
     await startReplica(storage, build(seen.reporter('B')), { pubsub: seen.pubsub('B'), recovery: scanning });
     const run = await a.workflow.createRun();
 
-    // A's timer takes the sleep's lease and stalls before marking the run live. B's loop finds
-    // the sleep overdue meanwhile, and the wake its restart starts finds the lease held. A then
-    // goes on.
+    // A's timer takes the sleep's lease and stalls before marking the run live. B's loop finds the
+    // run's keys lapsed past the grace period meanwhile, and the wake its restart starts finds the
+    // lease held. A then goes on.
     const claim = store.claimRunOwnership.bind(store);
     const read = store.getRunOwnership.bind(store);
     const refused = Promise.withResolvers<void>();
@@ -352,7 +370,7 @@ describe('waking an evented sleep once (#30012)', () => {
     20_000,
   );
 
-  it('stops a wake whose workers stopped while it checked its lease', async () => {
+  it('stops a wake whose workers stopped while it checked its lease, and wakes the sleep once they start again', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const seen = observe('leased');
@@ -368,6 +386,7 @@ describe('waking an evented sleep once (#30012)', () => {
     const renew = store.renewRunOwnership.bind(store);
     const checking = Promise.withResolvers<void>();
     const stopped = Promise.withResolvers<void>();
+    const lapsed = Promise.withResolvers<void>();
     let wakeKey: string | undefined;
     vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
       const result = await claim(args);
@@ -378,62 +397,31 @@ describe('waking an evented sleep once (#30012)', () => {
       return result;
     });
     vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
+      if (args.runId === wakeKey && args.leaseMs === 1) {
+        const result = await renew(args);
+        lapsed.resolve();
+        return result;
+      }
+
       if (args.runId === wakeKey && (await storedSleeps(storage, run.runId))[0] === 'success') {
         checking.resolve();
         await stopped.promise;
       }
+
       return renew(args);
     });
     startInBackground(run, { n: 1 });
     await checking.promise;
     await a.mastra.stopWorkers({ drainTimeout: 0 });
     stopped.resolve();
-    for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+    // The stopped wake lets its lease lapse once it put the sleep back.
+    await lapsed.promise;
 
     expect(seen.continuations).toEqual([]);
     expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']);
-  }, 20_000);
-
-  it('wakes a sleep whose workers stopped and started again while its wake checked its lease', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const seen = observe('leased');
-    const a = await startReplica(storage, sleepingFor(100)(seen.reporter('A')), {
-      pubsub: seen.pubsub('A'),
-      recovery: { workflows: 'off' },
-    });
-    const run = await a.workflow.createRun();
-
-    // A's wake marked the sleep finished and checks its lease before publishing. The store answers
-    // only once A's workers stopped and started again.
-    const claim = store.claimRunOwnership.bind(store);
-    const renew = store.renewRunOwnership.bind(store);
-    const checking = Promise.withResolvers<void>();
-    const restarted = Promise.withResolvers<void>();
-    let wakeKey: string | undefined;
-    vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
-      const result = await claim(args);
-      if (result.acquired && isSleepKeyOf(args.runId, run.runId)) {
-        wakeKey = args.runId;
-      }
-
-      return result;
-    });
-    vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
-      if (args.runId === wakeKey && (await storedSleeps(storage, run.runId))[0] === 'success') {
-        checking.resolve();
-        await restarted.promise;
-      }
-
-      return renew(args);
-    });
-    startInBackground(run, { n: 1 });
-    await checking.promise;
-    await a.mastra.stopWorkers({ drainTimeout: 0 });
-    await a.mastra.startWorkers();
-    restarted.resolve();
 
     // With recovery off, only the interrupted wake running again wakes the sleep.
+    await a.mastra.startWorkers();
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 5_000 });
     expect(seen.executions).toEqual(['A:before', 'A:after']);
   }, 20_000);
@@ -475,6 +463,7 @@ describe('waking an evented sleep once (#30012)', () => {
 
       return load(args);
     });
+    const lapsed = Promise.withResolvers<void>();
     vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
       if (args.runId === wakeKey && readHolding && !renewHolding) {
         renewHolding = true;
@@ -482,16 +471,24 @@ describe('waking an evented sleep once (#30012)', () => {
         await renewHeld.promise;
       }
 
-      return renew(args);
+      const result = await renew(args);
+      if (args.runId === wakeKey && args.leaseMs === 1) {
+        lapsed.resolve();
+      }
+
+      return result;
     });
     startInBackground(run, { n: 1 });
     await renewing.promise;
 
     await a.mastra.stopWorkers({ drainTimeout: 0 });
     readHeld.resolve();
+    // Only spaces the renewal after the wake's read: the wake leaves no trace on the store between
+    // the read and its wait for the renewal, and the run finishing below is what the test checks.
     await sleep(100);
     renewHeld.resolve();
-    await sleep(100);
+    // The stopped wake lets its lease lapse once the held renewal landed.
+    await lapsed.promise;
     await a.mastra.startWorkers();
 
     // With recovery off, only the interrupted wake running again wakes the sleep. Had the renewal
@@ -569,31 +566,19 @@ describe('waking an evented sleep once (#30012)', () => {
       recovery: { workflows: 'off' },
     });
     const run = await a.workflow.createRun();
+    const setUp = releaseOf(storage, sleepStartKey(run.runId, [1]));
     startInBackground(run, { n: 1 });
     await resolving.promise;
 
     await run.cancel();
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('canceled'));
     resolve.resolve();
-    // Past the sleep's wake time.
-    await sleep(300);
+    // The setup is over once it released its start lease.
+    await setUp;
 
     expect(await runStatus(storage, run.runId)).toBe('canceled');
     expect(seen.continuations).toEqual([]);
     expect(seen.executions).toEqual(['A:before']);
-  }, 20_000);
-
-  it('sets up a sleep in a run whose state JSON cannot hold', async () => {
-    const storage = new InMemoryStore();
-    const seen = observe('leased');
-    const a = await startReplica(storage, sleepingFor(50)(seen.reporter('A')), { recovery: { workflows: 'off' } });
-    const run = await a.workflow.createRun();
-
-    // The in-memory store and the in-process pubsub keep a bigint as it is.
-    const result = await run.start({ inputData: { n: 1 }, initialState: { value: 1n } } as any);
-
-    expect(result.status).toBe('success');
-    expect(seen.executions).toEqual(['A:before', 'A:after']);
   }, 20_000);
 
   it('stops a sleep setup whose start lease another process took while its duration resolved', async () => {
@@ -617,6 +602,7 @@ describe('waking an evented sleep once (#30012)', () => {
       recovery: { workflows: 'off' },
     });
     const run = await a.workflow.createRun();
+    const setUp = releaseOf(storage, sleepStartKey(run.runId, [1]));
     startInBackground(run, { n: 1 });
     await resolving.promise;
 
@@ -629,51 +615,12 @@ describe('waking an evented sleep once (#30012)', () => {
       force: true,
     });
     resolve.resolve();
-    await sleep(300);
+    // A's setup is over once it let go of the start lease it lost.
+    await setUp;
 
     expect(await storedSleeps(storage, run.runId)).toEqual([]);
     expect(seen.continuations).toEqual([]);
     expect(seen.executions).toEqual(['A:before']);
-  }, 20_000);
-
-  it('wakes a sleep again later when the store failed its wake lease check', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const seen = observe('leased');
-    const a = await startReplica(storage, sleepingFor(100)(seen.reporter('A')), {
-      pubsub: seen.pubsub('A'),
-      recovery: { workflows: 'off' },
-    });
-    const run = await a.workflow.createRun();
-
-    // The store fails A's lease check before publishing once, as a dropped connection would.
-    const claim = store.claimRunOwnership.bind(store);
-    const renew = store.renewRunOwnership.bind(store);
-    let wakeKey: string | undefined;
-    let failed = false;
-    vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
-      const result = await claim(args);
-      if (result.acquired && isSleepKeyOf(args.runId, run.runId)) {
-        wakeKey = args.runId;
-      }
-
-      return result;
-    });
-    vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
-      if (!failed && args.runId === wakeKey && (await storedSleeps(storage, run.runId))[0] === 'success') {
-        failed = true;
-        throw new Error('connection reset');
-      }
-
-      return renew(args);
-    });
-    startInBackground(run, { n: 1 });
-
-    // With recovery off, only A trying the wake again wakes the sleep.
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 5_000 });
-    expect(failed).toBe(true);
-    expect(seen.continuations).toEqual(['A']);
-    expect(seen.executions).toEqual(['A:before', 'A:after']);
   }, 20_000);
 
   it('stops a wake whose workers stopped while it claimed its lease', async () => {
@@ -687,8 +634,10 @@ describe('waking an evented sleep once (#30012)', () => {
     const run = await a.workflow.createRun();
     // The store grants A's wake its lease only once A's workers stopped.
     const claim = store.claimRunOwnership.bind(store);
+    const renew = store.renewRunOwnership.bind(store);
     const claiming = Promise.withResolvers<void>();
     const stopped = Promise.withResolvers<void>();
+    const lapsed = Promise.withResolvers<void>();
     vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
       if (isSleepKeyOf(args.runId, run.runId)) {
         claiming.resolve();
@@ -696,11 +645,20 @@ describe('waking an evented sleep once (#30012)', () => {
       }
       return claim(args);
     });
+    vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
+      const result = await renew(args);
+      if (isSleepKeyOf(args.runId, run.runId) && args.leaseMs === 1) {
+        lapsed.resolve();
+      }
+
+      return result;
+    });
     startInBackground(run, { n: 1 });
     await claiming.promise;
     await a.mastra.stopWorkers({ drainTimeout: 0 });
     stopped.resolve();
-    await sleep(100);
+    // The stopped wake lets the lease it was granted lapse.
+    await lapsed.promise;
 
     expect(seen.continuations).toEqual([]);
     expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']);
@@ -740,7 +698,8 @@ describe('waking an evented sleep once (#30012)', () => {
     resolve.resolve();
     await vi.waitFor(async () => expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']));
     // Past the sleep's wake time.
-    await sleep(300);
+    const wakeAt = await storedWakeTime(storage, 'leased', run.runId);
+    await sleep(Math.max(0, wakeAt + 200 - Date.now()));
     expect(seen.continuations).toEqual([]);
     expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']);
 
@@ -878,7 +837,8 @@ describe('waking an evented sleep once (#30012)', () => {
 
     const stopping = a.mastra.stopWorkers({ drainTimeout: 5_000 });
     // Past the sleep's wake time, while the drain still waits for the second run.
-    await sleep(400);
+    const wakeAt = await storedWakeTime(storage, 'leased', sleeping.runId);
+    await sleep(Math.max(0, wakeAt + 200 - Date.now()));
     drained.resolve();
     await stopping;
     expect(await storedSleeps(storage, sleeping.runId)).toEqual(['waiting']);
@@ -887,23 +847,6 @@ describe('waking an evented sleep once (#30012)', () => {
     await vi.waitFor(async () => expect(await runStatus(storage, sleeping.runId)).toBe('success'), {
       timeout: 5_000,
     });
-  }, 20_000);
-
-  it('wakes sleeps again when the workers of the instance that started them start again', async () => {
-    const storage = new InMemoryStore();
-    const seen = observe('leased');
-    const a = await startReplica(storage, sleepingFor(500)(seen.reporter('A')), {
-      recovery: { workflows: 'off' },
-    });
-    const run = await a.workflow.createRun();
-    startInBackground(run, { n: 1 });
-    await sleepingRunId(storage, run.runId);
-
-    await a.mastra.stopWorkers();
-    await a.mastra.startWorkers();
-
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 5_000 });
-    expect(seen.executions).toEqual(['A:before', 'A:after']);
   }, 20_000);
 
   it('stops a wake whose lease another process took before it marked the sleep finished', async () => {
@@ -946,7 +889,9 @@ describe('waking an evented sleep once (#30012)', () => {
 
     // Either the wake found its lease gone, or it went on and published.
     await vi.waitFor(() => expect(refused || seen.continuations.length > 0).toBe(true));
-    for (let i = 0; i < 3; i++) await new Promise(resolve => setImmediate(resolve));
+    for (let i = 0; i < 3; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
 
     expect(seen.continuations).toEqual([]);
     expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']);

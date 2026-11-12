@@ -25,6 +25,7 @@ import {
   Num,
   crash,
   interceptWorkflowEvents,
+  isSleepKeyOf,
   isStepRunAt,
   observe,
   recordRestarts,
@@ -423,26 +424,90 @@ describe('recovery of evented runs in a sleep (#30012)', () => {
     expect(sleepStatuses(result.steps)).toEqual(['success']);
   }, 20_000);
 
-  it('wakes a sleep again from another instance when publishing the step after it failed', async () => {
-    const storage = new InMemoryStore();
-    const seen = observe('leased');
-    let rejected = false;
-    const pubsubA = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-      if (rejected || !isStepRunAt(event, [2])) {
-        return undefined;
-      }
+  it.each([
+    'the claim of its wake lease',
+    'its wake lease check',
+    'putting it back to waiting',
+    'the publish',
+  ] as const)(
+    'wakes a sleep again later when the store or the pubsub failed %s once',
+    async failure => {
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('workflows'))!;
+      const seen = observe('leased');
+      const failures: string[] = [];
+      // As a broker that drops the connection: the step after the sleep fails to publish once.
+      const pubsubA = interceptWorkflowEvents(seen.pubsub('A'), event => {
+        if (failure !== 'the publish' || failures.length > 0 || !isStepRunAt(event, [2])) {
+          return undefined;
+        }
 
-      rejected = true;
-      return { reject: new Error('broker unavailable') };
-    });
-    const a = await startReplica(storage, sleepingFor(300)(seen.reporter('A')), { pubsub: pubsubA });
-    await startReplica(storage, sleepingFor(300)(seen.reporter('B')), { recovery: scanning });
-    const run = await a.workflow.createRun();
-    startInBackground(run, { n: 1 });
+        failures.push('publish');
+        return { reject: new Error('broker unavailable') };
+      });
+      const a = await startReplica(storage, sleepingFor(100)(seen.reporter('A')), {
+        pubsub: pubsubA,
+        recovery: { workflows: 'off' },
+      });
+      const run = await a.workflow.createRun();
 
-    // The failed wake puts the sleep back to waiting, and B's recovery loop restarts the run.
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 10_000 });
-    expect(rejected).toBe(true);
-    expect(seen.executions).toEqual(['A:before', 'B:after']);
-  }, 20_000);
+      // The store fails once, as a dropped connection would.
+      const claim = store.claimRunOwnership.bind(store);
+      const renew = store.renewRunOwnership.bind(store);
+      const write = store.updateWorkflowResults.bind(store);
+      let wakeKey: string | undefined;
+      vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+        if (failure === 'the claim of its wake lease' && failures.length === 0 && isSleepKeyOf(args.runId, run.runId)) {
+          failures.push('claim');
+          throw new Error('connection reset');
+        }
+
+        const result = await claim(args);
+        if (result.acquired && isSleepKeyOf(args.runId, run.runId)) {
+          wakeKey = args.runId;
+        }
+
+        return result;
+      });
+      // A lease check after the wake stored the sleep's success, before it published the next step.
+      vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
+        const checksLease =
+          (failure === 'its wake lease check' || failure === 'putting it back to waiting') &&
+          !failures.includes('check') &&
+          args.runId === wakeKey &&
+          (await storedSleeps(storage, run.runId))[0] === 'success';
+        if (checksLease) {
+          failures.push('check');
+          throw new Error('connection reset');
+        }
+
+        return renew(args);
+      });
+      // The write that puts the sleep back to waiting after that check fails as well.
+      vi.spyOn(store, 'updateWorkflowResults').mockImplementation(async args => {
+        if (failure === 'putting it back to waiting' && failures.includes('check') && !failures.includes('revert')) {
+          failures.push('revert');
+          throw new Error('connection reset');
+        }
+
+        return write(args);
+      });
+      startInBackground(run, { n: 1 });
+
+      // With recovery off, only A trying the wake again wakes the sleep.
+      await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 8_000 });
+      expect(failures).toEqual(
+        {
+          'the claim of its wake lease': ['claim'],
+          'its wake lease check': ['check'],
+          'putting it back to waiting': ['check', 'revert'],
+          'the publish': ['publish'],
+        }[failure],
+      );
+      expect(seen.continuations).toEqual(['A']);
+      expect(seen.executions).toEqual(['A:before', 'A:after']);
+      expect(await storedSleeps(storage, run.runId)).toEqual(['success']);
+    },
+    20_000,
+  );
 });

@@ -98,6 +98,12 @@ interface SleepOccurrence {
   payload: unknown;
   startedAt: number;
   wakeAt: number;
+  /**
+   * The `endedAt` of a `success` this process's wake stored and failed to put
+   * back to `waiting`. A later attempt of the same wake treats that result as
+   * still `waiting`, since no next step was published for it.
+   */
+  unrevertedEndedAt?: number;
 }
 
 type SleepEntry = Extract<StepFlowEntry, { type: 'sleep' | 'sleepUntil' }>;
@@ -113,14 +119,14 @@ interface PendingWake {
   args: ProcessorArgs;
   deps: SleepDeps;
   occurrence: SleepOccurrence;
-  /** How many attempts of this wake failed a lease check (see {@link retryWake}). */
+  /** How many attempts of this wake the store failed (see {@link retryWake}). */
   attempt: number;
   /** When the next attempt may run at the earliest, in epoch milliseconds. */
   notBefore: number;
   timer?: ReturnType<typeof setTimeout>;
 }
 
-// The longest wait between attempts of a wake whose lease checks keep failing.
+// The longest wait between attempts of a wake the store keeps failing.
 const MAX_WAKE_RETRY_DELAY_MS = 5 * 60_000;
 
 // How long an interrupted wake waits for the lease it let lapse (a millisecond lease) to run out.
@@ -616,17 +622,17 @@ function sleepInProgress(
  * (see `claimSleepWake`), and wakes only while the stored run is still active
  * and in this occurrence. It marks the run live and the sleep `success` before
  * publishing, so a restart is refused until the next step takes its own lease,
- * and releases the lease only once the next step was published. When
- * publishing fails, the sleep is put back to `waiting` and the lease left to
- * lapse, so a restart of the run wakes it again.
+ * and releases the lease only once the next step was published.
  *
  * Leases are advisory, so the wake checks that it still holds its lease before
  * marking the sleep `success` and again before publishing, and stops (putting
  * the sleep back to `waiting` if it already marked it) when the lease lapsed or
  * was abandoned meanwhile. A wake stalled past the lease TTL between that check
- * and the publish can still publish twice. A check the store fails tells
- * neither, so the wake stops the same way and tries again later (see
- * {@link retryWake}); `attempt` counts those tries.
+ * and the publish can still publish twice. When the store or the pubsub fails
+ * the wake before it published (its claim, a lease check the store could not
+ * answer, a read, a write or the publish), the wake stops the same way, leaves
+ * its lease to lapse and tries again later (see {@link retryWake}); `attempt`
+ * counts those tries. A restart of the run can wake the sleep meanwhile.
  */
 async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: SleepOccurrence, attempt = 0) {
   const { workflow, workflowId, runId, executionPath, prevResult, requestContext } = args;
@@ -645,7 +651,21 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
   }
 
   const key = sleepOccurrenceKey(runId, executionPath, startedAt);
-  const lease = leaseStore ? await claimSleepWake({ store: leaseStore, key, logger }) : undefined;
+  let lease: Awaited<ReturnType<typeof claimSleepWake>> | undefined;
+  try {
+    lease = leaseStore ? await claimSleepWake({ store: leaseStore, key, logger }) : undefined;
+  } catch (error) {
+    // The timer that started this wake is gone, and with recovery off nothing else would wake the
+    // sleep. Nothing was claimed, so no other process is held off meanwhile.
+    logger?.warn('Failed to claim the wake of a workflow sleep, trying again later', {
+      workflowId,
+      runId,
+      stepId,
+      error,
+    });
+    return retryWake(args, deps, occurrence, attempt);
+  }
+
   if (lease === 'busy') {
     logger?.debug('Another process is waking this workflow sleep', { workflowId, runId, stepId });
     return;
@@ -675,9 +695,14 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
     }
   }
 
-  // Set when the store failed a lease check: the lease may still be this wake's, so another
-  // process need not have taken the sleep over, and this process tries again.
-  let checkFailed = false;
+  // Set when the store failed this wake before it published: a lease check it could not answer, a
+  // read, a write or the publish. The lease may still be this wake's, so another process need not
+  // have taken the sleep over, and with recovery off nothing else would wake it: this process
+  // tries again.
+  let retryLater = false;
+  // The `endedAt` of the `success` this wake stored, kept for the next attempt in case putting it
+  // back to `waiting` fails too (see SleepOccurrence.unrevertedEndedAt).
+  let successEndedAt = occurrence.unrevertedEndedAt;
   // A lease that lapsed while this wake waited on the store may already be another wake's.
   const lost = async () => {
     if (!lease) {
@@ -689,9 +714,26 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
       return false;
     }
 
-    checkFailed = held === 'unknown';
+    retryLater ||= held === 'unknown';
     logger?.debug('Lost the lease of a workflow sleep while waking it', { workflowId, runId, stepId, held });
     return true;
+  };
+
+  // Puts this wake's `success` back to `waiting` (see revertWake). When the store fails that too,
+  // the result stays `success` with no next step published, so this process tries again and the
+  // next attempt takes that result as still waiting.
+  const putBack = async (endedAt: number) => {
+    try {
+      await revertWake(args, deps, occurrence, endedAt);
+    } catch (error) {
+      retryLater = true;
+      logger?.error('Failed to put a workflow sleep back to waiting after its wake failed', {
+        workflowId,
+        runId,
+        stepId,
+        error,
+      });
+    }
   };
 
   let published = false;
@@ -699,14 +741,22 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId });
     // A run with no stored state has nothing to check against, and its timer wakes it. Otherwise
     // the run must still be in this very occurrence: a restart, a time travel or a cancel since
-    // the timer was set stores a different sleep or none.
+    // the timer was set stores a different sleep or none. A `success` an earlier attempt of this
+    // wake stored and failed to put back is still this occurrence, with no next step published.
     if (snapshot) {
       const stored = snapshot.context?.[stepId];
+      const unpublished =
+        stored?.status === 'success' &&
+        occurrence.unrevertedEndedAt !== undefined &&
+        stored.endedAt === occurrence.unrevertedEndedAt;
+      // Neither counts once a step after the sleep started: a wake or a restart went on from it, for
+      // example from a publish this wake saw fail but the broker kept, after which the sleep was put
+      // back to `waiting`.
       const sameSleep =
         (snapshot.status === 'running' || snapshot.status === 'waiting') &&
-        stored?.status === 'waiting' &&
-        stored.startedAt === startedAt &&
-        storedWakeAt(stored) === occurrence.wakeAt;
+        stored?.startedAt === startedAt &&
+        ((stored.status === 'waiting' && storedWakeAt(stored) === occurrence.wakeAt) || unpublished) &&
+        !movedPastSleep(snapshot, executionPath);
       if (!sameSleep) {
         logger?.debug('Not waking a workflow sleep the run already left', { workflowId, runId, stepId });
         return;
@@ -722,6 +772,8 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
     }
 
     const endedAt = Date.now();
+    // Set before the write: a write the store reports failed may still have landed.
+    successEndedAt = endedAt;
     await workflowsStore?.updateWorkflowResults({
       workflowName: workflowId,
       runId,
@@ -732,7 +784,7 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
     // The run leaves the sleep; a step after it must not count it as active.
     const { [stepId]: _woken, ...activeStepsPath } = args.activeStepsPath ?? {};
     if (await lost()) {
-      await revertWake(args, deps, occurrence, endedAt);
+      await putBack(endedAt);
       return;
     }
 
@@ -782,17 +834,15 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
       });
       published = true;
     } catch (error) {
-      // Back in `waiting`, the sleep is woken again by the restart recovery makes once the run's keys lapse.
-      await revertWake(args, deps, occurrence, endedAt).catch(revertError =>
-        logger?.error('Failed to put a workflow sleep back to waiting after its wake failed', {
-          workflowId,
-          runId,
-          stepId,
-          error: revertError,
-        }),
-      );
+      // Back in `waiting`, the sleep is woken again by this wake's next attempt, or by the restart
+      // recovery makes once the run's keys lapse, whichever claims the wake first.
+      await putBack(endedAt);
       throw error;
     }
+  } catch (error) {
+    // Logged by the timer that started this wake.
+    retryLater = true;
+    throw error;
   } finally {
     if (wake) {
       active?.delete(wake);
@@ -806,24 +856,31 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
       // lease would hold the next attempt off for a lease TTL.
       await lease.lapse();
       // The lapsed lease runs out a millisecond later; an attempt within it would find it held.
-      scheduleWake(args, deps, occurrence, { attempt, notBefore: Date.now() + LAPSED_LEASE_MARGIN_MS });
+      scheduleWake(
+        args,
+        deps,
+        { ...occurrence, unrevertedEndedAt: successEndedAt },
+        { attempt, notBefore: Date.now() + LAPSED_LEASE_MARGIN_MS },
+      );
     } else {
       // Left to lapse, so another wake can claim the occurrence once this one is surely gone.
       lease?.abandon();
-      if (checkFailed) {
-        retryWake(args, deps, occurrence, attempt);
+      if (retryLater) {
+        retryWake(args, deps, { ...occurrence, unrevertedEndedAt: successEndedAt }, attempt);
       }
     }
   }
 }
 
 /**
- * Tries the wake of `occurrence` again after a lease check the store failed:
- * the timer that started it is gone, and with recovery off nothing else would
- * wake the sleep. The next attempt waits for the lease this one abandoned to
- * lapse, at least one lease TTL, doubling with each failed attempt up to
- * {@link MAX_WAKE_RETRY_DELAY_MS}. It claims the lease and checks the stored
- * run again, so a sleep another process woke meanwhile stays woken once.
+ * Tries the wake of `occurrence` again after the store or the pubsub failed
+ * it: the timer that started it is gone, and with recovery off nothing else
+ * would wake the sleep. The next attempt waits for the lease this one
+ * abandoned to lapse, at least one lease TTL, doubling with each failed
+ * attempt up to {@link MAX_WAKE_RETRY_DELAY_MS}. Attempts go on until one
+ * wakes the sleep or finds it woken or left. Each claims the lease and checks
+ * the stored run again, so a sleep another process woke meanwhile stays woken
+ * once.
  */
 function retryWake(args: ProcessorArgs, deps: SleepDeps, occurrence: SleepOccurrence, attempt: number) {
   const delay = Math.min(WORKFLOW_RUN_LEASE_TTL_MS * 2 ** attempt, MAX_WAKE_RETRY_DELAY_MS);
