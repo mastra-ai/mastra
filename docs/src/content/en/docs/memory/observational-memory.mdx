@@ -452,7 +452,9 @@ A failed extractor is reported in OM markers and doesn't drop values from extrac
 Extractor results arrive when OM completes an observation or reflection. Read both completion data parts from the stream:
 
 ```typescript title="src/run.ts"
-const stream = await agent.stream('Remember that I prefer dark mode.', {
+import { assistant } from './mastra/agents/assistant'
+
+const stream = await assistant.stream('Remember that I prefer dark mode.', {
   memory: { resource: 'user-123', thread: 'conversation-123' },
 })
 
