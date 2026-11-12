@@ -1,10 +1,18 @@
 import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
+import { getErrorFromUnknown } from '../../../error';
 import type { PubSub } from '../../../events';
+import { isFrameworkCondition } from '../../framework-condition';
 import type { RunStorage } from '../../run-storage';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
-import { resolveCurrentState, withoutAuthToken } from '../helpers';
+import {
+  isNonRedeliverable,
+  markNonRedeliverable,
+  resolveCurrentState,
+  RunFailure,
+  withoutAuthToken,
+} from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
 import { currentStorageVersion } from './storage-scope';
@@ -22,7 +30,7 @@ export async function evaluateLoopCondition(
   stepExecutor: StepExecutor,
   stepResult: StepResult<any, any, any, any>,
 ) {
-  return stepExecutor.evaluateCondition({
+  const evaluation = stepExecutor.evaluateCondition({
     workflowId: args.workflowId,
     condition: step.condition,
     runId: args.runId,
@@ -38,6 +46,34 @@ export async function evaluateLoopCondition(
     retryCount: args.retryCount ?? 0,
     iterationCount: (args.stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) + 1,
   });
+  return evaluation.catch(error => {
+    if (isFrameworkCondition(step.condition)) throw error;
+    // Redelivery would run the user condition again, and a step body before it.
+    throw userCallbackError(error);
+  });
+}
+
+/** A user callback's error, marked so its delivery is not retried. */
+function userCallbackError(error: unknown): Error {
+  // A frozen error cannot take the marker, so wrap it.
+  const markable =
+    typeof error === 'object' && error !== null && !Object.isExtensible(error)
+      ? new Error(String((error as { message?: unknown }).message ?? error), { cause: error })
+      : error;
+  return markNonRedeliverable(getErrorFromUnknown(markable, { serializeStack: false }));
+}
+
+/** The loop step's result when its condition throws. */
+export function failedLoopStep(result: StepResult<any, any, any, any>, error: Error): StepResult<any, any, any, any> {
+  return {
+    status: 'failed',
+    error,
+    payload: result.payload,
+    startedAt: result.startedAt ?? Date.now(),
+    endedAt: Date.now(),
+    nonRetryable: true,
+    metadata: result.metadata,
+  };
 }
 
 export async function processWorkflowLoop(
@@ -186,6 +222,46 @@ export async function processWorkflowLoop(
 }
 
 export async function processWorkflowForEach(
+  args: ProcessorArgs,
+  deps: {
+    pubsub: PubSub;
+    runStorage: RunStorage;
+    step: Extract<StepFlowEntry, { type: 'foreach' }>;
+  },
+) {
+  try {
+    return await advanceForEach(args, deps);
+  } catch (error) {
+    if (!isNonRedeliverable(error)) throw error;
+    // The concurrency function threw. Fail the run at the foreach step, so the failed step
+    // is recorded and streamed.
+    const stepId = getEntryId(deps.step.step);
+    const failed: StepResult<any, any, any, any> = {
+      status: 'failed',
+      error: error as Error,
+      payload: (args.prevResult as any)?.output,
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      nonRetryable: true,
+    };
+    const { workflow: _workflow, ...run } = args;
+    const failRun = {
+      ...run,
+      executionPath: [args.executionPath[0]!],
+      stepResults: { ...args.stepResults, [stepId]: failed },
+      prevResult: failed,
+      state: resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
+    };
+    try {
+      await deps.pubsub.publish('workflows', { type: 'workflow.fail', runId: args.runId, data: failRun });
+    } catch {
+      // A plain throw here would be redelivered and call the concurrency function again.
+      throw markNonRedeliverable(new RunFailure(error as Error, failRun));
+    }
+  }
+}
+
+async function advanceForEach(
   {
     workflowId,
     prevResult,
@@ -220,6 +296,16 @@ export async function processWorkflowForEach(
 
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
+  const resolveConcurrency = () => {
+    try {
+      return resolveForeachConcurrency(step.opts, {
+        inputData: (prevResult as any)?.output,
+        getInitData: () => (stepResults as any)?.input,
+      });
+    } catch (error) {
+      throw userCallbackError(error);
+    }
+  };
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
     getEntryId(step.step)
   ] as any;
@@ -391,10 +477,7 @@ export async function processWorkflowForEach(
 
     if (suspendedIndices.length > 0) {
       // Limit resumption to concurrency value (like initial execution)
-      const concurrency = resolveForeachConcurrency(step.opts, {
-        inputData: (prevResult as any)?.output,
-        getInitData: () => (stepResults as any)?.input,
-      });
+      const concurrency = resolveConcurrency();
       const indicesToResume = suspendedIndices.slice(0, concurrency);
 
       // Reset suspended iterations to "pending" state before re-running them.
@@ -532,10 +615,7 @@ export async function processWorkflowForEach(
     ? currentResult.output.flatMap((result: any, index: number) => (isQueuedForeachIteration(result) ? [index] : []))
     : [];
   if (queuedIndices.length > 0) {
-    const concurrency = resolveForeachConcurrency(step.opts, {
-      inputData: (prevResult as any)?.output,
-      getInitData: () => (stepResults as any)?.input,
-    });
+    const concurrency = resolveConcurrency();
     const runningCount = currentResult.output.filter((result: any) => result === null).length;
     const suspendedIndices = currentResult.output.flatMap((result: any, index: number) =>
       result?.status === 'suspended' ? [index] : [],
@@ -602,13 +682,7 @@ export async function processWorkflowForEach(
     return;
   }
 
-  const concurrency =
-    idx === 0
-      ? undefined
-      : resolveForeachConcurrency(step.opts, {
-          inputData: (prevResult as any)?.output,
-          getInitData: () => (stepResults as any)?.input,
-        });
+  const concurrency = idx === 0 ? undefined : resolveConcurrency();
   const runningIterations = currentResult?.output?.filter((result: any) => result === null).length ?? 0;
   const suspendedIndices =
     currentResult?.output?.flatMap((result: any, index: number) => (result?.status === 'suspended' ? [index] : [])) ??
@@ -701,11 +775,7 @@ export async function processWorkflowForEach(
 
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency
-    const resolvedConcurrency = resolveForeachConcurrency(step.opts, {
-      inputData: (prevResult as any)?.output,
-      getInitData: () => (stepResults as any)?.input,
-    });
-    const concurrency = Math.min(resolvedConcurrency, targetLen);
+    const concurrency = Math.min(resolveConcurrency(), targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
     await runStorage.mergeStepResult({

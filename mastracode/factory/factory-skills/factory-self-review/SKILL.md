@@ -40,14 +40,13 @@ Push for the smallest change that fixes the reported problem, with proportionate
 
 ## Report
 
-Write the findings argument of the verdict call as Markdown the builder (on request changes) or the change request body (on approve) can use directly:
+Write the findings argument of the verdict call as Markdown the builder (on request changes) or the change request body (on approve) can use directly. Keep it short: every line has to earn its place, with plain words and no jargon, no recap of the diff, and no praise. Drop each part that would be empty:
 
 1. **Result** line: `Approved`, `Changes requested`, or `Verification incomplete`, followed by the full head SHA.
-2. A two-to-three sentence recap of the change and what the test plan covered.
-3. **Checks on this head**: the same table format as the Factory test report in `factory-review` (Check / Result / Tests, ✅ Passed or ❌ Failed, no raw exit codes), plus **Regression proof** and **Not run** sections when they apply.
-4. On request changes: a numbered list of discrete **Required changes**, each a blocking finding with a file pointer and the reason. Each must be something the builder can act on in the next round.
-5. **Follow-ups**: a separate list of non-blocking findings, or `None`. They are never required work; on approve they carry into the change request body.
-6. On approve: the one-line adversarial check record.
+2. **Checks on this head**: the same table format as the Factory test report in `factory-review` (Check / Result / Tests, ✅ Passed or ❌ Failed, no raw exit codes), with a `New tests on base code` row when you proved the tests catch the bug, and a one-line **Not run:** note when a planned check could not run.
+3. On request changes: a numbered list of discrete **Required changes**, each a blocking finding with a `file:line` pointer (linked to that line at the reviewed head when the repository is on GitHub or GitLab, since the report can end up in the change request body) and the reason in one sentence. Workflow and verification failures with no code location, such as an unpushed branch or a failed check, get no pointer. Each must be something the builder can act on in the next round.
+4. **Follow-ups**: a separate list of non-blocking findings, one line each; omit it when there are none. They are never required work; on approve they carry into the change request body.
+5. On approve: the one-line adversarial check record.
 
 ## Verdict
 
@@ -60,7 +59,7 @@ On request changes, post the report as your final conversation message and stop.
 On approve, keep the card where it is until the change request exists:
 
 1. Confirm `origin/<branch>` still points at the head you approved (`git ls-remote origin <branch>`). If it moved, do not open anything: record a fresh review of the new head instead.
-2. Open the change request from that head with `source_control_create_change_request` (head: the work branch; base: the default branch). Title it after the work item; put your report in the body and link the source issue (`Fixes #<n>` on GitHub, `Closes #<n>` on GitLab) when the card has one. Factory refuses a change request whose head is not the approved one.
+2. Open the change request from that head with `source_control_create_change_request` (head: the work branch; base: the default branch). Title it after the work item; put your report in the body and link the source issue (`Fixes #<n>` on GitHub, `Closes #<n>` on GitLab, `Fixes <ID>` such as `Fixes ENG-123` for a Linear issue; one line per issue when the card has several; for an issue the work only partly resolves, use `Refs #<n>` or `Ref <ID>` instead so the merge does not close it) when the card has one. Factory refuses a change request whose head is not the approved one.
 3. On GitHub, Factory moves the card to pull request review itself when the pull request opens from the head you approved: if the latest `factory-phase` signal shows the card already there, skip this step. Otherwise move the card to the `pull request review` phase the `factory-phase` signal's `Board phases by part:` line names (`pr-review` on the default board) with `factory_transition_work_item` (`expectedRevision` from the latest `factory-phase` signal), with a one-sentence rationale naming the change request. Opening the change request can move the card's revision on under you (attaching it is a write to the card), so a move refused as `stale` is expected: if the refusal shows the card still in this self-review phase, retry once with the `expectedRevision` it names; if it shows the card in another phase, someone moved it, so leave it there. That phase takes the card only once Factory has attached the change request to it, which happens when the provider reports it opened. If the move is refused because the card has no pull request yet, wait briefly (`sleep 20`), re-read the revision from the latest `factory-phase` signal, and retry, up to three times; if it is still refused, the change request is tracked on its own card instead (a manual card, or an issue from another provider than the repository): the project's intake routes decide where that card goes. Post the change request link, say it is tracked on its own card and that a person should confirm it is reviewed there, and leave this card where it is.
 
 Never move the card to a terminal phase yourself: the merge finishes it. Then post the report and the change request link as your final conversation message and stop.

@@ -6,6 +6,7 @@
  * define its version rule; endedAt alone is not a general-purpose revision number.
  */
 import { z } from 'zod/v4';
+import { observabilityTextSearchSchema } from './text-search';
 import {
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
@@ -31,6 +32,12 @@ import { isPreviewTruncated } from './tracing';
 export const SPAN_QUERY_MAX_PREVIEW_CHARACTERS = 256;
 export const SPAN_QUERY_MAX_LIMIT = 1000;
 export const SPAN_QUERY_MAX_CURSOR_BYTES = 8192;
+/** Span-only fields do not extend the trace-query ordering contract. */
+export const SPAN_QUERY_ORDER_FIELDS = [...TRACE_QUERY_ORDER_FIELDS, 'durationMs'] as const;
+export interface SpanQueryPlanOptions extends TraceQueryPlanOptions {
+  /** Opt in only when the host checks span-query-duration-sort support before execution. */
+  allowSpanDurationOrdering?: boolean;
+}
 const timestamp = z.string().datetime({ offset: true });
 const identifier = z.string().min(1).max(512);
 
@@ -45,8 +52,9 @@ const requestSchema = z
   .object({
     timeRange: timeRangeSchema,
     where: traceQueryScalarPredicateSchema.optional(),
+    textSearch: observabilityTextSearchSchema.optional(),
     orderBy: z
-      .array(z.object({ field: z.enum(TRACE_QUERY_ORDER_FIELDS), direction: z.enum(['asc', 'desc']) }).strict())
+      .array(z.object({ field: z.enum(SPAN_QUERY_ORDER_FIELDS), direction: z.enum(['asc', 'desc']) }).strict())
       .length(1)
       .default([{ field: 'startedAt', direction: 'desc' }]),
     page: z
@@ -228,6 +236,7 @@ export interface TrustedSpanQueryPlan {
   result: 'spans';
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryScalarPredicate;
+  textSearch?: string;
   scope?: TraceQueryPlanOptions['scope'];
   orderBy: NormalizedSpanQueryRequest['orderBy'][number];
   limit: number;
@@ -242,9 +251,16 @@ export function parseSpanQueryRequest(input: unknown): NormalizedSpanQueryReques
 }
 
 /** Host authorization is separate from the query document; a binding is not an authorization grant. */
-export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {}): TrustedSpanQueryPlan {
+export function planSpanQuery(input: unknown, options: SpanQueryPlanOptions = {}): TrustedSpanQueryPlan {
   const request = parseSpanQueryRequest(input);
   const issues: TraceQueryIssue[] = [];
+  if (request.orderBy[0]?.field === 'durationMs' && !options.allowSpanDurationOrdering) {
+    issues.push({
+      code: 'field_not_allowed',
+      path: ['orderBy', 0, 'field'],
+      message: 'Span duration ordering requires a supporting host and store',
+    });
+  }
   const where = request.where ? planSpanQuerySelectionPredicate(request.where, issues) : undefined;
   if (issues.length) throw new TraceQueryValidationError(issues);
   const scope = normalizeTraceQueryTenantScope(options.scope);
@@ -256,6 +272,7 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
   // Page size may change without invalidating a cursor.
   const binding = digestBinding({
     version: 1,
+    textSearch: request.textSearch,
     result: 'spans',
     timeRange,
     where,
@@ -276,7 +293,7 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
     if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
     if (envelope.data.binding !== binding) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
     const { sortValue } = envelope.data.values;
-    if (!isTraceQuerySortValueFor(orderBy.field, sortValue))
+    if (!isSpanQuerySortValueFor(orderBy.field, sortValue))
       throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
     cursor = {
       ...envelope.data.values,
@@ -290,10 +307,28 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
       throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
     }
   }
-  return { result: 'spans', timeRange, where, scope, orderBy, limit: request.page.limit, binding, cursor };
+  return {
+    result: 'spans',
+    textSearch: request.textSearch,
+    timeRange,
+    where,
+    scope,
+    orderBy,
+    limit: request.page.limit,
+    binding,
+    cursor,
+  };
+}
+
+function isSpanQuerySortValueFor(field: TrustedSpanQueryPlan['orderBy']['field'], value: string | number | null) {
+  return field === 'durationMs'
+    ? typeof value === 'number' && Number.isFinite(value) && value >= 0
+    : isTraceQuerySortValueFor(field, value);
 }
 
 export function encodeSpanQueryCursor(plan: TrustedSpanQueryPlan, values: z.infer<typeof cursorValuesSchema>): string {
+  if (plan.orderBy.field === 'durationMs' && !isSpanQuerySortValueFor(plan.orderBy.field, values.sortValue))
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
   const envelope = cursorEnvelopeSchema.parse({ version: 1, result: 'spans', binding: plan.binding, values });
   const result = Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url');
   if (result.length > SPAN_QUERY_MAX_CURSOR_BYTES) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');

@@ -6,8 +6,8 @@
     "demo": "tsc --outDir dist --noEmit false && node dist/demo.js"
   },
   "dependencies": {
-    "@mastra/core": "1.66.0",
-    "@mastra/mcp": "1.17.3",
+    "@mastra/core": "e2e-test",
+    "@mastra/mcp": "https://registry.npmjs.org/@mastra/mcp/-/mcp-1.17.3.tgz",
     "@modelcontextprotocol/sdk": "1.32.2",
     "zod": "4.6.7"
   },

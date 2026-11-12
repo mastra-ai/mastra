@@ -263,12 +263,11 @@ describe('createSourceControlTools', () => {
       expect(setup.closePullRequest).not.toHaveBeenCalled();
     });
 
-    // The gate as the Factory wires it, reading the bound card and project from real storage.
+    // The gate as the Factory wires it, reading the bound card and its board from real storage.
     // `olderWork`: the project's Work was stored while Work still had its `review` self-review phase.
     const boundTo = async (source: 'github-issue' | 'github-pr', role: 'work' | 'review', olderWork = true) => {
       const seeded = await createFactoryStorageForTests();
       const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
-      await seeded.projects.update({ orgId: 'org-1', id: project.id, input: { selfReviewEnabled: true } });
       await seeded.workItems.prepareRunStart({
         orgId: 'org-1',
         userId: 'user-1',
@@ -309,7 +308,6 @@ describe('createSourceControlTools', () => {
           selfReviewApprovedHead({
             requestContext: context,
             workItems: seeded.workItems,
-            projects: seeded.projects,
             boards: olderWork ? new Map([['work', selfReviewWorkBoard]]) : createBoardRegistry(),
           }),
       });
@@ -328,7 +326,7 @@ describe('createSourceControlTools', () => {
       expect(setup.createPullRequest).not.toHaveBeenCalled();
     });
 
-    it("lets the builder on a new project's Work, which has no self-review phase, open its change request with self-review on", async () => {
+    it("lets the builder on a new project's Work, which has no self-review phase, open its change request", async () => {
       const { setup, run } = await boundTo('github-issue', 'work', false);
       await expect(run()).resolves.toMatchObject({ id: '17' });
       expect(setup.createPullRequest).toHaveBeenCalled();

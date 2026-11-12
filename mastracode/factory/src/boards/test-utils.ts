@@ -3,10 +3,12 @@ import { validateFactoryRuleDecisions } from '../rules/validation.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { defineBoard } from './define-board.js';
 import type { BoardDefinition, BoardPhaseDefinition, BoardPhaseRunner } from './define-board.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { compileStoredBoard } from './stored-board.js';
+import { boardDefinitionOf, compileStoredBoard } from './stored-board.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 import { workSeedWithSelfReview } from './work-migrations.js';
+import { workSeedWithTriage } from './work-seeds.js';
 import { workBoard } from './work.js';
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
@@ -29,6 +31,34 @@ export function createPolicyTestRegistry(transitionPolicy: BoardTransitionPolicy
  * dropped that phase, but a project's stored row keeps it, and other boards may declare one.
  */
 export const selfReviewWorkBoard: InstalledBoard = compileStoredBoard(workSeedWithSelfReview(), workBoard);
+
+/**
+ * `boards` with every working phase starting on its own for every card: what the
+ * `auto-run-switch-v1` board migration gives a project that had the retired auto-run switch on.
+ */
+export function autoStartingBoards(boards: BoardRegistry = createBoardRegistry()): BoardRegistry {
+  return new Map(
+    [...boards.values()].map(board => {
+      const row = boardDefinitionOf(board);
+      const phases = row.phases.map(phase =>
+        phase.kind === 'working' ? { ...phase, autoStart: true, autoStartWhen: null } : phase,
+      );
+      return [board.id, compileStoredBoard({ ...row, phases }, board)] as const;
+    }),
+  );
+}
+
+/**
+ * Work as every project stored before new projects' Work dropped Triage: today's seed plus Triage
+ * ({@link workSeedWithTriage}). Tests that exercise the Triage lane run against this board, which
+ * is what those projects compile.
+ */
+export const triageWorkBoard: InstalledBoard = compileStoredBoard(workSeedWithTriage(), workBoard);
+
+/** A registry holding only {@link triageWorkBoard}, plus any other boards given. */
+export function createTriageWorkRegistry(...boards: InstalledBoard[]): BoardRegistry {
+  return boardRegistryOf([triageWorkBoard, ...boards]);
+}
 
 /**
  * Work (with its self-review phase, {@link selfReviewWorkBoard}) with every phase allowed to move

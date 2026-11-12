@@ -238,7 +238,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => false,
       factoryProjectExists,
       ownerId: 'label-routing-test',
     }).runOnce(new Date(Date.now() + 1_000));

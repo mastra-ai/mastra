@@ -133,6 +133,10 @@ class WorkflowEventPolicyPubSub extends PubSub {
     return this.pubsub.supportsOffsets;
   }
 
+  override __replaysTopic(topic: string): boolean {
+    return this.pubsub.__replaysTopic(topic);
+  }
+
   getHistory(topic: string, offset?: number): Promise<Event[]> {
     return this.pubsub.getHistory(topic, offset);
   }
@@ -473,7 +477,7 @@ export class InngestWorkflow<
        * @param context - The Inngest event, durable step tools, and current attempt.
        * @returns The workflow result and run identifier returned to Inngest.
        */
-      async ({ event, step, attempt }) => {
+      async ({ event, step, attempt, runId: inngestRunId }) => {
         let {
           inputData,
           initialState,
@@ -580,7 +584,14 @@ export class InngestWorkflow<
           return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
+        const engine = new InngestExecutionEngine(
+          this.#mastra,
+          step,
+          attempt,
+          this.options,
+          parentStream,
+          inngestRunId,
+        );
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {

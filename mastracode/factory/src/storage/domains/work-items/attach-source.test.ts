@@ -279,6 +279,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('one card for an
       expect(await raw(storage, card.id)).toMatchObject({ board: 'review', stages: ['intake'] });
     });
 
+    it('answers from the first open card instead of reading every row on Review', async () => {
+      const { storage, workItems, scope, file } = await setup();
+      for (let index = 0; index < 250; index += 1) {
+        const card = await file({ ...pullRequest34, externalId: `github:10:pull-request:${1000 + index}` }, {});
+        await storeOnReview(storage, card.id, 'review');
+      }
+      const findMany = storage.ops.findMany.bind(storage.ops);
+      let reviewRowsRead = 0;
+      storage.ops.findMany = (async (collection, where, options) => {
+        const rows = await findMany(collection, where, options);
+        if (collection === FACTORY_BOARD_ITEMS_SCHEMA.name && (where as { board?: unknown }).board === 'review') {
+          reviewRowsRead += rows.length;
+        }
+        return rows;
+      }) as typeof storage.ops.findMany;
+
+      expect(await workItems.reviewBoardInUse(scope)).toBe(true);
+      expect(reviewRowsRead).toBeLessThanOrEqual(100);
+    });
+
     it("reads a project's Review cards as Work once none is open, and stores Work on the next write", async () => {
       const { storage, workItems, scope, file } = await setup();
       const card = await file(pullRequest34, { state: 'merged' });

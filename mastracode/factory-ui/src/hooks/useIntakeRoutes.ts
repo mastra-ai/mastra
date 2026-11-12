@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -36,14 +36,27 @@ async function sendRouteRequest<T>(
 /** The project's intake routes in the order they are tried, and whether the caller may change them. */
 export function useIntakeRoutesQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
+  return useQuery({ ...intakeRoutesQueryOptions(baseUrl, factoryProjectId ?? ''), enabled: !!factoryProjectId });
+}
+
+/** The read behind `useIntakeRoutesQuery`, also used to load the routes ahead of the page. */
+export function intakeRoutesQueryOptions(baseUrl: string, factoryProjectId: string) {
+  return queryOptions({
     queryKey: queryKeys.intakeRoutes(factoryProjectId),
-    enabled: !!factoryProjectId,
-    queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId!)),
+    queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId)),
   });
 }
 
-type RouteWrite =
+/**
+ * Whether the caller may create, edit and delete this project's boards (an organization admin).
+ * Read off the intake routes, which answer for the project whatever boards it has: a project
+ * need not have a Work board. The server enforces it on every write.
+ */
+export function useCanEditBoards(factoryProjectId: string | undefined): boolean {
+  return useIntakeRoutesQuery(factoryProjectId).data?.canEdit ?? false;
+}
+
+export type RouteWrite =
   | { kind: 'create'; route: IntakeRouteInput }
   | { kind: 'update'; id: string; patch: IntakeRoutePatch }
   | { kind: 'delete'; id: string; expectedRevision: number }
@@ -56,12 +69,17 @@ type RouteWrite =
 export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  return useMutation<void, BoardRequestError, RouteWrite[]>({
+  return useMutation<IntakeRouteInfo[], BoardRequestError, RouteWrite[]>({
     mutationFn: async writes => {
       const project = factoryProjectId!;
+      const created: IntakeRouteInfo[] = [];
       for (const write of writes) {
         if (write.kind === 'create') {
-          await sendRouteRequest(baseUrl, routesPath(project), { method: 'POST', body: write.route });
+          const response = await sendRouteRequest<{ intakeRoute: IntakeRouteInfo }>(baseUrl, routesPath(project), {
+            method: 'POST',
+            body: write.route,
+          });
+          created.push(response.intakeRoute);
         } else if (write.kind === 'update') {
           await sendRouteRequest(baseUrl, routesPath(project, `/${encodeURIComponent(write.id)}`), {
             method: 'PATCH',
@@ -79,6 +97,7 @@ export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
           });
         }
       }
+      return created;
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
   });

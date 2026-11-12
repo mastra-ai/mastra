@@ -2,8 +2,9 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { coreFeatures } from '../../../features';
+import { hasFreeFormObject } from '../../../llm/model/free-form-object';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
-import { execute, hasFreeFormObject, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
+import { execute, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
 import { testUsage } from './test-utils';
 
 const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Summarize the plan.' }] }];

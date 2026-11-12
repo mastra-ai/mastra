@@ -779,27 +779,30 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     if (!(await this.buildCustomRouteHandler(routes))) return;
 
     for (const route of routes) {
-      // Create pseudo ServerRoute for auth checking
-      const serverRoute: ServerRoute = {
-        method: route.method as any,
-        path: route.path,
-        responseType: 'json',
-        handler: async () => {},
-        requiresAuth: route.requiresAuth,
-        requiresPermission: route.requiresPermission,
-        fga: route.fga,
-      };
-
       const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+        // Fastify prefers static paths, but the custom-route app may dispatch the request
+        // to a different route. Check auth against the route that will actually run for
+        // the URL it's forwarded.
+        const requestPath = String(request.url.split('?')[0] || '/');
+        const requestMethod = String(request.method || 'GET');
+        const dispatchUrl = `http://${request.headers.host}${request.url}`;
+        const { match, serverRoute, customRouteAuthConfig } = this.resolveCustomRouteAuth(
+          dispatchUrl,
+          requestMethod,
+          requestPath,
+          route,
+        );
+
         // Per-route auth check (same pattern as registerRoute)
         const authError = await this.checkRouteAuth(serverRoute, {
-          path: String(request.url.split('?')[0] || '/'),
-          method: String(request.method || 'GET'),
+          path: requestPath,
+          method: requestMethod,
           getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => (request.query as Record<string, string>)[name],
           requestContext: request.requestContext,
           request: toWebRequest(request),
           buildAuthorizeContext: () => toWebRequest(request),
+          customRouteAuthConfig,
         });
 
         if (authError) {
@@ -851,14 +854,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           ...(typeof request.body === 'object' && request.body !== null
             ? (request.body as Record<string, unknown>)
             : {}),
-          ...(request.params as Record<string, string>),
+          // Use the dispatched route's params; Fastify's may belong to a different route.
+          ...(match ? match.params : (request.params as Record<string, string>)),
         });
         if (fgaError) {
           return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
         }
 
         const response = await this.handleCustomRouteRequest(
-          `http://${request.headers.host}${request.url}`,
+          dispatchUrl,
           request.method,
           request.headers as Record<string, string | string[] | undefined>,
           request.body,

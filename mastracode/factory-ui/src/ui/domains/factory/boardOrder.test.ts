@@ -30,7 +30,7 @@ function item({
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt,
     updatedAt,

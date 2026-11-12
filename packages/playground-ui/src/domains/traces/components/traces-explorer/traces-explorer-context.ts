@@ -1,5 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
+import type { TraceQueryArgs, TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { createContext, useContext } from 'react';
 import type { useTraceColumnPreferences } from '../../hooks/use-trace-column-preferences';
 import type { useTracesListSource } from '../../hooks/use-traces-list-source';
@@ -29,6 +29,7 @@ export type TracesExplorerFeatures = {
 
 export type TracesConfigContextValue = {
   listId: string;
+  rootSource?: TraceQueryArgs['rootSource'];
   scopedFieldIds: ReadonlySet<string>;
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;

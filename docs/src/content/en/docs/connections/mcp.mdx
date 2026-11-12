@@ -138,6 +138,7 @@ Choose how to load tools based on whether the server configuration changes betwe
 | Use case | Shared, fixed configuration | Per-user or per-request configuration |
 | Credentials | Shared by all requests | Can vary between requests |
 | Agent API | `tools` in the `Agent` constructor | `toolsets` in `generate()` or `stream()` |
+| Tool names | Prefixed with the server name, such as `weather_get_weather` | Raw tool names. Same-named tools from different servers collide. See [`listToolsets()`](/reference/tools/mcp-client#listtoolsets). |
 
 The preceding agent example uses static tools. For runtime credentials, create a client for the request and pass its toolsets when calling the agent:
 
@@ -168,6 +169,8 @@ export async function handleRequest(prompt: string, apiKey: string) {
 ```
 
 Visit [`listTools()`](/reference/tools/mcp-client#listtools) and [`listToolsets()`](/reference/tools/mcp-client#listtoolsets) for their full APIs.
+
+This example finishes within one request. When agent work must continue after the request ends or survive a process restart, use [durable agents](/docs/harness/durable-agents) or [background tasks](/docs/harness/background-tasks) instead of building your own task tracking. Call-time `toolsets` can't move to another process, so with a durable agent, load per-request MCP tools in the agent's `tools` function from [request context](/docs/server/request-context).
 
 ### Tool approval
 

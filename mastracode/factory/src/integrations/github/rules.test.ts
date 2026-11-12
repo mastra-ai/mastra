@@ -1,13 +1,14 @@
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { reviewBoard } from '../../boards/review.js';
-import { createTestBoard, selfReviewWorkBoard } from '../../boards/test-utils.js';
+import { autoStartingBoards, createTestBoard, createTriageWorkRegistry, selfReviewWorkBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import type { FactoryGithubRuleContext } from '../../rules/types.js';
+import { FACTORY_GITHUB_EVENTS } from '../../rules/types.js';
+import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
@@ -15,6 +16,7 @@ import { GithubAppIdentity } from './app-identity.js';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
 import {
+  createGithubPullRequestDiscovery,
   createGithubPullRequestReconciler,
   GithubRules,
   polledPullRequestEvent,
@@ -291,7 +293,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
         : new LibSQLFactoryStorage({ id: 'github-provider-ingest', url: ':memory:' }),
     );
     const { github, sourceControl, integrationStorage, workItems, projects, project, storage } = seeded;
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const configVersion = 'provider-split';
     const service = new GithubRules({
       github, sourceControl, integrationStorage, projects, storage: workItems, boards, configVersion,
@@ -304,7 +306,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
       transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion }),
       storage: workItems,
       boards,
-      isAutoRunEnabled: async () => false,
       ownerId: 'provider-ingest-worker',
     });
     const opened = issueOpened('provider-split-opened', '2020-01-01T00:00:00Z');
@@ -426,7 +427,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const sender = input.sender ?? 'factory-app[bot]';
@@ -567,7 +568,7 @@ describe('GithubRules', () => {
     expect(before).toMatchObject([{ decision, workItemId: item.id }]);
     const restarted = new GithubRules({
       ...options,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'replacement-config',
     });
     await expect(restarted.ingest(ingress)).resolves.toEqual({ status: 'replayed' });
@@ -684,7 +685,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'custom-github-v2',
     });
     await expect(service.ingest(issueClosed('custom-close', 'completed'))).resolves.toEqual({ status: 'committed' });
@@ -707,7 +708,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -731,7 +732,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -752,7 +753,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -777,7 +778,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -872,7 +873,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -908,7 +909,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -944,7 +945,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -963,7 +964,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
 
@@ -992,7 +993,7 @@ describe('GithubRules', () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const card = await createLinkedIssue(workItems, project.id, ['intake']);
     const configVersion = 'factory-config-v1';
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const service = new GithubRules({
       github,
       sourceControl,
@@ -1040,7 +1041,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1067,7 +1068,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1088,7 +1089,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1122,7 +1123,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1154,7 +1155,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1177,7 +1178,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1196,7 +1197,7 @@ describe('GithubRules', () => {
     const transitionService = new FactoryTransitionService({
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const service = new GithubRules({
       github,
@@ -1205,14 +1206,13 @@ describe('GithubRules', () => {
       projects,
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       transitionService,
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-guard',
     });
 
@@ -1231,7 +1231,7 @@ describe('GithubRules', () => {
   it('keeps a trusted post-Factory issue in Intake without queueing a run', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const configVersion = 'trusted-arrival-intake';
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const service = new GithubRules({
       github,
       sourceControl,
@@ -1245,8 +1245,7 @@ describe('GithubRules', () => {
       controller: {} as never,
       transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
       storage: workItems,
-      boards,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(boards),
       ownerId: 'worker-guard',
     });
 
@@ -1268,7 +1267,7 @@ describe('GithubRules', () => {
     const transitionService = new FactoryTransitionService({
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const service = new GithubRules({
       github,
@@ -1276,7 +1275,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
@@ -1355,8 +1354,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
       primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
@@ -1531,7 +1529,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1563,7 +1561,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -1571,13 +1569,12 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       // The project's default `pull-requests` intake route sends the trusted request to review.
       intakeRoutes: storedBoards,
-      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
     const reviewRequested = (deliveryId: string, reviewer = 'factory-app[bot]') => ({
@@ -1641,7 +1638,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -1649,13 +1646,12 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       // The project's default `pull-requests` intake route sends the trusted request to review.
       intakeRoutes: storedBoards,
-      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
 
@@ -1700,7 +1696,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1746,7 +1742,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1781,7 +1777,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1886,7 +1882,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1949,7 +1945,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -1957,11 +1953,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -2041,7 +2036,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -2049,11 +2044,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -2137,11 +2131,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
     // The dispatcher polls on its own timer, so its tick can land as soon as
@@ -2165,7 +2158,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
 
@@ -2227,7 +2220,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2300,7 +2293,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const metadataOf = async (id: string) =>
@@ -2415,7 +2408,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const opened = pullRequest('opened', 'delivery-open-redelivered');
@@ -2465,7 +2458,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const opened = pullRequest('opened', 'delivery-open-next');
@@ -2496,7 +2489,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
 
@@ -2540,7 +2533,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2628,7 +2621,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2695,7 +2688,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2741,7 +2734,7 @@ describe('GithubRules', () => {
     const transitionService = new FactoryTransitionService({
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const service = new GithubRules({
       github,
@@ -2749,7 +2742,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
 
@@ -2841,8 +2834,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -2922,7 +2914,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3002,7 +2994,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const pullRequest = {
@@ -3118,7 +3110,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3179,7 +3171,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3232,7 +3224,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3240,11 +3232,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -3298,7 +3289,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3306,11 +3297,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
     await service.ingest(pullRequest('opened', 'poll:repository-1:pull-request:17'));
@@ -3350,7 +3340,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3499,8 +3489,7 @@ describe('GithubRules', () => {
         boards: olderWork(),
       }),
       storage: workItems,
-      boards: olderWork(),
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(olderWork()),
       ownerId: 'worker-1',
     });
     const work = await workItems.upsert({
@@ -3576,7 +3565,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3628,7 +3617,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3708,7 +3697,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const merged = pullRequest('closed', 'delivery-merged-branch', true);
@@ -3757,7 +3746,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const opened = pullRequest('opened', 'delivery-own-branch-link');
@@ -3800,7 +3789,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const opened = pullRequest('opened', 'delivery-other-repo-branch');
@@ -3850,7 +3839,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3907,13 +3896,138 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
     await service.ingest(issueOpened('multi-tenant'));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
     expect(await workItems.listDeferredDecisions('org-2', second.id)).toHaveLength(1);
+  });
+});
+
+describe('GithubRules and the shared board list', () => {
+  // The rules resolve a delivery's card from the board list the storage keeps cached for every
+  // reader in the process. A rule may write to the card it is handed (its context is typed
+  // mutable), so a card leaked from that cache would corrupt every later read of the board.
+  it('hands every event kind its own copy of the card, leaving the cached board list untouched', async () => {
+    const seen = new Map<FactoryGithubEventName, FactoryRuleItemContext[]>();
+    const mutateItem = (event: FactoryGithubEventName) => (context: Readonly<FactoryGithubRuleContext>) => {
+      if (!context.item) return;
+      seen.set(event, [...(seen.get(event) ?? []), context.item]);
+      context.item.workItem.title = `mutated by ${event}`;
+      context.item.workItem.metadata = { ...context.item.workItem.metadata, mutatedBy: event };
+      if (context.item.metadata) context.item.metadata.mutatedBy = event;
+    };
+    const overrides = Object.fromEntries(FACTORY_GITHUB_EVENTS.map(event => [event, mutateItem(event)]));
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', overrides);
+    const work = await createLinkedIssue(workItems, project.id);
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: { reviewVerdict: 'approve' },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createTriageWorkRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const pullRequestEvent = (action: string, deliveryId: string, extra: Record<string, unknown> = {}) => {
+      const delivery = pullRequest('opened', deliveryId);
+      return {
+        ...delivery,
+        payload: {
+          ...delivery.payload,
+          action,
+          sender: { login: 'maintainer' },
+          ...extra,
+          pull_request: {
+            ...delivery.payload.pull_request,
+            user: { login: 'maintainer' },
+            body: 'Closes #42',
+            head: { ref: 'feature', sha: 'abc123' },
+            ...(extra.pull_request as object | undefined),
+          },
+        },
+      };
+    };
+    const deliveries: Array<[FactoryGithubEventName, { event: string; deliveryId: string; payload: object }]> = [
+      ['issueOpened', issueOpened('shared-issue-opened')],
+      ['issueEdited', issueEdited('shared-issue-edited')],
+      ['issueClosed', issueClosed('shared-issue-closed', 'completed')],
+      [
+        'issueReopened',
+        { ...issueOpened('shared-issue-reopened'), payload: { ...issueOpened().payload, action: 'reopened' } },
+      ],
+      ['issueCommentCreated', issueComment('created', 'shared-comment-created')],
+      ['issueCommentEdited', issueComment('edited', 'shared-comment-edited')],
+      ['issueCommentDeleted', issueComment('deleted', 'shared-comment-deleted')],
+      // A trusted author's pull request that closes the issue looks for the card it belongs on.
+      [
+        'pullRequestOpened',
+        pullRequestEvent('opened', 'shared-pr-opened-new', { pull_request: { number: 18 } }),
+      ],
+      ['pullRequestOpened', pullRequestEvent('opened', 'shared-pr-opened')],
+      ['pullRequestUpdated', pullRequestEvent('synchronize', 'shared-pr-updated')],
+      // Feedback on the pull request follows the Review card's parent link to the authoring item.
+      ['pullRequestCommentCreated', pullRequestComment('shared-pr-comment', { body: 'Looks good to me' })],
+      [
+        'pullRequestReviewRequested',
+        pullRequestEvent('review_requested', 'shared-pr-review-requested', {
+          requested_reviewer: { login: 'factory-app[bot]' },
+        }),
+      ],
+      [
+        'pullRequestReviewSubmitted',
+        pullRequestEvent('submitted', 'shared-pr-review-submitted', {
+          review: {
+            id: 99,
+            state: 'changes_requested',
+            body: 'Please fix',
+            html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+            user: { login: 'maintainer' },
+          },
+        }),
+      ],
+      // A closed pull request settles both linked cards: the Review card and its authoring item.
+      ['pullRequestClosed', pullRequestEvent('closed', 'shared-pr-closed', { pull_request: { state: 'closed' } })],
+      [
+        'pullRequestMerged',
+        pullRequestEvent('closed', 'shared-pr-merged', { pull_request: { state: 'closed', merged: true } }),
+      ],
+    ];
+    expect(new Set(deliveries.map(([event]) => event))).toEqual(new Set(FACTORY_GITHUB_EVENTS));
+
+    for (const [event, delivery] of deliveries) {
+      const shared = await workItems.listShared({ orgId: 'org-1', factoryProjectId: project.id });
+      const before = structuredClone(shared);
+      await service.ingest(
+        event === 'pullRequestReviewSubmitted' ? { ...delivery, event: 'pull_request_review' } : delivery,
+      );
+      expect(shared, `${event} wrote to the cached board list`).toEqual(before);
+      for (const item of seen.get(event) ?? []) {
+        expect(shared.some(card => card.workItem === item.workItem || card.metadata === item.metadata)).toBe(false);
+      }
+    }
+    // Every event kind resolved a card, so each one exercised the shared read.
+    expect([...seen.keys()].sort()).toEqual([...FACTORY_GITHUB_EVENTS].sort());
   });
 });
 
@@ -4112,7 +4226,8 @@ describe('GithubRules with intake routes', () => {
    */
   async function setupIntake(permission: string, { withDefaultRoute = false } = {}) {
     const base = await setup(permission);
-    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    // The route targets Triage, which Work keeps in projects stored before new projects' Work dropped it.
+    const boards = createTriageWorkRegistry(createTestBoard());
     const configVersion = 'intake-routes';
     const service = new GithubRules({
       github: base.github,
@@ -4129,7 +4244,6 @@ describe('GithubRules with intake routes', () => {
       storage: base.workItems,
       boards,
       intakeRoutes: base.boards,
-      isAutoRunEnabled: async () => false,
       ownerId: 'worker-intake-routes',
     });
     const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
@@ -4261,7 +4375,7 @@ describe('GithubRules with outside work in Intake', () => {
     ['a maintainer', { authorTrusted: true }],
   ] as const;
 
-  /** A card already on the board, real GitHub rules, and a dispatcher with auto-run on. */
+  /** A card already on the board, real GitHub rules, and a dispatcher over boards whose working phases start on their own. */
   async function setupCard(input: {
     permission: string;
     source: 'issue' | 'pull-request';
@@ -4270,7 +4384,7 @@ describe('GithubRules with outside work in Intake', () => {
   }) {
     const base = await setup(input.permission);
     const configVersion = 'outside-work';
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const number = input.source === 'issue' ? 42 : 17;
     const card = (
       await base.workItems.upsert({
@@ -4304,9 +4418,8 @@ describe('GithubRules with outside work in Intake', () => {
       controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: base.workItems, configVersion, boards }),
       storage: base.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       intakeRoutes: base.boards,
-      isAutoRunEnabled: async () => true,
       ownerId: 'worker-outside',
     });
     const deliver = async (ingress: Parameters<GithubRules['ingest']>[0]) => {
@@ -4370,7 +4483,7 @@ describe('polledPullRequestEvent', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     await service.ingest(
@@ -4460,8 +4573,7 @@ describe('createGithubPullRequestReconciler', () => {
   function createReconciler(
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
-    fetchIssue?: ReturnType<typeof vi.fn>,
-    boards = createBoardRegistry(),
+    boards = createTriageWorkRegistry(),
   ) {
     return createGithubPullRequestReconciler(
       {
@@ -4474,9 +4586,31 @@ describe('createGithubPullRequestReconciler', () => {
         boards,
       },
       fetchPullRequest as never,
-      fetchIssue as never,
     );
   }
+
+  function openState(number: number, createdAt: string) {
+    return {
+      number,
+      title: `PR ${number}`,
+      url: `https://github.com/acme/repo/pull/${number}`,
+      state: 'open' as const,
+      draft: false,
+      merged: false,
+      assignees: ['assignee'],
+      requestedReviewers: ['reviewer'],
+      labels: ['bug'],
+      headBranch: 'feature',
+      baseBranch: 'main',
+      author: 'pr-author',
+      createdAt,
+    };
+  }
+
+  const reviewIntakes = async (context: Awaited<ReturnType<typeof setup>>) =>
+    (await context.workItems.listDeferredDecisions('org-1', context.project.id)).filter(
+      ({ decision }) => decision.type === 'upsertLinkedWorkItem',
+    );
 
   async function createIssueCard(
     context: Awaited<ReturnType<typeof setup>>,
@@ -4769,8 +4903,7 @@ describe('createGithubPullRequestReconciler', () => {
     const reconcile = createReconciler(
       context,
       vi.fn(async () => mergedState(17)),
-      undefined,
-      createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+      boardRegistryOf([createTestBoard()]),
     );
 
     await reconcile([repositoryTarget]);
@@ -4792,7 +4925,7 @@ describe('createGithubPullRequestReconciler', () => {
       projects: context.projects,
       storage: context.workItems,
       configVersion: 'factory-config-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const now = new Date('2030-01-01T00:00:00.000Z');
     await rules.ingest(reconciledClosedEvent(repositoryTarget, 17, mergedState(17)));
@@ -5429,6 +5562,234 @@ describe('createGithubPullRequestReconciler', () => {
       ],
     });
   });
+
+  describe('missed-open discovery', () => {
+    function createDiscovery(context: Awaited<ReturnType<typeof setup>>, listOpenPullRequests: ReturnType<typeof vi.fn>) {
+      return createGithubPullRequestDiscovery(
+        {
+          github: context.github,
+          sourceControl: context.sourceControl,
+          integrationStorage: context.integrationStorage,
+          projects: context.projects,
+          storage: context.workItems,
+          configVersion: 'factory-config-v1',
+          boards: createTriageWorkRegistry(),
+        },
+        listOpenPullRequests as never,
+      );
+    }
+
+    it('mints a Review card, with its author and labels, for an open pull request whose opened webhook never arrived', async () => {
+      const context = await setup('read');
+      const listOpenPullRequests = vi.fn(async () => [openState(21, '2030-01-01T00:00:00Z')]);
+      const discover = createDiscovery(context, listOpenPullRequests);
+
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ listed: 1, created: 1, failed: 0 });
+      // Only pull requests opened since the link are asked for: the link-time import owns the backlog.
+      expect(listOpenPullRequests).toHaveBeenCalledWith({
+        installationId: 7,
+        repository: 'acme/repo',
+        createdSince: context.projectRepository.createdAt.getTime(),
+      });
+      const intakes = await reviewIntakes(context);
+      expect(intakes).toHaveLength(1);
+      expect(intakes[0]!.decision).toMatchObject({
+        type: 'upsertLinkedWorkItem',
+        metadata: {
+          author: 'pr-author',
+          factoryAuthored: false,
+          assignees: ['assignee'],
+          requestedReviewers: ['reviewer'],
+          labels: ['bug'],
+        },
+      });
+
+      // Later sweeps see the same pull request until the card lands; the stable
+      // delivery id makes the ingress replay instead of committing a second intake.
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, failed: 0 });
+      expect(await reviewIntakes(context)).toHaveLength(1);
+    });
+
+    it('leaves pull requests some card already holds', async () => {
+      const context = await setup('read');
+      await createCard(context, {
+        number: 17,
+        stages: ['done'],
+        metadata: {
+          author: 'pr-author',
+          state: 'closed',
+          draft: false,
+          merged: true,
+          assignees: [],
+          requestedReviewers: [],
+          labels: [],
+          [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+        },
+      });
+      const work = await createIssueCard(context, { number: 40 });
+      // A card intaken before URLs were recorded still holds its pull request.
+      await createCard(context, { number: 16, url: null });
+      await context.workItems.attachSource({
+        orgId: 'org-1',
+        id: work.item.id,
+        source: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:18',
+          url: 'https://github.com/acme/repo/pull/18',
+        },
+        metadata: { state: 'open' },
+      });
+      const listOpenPullRequests = vi.fn(async () => [
+        openState(16, '2030-01-01T00:00:00Z'),
+        openState(17, '2030-01-01T00:00:00Z'),
+        openState(18, '2030-01-01T00:00:00Z'),
+      ]);
+
+      await expect(createDiscovery(context, listOpenPullRequests)([repositoryTarget])).resolves.toMatchObject({
+        listed: 3,
+        created: 0,
+        repaired: 0,
+        failed: 0,
+      });
+      expect(await reviewIntakes(context)).toEqual([]);
+      // Someone else's pull request filed on the card is not this card's to mark,
+      // so it costs no replay, and no collaborator lookup, every sweep.
+      expect(context.github.getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+    });
+
+    it('records a failed open pull request listing', async () => {
+      const context = await setup('read');
+      const listOpenPullRequests = vi.fn(async () => {
+        throw new Error('GitHub API request failed: 502 Bad Gateway');
+      });
+
+      await expect(createDiscovery(context, listOpenPullRequests)([repositoryTarget])).resolves.toMatchObject({
+        repositories: 1,
+        created: 0,
+        failed: 1,
+        errors: [{ repository: 'acme/repo', error: 'GitHub API request failed: 502 Bad Gateway' }],
+      });
+    });
+
+    it('restores the open mark a card lost after its pull request opened, without filing it twice', async () => {
+      const context = await setup('read');
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = context;
+      const work = await createIssueCard(context, { number: 42, stages: ['execute'] });
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createTriageWorkRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({
+          storage: workItems,
+          configVersion: 'factory-config-v1',
+          boards: createTriageWorkRegistry(),
+        }),
+        storage: workItems,
+        boards: autoStartingBoards(createTriageWorkRegistry()),
+        ownerId: 'worker-1',
+      });
+      await service.ingest(pullRequest('opened', 'delivery-open'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      // The write recording the open pull request failed after the opening committed.
+      const marked = (await workItems.get({ orgId: 'org-1', id: work.item.id }))!;
+      expect(marked.metadata?.openPullRequestNumber).toBe(17);
+      await workItems.update({
+        orgId: 'org-1',
+        id: work.item.id,
+        userId: 'user-1',
+        patch: { metadata: { ...marked.metadata, openPullRequestNumber: null } },
+      });
+      const discover = createDiscovery(
+        context,
+        vi.fn(async () => [{ ...openState(17, '2030-01-01T00:00:00Z'), headSha: 'abc123' }]),
+      );
+
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, repaired: 1, failed: 0 });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+
+      const repaired = (await workItems.get({ orgId: 'org-1', id: work.item.id }))!;
+      expect(repaired.metadata).toMatchObject({ openPullRequestNumber: 17, pullRequestHeadSha: 'abc123' });
+      expect(repaired.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
+      expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
+
+      // Once restored, the card is no longer a candidate and later sweeps leave it alone.
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, repaired: 0 });
+      expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.revision).toBe(repaired.revision);
+    });
+
+    it('does not replay, every sweep, a lost mark that only a branch name ties to its card', async () => {
+      const context = await setup('write');
+      const { github, sourceControl, integrationStorage, workItems, projects } = context;
+      const work = await createIssueCard(context, { number: 42, stages: ['execute'] });
+      const headBranch = workItemBranch({
+        id: work.item.id,
+        source: 'github-issue',
+        metadata: work.item.workItem.metadata,
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createTriageWorkRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({
+          storage: workItems,
+          configVersion: 'factory-config-v1',
+          boards: createTriageWorkRegistry(),
+        }),
+        storage: workItems,
+        boards: autoStartingBoards(createTriageWorkRegistry()),
+        ownerId: 'worker-1',
+      });
+      // No provenance: the pull request is the card's only because it was opened from the card's branch.
+      const opened = pullRequest('opened', 'delivery-open');
+      opened.payload.pull_request.head.ref = headBranch;
+      await service.ingest(opened);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      const marked = (await workItems.get({ orgId: 'org-1', id: work.item.id }))!;
+      expect(marked.metadata?.openPullRequestNumber).toBe(17);
+      await workItems.update({
+        orgId: 'org-1',
+        id: work.item.id,
+        userId: 'user-1',
+        patch: { metadata: { ...marked.metadata, openPullRequestNumber: null } },
+      });
+      const discover = createDiscovery(
+        context,
+        vi.fn(async () => [{ ...openState(17, '2030-01-01T00:00:00Z'), headBranch, author: 'contributor' }]),
+      );
+      const permissionLookups = vi.mocked(github.getRepositoryCollaboratorPermission).mock.calls.length;
+
+      // A replay resolves to the pull request's own Review card, which cannot restore its
+      // parent's mark (a webhook redelivery cannot either), so discovery skips it rather
+      // than paying a rules pass and a collaborator lookup for it every five minutes.
+      await expect(discover([repositoryTarget])).resolves.toMatchObject({ created: 0, repaired: 0, failed: 0 });
+      expect(vi.mocked(github.getRepositoryCollaboratorPermission).mock.calls).toHaveLength(permissionLookups);
+      expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
+    });
+  });
 });
 
 describe('GithubRules push hand-off', () => {
@@ -5457,7 +5818,7 @@ describe('GithubRules push hand-off', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'v1',
       onRepositoryPush,
     });
@@ -5484,7 +5845,7 @@ describe('GithubRules push hand-off', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'v1',
       onRepositoryPush,
     });
@@ -5497,7 +5858,7 @@ describe('GithubRules push hand-off', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'v1',
     });
     await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
@@ -5533,9 +5894,8 @@ describe('pull request cards on the Work board', () => {
         boards,
       }),
       storage: harness.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       ...(withRoutes ? { intakeRoutes: harness.boards } : {}),
-      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
     let tick = 0;
@@ -5894,7 +6254,7 @@ describe('GithubRules board events', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     return { seen, service, workItems, project };
@@ -5934,7 +6294,7 @@ describe('GithubRules board events', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     await service.ingest(issueClosed('override-closed', 'completed'));
@@ -5955,7 +6315,7 @@ describe('GithubRules board events', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     await expect(service.ingest(issueReopened('reopen-default'))).resolves.toEqual({ status: 'committed' });
@@ -6015,7 +6375,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
       storage: workItems,
       boards,
       intakeRoutes: storedBoards,
-      isAutoRunEnabled: async () => false,
       ownerId: 'close-routes-worker',
     });
     const card = (
@@ -6157,7 +6516,7 @@ describe('GithubRules activity signals', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const decisions = async () =>
@@ -6233,7 +6592,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
           : new LibSQLFactoryStorage({ id: 'github-one-card', url: ':memory:' }),
       );
-      const boards = createBoardRegistry();
+      const boards = createTriageWorkRegistry();
       const configVersion = 'one-card';
       const service = new GithubRules({
         github: seeded.github,
@@ -6248,9 +6607,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         controller: { getSession: vi.fn(async () => undefined) } as never,
         transitionService: new FactoryTransitionService({ storage: seeded.workItems, configVersion, boards }),
         storage: seeded.workItems,
-        boards,
+        boards: autoStartingBoards(boards),
         intakeRoutes: seeded.boards,
-        isAutoRunEnabled: async () => true,
         ownerId: 'worker-1',
       });
       let tick = 0;
@@ -6732,7 +7090,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           : new LibSQLFactoryStorage({ id: 'github-self-review-handoff', url: ':memory:' }),
       );
       // Work as a project stored it with its self-review phase: execute -> review (self-review) -> pr-review.
-      const boards = olderWork();
+      const boards = autoStartingBoards(olderWork());
       const configVersion = 'self-review-handoff';
       const card = (
         await seeded.workItems.upsert({
@@ -6785,7 +7143,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         storage: seeded.workItems,
         boards,
         intakeRoutes: seeded.boards,
-        isAutoRunEnabled: async () => true,
         ownerId: 'worker-1',
       });
       const openPullRequest = async (headSha: string) => {

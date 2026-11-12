@@ -91,6 +91,7 @@ const releaseSkills = [
 
 describe('custom board public runtime', () => {
   it.each([true, false])(
+    // The retired includeDefaultBoards changes nothing: Work is installed either way.
     'executes a release through both phase runners and terminal tool-result dispatch (includeDefaultBoards: %s)',
     async includeDefaultBoards => {
       // The mocked fetch below makes any key work, but gateway auth resolution
@@ -223,7 +224,7 @@ describe('custom board public runtime', () => {
         const settingsResponse = await app.request(`/web/factory/projects/${project.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ autoRunEnabled: true, defaultModelId: 'openai/gpt-5.6-sol' }),
+          body: JSON.stringify({ defaultModelId: 'openai/gpt-5.6-sol' }),
         });
         expect(settingsResponse.status).toBe(200);
         const sourceControl = github.sourceControlStorage;

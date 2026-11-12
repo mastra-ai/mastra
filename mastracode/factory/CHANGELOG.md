@@ -1,5 +1,433 @@
 # @mastra/factory
 
+## 0.28.0-alpha.13
+
+### Minor Changes
+
+- Added a `workItemId` filter to the work-item list route for reading cards by id without listing the whole board. ([#30154](https://github.com/mastra-ai/mastra/pull/30154))
+
+  `GET /web/factory/projects/:id/work-items?workItemId=<id>` lists the cards with the given ids and no other. `workItemId` can be repeated, up to 100 times. An id no card has is left out, so asking for a deleted card answers 200 with an empty list. It cannot be combined with `source`, `started`, `sessionId` or `scope`.
+
+  ```bash
+  curl "$FACTORY_URL/web/factory/projects/$PROJECT_ID/work-items?workItemId=$CARD_ID"
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a0cd52c`](https://github.com/mastra-ai/mastra/commit/a0cd52cdc15c67c5e3d225b90428efde1c15d8a3), [`c1fb13f`](https://github.com/mastra-ai/mastra/commit/c1fb13f325096d244285907d0dd4b0ad35d2cfca), [`6f7eb69`](https://github.com/mastra-ai/mastra/commit/6f7eb696e9c629f5659072947fbed0e09d5e02d3)]:
+  - @mastra/core@1.83.0-alpha.11
+  - @mastra/code-sdk@1.19.0-alpha.13
+
+## 0.28.0-alpha.12
+
+### Minor Changes
+
+- Added filters to the work-item list route for finding cards without listing the whole board. ([#30081](https://github.com/mastra-ai/mastra/pull/30081))
+
+  `GET /web/factory/projects/:id/work-items?started=false` lists the cards holding no session, most recently updated first. `q` keeps the cards whose title, key, number or source id contains every word in it, `limit` sets how many are sent (20 unless given, 50 at most), and `total` in the response counts every match. `source`, which can be repeated, lists the cards filed from the given source ids or URLs. `started` and `source` cannot be combined with each other, with `sessionId` or with `scope`.
+
+  ```bash
+  curl "$FACTORY_URL/web/factory/projects/$PROJECT_ID/work-items?started=false&q=login+flow&limit=10"
+  curl "$FACTORY_URL/web/factory/projects/$PROJECT_ID/work-items?source=https://github.com/acme/app/issues/12"
+  ```
+
+### Patch Changes
+
+- Improved how an open Factory board stays up to date. The board listing now returns a `cursor`, and `GET /web/factory/projects/:id/work-items?since=<cursor>` answers with only the cards changed and the ids of the cards removed since that read, instead of the whole board. ([#30099](https://github.com/mastra-ai/mastra/pull/30099))
+
+- Record a retryable `run_incomplete` failure when a Factory working-phase runner ends cleanly before the card progresses. Retry the incomplete delivery once, then show the terminal failure on the card instead of silently marking the decision successful. ([#30101](https://github.com/mastra-ai/mastra/pull/30101))
+
+- Documented the exact value `source.repository` takes for each provider: `owner/repo` on GitHub (`mastra-ai/mastra`, not `mastra`), the full project path on GitLab, the team key on Linear and the project key on Jira, compared case-insensitively. incident.io items have none (test `source.provider equals incidentio`), and manual cards have no `source.*` facts (test `source.kind not_exists`). ([#29982](https://github.com/mastra-ai/mastra/pull/29982))
+
+  In the Factory route editor, **Repository, team or project** is now a searchable list of the project's linked repositories and the keys of its Linear teams and Jira projects. When another condition limits the provider, only that provider's values are offered. You can still type any value: it's offered after the suggestions it matches, so typing `mastra` and pressing Enter picks `mastra-ai/mastra`. **is any of** picks several. The editor warns when a route limited to GitHub or GitLab requires a repository name with no owner, which never matches.
+
+- Honor explicit board-defined Planning routes for triaged items regardless of author trust, and return approval-labeled cards left in Triage to Intake without removing their approval label. ([#30100](https://github.com/mastra-ai/mastra/pull/30100))
+
+- Fixed build-on-push for Factories connected to GitHub through Mastra Platform. A push to an environment repository's default branch now rebuilds the sandbox template, so new sessions start from current code instead of an old template. ([#30135](https://github.com/mastra-ai/mastra/pull/30135))
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`2d42846`](https://github.com/mastra-ai/mastra/commit/2d4284603a4b3dad68d3621c5ce6990ea20d8d7e), [`2d42846`](https://github.com/mastra-ai/mastra/commit/2d4284603a4b3dad68d3621c5ce6990ea20d8d7e), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83)]:
+  - @mastra/core@1.83.0-alpha.10
+  - @mastra/code-sdk@1.19.0-alpha.12
+  - @mastra/mcp@2.9.0-alpha.4
+  - @mastra/connect@1.4.0-alpha.5
+
+## 0.28.0-alpha.11
+
+### Minor Changes
+
+- Added a `sessionId` filter to the work-item list route. `GET /web/factory/projects/:id/work-items?sessionId=<id>` returns only the cards holding that session and the cards related to them (a card's parent and children, and a pull request with the card whose session branch it was pushed from). The response has the same shape as the full list. Repeat `sessionId` to list several sessions' cards in one request. ([#30080](https://github.com/mastra-ai/mastra/pull/30080))
+
+  A page that shows one session no longer has to download the whole board to find its card.
+
+  ```bash
+  curl "$FACTORY_URL/web/factory/projects/$PROJECT_ID/work-items?sessionId=$SESSION_ID"
+  ```
+
+- Added a `scope=sessions` filter to the work-item list route. `GET /web/factory/projects/:id/work-items?scope=sessions` returns only the cards holding a session and the cards related to them (a card's parent and children, and a pull request with the card whose session branch it was pushed from). The response has the same shape as the full list. `scope` cannot be combined with `sessionId`. ([#30087](https://github.com/mastra-ai/mastra/pull/30087))
+
+  A sidebar that lists every session no longer has to download the whole board to name them.
+
+  ```bash
+  curl "$FACTORY_URL/web/factory/projects/$PROJECT_ID/work-items?scope=sessions"
+  ```
+
+### Patch Changes
+
+- Fixed board cards showing old labels, state or titles for up to a minute after an issue or pull request changed without its card moving. Projects that still show the retired Review board also update right away when their last open Review card closes. ([#30042](https://github.com/mastra-ai/mastra/pull/30042))
+
+- Fixed a type error in the environment build schedule view after schedules gained one-off runs without a cron expression. A schedule without a cron expression now reports `cron: null`. ([#30098](https://github.com/mastra-ai/mastra/pull/30098))
+
+- Factories with more than ten repositories no longer hit GitHub's token rate limit when sessions start or environments build. Repository access is now requested ten repositories at a time and each token is reused for 20 minutes, so a Factory with eleven repositories needs two tokens instead of eleven. ([#30093](https://github.com/mastra-ai/mastra/pull/30093))
+
+- Fixed a Factory session staying marked as running on other people's boards after it switched to another thread, started a new one or deleted its thread in the middle of a run. Open boards now hear about it right away. ([#30077](https://github.com/mastra-ai/mastra/pull/30077))
+
+- Factory build and self-review runs now link Linear source issues in the change request with one `Fixes <ID>` line per issue, such as `Fixes ENG-123`, so the GitHub and Linear sync closes them on merge. An issue the work only partly resolves gets a non-closing reference instead (`Refs #<n>` on GitHub, `Ref <ID>` on Linear). ([#30112](https://github.com/mastra-ai/mastra/pull/30112))
+
+- Fixed Slack progress statuses that Slack rejected for being too long. Long tool steps now show a shortened status instead of none. ([#30082](https://github.com/mastra-ai/mastra/pull/30082))
+
+- Updated dependencies [[`1689ce3`](https://github.com/mastra-ai/mastra/commit/1689ce38e1d66df6f474acd5db65f46315a02c23), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`38327de`](https://github.com/mastra-ai/mastra/commit/38327de07a169a6d5ce8ab8fc2075caec112d6f3), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`bb0e97e`](https://github.com/mastra-ai/mastra/commit/bb0e97e2aa2de99891bd874812c0409bda49a5f3), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`10b2ac6`](https://github.com/mastra-ai/mastra/commit/10b2ac66141228c198dce1b974c4065817e3abde), [`2053c88`](https://github.com/mastra-ai/mastra/commit/2053c881ed7a13c43d3932e1938e2f94ef226b4f), [`4884ee0`](https://github.com/mastra-ai/mastra/commit/4884ee08a067dd82176c57ca54bdfec02eda97ea), [`49e7108`](https://github.com/mastra-ai/mastra/commit/49e71082bd2c36cd20d7f4ba62bb3666e108968b), [`4cfa256`](https://github.com/mastra-ai/mastra/commit/4cfa256801f6b7e909daa5ed5d14c77b9fb24197), [`7f0d2fd`](https://github.com/mastra-ai/mastra/commit/7f0d2fd4b6c304ad851232b5969d96fdb20aa06a), [`b0ef22e`](https://github.com/mastra-ai/mastra/commit/b0ef22e7bfeb309c456d5c54528d579c4ac9e863), [`0b3514e`](https://github.com/mastra-ai/mastra/commit/0b3514eb8a590278c07574729d6539c1e67d2887), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`eb683b4`](https://github.com/mastra-ai/mastra/commit/eb683b45fe2ad645ae81c419d405aa2327a053e3)]:
+  - @mastra/core@1.83.0-alpha.9
+  - @mastra/code-sdk@1.19.0-alpha.11
+  - @mastra/connect@1.4.0-alpha.4
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 0.28.0-alpha.10
+
+### Patch Changes
+
+- Open boards stay fast on large projects. After a card changes, Factory now rereads only the cards that changed or were deleted instead of the whole board, and still does a full read at least once a minute. ([#30041](https://github.com/mastra-ai/mastra/pull/30041))
+
+- Sessions in environments with several repositories now sync the other repositories side by side instead of one after another, so a session starts in roughly the time of its slowest repository rather than the sum of all of them. Setup commands still run one at a time. ([#30029](https://github.com/mastra-ai/mastra/pull/30029))
+
+- Sessions that start at the same time now share one GitHub token mint per repository instead of each minting their own, so busy projects stop hitting the Platform's per-installation mint rate limit and skipping repository syncs. ([#30032](https://github.com/mastra-ai/mastra/pull/30032))
+
+- Checking whether a project still uses its retired Review board now reads Review cards a page at a time and stops at the first open one, instead of loading every Review row on each card read or write. ([#30037](https://github.com/mastra-ai/mastra/pull/30037))
+
+- Updated Factory's browser tab icon and session status icons to a rounded tile, matching the rounded corners used across the rest of the UI. ([#30040](https://github.com/mastra-ai/mastra/pull/30040))
+
+- Factory sessions bound to a card no longer read every card on the board on each model step to find the card's parent and children. Those are now read directly, so busy boards stay fast while cards change. ([#30034](https://github.com/mastra-ai/mastra/pull/30034))
+
+- Updated dependencies [[`b244478`](https://github.com/mastra-ai/mastra/commit/b24447862682a03b0ac3675005fcbeed6a2676b8), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/connect@1.3.2-alpha.3
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/code-sdk@1.19.0-alpha.10
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 0.28.0-alpha.9
+
+### Patch Changes
+
+- Factory servers no longer wait for a pass over every active run binding before they finish booting. The decision dispatcher already runs that catch-up in the background on its first tick, so boot stops being held for it. With a few hundred active bindings this took over a minute, which pushed deploys past their health check and left new instances unauthenticated for longer. ([#30025](https://github.com/mastra-ai/mastra/pull/30025))
+
+- Updated dependencies [[`13b4728`](https://github.com/mastra-ai/mastra/commit/13b47281ca4e91df1d5eda1dda55b14576529509)]:
+  - @mastra/code-sdk@1.19.0-alpha.9
+
+## 0.28.0-alpha.8
+
+### Patch Changes
+
+- The board listing no longer re-sends every card on each refresh. Each open tab refetched the whole board (megabytes on large projects) every few seconds, and the server serialized it again each time, stalling the process. The listing now builds its body once per board version and run activity, answers repeat reads with `304 Not Modified` via an `ETag`, and gzips the body for clients that accept it. ([#30014](https://github.com/mastra-ai/mastra/pull/30014))
+
+- Acknowledge running-session model switches immediately and apply the new default in the background without letting slow or failed session gateways block other sessions or newer defaults. ([#29979](https://github.com/mastra-ai/mastra/pull/29979))
+
+- Fixed the active-runs list failing with `invalid input syntax for type uuid` whenever a teammate's private session had a run in progress. Requests naming another person's private resource now answer 404 instead of 500, and a run whose access check fails is left out of the list rather than failing it. ([#30010](https://github.com/mastra-ai/mastra/pull/30010))
+
+- Updated dependencies:
+  - @mastra/code-sdk@1.19.0-alpha.8
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 0.28.0-alpha.7
+
+### Minor Changes
+
+- Added Factory-wide sandbox environment variables. Open **Settings › Manage Factory › Environment variables** to add a variable and choose where it applies: ([#29923](https://github.com/mastra-ai/mastra/pull/29923))
+
+  - **Runtime**: every command in every sandbox of the factory. Adds, edits and deletes take effect on the next command in a running sandbox, without restarting it.
+  - **Build**: the template build and setup commands only. Editing one rebuilds the template on the next build.
+  - **Both**: runtime and build.
+
+  Values are encrypted with the factory's credential encryption key and are never returned by the API or shown again in the UI. When sign-in is on and no key is configured, saving is blocked and the settings page explains why.
+
+### Patch Changes
+
+- Stop GitHub, GitLab, Linear, Jira and incident.io events from freezing the Factory server on large boards. Each event used to copy every card on the board, two or three times, to find the one it was about. Events, the issue and pull request sweeps, and board edits now read the board once and copy only the card they act on. On a 2,180-card board, 90 GitHub events went from 1.4 s to 0.06 s of blocked CPU. ([#29991](https://github.com/mastra-ai/mastra/pull/29991))
+
+- Factory agents are no longer told that approving a plan starts a goal. In Factory, approving a plan switches to Build mode and implements it without starting a goal, and the agent's instructions now say so. ([#28037](https://github.com/mastra-ai/mastra/pull/28037))
+
+- Fixed slow GitHub board loads in Factory. Listing a project's issues and pull requests no longer runs Factory rules on every board poll, so boards stay fast with many repositories and open tabs. A background check now runs every five minutes and creates Review cards for open pull requests whose opened webhook never arrived, checking the 600 newest per repository, and restores the open pull request on a card that lost track of it. Set `MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS` (or `MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS` on Mastra Platform) to change its cadence. Linking a repository through Mastra Platform now imports its open issues and pull requests like a direct GitHub App connection does. ([#29995](https://github.com/mastra-ai/mastra/pull/29995))
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`210458a`](https://github.com/mastra-ai/mastra/commit/210458a144ac5a934663db7bfe6cc650c0d2adaa), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`ac40e76`](https://github.com/mastra-ai/mastra/commit/ac40e762db7b6614076273221aae6681945f9da1), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/code-sdk@1.19.0-alpha.7
+  - @mastra/platform-workspace@1.13.0-alpha.1
+
+## 0.28.0-alpha.6
+
+### Minor Changes
+
+- Removed comments from Factory work items. Cards no longer have a comment feed, mentions, or comment counts, and the mention and activity items are gone from the attention inbox. Slack `aside` messages are still ignored by the agent but are no longer copied onto the card, and Factory no longer mirrors card comments to Slack. ([#29062](https://github.com/mastra-ai/mastra/pull/29062))
+
+  Each card now has a single `description` instead. Set it with `description` on `POST /web/factory/projects/:id/work-items` and `PATCH /web/factory/work-items/:id` (a blank string clears it), or edit it from the card panel. Runs started on the card receive it in a `<work-item-description>` block after the skill instructions, in place of the old `<work-item-feed>` block.
+
+  Breaking changes for API and agent-tool callers:
+
+  - `factory_create_work_item` takes `description` instead of `brief`. `factory_update_work_item` also accepts `description`, and `factory_inspect_work_item` returns it in place of recent comments.
+  - The `/web/factory/work-items/:id/comments` and `/web/factory/projects/:id/mention-roster` routes are removed. `/web/factory/projects/:id/feed-events` stays and still refreshes open boards, but its frames no longer carry a `workItemId`.
+  - The `mention` and `activity` attention kinds are removed.
+  - Work items no longer include `commentCount` or `feedActivityAt`.
+  - Integrations can no longer declare a `feedPublisher`, and `IntegrationContext` no longer has `feed`.
+  - `factoryWorkItemUrl()` no longer accepts `commentId`.
+
+- New projects' Work board has no Triage phase: a project created now gets Intake → Planning → Building → Review → Done/Canceled. Existing projects keep the Work board they stored, Triage included, and a project created on an older release that stores its boards only now gets Work with Triage too. No migration adds or removes Triage. Add Triage in Settings › Work board if you want it; resetting Factory's Work restores Factory's built-in Work, with Triage if Factory first stored the project's Work with it (an app's Work resets to the app's, see below). ([#29901](https://github.com/mastra-ai/mastra/pull/29901))
+
+  Factory now adds its Work board only to a project that has no boards yet. `factory.upsertBoard(board, { projects: 'all' })` also covers projects created later in the same process: a project with no boards gets the app's boards first, so it gets no Work from Factory beside an app's `work` board.
+
+  A project without a Work board still files every integration arrival (GitHub, GitLab, Linear, Jira, incident.io) and every card created with neither a board nor stages: its intake routes place them, and one no route takes lands in the initial phase of the project's first board. A card created with stages but no board skips the routes and goes to that first board. A project with no boards at all has no first board: card creation without a board is refused and integration arrivals aren't filed until a board is installed, so upsert yours (or let Factory add Work) first. Before, such a project filed nothing.
+
+  `includeDefaultBoards` is deprecated and ignored, with a one-time warning. To run your own Work board, store it under the `work` key at startup instead of turning the default off.
+
+  For now, a board stored under `work` must keep Work's code phases and moves, because Factory's code (intake, source-closed handling, integrations) moves cards between them: Intake stays first, and Intake, Planning, Building (`execute`), Review (`pr-review`), Done and Canceled keep their kind and every move Work makes between them. Names, runners, exit tools, start conditions, added phases and added moves are free. Boards under any other key are free. `upsertBoard` refuses a `work` board that drops one of these with `code_behaviour`.
+
+  ```ts
+  // Before
+  const factory = new MastraFactory({ storage, includeDefaultBoards: false, boards: [ourWorkBoard] });
+
+  // After: Work's stored definition, edited where Work's code allows, under the `work` key
+  import { Mastra } from '@mastra/core/mastra';
+  import { MastraFactory, workSeedWithTriage } from '@mastra/factory';
+  import type { StoredBoardInput } from '@mastra/factory';
+
+  // Work with Triage, as existing projects store it. Dropping Triage fails while cards sit in it.
+  const work = workSeedWithTriage();
+  const ourWorkBoard: StoredBoardInput = {
+    ...work,
+    phases: [
+      ...work.phases.map(phase => {
+        // Free: names, runners and start conditions.
+        if (phase.key === 'planning') {
+          return {
+            ...phase,
+            name: 'Plan',
+            autoStart: true,
+            runner: { ...phase.runner, instructions: 'Follow docs/planning.md.' },
+          };
+        }
+        // Free: added moves.
+        if (phase.key === 'execute') return { ...phase, nextPhases: [...(phase.nextPhases ?? []), 'blocked'] };
+        return phase;
+      }),
+      // Free: added phases.
+      { key: 'blocked', name: 'Blocked', kind: 'resting', nextPhases: ['planning', 'execute', 'canceled'] },
+    ],
+  };
+
+  const factory = new MastraFactory({ storage });
+  const mastraArgs = await factory.prepare(); // prepare() runs once: keep its result
+  await factory.upsertBoard(ourWorkBoard, { projects: 'all' });
+  export const mastra = new Mastra(mastraArgs);
+  await factory.finalize();
+  ```
+
+  `upsertBoard` takes the stored shape (`key` plus a `phases` array, first phase first), not a `defineBoard()` board. `workSeedWithTriage()` gives Work as existing projects store it, with Triage: keep Triage while any project may have cards in it, because `upsertBoard` refuses (`409 phase_in_use`) to drop a phase that holds cards, and with `projects: 'all'` that stops the call partway, after earlier projects were already replaced. To drop Triage, move its cards out first. A project created now has no Triage and gains it from this board. The README's "Stored boards" section lists every phase field.
+
+  `upsertBoard(board, { projects: 'all' })` replaces the `work` row of every existing project with your definition, at that row's current revision: edits people made to Work in Settings are discarded each time it runs. Check what projects have stored before you start running it.
+
+  Only `upsertBoard(…, { projects: 'all' })` registers a board for reset and for skipping Factory's Work migrations; an upsert to named projects doesn't. Resetting a board your app upserted with `projects: 'all'` (Settings, or `POST …/boards/:key/reset`) restores your app's definition from this process's last `upsertBoard` call, not Factory's Work. Factory's one-time Work migrations don't run on it once it is registered. Registration happens in `upsertBoard`, after `prepare()` has loaded existing projects, so a Work migration a new Factory release adds can run once on your stored `work` row during `prepare()`; the `upsertBoard` call right after writes your definition back over it, and the migration is recorded, so it never runs again. A `work` board upserted only to named projects resets to Factory's Work, and its migrations run. A project's own Work, with no app board under `work`, resets to Factory's built-in Work, with Triage or without depending on how Factory first stored it.
+
+  Passing a board of your own with the `work` ID in `boards` now throws, since Work is always installed: apps that set `includeDefaultBoards: false` and passed their own `work` board must move it to `upsertBoard` as shown above.
+
+### Patch Changes
+
+- Factory PR reviews no longer request changes because of CI status alone. Failing checks about PR metadata or process (such as a missing issue reference, title format, or labels) are reported as non-blocking findings, and a red build or test check only blocks the verdict when the reviewer reproduces the failure. ([#29933](https://github.com/mastra-ai/mastra/pull/29933))
+
+- Factory triage comments on Linear issues now render correctly. The triage skill wrote its Linear comments with GitHub-only HTML (the `<!-- mastra-factory-triage -->` marker and a `<details>` block), which Linear shows as literal text. Linear comments now leave out the marker and use Linear's `+++ Details` … `+++` collapsible syntax, and the `linear_create_comment` tool tells agents that Linear does not render HTML. ([#29941](https://github.com/mastra-ai/mastra/pull/29941))
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`023455e`](https://github.com/mastra-ai/mastra/commit/023455e2d45ba13aef1880364985c949308ae015), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/code-sdk@1.19.0-alpha.6
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 0.28.0-alpha.5
+
+### Minor Changes
+
+- Added one-click Mastra Gateway setup to Factory. When Factory signs users in with their Mastra account, onboarding, factory creation, and Settings > Models offer **Mastra Gateway** first. One click creates a gateway key on the user's Mastra organization and stores it with their model credentials, so Mastra Gateway models run on the organization's Mastra credits without provider keys. ([#29183](https://github.com/mastra-ai/mastra/pull/29183))
+
+  - The Mastra Gateway option says it is billed to the organization's Mastra credits and shows the balance left, before the user connects it.
+  - When the organization runs out of credits, the **No gateway credits left** warning and the failed run both offer **Add credits**, which opens the organization's add-credits page on Mastra in a new tab. The balance updates when the user comes back to Factory.
+  - Members who are not admins of the Mastra organization are told to ask an admin, since only admins can buy credits.
+  - New gateway setups start on Claude Opus 5.5.
+  - Factory creates no key while the user's Mastra session is on a different organization than the Factory, and asks them to sign in again with the Factory's organization.
+  - With other auth providers, Factory lists Mastra Gateway as a regular API-key provider.
+
+### Patch Changes
+
+- Factory review, re-review, test report, triage, and self-review comments are now shorter and lead with what matters. Reviews open with the verdict as a heading, then a one-sentence summary, a ranked findings table (blocking first, with a type for each finding), and the required changes. Supporting notes sit in one collapsed block, and the detailed run record stays in the Factory session instead of the PR. ([#29880](https://github.com/mastra-ai/mastra/pull/29880))
+
+- Factory now tells open boards when something changes, so they no longer have to poll for it. ([#29777](https://github.com/mastra-ai/mastra/pull/29777))
+
+  - Moving or editing a card, a decision being proposed, picked up, approved, retried, failed or finished, and a session starting, parking, finishing or being torn down mid-run each send a live update to every open board of the project. This includes sessions picked back up after a server restart.
+  - The live connection sends its first keepalive as soon as it opens, so a proxy that holds a response until its first byte no longer delays it.
+
+- Fixed removing a saved API key in local mode. The provider used to stay connected until the server restarted, because the key stayed in the server's environment. It now disconnects right away, or goes back to the key the server was started with if there was one. ([#29432](https://github.com/mastra-ai/mastra/pull/29432))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`b3801a7`](https://github.com/mastra-ai/mastra/commit/b3801a79d35090231cc6e57752739f0e238d5a01), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`b3801a7`](https://github.com/mastra-ai/mastra/commit/b3801a79d35090231cc6e57752739f0e238d5a01), [`92f9771`](https://github.com/mastra-ai/mastra/commit/92f9771a0fefaf6e23541ac702850da63bfe4ef9)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/code-sdk@1.19.0-alpha.5
+  - @mastra/auth-studio@1.4.0-alpha.1
+  - @mastra/mcp@2.9.0-alpha.2
+
+## 0.28.0-alpha.4
+
+### Minor Changes
+
+- The board now decides what Factory does on its own. The project-wide **Auto-start runs** and **Self-review before pull requests** switches are gone: a phase starts its runs without approval when it has `autoStart` (optionally `autoStartWhen`), and a card is self-reviewed when its board has a self-review phase. ([#29756](https://github.com/mastra-ai/mastra/pull/29756))
+
+  **Existing projects keep their behavior.** On the next load, Factory rewrites each project's stored boards once:
+
+  - A project with auto-run on gets `autoStart: true` on every working phase of every stored board.
+  - A project with self-review off loses the self-review phase of every stored board (Work, app and custom), with every move into it. Factory keeps the phase and logs a warning when an app board declares it in code (`defineBoard()`), when cards sit in it, when the board's build phase can't move to its pull request review without it, or when it is another phase's only move.
+
+  Every board the project stores is rewritten, app boards included: Factory serves a project the stored row, not the code. Boards are only served from code, unmigrated, when the boards storage domain is unavailable.
+
+  **API.** `PATCH /web/factory/projects/:id` still accepts `autoRunEnabled` and `selfReviewEnabled` for one more release and ignores them. Projects no longer return them. `autoApprovePlans` stays accepted and ignored as before.
+
+  Instead of `{ "autoRunEnabled": true }`, set `autoStart` on the phases that should start on their own, in Settings → Work board or with `PATCH /web/factory/projects/:id/boards/work`, sending the board's phases and the `expectedRevision` you read.
+
+- Added creating, editing and deleting boards in the Factory UI. Organization admins get **New board** in the sidebar's Boards section and in **Settings → Boards** (formerly "Work board"), and **Edit board** on every board. ([#29895](https://github.com/mastra-ai/mastra/pull/29895))
+
+  A new board starts from Backlog → Doing → Done or from a copy of an existing board. Its key is derived from the name and can be changed before the board is created. The editor that already edited the Work board now edits any board, and also adds, removes and reorders phases, sets each phase's kind, and edits the board's description. Boards the project or the app added can be deleted once no card sits on them; Work can only be reset.
+
+  Cards still reach a new board through intake routes, so the form links to **Settings → Work Intake**.
+
+- Intake routes now decide where every new card lands. Label routes and a source binding's board are gone, and Work stays the default board through an editable route instead of a hardcoded fallback. ([#29754](https://github.com/mastra-ai/mastra/pull/29754))
+
+  **Why.** Where a card landed used to depend on five things: intake routes, GitHub label routes, the board on a source binding, the board and phase an integration's rule named, and a fallback to Work. Only some of them were visible, and they could disagree. Now one ordered list per project decides, and admins can see and change all of it.
+
+  **Everything else goes to Work › Intake.** Every project gets a new default route, added once at the end of its routes: it has no condition and sends every new card no other route takes to Work › Intake, which is where those cards landed before. Point it at another board to send there every new card the routes above it don't take. A deleted default is not added back. A new route that places new cards now goes just ahead of the first enabled route with no condition that takes every new card, whoever added it, so it can match; a route that only handles status events goes at the end.
+
+  ```bash
+  # Send every new card no other route takes to the Docs board.
+  curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$EVERYTHING_ELSE_ROUTE" -H 'content-type: application/json' -d '{
+    "target": { "boardKey": "docs" },
+    "expectedRevision": 1
+  }'
+  ```
+
+  **Edit routes in Settings.** Settings › Work Intake › Intake routes lists the project's routes in the order they are tried. Admins can turn routes on and off, reorder, edit, add and delete them, and use **Send new cards to** to send every new card the routes above the catch-all don't take to another board (outside authors' items and pull requests still go to Work through their own routes unless you change those too), which also copies the close, reopen and pull request routes onto that board. Everyone else sees them read-only. `GET /web/factory/projects/:id/intake-routes` now also returns `canEdit`.
+
+  **Route on any fact of the work item.** Routes and phase rules can now test where an item lives and what the provider says about it: `source.repository` (GitHub repository or GitLab project path, Linear team key, Jira project key), `source.provider`, `item.key` (`acme/app#42`, `ENG-12`), `item.state` and `item.assignees`. Strings compare case-insensitively. A list fact (`item.labels`, `item.assignees`) now matches `equals`, `not_equals`, `in` and `not_in` by its members, and an empty list counts as missing, so `item.assignees exists` matches only assigned items. Before, `equals` never matched a label and `item.labels exists` matched every card.
+
+  ```bash
+  # Send one repository's issues and pull requests to the Docs board.
+  curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+    "name": "acme/docs goes to Docs",
+    "when": { "operator": "AND", "conditions": [
+      { "field": "source.repository", "operator": "equals", "value": "acme/docs" }
+    ] },
+    "target": { "boardKey": "docs" }
+  }'
+  ```
+
+  **Removed: label routes and binding boards.** Use an intake route with any condition on the work item instead, such as `item.labels contains release` or `source.repository equals acme/app`.
+
+  ```bash
+  # Before: send GitHub issues labelled "release" to the Release board
+  curl -X PUT "$FACTORY_URL/web/intake/label-routes" -d '{"factoryProjectId":"…","integrationId":"github","label":"release","board":"release"}'
+
+  # After: an intake route on the project
+  curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+    "name": "Releases go to Release",
+    "when": { "operator": "AND", "conditions": [
+      { "field": "item.labels", "operator": "contains", "value": "release" },
+      { "field": "source.integration", "operator": "equals", "value": "github" }
+    ] },
+    "target": { "boardKey": "release" }
+  }'
+  ```
+
+  - `GET` and `PUT /web/intake/label-routes` answer `410` with `label_routes_removed`. Stored label routes are no longer read.
+  - `PUT /web/intake/bindings` ignores `board`, and bindings no longer return it. A binding only decides which project a source feeds. Rebinding a source no longer moves its cards.
+  - `/web/gitlab/issues` no longer takes a `board` query parameter.
+  - A GitHub label change updates the card's labels and never moves the card.
+
+  **API changes for host rules**
+
+  - `intakeTarget(boards)` and `withIntakeTarget(boards)` from `@mastra/factory/boards` no longer take a `board` argument: they always name the default board's first phase, since intake routes place the card from there.
+  - `FactoryRuleIntakeTarget.pullRequestReview` is gone, so `context.intake.pullRequestReview` no longer compiles. In an `upsertLinkedWorkItem` decision, file a review request at `context.intake.board` / `context.intake.initialPhase` and let the `Requested reviews go to Review` route place it, or set `skipRules: true` with the stage you want.
+
+  ```ts
+  // Before: file a review request straight into the review phase
+  stage: context.intake!.pullRequestReview ?? context.intake!.initialPhase,
+
+  // After: file it in the default board's first phase; the "Requested reviews go to Review" route moves it
+  board: context.intake!.board,
+  stage: context.intake!.initialPhase,
+  ```
+
+  **Behavior changes**
+
+  - The board and stage an integration rule names no longer place a new card: every integration files new cards in the default board's first phase and the project's routes place them. A host override of `issueOpened` (or any intake rule) that picked a board or a phase such as `stage: 'pr-review'` is now routed like any other card. Add an intake route to get the same placement. `skipRules: true` still files a card exactly where the decision says.
+  - A pull request a maintainer asks Factory to review reaches Work › Review through the default `Pull requests go to Review` route. If you disabled that route, it now lands in Work › Intake.
+  - A Linear, Jira or incident.io source bound to a project without a board now feeds that project. Previously it was skipped until a board was picked. Unbind it if it should not feed the project.
+  - A binding's board used to send one source's cards to its own board. Routes can't always do the same: they see where an item lives, not which binding it came through. A `source.repository` condition matches a GitHub or GitLab repository, a Linear team or a Jira project, so sources that differ by one of those can still go to different boards. Two Linear projects in the same team share the team key, so a route can't send them to different boards; send that team to one board, or tell their items apart by another fact such as `item.labels`. incident.io items have no `source.repository`, so a `source.repository` condition never matches them; route them with `source.provider equals incidentio` or another fact.
+
+- **Intake routes can move cards into any phase.** A route that handles a status event (a close, a reopen, a pull request push or review request) now moves the card to its target phase even when that phase is a working phase such as Triage. One limit stays: on a board with a pull request loop, a pull request card enters only the review phase among working phases. ([#29884](https://github.com/mastra-ai/mastra/pull/29884))
+
+  The move is not a person's go-ahead, so whether work starts follows the usual rules. The board decides: a phase with `autoStart` (and a matching `autoStartWhen`) starts its run, and so does a re-review of a pull request Factory opened. Otherwise the run is proposed for a person to approve. To have a reopen route into Triage re-run Triage straight away, give Triage `autoStart`.
+
+  ```bash
+  curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+    "name": "Reopened bugs re-run Triage",
+    "on": ["work_item.reopened"],
+    "target": { "boardKey": "work", "phaseKey": "triage" }
+  }'
+  ```
+
+- Removed the `source_control_publish_test_check` session tool and the per-project `reviewTestChecksEnabled` setting that gated it. Factory's review skills now report test results only in their `## Factory test report` comment. An app that wants a commit check passes its own tool through `tools` and builds it on the new `factory.reviewedChangeRequest(requestContext)`. That returns the change request a Review run reviews (provider, repository, number, current head and branch), or `undefined` outside a Review run. Its `publishCommitCheck()` refuses a head that moved, a closed change request, and a provider that cannot publish commit checks. ([#29888](https://github.com/mastra-ai/mastra/pull/29888))
+
+  `platformConnectTools(projectId)` is now exported, so an app passing `tools` can keep the Mastra Connect tools Factory offers by default.
+
+  `FactoryProject` no longer has `reviewTestChecksEnabled`, and `FactoryProjectsStorage.update` no longer accepts it. `PATCH /web/factory/projects/:id` still accepts it for one more release and ignores it.
+
+  **Before**
+
+  ```ts
+  await projects.update({ orgId, id, input: { autoRunEnabled: true, reviewTestChecksEnabled: true } });
+  // A review skill called source_control_publish_test_check.
+  ```
+
+  **After**
+
+  ```ts
+  await projects.update({ orgId, id, input: { autoRunEnabled: true } });
+
+  const factory: MastraFactory = new MastraFactory({
+    // ...
+    tools: async ({ requestContext }) => ({
+      ...(await platformConnectTools(process.env.MASTRA_PROJECT_ID!)({ requestContext })),
+      publish_test_check: createTool({
+        id: 'publish_test_check',
+        inputSchema: z.object({ headSha: z.string(), status: z.enum(['success', 'failure']), summary: z.string() }),
+        execute: async (input, { requestContext }) => {
+          const reviewed = await factory.reviewedChangeRequest(requestContext!);
+          if (!reviewed) throw new Error('Only a Review run can publish a test check.');
+          return reviewed.publishCommitCheck({ ...input, name: 'Review / tests', title: input.summary });
+        },
+      }),
+    }),
+  });
+  ```
+
+  Call your tool from your own review skill.
+
+### Patch Changes
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+  - @mastra/code-sdk@1.19.0-alpha.4
+  - @mastra/mcp@2.9.0-alpha.1
+
 ## 0.28.0-alpha.3
 
 ### Minor Changes
