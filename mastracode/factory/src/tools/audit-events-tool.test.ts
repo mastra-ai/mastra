@@ -1,6 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
+import { auditActorOf } from '../rules/transition-service.js';
 import { ACTOR_PROFILE_METADATA_KEY, AuditStorage } from '../storage/domains/audit/base.js';
 import type { RecordAuditEventInput } from '../storage/domains/audit/base.js';
 import type { Card, FactoryRunBindingRecord } from '../storage/domains/work-items/base.js';
@@ -279,6 +280,29 @@ describe('factory_list_audit_events', () => {
 
     const result = await run();
     expect(result.events.map(e => e.targets[0]!.id)).toEqual(['mine', 'shared']);
+  });
+
+  it("shows the stage moves a run's agent made on its card", async () => {
+    // The transition service records a run agent under its binding, not its thread.
+    const runAgent = (bindingId: string) => auditActorOf({ type: 'agent', bindingId, role: 'engineer' });
+    const moved = {
+      action: 'factory.work_item.stage_moved',
+      targets: [{ type: 'work_item', id: ITEM, name: 'Fix it' }],
+    };
+    const { run } = await setup({
+      events: [
+        { at: 1, actorId: 'user-2', action: 'factory.work_item.created', targets: [{ type: 'work_item', id: ITEM }] },
+        { at: 2, ...runAgent('binding-1'), ...moved },
+        { at: 3, ...runAgent('binding-elsewhere'), ...moved },
+      ],
+      bindings: [{ id: 'binding-1', threadId: 'run-thread', sessionId: 'run-session' }],
+    });
+
+    const history = await run({ workItem: ITEM });
+    expect(history.events.map(e => [e.action, e.actor.id])).toEqual([
+      ['factory.work_item.stage_moved', 'agent:binding-1'],
+      ['factory.work_item.created', 'user-2'],
+    ]);
   });
 
   it('includes agent runs a person started when asked', async () => {

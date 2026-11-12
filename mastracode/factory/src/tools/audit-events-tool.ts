@@ -181,7 +181,7 @@ function sessionRefs(event: AuditEventRow): string[] {
 function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependencies) {
   const sessions = new Map<string, Promise<boolean>>();
   const threads = new Map<string, Promise<boolean>>();
-  let runThreads: Promise<Set<string>> | undefined;
+  let runAgents: Promise<Set<string>> | undefined;
 
   const sessionVisible = (sessionId: string): Promise<boolean> => {
     let result = sessions.get(sessionId);
@@ -197,11 +197,12 @@ function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependen
   };
 
   const threadVisible = async (threadId: string): Promise<boolean> => {
-    // Work item runs are on the board for everyone in the Factory.
-    runThreads ??= deps.workItems
+    // Work item runs are on the board for everyone in the Factory. A run's agent is recorded
+    // under its thread (commits, pushes, signals) or under its binding (stage moves).
+    runAgents ??= deps.workItems
       .listRunBindings(scope.orgId, scope.factoryProjectId)
-      .then(bindings => new Set(bindings.map(binding => binding.threadId)));
-    if ((await runThreads).has(threadId)) return true;
+      .then(bindings => new Set(bindings.flatMap(binding => [binding.threadId, binding.id])));
+    if ((await runAgents).has(threadId)) return true;
 
     const controller = (await deps.messaging?.())?.controller;
     if (!controller) return false;
