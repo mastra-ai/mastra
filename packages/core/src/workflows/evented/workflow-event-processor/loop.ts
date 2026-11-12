@@ -75,6 +75,11 @@ export function failedLoopStep(result: StepResult<any, any, any, any>, error: Er
   };
 }
 
+/**
+ * Decides, after a loop body ran, whether the loop runs again: publishes the
+ * next iteration's `workflow.step.run`, or the loop step's `workflow.step.end`.
+ * `savedCondition` replays a decision a guarded delivery already committed.
+ */
 export async function processWorkflowLoop(
   {
     workflowId,
@@ -99,12 +104,23 @@ export async function processWorkflowLoop(
     step,
     stepResult,
     savedCondition,
+    beforePublish,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
     savedCondition?: boolean;
+    /**
+     * Called once the condition decided, before the event that runs the next
+     * iteration (`again`) or ends the loop step is published, with the step
+     * results and state that event carries.
+     */
+    beforePublish?: (decision: {
+      again: boolean;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      state: Record<string, any>;
+    }) => Promise<void>;
   },
 ) {
   // Get current state from stepResult, stepResults or passed state
@@ -184,13 +200,15 @@ export async function processWorkflowLoop(
     outputOptions,
   };
 
-  if (step.loopType === 'dountil') {
-    if (loopCondition) {
-      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
-    } else {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
-    }
-  } else if (loopCondition) {
+  // dountil runs again while its condition is false, dowhile while it is true.
+  const again = step.loopType === 'dountil' ? !loopCondition : !!loopCondition;
+  await beforePublish?.({
+    again,
+    stepResults: (again ? loopAgainData : loopEndData).stepResults as Record<string, StepResult<any, any, any, any>>,
+    state: currentState,
+  });
+
+  if (again) {
     await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
   } else {
     await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });

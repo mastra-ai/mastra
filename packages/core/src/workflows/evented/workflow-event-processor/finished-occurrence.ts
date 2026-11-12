@@ -38,6 +38,30 @@ function sameRecord(stored: StoredRecord, known: StoredRecord | undefined): bool
   );
 }
 
+/** The ids of the leaf steps `entries` run, once per place they appear. */
+function leafIds(entries: StepFlowEntry[]): string[] {
+  return entries.flatMap(entry => {
+    if (entry.type === 'parallel' || entry.type === 'conditional') {
+      return leafIds(entry.steps);
+    }
+
+    if (entry.type === 'loop' || entry.type === 'foreach') {
+      return [getEntryId(entry.step)];
+    }
+
+    if (entry.type === 'step' || entry.type === 'agent' || entry.type === 'tool' || entry.type === 'mapping') {
+      return [getEntryId(entry)];
+    }
+
+    return [];
+  });
+}
+
+/** Whether the graph uses the step `leafId` at more than one place. */
+function usedMoreThanOnce(stepGraph: StepFlowEntry[], leafId: string): boolean {
+  return leafIds(stepGraph).filter(id => id === leafId).length > 1;
+}
+
 /**
  * Whether `record` ends its occurrence. On a store with step guards a failed
  * attempt is saved before its retry is published, and every loop iteration
@@ -58,9 +82,9 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: 
  * A delivery can reach a worker after its occurrence finished: a broker
  * redelivery or a message that sat in a backlog while `restart()` ran the step,
  * or a restart that read the snapshot just before the step saved its result.
- * The stored record ends the occurrence when it is terminal and newer than the
- * record the delivery carried, so a step id used twice in one graph still runs
- * its second occurrence. For the steps a restart dispatches, any terminal
+ * The stored record ends the occurrence when it is terminal and is not an
+ * earlier occurrence's record the delivery carried, so a step id used twice in
+ * `stepGraph` still runs its second occurrence. For the steps a restart dispatches, any terminal
  * record ends them. For a loop body, a stored record from a later iteration
  * ends the iteration too. Foreach items are read from the foreach step's
  * per-item records.
@@ -86,6 +110,7 @@ export function finishedOccurrence({
   snapshot,
   stepGuards,
   guarded,
+  stepGraph,
 }: {
   step: LeafEntry;
   executionPath: number[];
@@ -94,6 +119,7 @@ export function finishedOccurrence({
   snapshot: WorkflowRunState | null | undefined;
   stepGuards: boolean;
   guarded: boolean;
+  stepGraph: StepFlowEntry[];
 }): FinishedOccurrence {
   const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
   const stored = snapshot?.context[leafId] as StoredRecord | undefined;
@@ -133,10 +159,12 @@ export function finishedOccurrence({
     return 'run';
   }
 
-  // The delivery already carried this terminal record, so it belongs to an earlier occurrence of
-  // the same step id. A step a restart dispatches was active when the restart read the run, so
-  // there a terminal record is the step's own result.
-  if (!restartTarget && sameRecord(stored, known)) {
+  // A terminal record the delivery already carried belongs to an earlier occurrence of a step id
+  // the graph uses twice. Steps save their result before the event that continues the run, so for
+  // a step used once it is the step's own result, read by a late continuation of the step before.
+  // A step a restart dispatches was active when the restart read the run, so there a terminal
+  // record is the step's own result.
+  if (!restartTarget && sameRecord(stored, known) && usedMoreThanOnce(stepGraph, leafId)) {
     return 'run';
   }
 

@@ -561,7 +561,14 @@ describe.each(transports)(
           return { ok: true };
         },
       });
-      const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }) })
+      // Unleased, so every delivery runs the step and throws on its step end publish. A leased step
+      // saves its result first, and its redelivery continues the run from it without that publish.
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        options: { autoRestartActiveRuns: false },
+      })
         .then(step)
         .commit();
       return { workflow, executions: () => executions };

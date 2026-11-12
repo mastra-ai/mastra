@@ -117,6 +117,12 @@ export type ProcessorArgs = {
    * step lease its publisher hands to the worker that runs the retry.
    */
   stepLeaseHandoff?: StepLeaseHandoff;
+  /**
+   * Set only on the `workflow.step.end` of a parallel or conditional branch
+   * that saved its result before publishing it: whether that save left every
+   * branch of the entry settled. Only that step end joins the entry.
+   */
+  joinsBranches?: boolean;
   perStep?: boolean;
   format?: 'legacy' | 'vnext';
   state?: Record<string, any>;
@@ -2558,6 +2564,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       snapshot,
       stepGuards: store.supportsWorkflowStepGuards(),
       guarded: deferToGuards && this.#guardsStepStart(store, args, step),
+      stepGraph: args.workflow.stepGraph,
     });
     if (outcome === 'run' || outcome === 'drop') {
       return outcome;
@@ -2575,15 +2582,156 @@ export class WorkflowEventProcessor extends EventProcessor {
     };
   }
 
-  /** Evaluates the loop condition after an iteration, then starts the next one or leaves the loop. */
+  /**
+   * Saves a leaf step's terminal result the way its step end would, before the
+   * event that ends the occurrence is published and before the caller releases
+   * the step lease. A delivery of the step that arrives later, or a restart,
+   * then finds the result instead of a running record and doesn't run the step
+   * again. The step end still writes the same record afterwards.
+   *
+   * `guardEventId` is the delivery that started the step on a store with step
+   * guards: the save then commits under that occurrence's completion guard, and
+   * the step end adopts it. Returns the stored step results after the write, or
+   * `undefined` when nothing was saved.
+   */
+  async #saveFinishedStep({
+    args,
+    stepId,
+    result,
+    stepResults,
+    guardEventId,
+  }: {
+    args: Pick<ProcessorArgs, 'workflow' | 'workflowId' | 'runId' | 'executionPath' | 'activeStepsPath' | 'state'> & {
+      requestContext: Record<string, any>;
+    };
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    guardEventId?: string;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
+    const { workflow, workflowId, runId, executionPath, activeStepsPath } = args;
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    if (!store) {
+      return undefined;
+    }
+
+    // The same record the step end builds: state goes with the run, a branch keeps its delta for
+    // the join, and only records a restart doesn't read in full are pruned.
+    const { __state, __stateDelta, ...clean } = result as typeof result & {
+      __state?: Record<string, any>;
+      __stateDelta?: Record<string, any>;
+    };
+    const state = __state ?? (stepResults as Record<string, any>).__state ?? args.state ?? {};
+    const entry = workflow.stepGraph[executionPath[0]!];
+    const isParallelBranch = (entry?.type === 'parallel' || entry?.type === 'conditional') && executionPath.length > 1;
+    const stored = (isParallelBranch && __stateDelta ? { ...clean, __stateDelta } : clean) as typeof result;
+    const retainContinuation = !!guardEventId && executionPath.length === 1;
+    const persisted =
+      isParallelBranch || retainContinuation
+        ? stored
+        : this.pruneStepResultForPersist({
+            workflow,
+            runId,
+            state,
+            stepId,
+            storedResult: stored,
+            stepResults: { ...stepResults, [stepId]: stored },
+            executionPath,
+            activeStepsPath: Object.fromEntries(Object.entries(activeStepsPath).filter(([id]) => id !== stepId)),
+          });
+
+    try {
+      const context = await store.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId,
+        result: guardEventId
+          ? { ...persisted, metadata: { ...persisted.metadata, startedBy: guardEventId } }
+          : persisted,
+        requestContext: withoutAuthToken(args.requestContext),
+        ...(isParallelBranch ? {} : { state }),
+        ...(guardEventId ? { completionGuard: { eventId: guardEventId } } : {}),
+      });
+
+      // Stores return no results when the run has no stored row: nothing was saved.
+      return context && Object.keys(context).length > 0 ? context : undefined;
+    } catch (error) {
+      if (!isWorkflowStepConflictError(error)) {
+        throw error;
+      }
+
+      // Another delivery of this occurrence committed first. The step end this delivery publishes
+      // meets the same guard and adopts what was committed, or drops as stale.
+      this.mastra.getLogger()?.debug('Another delivery saved this workflow step first', {
+        runId,
+        stepId,
+        reason: error.reason,
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * Saves a loop's progress before the event that continues it is published, on
+   * the paths without step guards (a guarded delivery commits it in
+   * {@link #advanceLoop}). Running again saves the next iteration's start, the
+   * record that iteration writes when it starts: a late delivery of the
+   * iteration that just ran then sees a later iteration and is dropped, and a
+   * restart runs the next iteration from its input. A restart reads a
+   * successful body record as a finished loop, so the iteration's own result
+   * is not saved. Ending the loop saves the body's final result.
+   */
+  async #saveLoopProgress(
+    args: ProcessorArgs,
+    leafId: string,
+    result: StepResult<any, any, any, any>,
+    decision: {
+      again: boolean;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      state: Record<string, any>;
+    },
+  ) {
+    if (!decision.again) {
+      await this.#saveFinishedStep({
+        args: { ...args, requestContext: args.requestContext ?? {} },
+        stepId: leafId,
+        result,
+        stepResults: decision.stepResults,
+      });
+      return;
+    }
+
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    const nextStart = {
+      ...omitPriorCompletionFields((decision.stepResults[leafId] ?? {}) as Record<string, unknown>),
+      payload: result.status === 'success' ? result.output : undefined,
+      startedAt: Date.now(),
+      status: 'running' as const,
+    };
+    await store?.updateWorkflowResults({
+      workflowName: args.workflowId,
+      runId: args.runId,
+      stepId: leafId,
+      result: nextStart as unknown as StepResult<any, any, any, any>,
+      requestContext: withoutAuthToken(args.requestContext ?? {}),
+      state: decision.state,
+    });
+  }
+
+  /**
+   * Evaluates the loop condition after an iteration, then starts the next one or leaves the loop.
+   * With `saveProgress`, set by the delivery that ran the body under its step lease, the loop's
+   * progress is saved before the next event is published (see {@link #saveLoopProgress}).
+   */
   async #processLoop(
     args: ProcessorArgs,
     step: Extract<StepFlowEntry, { type: 'loop' }>,
     result: StepResult<any, any, any, any>,
     startedBy?: string,
+    { saveProgress = false }: { saveProgress?: boolean } = {},
   ) {
     try {
-      return await this.#advanceLoop(args, step, result, startedBy);
+      return await this.#advanceLoop(args, step, result, startedBy, saveProgress);
     } catch (error) {
       if (!isNonRedeliverable(error)) throw error;
       // The condition threw, now or on an earlier delivery. End the loop step as failed in the
@@ -2667,11 +2815,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  /**
+   * Evaluates the loop condition, under the occurrence's completion guard on a
+   * store with step guards, and publishes the next iteration or the loop's end.
+   * `saveProgress` saves the loop's progress first on the unguarded path.
+   */
   async #advanceLoop(
     args: ProcessorArgs,
     step: Extract<StepFlowEntry, { type: 'loop' }>,
     result: StepResult<any, any, any, any>,
     startedBy?: string,
+    saveProgress = false,
   ) {
     const leafId = getEntryId(step.step);
     const store = await this.mastra.getStorage()?.getStore('workflows');
@@ -2739,6 +2893,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         step,
         stepResult,
         savedCondition: guarded ? stepResult.metadata?.loopCondition : undefined,
+        beforePublish:
+          saveProgress && !guarded ? decision => this.#saveLoopProgress(args, leafId, stepResult, decision) : undefined,
       },
     );
   }
@@ -3879,6 +4035,25 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResult.metadata = { ...stepResult.metadata, startedBy: args.eventId };
     }
 
+    // A leased step saves its terminal result before the event that ends the occurrence and before
+    // its lease is released, so a delivery or restart arriving in between finds the result. Foreach
+    // items are left to the foreach's step end: their step ends decide together, from the shared
+    // record, which item continues the foreach or fails the run, and an earlier save would let two
+    // of them decide. Workflows that persist no running snapshot have nothing to save into.
+    const savesFinishedResult =
+      stepLease !== UNLEASED_STEP &&
+      step.type !== 'foreach' &&
+      !!workflowsStore &&
+      (shouldPersistRunning || guardStart);
+    const saveFinished = (result: StepResult<any, any, any, any>) =>
+      this.#saveFinishedStep({
+        args: { ...args, requestContext },
+        stepId: leafId,
+        result,
+        stepResults,
+        guardEventId: guardStart ? args.eventId : undefined,
+      });
+
     if (abortController?.signal?.aborted) {
       if (this.cancelHandledControllers.has(abortController)) return;
       // Extract updated state from step result
@@ -3943,6 +4118,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (stepResult.status === 'failed') {
       const retries = getEntryRetries(leaf) ?? workflow.retryConfig.attempts ?? 0;
       if (retryCount >= retries || stepResult.nonRetryable) {
+        // A failure that lost the run to another execution must not be merged into its row.
+        const ownershipLost = workflow.options?.isOwnershipLostError?.(stepResult.error);
+        if (savesFinishedResult && !ownershipLost) {
+          await saveFinished(stepResult);
+        }
+
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
           runId,
@@ -4073,10 +4254,14 @@ export class WorkflowEventProcessor extends EventProcessor {
           : !restart && !timeTravel && resumeSteps?.length
             ? stepResults[leafId]?.metadata?.startedBy
             : undefined,
+        { saveProgress: savesFinishedResult },
       );
     } else {
       // Extract updated state from step result
       const updatedState = (stepResult as any).__state ?? currentState;
+
+      // A suspended step is not finished: its step end records the suspension.
+      const saved = savesFinishedResult && stepResult.status === 'success' ? await saveFinished(stepResult) : undefined;
 
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
@@ -4102,9 +4287,38 @@ export class WorkflowEventProcessor extends EventProcessor {
           state: updatedState,
           outputOptions,
           forEachIndex,
+          ...(saved ? { joinsBranches: this.#branchesJoined(workflow, executionPath, saved) } : {}),
         },
       });
     }
+  }
+
+  /**
+   * For a branch of a parallel or conditional entry, whether the step results
+   * stored after its save show every branch of the entry finished or
+   * suspended, the way {@link aggregateBranchResults} counts them. Each branch
+   * saves before its step end is handled, so every step end could see the
+   * whole set: only the branch whose save completed it joins the entry.
+   * `undefined` for a step that is not a branch.
+   */
+  #branchesJoined(
+    workflow: Workflow,
+    executionPath: number[],
+    stored: Record<string, StepResult<any, any, any, any>>,
+  ): boolean | undefined {
+    const entry = workflow.stepGraph[executionPath[0]!];
+    if ((entry?.type !== 'parallel' && entry?.type !== 'conditional') || executionPath.length < 2) {
+      return undefined;
+    }
+
+    return entry.steps.every(branch => {
+      if (!isSingleStepEntry(branch)) {
+        return false;
+      }
+
+      const status = stored[getSingleStepEntryId(branch)]?.status;
+      return status === 'success' || status === 'skipped' || status === 'suspended';
+    });
   }
 
   /**
@@ -4330,6 +4544,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
+  /**
+   * Handles a `workflow.step.end`: records the step's result, then fails,
+   * suspends, joins a parallel or conditional entry, advances a foreach,
+   * publishes the next step or ends the run.
+   */
   protected async processWorkflowStepEnd({
     workflow,
     workflowId,
@@ -4350,6 +4569,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     outputOptions,
     forEachIndex,
     nestedRunId,
+    joinsBranches,
   }: ProcessorArgs) {
     // Extract state from prevResult if it was updated by the step
     // For nested workflow completion (parentContext present), prefer the passed state
@@ -5148,6 +5368,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       }
     } else if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
+      // The branch saved its result before this step end, and a sibling's save completed the set
+      // after it: that sibling's step end joins the entry, so this one must not join it as well.
+      if (joinsBranches === false) {
+        return;
+      }
+
       await this.aggregateBranchResults({
         workflow,
         workflowId,
