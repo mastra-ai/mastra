@@ -24,6 +24,7 @@ export const DEFAULT_CONFIG: ValidationConfig = {
     'docs/license.mdx',
     'docs/getting-started/',
     'docs/mastra-platform/',
+    'docs/gateway/',
     'docs/index.mdx',
     'models/',
     'docs/studio/cloud.mdx',

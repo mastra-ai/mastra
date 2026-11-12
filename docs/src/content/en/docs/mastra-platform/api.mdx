@@ -137,7 +137,7 @@ curl -sS "https://observability.mastra.ai/api/observability/feedback?page=0&perP
   -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
 ```
 
-Use an organization-scoped Platform access token. Gateway inference keys such as `mk_*` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
+Use an organization-scoped Platform access token. Gateway inference keys such as `msk-gateway-` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
 
 ### Endpoints
 
@@ -209,7 +209,7 @@ curl -sS "https://observability.mastra.ai/api/observability/discovery/metric-nam
   -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
 ```
 
-Use an organization-scoped Platform access token. Gateway inference keys such as `mk_*` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
+Use an organization-scoped Platform access token. Gateway inference keys such as `msk-gateway-` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
 
 ### Endpoints
 
@@ -272,4 +272,4 @@ mastra api --url https://observability.eu.mastra.ai metric aggregate '<json>'
 
 ## Gateway proxy endpoints
 
-Visit the [Gateway documentation](https://gateway.mastra.ai/docs) for more details.
+Visit the [Gateway documentation](/docs/gateway/overview) for more details.

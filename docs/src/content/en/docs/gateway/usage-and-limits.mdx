@@ -1,0 +1,69 @@
+---
+title: "Usage, pricing, and limits | Gateway"
+description: "How Gateway bills requests, records usage, applies spend caps and rate limits, and reports errors."
+---
+
+# Usage, pricing, and limits
+
+## Pricing
+
+Gateway uses prepaid credit. Each model's price is published in the catalog, and a model is listed in [`/v1/models`](/docs/gateway/api/models) only when it has a price.
+
+- You pay for the attempt that served you. Failed attempts on routes Gateway moved away from aren't charged.
+- Web search calls and generated images are priced separately. Images are charged only when delivered.
+- Requests over a [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key) are billed by your provider, not from Mastra credit.
+
+When credit runs out, requests return `402` with `insufficient_credit`. Add credits or turn on auto top-up in **Billing** at [projects.mastra.ai](https://projects.mastra.ai).
+
+## Spend caps
+
+An organization can set a Gateway spend cap. It's separate from the auto top-up limit: auto top-up controls how much credit is bought, and the spend cap controls how much Gateway may use. When the cap is reached, requests return `402` with `spend_limit_reached`.
+
+## Usage logs
+
+Open **Gateway** > **Query** in [projects.mastra.ai](https://projects.mastra.ai) to see each request with its model, provider, tokens, cost, and every provider attempt. Find a specific request with the `x-request-id` response header.
+
+Gateway logs don't store prompts, completions, images, or audio.
+
+## Rate limits
+
+Each key has these limits:
+
+| Window | Requests |
+| - | - |
+| 1 minute | 2,000 |
+| 10 seconds | 400 |
+
+Organizations can also set an organization-wide per-minute cap. `GET /v1/models` and stored-response reads aren't counted.
+
+A rate-limited request returns `429` with these headers:
+
+| Header | Description |
+| - | - |
+| `retry-after` | Seconds to wait before retrying. |
+| `x-gateway-rate-limit-scope` | `key`, `organization`, or `upstream_provider`. |
+| `x-gateway-rate-limit-dimension` | The limit that was hit. |
+
+`upstream_provider` means every eligible provider route is rate limiting. See [cooldowns](/docs/gateway/models-and-routing#failover).
+
+Request bodies can be up to 16 MiB.
+
+## Errors
+
+Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1/messages`](/docs/gateway/api/messages) uses the Anthropic shape.
+
+| Status | Common codes | Meaning |
+| - | - | - |
+| `400` | `unsupported_model_endpoint` | Invalid request, or the model isn't available on this endpoint. |
+| `401` | | Missing, invalid, expired, or revoked key. |
+| `402` | `insufficient_credit`, `spend_limit_reached` | Out of credit, or a spend cap was reached. |
+| `403` | `model_not_allowed`, `byok_connection_inactive` | Key or policy doesn't allow the request. |
+| `404` | `model_not_found` | Unknown model ID. |
+| `409` | | A request with the same ID is already in progress. |
+| `413` | | The input exceeds the model's context window. |
+| `429` | `rate_limited` | A rate limit was hit, or spend capacity is held by in-flight requests. Retry after `retry-after`. |
+| `502` | | The provider failed after the request may have been sent. |
+| `503` | `upstream_unavailable` | No route could serve the request. |
+| `504` | `deadline_exceeded` | The request timed out. |
+
+Include `x-request-id` when contacting support.

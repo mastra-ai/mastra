@@ -1,0 +1,41 @@
+---
+title: "Models and routing | Gateway"
+description: "How Gateway names models, chooses a provider route, and fails over when a provider errors."
+---
+
+# Models and routing
+
+## Model IDs
+
+Models use `provider/model` IDs, for example `__GATEWAY_OPENAI_MODEL__` or `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. [`GET /v1/models`](/docs/gateway/api/models) lists every ID available to your key. A model is listed in the catalog only when Gateway has a published price for it.
+
+From a Mastra agent, add the `mastra/` prefix: `mastra/__GATEWAY_OPENAI_MODEL__`.
+
+## Routes
+
+One model can be served by more than one route, such as the provider's own API and a partner provider. For each request, Gateway:
+
+1. Finds the routes that serve the model on the requested endpoint and support the request's features (for example tools, images, or context length).
+1. Removes routes that your key or organization policy doesn't allow.
+1. Orders the remaining routes by platform preference.
+
+If no route remains, the request fails with `no_eligible_route`, or with `unsupported_model_endpoint` when the model exists but not on that endpoint.
+
+The `x-gateway-provider` response header names the provider that served the request.
+
+## Failover
+
+When a route fails with an eligible error, such as a timeout, a provider outage, or a provider rate limit, Gateway tries the next route. Failover rules:
+
+- **Before output only**: Gateway fails over only until the first byte reaches your client. After a stream starts, an upstream error ends the request.
+- **Bounded**: A request makes up to 3 attempts by default.
+- **Not for client errors**: Invalid requests aren't retried on another route.
+- **Cooldowns**: When a provider returns `429`, Gateway pauses that route for the provider's `Retry-After` value (5 seconds by default, 60 at most) and skips it during that time. If every route is cooling down, Gateway returns `429` with `x-gateway-rate-limit-scope: upstream_provider`.
+
+These requests stay on one route and don't fail over:
+
+- Requests with a key that has failover turned off. See [Keys and BYOK](/docs/gateway/keys-and-byok#restrict-a-key).
+- Requests that use a [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key).
+- [Responses](/docs/gateway/api/responses) continuations, which return to the provider that stored the response.
+
+You're charged only for the attempt that served you. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits).

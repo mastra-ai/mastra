@@ -866,6 +866,32 @@ const sidebars = {
     },
     { type: 'doc', id: 'mastra-platform/api', label: 'API Reference' },
   ],
+  gatewaySidebar: [
+    { type: 'doc', id: 'gateway/overview', label: 'Overview' },
+    { type: 'doc', id: 'gateway/quickstart', label: 'Quickstart' },
+    { type: 'doc', id: 'gateway/migrate', label: 'Migrate' },
+    {
+      type: 'category',
+      label: 'APIs',
+      items: [
+        { type: 'doc', id: 'gateway/api/chat-completions', label: 'Chat Completions' },
+        { type: 'doc', id: 'gateway/api/responses', label: 'Responses' },
+        { type: 'doc', id: 'gateway/api/messages', label: 'Anthropic Messages' },
+        { type: 'doc', id: 'gateway/api/embeddings', label: 'Embeddings' },
+        { type: 'doc', id: 'gateway/api/decisions', label: 'Decisions' },
+        { type: 'doc', id: 'gateway/api/rerank', label: 'Rerank' },
+        { type: 'doc', id: 'gateway/api/images', label: 'Images' },
+        { type: 'doc', id: 'gateway/api/audio', label: 'Audio' },
+        { type: 'doc', id: 'gateway/api/models', label: 'Models list' },
+      ],
+    },
+    { type: 'doc', id: 'gateway/models-and-routing', label: 'Models and routing' },
+    { type: 'doc', id: 'gateway/keys-and-byok', label: 'Keys and BYOK' },
+    { type: 'doc', id: 'gateway/web-search', label: 'Web search' },
+    { type: 'doc', id: 'gateway/usage-and-limits', label: 'Usage, pricing, and limits' },
+    { type: 'doc', id: 'gateway/integrations', label: 'Integrations' },
+    { type: 'doc', id: 'gateway/faq', label: 'FAQ' },
+  ],
 }
 
 export default sidebars

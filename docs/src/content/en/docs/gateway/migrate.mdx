@@ -1,0 +1,59 @@
+---
+title: "Migrate | Gateway"
+description: "Move to Mastra Gateway from OpenAI, Anthropic, OpenRouter, Vercel AI Gateway, or the previous Mastra Memory Gateway."
+---
+
+# Migrate to Gateway
+
+Gateway is wire-compatible with the OpenAI and Anthropic APIs. Most migrations change two values: the base URL and the API key.
+
+## From OpenAI
+
+Point the client at Gateway and prefix model IDs with `openai/`:
+
+```diff
+ const client = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
++  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
++  baseURL: 'https://gateway-api.mastra.ai/v1',
+ })
+
+-  model: 'gpt-5.6',
++  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+```
+
+To keep billing on your OpenAI account, add an OpenAI [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key).
+
+## From Anthropic
+
+The Anthropic SDK appends `/v1/messages` to its base URL, so set the base URL without `/v1`:
+
+```diff
+ const client = new Anthropic({
+-  apiKey: process.env.ANTHROPIC_API_KEY,
++  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
++  baseURL: 'https://gateway-api.mastra.ai',
+ })
+
+-  model: 'claude-sonnet-5-5',
++  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+```
+
+## From OpenRouter or Vercel AI Gateway
+
+Both use `provider/model` IDs, so most model IDs carry over. Change the base URL to `https://gateway-api.mastra.ai/v1` and use a Gateway key. Check each model ID against [`GET /v1/models`](/docs/gateway/api/models), because provider naming can differ.
+
+Gateway accepts OpenRouter's `openrouter:web_search` tool without options. See [Web search](/docs/gateway/web-search).
+
+## From Mastra Memory Gateway
+
+The previous product, Memory Gateway, combined model routing with Observational Memory. Gateway now handles model access only:
+
+| Before | Now |
+| - | - |
+| `msk_` keys | `msk-gateway-` keys. Create a new key in [projects.mastra.ai](https://projects.mastra.ai). |
+| `x-thread-id` and `x-resource-id` headers | Gateway ignores these headers and doesn't store conversations. |
+| `/v1/memory/threads` | Removed. Use [Mastra Memory](/docs/memory/overview) in your agent. |
+| `memory.thread` and `memory.resource` on a Mastra agent routed through Gateway | Configure [Memory](/docs/memory/overview) on the agent instead. |
+
+The base URL, `https://gateway-api.mastra.ai/v1`, is unchanged.

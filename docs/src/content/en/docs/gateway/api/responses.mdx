@@ -1,0 +1,42 @@
+---
+title: "Responses | Gateway"
+description: "Use the OpenAI Responses API through Gateway, including stored responses and continuation."
+---
+
+# Responses
+
+```text
+POST   https://gateway-api.mastra.ai/v1/responses
+GET    https://gateway-api.mastra.ai/v1/responses/{response_id}
+DELETE https://gateway-api.mastra.ai/v1/responses/{response_id}
+GET    https://gateway-api.mastra.ai/v1/responses/{response_id}/input_items
+```
+
+Compatible with the OpenAI Responses API.
+
+## Create a response
+
+```typescript
+const response = await client.responses.create({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  input: 'Write a haiku about routers.',
+})
+
+console.log(response.output_text)
+```
+
+## Continue a conversation
+
+Pass `previous_response_id` to continue from a stored response:
+
+```typescript
+const followUp = await client.responses.create({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  previous_response_id: response.id,
+  input: 'Now make it rhyme.',
+})
+```
+
+Stored responses live with the provider that created them. Gateway sends a continuation back to the same provider route, so a continuation doesn't fail over to a different provider. Retrieving, deleting, and listing input items for a stored response isn't billed.
+
+Gateway response IDs belong to your organization. Another organization's key can't read them.

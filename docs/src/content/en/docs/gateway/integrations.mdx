@@ -1,0 +1,158 @@
+---
+title: "Integrations | Gateway"
+description: "Use Gateway with the Mastra framework, AI SDK, OpenAI and Anthropic SDKs, LangGraph, Deep Agents, and Pydantic AI."
+---
+
+# Integrations
+
+Any client that supports a custom OpenAI or Anthropic base URL works with Gateway. Set the base URL and your `msk-gateway-` key, then use a `provider/model` ID from [`/v1/models`](/docs/gateway/api/models). Each example reads the key from `MASTRA_GATEWAY_API_KEY`.
+
+## Mastra framework
+
+Set `MASTRA_GATEWAY_API_KEY` and use a model ID with the `mastra/` prefix. No base URL is needed.
+
+```typescript title="src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: 'You are a helpful weather assistant.',
+  model: 'mastra/__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+To give the agent conversation memory, see [Memory](/docs/memory/overview).
+
+## AI SDK
+
+Use `@ai-sdk/openai-compatible` for any model, or `@ai-sdk/anthropic` for the Messages API.
+
+```typescript title="src/gateway.ts"
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { createAnthropic } from '@ai-sdk/anthropic'
+import { generateText } from 'ai'
+
+export const gateway = createOpenAICompatible({
+  name: 'mastra-gateway',
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+})
+
+export const anthropicGateway = createAnthropic({
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+})
+
+const { text } = await generateText({
+  model: gateway.chatModel('__GATEWAY_GOOGLE_MODEL_FLASH__'),
+  prompt: 'What is 2+2?',
+})
+```
+
+## OpenAI SDK
+
+```typescript title="src/gateway.ts"
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+})
+
+const completion = await client.chat.completions.create({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  messages: [{ role: 'user', content: 'What is 2+2?' }],
+})
+```
+
+The same client works for [Responses](/docs/gateway/api/responses), [Embeddings](/docs/gateway/api/embeddings), and [Images](/docs/gateway/api/images).
+
+## OpenAI Python SDK
+
+```python title="gateway.py"
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://gateway-api.mastra.ai/v1",
+    api_key=os.environ["MASTRA_GATEWAY_API_KEY"],
+)
+
+completion = client.chat.completions.create(
+    model="__GATEWAY_GOOGLE_MODEL_FLASH__",
+    messages=[{"role": "user", "content": "What is 2+2?"}],
+)
+```
+
+## Anthropic SDK
+
+The Anthropic SDK appends `/v1/messages`, so omit `/v1` from the base URL.
+
+```typescript title="src/gateway.ts"
+import Anthropic from '@anthropic-ai/sdk'
+
+const client = new Anthropic({
+  baseURL: 'https://gateway-api.mastra.ai',
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+})
+
+const message = await client.messages.create({
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  max_tokens: 256,
+  messages: [{ role: 'user', content: 'What is 2+2?' }],
+})
+```
+
+## LangGraph and Deep Agents (TypeScript)
+
+Use `ChatOpenAI` from `@langchain/openai`, then pass the model to a LangGraph graph or `createDeepAgent`.
+
+```typescript title="src/agent.ts"
+import { ChatOpenAI } from '@langchain/openai'
+
+export const model = new ChatOpenAI({
+  model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+  configuration: {
+    baseURL: 'https://gateway-api.mastra.ai/v1',
+    apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  },
+})
+```
+
+## LangChain and Deep Agents (Python)
+
+```python title="agent.py"
+import os
+from langchain_openai import ChatOpenAI
+
+model = ChatOpenAI(
+    model="__GATEWAY_GOOGLE_MODEL_FLASH__",
+    base_url="https://gateway-api.mastra.ai/v1",
+    api_key=os.environ["MASTRA_GATEWAY_API_KEY"],
+)
+```
+
+Pass `model` to `create_deep_agent` or any LangGraph node.
+
+## Pydantic AI
+
+```python title="agent.py"
+import os
+from openai import AsyncOpenAI
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
+client = AsyncOpenAI(
+    base_url="https://gateway-api.mastra.ai/v1",
+    api_key=os.environ["MASTRA_GATEWAY_API_KEY"],
+)
+
+model = OpenAIChatModel(
+    "__GATEWAY_GOOGLE_MODEL_FLASH__",
+    provider=OpenAIProvider(openai_client=client),
+)
+
+agent = Agent(model, system_prompt="Keep answers concise.")
+```

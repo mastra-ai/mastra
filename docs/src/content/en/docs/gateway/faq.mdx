@@ -1,0 +1,42 @@
+---
+title: "FAQ | Gateway"
+description: "Answers to common Gateway questions and fixes for common errors."
+---
+
+# FAQ
+
+## How do I get started?
+
+Add credits in **Billing** at [projects.mastra.ai](https://projects.mastra.ai), create a key, and follow the [Quickstart](/docs/gateway/quickstart).
+
+## Why do I get `402`?
+
+Your organization is out of credit (`insufficient_credit`) or reached its Gateway spend cap (`spend_limit_reached`). Add credits, turn on auto top-up, or raise the cap. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits#pricing).
+
+## Why do I get `401` with a key that starts with `msk_`?
+
+`msk_` keys belong to the previous Memory Gateway. Create a new `msk-gateway-` key. See [Migrate](/docs/gateway/migrate#from-mastra-memory-gateway).
+
+## Does Gateway store my prompts or conversations?
+
+No. Usage logs record model, provider, tokens, and cost, not content. For agent memory, see [Memory](/docs/memory/overview).
+
+## Which provider served my request?
+
+Check the `x-gateway-provider` response header, or find the request by `x-request-id` in **Gateway** > **Query**.
+
+## Am I charged for failed attempts?
+
+No. You pay for the attempt that served the request. See [Failover](/docs/gateway/models-and-routing#failover).
+
+## Can I use my own provider account?
+
+Yes, with a [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key). The provider bills you directly, and those requests don't fail over.
+
+## Why isn't a model in `/v1/models`?
+
+The model has no published price yet, or your key restricts allowed models. Calling it returns `model_not_found` or `model_not_allowed`.
+
+## My Anthropic SDK requests return `404`.
+
+The Anthropic SDK appends `/v1/messages`. Set the base URL to `https://gateway-api.mastra.ai`, without `/v1`.

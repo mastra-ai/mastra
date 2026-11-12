@@ -1,0 +1,51 @@
+---
+title: "Overview | Gateway"
+description: "Mastra Gateway is one OpenAI- and Anthropic-compatible API for many model providers, with routing, failover, BYOK, and per-request cost tracking."
+---
+
+# Gateway
+
+Mastra Gateway is a single API for models from many providers. It speaks the OpenAI and Anthropic wire formats, so existing SDKs and frameworks work by changing the base URL and API key.
+
+- **One key, many providers**: Call OpenAI, Anthropic, Google, and other providers with one Gateway key and a `provider/model` model ID.
+- **Routing and failover**: Gateway retries eligible failures on another route before any output reaches your client. See [Models and routing](/docs/gateway/models-and-routing).
+- **Bring your own key (BYOK)**: Send traffic through your own provider accounts. See [Keys and BYOK](/docs/gateway/keys-and-byok).
+- **Usage and spend controls**: Every request records its attempts and cost, and keys can be limited by model. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits).
+- **Gateway tools**: Add web search to any chat model with one tool entry. See [Web search](/docs/gateway/web-search).
+
+## Base URL
+
+```text
+https://gateway-api.mastra.ai/v1
+```
+
+## Endpoints
+
+| Endpoint | Compatible with |
+| - | - |
+| [`POST /v1/chat/completions`](/docs/gateway/api/chat-completions) | OpenAI Chat Completions |
+| [`POST /v1/responses`](/docs/gateway/api/responses) | OpenAI Responses |
+| [`POST /v1/messages`](/docs/gateway/api/messages) | Anthropic Messages |
+| [`POST /v1/embeddings`](/docs/gateway/api/embeddings) | OpenAI Embeddings |
+| [`POST /v1/decisions`](/docs/gateway/api/decisions) | OpenAI Decisions |
+| [`POST /v1/rerank`](/docs/gateway/api/rerank) | Cohere-style rerank |
+| [`POST /v1/images/generations`, `/v1/images/edits`](/docs/gateway/api/images) | OpenAI Images |
+| [`GET /v1/models`](/docs/gateway/api/models) | OpenAI Models |
+
+Audio endpoints are rolling out. See [Audio](/docs/gateway/api/audio).
+
+:::note
+
+Conversation memory is a separate product. Gateway doesn't store conversations. To give agents memory, see [Memory](/docs/memory/overview).
+
+:::
+
+## Get started
+
+Gateway uses prepaid credit. [Add credits](https://projects.mastra.ai) in **Billing**, create a key, and send your first request in the [Quickstart](/docs/gateway/quickstart).
+
+## Next steps
+
+- [Quickstart](/docs/gateway/quickstart): Add credits and send your first request
+- [Migrate](/docs/gateway/migrate): Move from another provider or gateway
+- [Integrations](/docs/gateway/integrations): Use Gateway with the Mastra framework, AI SDK, LangGraph, and more
