@@ -275,6 +275,58 @@ By default, background processes inherit the agent's abort signal and stop when 
 
 For the full `SandboxProcessManager` API, including programmatic process spawning, output, and standard input, see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
 
+### Tell the agent when a process exits
+
+The `execute_command` call returns as soon as the process starts, so the agent only has its PID. Set `notifyAgent: true` to have Mastra send the agent's thread a notification when the process exits. The notification includes the command, the exit code, and the end of the output:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      backgroundProcesses: { notifyAgent: true },
+    },
+  },
+})
+```
+
+If a run is active on the thread, the notification reaches it on its next step. If the thread is idle, the agent wakes and runs a turn to report the result. Mastra doesn't send a notification for a process that was stopped on purpose: with `kill_process`, with the kill route below, by the run's abort signal, or because the sandbox is shutting down.
+
+The notification needs a run with a memory thread and resource, and an agent registered on the `Mastra` instance. Mastra looks the agent up by ID when the process exits. An agent created inside a tool or another agent isn't registered, so its processes don't send notifications.
+
+### Inspect and stop processes over HTTP
+
+Each process that `execute_command` starts records the thread, resource, and tool call of the run that started it. The Mastra server uses them to scope these routes:
+
+| Route | Does |
+| - | - |
+| `GET /api/workspaces/:workspaceId/sandbox/processes` | Lists the sandbox's processes, including exited processes whose output hasn't been read. |
+| `GET /api/workspaces/:workspaceId/sandbox/processes/:pid` | Returns a process's status and retained output without releasing an exited process. The agent can still read it with `get_process_output`. |
+| `POST /api/workspaces/:workspaceId/sandbox/processes/:pid/kill` | Stops a process and releases its output. |
+
+All three accept `threadId` and `resourceId` query parameters to filter by the run that started the process. A request whose authenticated user has a resource ID only sees that resource's processes. Listing and reading need the `workspaces:read` permission, and killing needs `workspaces:write`.
+
+The [client SDK](/reference/client-js/mastra-client) wraps the routes on the workspace resource:
+
+```typescript title="src/client/processes.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+const workspace = client.getWorkspace('my-workspace')
+
+const { processes } = await workspace.listSandboxProcesses({ threadId: 'thread-1' })
+const server = await workspace.getSandboxProcess(processes[0].pid, { threadId: 'thread-1' })
+console.log(server.stdout)
+
+await workspace.killSandboxProcess(server.pid, { threadId: 'thread-1' })
+```
+
+In React, `useSandboxProcesses`, `useSandboxProcess`, and `useKillSandboxProcess` from `@mastra/react/hooks/workspace` wrap the same calls.
+
+For a [sandbox resolved per request](#sandboxes-per-user-or-thread), the server resolves the sandbox from the request context, with the requested `threadId` and `resourceId` set as `MASTRA_THREAD_ID_KEY` and `MASTRA_RESOURCE_ID_KEY`. A `sandboxCacheKey` that reads either key finds the sandbox the agent used. Without `sandboxCacheKey`, the routes return `404`: every request would get a new sandbox that doesn't hold the agent's processes.
+
 ## Lifecycle and persistence
 
 Who shares a sandbox depends on where you configure it and whether you use a resolver:

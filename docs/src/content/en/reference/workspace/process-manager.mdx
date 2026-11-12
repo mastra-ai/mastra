@@ -115,6 +115,13 @@ const handle = await sandbox.processes.spawn('npm run dev', {
               "How stdin is wired. `'pipe'` (default) opens a writable stdin for `sendStdin()` and `writer`. `'ignore'` closes stdin so commands that read it see immediate EOF. Honored by the local, Docker, and E2B providers.",
             isOptional: true,
           },
+          {
+            name: 'metadata',
+            type: 'ProcessMetadata',
+            description:
+              'Who started the process: `threadId`, `resourceId`, `toolCallId`, and `startedAt` (milliseconds since the epoch, filled in when omitted). Stored on the handle and returned by `list()` and `get()`. `execute_command` sets it for the processes an agent starts.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -213,6 +220,12 @@ Information about a tracked process, returned by `list()`.
     description: 'Exit code if the process has finished.',
     isOptional: true,
   },
+  {
+    name: 'metadata',
+    type: 'ProcessMetadata',
+    description: 'The `metadata` the process was spawned with, if any.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -276,6 +289,11 @@ await handle.kill()
     name: 'command',
     type: 'string | undefined',
     description: 'The command that was spawned. Set automatically by the process manager.',
+  },
+  {
+    name: 'metadata',
+    type: 'ProcessMetadata | undefined',
+    description: 'The `metadata` passed to `spawn()`, with `startedAt` filled in. Set by the process manager.',
   },
   {
     name: 'reader',

@@ -833,6 +833,14 @@ The `execute_command` tool accepts these options:
             isOptional: true,
           },
           {
+            name: 'notifyAgent',
+            type: 'boolean',
+            description:
+              "Sends the agent's thread a notification when a background process exits, with the command, exit code, and the end of its output. An active run gets it on its next step, and an idle thread wakes. Skips processes stopped with kill_process, the kill route, the run's abort signal, or a sandbox shutting down. Needs an agent registered on the Mastra instance and a run with a memory thread and resource.",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
             name: 'abortSignal',
             type: 'AbortSignal | null | false',
             description:

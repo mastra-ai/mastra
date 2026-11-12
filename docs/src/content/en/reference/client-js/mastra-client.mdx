@@ -192,6 +192,30 @@ You can also pass `requestContext` as a `Record<string, any>`.
       "Answers a suspended [background task](/docs/harness/background-tasks#answer-a-suspended-task-from-a-client) with `resumeData` and returns the task. Pass `options.suspendedAt` (a `Date`, ISO string, or epoch milliseconds) from the task you read; the server rejects the answer with `409` if the task has resumed or suspended again since. Also rejects with `409` when the task isn't suspended or no concurrency slot is free, and `404` when the task doesn't exist or belongs to another resource.",
   },
   {
+    name: 'cancelBackgroundTask(backgroundTaskId)',
+    type: 'Promise<BackgroundTaskResponse>',
+    description:
+      "Cancels a pending, running, or suspended [background task](/docs/harness/background-tasks#cancel-a-task-from-a-client) and returns it. A task that already finished is returned unchanged. Rejects with `404` when the task doesn't exist or belongs to another resource.",
+  },
+  {
+    name: 'getWorkspace(workspaceId).listSandboxProcesses(params?)',
+    type: 'Promise<ListSandboxProcessesResponse>',
+    description:
+      "Lists the workspace sandbox's [background processes](/docs/sandbox/overview#background-processes), including exited processes whose output hasn't been read. Pass `params.threadId` or `params.resourceId` to list the processes one thread or resource started.",
+  },
+  {
+    name: 'getWorkspace(workspaceId).getSandboxProcess(pid, params?)',
+    type: 'Promise<SandboxProcessOutputResponse>',
+    description:
+      "Returns a background process's status and retained `stdout` and `stderr`. Reading it here doesn't release an exited process, so the agent can still read it with `get_process_output`.",
+  },
+  {
+    name: 'getWorkspace(workspaceId).killSandboxProcess(pid, params?)',
+    type: 'Promise<KillSandboxProcessResponse>',
+    description:
+      'Stops a background process and returns `{ pid, killed }`. `killed` is `false` when the process had already exited. The request is sent once, without retries.',
+  },
+  {
     name: 'getVector(vectorName)',
     type: 'MastraVector',
     description: 'Returns a vector store instance by name.',
