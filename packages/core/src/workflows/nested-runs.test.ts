@@ -844,8 +844,9 @@ describe('a failed nested run hands back the state its completed steps set', () 
   });
 
   it('keeps the last attempt state when a retried nested run fails', async () => {
+    const onRun = vi.fn();
     const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
-      .then(appendItem('inner-a'))
+      .then(appendItem('inner-a', { onRun }))
       .then(boom)
       .commit();
     // The nested step is retried, and every attempt re-runs `inner` from the parent's
@@ -868,6 +869,8 @@ describe('a failed nested run hands back the state its completed steps set', () 
     });
 
     expect(result.status).toBe('failed');
+    // The first attempt plus two retries.
+    expect(onRun).toHaveBeenCalledTimes(3);
     expect(result.state).toEqual({ items: ['inner-a:0'] });
   });
 });
