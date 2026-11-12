@@ -351,15 +351,32 @@ describe('prepareFactoryRuleBinding', () => {
       it("runs the phase as the Factory when a person's own session moves the card", async () => {
         const { seed, factory } = await seedWithKey();
         const chat = await sessionOf(seed, 'requester-1');
+        const { prepare, started } = start(seed, `agent:session:${chat.sessionId}`);
 
-        await expect(ownerOfPreparedSession(seed, `agent:session:${chat.sessionId}`)).resolves.toBe(factory);
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: factory,
+            // An agent's move is an agent's, never a person's.
+            startedBy: { type: 'agent', bindingId: `session:${chat.sessionId}`, role: 'session' },
+          }),
+        );
       });
 
       it('runs the next phase as the Factory when the agent of an earlier phase moves the card', async () => {
         const { seed, factory } = await seedWithKey();
         const binding = await phaseRunOf(seed);
+        const { prepare, started } = start(seed, `agent:${binding.id}`);
 
-        await expect(ownerOfPreparedSession(seed, `agent:${binding.id}`)).resolves.toBe(factory);
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: factory,
+            startedBy: { type: 'agent', bindingId: binding.id, role: 'triage' },
+          }),
+        );
       });
 
       // A card a webhook filed, or one an automatic phase picked up.
@@ -461,7 +478,16 @@ describe('prepareFactoryRuleBinding', () => {
         const seed = await seedPersonal();
         const binding = await phaseRunOf(seed);
 
-        await expect(ownerOfPreparedSession(seed, `agent:${binding.id}`)).resolves.toBe('requester-1');
+        const { prepare, started } = start(seed, `agent:${binding.id}`);
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: 'requester-1',
+            startedBy: { type: 'agent', bindingId: binding.id, role: 'triage' },
+          }),
+        );
       });
 
       it('runs the phase for whoever set the Factory up when nobody is behind the move', async () => {

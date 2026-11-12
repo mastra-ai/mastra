@@ -7,6 +7,7 @@ import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryRuleActor } from './types.js';
 
 const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
 vi.mock('../routes/tenant-credentials.js', async importOriginal => {
@@ -488,7 +489,7 @@ describe('FactoryStartCoordinator', () => {
   describe('who a start that moves the card is recorded as', () => {
     const FACTORY = `factory-project:${PROJECT_ID}`;
 
-    async function startOnFactorySession(startedBy?: { type: 'human'; id: string }) {
+    async function startOnFactorySession(startedBy?: FactoryRuleActor) {
       const storage = (await createFactoryStorageForTests()).workItems;
       const audit = vi.fn(async (_event: { actorId: string; actorType: string }) => null);
       const transitionService = new FactoryTransitionService({
@@ -533,6 +534,16 @@ describe('FactoryStartCoordinator', () => {
         movedAs: { type: 'system', id: FACTORY },
         enteredBy: FACTORY,
         recorded: { actorId: FACTORY, actorType: 'system' },
+      });
+    });
+
+    it('names the agent that started the work as an agent, never a person', async () => {
+      await expect(
+        startOnFactorySession({ type: 'agent', bindingId: 'binding-earlier', role: 'triage' }),
+      ).resolves.toEqual({
+        movedAs: { type: 'agent', bindingId: 'binding-earlier', role: 'triage' },
+        enteredBy: 'agent:binding-earlier',
+        recorded: { actorId: 'agent:binding-earlier', actorType: 'agent' },
       });
     });
   });

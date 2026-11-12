@@ -28,6 +28,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
+import type { FactoryRuleActor } from '../rules/types.js';
 import { secretKeyMismatchHint, secretKeyProblem } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
@@ -359,6 +360,26 @@ async function phaseSessionOwner(args: {
 }
 
 /**
+ * Who started the work, as the move that starts the run records them. An agent stays an
+ * agent: recorded as a person, its move would count as a person accepting the work.
+ */
+async function starterOf(
+  workItems: Pick<WorkItemsStorage, 'findRunBindingById'> | undefined,
+  project: Pick<FactoryProject, 'id' | 'orgId'>,
+  approver: string,
+): Promise<FactoryRuleActor> {
+  if (!approver.startsWith('agent:')) return { type: 'human', id: approver };
+  const bindingId = approver.slice('agent:'.length);
+  if (bindingId.startsWith('session:')) return { type: 'agent', bindingId, role: 'session' };
+  const binding = await workItems?.findRunBindingById({
+    orgId: project.orgId,
+    factoryProjectId: project.id,
+    id: bindingId,
+  });
+  return { type: 'agent', bindingId, role: binding?.role ?? 'agent' };
+}
+
+/**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
  * default model. Exported for tests — this is the autonomous entry point with no
@@ -507,8 +528,7 @@ export async function prepareFactoryRuleBinding(
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
-      // As the dispatcher does: an agent's approval moves as a person's would, under the agent's id.
-      ...(approver ? { startedBy: { type: 'human' as const, id: approver } } : {}),
+      ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       modelScope,
