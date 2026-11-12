@@ -127,14 +127,7 @@ export type Built = ReturnType<Shape['build']>;
  * in a nested workflow, and the nested workflows to register.
  */
 export const sleepingWorkflows = {
-  sleep: (report: Report) => ({
-    workflow: createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-      .then(work('before', report))
-      .sleep(2_000)
-      .then(work('after', report))
-      .commit(),
-    nested: {},
-  }),
+  sleep: (report: Report) => ({ workflow: sleepingFor(2_000)(report), nested: {} }),
   'sleep of a nested workflow': (report: Report) => {
     const child = createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num })
       .then(work('before', report))
