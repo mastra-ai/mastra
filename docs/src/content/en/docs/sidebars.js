@@ -831,6 +831,16 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'mastra-platform/dashboards',
+      label: 'Custom dashboards',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/observability-alerts',
+      label: 'Observability alerts',
+    },
+    {
+      type: 'doc',
       id: 'mastra-platform/alerts',
       label: 'Alerts',
     },

@@ -1,0 +1,85 @@
+---
+title: "Custom dashboards | Mastra platform"
+description: "Build saved Mastra platform dashboards from presets or a prompt, then add, arrange, configure, and save widgets that chart your observability data."
+packages:
+  - "mastra"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Build custom dashboards
+
+A custom dashboard is a saved set of charts and numbers on the Mastra platform **Metrics** page. Use dashboards to keep the views your team checks often, such as agent health, model spend, or tool latency, next to the built-in **Metrics** dashboard.
+
+By the end of this page, you'll have a saved dashboard that your organization can open from the **Metrics** page.
+
+Custom dashboards are a Mastra platform feature. They're separate from local Studio, and from the [observability query APIs](/docs/mastra-platform/observability#query-observability-data) you can use to build your own visualizations.
+
+## Before you begin
+
+- Send traces to Mastra Platform Observability. Follow [Observability on Mastra platform](/docs/mastra-platform/observability) if your project doesn't send data yet. Widgets chart only the data your application has sent.
+- Use an organization member or admin account. Viewers can open dashboards but can't create, arrange, or save them.
+
+## Create a dashboard
+
+New dashboards are created with the observability agent, which builds widgets from a preset or from your description.
+
+<Steps>
+  <StepItem>
+    Open the [Mastra platform dashboard](https://projects.mastra.ai) without selecting a project, then select **Observability** > **Metrics**.
+  </StepItem>
+
+  <StepItem>
+    Open the dashboard switcher next to **Metrics** in the breadcrumb, then select **Add dashboard**. A **New dashboard** panel opens beside the page.
+
+    If **Add dashboard** isn't in the switcher, creating dashboards isn't available for your organization or role.
+  </StepItem>
+
+  <StepItem>
+    Under **Start from a preset**, choose a preset such as **Agent health**, **Model spend**, **Latency**, or **Token usage**. Alternatively, describe the dashboard you want, for example `Failed workflow runs and p95 duration per workflow`.
+  </StepItem>
+
+  <StepItem>
+    Wait for the agent to finish. It creates the dashboard, selects it, and adds widgets. If the page header shows **Save**, select it to keep the widgets.
+  </StepItem>
+
+  <StepItem>
+    Check the result. Open the dashboard switcher, select **Metrics**, then select your new dashboard again. The dashboard and its widgets reload with the same layout. Other members of your organization see it in their switcher too.
+  </StepItem>
+</Steps>
+
+## Add widgets
+
+Select **Add widgets** in the page header to add to the selected dashboard. Choose a suggested widget, such as **Agent failure rate** or **Slowest tools**, or ask the agent for a widget. New widgets join the dashboard's unsaved changes until you select **Save**.
+
+## Arrange and edit widgets
+
+Members and admins can change a dashboard in place:
+
+- Drag a widget to move it between rows, or resize it.
+- Select **Configure** on a widget to change its type, metrics, and display options. Widget types are **KPI**, **Line**, **Stacked bars**, **Table**, and **Scores**. Select **Save** in the dialog to apply the changes.
+- Select **Unpin** on a widget to remove it from the dashboard.
+
+Changes stay in a draft until you select **Save** in the page header. Select **Cancel** to discard them. You can switch dashboards without losing a draft. The switcher marks each dashboard with unsaved changes, and Mastra asks before you leave the page with changes that aren't saved.
+
+## Filter dashboards
+
+Widgets use the date range and filters selected on the **Metrics** page. Change them to see the same dashboard for another period or subset of your data.
+
+## Rename or delete a dashboard
+
+Select a dashboard, open the dashboard switcher, then select **Rename** or **Delete** under **This dashboard**. Deleting a dashboard removes it and its widgets for everyone in the organization.
+
+## Change the Metrics dashboard
+
+The **Metrics** dashboard is the default dashboard on the page. Members and admins can arrange and save it like a custom dashboard, and the saved version replaces the default for the organization. The **Metrics** dashboard can't be renamed or deleted.
+
+## Create alerts from widgets
+
+Organization admins can create an alert from a dashboard widget. Select **Create alert** on the widget, then review and save the alert. See [Create an alert from a dashboard card](/docs/mastra-platform/observability-alerts#create-an-alert-from-a-dashboard-card) for the widgets that support alerts.
+
+## Related
+
+- [Create observability alerts](/docs/mastra-platform/observability-alerts)
+- [Observability on Mastra platform](/docs/mastra-platform/observability)
