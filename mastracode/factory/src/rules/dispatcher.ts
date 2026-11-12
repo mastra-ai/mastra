@@ -2298,7 +2298,11 @@ export class FactoryDecisionDispatcher {
     }
     if (!first.board.isTerminal(first.route.phase)) {
       const binding = await this.#findBinding(record);
-      const session = binding ? await this.#findSession(binding) : undefined;
+      // A binding with no recorded owner never started a run, so it has none in flight.
+      const startedBy = binding ? first.item.sessions[binding.role]?.startedBy : undefined;
+      if (startedBy) await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+      const session =
+        binding && startedBy ? await this.#findSession(binding, { userId: startedBy, orgId: record.orgId }) : undefined;
       // Checked again on the next claim: the card may have moved, or the routes changed, by then.
       if (binding && session && (await this.#hasRunInFlight(session, binding))) {
         throw new FactoryDecisionPostponed();
@@ -2518,7 +2522,7 @@ export class FactoryDecisionDispatcher {
 
   async #findSession(
     binding: FactoryRunBindingRecord,
-    owner?: SessionOwner,
+    owner: SessionOwner,
   ): Promise<BoundDispatcherSession | undefined> {
     const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
@@ -2603,16 +2607,14 @@ export class FactoryDecisionDispatcher {
   }
 
   // Switching subscribes to the thread, which resolves memory and model
-  // credentials, so it runs as the session owner when one is known.
+  // credentials, so it always runs as the session owner.
   async #switchThread(
     session: BoundDispatcherSession,
     binding: FactoryRunBindingRecord,
-    owner?: SessionOwner,
+    owner: SessionOwner,
   ): Promise<void> {
     if (session.thread.requireId() === binding.threadId) return;
-    const requestContext = owner
-      ? factoryRequestContext({ session, binding, userId: owner.userId, orgId: owner.orgId })
-      : undefined;
+    const requestContext = factoryRequestContext({ session, binding, userId: owner.userId, orgId: owner.orgId });
     await session.thread.switch({ threadId: binding.threadId, requestContext });
   }
 
