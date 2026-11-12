@@ -63,6 +63,7 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
@@ -2309,6 +2310,200 @@ describe('run activity on the work-item listing', () => {
     const { workItem } = await res.json();
     return workItem;
   };
+
+  describe('a board read that sends its cursor back (?since=)', () => {
+    // Steps past the window a `since` read goes back to catch a writer whose clock runs behind.
+    const later = () => vi.setSystemTime(Date.now() + 10_000);
+    const read = async (since?: string) => {
+      const res = await buildApp(orgUser).request(since === undefined ? boardPath() : `${boardPath()}?since=${since}`);
+      const text = await res.text();
+      return { ...FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(JSON.parse(text)), bytes: text.length };
+    };
+    /** A board of `count` cards, read in full once every write to it is older than the window. */
+    const boardOf = async (count: number) => {
+      const cards: { id: string }[] = [];
+      for (let from = 0; from < count; from += 50) {
+        const ids = Array.from({ length: Math.min(50, count - from) }, (_, i) => `issue-${from + i}`);
+        cards.push(...(await Promise.all(ids.map(id => createCard(id)))));
+      }
+      later();
+      return { cards, board: await read() };
+    };
+
+    /** The card tables read from here on, and the table of deleted ids. */
+    const cardReads = () => {
+      const tables = ['factory_board_items', 'factory_work_items', 'factory_work_item_sources', 'work_items'];
+      const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+      return () =>
+        findMany.mock.calls
+          .map(([collection]) => collection)
+          .filter(collection => [...tables, 'factory_board_item_tombstones'].includes(collection));
+    };
+
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }));
+
+    it('sends only the cards written and the ids removed since the cursor', async () => {
+      const { cards, board } = await boardOf(4);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+      await json('PATCH', `/web/factory/work-items/${cards[2]!.id}`, { title: 'Reworded' });
+      await json('DELETE', `/web/factory/work-items/${cards[3]!.id}`);
+      later();
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title).sort()).toEqual(['Renamed', 'Reworded']);
+      expect(next).toMatchObject({ removedIds: [cards[3]!.id], check: boardCheck((await read()).workItems) });
+      later();
+      expect(await read(next.cursor)).toMatchObject({ workItems: [], removedIds: [], check: next.check });
+    });
+
+    it('sends a card stamped before the cursor that the cursor’s read did not hold', async () => {
+      const { board } = await boardOf(1);
+      // A second writer: its card lands after the read, stamped by a clock behind this one.
+      vi.setSystemTime(Date.now() - 2_000);
+      const late = await createCard('late');
+      later();
+
+      expect((await read(board.cursor)).workItems.map(card => card.id)).toEqual([late.id]);
+    });
+
+    it.each(['not-a-cursor', ''])('sends the whole board for the cursor %j, which it did not issue', async since => {
+      await boardOf(2);
+
+      const answer = await read(since);
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toEqual(expect.any(String));
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers one changed card in the same bytes on a board of 50 cards and of 2,000', async () => {
+      const bytes = [];
+      for (const count of [50, 2_000]) {
+        await seedProject();
+        const { cards, board } = await boardOf(count);
+        later();
+        await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+        const answer = await read(board.cursor);
+        bytes.push(answer.bytes - answer.check!.length);
+      }
+
+      expect(bytes[1]).toBe(bytes[0]);
+    }, 60_000);
+
+    it('names a board that holds an edit its reader was never sent', async () => {
+      const { cards, board } = await boardOf(2);
+      // A writer whose clock runs further behind than a `since` read goes back.
+      vi.setSystemTime(Date.now() - 6_000);
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      // Past the age at which the list is read whole again, which finds the edit.
+      vi.setSystemTime(Date.now() + 70_000);
+
+      const next = await read(board.cursor);
+
+      expect(next).toMatchObject({ workItems: [], removedIds: [] });
+      expect(next.check).not.toBe(boardCheck(board.workItems));
+      const whole = await read();
+      expect(whole.workItems.map(card => card.title)).toContain('Renamed');
+      expect(next.check).toBe(boardCheck(whole.workItems));
+    });
+
+    it.each([50, 2_000])(
+      'reads no card to answer a reader that holds the cached board of %i cards',
+      async count => {
+        const { board } = await boardOf(count);
+        const reads = cardReads();
+
+        for (let poll = 0; poll < 3; poll++) {
+          expect(await read(board.cursor)).toMatchObject({ workItems: [], removedIds: [], cursor: board.cursor });
+        }
+
+        expect(reads()).toEqual([]);
+      },
+      60_000,
+    );
+
+    it('reads only the deleted ids to answer a cursor older than the cached board', async () => {
+      const { cards, board } = await boardOf(3);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      await read(board.cursor);
+      const reads = cardReads();
+
+      const next = await read(board.cursor);
+      const all = await read('1');
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(all.workItems).toHaveLength(3);
+      expect(reads()).toEqual(['factory_board_item_tombstones', 'factory_board_item_tombstones']);
+    });
+
+    it('gzips what moved for a reader that accepts it', async () => {
+      const { cards, board } = await boardOf(1);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+
+      const res = await buildApp(orgUser).request(`${boardPath()}?since=${board.cursor}`, {
+        headers: { 'accept-encoding': 'gzip, br' },
+      });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      expect(res.headers.get('vary')).toBe('Accept-Encoding');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
+      expect(body.workItems.map((card: { title: string }) => card.title)).toEqual(['Renamed']);
+    });
+
+    it('leaves a card deleted after the list was read for the next read to remove', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      const listed = await read();
+      const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+      let deleting: Promise<unknown> | undefined;
+      vi.spyOn(seed.storage.ops, 'findMany').mockImplementation(async (collection, ...rest) => {
+        // The delete lands between this read's list and its read of the deleted ids.
+        if (collection === 'factory_board_item_tombstones') {
+          await (deleting ??= json('DELETE', `/web/factory/work-items/${cards[1]!.id}`));
+        }
+        return findMany(collection, ...rest);
+      });
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(next).toMatchObject({ removedIds: [], check: boardCheck(listed.workItems) });
+      later();
+      expect((await read(next.cursor)).removedIds).toEqual([cards[1]!.id]);
+    });
+
+    it('sends a board showing Review cards whole, without a cursor', async () => {
+      const card = await createCard('pull-request');
+      await createCard('issue');
+      // A row as the retired Review board left it.
+      await seed.storage.ops.updateMany('factory_board_items', { id: card.id }, { board: 'review' });
+
+      const answer = await read('1');
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toBeUndefined();
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers a narrowed list as it does without a cursor', async () => {
+      const held = await startRun('session-mine');
+      await startRun('session-other');
+      const { cursor } = await read();
+      later();
+      await json('PATCH', `/web/factory/work-items/${held.id}`, { title: 'Renamed' });
+
+      const narrowed = `${boardPath()}?sessionId=session-mine`;
+      const answer = await buildApp(orgUser).request(`${narrowed}&since=${cursor}`);
+
+      expect(answer.headers.get('etag')).toBe((await buildApp(orgUser).request(narrowed)).headers.get('etag'));
+      expect(await answer.json()).not.toHaveProperty('removedIds');
+    });
+  });
 
   describe('one session’s cards (?sessionId=)', () => {
     const scopedPath = (...sessionIds: string[]) =>

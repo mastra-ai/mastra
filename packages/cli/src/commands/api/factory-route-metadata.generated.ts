@@ -363,6 +363,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "q",
       "scope",
       "sessionId",
+      "since",
       "source",
       "started"
     ],
@@ -3444,6 +3445,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "source": {
           "$ref": "#/$defs/__schema5"
+        },
+        "since": {
+          "$ref": "#/$defs/__schema7"
         }
       },
       "$defs": {
@@ -3486,6 +3490,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 512
+        },
+        "__schema7": {
+          "type": "string",
+          "pattern": "^\\d{1,15}$"
         }
       }
     },
@@ -3569,6 +3577,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "removedIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "check": {
+          "type": "string"
         }
       },
       "required": [
