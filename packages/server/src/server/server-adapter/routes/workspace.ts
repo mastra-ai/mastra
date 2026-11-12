@@ -11,6 +11,7 @@ import {
   WORKSPACE_SEARCH_ROUTES,
   WORKSPACE_SKILLS_ROUTES,
   WORKSPACE_SKILLS_SH_ROUTES,
+  WORKSPACE_SANDBOX_PROCESS_ROUTES,
 } from '../../handlers/workspace';
 
 export const WORKSPACE_ROUTES = [
@@ -31,4 +32,7 @@ export const WORKSPACE_ROUTES = [
 
   // skills.sh proxy routes (at /api/workspaces/:workspaceId/skills-sh/*)
   ...WORKSPACE_SKILLS_SH_ROUTES,
+
+  // Sandbox process routes (at /api/workspaces/:workspaceId/sandbox/processes/*)
+  ...WORKSPACE_SANDBOX_PROCESS_ROUTES,
 ] as const;

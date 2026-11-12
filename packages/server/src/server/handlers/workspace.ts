@@ -8,8 +8,16 @@
  */
 
 import { coreFeatures } from '@mastra/core/features';
-import type { Workspace, WorkspaceSkills, WorkspaceFilesystem, CompositeFilesystem } from '@mastra/core/workspace';
+import { RequestContext } from '@mastra/core/request-context';
+import type {
+  Workspace,
+  WorkspaceSkills,
+  WorkspaceFilesystem,
+  CompositeFilesystem,
+  ProcessMetadata,
+} from '@mastra/core/workspace';
 
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   // Workspace info
@@ -57,9 +65,16 @@ import {
   skillsShRemoveResponseSchema,
   skillsShUpdateBodySchema,
   skillsShUpdateResponseSchema,
+  // Sandbox process schemas
+  sandboxProcessPathParams,
+  sandboxProcessQuerySchema,
+  listSandboxProcessesResponseSchema,
+  sandboxProcessOutputResponseSchema,
+  killSandboxProcessResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import { getEffectiveThreadId, resolveResourceScope } from './utils';
 
 // =============================================================================
 // Constants
@@ -1778,6 +1793,161 @@ export const WORKSPACE_SKILLS_SH_ROUTES = [
   WORKSPACE_SKILLS_SH_INSTALL_ROUTE,
   WORKSPACE_SKILLS_SH_REMOVE_ROUTE,
   WORKSPACE_SKILLS_SH_UPDATE_ROUTE,
+];
+
+// =============================================================================
+// Sandbox Process Routes
+// =============================================================================
+
+// Same wording as the `get_process_output` and `kill_process` tools.
+const DYNAMIC_SANDBOX_HINT =
+  ' If this process was started from a dynamic sandbox resolver, configure sandboxCacheKey or have the resolver return the same sandbox for follow-up calls.';
+
+interface ProcessScope {
+  threadId?: string;
+  resourceId?: string;
+}
+
+/**
+ * Finds the sandbox processes a request may see. A resolver-backed sandbox is looked up with
+ * the request's thread and resource, so a `sandboxCacheKey` keyed on either finds the sandbox
+ * the agent used. Without a cache key every request resolves a new sandbox, which never holds
+ * the agent's processes.
+ */
+async function getSandboxProcesses(
+  mastra: any,
+  workspaceId: string,
+  requestContext: RequestContext,
+  query: { threadId?: string; resourceId?: string },
+) {
+  // A resource-scoped caller is pinned to its own resource.
+  const { resourceId } = resolveResourceScope(requestContext, query.resourceId);
+  const scope: ProcessScope = { threadId: getEffectiveThreadId(requestContext, query.threadId), resourceId };
+
+  const workspace = await getWorkspaceById(mastra, workspaceId);
+  if (!workspace) {
+    throw new HTTPException(404, { message: 'Workspace not found' });
+  }
+
+  let sandbox = workspace.sandbox;
+  if (workspace.hasSandboxResolver?.()) {
+    if (!workspace.hasSandboxCacheKey?.()) {
+      throw new HTTPException(404, { message: `Sandbox not found for this request.${DYNAMIC_SANDBOX_HINT}` });
+    }
+    const resolveContext = new RequestContext(requestContext.entries());
+    if (scope.threadId) resolveContext.set(MASTRA_THREAD_ID_KEY, scope.threadId);
+    if (scope.resourceId) resolveContext.set(MASTRA_RESOURCE_ID_KEY, scope.resourceId);
+    sandbox = await workspace.resolveSandbox({ requestContext: resolveContext });
+  }
+  if (!sandbox?.processes) {
+    throw new HTTPException(404, { message: 'No sandbox with background processes configured' });
+  }
+
+  return { processes: sandbox.processes, scope, hint: workspace.hasSandboxResolver?.() ? DYNAMIC_SANDBOX_HINT : '' };
+}
+
+/** Processes outside the scope read as missing, so their existence is not disclosed. */
+function inScope(metadata: ProcessMetadata | undefined, scope: ProcessScope): boolean {
+  if (scope.resourceId !== undefined && metadata?.resourceId !== scope.resourceId) return false;
+  if (scope.threadId !== undefined && metadata?.threadId !== scope.threadId) return false;
+  return true;
+}
+
+export const WORKSPACE_LIST_SANDBOX_PROCESSES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/sandbox/processes',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: sandboxProcessQuerySchema,
+  responseSchema: listSandboxProcessesResponseSchema,
+  summary: 'List sandbox processes',
+  description:
+    'Returns the background processes in the workspace sandbox, including exited processes whose output has not been read. Filter by the memory thread or resource that started them.',
+  tags: ['Workspace'],
+  handler: async ({ mastra, workspaceId, threadId, resourceId, requestContext }) => {
+    try {
+      const { processes, scope } = await getSandboxProcesses(mastra, workspaceId, requestContext, {
+        threadId,
+        resourceId,
+      });
+      const listed = await processes.list();
+      return { processes: listed.filter(info => inScope(info.metadata, scope)) };
+    } catch (error) {
+      return handleWorkspaceError(error, 'Error listing sandbox processes');
+    }
+  },
+});
+
+export const WORKSPACE_GET_SANDBOX_PROCESS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/sandbox/processes/:pid',
+  responseType: 'json',
+  pathParamSchema: sandboxProcessPathParams,
+  queryParamSchema: sandboxProcessQuerySchema,
+  responseSchema: sandboxProcessOutputResponseSchema,
+  summary: 'Get sandbox process output',
+  description:
+    'Returns the status and retained output of a background process. Reading it here does not release an exited process, so the agent can still read it.',
+  tags: ['Workspace'],
+  handler: async ({ mastra, workspaceId, pid, threadId, resourceId, requestContext }) => {
+    try {
+      const { processes, scope, hint } = await getSandboxProcesses(mastra, workspaceId, requestContext, {
+        threadId,
+        resourceId,
+      });
+      const handle = await processes.get(pid, { release: false });
+      if (!handle || !inScope(handle.metadata, scope)) {
+        throw new HTTPException(404, { message: `Process ${pid} not found.${hint}` });
+      }
+      return {
+        pid: handle.pid,
+        command: handle.command,
+        running: handle.exitCode === undefined,
+        exitCode: handle.exitCode,
+        metadata: handle.metadata,
+        stdout: handle.stdout,
+        stderr: handle.stderr,
+        stdoutTruncated: handle.stdoutTruncated,
+        stderrTruncated: handle.stderrTruncated,
+      };
+    } catch (error) {
+      return handleWorkspaceError(error, 'Error reading sandbox process');
+    }
+  },
+});
+
+export const WORKSPACE_KILL_SANDBOX_PROCESS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/sandbox/processes/:pid/kill',
+  responseType: 'json',
+  pathParamSchema: sandboxProcessPathParams,
+  queryParamSchema: sandboxProcessQuerySchema,
+  responseSchema: killSandboxProcessResponseSchema,
+  summary: 'Kill a sandbox process',
+  description:
+    'Stops a background process and releases its output. An agent with `notifyAgent` is not told about the exit.',
+  tags: ['Workspace'],
+  handler: async ({ mastra, workspaceId, pid, threadId, resourceId, requestContext }) => {
+    try {
+      const { processes, scope, hint } = await getSandboxProcesses(mastra, workspaceId, requestContext, {
+        threadId,
+        resourceId,
+      });
+      const handle = await processes.get(pid, { release: false });
+      if (!handle || !inScope(handle.metadata, scope)) {
+        throw new HTTPException(404, { message: `Process ${pid} not found.${hint}` });
+      }
+      return { pid, killed: await processes.kill(pid) };
+    } catch (error) {
+      return handleWorkspaceError(error, 'Error killing sandbox process');
+    }
+  },
+});
+
+export const WORKSPACE_SANDBOX_PROCESS_ROUTES = [
+  WORKSPACE_LIST_SANDBOX_PROCESSES_ROUTE,
+  WORKSPACE_GET_SANDBOX_PROCESS_ROUTE,
+  WORKSPACE_KILL_SANDBOX_PROCESS_ROUTE,
 ];
 
 // =============================================================================

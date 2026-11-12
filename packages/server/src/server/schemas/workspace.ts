@@ -490,3 +490,57 @@ export const skillsShUpdateResponseSchema = z.object({
     }),
   ),
 });
+
+// =============================================================================
+// Sandbox Process Schemas
+// =============================================================================
+
+export const sandboxProcessPathParams = workspaceIdPathParams.extend({
+  pid: z.string().min(1).describe('Process ID from the sandbox provider'),
+});
+
+export const sandboxProcessQuerySchema = z.object({
+  threadId: z
+    .string()
+    .optional()
+    .describe(
+      'Only processes started on this memory thread. Also picks the sandbox when the workspace resolves one per thread.',
+    ),
+  resourceId: z
+    .string()
+    .optional()
+    .describe(
+      'Only processes started for this resource. Resource-scoped callers are always limited to their own resource.',
+    ),
+});
+
+export const sandboxProcessMetadataSchema = z.object({
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  toolCallId: z.string().optional(),
+  startedAt: z.number().optional().describe('Milliseconds since the epoch'),
+});
+
+export const sandboxProcessSchema = z.object({
+  pid: z.string(),
+  command: z.string().optional(),
+  running: z.boolean(),
+  exitCode: z.number().optional(),
+  metadata: sandboxProcessMetadataSchema.optional(),
+});
+
+export const listSandboxProcessesResponseSchema = z.object({
+  processes: z.array(sandboxProcessSchema),
+});
+
+export const sandboxProcessOutputResponseSchema = sandboxProcessSchema.extend({
+  stdout: z.string(),
+  stderr: z.string(),
+  stdoutTruncated: z.boolean().describe('Whether older stdout was dropped to stay within the retention limit'),
+  stderrTruncated: z.boolean().describe('Whether older stderr was dropped to stay within the retention limit'),
+});
+
+export const killSandboxProcessResponseSchema = z.object({
+  pid: z.string(),
+  killed: z.boolean().describe('False when the process had already exited'),
+});

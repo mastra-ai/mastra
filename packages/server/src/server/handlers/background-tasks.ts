@@ -9,29 +9,7 @@ import {
   resumeBackgroundTaskBodySchema,
 } from '../schemas/background-tasks';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { getContextResourceId } from './utils';
-
-/**
- * Resolves the resource filter for a background-task request. A resource-scoped caller
- * is pinned to its own resource and may not request another one; a privileged caller
- * (no resource in the request context) keeps the client-provided filter.
- */
-function resolveResourceScope(
-  requestContext: Parameters<typeof getContextResourceId>[0],
-  clientResourceId: string | undefined,
-): { resourceId: string | undefined; scoped: boolean } {
-  const contextResourceId = getContextResourceId(requestContext);
-  if (contextResourceId === undefined) return { resourceId: clientResourceId, scoped: false };
-  // An empty resource id must not be mistaken for a privileged (unscoped) caller, and
-  // storage filters ignore empty strings, so it cannot be scoped safely either.
-  if (contextResourceId === '') {
-    throw new HTTPException(403, { message: 'Access denied: authenticated resourceId is empty' });
-  }
-  if (clientResourceId !== undefined && clientResourceId !== contextResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: resourceId does not match the authenticated resource' });
-  }
-  return { resourceId: contextResourceId, scoped: true };
-}
+import { resolveResourceScope } from './utils';
 
 export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
   method: 'GET',
@@ -128,6 +106,37 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
       throw new HTTPException(404, { message: 'Background task not found' });
     }
     return task;
+  },
+});
+
+export const CANCEL_BACKGROUND_TASK_ROUTE = createRoute({
+  method: 'POST',
+  path: '/background-tasks/:backgroundTaskId/cancel',
+  responseType: 'json' as const,
+  pathParamSchema: backgroundTaskIdPathParams,
+  responseSchema: backgroundTaskResponseSchema,
+  summary: 'Cancel a background task',
+  description:
+    'Stops a pending, running or suspended background task and returns it. A task that already finished is returned unchanged.',
+  tags: ['Background Tasks'],
+  requiresAuth: true,
+  handler: async ({ mastra, backgroundTaskId, requestContext }) => {
+    const { resourceId, scoped } = resolveResourceScope(requestContext, undefined);
+    const bgManager = mastra.backgroundTaskManager;
+    if (!bgManager) {
+      throw new HTTPException(404, { message: 'Background task not found' });
+    }
+
+    const task = await bgManager.getTask(backgroundTaskId);
+    // Report another resource's task as missing so its existence is not disclosed.
+    if (!task || (scoped && task.resourceId !== resourceId)) {
+      throw new HTTPException(404, { message: 'Background task not found' });
+    }
+
+    await bgManager.cancel(backgroundTaskId);
+    const cancelled = await bgManager.getTask(backgroundTaskId);
+    if (!cancelled) throw new HTTPException(404, { message: 'Background task not found' });
+    return cancelled;
   },
 });
 

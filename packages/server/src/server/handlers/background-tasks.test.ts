@@ -8,6 +8,7 @@ import { HTTPException } from '../http-exception';
 import { getEffectivePermission } from '../server-adapter/routes/permissions';
 import {
   BACKGROUND_TASK_STREAM_ROUTE,
+  CANCEL_BACKGROUND_TASK_ROUTE,
   LIST_BACKGROUND_TASKS_ROUTE,
   GET_BACKGROUND_TASK_ROUTE,
   RESUME_BACKGROUND_TASK_ROUTE,
@@ -641,6 +642,83 @@ describe('Background Tasks handlers', () => {
 
     it('requires the background-tasks:execute permission', () => {
       expect(getEffectivePermission(RESUME_BACKGROUND_TASK_ROUTE)).toBe('background-tasks:execute');
+    });
+  });
+
+  describe('CANCEL_BACKGROUND_TASK_ROUTE', () => {
+    const cancel = (backgroundTaskId: string, requestContext = new RequestContext()) =>
+      CANCEL_BACKGROUND_TASK_ROUTE.handler({
+        mastra,
+        backgroundTaskId,
+        requestContext,
+        abortSignal: new AbortController().signal,
+      } as any);
+
+    // A tool that runs until its task is cancelled, and records that it was stopped.
+    async function runningTask(resourceId?: string) {
+      let started = false;
+      const stopped: unknown[] = [];
+      const { task } = await bgManager.enqueue(
+        { toolName: 'crawl', toolCallId: 'call-1', args: {}, agentId: 'a1', runId: 'run-1', resourceId },
+        ctx(
+          (_args, opts) =>
+            new Promise((_resolve, reject) => {
+              started = true;
+              opts?.abortSignal?.addEventListener('abort', () => {
+                stopped.push(opts.abortSignal.reason);
+                reject(opts.abortSignal.reason);
+              });
+            }),
+        ),
+      );
+      await vi.waitFor(() => expect(started).toBe(true));
+      return { task, stopped };
+    }
+
+    it('stops a running task and returns it cancelled', async () => {
+      const { task, stopped } = await runningTask();
+
+      const returned = await cancel(task.id);
+
+      expect(returned).toMatchObject({ id: task.id, status: 'cancelled' });
+      expect(returned.completedAt).toBeInstanceOf(Date);
+      await vi.waitFor(() => expect(stopped).toHaveLength(1));
+      expect((await bgManager.getTask(task.id))?.status).toBe('cancelled');
+    });
+
+    it('returns a finished task unchanged', async () => {
+      const { task } = await bgManager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(vi.fn().mockResolvedValue('ok')),
+      );
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.status).toBe('completed'));
+
+      const returned = await cancel(task.id);
+
+      expect(returned).toMatchObject({ id: task.id, status: 'completed', result: 'ok' });
+    });
+
+    it("returns 404 for another resource's task and leaves it running", async () => {
+      const { task, stopped } = await runningTask('user-a');
+
+      const error = await cancel(task.id, scopedContext('user-b')).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
+      expect((await bgManager.getTask(task.id))?.status).toBe('running');
+      expect(stopped).toEqual([]);
+      // Its own resource can still cancel it.
+      expect(await cancel(task.id, scopedContext('user-a'))).toMatchObject({ status: 'cancelled' });
+    });
+
+    it('returns 404 for an unknown task', async () => {
+      const error = await cancel('missing-task').catch(e => e);
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
+    });
+
+    it('requires the background-tasks:execute permission', () => {
+      expect(getEffectivePermission(CANCEL_BACKGROUND_TASK_ROUTE)).toBe('background-tasks:execute');
     });
   });
 });
