@@ -538,12 +538,14 @@ For tools that agents call, see [make tools safe to repeat](/docs/harness/durabl
 
 ### Recovery loop
 
-An instance that called `mastra.startWorkers()` with the orchestration worker, such as a server or a `mastra worker` process, keeps checking storage for stopped runs while it runs, with the same rule as the boot-time restart. A run that stops after the instances booted is restarted without waiting for the next boot:
+An instance that called `mastra.startWorkers()` with the orchestration worker, such as a server or a `mastra worker` process, keeps checking storage for stopped runs while the instance runs, with the same rule as the boot-time restart. A run that stops after the instances booted is restarted without waiting for the next boot:
 
-- A run whose instance crashed is restarted about `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus `recovery.workflowGraceMs` after that instance last worked on it.
-- A run whose instance called `shutdown()` is restarted about `recovery.workflowGraceMs` after the shutdown finished. With the in-process pubsub that's 2 seconds, so a run left behind by a `mastra dev` reload continues shortly after the reload.
+- A run whose instance crashed can be restarted once `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus `recovery.workflowGraceMs` passed since that instance last worked on it.
+- A run whose instance called `shutdown()` can be restarted once `recovery.workflowGraceMs` passed since the shutdown.
 
-The first check runs when the workers start, and the server's boot-time call joins it. Later checks run every `recovery.workflowScanIntervalMs` (60 seconds by default), each up to 20% earlier or later so instances started together check at different times. A check runs sooner when a run the last check saw can be restarted earlier. Each check lists the active runs of every workflow recovery restarts, so raise the interval when you run many instances or keep many runs active.
+The first check runs when the workers start, and the server's boot-time call joins it. Later checks run every `recovery.workflowScanIntervalMs` (60 seconds by default), each up to 20% earlier or later so instances started together check at different times. A run a check found stopped but still in its grace period moves the next check up to the end of that period. A run a check saw running is picked up by the first check after it can be restarted, so within about one interval plus `MASTRA_AGENT_THREAD_LEASE_TTL_MS` plus `recovery.workflowGraceMs` after its instance stops. An instance that boots right after a `mastra dev` reload finds the runs the reload left behind in their grace period, and restarts them about 2 seconds after the reload with the in-process pubsub.
+
+Each check lists the active runs of every workflow that recovery restarts, so raise the interval when you run many instances or keep many runs active. A longer interval delays the recovery of runs that stop while the instances run.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'

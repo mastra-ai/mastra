@@ -402,7 +402,7 @@ A step can run more than once. If a worker stops during a step, or after the ste
 
 The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
 
-If the API crashes while a step is executing, that work can be lost and the workflow run stays `running` until the orchestration worker's [recovery loop](/docs/workflows/overview#recovery-loop) restarts it, about `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus `recovery.workflowGraceMs` (60 seconds by default with a broker) after the crash. See [durable agent crash recovery](/docs/harness/durable-agents#crash-recovery) for agent runs.
+If the API crashes while a step is executing, that work can be lost and the workflow run stays `running` until the orchestration worker's [recovery loop](/docs/workflows/overview#recovery-loop) restarts it, within about `recovery.workflowScanIntervalMs` (60 seconds by default) plus `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus `recovery.workflowGraceMs` (60 seconds by default with a broker) after the crash. See [durable agent crash recovery](/docs/harness/durable-agents#crash-recovery) for agent runs.
 
 ## Known limitations
 
