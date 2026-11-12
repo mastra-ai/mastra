@@ -766,12 +766,10 @@ describe('suspended-run discovery', () => {
       expect((await agent.listSuspendedRuns()).runs).toHaveLength(0);
     }, 30000);
 
-    it('drains parallel approval-requiring tool calls one suspension at a time', async () => {
-      // The model requests two tool calls in the same turn. Because both
-      // require approval, the loop runs them sequentially, so each call
-      // suspends on its own — discovery always reports exactly the tool call
-      // that is currently blocking (and therefore resumable), never a stale or
-      // half-executed sibling.
+    it('drains parallel approval-requiring tool calls one approval at a time', async () => {
+      // The model requests two tool calls in the same turn. Both park at their
+      // approval gates at once (#30152), so discovery reports every call that
+      // is still waiting — and only those — after each approval.
       const agent = new Agent({
         id: 'user-agent',
         name: 'User Agent',
@@ -786,18 +784,19 @@ describe('suspended-run discovery', () => {
         memory: { thread: 'thread-par', resource: 'resource-par' },
       });
       for await (const _chunk of stream.fullStream) {
-        // consume until the first suspension
+        // consume until the run parks
       }
 
-      // First suspension: only the first tool call is parked and discoverable.
+      // Both calls are parked and discoverable.
       const first = await agent.listSuspendedRuns({ threadId: 'thread-par' });
       expect(first.runs).toHaveLength(1);
       expect(first.runs[0]!.runId).toBe(stream.runId);
       expect(first.runs[0]!.toolCalls).toEqual([
         { toolCallId: 'call-A', toolName: 'toolA', args: { name: 'A' }, requiresApproval: true },
+        { toolCallId: 'call-B', toolName: 'toolB', args: { name: 'B' }, requiresApproval: true },
       ]);
 
-      // Approve the first call; the loop resumes and re-suspends on the second.
+      // Approve the first call; the run stays parked on the second.
       const afterFirst = await agent.approveToolCall({ runId: stream.runId, toolCallId: 'call-A' });
       for await (const _chunk of afterFirst.fullStream) {
         // consume until the next suspension

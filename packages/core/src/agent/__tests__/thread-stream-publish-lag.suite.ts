@@ -337,12 +337,22 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
       })();
       toolGate.resolve();
       await resumed;
-      await vi.waitFor(() => expect(chunks.some(c => c.type === 'tool-call-approval')).toBe(true));
+      await vi.waitFor(() => expect(chunks.some(c => c.type === 'thread-run-status')).toBe(true));
       await nextTicks(20);
       subscription.unsubscribe();
       await consumed;
 
-      expect(chunks.filter(c => c.type === 'tool-call-approval').map(c => c.payload.toolCallId)).toEqual(['call-2']);
+      // Both approvals were requested by the first step (#30152), so the joiner
+      // learns about the unanswered one from history rather than a live chunk —
+      // and never sees the already-answered call as pending.
+      const history = chunks.find(c => c.type === 'thread-history');
+      const pending = history.payload.messages.flatMap((m: any) =>
+        Object.keys(m.content?.metadata?.pendingToolApprovals ?? {}),
+      );
+      expect(pending).toEqual(['call-2']);
+      expect(chunks.filter(c => c.type === 'tool-call-approval').map(c => c.payload.toolCallId)).not.toContain(
+        'call-1',
+      );
     });
 
     it('trims the saved step from the topic while the run continues', async () => {

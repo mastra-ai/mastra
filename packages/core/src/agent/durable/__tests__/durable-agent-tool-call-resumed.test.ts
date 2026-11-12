@@ -110,7 +110,13 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const wrapped = createEventedAgent({ agent, pubsub });
     new Mastra({ agents: { wrapped }, storage, logger: false });
     const first = await wrapped.stream('go', { maxSteps: 3, closeOnSuspend: true });
-    await drain(first);
+    // The closeOnSuspend stream closes once the step has parked every call, which
+    // for the evented engine is after the suspended snapshot lands (#30152).
+    let firstClosed = false;
+    const firstDrained = drain(first).then(chunks => {
+      firstClosed = true;
+      return chunks;
+    });
     await persistenceBlocked;
     const reads = vi.spyOn(workflows, 'getWorkflowRunById');
     let resumeSettled = false;
@@ -120,6 +126,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     });
     try {
       await new Promise(resolve => setTimeout(resolve, 50));
+      expect(firstClosed).toBe(false);
       expect(resumeSettled).toBe(false);
       expect(reads).not.toHaveBeenCalled();
     } finally {
@@ -127,6 +134,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
       reads.mockRestore();
       stateSpy.mockRestore();
     }
+    expect((await firstDrained).some(chunk => chunk.type === 'tool-call-approval')).toBe(true);
     const resumed = await resuming;
     await drain(resumed);
     expect((await resumed.output.toolCalls).map(call => call.payload.toolCallId)).toEqual(['tc-1']);

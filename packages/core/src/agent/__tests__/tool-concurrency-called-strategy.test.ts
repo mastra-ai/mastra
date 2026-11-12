@@ -68,7 +68,7 @@ async function drain(stream: { fullStream: AsyncIterable<unknown> }) {
 }
 
 describe("toolCallConcurrency strategy: 'called'", () => {
-  it('serializes safe parallel calls by default when an approval tool is merely registered', async () => {
+  it('parallelizes safe calls by default when an approval tool is merely registered (#30152)', async () => {
     const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
     const agent = new Agent({
       id: 'repro-available',
@@ -85,8 +85,8 @@ describe("toolCallConcurrency strategy: 'called'", () => {
     const stream = await agent.stream('go', { maxSteps: 1, toolCallConcurrency: 10 });
     await drain(stream);
 
-    // Default 'available' strategy: registered approval tool forces sequential.
-    expect(tracker.peak).toBe(1);
+    // Approval never forces sequential execution, so a registered approval tool does not either.
+    expect(tracker.peak).toBe(2);
   });
 
   it("parallelizes a pure-safe batch under strategy 'called' even with an approval tool registered", async () => {

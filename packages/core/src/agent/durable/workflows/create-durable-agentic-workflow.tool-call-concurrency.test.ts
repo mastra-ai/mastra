@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { MASTRA_DELEGATED_RUN_KEY } from '../../../request-context';
 import { DurableAgentDefaults } from '../constants';
 import { createDurableAgenticWorkflow } from './create-durable-agentic-workflow';
 
 /**
  * The durable agentic workflow's tool-call foreach must honor the run's
- * `toolCallConcurrency` while forcing sequential execution for approval /
- * suspend-capable tool sets. Because the workflow graph is created once and
+ * `toolCallConcurrency` while forcing sequential execution for suspend-capable
+ * tool sets (approval-gated ones only inside a delegated sub-agent run). Because the workflow graph is created once and
  * shared across runs, concurrency is a resolver evaluated per run from the
  * serialized iteration state — never a static value or shared mutable object.
  */
@@ -69,28 +70,32 @@ describe('createDurableAgenticWorkflow', () => {
     expect(resolveWith(undefined)).toBe(DurableAgentDefaults.TOOL_CALL_CONCURRENCY);
   });
 
-  it('forces sequential execution when requireToolApproval is set globally', () => {
+  it('keeps the configured concurrency for approval-gated tools (#30152)', () => {
     expect(
       resolveWith({
         options: { requireToolApproval: true, toolCallConcurrency: 10 },
-        toolsMetadata: [],
-      }),
-    ).toBe(1);
-  });
-
-  it('forces sequential execution when a tool requires approval or can suspend', () => {
-    expect(
-      resolveWith({
-        options: { toolCallConcurrency: 10 },
         toolsMetadata: [{ id: 'gated', name: 'gated', inputSchema: { type: 'object' }, requireApproval: true }],
       }),
-    ).toBe(1);
+    ).toBe(10);
+  });
+
+  it('forces sequential execution when a tool can suspend', () => {
     expect(
       resolveWith({
         options: { toolCallConcurrency: 10 },
         toolsMetadata: [
           { id: 'suspending', name: 'suspending', inputSchema: { type: 'object' }, hasSuspendSchema: true },
         ],
+      }),
+    ).toBe(1);
+  });
+
+  it('forces sequential execution for approval-gated tools in a delegated sub-agent run', () => {
+    expect(
+      resolveWith({
+        options: { toolCallConcurrency: 10 },
+        toolsMetadata: [{ id: 'gated', name: 'gated', inputSchema: { type: 'object' }, requireApproval: true }],
+        requestContextEntries: { [MASTRA_DELEGATED_RUN_KEY]: true },
       }),
     ).toBe(1);
   });

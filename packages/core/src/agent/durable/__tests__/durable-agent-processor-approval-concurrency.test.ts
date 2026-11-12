@@ -5,16 +5,13 @@
  * run start (`toolsMetadata` from the agent's static `tools`). A tool that an
  * input processor adds per step — `ToolSearchProcessor` in the report, a plain
  * injector here — is executable but invisible to that gate, so two calls to an
- * approval-gated tool could suspend in parallel inside one foreach. That state
- * could not be drained: the second approval hung forever.
+ * approval-gated tool used to suspend in parallel inside one foreach — a state
+ * that could not be drained: the second approval hung forever.
  *
- * These tests pin the observable contract: one approval at a time, the sibling
- * runs only after the first is approved, and the run reaches a terminal result.
- *
- * The focused resolver tests pin the concurrency decision directly. These
- * end-to-end variants additionally cover both durable engines so the evented
- * engine cannot release an unapproved sibling while the default engine drains
- * the approvals sequentially to a terminal result.
+ * Parallel approvals are now the intended behavior (#30152), so these tests pin
+ * that both parked calls drain: both approvals surface at once, approving one
+ * runs only that call and leaves the run parked on its sibling, and approving
+ * the sibling lets the run reach a terminal result on both durable engines.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -172,7 +169,7 @@ describe('durable processor-injected approval tool concurrency', () => {
   const approvalsIn = (chunks: any[]) => chunks.filter(c => c.type === 'tool-call-approval');
 
   it.each(['durable', 'evented'] as const)(
-    '%s engine serializes two same-turn calls to a processor-injected approval tool',
+    '%s engine drains two same-turn approvals for a processor-injected tool',
     async engine => {
       const storage = new InMemoryStore();
       const mockMemory = new MockMemory();
@@ -189,56 +186,30 @@ describe('durable processor-injected approval tool concurrency', () => {
           : createDurableAgent({ agent: baseAgent, pubsub });
       new Mastra({ agents: { durableAgent }, storage, logger: false });
 
-      // Leg 1: stream until the first approval, then keep the (unapproved) stream
-      // open for a stabilization window. The gate must hold the sibling back, so
-      // no second approval arrives even though the model called the tool twice.
-      const first = await durableAgent.stream('Echo twice', { memory, maxSteps: 6 });
-      const firstChunks: any[] = [];
-      for await (const chunk of first.fullStream) {
-        firstChunks.push(chunk);
-        if (chunk.type === 'tool-call-approval') break;
-      }
-      expect(firstChunks.some(c => c.type === 'tool-call-approval')).toBe(true);
-      const firstApprovals = approvalsIn(firstChunks);
-      expect(
-        firstApprovals.map(c => c.payload?.toolCallId),
-        `approval chunks: ${firstChunks.map(c => c.type).join(', ')}`,
-      ).toHaveLength(1);
+      // Leg 1: both calls park at their approval gates and both approvals surface.
+      const first = await durableAgent.stream('Echo twice', { memory, maxSteps: 6, closeOnSuspend: true });
+      const firstChunks = await collectUntil(first.fullStream, () => false, 15000);
+      const firstIds = [...new Set(approvalsIn(firstChunks).map(c => c.payload?.toolCallId))];
+      expect(firstIds, `leg-1 chunks: ${firstChunks.map(c => c.type).join(', ')}`).toEqual(['tc-alpha', 'tc-beta']);
       expect(toolExecutions.count).toBe(0);
       await waitForSnapshotStatus(storage, first.runId, 'suspended');
 
-      // Stabilization window: the sibling must NOT surface while the first call is
-      // unapproved. Without the gate this is where a second parallel approval
-      // would appear.
-      const stabilization = await collectUntil(first.fullStream, () => false, 3000);
-      const leg1Ids = [...new Set(approvalsIn([...firstChunks, ...stabilization]).map(c => c.payload?.toolCallId))];
-      expect(leg1Ids, `leg-1 approvals: ${[...firstChunks, ...stabilization].map(c => c.type).join(', ')}`).toEqual([
-        'tc-alpha',
-      ]);
-      expect(toolExecutions.count).toBe(0);
-
-      // Leg 2: approving the first call releases the sibling, which now raises its
-      // own approval instead of having suspended alongside it.
+      // Leg 2: approving one call runs only that call; the run stays parked on the sibling.
       const second = await durableAgent.approveToolCall({
         runId: first.runId,
-        toolCallId: firstApprovals[0].payload.toolCallId,
+        toolCallId: 'tc-alpha',
         memory,
+        closeOnSuspend: true,
       });
-      const secondChunks = await collectUntil(second.fullStream, chunks => approvalsIn(chunks).length > 0, 15000);
-      const secondApprovals = approvalsIn(secondChunks);
-      expect(
-        [...new Set(secondApprovals.map(c => c.payload?.toolCallId))],
-        `leg-2 chunks: ${secondChunks.map(c => c.type).join(', ')}`,
-      ).toEqual(['tc-beta']);
-      expect(secondChunks.map(c => c.type)).not.toContain('error');
+      const secondChunks = await collectUntil(second.fullStream, () => false, 15000);
+      const secondTypes = secondChunks.map(c => c.type);
+      expect(secondTypes).not.toContain('error');
+      expect(secondTypes).not.toContain('finish');
       expect(toolExecutions.count).toBe(1);
+      await waitForSnapshotStatus(storage, first.runId, 'suspended');
 
       // Leg 3: approving the sibling lets the run finish rather than hanging.
-      const third = await durableAgent.approveToolCall({
-        runId: first.runId,
-        toolCallId: secondApprovals[0].payload.toolCallId,
-        memory,
-      });
+      const third = await durableAgent.approveToolCall({ runId: first.runId, toolCallId: 'tc-beta', memory });
       const thirdChunks = await collectUntil(third.fullStream, chunks => chunks.some(c => c.type === 'finish'), 15000);
       const thirdTypes = thirdChunks.map(c => c.type);
       expect(thirdTypes).not.toContain('error');
@@ -252,6 +223,6 @@ describe('durable processor-injected approval tool concurrency', () => {
           .join(''),
       ).toBe('Done.');
     },
-    40000,
+    60000,
   );
 });
