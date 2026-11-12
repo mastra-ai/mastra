@@ -106,10 +106,6 @@ const strictToolLanes: Array<{
 
 describeForAllEngines('AIMock loop scenario: Azure OpenAI structured output', engine => {
   const getMock = useLoopScenarioAimock();
-  // Durable, evented and Inngest runs skip the null-to-undefined transform Agent applies in agent.ts, so a
-  // strict answer with null optional keys fails validation there. openai/* models fail the same way on
-  // these engines (#29945).
-  const itStrictAnswer = engine === 'durable' || engine === 'evented' || engine === 'inngest' ? it.fails : it;
 
   // AzureOpenAIGateway always calls the resource host and takes no base URL, so every lane calls
   // the real Azure URL and the request is forwarded to AIMock. The body is recorded here because
@@ -167,7 +163,7 @@ describeForAllEngines('AIMock loop scenario: Azure OpenAI structured output', en
       });
     });
 
-    itStrictAnswer(`${lane.name} returns the strict answer with null optional keys dropped (#28593)`, async () => {
+    it(`${lane.name} returns the strict answer with null optional keys dropped (#28593)`, async () => {
       const object = await run(lane.model, lane.providerOptions);
 
       expect(object).toEqual({ reply: 'hi', items: [{ name: 'apple' }] });

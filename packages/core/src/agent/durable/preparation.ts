@@ -30,7 +30,6 @@ import {
 } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
-import { toStandardSchema } from '../../schema';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -65,6 +64,7 @@ import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
 import { recordRunSavedMessages } from './run-message-refs';
 import { setRunScorerInstances } from './run-registry';
+import { needsNullToUndefined, toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import {
   createWorkflowInput,
@@ -837,8 +837,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  // Same strict-mode null → undefined handling as Agent.#execute; skipped when a separate
+  // structuring model runs (its own agent call applies the transform).
+  const nullToUndefined =
+    Boolean(execOptions?.structuredOutput?.schema) &&
+    !(execOptions?.structuredOutput as any)?.model &&
+    needsNullToUndefined(model, execOptions?.providerOptions);
   const structuredOutputSchema = execOptions?.structuredOutput?.schema
-    ? toStandardSchema(execOptions.structuredOutput.schema)
+    ? toLiveStructuredOutputSchema<{}>(execOptions.structuredOutput.schema, nullToUndefined)
     : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
@@ -850,6 +856,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         instructions: so.instructions,
         useAgent: so.useAgent,
         hasStructuringModel: so.model ? true : undefined,
+        nullToUndefined: nullToUndefined ? true : undefined,
         // Workers without the live config (remote/recovered runs) resolve the structuring
         // model from this. Model instances persist as `provider/modelId`, like the main model.
         structuringModelConfig:
