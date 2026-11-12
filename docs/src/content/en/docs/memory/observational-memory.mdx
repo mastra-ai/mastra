@@ -25,7 +25,7 @@ Install `@mastra/memory` and a [storage adapter](/docs/storage#supported-provide
 npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
-OM needs storage that supports it, a thread for every call, and `observationalMemory: true`. This script stores memory in a local LibSQL file and calls the agent twice on one thread:
+OM needs storage that supports it (`@mastra/libsql`, `@mastra/pg`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex` or `@mastra/oracledb`), a thread for every call, and `observationalMemory: true`. This script stores memory in a local LibSQL file and calls the agent twice on one thread:
 
 ```typescript title="src/observational-memory.ts"
 import { Agent } from '@mastra/core/agent'
@@ -70,6 +70,15 @@ console.log(second.text)
 `resource` identifies the user or entity and `thread` identifies the conversation. Reuse both to continue the conversation. Nothing is observed in this short exchange. Once the thread's message history passes 30,000 tokens, OM starts replacing older messages with observations.
 
 If your Mastra instance already has storage, you can leave `storage` out of `Memory` and it uses that.
+
+## Benefits
+
+- **Long tasks stay in one thread**: The agent keeps working past its context limit without compacting and without losing earlier decisions.
+- **Prompt caching**: Observations append to a stable prefix instead of being retrieved each turn, which lets the provider serve most of each request from its prompt cache. See [cost and latency](#cost-and-latency).
+- **Smaller context**: Raw messages and tool results compress into a dense observation log, which lowers the cost and latency of every call.
+- **Less context rot**: The agent reads what matters instead of stale tool output and noise, which keeps it on task over long sessions.
+
+Mastra's own agents run on OM. [Mastra Code](https://code.mastra.ai/), a coding agent for the terminal, uses it so a session can run for days without compacting. See its [Observational Memory settings](https://code.mastra.ai/configuration#observational-memory). [Mastra Factory](https://factory.mastra.ai/) runs its planning, implementation and review sessions on Mastra Code. Each agent keeps the context of a long task from start to finish.
 
 ## How it works
 
@@ -467,4 +476,5 @@ for await (const chunk of stream.fullStream) {
 - [Multi-user threads](/docs/memory/multi-user-threads): how OM attributes facts to individual users in a shared thread
 - [Memory processors](/docs/memory/memory-processors)
 - [Mastra Code](https://code.mastra.ai/): a coding agent using Observational Memory
+- [Mastra Factory](https://factory.mastra.ai/): a software factory whose agent sessions use Observational Memory
 - 📹 [Mastra processors and Observational Memory workshop](https://www.youtube.com/watch?v=4Vpp7xQYvl0)
