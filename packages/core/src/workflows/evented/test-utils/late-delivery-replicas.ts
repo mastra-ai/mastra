@@ -143,7 +143,10 @@ export function heldQueue(holds: (event: Event) => boolean) {
       return undefined;
     }
 
-    queue.push(copyEvent(event));
+    // The pubsub names an event only when it publishes it: give a held one the id a broker would,
+    // so a store's step start guard sees the delivery the way it sees a broker's.
+    const held = copyEvent(event);
+    queue.push({ ...held, id: held.id ?? globalThis.crypto.randomUUID() });
     firstHeld.resolve();
     return 'drop';
   };
