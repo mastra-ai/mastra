@@ -1,4 +1,4 @@
-import { MASTRA_RESOURCE_ID_KEY } from '../../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../constants';
 import {
   AWAIT_BUFFER_STATUS_ROUTE,
   CLONE_THREAD_ROUTE,
@@ -109,8 +109,9 @@ export async function addMemoryTools(kit: CatalogueKit) {
     object({ agentId, threadId, resourceId }, ['agentId']),
     async (args, signal) => {
       const query = defined({ agentId: args.agentId, resourceId: contextResource(args) });
-      const result = args.threadId
-        ? await call(GET_WORKING_MEMORY_ROUTE, { pathParams: { threadId: args.threadId }, query }, signal)
+      const effectiveThreadId = requestContext.get(MASTRA_THREAD_ID_KEY) || args.threadId;
+      const result = effectiveThreadId
+        ? await call(GET_WORKING_MEMORY_ROUTE, { pathParams: { threadId: effectiveThreadId }, query }, signal)
         : await call(GET_RESOURCE_WORKING_MEMORY_ROUTE, { query }, signal);
       return fitValue(result);
     },

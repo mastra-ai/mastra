@@ -5,6 +5,7 @@ import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { MASTRA_USER_KEY } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -1496,6 +1497,20 @@ export const GET_RESOURCE_WORKING_MEMORY_ROUTE = createRoute({
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ resourceId: effectiveResourceId });
+      const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
+      if (fgaProvider) {
+        const user = requestContext?.get(MASTRA_USER_KEY) ?? requestContext?.get('user');
+        if (!user || typeof user !== 'object') {
+          throw new HTTPException(403, { message: 'FGA authorization denied: authenticated user is required' });
+        }
+        const allowed = await fgaProvider.check(user, {
+          resource: { type: 'resource', id: effectiveResourceId! },
+          permission: MastraFGAPermissions.MEMORY_READ,
+        });
+        if (!allowed) {
+          throw new HTTPException(403, { message: 'FGA authorization denied: resource working memory access' });
+        }
+      }
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
       if (!memory) {
         return { workingMemory: null, source: 'resource' as const, workingMemoryTemplate: null, threadExists: false };
