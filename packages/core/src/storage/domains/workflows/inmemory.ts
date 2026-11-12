@@ -195,6 +195,20 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
   return out;
 }
 
+/** A run's snapshot reduced to what `listWorkflowRuns({ summary: true })` returns. */
+function summarizeRunSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
+  const { status, timestamp, parentWorkflow } = snapshot;
+  if (!parentWorkflow) {
+    return { status, timestamp } as WorkflowRunState;
+  }
+
+  return {
+    status,
+    timestamp,
+    parentWorkflow: { workflowId: parentWorkflow.workflowId, runId: parentWorkflow.runId },
+  } as WorkflowRunState;
+}
+
 export class WorkflowsInMemory extends WorkflowsStorage {
   private db: InMemoryDB;
 
@@ -860,6 +874,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return snapshot ? cloneRunData(snapshot) : null;
   }
 
+  /**
+   * Lists v1 and v2 runs, newest first. With `summary`, each returned snapshot keeps only its
+   * status, timestamp and parent run, and the stored snapshot is not cloned.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -869,6 +887,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     resourceId,
     threadId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     if (page !== undefined && page < 0) {
       throw new Error('page must be >= 0');
@@ -945,16 +964,26 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       runs = runs.slice(start, end);
     }
 
-    // Deserialize snapshot if it's a string
-    const parsedRuns = runs.map((run: any) => ({
-      ...run,
-      snapshot: typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : cloneRunData(run.snapshot),
-      createdAt: new Date(run.createdAt),
-      updatedAt: new Date(run.updatedAt),
-      runId: run.run_id,
-      workflowName: run.workflow_name,
-      resourceId: run.resourceId,
-    }));
+    const parsedRuns = runs.map((run: any) => {
+      // A parsed string is already a copy; a stored object is cloned unless summary mode reduces
+      // it. The reduction comes last because the status and thread filters read the full snapshot.
+      let snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+      if (summary) {
+        snapshot = summarizeRunSnapshot(snapshot);
+      } else if (typeof run.snapshot !== 'string') {
+        snapshot = cloneRunData(snapshot);
+      }
+
+      return {
+        ...run,
+        snapshot,
+        createdAt: new Date(run.createdAt),
+        updatedAt: new Date(run.updatedAt),
+        runId: run.run_id,
+        workflowName: run.workflow_name,
+        resourceId: run.resourceId,
+      };
+    });
 
     return { runs: parsedRuns as WorkflowRun[], total };
   }
