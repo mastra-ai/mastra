@@ -323,7 +323,7 @@ See the [Editor versioning reference](/reference/editor/versioning) for version 
 
 ## Visibility
 
-With [`server.auth`](/docs/auth/overview) configured, every stored agent has an owner and a `visibility`. An agent created in Studio, through `POST /api/stored/agents`, or with the [built-in MCP server](/docs/server/mcp) is owned by the user who created it and is `private` unless they set `visibility: 'public'`. The owner is the caller's resource ID from `mapUserToResourceId`, or the user's `id` without it. Without `server.auth`, stored agents have no owner and every caller can use them.
+With [`server.auth`](/docs/auth/overview) configured, every stored agent has an owner and a `visibility`. An agent created in Studio, through `POST /api/stored/agents`, or with the [built-in MCP server](/docs/server/mcp) is owned by the user who created it and is `private` unless they set `visibility: 'public'`. The owner is the caller's resource ID from `mapUserToResourceId`, or the user's `id` without it. Without `server.auth`, or when the caller has neither, stored agents have no owner, are `public`, and every caller can use them.
 
 | Who | Can see and call a private agent | Can edit or delete it |
 | - | - | - |

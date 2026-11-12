@@ -76,7 +76,7 @@ A `tool_<id>` entry uses the tool's own `mcp.annotations` when the tool defines 
 | `clone_thread` | `threadId*`, `agentId*`, `newThreadId`, `title`, `metadata`, `messageLimit` | `POST /memory/threads/:threadId/clone` | `memory:execute` |
 | `save_messages` | `agentId*`, `messages*` | `POST /memory/save-messages` | `memory:write` |
 
-- `resourceId` defaults to the caller when `server.auth` sets `mapUserToResourceId`, and a caller can't read or write another resource's threads, messages, or Observational Memory. Without `mapUserToResourceId`, the tools use the `resourceId` the client sends, so keep memory private with [FGA](/docs/auth/fga) or by setting `mapUserToResourceId`.
+- `resourceId` defaults to the caller when `server.auth` sets `mapUserToResourceId`, and a caller can't read or write another resource's threads, messages, or Observational Memory. Without `mapUserToResourceId`, the tools use the `resourceId` the client sends, so set `mapUserToResourceId` to keep memory private. [FGA](/docs/auth/fga) protects threads, but `get_observations` called with only a `resourceId` isn't covered by the default FGA routes.
 - `get_observations` reads resource-scoped Observational Memory when `threadId` is left out. `waitForPending: true` waits up to 30 seconds for pending observations, and is only offered when the caller may call `POST /memory/observational-memory/buffer-status`, which needs `memory:write`.
 - `search_memory` returns up to 20 results unless `limit` is set.
 
