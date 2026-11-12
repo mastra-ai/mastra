@@ -4,7 +4,7 @@ import type { EmptyStateIllustrationName } from '@mastra/playground-ui/component
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogIn, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 
 interface LoadFailure {
   art: EmptyStateIllustrationName;
@@ -53,6 +53,9 @@ interface RetryProps {
 /** A page whose data failed to load: art for the kind of failure, what to do about it, and the way to do it. */
 export function LoadErrorState({ title, error, onRetry, retrying }: RetryProps & { title: string; error: unknown }) {
   const failure = describeLoadFailure(error);
+  // Signing in comes back to this page, like the app's other ways into /signin.
+  const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}${location.hash}`;
   return (
     <EmptyState
       variant="fill"
@@ -62,7 +65,7 @@ export function LoadErrorState({ title, error, onRetry, retrying }: RetryProps &
       descriptionSlot={failure.description}
       actionSlot={
         failure.signIn ? (
-          <Button icon={<LogIn />} render={<Link to="/signin" />}>
+          <Button icon={<LogIn />} render={<Link to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} />}>
             Sign in
           </Button>
         ) : (

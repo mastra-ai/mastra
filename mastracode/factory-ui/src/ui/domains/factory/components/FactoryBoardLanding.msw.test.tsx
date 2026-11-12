@@ -12,15 +12,16 @@ import { OverlaysProvider } from '../../../lib/overlays';
 import { FactoryBoardLanding } from './FactoryBoardLanding';
 
 function Destination() {
-  return <p>{useLocation().pathname}</p>;
+  const location = useLocation();
+  return <p>{`${location.pathname}${location.search}`}</p>;
 }
 function renderLanding() {
   return renderWithProviders(
     <Sidebar.Provider storageKey="board-landing-test" collapsedWidth={0}>
       <OverlaysProvider>
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter initialEntries={['/factories/project-1']}>
           <Routes>
-            <Route path="/" element={<FactoryBoardLanding factoryId="project-1" />} />
+            <Route path="/factories/:factoryId" element={<FactoryBoardLanding factoryId="project-1" />} />
             <Route path="*" element={<Destination />} />
           </Routes>
         </MemoryRouter>
@@ -117,13 +118,16 @@ describe('installed board landing', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
   });
 
-  it('sends an expired session to sign in instead of offering a retry that would fail again', async () => {
+  it('sends an expired session to sign in, and back to this factory after, instead of a retry that would fail again', async () => {
     server.use(http.get(endpoint, () => HttpResponse.json({ error: 'unauthorized' }, { status: 401 })));
     renderLanding();
 
     await screen.findByRole('alert');
     expect(screen.getByText('Your session expired. Sign in again to continue.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/signin');
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Sign in' }));
+
+    expect(await screen.findByText('/signin?returnTo=%2Ffactories%2Fproject-1')).toBeInTheDocument();
   });
 });
