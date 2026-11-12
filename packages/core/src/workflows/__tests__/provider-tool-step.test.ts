@@ -177,6 +177,26 @@ describe.each(ENGINES)('provider-returned plain tool validation ($name engine)',
     expect(execute).toHaveBeenCalledOnce();
   });
 
+  it("returns invalid output when the tool action uses outputValidation: 'warn'", async () => {
+    const execute = vi.fn(async () => ({ doubled: 'not-a-number' }));
+    const result = await runPlainTool(
+      {
+        id: 'mock.double',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+        outputValidation: 'warn',
+        execute,
+      },
+      { value: 2 },
+    );
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ doubled: 'not-a-number' });
+    }
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   it('does not validate output when the tool suspends', async () => {
     const execute = vi.fn(async (_input: unknown, context: any) => {
       await context.workflow.suspend({ reason: 'waiting' });

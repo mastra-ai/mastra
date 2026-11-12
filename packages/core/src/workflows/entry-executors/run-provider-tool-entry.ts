@@ -1,7 +1,7 @@
 import type { Mastra } from '../../mastra';
 import { resolveSingleProviderTool } from '../../tool-provider';
 import { isMastraTool } from '../../tools/toolchecks';
-import { validateToolInput, validateToolOutput } from '../../tools/validation';
+import { getValidationIssuePaths, validateToolInput, validateToolOutput } from '../../tools/validation';
 import type { ProviderToolEntry } from '../types';
 import { executeToolWithStepContext } from './run-tool-entry';
 import type { EntryExecuteContext } from './types';
@@ -52,6 +52,13 @@ export async function runProviderToolEntry(
   if (!suspended && isPlainToolAction && tool.outputSchema && '~standard' in tool.outputSchema) {
     const validation = validateToolOutput(tool.outputSchema, output, entry.toolSlug);
     if (validation.error) {
+      registry?.getLogger()?.warn('Tool output validation failed', {
+        toolId: entry.toolSlug,
+        issuePaths: getValidationIssuePaths(validation.error, tool.outputSchema, 'output'),
+      });
+      if (tool.outputValidation === 'warn') {
+        return output;
+      }
       throw new Error(validation.error.message);
     }
     return validation.data;
