@@ -45,18 +45,32 @@ type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snap
   snapshot: WorkflowRunState | string;
 };
 
-/** A snapshot reduced to what `listWorkflowRuns({ summary: true })` returns. */
-function summarizeSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
-  const { status, timestamp, parentWorkflow } = snapshot;
-  if (!parentWorkflow) {
-    return { status, timestamp } as WorkflowRunState;
+/**
+ * A stored snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status` and
+ * `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot reduces to `{}`. Reads the stored value in place, without a full copy.
+ */
+function summarySnapshot(stored: WorkflowRunState | string | undefined): WorkflowRunState {
+  const parsed: unknown = typeof stored === 'string' ? JSON.parse(stored) : stored;
+  const source = (parsed !== null && typeof parsed === 'object' ? parsed : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    summary.status = status;
   }
 
-  return {
-    status,
-    timestamp,
-    parentWorkflow: { workflowId: parentWorkflow.workflowId, runId: parentWorkflow.runId },
-  } as WorkflowRunState;
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
 }
 
 export class WorkflowsConvex extends WorkflowsStorage {
@@ -265,7 +279,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     const runs: WorkflowRun[] = rows.map(run => ({
       workflowName: run.workflow_name,
       runId: run.run_id,
-      snapshot: summary ? summarizeSnapshot(this.ensureSnapshot(run)) : this.ensureSnapshot(run),
+      snapshot: summary ? summarySnapshot(run.snapshot) : this.ensureSnapshot(run),
       createdAt: new Date(run.createdAt),
       updatedAt: new Date(run.updatedAt),
       resourceId: run.resourceId,
