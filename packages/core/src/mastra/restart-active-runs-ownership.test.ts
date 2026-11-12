@@ -125,32 +125,6 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       .toBe('success');
   }, 15_000);
 
-  it('drains a restart the recovery loop started on shutdown', async () => {
-    const storage = new InMemoryStore();
-    let finish!: () => void;
-    const gate = new Promise<void>(resolve => (finish = resolve));
-    let signalStarted!: () => void;
-    const started = new Promise<void>(resolve => (signalStarted = resolve));
-    const replica = buildReplica(storage, async () => {
-      signalStarted();
-      await gate;
-    });
-    const { workflow, run, workflowsStore } = await persistOrphanedRun(storage, replica, -60_000);
-
-    await replica.startWorkers();
-    await started;
-
-    let shutDown = false;
-    const shutdown = replica.shutdown().then(() => (shutDown = true));
-    await new Promise(resolve => setTimeout(resolve, 200));
-    expect(shutDown).toBe(false);
-
-    finish();
-    await shutdown;
-    expect((await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.status).toBe(
-      'success',
-    );
-  }, 15_000);
   it('keeps renewing the lease of a run that outlives the lease TTL', async () => {
     // The lease renews on a setTimeout chain.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });

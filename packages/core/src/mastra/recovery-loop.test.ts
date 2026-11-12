@@ -41,6 +41,11 @@ afterEach(async () => {
 
 const schema = z.object({});
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/**
+ * Settles once the promise callbacks queued so far, and the ones they queue, ran. A pass on the
+ * in-memory store goes from a listing to its restarts within them.
+ */
+const drained = () => new Promise(resolve => setImmediate(resolve));
 
 /** The one-step `recovered-wf` on `engine`, whose step records `<replica>:work` and then runs `then`. */
 function oneStep(engine: 'default' | 'evented', replica: string, executions: string[], then?: () => Promise<void>) {
@@ -420,7 +425,7 @@ describe('workflow recovery loop (#28712)', () => {
     release.resolve();
     // The pass got the stopped run back from the store, so only the stop keeps it from restarting the run.
     await listed.promise;
-    await sleep(scanning.workflowScanIntervalMs * 3);
+    await drained();
 
     expect(restarted).not.toHaveBeenCalled();
   });
@@ -469,7 +474,8 @@ describe('workflow recovery loop (#28712)', () => {
     await mastra.stopWorkers({ drainTimeout: 0 });
     release.resolve();
     await starting;
-    await sleep(scanning.workflowScanIntervalMs * 5);
+    // A loop's first pass would list at once.
+    await drained();
 
     expect(listings).not.toHaveBeenCalled();
   });
@@ -481,22 +487,24 @@ describe('workflow recovery loop (#28712)', () => {
     const list = store.listWorkflowRuns.bind(store);
     const listing = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
+    const order: string[] = [];
     vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
       listing.resolve();
       await release.promise;
-      return list(args);
+      const runs = await list(args);
+      order.push('listed');
+      return runs;
     });
     await mastra.startWorkers();
     await listing.promise;
 
-    let shutDown = false;
-    const shutdown = mastra.shutdown({ drainTimeout: 5_000 }).then(() => (shutDown = true));
-    await sleep(200);
-    expect(shutDown).toBe(false);
-
-    release.resolve();
+    const shutdown = mastra.shutdown({ drainTimeout: 5_000 }).then(() => order.push('shut down'));
+    // Later than a shutdown with nothing to wait for takes.
+    setTimeout(release.resolve, 200);
     await shutdown;
-    expect(shutDown).toBe(true);
+
+    expect(order.at(-1)).toBe('shut down');
+    expect(order).toContain('listed');
   });
 
   it('keeps checking after a pass whose store failed to answer', async () => {
@@ -577,8 +585,7 @@ describe('workflow recovery loop (#28712)', () => {
 
     await mastra.startWorkers();
     await probed.promise;
-    // A pass lists right after the probe answers, within the same macrotask.
-    await new Promise(resolve => setImmediate(resolve));
+    await drained();
 
     // Nothing tells the run from one another instance still drives, so the loop leaves it alone.
     expect(listings.mock.calls.filter(([args]) => args?.workflowName === 'recovered-wf')).toEqual([]);
@@ -620,7 +627,8 @@ describe('workflow recovery loop (#28712)', () => {
     await persistActiveRun(storage, 'stopped');
 
     await mastra.startWorkers();
-    await sleep(scanning.workflowScanIntervalMs * 5);
+    // A loop's first pass would list at once.
+    await drained();
 
     expect(listings).not.toHaveBeenCalled();
     expect(executions).toEqual([]);
