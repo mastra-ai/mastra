@@ -93,6 +93,7 @@ import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
   assertObservabilitySpanDurationSortSupported,
+  assertObservabilitySpanModelProviderSortSupported,
   assertObservabilitySpanQueryFieldsSupported,
   assertObservabilitySpanAggregateModelDimensionsSupported,
   assertObservabilityAggregateTimeToFirstMeasuresSupported,
@@ -771,7 +772,11 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       plan = coreStorage.planSpanQuery(
         { timeRange, where, ...(textSearch === undefined ? {} : { textSearch }), orderBy, page },
-        { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED'), allowSpanDurationOrdering: true },
+        {
+          scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED'),
+          allowSpanDurationOrdering: true,
+          allowSpanModelProviderOrdering: true,
+        },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -791,6 +796,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanDurationSortSupported(observabilityStore, plan.orderBy);
+      assertObservabilitySpanModelProviderSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'span');
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
