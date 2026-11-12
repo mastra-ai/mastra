@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { IMastraLogger } from '@internal/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
@@ -316,9 +317,21 @@ async function captureDependenciesToOptimize(
           packageSpec = metadata.packageSpec;
         }
 
+        const importers = dynamicImporters.get(dynamicImport) ?? [];
+        if (pkgName && !rootPath && !version && !packageSpec) {
+          // The bundler resolves the import from the importing file, so a package installed only there is installed.
+          for (const importer of importers) {
+            if (!isAbsolute(importer)) continue;
+            const metadata = await getPackageMetadata(dynamicImport, importer);
+            if (metadata.rootPath || metadata.version || metadata.packageSpec) {
+              ({ rootPath, version, packageSpec } = metadata);
+              break;
+            }
+          }
+        }
+
         if (pkgName && !rootPath && !version && !packageSpec && !isUserListedExternal(dynamicImport, externals)) {
           // Not installed: leave it out only when every importing package declares it as an optional peer.
-          const importers = dynamicImporters.get(dynamicImport) ?? [];
           const optionalPeerChecks = await Promise.all(
             importers.map(importer => isOptionalPeerOfImporter(pkgName, importer)),
           );

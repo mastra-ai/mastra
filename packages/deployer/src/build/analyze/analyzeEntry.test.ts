@@ -406,6 +406,52 @@ export const loadUndeclared = () => import('missing-undeclared');
     }
   });
 
+  it('should keep an optional peer that resolves only from the importing package', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-optional-peer-nested-'));
+    const hostDir = join(root, 'linked', 'host-pkg');
+    // Not resolvable from the project root, but the bundler resolves it from the importer, e.g. a pnpm-linked peer.
+    const nestedPeerDir = join(hostDir, 'node_modules', 'nested-peer');
+    const entryFilePath = join(root, 'entry.ts');
+
+    try {
+      await mkdir(join(hostDir, 'dist'), { recursive: true });
+      await mkdir(nestedPeerDir, { recursive: true });
+      await Promise.all([
+        writeFile(
+          join(hostDir, 'package.json'),
+          JSON.stringify({
+            name: 'host-pkg',
+            version: '1.0.0',
+            type: 'module',
+            exports: { '.': './dist/index.js' },
+            peerDependencies: { 'nested-peer': '^3.0.0' },
+            peerDependenciesMeta: { 'nested-peer': { optional: true } },
+          }),
+        ),
+        writeFile(join(hostDir, 'dist', 'index.js'), `export const loadNested = () => import('nested-peer');\n`),
+        writeFile(
+          join(nestedPeerDir, 'package.json'),
+          JSON.stringify({ name: 'nested-peer', version: '3.1.0', type: 'module', main: 'index.js' }),
+        ),
+        writeFile(join(nestedPeerDir, 'index.js'), 'export const value = 1;'),
+        writeFile(entryFilePath, `export * from './linked/host-pkg/dist/index.js';\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+      });
+
+      const nestedPeer = result.dependencies.get('nested-peer');
+      expect(nestedPeer?.version).toBe('3.1.0');
+      expect(nestedPeer?.rootPath).toMatch(/linked\/host-pkg\/node_modules\/nested-peer$/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('should keep an uninstalled optional peer that the user externalizes or that another importer needs', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-optional-peer-kept-'));
     const hostDir = join(root, 'linked', 'host-pkg');
