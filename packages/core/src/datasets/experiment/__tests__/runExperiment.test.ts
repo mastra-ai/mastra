@@ -1038,6 +1038,16 @@ describe('runExperiment', () => {
       expect(workflowScorer.run).toHaveBeenCalledTimes(1);
       expect(stepScorer.run).toHaveBeenCalledTimes(1);
       expect(lowerScorer.run).not.toHaveBeenCalled();
+
+      // Regression for #29787: the step score must actually reach the scores store.
+      // The schema only accepts the 'STEP' entityType that runEvals uses; emitting
+      // 'WORKFLOW_STEP' failed validation and the score was silently dropped.
+      const { scores: persistedStepScores } = await scoresStorage.listScoresByScorerId({
+        scorerId: 'workflow-step',
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedStepScores).toHaveLength(1);
+      expect(persistedStepScores[0]?.entityType).toBe('STEP');
     });
   });
 

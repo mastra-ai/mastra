@@ -10705,6 +10705,8 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'SCORER'
+          | 'PROCESSOR'
           | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
