@@ -5,6 +5,7 @@ import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleSuspendedSnapshotWithThread, createSampleWorkflowSnapshot } from './data';
 import { createWorkflowEngineTests } from './engine';
 import { createRunJournalTests } from './run-journal';
+import { createUpdatedAtTests } from './updated-at';
 
 export interface WorkflowsTestOptions {
   storage: MastraStorage;
@@ -25,6 +26,7 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
   });
 
   createRunJournalTests({ getStore: () => workflowsStorage });
+  createUpdatedAtTests({ getStore: () => workflowsStorage });
   createWorkflowEngineTests({ storage, getStore: () => workflowsStorage });
 
   describe('listWorkflowRuns', () => {
@@ -291,39 +293,6 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       // ...while updatedAt advances to reflect the new activity.
       expect(updatedAtAfter).toBeGreaterThan(updatedAtBefore);
     });
-
-    // Run recovery waits out a grace period from a run's last `updatedAt` before restarting it, so
-    // every write an engine makes between steps must count as activity, not only a full re-persist.
-    it.for(['updateWorkflowResults', 'updateWorkflowState'] as const)(
-      'should advance updatedAt on %s',
-      async (method, { skip }) => {
-        const updatedAt = async () =>
-          new Date((await workflowsStorage.getWorkflowRunById({ runId, workflowName }))!.updatedAt).getTime();
-        const before = await updatedAt();
-        // Every adapter keeps updatedAt to the millisecond or finer.
-        await new Promise(resolve => setTimeout(resolve, 50));
-
-        try {
-          if (method === 'updateWorkflowResults') {
-            await workflowsStorage.updateWorkflowResults({
-              workflowName,
-              runId,
-              stepId: 'later-step',
-              result: { status: 'success', output: {}, payload: {}, startedAt: Date.now(), endedAt: Date.now() } as any,
-              requestContext: {},
-            });
-          } else {
-            await workflowsStorage.updateWorkflowState({ workflowName, runId, opts: { status: 'running' } });
-          }
-        } catch (error) {
-          // Only adapters that don't implement the method at all are exempt.
-          if (/not (yet )?(implemented|supported)/i.test(String((error as Error)?.message ?? error))) return skip();
-          throw error;
-        }
-
-        expect(await updatedAt()).toBeGreaterThan(before);
-      },
-    );
 
     it('should delete a workflow run by ID', async () => {
       const found = await workflowsStorage.getWorkflowRunById({
