@@ -12,6 +12,7 @@ import { findBoardSkillProblems } from '../skills/app-skills.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
 import type {
+  BoardWriteStep,
   StoredBoardInput,
   StoredBoardRecord,
   StoredBoardScope,
@@ -19,9 +20,11 @@ import type {
   StoredPhaseInput,
 } from '../storage/domains/boards/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { LEGACY_REVIEW_BOARD, ReviewBoardInUseError } from '../storage/domains/work-items/legacy-review.js';
 import { codeBoardOf } from './define-board.js';
+import { isUntouchedReviewSeed } from './project-boards.js';
 import type { ProjectBoardCache } from './project-boards.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf } from './registry.js';
 import { boardForWorkItem } from './semantics.js';
 import {
   codeBehaviourConflicts,
@@ -35,8 +38,8 @@ export interface BoardWritesDeps {
   storage: StoredBoardsStorage;
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
   boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
-  /** Read to refuse edits that would strand cards. */
-  workItems: Pick<WorkItemsStorage, 'list'>;
+  /** Read to refuse edits that would strand cards; the retired Review board's cards leave `review` through it. */
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'releaseReviewCards'>;
 }
 
 /** Who writes: stored as the board's author, and the audit event's actor. */
@@ -80,6 +83,9 @@ async function stored<T>(write: () => Promise<T>): Promise<T> {
         message: error.message,
       });
     }
+    if (error instanceof ReviewBoardInUseError) {
+      throw new BoardWriteError(409, { error: 'board_in_use', message: error.message, cards: error.cards });
+    }
     throw error;
   }
 }
@@ -89,7 +95,7 @@ export class BoardWrites {
 
   /**
    * Code boards can't be created over, and Work can't be deleted while its code handlers run by its
-   * key; the legacy Review board can't be changed at all.
+   * key.
    */
   refuseCodeBoard(key: string, action: 'create' | 'edit' | 'delete'): void {
     const { boards } = this.deps;
@@ -131,10 +137,7 @@ export class BoardWrites {
       }
     }
     const board = code ? compileStoredBoard(parsed.data, code) : compileStoredBoard(parsed.data);
-    const problems = findBoardSkillProblems(
-      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
-      boards.codeSkills,
-    );
+    const problems = findBoardSkillProblems(boardRegistryOf([board]), boards.codeSkills);
     const unknown = problems.filter(problem => problem.includes(UNKNOWN_SKILL));
     if (unknown.length > 0) throw new BoardWriteError(422, { error: 'unknown_skill', message: unknown.join(' ') });
     return parsed.data;
@@ -145,7 +148,18 @@ export class BoardWrites {
     const key = (input as { key?: unknown } | null)?.key;
     if (typeof key === 'string') this.refuseCodeBoard(key, 'create');
     const board = this.validate(input);
-    const row = await stored(() => this.deps.storage.create(scope, board, writer.id));
+    // Factory stores its boards only into a project that has none, so they go in first.
+    await this.deps.boards.describe(scope);
+    const row = await stored(() =>
+      this.deps.storage.create(
+        scope,
+        board,
+        writer.id,
+        this.#takeReviewKey(scope, board.key, null),
+        // The row an earlier release seeded for the retired Review board is nobody's board.
+        board.key === LEGACY_REVIEW_BOARD ? isUntouchedReviewSeed : undefined,
+      ),
+    );
     this.deps.boards.invalidate(scope);
     await this.#audit(scope, writer, 'created', board);
     return row;
@@ -168,7 +182,10 @@ export class BoardWrites {
       const row = await storage.get(scope, board.key);
       try {
         if (!row) {
-          if (!(await storage.insertIfMissing(scope, board, writer.id))) {
+          const inserted = await stored(() =>
+            storage.insertIfMissing(scope, board, writer.id, this.#takeReviewKey(scope, board.key, null)),
+          );
+          if (!inserted) {
             throw new BoardWriteError(409, {
               error: 'revision_mismatch',
               message: `Board "${board.key}" was stored by another write; try again.`,
@@ -209,10 +226,16 @@ export class BoardWrites {
     if (row.revision === expectedRevision && sameBoardDefinition(row, input)) {
       return { row, written: false };
     }
-    await this.#checkPhasesFree(scope, row, input.phases);
+    const takeKey = this.#takeReviewKey(scope, key, row);
+    // No card is on a seed nobody made into a board: the ones stored there are the retired board's.
+    if (!takeKey) await this.#checkPhasesFree(scope, row, input.phases);
     const { key: _key, ...replacement } = input;
     const replaced = await stored(() =>
-      storage.replace(scope, key, replacement, { expectedRevision, actor: writer.id }),
+      storage.replace(scope, key, replacement, {
+        expectedRevision,
+        actor: writer.id,
+        before: takeKey,
+      }),
     );
     boards.invalidate(scope);
     await this.#audit(scope, writer, 'updated', input);
@@ -260,18 +283,33 @@ export class BoardWrites {
     }
     await boards.describe(scope);
     const row = await this.existing(scope, key);
-    await this.#checkPhasesFree(scope, row, seed.phases);
-    const reset = await stored(() => storage.resetTo(scope, key, seed, { expectedRevision, actor: writer.id }));
+    // A board the app upserts for every project resets to the app's. Factory's Work resets to the
+    // Work the project was stored with: today's for a project Factory created with it, Work with
+    // Triage for every other.
+    const definition = boards.seedFor(key, row) ?? seed;
+    await this.#checkPhasesFree(scope, row, definition.phases);
+    const reset = await stored(() => storage.resetTo(scope, key, definition, { expectedRevision, actor: writer.id }));
     boards.invalidate(scope);
     await this.#audit(scope, writer, 'reset', row);
     return reset;
+  }
+
+  /**
+   * What a write does first, in its transaction, when it gives the project a board of its own
+   * under `review` (none is stored, or only the seed an earlier release left): the cards the
+   * retired Review board left stored there get their Work placement, so the new board starts
+   * empty. Refused while one of them is still open.
+   */
+  #takeReviewKey(scope: StoredBoardScope, key: string, row: StoredBoardRecord | null): BoardWriteStep | undefined {
+    if (key !== LEGACY_REVIEW_BOARD || (row && !isUntouchedReviewSeed(row))) return undefined;
+    return ops => this.deps.workItems.releaseReviewCards(ops, scope, { open: 'refuse' });
   }
 
   /** The cards on a board, and how many sit in each phase. */
   async #occupancy(scope: StoredBoardScope, key: string): Promise<{ cards: number; phases: Map<string, number> }> {
     const phases = new Map<string, number>();
     let cards = 0;
-    for (const item of await this.deps.workItems.list(scope)) {
+    for (const item of await this.deps.workItems.listShared(scope)) {
       if (boardForWorkItem(item) !== key) continue;
       cards++;
       for (const stage of new Set(item.stages)) phases.set(stage, (phases.get(stage) ?? 0) + 1);

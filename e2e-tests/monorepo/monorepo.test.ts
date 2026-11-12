@@ -209,7 +209,14 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(Object.keys(body).sort()).toEqual(
-        ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
+        [
+          'calculatorTool',
+          'lodashTool',
+          'hello-world',
+          'generate-password',
+          'compare-password',
+          'wait-for-abort',
+        ].sort(),
       );
     });
 
@@ -245,6 +252,18 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
         status: 400,
         body: { error: expect.stringContaining('calculatorTool') },
       });
+    });
+
+    it('does not allow CORS credentials for cross-origin requests by default', async () => {
+      const res = await fetch(`http://localhost:${port}/api/tools`, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://evil.example.com',
+          'Access-Control-Request-Method': 'GET',
+        },
+      });
+      expect(res.headers.get('access-control-allow-origin')).toBe('*');
+      expect(res.headers.get('access-control-allow-credentials')).toBeNull();
     });
   }
 
@@ -677,6 +696,19 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
 });
 `,
         );
+        // The workspace package dynamically imports an optional peer that is not installed anywhere. It is declared
+        // only in `peerDependenciesMeta`, so pnpm does not look it up in the registry during install.
+        await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optional-peer.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+import { loadOptionalPeer } from '@inner/optional-peer-host';
+
+export const optionalPeerRoute = registerApiRoute('/optional-peer', {
+  method: 'GET',
+  handler: async c => c.json({ peer: await loadOptionalPeer() }),
+});
+`,
+        );
         await writeFile(
           join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
           `import { registerApiRoute } from '@mastra/core/server';
@@ -708,11 +740,11 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
             )
             .replace(
               "import { testRoute } from '@/api/route/test';",
-              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';\nimport { optionalPeerRoute } from '@/api/route/optional-peer';",
             )
             .replace(
               /apiRoutes: \[\s*testRoute,/,
-              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute,',
+              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute, optionalPeerRoute,',
             ),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
@@ -1064,6 +1096,17 @@ export const mastra = new Mastra({
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'dependent:leaf' });
     });
+
+    it('should leave an uninstalled optional peer out of the output instead of installing it as latest', async () => {
+      const outputPackageJson = JSON.parse(
+        await readFile(join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json'), 'utf-8'),
+      );
+      expect(outputPackageJson.dependencies).not.toHaveProperty('@inner/missing-optional-peer');
+
+      const res = await fetch(`http://localhost:${port}/optional-peer`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ peer: 'missing' });
+    });
   });
 
   describe('start', { concurrent: false }, async () => {
@@ -1261,6 +1304,55 @@ export const mastra = new Mastra({
 
           await expect(server).resolves.toMatchObject({ exitCode: 0 });
           expect(stdout).toContain('shutdown-drain-workflow:finished');
+        } finally {
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'hands back an in-flight agent thread run before the generated server exits on SIGTERM (#27364)',
+      async () => {
+        // The run's tool only returns once the run is aborted. Nothing but
+        // `mastra.shutdown()` handing the thread run back aborts it, and that
+        // handback runs after the drain window, so the generated server's core
+        // shutdown bound must leave room for it.
+        const handbackPort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const handbackController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: handbackController.signal,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: handbackPort.toString(),
+          },
+        });
+        activeProcesses.push({ controller: handbackController, proc: server });
+
+        let output = '';
+        server.stdout?.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+        });
+        server.stderr?.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+        });
+
+        try {
+          await waitForServer(handbackPort);
+
+          const response = await fetch(`http://localhost:${handbackPort}/shutdown-thread-run`, { method: 'POST' });
+          expect(response.ok).toBe(true);
+          expect(output).toContain('shutdown-thread-run:tool-started');
+          expect(output).not.toContain('shutdown-thread-run:aborted');
+
+          server.kill('SIGTERM');
+
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          expect(output).toContain('shutdown-thread-run:aborted');
+          expect(output).not.toContain('Mastra shutdown timed out');
         } finally {
           server.kill('SIGKILL');
           await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);

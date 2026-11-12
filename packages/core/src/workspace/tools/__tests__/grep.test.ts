@@ -653,6 +653,24 @@ describe('workspace_grep', () => {
     expect(result).toContain('(truncated at 1000)');
   });
 
+  it('does not split a surrogate pair when it cuts a long matching line', async () => {
+    // 499 ASCII chars then an emoji: the 500-char cut lands between its two UTF-16 halves.
+    await fs.writeFile(path.join(tempDir, 'long.txt'), `${'x'.repeat(499)}🙂 needle\nshort needle`);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+    const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+    for (const contextLines of [0, 1]) {
+      const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+        { pattern: 'needle', contextLines },
+        { workspace },
+      )) as string;
+
+      expect(result).toContain(`${'x'.repeat(499)}\uFFFD...`);
+      expect(result).not.toMatch(loneSurrogate);
+    }
+  });
+
   it('should apply token limit to output', async () => {
     // Create a file with many lines that will exceed default token limit (~3k tokens)
     // Each line has ~5 words => ~7 tokens. 1000 lines => ~7000 tokens (well over 3k)

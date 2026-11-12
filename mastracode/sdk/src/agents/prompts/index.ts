@@ -14,7 +14,13 @@ import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 import { resolveProviderWebSearchRoute } from '../model.js';
-import { loadSessionInstructions, formatInstructionSource, AGENT_INSTRUCTIONS_HEADING } from './agent-instructions.js';
+import {
+  loadSessionInstructions,
+  loadSessionInstructionsAsync,
+  formatInstructionSource,
+  AGENT_INSTRUCTIONS_HEADING,
+} from './agent-instructions.js';
+import type { InstructionSource } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
 import { modelSpecificPrompts } from './model.js';
@@ -84,11 +90,25 @@ export function buildFullPrompt(ctx: PromptContext): string {
   return joinPromptSections(buildFullPromptSections(ctx));
 }
 
+export async function buildFullPromptSectionsAsync(ctx: PromptContext): Promise<PromptSection[]> {
+  const sources = ctx.workingDir
+    ? await loadSessionInstructionsAsync({
+        workingDir: ctx.workingDir,
+        instructionRoots: Array.isArray(ctx.state?.instructionRoots) ? ctx.state.instructionRoots : undefined,
+        configDir: ctx.state?.configDir,
+        untrustedCheckout: ctx.state?.untrustedCheckout === true,
+        baseRef: typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined,
+        skipGlobal: ctx.state?.skipGlobalInstructions === true,
+      })
+    : [];
+  return buildFullPromptSections(ctx, sources);
+}
+
 /**
  * Build the system prompt as labeled sections. `buildFullPrompt` is the join of
  * these, so the two can never disagree about what the model receives.
  */
-export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
+export function buildFullPromptSections(ctx: PromptContext, loadedInstructions?: InstructionSource[]): PromptSection[] {
   // Determine whether web search tools are available
   // Parallel/Tavily register web_search and web_extract; provider search registers only web_search.
   const hasWebExtract = hasParallelKey() || hasTavilyKey();
@@ -137,6 +157,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     coAuthorEmail: ctx.coAuthorEmail,
     activePlan: ctx.state?.activePlan,
     hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
+    planApprovalStartsGoal: ctx.planApprovalStartsGoal,
     toolGuidance,
   };
 
@@ -174,16 +195,18 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // load NO instruction files at all — project locations would resolve
   // against the server's own cwd, and global locations against the server's
   // homedir. Neither belongs in a hosted session's prompt.
-  const instructionSources = ctx.workingDir
-    ? loadSessionInstructions({
-        workingDir: ctx.workingDir,
-        instructionRoots,
-        configDir,
-        untrustedCheckout: ctx.state?.untrustedCheckout === true,
-        baseRef,
-        skipGlobal: ctx.state?.skipGlobalInstructions === true,
-      })
-    : [];
+  const instructionSources =
+    loadedInstructions ??
+    (ctx.workingDir
+      ? loadSessionInstructions({
+          workingDir: ctx.workingDir,
+          instructionRoots,
+          configDir,
+          untrustedCheckout: ctx.state?.untrustedCheckout === true,
+          baseRef,
+          skipGlobal: ctx.state?.skipGlobalInstructions === true,
+        })
+      : []);
   // Emitted per source so each AGENTS.md/CLAUDE.md can be costed individually.
   // The heading rides on the first source's section, which is exactly how
   // `formatAgentInstructions` lays the block out, so joining the sections

@@ -33,7 +33,7 @@ function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
     stageHistory: [],
     sessions: {},
     metadata: { githubPullRequestNumber: 22765, author: 'LekoArts' },
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-09-02T12:00:00.000Z',
     updatedAt: '2026-09-02T12:00:00.000Z',
@@ -89,6 +89,12 @@ describe('workItemMeta', () => {
       workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
     ).toEqual(['!5', 'Rhys', 'just now']);
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
+  });
+
+  it('names a card filed by hand by its card number', () => {
+    expect(
+      workItemMeta(workItem({ source: 'manual', sourceKey: null, url: null, metadata: { cardNumber: 12 } })),
+    ).toEqual(['#12', 'just now']);
   });
 });
 

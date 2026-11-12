@@ -321,6 +321,23 @@ The same version controls work when a supervisor calls sub-agents. Developers ca
 
 See the [Editor versioning reference](/reference/editor/versioning) for version selection, sub-agent behavior, REST endpoints, and SDK methods.
 
+## Visibility
+
+With [`server.auth`](/docs/auth/overview) configured, every stored agent has an owner and a `visibility`. An agent created in Studio, through `POST /api/stored/agents`, or with the [built-in MCP server](/docs/server/mcp) is owned by the user who created it and is `private` unless they set `visibility: 'public'`. The owner is the caller's resource ID from `mapUserToResourceId`, or the user's `id` without it. Without `server.auth`, or when the caller has neither, stored agents have no owner, are `public`, and every caller can use them.
+
+| Who | Can see and call a private agent | Can edit or delete it |
+| - | - | - |
+| Owner | Yes | Yes |
+| Users with `*`, `stored-agents:*`, or `stored-agents:admin` | Yes | Yes |
+| Users granted that agent by id, for example `stored-agents:read:support-agent` or `stored-agents:edit:support-agent` | Yes, with a `read` grant. An `execute` grant only lets them call it | Yes, with an `edit` or `delete` grant |
+| Everyone else | No | No |
+
+The table covers ownership only. Each route still checks its own permission, such as `stored-agents:write` to edit or `agents:execute` to call, so an admin or id grant works only alongside the route permission. A grant by id only works when the agent is requested by its id. The agent still doesn't appear in their `GET /api/agents` or `GET /api/stored/agents` list.
+
+A `public` agent can be seen and called by every user, but only the users in the table can edit or delete it. Agents saved before they had an owner stay visible to everyone, and any user with the route permission can edit or delete them. Code-defined agents aren't affected, including ones with Editor overrides.
+
+The rules apply to every route that looks up an agent, not only `/api/stored/agents`. To another user, a private agent behaves like an agent that doesn't exist: `GET /api/agents` leaves it out, the agent, version, workspace, and schedule routes for it answer `404`, and the memory routes answer as they would for a missing agent. Changing its model at runtime with `POST /api/agents/:agentId/model` needs edit access. `POST /api/agents/:agentId/clone` makes the caller the owner of a private clone and ignores an `authorId` in the body.
+
 ## Programmatic access
 
 Everything available in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor), the REST API, or the Client SDK. Use it to script bulk updates or seed stored configurations from code. It can also power automation that tunes agents based on [evaluation results](/docs/evals/experiments).

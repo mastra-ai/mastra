@@ -7,7 +7,7 @@ import { NewJiraFactoryFields } from './NewJiraFactoryFields';
 import type { NewJiraRoute } from './NewJiraFactoryFields';
 import type { Factory } from './routing';
 
-/** Routes a Jira project to one more factory, with the board and labels it starts with. */
+/** Routes a Jira project to one more factory, with the labels it starts with. */
 export function AddJiraFactory({
   project,
   unbound,
@@ -52,7 +52,6 @@ export function AddJiraFactory({
       {factory && (
         <NewJiraFactoryFields
           key={factory.id}
-          project={project}
           factory={factory}
           anotherTakesAll={anotherTakesAll}
           error={errors[factory.id]}

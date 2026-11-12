@@ -4,9 +4,10 @@ import {
   TRACE_QUERY_CONFORMANCE_CASES,
   TRACE_QUERY_FIXTURE_DATA,
 } from '@internal/storage-test-utils';
-import type { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
 import {
+  InMemoryStore,
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   TraceQueryCursorError,
@@ -94,6 +95,18 @@ const otherTimingFeatures = (field: string, key: 'feature' | 'sortFeature') =>
   TIMING_FIELDS.filter(timing => timing.field !== field).map(timing => timing[key]);
 
 describe('QUERY_TRACES', () => {
+  it('rejects aggregated roots rather than silently using an OSS reader', async () => {
+    const mastra = new Mastra({ storage: new InMemoryStore() });
+    const error = await captureHttpException(
+      QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, rootSource: 'aggregated' })),
+    );
+    expect(error.status).toBe(501);
+    await expect(error.getResponse().json()).resolves.toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Aggregated trace roots are not supported by this server',
+    });
+  });
+
   beforeEach(() => vi.clearAllMocks());
 
   it('passes delta plans and preserves the numbered handoff across the same authorization scope', async () => {

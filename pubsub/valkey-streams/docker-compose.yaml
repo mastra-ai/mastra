@@ -1,6 +1,6 @@
 services:
   valkey:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     ports:
       - '6381:6379'
     healthcheck:

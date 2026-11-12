@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import type { IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
@@ -8,7 +9,11 @@ import { OpenAIRealtimeVoice } from './index';
 const servers: WebSocketServer[] = [];
 const voices: OpenAIRealtimeVoice[] = [];
 
-async function setup(onConnection: (socket: WebSocket) => void, connectTimeoutMs = 200) {
+async function setup(
+  onConnection: (socket: WebSocket, request: IncomingMessage) => void,
+  connectTimeoutMs = 200,
+  model?: string,
+) {
   const server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   servers.push(server);
   await once(server, 'listening');
@@ -17,6 +22,7 @@ async function setup(onConnection: (socket: WebSocket) => void, connectTimeoutMs
     apiKey: 'test-key',
     url: `ws://127.0.0.1:${(server.address() as AddressInfo).port}`,
     connectTimeoutMs,
+    model,
   });
   voices.push(voice);
   return { voice, server };
@@ -36,6 +42,23 @@ afterEach(async () => {
 });
 
 describe('real WebSocket connection handshake', () => {
+  it.each([
+    { model: undefined, expected: 'gpt-realtime-2.1-mini' },
+    { model: 'gpt-realtime-2.1', expected: 'gpt-realtime-2.1' },
+  ])('connects using $expected when configured model is $model', async ({ model, expected }) => {
+    let requestedModel: string | null = null;
+    const { voice } = await setup(
+      (socket, request) => {
+        requestedModel = new URL(request.url!, 'ws://localhost').searchParams.get('model');
+        socket.send(session);
+      },
+      200,
+      model,
+    );
+    await voice.connect();
+    expect(requestedModel).toBe(expected);
+  });
+
   it('resolves and sends configuration after session creation', async () => {
     let config: Promise<unknown> | undefined;
     const { voice } = await setup(socket => {

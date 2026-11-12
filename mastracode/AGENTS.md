@@ -4,6 +4,8 @@ TUI: build deps with `pnpm build:mastracode`; test SDK+TUI with `pnpm test:mastr
 
 Focused TUI test: `pnpm --filter ./mastracode/tui exec vitest run <test-file> --reporter=dot --bail 1`.
 
+Factory: full suite is too slow for foreground runs; see "Development" in `mastracode/factory/README.md` for focused tests.
+
 Factory UI is the independent React SPA and CLI UI artifact; see `mastracode/factory-ui/AGENTS.md`.
 
 Tests are colocated in package `src`. TUI scenarios: `mastracode/tui/e2e/tui/`; fixtures: `mastracode/tui/e2e/fixtures/`. Use `e2e:list`, `e2e:smoke`, or `e2e:test -- --reporter=dot`; focus with `MC_E2E_VITEST_SCENARIOS=<scenario> pnpm --filter ./mastracode/tui exec vitest run --config e2e/vitest.config.ts --reporter=dot`.
