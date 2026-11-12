@@ -818,6 +818,21 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
 const SLOW_TOOL_SOURCE_MS = 100;
 
 /**
+ * Assistant messages in a delegating agent's context that keep content once tool calls
+ * and tool results are removed. Reasoning still counts, so this matches the iteration
+ * delegation hooks saw before `stripParentToolParts` also dropped reasoning (#29276).
+ */
+function countParentAssistantSteps(messages: ModelMessage[]): number {
+  return messages.filter(
+    message =>
+      (message as { id?: string }).id !== 'om-continuation' &&
+      message.role === 'assistant' &&
+      (!Array.isArray(message.content) ||
+        message.content.some(part => part.type !== 'tool-call' && part.type !== 'tool-result')),
+  ).length;
+}
+
+/**
  * Creates an AI agent that generates and streams responses, with optional tools,
  * memory, and voice capabilities.
  *
@@ -845,21 +860,6 @@ const SLOW_TOOL_SOURCE_MS = 100;
  * @see [Agent documentation](https://mastra.ai/docs/agents/overview)
  * if packaged docs are unavailable.
  */
-/**
- * Assistant messages in a delegating agent's context that keep content once tool calls
- * and tool results are removed. Reasoning still counts, so this matches the iteration
- * delegation hooks saw before `stripParentToolParts` also dropped reasoning (#29276).
- */
-function countParentAssistantSteps(messages: ModelMessage[]): number {
-  return messages.filter(
-    message =>
-      (message as { id?: string }).id !== 'om-continuation' &&
-      message.role === 'assistant' &&
-      (!Array.isArray(message.content) ||
-        message.content.some(part => part.type !== 'tool-call' && part.type !== 'tool-result')),
-  ).length;
-}
-
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
