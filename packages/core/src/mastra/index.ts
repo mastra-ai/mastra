@@ -716,7 +716,7 @@ export interface Config<
    * (must be idempotent). In multi-instance deploys a run another replica
    * still drives is skipped, and recovered once that replica's claim lapses.
    *
-   * @default { workflows: 'auto', workflowConcurrency: 5, workflowScanIntervalMs: 60_000, durableAgents: 'off' }
+   * @default { workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2_000 with the default in-process pubsub and 60_000 with another pubsub, workflowScanIntervalMs: 60_000, durableAgents: 'off' }
    */
   recovery?: MastraRecoveryConfig;
 
@@ -775,9 +775,11 @@ export interface MastraRecoveryConfig {
    * the orchestration worker checks storage for workflow runs whose process
    * stopped. The first check runs when the workers start; later ones run this
    * often, each up to a fifth earlier or later, and sooner when a run the last
-   * check saw comes due earlier. Each check lists the active runs of every
-   * workflow recovery restarts. Values are capped at 2^31-1; set `workflows`
-   * to `'off'` to turn checking off.
+   * check found stopped comes out of its grace period earlier. A run a check
+   * saw running is restarted within about this interval plus the lease TTL
+   * plus `workflowGraceMs` after its process stops. Each check lists the
+   * active runs of every workflow that recovery restarts. Values are capped at
+   * 2^31-1; set `workflows` to `'off'` to turn checking off.
    * @default 60000
    */
   workflowScanIntervalMs?: number;
