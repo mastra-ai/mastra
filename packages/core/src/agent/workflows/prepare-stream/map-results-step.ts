@@ -19,6 +19,7 @@ import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
+import { setPersistencePolicy } from '../../save-queue/persistence-policy';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
@@ -49,7 +50,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   resolvedScopes?: string[];
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
+  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string, resourceId?: string) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -85,6 +86,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // Class instances written to runScope by upstream steps. These never travel
     // through inputData because the evented engine JSON-serializes step outputs.
     const messageList = runScope.getOrThrow(MESSAGE_LIST_KEY);
+    setPersistencePolicy(messageList, {
+      readOnly: !!memoryConfig?.readOnly,
+      authorize: async (threadId, resolvedResourceId) => {
+        const threadIds = new Set([threadId, memoryData.thread?.id, threadIdFromArgs].filter(Boolean));
+        for (const id of threadIds) {
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, id!, resolvedResourceId);
+        }
+      },
+    });
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;

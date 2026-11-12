@@ -5,6 +5,7 @@ import { commitToolResult } from '../../../loop/shared/steps/tool-result-commit-
 import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import { checkThreadFGA } from '../../../memory/thread-fga';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
@@ -23,6 +24,7 @@ import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
+import { setPersistencePolicy } from '../../save-queue/persistence-policy';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
@@ -195,6 +197,24 @@ export async function runDurableFinishSideEffects({
   if (registryEntry) {
     registryEntry.messageList = messageList;
   }
+  setPersistencePolicy(messageList, {
+    readOnly: !!durableState?.memoryConfig?.readOnly,
+    authorize: async (threadId, resourceId) => {
+      const threadIds = new Set([threadId, durableState?.threadId].filter(Boolean));
+      for (const id of threadIds) {
+        await checkThreadFGA({
+          mastra,
+          user: effectiveRequestContext.get('user'),
+          threadId: id!,
+          resourceId,
+          agentId: initData.agentId,
+          requestContext: effectiveRequestContext,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+          actor: initData.options?.actor,
+        });
+      }
+    },
+  });
 
   // The caller-side MastraModelOutput only sees the finish event after this step has
   // persisted messages, and remote/recovered runs have no caller at all. Attach the
@@ -578,7 +598,7 @@ export async function runDurableDeadlineOutputPass({
   // The output processors save the turn (MessageHistory) to the thread the run or its request context
   // names, so the caller needs write access to each first. A denial skips the whole save.
   const resourceId = durableState?.resourceId ?? memoryContext?.resourceId;
-  if (entry.memory && resourceId) {
+  if (resourceId) {
     const threadIds = new Set([durableState?.threadId, memoryContext?.thread?.id].filter(Boolean) as string[]);
     try {
       for (const threadId of threadIds) {
@@ -616,6 +636,23 @@ export async function runDurableDeadlineOutputPass({
       messageListState,
     ),
   );
+  setPersistencePolicy(messageList, {
+    readOnly: !!durableState?.memoryConfig?.readOnly,
+    authorize: async (threadId, targetResourceId) => {
+      for (const id of new Set([threadId, durableState?.threadId].filter((id): id is string => !!id))) {
+        await checkThreadFGA({
+          mastra,
+          user: requestContext.get('user'),
+          threadId: id,
+          resourceId: targetResourceId,
+          agentId: initData.agentId,
+          requestContext,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+          actor: initData.options?.actor,
+        });
+      }
+    },
+  });
   // Untargeted processor data lands on the reply, as at finish; resolved before the cut-off text is added.
   const replyMessageId = resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? initData.messageId;
   let inFlightMessageId: string | undefined;

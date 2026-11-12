@@ -1,6 +1,7 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { filterMessagesForPersistence } from '../../agent/filter-messages-for-persistence';
+import { getPersistencePolicy } from '../../agent/save-queue/persistence-policy';
 import { noteThreadMessagesSaved } from '../../agent/thread-saves';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
@@ -295,7 +296,8 @@ export class MessageHistory implements Processor {
 
     // Check if readOnly from memoryConfig
     const memoryContext = parseMemoryRequestContext(requestContext);
-    const readOnly = memoryContext?.memoryConfig?.readOnly;
+    const policy = getPersistencePolicy(messageList);
+    const readOnly = memoryContext?.memoryConfig?.readOnly || policy?.readOnly;
 
     if (!context || readOnly) {
       return messageList;
@@ -322,7 +324,19 @@ export class MessageHistory implements Processor {
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { messageCount: messagesToSave.length } });
 
+    await policy?.authorize(threadId, resourceId);
+    const responseIds = new Set(newOutput.map(message => message.id));
+    const previous = policy ? (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages : [];
     await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+    policy?.undo.push(async () => {
+      const saved = (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages.filter(
+        message => message.threadId === threadId,
+      );
+      const previousIds = new Set(previous.map(message => message.id));
+      const newIds = saved.filter(message => !previousIds.has(message.id)).map(message => message.id);
+      if (newIds.length > 0) await this.storage.deleteMessages(newIds);
+      if (previous.length > 0) await this.storage.saveMessages({ messages: previous });
+    });
     // add extra 1ms latency to make sure the next generate has not the same input
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -343,7 +357,7 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    const filtered = filterMessagesForPersistence(messages);
+    const filtered = filterMessagesForPersistence(messages).map(message => ({ ...message, threadId, resourceId }));
 
     if (filtered.length === 0) {
       return;

@@ -84,6 +84,7 @@ import { isJsonSafe } from './workflows/shared/schemas';
  */
 function snapshotRequestContextEntries(
   requestContext: RequestContext | undefined,
+  includeMemoryContext = false,
 ): Record<string, unknown> | undefined {
   if (!requestContext) return undefined;
   const out: Record<string, unknown> = {};
@@ -96,7 +97,7 @@ function snapshotRequestContextEntries(
     if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
     // Framework-managed per-run memory context is rebuilt from persisted run
     // state. A caller may carry a parent run's serializable value here.
-    if (key === 'MastraMemory') continue;
+    if (key === 'MastraMemory' && !includeMemoryContext) continue;
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
@@ -556,7 +557,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       }));
     threadExists = true;
     requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
-  } else {
+  } else if (memory) {
     // This run has no complete per-request memory context. Clear any
     // MastraMemory inherited from a caller-provided requestContext (e.g. a
     // parent agent's context during sub-agent delegation) so processor
@@ -729,7 +730,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // snapshotRequestContextEntries; the versions entry is pinned back to the
   // caller's own value (captured at step 3, before the merge) so persisted
   // input still reflects only caller intent.
-  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext, !memory);
   // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
   // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
   // snapshot (key absent, supplied scopes are adopted). The live run context deliberately

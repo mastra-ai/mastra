@@ -121,8 +121,8 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   const runScope = createRunScope();
   // Keyed by permission and thread: approval for one thread must not cover another.
   const memoryAuthorizationChecks = new Map<string, Promise<void>>();
-  const authorizeMemory = (permission: MastraFGAPermissionInput, threadId: string) => {
-    const key = JSON.stringify([permission, threadId]);
+  const authorizeMemory = (permission: MastraFGAPermissionInput, threadId: string, targetResourceId = resourceId) => {
+    const key = JSON.stringify([permission, threadId, targetResourceId]);
     const existingCheck = memoryAuthorizationChecks.get(key);
     if (existingCheck) return existingCheck;
 
@@ -130,7 +130,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       mastra: capabilities.mastra,
       user: requestContext.get('user'),
       threadId,
-      resourceId,
+      resourceId: targetResourceId,
       agentId,
       requestContext,
       permission,
