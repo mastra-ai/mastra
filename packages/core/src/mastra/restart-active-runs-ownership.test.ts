@@ -293,6 +293,64 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     expect(executions).toEqual(['approve:suspended', 'approve:resumed', 'after']);
   });
 
+  it('leaves a nested parent run alone while its own nested run is resumed directly, three levels deep', async () => {
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    const resumed = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const step = (id: string, execute: (args: any) => Promise<any>) =>
+      createStep({ id, inputSchema: z.any(), outputSchema: z.any(), resumeSchema: z.any(), execute });
+    const child = createWorkflow({ id: 'child', inputSchema: z.object({}), outputSchema: z.any() })
+      .then(
+        step('approve', async ({ resumeData, suspend }) => {
+          executions.push(`approve:${resumeData ? 'resumed' : 'suspended'}`);
+          if (!resumeData) {
+            return suspend({});
+          }
+
+          resumed.resolve();
+          await finish.promise;
+          return {};
+        }),
+      )
+      .commit();
+    const middle = createWorkflow({ id: 'middle', inputSchema: z.object({}), outputSchema: z.any() })
+      .then(child)
+      .commit();
+    const top = createWorkflow({ id: 'top', inputSchema: z.object({}), outputSchema: z.any() })
+      .then(middle)
+      .commit();
+    const workflows = { top, middle, child };
+    replicas.push(new Mastra({ logger: false, storage, workflows }));
+    const run = await top.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const nestedRunIdOf = async (workflowName: string, runId: string, stepId: string) =>
+      ((await workflowsStore.loadWorkflowSnapshot({ workflowName, runId }))?.context[stepId] as any).suspendPayload
+        .__workflow_meta.runId as string;
+    const middleRunId = await nestedRunIdOf('top', run.runId, 'middle');
+    const childRunId = await nestedRunIdOf('middle', middleRunId, 'child');
+    // Another instance sees every stopped run as due at once.
+    const other = new Mastra({ logger: false, storage, workflows, recovery: { workflowGraceMs: 0 } });
+    replicas.push(other);
+
+    // The top run stays suspended, so the middle run, now running, would be restarted on its own if unleased.
+    const resuming = (await child.createRun({ runId: childRunId })).resume({
+      step: 'approve',
+      resumeData: { approved: true },
+    });
+    await resumed.promise;
+    expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'middle', runId: middleRunId })).toBe('running');
+    // A stub, so a restart that slips through fails here instead of blocking on the held step.
+    const restarts = vi.spyOn(middle, 'createRun').mockResolvedValue({ restart: async () => {} } as any);
+    await other.restartAllActiveWorkflowRuns();
+    expect(restarts).not.toHaveBeenCalled();
+    restarts.mockRestore();
+
+    finish.resolve();
+    expect((await resuming).status).toBe('success');
+  });
+
   it('leaves a directly resumed nested run alone on a store without compare-and-set, where its parent stays suspended', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];

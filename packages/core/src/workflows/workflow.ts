@@ -5869,7 +5869,8 @@ export class Run<
       let parentLease: WorkflowRunOwnership | undefined;
       if (flippedParent) {
         try {
-          const claim = await parentRun.#claimOwnership(true);
+          // `nested`: a parent that is itself nested needs the lease too, as its own parent stays suspended.
+          const claim = await parentRun.#claimOwnership(true, { nested: true });
           // Even a forced claim can be refused, for example when retention deletes the record mid-claim.
           if (!('release' in claim)) {
             throw new Error(`Failed to claim the lease of parent workflow run ${parentRun.runId}`);
