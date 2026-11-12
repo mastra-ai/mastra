@@ -75,31 +75,39 @@ describe('resolveProviderModel', () => {
     { id: 'private/ollama', models: ['gpt-oss:20b'] },
   ];
 
-  it('moves the provider segment of a prefixed gateway model onto the provider', () => {
-    expect(resolveProviderModel(providers, 'private', 'ollama/gpt-oss:20b')).toEqual({
-      provider: 'private/ollama',
-      model: 'gpt-oss:20b',
+  describe('when the model is routed through a prefixed gateway', () => {
+    it('moves the provider segment of the model onto the provider', () => {
+      expect(resolveProviderModel(providers, 'private', 'ollama/gpt-oss:20b')).toEqual({
+        provider: 'private/ollama',
+        model: 'gpt-oss:20b',
+      });
     });
   });
 
-  it('keeps models whose ids contain a slash on a unified gateway', () => {
-    expect(resolveProviderModel(providers, 'mastra', 'openai/gpt-5-mini')).toEqual({
-      provider: 'mastra',
-      model: 'openai/gpt-5-mini',
+  describe('when the model id contains a slash on a unified gateway', () => {
+    it('keeps the provider and model unchanged', () => {
+      expect(resolveProviderModel(providers, 'mastra', 'openai/gpt-5-mini')).toEqual({
+        provider: 'mastra',
+        model: 'openai/gpt-5-mini',
+      });
     });
   });
 
-  it('keeps the gateway prefix fallback for providers reported without it', () => {
-    expect(resolveProviderModel(providers, 'custom', 'custom-small')).toEqual({
-      provider: 'acme/custom',
-      model: 'custom-small',
+  describe('when the provider is reported without its gateway prefix', () => {
+    it('resolves the provider to its prefixed id', () => {
+      expect(resolveProviderModel(providers, 'custom', 'custom-small')).toEqual({
+        provider: 'acme/custom',
+        model: 'custom-small',
+      });
     });
   });
 
-  it('leaves unknown providers and models unchanged', () => {
-    expect(resolveProviderModel(providers, 'other', 'vendor/model')).toEqual({
-      provider: 'other',
-      model: 'vendor/model',
+  describe('when the provider and model are unknown', () => {
+    it('leaves them unchanged', () => {
+      expect(resolveProviderModel(providers, 'other', 'vendor/model')).toEqual({
+        provider: 'other',
+        model: 'vendor/model',
+      });
     });
   });
 });

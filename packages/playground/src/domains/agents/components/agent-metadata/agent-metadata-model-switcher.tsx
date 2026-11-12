@@ -85,13 +85,12 @@ export const AgentMetadataModelSwitcher = ({
   // Handle provider selection
   const handleProviderSelect = (providerId: string) => {
     const cleanedId = cleanProviderId(providerId);
-    setSelectedProvider(cleanedId);
+    // Keep the current model when the same provider is picked again
+    if (cleanedId === currentModelProvider) return;
 
-    // Only clear model selection and open model combobox when switching to a different provider
-    if (cleanedId !== currentModelProvider) {
-      setSelectedModel('');
-      setModelOpen(true);
-    }
+    setSelectedProvider(cleanedId);
+    setSelectedModel('');
+    setModelOpen(true);
   };
 
   // Get the model reset context
