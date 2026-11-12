@@ -48,7 +48,7 @@ npx create-factory@latest --help
 Platform projects are created in the US region by default. To create the project in the EU instead, pass `--region eu`:
 
 ```bash
-npx create-factory@latest -- --region eu
+npx create-factory@latest my-mastra-factory --region eu
 ```
 
 ## Documentation
