@@ -2473,6 +2473,43 @@ describe('Memory Handlers', () => {
       });
     });
 
+    describe('thread metadata writes cannot set tool permission rules', () => {
+      it('drops client permissionRules on update and keeps the stored rules', async () => {
+        const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+        await mockMemory.createThread({
+          threadId: 'perm-thread',
+          resourceId: 'user-1',
+          metadata: { permissionRules: { categories: {}, tools: { transition: 'ask' } } },
+        });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'perm-thread',
+          metadata: { tag: 'x', permissionRules: { categories: { mcp: 'allow' }, tools: { transition: 'allow' } } },
+        });
+
+        expect(result.metadata).toEqual({
+          tag: 'x',
+          permissionRules: { categories: {}, tools: { transition: 'ask' } },
+        });
+      });
+
+      it('drops client permissionRules when the thread has none stored', async () => {
+        const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+        await mockMemory.createThread({ threadId: 'perm-thread-2', resourceId: 'user-1' });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'perm-thread-2',
+          metadata: { permissionRules: { categories: { mcp: 'allow' }, tools: {} } },
+        });
+
+        expect(result.metadata).toEqual({});
+      });
+    });
+
     describe('UPDATE_THREAD_ROUTE - clearing title/metadata', () => {
       it('should clear the title when an empty string is provided', async () => {
         const mastra = new Mastra({

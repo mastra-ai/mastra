@@ -40,3 +40,46 @@ export function stripModelSnapshots<T>(chunk: T): T {
 
   return chunk;
 }
+
+const PROGRESS_WRAPPER_TYPES = new Set(['tool-output', 'workflow-step-output']);
+
+/**
+ * Removes model request/history snapshots from agent chunks before a progress
+ * chunk is published to pubsub. Nested agent chunks arrive wrapped in
+ * `tool-output` / `workflow-step-output` payloads, so only those wrappers are
+ * unwrapped, and only agent-origin chunks are stripped — data a tool writes
+ * itself (`from: 'USER'`) is published as-is.
+ */
+export function slimProgressChunk<T>(chunk: T, depth = 0): T {
+  if (!chunk || typeof chunk !== 'object') return chunk;
+  const { type, from, payload } = chunk as { type?: unknown; from?: unknown; payload?: unknown };
+
+  if (typeof type === 'string' && PROGRESS_WRAPPER_TYPES.has(type) && payload && typeof payload === 'object') {
+    const p = payload as Record<string, unknown>;
+    const inner = p.output as { type?: unknown; from?: unknown } | undefined;
+    const isNestedChunk =
+      !!inner &&
+      typeof inner === 'object' &&
+      typeof inner.type === 'string' &&
+      (inner.from === 'AGENT' || PROGRESS_WRAPPER_TYPES.has(inner.type));
+    if (!isNestedChunk) return chunk;
+    // Past the nesting limit, drop the nested chunk rather than publish it unslimmed.
+    if (depth >= 20) {
+      const { output: _output, ...rest } = p;
+      return { ...chunk, payload: rest };
+    }
+    const output = slimProgressChunk(inner, depth + 1);
+    return output === inner ? chunk : { ...chunk, payload: { ...p, output } };
+  }
+
+  return from === 'AGENT' ? stripModelSnapshots(chunk) : chunk;
+}
+
+/**
+ * Like {@link slimProgressChunk}, but only for the agent chunks nested in a
+ * `tool-output` / `workflow-step-output` chunk; any other chunk is returned as-is.
+ */
+export function slimNestedAgentChunks<T>(chunk: T): T {
+  const type = chunk && typeof chunk === 'object' ? (chunk as { type?: unknown }).type : undefined;
+  return typeof type === 'string' && PROGRESS_WRAPPER_TYPES.has(type) ? slimProgressChunk(chunk) : chunk;
+}

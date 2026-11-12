@@ -60,7 +60,7 @@ export class KnowledgeRun {
     // Held scopes are host-vouched, so a writing run materializes (and late-links) them. Reads create
     // nothing: a scope with no pages yet reads the same as one that doesn't exist.
     if (options.write) {
-      for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
+      await runtime.materializeScopes(principals, principals, provenance);
     }
     const read = (await runtime.readScopeFor(principals)) as Exclude<KnowledgeReadScope, 'all'>;
     return new KnowledgeRun(runtime, storage, principals, read, provenance);

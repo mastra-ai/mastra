@@ -1,6 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraDBMessageMetadata } from '@mastra/react';
 
+import { isMcpAppContextText } from '@/utils/mcp-app-context';
+
 const SUMMARY_MAX_LENGTH = 120;
 const FILE_PREVIEW_LIMIT = 2;
 // Inlined, not imported: the value export sits behind a barrel this browser bundle must not pull.
@@ -35,6 +37,7 @@ const getTextFromParts = (message: MastraDBMessage): string =>
   message.content.parts
     .flatMap(part => {
       if (!isRecord(part) || part.type !== 'text' || typeof part.text !== 'string') return [];
+      if (isMcpAppContextText(part.text)) return [];
       return [part.text];
     })
     .join('\n');

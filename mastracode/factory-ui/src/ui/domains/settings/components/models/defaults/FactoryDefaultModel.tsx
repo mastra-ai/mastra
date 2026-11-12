@@ -11,7 +11,6 @@ import {
 } from '../../../../../../hooks/useFactoryDefaultModel';
 import { ModelCombobox } from '../../ModelCombobox';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
-import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { FactoryThinkingControl } from './FactoryThinkingControl';
 import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
@@ -64,7 +63,11 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
           </Txt>
         )}
         <SharedCredentialNotice modelId={defaultModelId || undefined} />
-        {applyToSessions.data && <AppliedSessionsSummary result={applyToSessions.data} />}
+        {applyToSessions.data && (
+          <Txt as="p" variant="meta" role="status">
+            Switch started in the background. Running sessions will pick up the new model on their next step.
+          </Txt>
+        )}
       </div>
 
       {confirmModelId && (

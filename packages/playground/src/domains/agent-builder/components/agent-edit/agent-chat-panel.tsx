@@ -206,7 +206,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
                 className={cn(
-                  'starter-chip group state-layer flex gap-3 rounded-3xl border border-border bg-background p-4 text-left hover:border-border-strong',
+                  'starter-chip group flex gap-3 rounded-3xl border border-border bg-background state-layer p-4 text-left hover:border-border-strong',
                   focusRing,
                 )}
               >

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.27.0",
+  "version": "0.28.0-alpha.14",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -63,6 +63,7 @@
     "@mastra/auth-studio": "workspace:*",
     "@mastra/auth-workos": "workspace:*",
     "@mastra/code-sdk": "workspace:*",
+    "@mastra/connect": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/platform-workspace": "workspace:*",

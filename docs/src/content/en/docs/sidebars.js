@@ -61,6 +61,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agents/resumable-streams',
+              label: 'Resumable Streams',
+            },
+            {
+              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -464,6 +469,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/mcp',
+              label: 'Built-in MCP Server',
+            },
+            {
+              type: 'doc',
               id: 'server/pubsub',
               label: 'PubSub',
             },
@@ -807,34 +817,12 @@ const sidebars = {
       label: 'Regions',
     },
     {
-      type: 'category',
+      type: 'doc',
+      id: 'mastra-platform/connect',
       label: 'Connect',
-      collapsed: true,
-      link: {
-        type: 'doc',
-        id: 'mastra-platform/connect/overview',
-      },
       customProps: {
-        contextualSidebar: true,
         tags: ['new'],
       },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/providers',
-          label: 'Providers',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/channels',
-          label: 'Channels',
-        },
-      ],
     },
     {
       type: 'doc',

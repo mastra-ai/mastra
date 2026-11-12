@@ -188,6 +188,10 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     thinkingLevel: (state?.thinkingLevel ?? globalSettings.preferences.thinkingLevel) as string,
     currentModelId: ctx.state.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
+    mouse: {
+      dialogs: globalSettings.preferences.mouseDialogs ?? false,
+      input: globalSettings.preferences.mouseInput ?? false,
+    },
     previewLines: globalSettings.preferences.previewLines,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
@@ -231,6 +235,14 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         ctx.state.editor.escapeEnabled = enabled;
         await ctx.state.session.state.set({ escapeAsCancel: enabled });
         await ctx.state.session.thread.setSetting({ key: 'escapeAsCancel', value: enabled });
+      },
+      onMouseChange: ({ dialogs, input }) => {
+        const current = loadSettings();
+        current.preferences.mouseDialogs = dialogs;
+        current.preferences.mouseInput = input;
+        saveSettings(current);
+        ctx.state.mouseController?.setDialogMouseEnabled(dialogs);
+        ctx.state.mouseController?.setInputMouseModeEnabled(input);
       },
       onPreviewLinesChange: lines => {
         const current = loadSettings();

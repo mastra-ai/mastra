@@ -1,7 +1,8 @@
 import { execFileSync } from 'child_process'
 import fs from 'fs/promises'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
+import { isDirectRun } from './is-direct-run'
 
 /**
  * Validates (and optionally fixes) the sorting order of items in the reference sidebar.
@@ -35,13 +36,13 @@ interface SidebarCategory {
   items: SidebarItem[]
 }
 
-type SidebarItem = SidebarDoc | SidebarCategory
+export type SidebarItem = SidebarDoc | SidebarCategory
 
 interface SidebarConfig {
   referenceSidebar: SidebarItem[]
 }
 
-interface SortError {
+export interface SortError {
   path: string
   message: string
 }
@@ -311,13 +312,53 @@ function printErrors(errors: SortError[]): void {
   }
 }
 
+export const REFERENCE_SIDEBAR_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../src/content/en/reference/sidebars.js',
+)
+
+export async function loadReferenceSidebar(sidebarPath = REFERENCE_SIDEBAR_PATH): Promise<SidebarItem[]> {
+  // Cache-bust so a sidebar rewritten by --fix is re-read in the same process.
+  const sidebarModule = await import(`${pathToFileURL(sidebarPath).href}?t=${Date.now()}`)
+  const sidebars: SidebarConfig = sidebarModule.default ?? sidebarModule
+  const items = sidebars.referenceSidebar
+  if (!items || !Array.isArray(items)) {
+    throw new Error('referenceSidebar not found or not an array')
+  }
+  return items
+}
+
+export interface ReferenceSidebarAnalysis {
+  sortErrors: SortError[]
+  typeWarnings: SortError[]
+  propertyWarnings: SortError[]
+  duplicateErrors: SortError[]
+}
+
+export function analyzeReferenceSidebar(items: SidebarItem[]): ReferenceSidebarAnalysis {
+  return {
+    sortErrors: validateItemOrder(items, 'referenceSidebar'),
+    typeWarnings: validateItemTypes(items, 'referenceSidebar'),
+    propertyWarnings: validateKnownProperties(items, 'referenceSidebar'),
+    duplicateErrors: validateDuplicateIds(items, 'referenceSidebar'),
+  }
+}
+
+/** Sorts the sidebar and writes it back atomically, then formats it with oxfmt. */
+export async function writeSortedReferenceSidebar(items: SidebarItem[], sidebarPath = REFERENCE_SIDEBAR_PATH) {
+  const output = serializeSidebar(sortItemsRecursive(items))
+  const tmpPath = sidebarPath + '.tmp'
+  await fs.writeFile(tmpPath, output, 'utf-8')
+  await fs.rename(tmpPath, sidebarPath)
+  execFileSync('pnpm', ['oxfmt', '--write', sidebarPath], { stdio: 'ignore', cwd: path.dirname(sidebarPath) })
+}
+
 async function main(): Promise<void> {
   const fixMode = process.argv.includes('--fix')
 
   console.log(`${fixMode ? 'Fixing' : 'Validating'} reference sidebar sort order...\n`)
 
-  const scriptDir = path.dirname(fileURLToPath(import.meta.url))
-  const sidebarPath = path.resolve(scriptDir, '../src/content/en/reference/sidebars.js')
+  const sidebarPath = REFERENCE_SIDEBAR_PATH
 
   try {
     await fs.stat(sidebarPath)
@@ -326,21 +367,15 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  // Dynamic import of the JS sidebar file
-  const sidebarModule = await import(sidebarPath)
-  const sidebars: SidebarConfig = sidebarModule.default ?? sidebarModule
-
-  const items = sidebars.referenceSidebar
-  if (!items || !Array.isArray(items)) {
-    console.error('Error: referenceSidebar not found or not an array')
+  let items: SidebarItem[]
+  try {
+    items = await loadReferenceSidebar(sidebarPath)
+  } catch (error) {
+    console.error(`Error: ${error instanceof Error ? error.message : error}`)
     process.exit(1)
   }
 
-  // Run all validations
-  const sortErrors = validateItemOrder(items, 'referenceSidebar')
-  const typeWarnings = validateItemTypes(items, 'referenceSidebar')
-  const propertyWarnings = validateKnownProperties(items, 'referenceSidebar')
-  const duplicateErrors = validateDuplicateIds(items, 'referenceSidebar')
+  const { sortErrors, typeWarnings, propertyWarnings, duplicateErrors } = analyzeReferenceSidebar(items)
 
   // Always print warnings (non-blocking)
   if (typeWarnings.length > 0) {
@@ -374,13 +409,7 @@ async function main(): Promise<void> {
   }
 
   if (sortErrors.length > 0) {
-    // Fix mode: sort and write back atomically
-    const sorted = sortItemsRecursive(items)
-    const output = serializeSidebar(sorted)
-    const tmpPath = sidebarPath + '.tmp'
-    await fs.writeFile(tmpPath, output, 'utf-8')
-    await fs.rename(tmpPath, sidebarPath)
-    execFileSync('pnpm', ['oxfmt', '--write', sidebarPath], { stdio: 'ignore' })
+    await writeSortedReferenceSidebar(items, sidebarPath)
     console.log(`Fixed ${sortErrors.length} sorting issue(s) in sidebars.js`)
   }
 
@@ -390,7 +419,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(error => {
-  console.error('Unhandled error:', error instanceof Error ? error.message : error)
-  process.exit(1)
-})
+if (isDirectRun(import.meta.url)) {
+  main().catch(error => {
+    console.error('Unhandled error:', error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}

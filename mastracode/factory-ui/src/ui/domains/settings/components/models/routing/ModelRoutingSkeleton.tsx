@@ -19,7 +19,7 @@ export function ModelRoutingSkeleton() {
             </CardContent>
           </Card>
         </SkeletonRows>
-        <div className="hidden @min-[44rem]:block" />
+        <div className="hidden @min-[38rem]:block" />
         <SkeletonRows label="Loading model defaults" rows={2} className="min-w-0 gap-3">
           <Card>
             <CardContent className="flex flex-col gap-4">

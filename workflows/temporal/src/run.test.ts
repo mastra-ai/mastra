@@ -1,10 +1,62 @@
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
-import { CancelledFailure, WorkflowExecutionAlreadyStartedError, WorkflowFailedError } from '@temporalio/client';
+import type { Step, Workflow } from '@mastra/core/workflows';
+import {
+  ActivityFailure,
+  ApplicationFailure,
+  CancelledFailure,
+  WorkflowExecutionAlreadyStartedError,
+  WorkflowFailedError,
+} from '@temporalio/client';
 import type { Client } from '@temporalio/client';
+import { proxyActivities } from '@temporalio/workflow';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { MastraPlugin } from './plugin';
+import { buildTemporalActivitiesModule } from './transforms/activities';
+import { buildTemporalWorkflowModule } from './transforms/workflows';
 import { createWorkflow } from './workflow';
+import { init } from './index';
+
+// The Temporal SDK cannot load under the repository's protobufjs override, so the
+// worker sandbox is replaced by calling the generated workflow module directly.
+vi.mock('@temporalio/workflow', async importOriginal => {
+  const { ApplicationFailure, TemporalFailure } = await importOriginal<typeof import('@temporalio/workflow')>();
+  return {
+    ApplicationFailure,
+    TemporalFailure,
+    isCancellation: () => false,
+    condition: vi.fn(),
+    defineQuery: (name: string) => name,
+    defineSignal: (name: string) => name,
+    setHandler: vi.fn(),
+    executeChild: vi.fn(),
+    proxyActivities: vi.fn(),
+    sleep: vi.fn(),
+    log: { info: vi.fn() },
+  };
+});
+
+// Temporal's default payload converter sends workflow arguments and results as JSON.
+function overTheWire<T>(value: T): T {
+  return value === undefined ? value : JSON.parse(JSON.stringify(value));
+}
+
+// Temporal's failure converter as these runs see it: an error thrown in an Activity or Workflow
+// arrives as an ApplicationFailure keeping its type, message and JSON details.
+function failureOverTheWire(error: unknown): ApplicationFailure {
+  const failure = ApplicationFailure.fromError(error);
+  return new ApplicationFailure(
+    failure.message,
+    failure.type,
+    failure.nonRetryable,
+    overTheWire(failure.details),
+    failure.cause,
+  );
+}
 
 describe('TemporalRun', () => {
   it('propagates workflow validateInputs to synchronous and asynchronous runs', async () => {
@@ -149,6 +201,7 @@ describe('TemporalRun', () => {
     await expect(run.start({ inputData: { value: 1 } })).resolves.toEqual({
       ...firstSuspension,
       steps: {
+        input: { value: 1 },
         firstApproval: {
           status: 'suspended',
           payload: { value: 1 },
@@ -165,6 +218,7 @@ describe('TemporalRun', () => {
     ).resolves.toEqual({
       ...secondSuspension,
       steps: {
+        input: { value: 1 },
         firstApproval: {
           status: 'success',
           payload: { value: 1 },
@@ -184,6 +238,7 @@ describe('TemporalRun', () => {
     await expect(run.resume({ step: 'secondApproval', resumeData: { approved: true } })).resolves.toEqual({
       ...finalResult,
       steps: {
+        input: { value: 1 },
         firstApproval: {
           status: 'success',
           payload: { value: 1 },
@@ -331,6 +386,7 @@ describe('TemporalRun', () => {
       input: { value: 1 },
       state: {},
       steps: {
+        input: { value: 1 },
         approval: {
           status: 'suspended',
           payload: { value: 1 },
@@ -398,6 +454,7 @@ describe('TemporalRun', () => {
 
   describe('lifecycle hooks', () => {
     const steps = {
+      input: { value: 1 },
       increment: { status: 'success', payload: { value: 1 }, output: { ok: true }, startedAt: 1, endedAt: 2 },
     };
     const workerSteps = {
@@ -515,6 +572,7 @@ describe('TemporalRun', () => {
       const result = await run.start({ inputData: { value: 1 } });
 
       expect(result.status).toBe('failed');
+      expect(result.steps).toEqual({ input: { value: 1 } });
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });
 
@@ -635,6 +693,7 @@ describe('TemporalRun', () => {
         voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
       };
       const normalizedSteps = {
+        input: { value: 1 },
         voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
       };
       const onFinish = vi.fn();
@@ -659,6 +718,7 @@ describe('TemporalRun', () => {
         voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
       };
       const normalizedSteps = {
+        input: { value: 1 },
         voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
       };
       const onFinish = vi.fn();
@@ -703,5 +763,155 @@ describe('TemporalRun', () => {
 
       expect(result).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('TemporalRun failed runs', () => {
+  // #28754: start() returned every failed run as `failed` with `steps: {}` and Temporal's
+  // WorkflowFailedError, because the Workflow dropped its step outputs when a step threw and the
+  // Activity failure kept only the error's class name and message.
+  it('returns the same success, failed and tripwire results as a local run', async () => {
+    const packageRoot = fileURLToPath(new URL('..', import.meta.url));
+    const directory = await realpath(await mkdtemp(path.join(packageRoot, '.failed-result-')));
+
+    try {
+      const sourcePath = path.join(directory, 'source.mjs');
+      await writeFile(
+        sourcePath,
+        `import { TripWire } from '@mastra/core/agent';
+         import { createStep, createWorkflow } from '@mastra/core/workflows';
+         import { z } from 'zod';
+
+         const Value = z.object({ value: z.number() });
+         export const addOne = createStep({
+           id: 'add-one',
+           inputSchema: Value,
+           outputSchema: Value,
+           // Finishes after \`fail\` in the parallel run, so its record needs the run to wait for it.
+           execute: async ({ inputData }) => {
+             await new Promise(resolve => setImmediate(resolve));
+             return { value: inputData.value + 1 };
+           },
+         });
+         export const fail = createStep({
+           id: 'fail',
+           inputSchema: Value,
+           outputSchema: Value,
+           execute: async () => {
+             throw Object.assign(new Error('step failed'), { code: 'E_STEP' });
+           },
+         });
+         export const guard = createStep({
+           id: 'guard',
+           inputSchema: Value,
+           outputSchema: Value,
+           execute: async () => {
+             throw new TripWire('input blocked', { retry: false, metadata: { rule: 'no-secrets' } }, 'input-guard');
+           },
+         });
+
+         export const succeeding = createWorkflow({ id: 'succeeding', inputSchema: Value }).then(addOne).commit();
+         export const failing = createWorkflow({ id: 'failing', inputSchema: Value }).then(addOne).then(fail).commit();
+         export const parallel = createWorkflow({ id: 'parallel', inputSchema: Value }).parallel([addOne, fail]).commit();
+         export const tripwire = createWorkflow({ id: 'tripwire', inputSchema: Value }).then(guard).commit();`,
+      );
+
+      // The Worker's code: the generated Workflows and the plugin's Activities.
+      const { outputPath } = await buildTemporalWorkflowModule(sourcePath, directory, 'workflow.mjs');
+      const { activityBindings } = await buildTemporalActivitiesModule(sourcePath, directory, 'activities.mjs');
+      await writeFile(path.join(directory, 'activity-bindings.json'), JSON.stringify(activityBindings));
+      const activities = new MastraPlugin(sourcePath, packageRoot).getTemporalWorkerOptions(directory)
+        .activities as Record<string, (params: unknown) => Promise<unknown>>;
+      vi.mocked(proxyActivities).mockReturnValue(
+        Object.fromEntries(
+          Object.entries(activities).map(([stepId, activity]) => [
+            stepId,
+            async (params: unknown) => {
+              try {
+                return overTheWire(await activity(overTheWire(params)));
+              } catch (error) {
+                throw new ActivityFailure(
+                  'Activity task failed',
+                  stepId,
+                  undefined,
+                  'NON_RETRYABLE_FAILURE',
+                  undefined,
+                  failureOverTheWire(error),
+                );
+              }
+            },
+          ]),
+        ),
+      );
+      const workflows: Record<string, (args: unknown) => Promise<unknown>> = await import(
+        pathToFileURL(outputPath).href
+      );
+      const start = vi.fn(async (workflowType: string, options: { args: [unknown] }) => {
+        const execution = workflows[workflowType]!(overTheWire(options.args[0]));
+        return {
+          result: async () => {
+            try {
+              return overTheWire(await execution);
+            } catch (error) {
+              throw new WorkflowFailedError(
+                'Workflow execution failed',
+                failureOverTheWire(error),
+                'RETRY_POLICY_NOT_SET',
+              );
+            }
+          },
+        };
+      });
+      const { createWorkflow: createTemporalWorkflow } = init({
+        client: { workflow: { start } } as unknown as Client,
+        taskQueue: 'failed-result',
+      });
+
+      const local: Record<string, Workflow> & Record<'addOne' | 'fail' | 'guard', Step> = await import(
+        pathToFileURL(sourcePath).href
+      );
+      const { addOne, fail, guard } = local;
+      const inputSchema = addOne.inputSchema;
+      const temporal = {
+        succeeding: createTemporalWorkflow({ id: 'succeeding', inputSchema }).then(addOne).commit(),
+        failing: createTemporalWorkflow({ id: 'failing', inputSchema }).then(addOne).then(fail).commit(),
+        parallel: createTemporalWorkflow({ id: 'parallel', inputSchema }).parallel([addOne, fail]).commit(),
+        tripwire: createTemporalWorkflow({ id: 'tripwire', inputSchema }).then(guard).commit(),
+      };
+      // Step ids to statuses.
+      const statuses = (steps: Record<string, unknown>) =>
+        Object.fromEntries(
+          Object.entries(steps).map(([stepId, step]) => [stepId, (step as { status?: string }).status]),
+        );
+      // Fails the test if a fixture stops failing, which would make both runs succeed alike.
+      const expectedStatus = {
+        succeeding: 'success',
+        failing: 'failed',
+        parallel: 'failed',
+        tripwire: 'tripwire',
+      } as const;
+
+      for (const id of ['succeeding', 'failing', 'parallel', 'tripwire'] as const) {
+        const expected = await (await local[id]!.createRun()).start({ inputData: { value: 5 } });
+        const actual = await (await temporal[id].createRun()).start({ inputData: { value: 5 } });
+
+        expect(expected.status).toBe(expectedStatus[id]);
+        expect(statuses(actual.steps)).toEqual(statuses(expected.steps));
+        expect(actual.status).toBe(expected.status);
+        // #29502: a local run keeps the start input under `steps.input`.
+        expect(expected.steps.input).toEqual({ value: 5 });
+        expect(actual.steps.input).toEqual(expected.steps.input);
+        if (expected.status === 'failed' && actual.status === 'failed') {
+          expect(actual.error).toMatchObject({ message: 'step failed', code: 'E_STEP' });
+          expect(expected.error).toMatchObject({ message: 'step failed', code: 'E_STEP' });
+          expect(actual.steps.fail).toMatchObject({ error: { message: 'step failed', code: 'E_STEP' } });
+        }
+        if (expected.status === 'tripwire' && actual.status === 'tripwire') {
+          expect(actual.tripwire).toEqual(expected.tripwire);
+        }
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

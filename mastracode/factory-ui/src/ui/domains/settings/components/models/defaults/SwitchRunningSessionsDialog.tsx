@@ -34,7 +34,7 @@ export function SwitchRunningSessionsDialog({
         </DialogHeader>
         <DialogFooter>
           <DialogCancel>Keep them as-is</DialogCancel>
-          <DialogAction onConfirm={onConfirm}>{pending ? 'Switching…' : 'Switch running sessions'}</DialogAction>
+          <DialogAction onConfirm={onConfirm}>{pending ? 'Starting…' : 'Switch running sessions'}</DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

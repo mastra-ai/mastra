@@ -1,9 +1,8 @@
 ---
-title: "MCP | Connections"
-description: "Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, subscribe to MCP events, and build interactive MCP Apps for Studio."
+title: 'MCP | Connections'
+description: 'Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, subscribe to MCP events, and build interactive MCP Apps for Studio.'
 packages:
-  - "@mastra/mcp"
-  - "@mastra/mcp-apps-components"
+  - '@mastra/mcp'
 ---
 
 # MCP
@@ -12,7 +11,7 @@ Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.
 
 Use [`MCPClient`](/reference/tools/mcp-client) to connect to MCP servers. Use [`MCPServer`](/reference/tools/mcp-server) to expose Mastra agents, tools, workflows, prompts, and resources to other MCP-compatible systems. Both speak the MCP `2026-07-28` revision over stdio and Streamable HTTP.
 
-For hosted MCP servers such as Neon and Canva, [Connect](/docs/mastra-platform/connect/providers#mcp-providers) on Mastra platform can manage the OAuth flow and credentials for you, so agents get the server's tools through [`tools()`](/docs/mastra-platform/connect/tools) without a hand-configured `MCPClient`.
+For hosted MCP servers such as [Neon](/integrations/databases/neon#connect) and [Canva](/integrations/other/canva), [Connect](/docs/mastra-platform/connect) on Mastra platform can manage the OAuth flow and credentials for you, so agents get the server's tools through [`tools()`](/reference/connect/tools#mcp-providers) without a hand-configured `MCPClient`.
 
 :::note
 Upgrading from `@mastra/mcp` 1.x? See the [migration guide](/reference/migrations/mcp-v2).
@@ -138,6 +137,7 @@ Choose how to load tools based on whether the server configuration changes betwe
 | Use case | Shared, fixed configuration | Per-user or per-request configuration |
 | Credentials | Shared by all requests | Can vary between requests |
 | Agent API | `tools` in the `Agent` constructor | `toolsets` in `generate()` or `stream()` |
+| Tool names | Prefixed with the server name, such as `weather_get_weather` | Raw tool names. Same-named tools from different servers collide. See [`listToolsets()`](/reference/tools/mcp-client#listtoolsets). |
 
 The preceding agent example uses static tools. For runtime credentials, create a client for the request and pass its toolsets when calling the agent:
 
@@ -168,6 +168,8 @@ export async function handleRequest(prompt: string, apiKey: string) {
 ```
 
 Visit [`listTools()`](/reference/tools/mcp-client#listtools) and [`listToolsets()`](/reference/tools/mcp-client#listtoolsets) for their full APIs.
+
+This example finishes within one request. When agent work must continue after the request ends or survive a process restart, use [durable agents](/docs/harness/durable-agents) or [background tasks](/docs/harness/background-tasks) instead of building your own task tracking. Call-time `toolsets` can't move to another process, so with a durable agent, load per-request MCP tools in the agent's `tools` function from [request context](/docs/server/request-context).
 
 ### Tool approval
 
@@ -259,6 +261,8 @@ Registered servers are served at `/api/mcp/:serverId/mcp` over Streamable HTTP. 
 A tool that needs something from the user before it can finish calls `context.suspend()` with a payload and declares a `resumeSchema`. The server turns that into an `input_required` round and runs the tool again with the answer in `context.resumeData`. Clients answer those rounds with the `inputRequests` handler on their server definition. Visit [Asking the caller for input](/reference/tools/mcp-server#asking-the-caller-for-input) and [Answering input requests](/reference/tools/mcp-client#answering-input-requests).
 
 Visit the [`MCPServer` reference](/reference/tools/mcp-server) for prompts, resources, transports, and other server options.
+
+To expose every agent, workflow, and tool on your Mastra app without defining a server, use the [built-in MCP server](/docs/server/mcp) at `/api/mcp`.
 
 ### Publish a stdio server package
 
@@ -416,89 +420,6 @@ export const mastra = new Mastra({
 ```
 
 Tools loaded through `listTools()` include a `serverId` in `_meta.ui`, allowing Studio to resolve each app resource without scanning every server. Visit [`toMCPServerProxies()`](/reference/tools/mcp-client#tomcpserverproxies) for proxy configuration details.
-
-### Use prebuilt Mastra apps
-
-The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps that render Mastra UI. `dashboardRendererApp` renders a dashboard definition with live observability data, such as agent runs, token usage, or scores.
-
-```bash npm2yarn
-npm install @mastra/mcp-apps-components
-```
-
-Register the app and `observabilityAppTools` on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI:
-
-```typescript title="src/mastra/mcp/dashboard-server.ts"
-import type { DashboardDefinition } from '@mastra/core/storage/dashboards'
-import { createTool } from '@mastra/core/tools'
-import { MCPServer } from '@mastra/mcp'
-import {
-  dashboardRendererApp,
-  dashboardRendererInputSchema,
-} from '@mastra/mcp-apps-components/dashboard-renderer'
-import { observabilityAppTools } from '@mastra/mcp-apps-components/observability-tools'
-import { z } from 'zod'
-
-const DASHBOARD_APP_URI = 'ui://mastra/dashboard'
-
-const agentRuns: DashboardDefinition = {
-  schemaVersion: 1,
-  defaults: { datePreset: '7d' },
-  rows: [
-    {
-      widgets: [
-        {
-          id: 'runs',
-          span: 12,
-          kind: 'kpis',
-          views: [
-            {
-              queries: [
-                {
-                  id: 'runs',
-                  source: 'metrics',
-                  request: 'aggregate',
-                  name: ['mastra_agent_duration_ms'],
-                  aggregation: 'count',
-                },
-              ],
-              options: {
-                items: [{ label: 'Agent runs', format: 'count', value: { query: 'runs' } }],
-              },
-            },
-          ],
-        },
-      ],
-    },
-  ],
-}
-
-const showAgentRuns = createTool({
-  id: 'showAgentRuns',
-  description: 'Shows how many agent runs happened in the last 7 days',
-  inputSchema: z.object({}),
-  outputSchema: dashboardRendererInputSchema,
-  mcp: { _meta: { ui: { resourceUri: DASHBOARD_APP_URI } } },
-  execute: async () => ({ definition: agentRuns, scope: 'project' as const }),
-})
-
-export const dashboardServer = new MCPServer({
-  id: 'dashboard-server',
-  name: 'Dashboard Server',
-  version: '1.0.0',
-  appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
-  tools: { showAgentRuns, ...observabilityAppTools },
-})
-```
-
-The app never reaches the network from its iframe. It reads data by calling the observability tools over the host's MCP connection. These tools are marked app-only, so `MCPClient.listTools()` hides them from agents.
-
-Each tool runs its observability route in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks. The app sees the same data the caller can read over HTTP.
-
-:::note
-
-When server auth is configured, the tools need the caller resolved by Mastra server auth. Serve the MCP server through a Mastra server adapter, such as Hono, Express, Fastify, Koa, Elysia, or NestJS. Calls without an authenticated caller return `401`.
-
-:::
 
 ### Sandbox security
 

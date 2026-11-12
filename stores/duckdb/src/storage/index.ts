@@ -48,6 +48,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'thread-query',
   'trace-query-tenant-scope',
   'feedback',
+  'feedback-replacement',
   'trace-query-context-ids',
   ...contextFieldFeatures,
   ...timingFeatures,
@@ -76,6 +77,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'thread-query',
   'trace-query-tenant-scope',
   'feedback',
+  'feedback-replacement',
   'trace-query-context-ids',
   ...contextFieldFeatures,
   ...timingFeatures,
@@ -112,6 +114,10 @@ type ObservabilityStoreImpl = ObservabilityStorageDuckDBImpl;
  * which lets DuckDBStore degrade cleanly when paired with an older @mastra/core runtime.
  */
 export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: DuckDBConnection;
   private delegate: ObservabilityStoreImpl | null = null;
   private loadPromise: Promise<ObservabilityStoreImpl | null> | null = null;
@@ -529,6 +535,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getScoreById(...args);
   }
 
+  async getFeedbackById(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackById']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackById(...args);
+  }
+
   async getScoreAggregate(
     ...args: Parameters<ObservabilityStoreImpl['getScoreAggregate']>
   ): ReturnType<ObservabilityStoreImpl['getScoreAggregate']> {
@@ -555,6 +568,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['getScorePercentiles']> {
     const delegate = await this.requireDelegate();
     return delegate.getScorePercentiles(...args);
+  }
+
+  protected override async writeFeedbackReplacement(
+    args: Parameters<ObservabilityStoreImpl['replaceFeedback']>[0],
+  ): Promise<void> {
+    const delegate = await this.requireDelegate();
+    return delegate.replaceFeedback(args);
   }
 
   async createFeedback(

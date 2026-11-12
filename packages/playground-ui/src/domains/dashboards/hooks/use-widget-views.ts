@@ -9,10 +9,22 @@ import type { DashboardExpand, ResolvedView } from '../widget-kind';
 export type Views<Options> = readonly [ResolvedView<Options>, ...ResolvedView<Options>[]];
 
 /**
- * The open view of a widget, `defaultIndex` until one is picked, and the card title for it
- * (`title`, and `titleMenu` with several views, or an expand link with `expand`) to spread into
- * `ChartCard`.
+ * The open view of a widget, `wanted` when it has one (else the first), and the card title for it
+ * (`title`, and `titleMenu` with several views unless the widget has somewhere to `expand` to) to
+ * spread into `ChartCard`; picking a view calls `onChoose`.
  */
+export function viewMenu<Options>(
+  widget: DashboardWidget,
+  views: Views<Options>,
+  wanted: number,
+  onChoose: (index: number) => void,
+  expand?: DashboardExpand,
+) {
+  const index = views[wanted] ? wanted : 0;
+  return { view: views[index] ?? views[0], index, heading: viewTitle(widget, views, index, onChoose, expand) };
+}
+
+/** `viewMenu` with the open view held here: `defaultIndex` until one is picked. */
 export function useViewMenu<Options>(
   widget: DashboardWidget,
   views: Views<Options>,
@@ -20,9 +32,7 @@ export function useViewMenu<Options>(
   expand?: DashboardExpand,
 ) {
   const [chosen, choose] = useState<number>();
-  const wanted = chosen ?? defaultIndex;
-  const index = views[wanted] ? wanted : 0;
-  return { view: views[index] ?? views[0], index, heading: viewTitle(widget, views, index, choose, expand) };
+  return viewMenu(widget, views, chosen ?? defaultIndex, choose, expand);
 }
 
 /** What clicking a bucket or row opens, with what was clicked; `undefined` when the view has no click target. */

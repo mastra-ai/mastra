@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 
 const textareaVariants = cva(
   cn(
-    'flex w-full text-foreground',
+    'flex w-full zoom-safe-text text-foreground',
     controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',

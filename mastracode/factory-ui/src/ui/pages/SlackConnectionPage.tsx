@@ -1,4 +1,3 @@
-import { SettingsRowsSkeleton } from '../ui/SettingsRowsSkeleton';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
@@ -19,7 +18,13 @@ import {
 } from '../../hooks/useChannelAccounts';
 import { useFactoriesQuery } from '../../hooks/useFactories';
 import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsItem,
+  SettingsItemIcon,
+  SettingsRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
 
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
@@ -113,11 +118,11 @@ export function SlackConnectionSettings() {
   };
 
   return (
-    <div className="mt-6 flex flex-col gap-8 pb-5">
+    <>
       {accountsQuery.isPending ? (
         <SettingsSubsection scope="personal" title="Connection">
           <SettingsContainer>
-            <SettingsRowsSkeleton label="Loading Slack connection" rows={1} />
+            <SettingsSkeleton variant="item" label="Loading Slack connection" rows={1} />
           </SettingsContainer>
         </SettingsSubsection>
       ) : accountsQuery.error ? (
@@ -155,39 +160,39 @@ export function SlackConnectionSettings() {
           </SettingsContainer>
         </SettingsSubsection>
       ) : (
-        <div className="flex flex-col gap-8">
+        <>
           <SettingsSubsection scope="personal" title={accounts.length === 1 ? 'Connection' : 'Connections'}>
-            <div className="flex flex-col gap-4">
+            <SettingsContainer>
               {accounts.map(account => (
-                <SettingsContainer key={`${account.externalTeamId}:${account.externalUserId}`}>
-                  <SettingsRow
-                    label={
-                      <Metadata>
-                        <Metadata.Item>
-                          <IdentityWithTooltip
-                            label={account.externalTeamName ?? 'Slack workspace'}
-                            idLabel="Workspace ID"
-                            id={account.externalTeamId}
-                          />
-                        </Metadata.Item>
-                        <Metadata.Item>
-                          <IdentityWithTooltip
-                            label={account.externalUserName ?? account.externalUserId}
-                            idLabel="Slack user ID"
-                            id={account.externalUserId}
-                          />
-                        </Metadata.Item>
-                      </Metadata>
-                    }
-                    description={
-                      <Txt tone="faint" as="span" variant="meta">
-                        Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
-                      </Txt>
-                    }
-                  />
-                </SettingsContainer>
+                <SettingsItem
+                  key={`${account.externalTeamId}:${account.externalUserId}`}
+                  media={
+                    <SettingsItemIcon>
+                      <SlackIcon />
+                    </SettingsItemIcon>
+                  }
+                  title={
+                    <Metadata>
+                      <Metadata.Item>
+                        <IdentityWithTooltip
+                          label={account.externalTeamName ?? 'Slack workspace'}
+                          idLabel="Workspace ID"
+                          id={account.externalTeamId}
+                        />
+                      </Metadata.Item>
+                      <Metadata.Item>
+                        <IdentityWithTooltip
+                          label={account.externalUserName ?? account.externalUserId}
+                          idLabel="Slack user ID"
+                          id={account.externalUserId}
+                        />
+                      </Metadata.Item>
+                    </Metadata>
+                  }
+                  description={`Connected ${linkedDateFormatter.format(new Date(account.linkedAt))}`}
+                />
               ))}
-            </div>
+            </SettingsContainer>
           </SettingsSubsection>
 
           <SettingsSubsection scope="personal" title="Session behavior">
@@ -210,7 +215,6 @@ export function SlackConnectionSettings() {
                     <SelectTrigger
                       size="sm"
                       aria-label={`Default factory for ${account.externalUserName ?? account.externalUserId}`}
-                      className="w-auto"
                     >
                       <Txt as="span" variant="caption">
                         {factories.find(factory => factory.id === account.defaultFactoryProjectId)?.name ??
@@ -262,8 +266,8 @@ export function SlackConnectionSettings() {
               ))}
             </SettingsContainer>
           </SettingsSubsection>
-        </div>
+        </>
       )}
-    </div>
+    </>
   );
 }

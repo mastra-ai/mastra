@@ -36,7 +36,6 @@ const meta = {
   ollama: 'Ollama',
   opencode: 'OpenCode Zen',
   perplexity: 'Perplexity',
-  requesty: 'Requesty',
   scaleway: 'Scaleway',
   submodel: 'submodel',
   synthetic: 'Synthetic',

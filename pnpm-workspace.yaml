@@ -15,7 +15,6 @@ packages:
   - browser/*
   - code-mode/*
   - voice/*
-  - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
   - signals/*
@@ -27,7 +26,6 @@ packages:
   - observability/*
   - channels/*
   - explorations/longmemeval
-  - explorations/agent-builder-gh-repro
   - e2e-tests/client-js/_test-utils
   - e2e-tests/client-js/zod-v3
   - e2e-tests/client-js/zod-v4
@@ -77,6 +75,8 @@ patchedDependencies:
   react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
+  # minimatch 11 removed makeRe(); match package-access patterns with minimatch() instead (same nocase full-string match).
+  '@verdaccio/core@8.4.0': patches/@verdaccio__core@8.4.0.patch
 
 packageExtensions:
   # platform-express 12.2 imports rxjs (multer utils) without declaring it; the
@@ -210,8 +210,8 @@ minimumReleaseAgeExclude:
   # Renovate security update: dompurify@3.4.13
   - dompurify@3.4.13
   - dompurify@3.4.16
-  # Renovate security update: fast-xml-parser@5.10.1
-  - fast-xml-parser@5.10.1
+  # Renovate security update: fast-xml-parser@5.10.1 || 5.12.0
+  - fast-xml-parser@5.10.1 || 5.12.0
   # Renovate security update: svgo@3.3.5
   - svgo@3.3.4
   - svgo@3.3.5
@@ -255,7 +255,8 @@ minimumReleaseAgeExclude:
   - '@vitest/spy@5.1.0'
   - '@vitest/utils@5.1.0'
   - deepmerge-ts@8.0.2
-  - zod@4.6.5
+  # Renovate security update: zod@3.25.76
+  - zod@4.6.5 || 3.25.76
   - zod@4.6.7
   # Renovate security update: brace-expansion@2.1.4 || 5.0.9
   - brace-expansion@2.1.4 || 5.0.9
@@ -380,18 +381,21 @@ overrides:
   # Vanta 2026-10-23: AIKIDO-2026-886499 (fixed in 4.1.1). deepeval -> open@9 ->
   # default-browser@4 pins bundle-name ^3; 4.x keeps the same bundleName() API.
   'default-browser@4.0.0>bundle-name': 4.1.1
-  client-js-e2e-tests-zod-v3>zod: ^3.24.0
+  client-js-e2e-tests-zod-v3>zod: ^3.25.76
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
   # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
-  better-auth: ^1.7.13
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.13
+  better-auth: ^1.7.18
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.18
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
-  glob@<=10.5.0: 10.5.0
+  # Vanta 2026-11-10: CVE-2026-118773 (glob >=9.0.0 <=14.0.1, fixed only in 14.0.2). Cross-major, approved.
+  # Parents (rimraf 5, archiver-utils, @npmcli/*, unified-engine, @wdio/config, @fastify/static, @sentry/bundler-plugins,
+  # react-docgen plugin) only use the promise/sync API, which 14.x keeps. Replaces the old glob@<=10.5.0 floor.
+  glob@<14.0.2: 14.0.4
   body-parser@<2.4.0: 2.4.0
   inngest: ^4.26.1
-  fast-xml-parser@<5.5.7: ^5.10.1
+  fast-xml-parser@<5.5.7: ^5.12.0
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
@@ -401,7 +405,9 @@ overrides:
   simple-git@<3.36.0: 4.0.1
   axios@>=1.0.0 <1.20.0: 1.20.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
-  minimatch@>=9.0.0 <9.0.7: 9.0.7
+  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1). Cross-major, approved.
+  # 11.x drops makeRe()/Minimatch#regexp; @verdaccio/core 8.4.0 (e2e registry) is patched to use minimatch().
+  minimatch@>=7.0.0 <11.0.1: 11.0.5
   ws@>=8.0.0 <8.21.3: 8.22.0
   webpack-dev-server@<5.2.5: 5.2.6
   # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1
@@ -420,7 +426,7 @@ overrides:
   path-to-regexp@<0.1.13: 9.0.0
   joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
-  e2b>undici8: npm:undici@8.12.2
+  e2b>undici8: npm:undici@8.12.4
   multer@<2.5.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
@@ -470,6 +476,10 @@ overrides:
   # effect 4.0.0-beta (via @opencode-ai/plugin, dev-only in integrations/opencode), which declares ^4.1.1 on every
   # beta; 5.x keeps the same parse(input) API (new opt-in options only). Floor raised from <4.1.2 -> 4.2.0.
   toml@<5.0.1: 5.0.1
+  # Vanta 2026-11-11 (Dependabot #3443, effect >=4.0.0-beta.0 <4.0.0-beta.103, fixed in beta.103): @opencode-ai/plugin
+  # pins effect exactly (1.14.48 -> beta.59; even latest 1.19.5 -> beta.83), dev-only in integrations/opencode.
+  # Same 4.0.0-beta prerelease line; parent-scoped so nothing else is affected.
+  '@opencode-ai/plugin>effect': 4.0.0-beta.103
   postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   # Vanta 2026-10-20 (CVE-2026-104844 / GHSA-rj75-hqrm-r3gf, fixed only in 7.1.6): these parents are on their
@@ -502,7 +512,7 @@ overrides:
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.42
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.45
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
   # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
   # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.
@@ -626,7 +636,8 @@ overrides:
   'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1.0.25'
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   # Vanta 2026-10-20: raised to 8.12.2 (AIKIDO-2026-159850/393834/846025/559914/609286/634008/740957, fixed in 8.12.2)
-  'undici@<8.12.2': 8.12.2
+  # Vanta 2026-11-12: raised to 8.12.4 (GHSA-mqg3-3v4r-cm32 High, -7xg3-fphp-28hg, -5rm8-gv32-r954, -9v6h-8rgp-m69f, -3g9m-rv3r-w5w2, -r4pc-4jcp-7pqc; all >=8.0.0 <8.12.4)
+  'undici@<8.12.4': 8.12.4
   # @qdrant/js-client-rest builds an undici Agent and hands it to fetch as `dispatcher`.
   # Forcing the 8.x line there pairs an undici 8 dispatcher with the undici that Node
   # bundles for global fetch (7.x), and undici 8 rejects that handler with

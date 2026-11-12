@@ -1,4 +1,5 @@
-import { workItemPhaseSemantics } from '../../boards/index.js';
+import { resolveBoardClosure, workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
 import type { FactoryProject } from '../../storage/domains/projects/base.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
@@ -182,13 +183,14 @@ export function attachGitLabMergeRequestReconciler(
       errors: [],
     };
     for (const project of await context.storage.projects.listAll()) {
+      await toBoardSource(boards).load({ orgId: project.orgId, factoryProjectId: project.id });
       const items = (
-        await context.runtime!.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })
+        await context.runtime!.workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id })
       ).filter(item => {
         if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
           return false;
         }
-        if (workItemPhaseSemantics(boards, item)?.kind !== 'terminal') return true;
+        if (workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind !== 'terminal') return true;
         // Same contract as the GitHub sweep: a terminal card is settled once
         // the provider's terminal outcome has been replayed and stamped. Done
         // means the review finished, not that the MR merged, so a later close
@@ -259,7 +261,7 @@ export function attachGitLabMergeRequestReconciler(
           const metadataChanged = (next: Record<string, unknown>) =>
             !Object.entries(next).every(([key, value]) => JSON.stringify(current[key]) === JSON.stringify(value));
           if (pullRequest.state === 'closed') {
-            const terminal = workItemPhaseSemantics(boards, item)?.kind === 'terminal';
+            const terminal = workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal';
             let cleanupFailed = false;
             if (terminal) {
               // Retire whatever the card still had pending, as the GitHub sweep
@@ -281,10 +283,14 @@ export function attachGitLabMergeRequestReconciler(
                 });
               }
             }
+            // The phase the card's board closes merged (or abandoned) merge requests into; a board
+            // that names none only needs the card to have finished.
+            const closure = resolveBoardClosure(toBoardSource(boards).forProject(item), item);
+            const closedPhase = closure ? closure[pullRequest.merged ? 'completed' : 'canceled'].phase : undefined;
             const terminalTransition =
               current.state !== 'closed' ||
               current.merged !== pullRequest.merged ||
-              !item.stages.includes(pullRequest.merged ? 'done' : 'canceled');
+              (closedPhase ? !item.stages.includes(closedPhase) : !terminal);
             if (terminalTransition) {
               await ingest(terminalEvent(item, pullRequest, identity));
               // The webhook path retires thread subscriptions itself; a missed

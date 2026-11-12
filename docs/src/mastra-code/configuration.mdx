@@ -474,7 +474,7 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 | `PostToolUse` | After the agent tool hook wrapper observes a completed tool call | No |
 | `Stop` | When an agent response ends (`complete`, `aborted`, or `error`) | Yes |
 | `UserPromptSubmit` | When the user sends a message | Yes |
-| `SessionStart` | When a session begins | No |
+| `SessionStart` | When a session begins, and again when it binds a different thread | No |
 | `SessionEnd` | When a session ends | No |
 | `Notification` | When the TUI fires a notification | No |
 | `AgentStart` | When an agent run begins | No |
@@ -497,6 +497,8 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
   "main_repo_path": "/repos/myapp"
 }
 ```
+
+`SessionStart` carries `source`. It is `startup` when Mastra Code starts. It is `thread_change` when the session later binds a different thread: the first message of a new conversation creates one, `/new` starts one, or a thread is resumed. `session_id` is the thread ID from then on, and a `thread_change` SessionStart runs before any other hook of that thread, so a hook that tracks sessions (a terminal multiplexer's status integration, for example) learns the new ID first. When Mastra Code starts without a thread to resume, the startup event's `session_id` is the placeholder `session-init`.
 
 These fire on session boundaries, not on worktree creation and removal. Mastra Code detects the worktree it is started in; it does not create or delete worktrees, so a session that ends is not necessarily a worktree that is going away.
 
