@@ -112,13 +112,7 @@ export function describeLateDeliveryCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
-    it('keeps counting the attempts of a failing step across a restart', async ({ skip }) => {
-      // A store with step guards keeps the failed attempt saved instead of the retry it hands off,
-      // and a restart starts the attempts over from it.
-      if ((await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards()) {
-        skip();
-      }
-
+    it('keeps counting the attempts of a failing step across a restart', async () => {
       let attempts = 0;
       const build = () =>
         createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, retryConfig: { attempts: 2 } })
