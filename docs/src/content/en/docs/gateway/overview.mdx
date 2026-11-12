@@ -5,6 +5,7 @@ description: "Mastra Gateway is one OpenAI- and Anthropic-compatible API for man
 
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
+import { ArrowRightLeft, Blocks, ChartColumn, Code, Gauge, Globe, KeyRound, Receipt, Rocket, Route, ShieldCheck, Shuffle, Wallet } from "lucide-react"
 import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid'
 
 # Gateway
@@ -99,42 +100,49 @@ Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing S
 <CardGrid columns={3}>
   <CardGridItem
     title="Centralized credentials"
+    logo={<KeyRound size={28} strokeWidth={1.5} />}
     href="/docs/gateway/keys-and-byok"
     description="Authenticate with one Gateway key. Gateway calls providers with Mastra-managed credentials or your own accounts through BYOK."
   />
 
   <CardGridItem
     title="Provider failover"
+    logo={<Shuffle size={28} strokeWidth={1.5} />}
     href="/docs/gateway/models-and-routing"
     description="When a provider fails before any output reaches your client, Gateway retries on another eligible route."
   />
 
   <CardGridItem
     title="Key scoping"
+    logo={<ShieldCheck size={28} strokeWidth={1.5} />}
     href="/docs/gateway/keys-and-byok"
     description="Project and organization keys, each with an optional expiry date and allowed-model list."
   />
 
   <CardGridItem
     title="Cost tracking"
+    logo={<Receipt size={28} strokeWidth={1.5} />}
     href="/docs/gateway/usage-and-limits#usage-logs"
     description="Every request records its model, provider attempts, tokens, and cost. Search logs by x-request-id."
   />
 
   <CardGridItem
     title="Spending controls"
+    logo={<Wallet size={28} strokeWidth={1.5} />}
     href="/docs/gateway/usage-and-limits#spend-caps"
     description="An organization spend cap rejects new requests with 402 when it's reached. Per-key limits are rolling out."
   />
 
   <CardGridItem
     title="Rate limits"
+    logo={<Gauge size={28} strokeWidth={1.5} />}
     href="/docs/gateway/usage-and-limits#rate-limits"
     description="Per-key request limits. 429 responses include retry-after and name the limit that was hit."
   />
 
   <CardGridItem
     title="Web search"
+    logo={<Globe size={28} strokeWidth={1.5} />}
     href="/docs/gateway/web-search"
     description="Add mastra:web_search to any chat model. Results are reused if the request fails over."
   />
@@ -153,24 +161,28 @@ Conversation memory is a separate product. To give agents memory, see [Memory](/
 <CardGrid>
   <CardGridItem
     title="Make your first request"
+    logo={<Rocket size={28} strokeWidth={1.5} />}
     href="/docs/gateway/quickstart"
     description="Add credits, create a key, and call a model with cURL, TypeScript, or Python."
   />
 
   <CardGridItem
     title="Migrate existing model calls"
+    logo={<ArrowRightLeft size={28} strokeWidth={1.5} />}
     href="/docs/gateway/migrate"
     description="Move from OpenAI, Anthropic, OpenRouter, or Vercel AI Gateway by changing the base URL and key."
   />
 
   <CardGridItem
     title="Use a framework"
+    logo={<Blocks size={28} strokeWidth={1.5} />}
     href="/docs/gateway/integrations"
     description="Connect the Mastra framework, AI SDK, LangGraph, Deep Agents, or Pydantic AI."
   />
 
   <CardGridItem
     title="Browse the API"
+    logo={<Code size={28} strokeWidth={1.5} />}
     href="/docs/gateway/api/chat-completions"
     description="Chat Completions, Responses, Messages, Embeddings, Decisions, Rerank, Images, and Models."
   />
@@ -181,24 +193,28 @@ Conversation memory is a separate product. To give agents memory, see [Memory](/
 <CardGrid>
   <CardGridItem
     title="Models and routing"
+    logo={<Route size={28} strokeWidth={1.5} />}
     href="/docs/gateway/models-and-routing"
     description="Model IDs, route selection, failover rules, and cooldowns."
   />
 
   <CardGridItem
     title="Keys and BYOK"
+    logo={<KeyRound size={28} strokeWidth={1.5} />}
     href="/docs/gateway/keys-and-byok"
     description="Project and organization keys, rotation, model restrictions, and your own provider accounts."
   />
 
   <CardGridItem
     title="Usage, pricing, and limits"
+    logo={<ChartColumn size={28} strokeWidth={1.5} />}
     href="/docs/gateway/usage-and-limits"
     description="Credits, spend caps, usage logs, rate limits, and error codes."
   />
 
   <CardGridItem
     title="Web search"
+    logo={<Globe size={28} strokeWidth={1.5} />}
     href="/docs/gateway/web-search"
     description="Ground any chat model with the mastra:web_search tool."
   />
