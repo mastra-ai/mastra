@@ -92,19 +92,22 @@ async function readRunOwner(q: Queryable, runId: string): Promise<RunOwnershipRe
   return rows[0] ? toRunOwnershipRecord(runId, rows[0]) : null;
 }
 
-const SUMMARY_FIELDS_SQL = `'status', JSON_EXTRACT(snapshot, '$.status'), 'timestamp', JSON_EXTRACT(snapshot, '$.timestamp')`;
+const SUMMARY_WORKFLOW_ID_SQL = `JSON_EXTRACT(snapshot, '$.parentWorkflow.workflowId')`;
+const SUMMARY_RUN_ID_SQL = `JSON_EXTRACT(snapshot, '$.parentWorkflow.runId')`;
 
 /**
- * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status`, `timestamp`, and
- * for a nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths are
- * read, so `context` is never sent. The parent is a separate branch because JSON_OBJECT() keeps
- * a SQL NULL as a JSON null.
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status` and `timestamp`
+ * when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty
+ * strings. Only these paths are read, so `context` is never sent. JSON_OBJECT() keeps a SQL NULL
+ * as a JSON null, and merge-patching `{}` with it drops those keys. The snapshot column is JSON,
+ * stored parsed, so each JSON_EXTRACT reads it without parsing it again.
  */
-const SUMMARY_SNAPSHOT_SQL = `CASE WHEN JSON_TYPE(JSON_EXTRACT(snapshot, '$.parentWorkflow')) = 'OBJECT'
-    THEN JSON_OBJECT(${SUMMARY_FIELDS_SQL}, 'parentWorkflow', JSON_OBJECT(
-      'workflowId', JSON_EXTRACT(snapshot, '$.parentWorkflow.workflowId'),
-      'runId', JSON_EXTRACT(snapshot, '$.parentWorkflow.runId')))
-    ELSE JSON_OBJECT(${SUMMARY_FIELDS_SQL}) END`;
+const SUMMARY_SNAPSHOT_SQL = `JSON_MERGE_PATCH('{}', JSON_OBJECT(
+    'status', JSON_EXTRACT(snapshot, '$.status'),
+    'timestamp', JSON_EXTRACT(snapshot, '$.timestamp'),
+    'parentWorkflow', CASE WHEN JSON_TYPE(${SUMMARY_WORKFLOW_ID_SQL}) = 'STRING' AND JSON_TYPE(${SUMMARY_RUN_ID_SQL}) = 'STRING'
+        AND JSON_UNQUOTE(${SUMMARY_WORKFLOW_ID_SQL}) <> '' AND JSON_UNQUOTE(${SUMMARY_RUN_ID_SQL}) <> ''
+      THEN JSON_OBJECT('workflowId', ${SUMMARY_WORKFLOW_ID_SQL}, 'runId', ${SUMMARY_RUN_ID_SQL}) END))`;
 
 function mapWorkflowRow(row: WorkflowRow): WorkflowRun {
   return {
@@ -735,6 +738,10 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const { workflowName, fromDate, toDate, perPage, page, resourceId, status, summary } = args;
 
