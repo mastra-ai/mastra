@@ -226,7 +226,12 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
   // Keep the released generation as the retry barrier before dropping the thread token.
   await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
   if (claim.threadId && event.type !== 'workflow.suspend') {
-    await agentThreadStreamRuntime.releaseDurableThreadLease(
+    // Stop renewing this process's hold on the thread as well as releasing it.
+    // The pre-persist claim is held (see `holdDurableThreadLease`) for a run that
+    // never registers a thread run — an evented `generate()` — and nothing else
+    // ends it here. A process that does not hold the timer is a no-op and still
+    // releases.
+    await agentThreadStreamRuntime.abandonDurableThreadLease(
       mastra.pubsub,
       event.runId,
       claim.threadId,

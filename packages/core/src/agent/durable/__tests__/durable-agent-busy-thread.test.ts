@@ -15,6 +15,12 @@
  * The model here blocks its first call on a gate the test controls, so the
  * first run is provably still live when the second message arrives — no
  * timing-based flakiness.
+ *
+ * The last two tests cover how the thread reservation and the thread lease
+ * behave around the initial input write: a failure to take the thread-control
+ * subscription must not orphan the run's execution claim, and a lease claimed
+ * before the input is persisted must keep being renewed until registration
+ * adopts it.
  */
 
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
@@ -62,9 +68,19 @@ function createGatedModel() {
   return { model, calls: () => calls, releaseFirst: () => releaseFirst?.() };
 }
 
-type StartOptions = { engine: 'durable' | 'evented'; holdThreadLease?: boolean };
+type StartOptions = {
+  engine: 'durable' | 'evented';
+  holdThreadLease?: boolean;
+  sharedTransport?: boolean;
+  failThreadControlSubscribe?: boolean;
+};
 
-async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
+async function startProcess({
+  engine,
+  holdThreadLease = false,
+  sharedTransport = false,
+  failThreadControlSubscribe = false,
+}: StartOptions) {
   vi.resetModules();
   const [
     { Mastra },
@@ -75,6 +91,9 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
     { createEventedAgent },
     { EventEmitterPubSub },
     { PubSub },
+    { agentThreadStreamTopic },
+    { agentThreadStreamRuntime },
+    { ExtendedRunRegistry },
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -84,6 +103,9 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
     import('../create-evented-agent'),
     import('../../../events/event-emitter'),
     import('../../../events/pubsub'),
+    import('../../thread-stream-topic'),
+    import('../../thread-stream-runtime'),
+    import('../run-registry'),
   ]);
 
   const storage = new InMemoryStore();
@@ -91,6 +113,9 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
   const threadId = `busy-thread-${engine}`;
   const resourceId = `busy-resource-${engine}`;
   await memory.createThread({ threadId, resourceId });
+
+  const threadKey = [resourceId, threadId].join(THREAD_KEY_SEPARATOR);
+  const threadControlTopic = agentThreadStreamTopic(resourceId, threadId);
 
   const gated = createGatedModel();
   const agent = new Agent({
@@ -102,11 +127,21 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
   });
 
   // A lease-capable pubsub that is not an EventEmitterPubSub, so the evented
-  // engine treats it as a shared transport and claims the thread lease. The
-  // lease for this thread is pre-held by another owner so the claim is denied.
+  // engine treats it as a shared transport and claims the thread lease. Leases
+  // carry the TTL the runtime asks for, so a test can watch renewal actually
+  // extend them. `failThreadControlSubscribesOnce` makes the first subscribe on
+  // this thread's control topic reject, standing in for a transport outage
+  // during run setup.
   class LeaseHoldingPubSub extends PubSub implements LeaseProvider {
     owners = new Map<string, string>();
+    expiresAt = new Map<string, number>();
+    failThreadControlSubscribesOnce = false;
     #subscribers = new Map<string, Set<EventCallback>>();
+
+    #lapsed(key: string): boolean {
+      const expiresAt = this.expiresAt.get(key);
+      return expiresAt !== undefined && expiresAt <= Date.now();
+    }
 
     async publish(topic: string, event: any): Promise<void> {
       const subscribers = [...(this.#subscribers.get(topic) ?? [])];
@@ -119,6 +154,10 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
     }
 
     async subscribe(topic: string, cb: EventCallback): Promise<void> {
+      if (topic === threadControlTopic && this.failThreadControlSubscribesOnce) {
+        this.failThreadControlSubscribesOnce = false;
+        throw new Error('thread control subscribe failed');
+      }
       const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
       subscribers.add(cb);
       this.#subscribers.set(topic, subscribers);
@@ -132,45 +171,68 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
 
     async close(): Promise<void> {}
 
-    async acquireLease(key: string, owner: string): Promise<{ acquired: boolean; owner?: string }> {
+    async acquireLease(
+      key: string,
+      owner: string,
+      ttlMs: number = Number.MAX_SAFE_INTEGER,
+    ): Promise<{ acquired: boolean; owner?: string }> {
+      if (this.#lapsed(key)) {
+        this.owners.delete(key);
+        this.expiresAt.delete(key);
+      }
       const current = this.owners.get(key);
       if (current && current !== owner) return { acquired: false, owner: current };
       this.owners.set(key, owner);
+      this.expiresAt.set(key, Date.now() + ttlMs);
       return { acquired: true, owner };
     }
 
     async getLeaseOwner(key: string): Promise<string | undefined> {
+      if (this.#lapsed(key)) return undefined;
       return this.owners.get(key);
     }
 
     async releaseLease(key: string, owner: string): Promise<void> {
-      if (this.owners.get(key) === owner) this.owners.delete(key);
+      if (this.owners.get(key) !== owner) return;
+      this.owners.delete(key);
+      this.expiresAt.delete(key);
     }
 
-    async renewLease(key: string, owner: string): Promise<boolean> {
-      return this.owners.get(key) === owner;
+    async renewLease(key: string, owner: string, ttlMs: number = Number.MAX_SAFE_INTEGER): Promise<boolean> {
+      if (this.#lapsed(key)) return false;
+      if (this.owners.get(key) !== owner) return false;
+      this.expiresAt.set(key, Date.now() + ttlMs);
+      return true;
     }
 
-    async transferLease(key: string, fromOwner: string, toOwner: string): Promise<boolean> {
+    async transferLease(
+      key: string,
+      fromOwner: string,
+      toOwner: string,
+      ttlMs: number = Number.MAX_SAFE_INTEGER,
+    ): Promise<boolean> {
       if (this.owners.get(key) !== fromOwner) return false;
       this.owners.set(key, toOwner);
+      this.expiresAt.set(key, Date.now() + ttlMs);
       return true;
     }
   }
 
   let pubsub: LeaseHoldingPubSub | InstanceType<typeof EventEmitterPubSub> | undefined;
-  if (engine === 'evented') {
-    if (holdThreadLease) {
-      const denied = new LeaseHoldingPubSub();
-      denied.owners.set([resourceId, threadId].join(THREAD_KEY_SEPARATOR), 'another-replica-run');
-      pubsub = denied;
-    } else {
-      pubsub = new EventEmitterPubSub();
-    }
+  if (holdThreadLease || sharedTransport || failThreadControlSubscribe) {
+    const leasePubSub = new LeaseHoldingPubSub();
+    // Pre-held by another owner with no expiry, so the claim is always denied.
+    if (holdThreadLease) leasePubSub.owners.set(threadKey, 'another-replica-run');
+    if (failThreadControlSubscribe) leasePubSub.failThreadControlSubscribesOnce = true;
+    pubsub = leasePubSub;
+  } else if (engine === 'evented') {
+    pubsub = new EventEmitterPubSub();
   }
 
   const durableAgent = storeRunsInV2(
-    pubsub ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent }),
+    engine === 'evented'
+      ? createEventedAgent({ agent, ...(pubsub ? { pubsub } : {}) })
+      : createDurableAgent({ agent, ...(pubsub ? { pubsub } : {}) }),
     false,
   );
   const mastra = new Mastra({
@@ -186,6 +248,10 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
     memory,
     threadId,
     resourceId,
+    threadKey,
+    pubsub,
+    agentThreadStreamRuntime,
+    ExtendedRunRegistry,
     options: { memory: { thread: threadId, resource: resourceId } },
     modelCalls: () => gated.calls(),
     releaseFirstModelCall: () => gated.releaseFirst(),
@@ -196,6 +262,25 @@ async function startProcess({ engine, holdThreadLease = false }: StartOptions) {
       }
     },
   };
+}
+
+/**
+ * Records whether a specific run reached the cross-agent thread wait, so an
+ * ordering test can assert the thread is untouched at that exact moment instead
+ * of after a fixed sleep that could elapse before the second run even tried to
+ * write.
+ */
+function watchRunEnteringThreadWait(
+  runtime: { waitForCrossAgentThreadRun: (...args: any[]) => Promise<any> },
+  runId: string,
+) {
+  const state = { entered: false };
+  const original = runtime.waitForCrossAgentThreadRun.bind(runtime);
+  vi.spyOn(runtime, 'waitForCrossAgentThreadRun').mockImplementation(async (...args: any[]) => {
+    if ((args[1] as { runId?: string } | undefined)?.runId === runId) state.entered = true;
+    return await original(...args);
+  });
+  return state;
 }
 
 async function collectText(stream: { fullStream: AsyncIterable<any> }) {
@@ -218,9 +303,13 @@ describe('second message on a busy thread', () => {
       const firstText = collectText(first);
       await vi.waitFor(() => expect(proc.modelCalls()).toBeGreaterThanOrEqual(1));
 
-      const secondPromise = durableAgent.stream('second message', options);
-      // The second run must not have written anything to the thread yet.
-      await sleep(200);
+      const secondRunId = 'second-run';
+      const waitedOnThread = watchRunEnteringThreadWait(proc.agentThreadStreamRuntime, secondRunId);
+      const secondPromise = durableAgent.stream('second message', { ...options, runId: secondRunId });
+      // Wait until the second run has actually reached the thread, so this cannot
+      // pass just because it had not started writing yet. It must not have
+      // written anything to the thread.
+      await vi.waitFor(() => expect(waitedOnThread.entered).toBe(true));
       expect(
         (await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId })).messages.map(m => m.role),
       ).toEqual(['user']);
@@ -247,8 +336,10 @@ describe('second message on a busy thread', () => {
       const firstPromise = durableAgent.generate('first message', options);
       await vi.waitFor(() => expect(proc.modelCalls()).toBeGreaterThanOrEqual(1));
 
-      const secondPromise = durableAgent.generate('second message', options);
-      await sleep(200);
+      const secondRunId = 'second-run';
+      const waitedOnThread = watchRunEnteringThreadWait(proc.agentThreadStreamRuntime, secondRunId);
+      const secondPromise = durableAgent.generate('second message', { ...options, runId: secondRunId });
+      await vi.waitFor(() => expect(waitedOnThread.entered).toBe(true));
       expect(
         (await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId })).messages.map(m => m.role),
       ).toEqual(['user']);
@@ -275,8 +366,10 @@ describe('second message on a busy thread', () => {
       const firstText = collectText(first);
       await vi.waitFor(() => expect(proc.modelCalls()).toBeGreaterThanOrEqual(1));
 
-      const secondPromise = durableAgent.stream('second message', options);
-      await sleep(200);
+      const secondRunId = 'second-run';
+      const waitedOnThread = watchRunEnteringThreadWait(proc.agentThreadStreamRuntime, secondRunId);
+      const secondPromise = durableAgent.stream('second message', { ...options, runId: secondRunId });
+      await vi.waitFor(() => expect(waitedOnThread.entered).toBe(true));
       expect(
         (await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId })).messages.map(m => m.role),
       ).toEqual(['user']);
@@ -316,6 +409,117 @@ describe('second message on a busy thread', () => {
       expect(proc.modelCalls()).toBe(0);
       expect((await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId })).messages).toEqual([]);
     } finally {
+      await proc.stop();
+    }
+  }, 30_000);
+});
+
+type LeaseDouble = {
+  getLeaseOwner(key: string): Promise<string | undefined>;
+  acquireLease(key: string, owner: string, ttlMs?: number): Promise<{ acquired: boolean; owner?: string }>;
+};
+
+describe('run ownership around the initial input write', () => {
+  it('settles the execution claim when the thread wait cannot take its subscription', async () => {
+    const proc = await startProcess({ engine: 'durable', failThreadControlSubscribe: true });
+    try {
+      const { durableAgent, memory, options } = proc;
+      const runId = 'retry-after-subscribe-failure';
+
+      await expect(durableAgent.stream('first attempt', { ...options, runId })).rejects.toThrow(
+        /thread control subscribe failed/,
+      );
+      expect((await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId })).messages).toEqual([]);
+
+      // The failed attempt left no execution claim behind, so this run id is
+      // usable again: the retry would reject with an execution conflict if the
+      // claim had been orphaned.
+      const retry = await durableAgent.stream('retry attempt', { ...options, runId });
+      // The failed attempt never reached the model, so the retry's call is the
+      // gated first call.
+      proc.releaseFirstModelCall();
+      expect(await collectText(retry)).toBe('done');
+
+      await vi.waitFor(async () => {
+        const recalled = await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId });
+        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      });
+    } finally {
+      await proc.stop();
+    }
+  }, 30_000);
+
+  it('releases the thread reservation when run setup fails before the workflow starts', async () => {
+    const proc = await startProcess({ engine: 'durable' });
+    try {
+      const { durableAgent, memory, options, ExtendedRunRegistry } = proc;
+      const register = vi.spyOn(ExtendedRunRegistry.prototype, 'registerWithMessageList').mockImplementationOnce(() => {
+        throw new Error('run registry unavailable');
+      });
+
+      // Setup fails after the thread reservation is taken and before the
+      // workflow starts.
+      await expect(durableAgent.stream('first message', options)).rejects.toThrow('run registry unavailable');
+      register.mockRestore();
+      expect((await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId })).messages).toEqual([]);
+
+      // A later run on the same thread must start instead of waiting forever on a
+      // reservation no run is behind.
+      const second = await durableAgent.stream('second message', options);
+      proc.releaseFirstModelCall();
+      expect(await collectText(second)).toBe('done');
+
+      await vi.waitFor(async () => {
+        const recalled = await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId });
+        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      });
+    } finally {
+      await proc.stop();
+    }
+  }, 30_000);
+
+  it('keeps renewing the thread lease it claimed before the input is persisted', async () => {
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');
+    const proc = await startProcess({ engine: 'evented', sharedTransport: true });
+    try {
+      const { durableAgent, memory, options } = proc;
+      const lease = proc.pubsub as unknown as LeaseDouble;
+
+      let enterPersist: (() => void) | undefined;
+      const persistEntered = new Promise<void>(resolve => {
+        enterPersist = resolve;
+      });
+      let releasePersist: (() => void) | undefined;
+      const persistGate = new Promise<void>(resolve => {
+        releasePersist = resolve;
+      });
+
+      const realSaveMessages = memory.saveMessages.bind(memory);
+      vi.spyOn(memory, 'saveMessages').mockImplementation(async (...args: Parameters<typeof realSaveMessages>) => {
+        enterPersist?.();
+        await persistGate;
+        return await realSaveMessages(...args);
+      });
+
+      const streamPromise = durableAgent.stream('held message', options);
+
+      const reachedPersist = await Promise.race([persistEntered.then(() => true), sleep(5000).then(() => false)]);
+      expect(reachedPersist).toBe(true);
+
+      // The run holds the lease while it writes its input. No workflow worker has
+      // started yet, so only its own renewal can keep the lease alive across a TTL.
+      expect(await lease.getLeaseOwner(proc.threadKey)).toBeDefined();
+      await sleep(900);
+      expect(await lease.getLeaseOwner(proc.threadKey)).toBeDefined();
+      expect(await lease.acquireLease(proc.threadKey, 'rival-replica', 300)).toMatchObject({ acquired: false });
+
+      releasePersist?.();
+      // The run reaches the model only after the input write completes.
+      proc.releaseFirstModelCall();
+      expect(await collectText(await streamPromise)).toBe('done');
+    } finally {
+      vi.unstubAllEnvs();
       await proc.stop();
     }
   }, 30_000);

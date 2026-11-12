@@ -193,6 +193,10 @@ export class EventedAgent<
    * Claim the cross-process thread lease before the initial input is persisted,
    * so a run that loses the race rejects without writing a user message to the
    * thread (see #30069).
+   *
+   * The claim is also held: this run persists its input before anything
+   * registers a thread run, so its own renewal is what carries the lease across
+   * the TTL until registration adopts it or the run settles.
    * @internal
    */
   protected override async beforePersistInitialInput(
@@ -211,6 +215,14 @@ export class EventedAgent<
     if (!threadId) return;
     const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
     await agentThreadStreamRuntime.claimDurableThreadLease(
+      pubsub,
+      runId,
+      threadId,
+      resourceId,
+      executionFence.generation,
+      executionFence.executionId,
+    );
+    agentThreadStreamRuntime.holdDurableThreadLease(
       pubsub,
       runId,
       threadId,

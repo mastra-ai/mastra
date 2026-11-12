@@ -1154,15 +1154,31 @@ export class AgentThreadStreamRuntime {
       threadLeaseOwner(runId, generation, executionId),
     );
     if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
-    if (this.#getState(pubsub).leaseRenewalTimers.has(runId)) {
-      this.#stopLeaseRenewal(pubsub, runId);
-      this.#startLeaseRenewal(
-        pubsub,
-        this.#threadKey(resourceId, threadId),
-        runId,
-        threadLeaseOwner(runId, generation, executionId),
-      );
-    }
+  }
+
+  /**
+   * @internal Keep renewing the thread lease a caller just claimed, so the lease survives the rest of that run.
+   *
+   * A run that claims before it registers — an evented `generate()` persists its input and lets its workers drive
+   * the run without ever registering a thread run — has no completion watcher to renew or stop renewal for it, so
+   * the lease would lapse a TTL into the run and another process could take the thread and save its own message
+   * beside this run's. Registration adopts this timer when the run registers under the same owner, and the run's
+   * terminal settlement stops it.
+   */
+  holdDurableThreadLease(
+    pubsub: PubSub,
+    runId: string,
+    threadId: string,
+    resourceId: string | undefined,
+    generation: number | undefined,
+    executionId?: string,
+  ): void {
+    this.#startLeaseRenewal(
+      pubsub,
+      this.#threadKey(resourceId, threadId),
+      runId,
+      threadLeaseOwner(runId, generation, executionId),
+    );
   }
 
   /** @internal Renew only the captured execution's thread lease; never acquire or transfer it. */
