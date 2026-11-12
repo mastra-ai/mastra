@@ -143,6 +143,7 @@ export async function handleContextCommand(ctx: SlashCommandContext): Promise<vo
       requestContext: requestContextForSession(ctx),
       coAuthor: TUI_CO_AUTHOR,
       backgroundTools: ctx.state.options?.backgroundToolsEnabled,
+      hasSubagents: ctx.state.options?.subagentsEnabled,
     });
 
     let skillsCatalog: string | undefined;
