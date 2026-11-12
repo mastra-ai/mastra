@@ -258,7 +258,7 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     return { run, workflowsStore, resume, parent, child };
   }
 
-  it('leaves a parent run alone while one of its nested runs is resumed directly', async () => {
+  it('leaves a parent run alone while one of its nested runs is resumed directly, and hands it the lease once', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];
     const resumed = Promise.withResolvers<void>();
@@ -277,6 +277,7 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     replicas.push(other);
 
     // Resuming the nested run sets the parent `running`, and the parent's lease shows it is driven.
+    const claims = vi.spyOn(workflowsStore, 'claimRunOwnership');
     const resuming = resume();
     await resumed.promise;
     expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'parent', runId: run.runId })).toBe('running');
@@ -291,6 +292,8 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'parent', runId: run.runId })).toBe('success'),
     );
     expect(executions).toEqual(['approve:suspended', 'approve:resumed', 'after']);
+    // The parent's lease was claimed once, by the nested run's resume, and handed to the parent's resume.
+    expect(claims.mock.calls.filter(([args]) => args.runId === run.runId)).toHaveLength(1);
   });
 
   it('leaves a nested parent run alone while its own nested run is resumed directly, three levels deep', async () => {
@@ -384,21 +387,6 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'parent', runId: run.runId })).toBe('success'),
     );
     expect(executions).toEqual(['approve:suspended', 'approve:resumed', 'after']);
-  });
-
-  it('hands the parent lease a directly resumed nested run held over to the parent, without releasing it in between', async () => {
-    const storage = new InMemoryStore();
-    const executions: string[] = [];
-    const { run, workflowsStore, resume } = await suspendedInChild(storage, executions);
-    const claims = vi.spyOn(workflowsStore, 'claimRunOwnership');
-
-    expect((await resume()).status).toBe('success');
-    await vi.waitFor(async () =>
-      expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'parent', runId: run.runId })).toBe('success'),
-    );
-    expect(executions).toEqual(['approve:suspended', 'approve:resumed', 'after']);
-    // The parent's lease was claimed once, by the nested run's resume, and the parent ran under it.
-    expect(claims.mock.calls.filter(([args]) => args.runId === run.runId)).toHaveLength(1);
   });
 
   it.each([
