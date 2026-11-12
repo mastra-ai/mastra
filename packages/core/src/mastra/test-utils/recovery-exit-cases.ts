@@ -131,10 +131,7 @@ export function describeRecoveryExitCases({
             return restartInBackground.call(this);
           });
 
-          // Right away the run is still live, or within its grace period.
-          await b.mastra.restartAllActiveWorkflowRuns();
-          expect(restartedAt).toEqual([]);
-
+          // B can start after the grace period on a slow store, so how early the restart came is checked below.
           await vi.waitFor(
             async () => {
               await b.mastra.restartAllActiveWorkflowRuns();
