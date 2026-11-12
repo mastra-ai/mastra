@@ -44,6 +44,8 @@ export async function assertStoredWorkflowExecuteAccess({
 }): Promise<void> {
   const storage = mastra.getStorage();
   const store = await storage?.getStore('workflowDefinitions');
+  if (!store) return;
+
   const visited = new Set<string>();
 
   const visit = async (id: string): Promise<void> => {
