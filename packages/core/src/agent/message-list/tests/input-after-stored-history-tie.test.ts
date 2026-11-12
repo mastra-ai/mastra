@@ -115,4 +115,17 @@ describe('input stamped in the same millisecond as the stored history it follows
 
     expect(list.get.all.db().map(message => message.id)).toEqual(['history', 'input', 'response', 'context']);
   });
+  it('keeps the turn in order when more stored history arrives after it was placed', () => {
+    const tie = new Date('2026-11-01T09:03:24.929Z').getTime();
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add([stored('a', 'user', 'a', new Date(tie)), stored('b', 'user', 'b', new Date(tie))], 'input');
+    list.add(stored('response', 'assistant', 'response', new Date(tie + 1)), 'response');
+    list.add(stored('h0', 'assistant', 'h0', new Date(tie)), 'memory');
+    list.add(
+      [stored('h1', 'assistant', 'h1', new Date(tie + 1)), stored('h2', 'assistant', 'h2', new Date(tie + 2))],
+      'memory',
+    );
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['h0', 'h1', 'h2', 'a', 'b', 'response']);
+  });
 });

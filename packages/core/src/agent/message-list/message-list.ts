@@ -2936,50 +2936,52 @@ export class MessageList {
   // (the previous turn's answer, saved just before this turn was queued). Sorting on equal
   // timestamps would then put the stored answer last, and this turn's response would merge
   // into it. Stored history sits underneath the live turn, so a live message tied with a stored
-  // one moves 1 ms later. Live messages that tie only with each other keep their timestamps.
-  // A live message that ties later (a response stamped in the same millisecond) lands after the
-  // ones already moved off that time, and a later live message that a moved one would now pass
-  // moves after it too, so the turn keeps the order it was added in. A message that was loaded
-  // from memory stays stored even if it is added again under another source, and a signal anchored
+  // one moves just past it. Every pass places the live messages again from their own timestamps,
+  // in the order those timestamps and their arrival give, so a later history load cannot
+  // reorder the turn: each keeps its own time unless that ties a stored message or would no
+  // longer follow the live message before it, which was moved. A message that was loaded from
+  // memory stays stored even if it is added again under another source, and a signal anchored
   // before a message (precedesMessageId) keeps its place.
-  private movedPastStoredTie = new Map<number, number>();
   private seenAsStored = new WeakSet<MastraDBMessage>();
-  private movedOffStoredTie = new WeakSet<MastraDBMessage>();
+  private livePlacement = new WeakMap<MastraDBMessage, { own: number; placed: number; arrival: number }>();
+  private liveArrivals = 0;
 
   private moveLiveMessagesPastStoredTies(): void {
     const memory = this.memoryMessages;
     if (!memory.size) return;
     for (const message of memory) this.seenAsStored.add(message);
-    const live = this.messages.filter(message => !this.seenAsStored.has(message));
+    const live = this.messages.filter(message => !this.seenAsStored.has(message) && !this.isAnchoredSignal(message));
     if (!live.length) return;
 
     const storedTimes = new Set<number>();
-    for (const message of this.messages) {
-      if (memory.has(message)) storedTimes.add(message.createdAt.getTime());
-    }
+    for (const message of memory) storedTimes.add(message.createdAt.getTime());
+
+    const placements = live.map(message => {
+      const time = message.createdAt.getTime();
+      let placement = this.livePlacement.get(message);
+      // A timestamp someone else set since the last pass is the message's own again.
+      if (!placement || placement.placed !== time) {
+        placement = { own: time, placed: time, arrival: placement?.arrival ?? this.liveArrivals++ };
+        this.livePlacement.set(message, placement);
+      }
+      return { message, placement };
+    });
+    placements.sort((a, b) => a.placement.own - b.placement.own || a.placement.arrival - b.placement.arrival);
 
     let moved = false;
-    // The last live message moved this pass; a later live one it would now pass moves after it too,
-    // unless an earlier pass already placed it (a later arrival is meant to land after those).
-    let movedUpTo: number | undefined;
-    for (const message of live) {
-      if (this.isAnchoredSignal(message)) continue;
-      const original = message.createdAt.getTime();
-      const passedBy =
-        movedUpTo !== undefined && original <= movedUpTo && !this.movedOffStoredTie.has(message)
-          ? movedUpTo
-          : undefined;
-      if (passedBy === undefined && !storedTimes.has(original)) continue;
-      let time = Math.max(this.movedPastStoredTie.get(original) ?? original, passedBy ?? original) + 1;
+    let previous: { time: number; moved: boolean } | undefined;
+    for (const { message, placement } of placements) {
+      let time = placement.own;
+      if (previous?.moved && time <= previous.time) time = previous.time + 1;
       while (storedTimes.has(time)) time++;
-      this.movedPastStoredTie.set(original, time);
-      movedUpTo = time;
-      this.movedOffStoredTie.add(message);
+      previous = { time, moved: time !== placement.own };
+      placement.placed = time;
+      if (time === message.createdAt.getTime()) continue;
 
-      const previous = message.createdAt.toISOString();
+      const before = message.createdAt.toISOString();
       message.createdAt = new Date(time);
       const signal = message.content.metadata?.signal as { createdAt?: string } | undefined;
-      if (signal?.createdAt === previous) signal.createdAt = message.createdAt.toISOString();
+      if (signal?.createdAt === before) signal.createdAt = message.createdAt.toISOString();
       this.updateLastCreatedAt(message);
       moved = true;
     }
