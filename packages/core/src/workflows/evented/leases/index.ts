@@ -7,6 +7,7 @@ export {
   runLivenessKey,
   stepOccurrenceKey,
 } from './keys';
+export { clearRunEnded } from './ended';
 export { endRunLiveness, enterRunLiveness, markRunLive } from './liveness';
 export type { LivenessScope } from './liveness';
 export { claimEventedRestart } from './restart';

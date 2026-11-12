@@ -197,6 +197,36 @@ export function describeLateEndCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
+    it('restarts a time travel of an ended run whose start event never reached a worker', async () => {
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+          .then(work('first', async () => {}))
+          .then(work('second', async () => {}))
+          .commit();
+      // A's time travel sets the run running, and its start event is lost.
+      const a = await startReplica(build(), event =>
+        event.type === 'workflow.start' && event.data.timeTravel ? 'drop' : undefined,
+      );
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+      run
+        .timeTravel({ step: 'second', inputData: { n: 2 } })
+        .catch(error => console.error('The time travel rejected', error));
+      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('running');
+      await waitUntilOrphaned(run.runId);
+
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      (await b.workflow.createRun({ runId: run.runId }))
+        .restart()
+        .catch(error => console.error('The restart rejected', error));
+      await fromB.firstHeld;
+      await fromB.drain(b);
+
+      expect((await storedRun(run.runId))?.status).toBe('success');
+      expect(finishesOf(run.runId, b)).toHaveLength(1);
+    }, 20_000);
+
     it('ends the run once when the last step end arrives twice', async () => {
       const { executions, fromA, a, run } = await holdLastStepEnd();
 

@@ -109,7 +109,7 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
-import { claimEventedRestart, markRunLive } from './leases';
+import { claimEventedRestart, clearRunEnded, markRunLive } from './leases';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -2007,9 +2007,19 @@ export class EventedRun<
     return workflow.options?.autoRestartActiveRuns !== false && workflow.type !== 'processor';
   }
 
-  /** `timeTravel()` makes the run `running` from the caller, so it is marked live first. */
+  /**
+   * `timeTravel()` and `resume()` make the run `running` from the caller, so it
+   * is marked live first. A run that ended recently also has its ended marker
+   * cleared here: if the start event never reaches a worker, a restart of the
+   * now running run must not be dropped as a restart of an ended run.
+   */
   protected override async beforeRunClaim(): Promise<void> {
     await this.#markLive();
+
+    const store = this.#restartable ? await this.mastra?.getStorage()?.getStore('workflows') : undefined;
+    if (store && (await store.supportsRunFencing())) {
+      await clearRunEnded(store, this.runId);
+    }
   }
 
   /**

@@ -73,6 +73,7 @@ import {
 } from '../helpers';
 import {
   acquireStepLease,
+  clearRunEnded,
   enterRunLiveness,
   LATE_DELIVERY_MARKER_TTL_MS,
   nestedHandOffKey,
@@ -1321,7 +1322,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // a new run record first. A late copy of the ended run's own start finds no record and keeps
     // the marker, so its steps are dropped. A restart of an ended run was dropped above.
     if (leaseStore && existingRun && !restart) {
-      await this.#clearRunEnded(leaseStore, runId);
+      await clearRunEnded(leaseStore, runId);
     }
 
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
@@ -2691,28 +2692,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       leaseMs: LATE_DELIVERY_MARKER_TTL_MS,
       force: true,
     });
-  }
-
-  /**
-   * Releases a live `<runId>::ended` claim when a run starts, so an app that
-   * reuses a run ID after that run ended runs the new run's steps.
-   */
-  async #clearRunEnded(store: WorkflowsStorage, runId: string): Promise<void> {
-    const key = runEndedKey(runId);
-    if (!(await store.getRunOwnership({ runId: key }))?.live) {
-      return;
-    }
-
-    const claim = await store.claimRunOwnership({
-      runId: key,
-      ownerId: globalThis.crypto.randomUUID(),
-      leaseMs: LATE_DELIVERY_MARKER_TTL_MS,
-      force: true,
-    });
-    if (claim.acquired) {
-      const { generation, ownerId } = claim.record;
-      await store.releaseRunOwnership({ runId: key, generation, ownerId });
-    }
   }
 
   /**
