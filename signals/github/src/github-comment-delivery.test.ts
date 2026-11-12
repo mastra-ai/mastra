@@ -206,9 +206,10 @@ describe.each(['working', 'review'] as const)('%s subscriber receives every find
     const f = fixture(mode);
     await f.poll();
     f.delivered.length = 0;
+    // 60 bodies of ~200,000 characters (~12 MB) exceed the former 10 MiB single-read buffer.
     f.sql(`with recursive n(i) as (select 0 union all select i + 1 from n where i < 59)
       insert into comments select 1, 'coderabbitai[bot]', 'Bot', 1,
-        'Large finding ' || i || '. ' || replace(hex(zeroblob(100000)), '00', 'x'),
+        'Large finding ' || i || '. ' || replace(hex(zeroblob(200000)), '00', 'x'),
         printf('2026-11-12T20:43:%02dZ', i), printf('2026-11-12T20:43:%02dZ', i),
         json_object('html_url', 'https://github.com/mastra-ai/mastra/pull/29096#issuecomment-large-' || i)
       from n`);
@@ -216,7 +217,9 @@ describe.each(['working', 'review'] as const)('%s subscriber receives every find
     expect(f.delivered.filter(n => n.kind === 'pull-request-activity')).toHaveLength(10);
     await f.poll();
     await f.poll();
-    expect(f.delivered.map(n => n.summary).join('\n')).toContain('Large finding 59.');
+    const text = f.delivered.map(n => n.summary).join('\n');
+    expect(text).toContain('Large finding 0.');
+    expect(text).toContain('Large finding 59.');
   }, 120_000);
 
   it('retries a bot finding whose app owner could not be looked up', async () => {
