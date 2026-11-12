@@ -206,6 +206,58 @@ describe('factory_list_audit_events', () => {
     expect(result.events[0]!.startedBy).toBe('user-1');
   });
 
+  it("leaves out people's events about another person's private session", async () => {
+    const sessions: SessionRow[] = [
+      { id: 'shared', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-2', visibility: 'org' },
+      { id: 'private', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-2', visibility: 'private' },
+      { id: 'mine', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-1', visibility: 'private' },
+    ];
+    const { run } = await setup({
+      events: [
+        {
+          at: 1,
+          actorId: 'user-2',
+          action: 'factory.session.owner_transferred',
+          targets: [{ type: 'session', id: 'private', name: 'Secret plan' }],
+        },
+        {
+          at: 2,
+          actorId: 'user-2',
+          action: 'factory.git.push',
+          targets: [{ type: 'branch', id: 'secret-branch' }],
+          metadata: { sessionId: 'private' },
+        },
+        {
+          at: 3,
+          actorId: 'user-2',
+          action: 'factory.session.owner_transferred',
+          targets: [{ type: 'session', id: 'shared', name: 'Shared plan' }],
+        },
+        {
+          at: 4,
+          actorId: 'user-2',
+          action: 'factory.run.approved',
+          targets: [{ type: 'session', id: 'mine' }],
+          metadata: { sessionId: 'mine' },
+        },
+        { at: 5, actorId: 'user-2', action: 'factory.git.push', targets: [{ type: 'session', id: 'gone' }] },
+        {
+          at: 6,
+          actorId: 'agent:run-thread',
+          actorType: 'agent',
+          action: 'factory.agent.signaled',
+          targets: [{ type: 'session', id: 'private' }],
+          metadata: { startedBy: 'user-1' },
+        },
+      ],
+      bindings: [{ threadId: 'run-thread' }],
+      sessions,
+    });
+
+    const result = await run();
+    expect(result.events.map(e => e.targets[0]!.id)).toEqual(['mine', 'shared']);
+  });
+
   it('includes agent runs a person started when asked', async () => {
     const { run } = await setup({
       events: [

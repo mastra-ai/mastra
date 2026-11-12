@@ -25,7 +25,7 @@ export interface FactoryAuditToolDependencies {
   workItems: FactoryReadToolDependencies['workItems'];
   audit: FactoryReadToolDependencies['audit'];
   messaging?: FactoryReadToolDependencies['messaging'];
-  /** Finds the session an agent event ran in, to leave out other people's private sessions. */
+  /** Finds the sessions an event names or an agent ran in, to leave out other people's private sessions. */
   sessions?: Pick<SourceControlSessionLookup, 'getBySessionId'>;
 }
 
@@ -75,8 +75,8 @@ function startedBy(event: AuditEventRow): string | undefined {
  * Who did what in this Factory, from its audit trail. The trail is org-wide and
  * its reads are unscoped by design, so this tool narrows what it hands back:
  * only this Factory's events, never request context (IP, user agent), names but
- * never emails, no metadata beyond what was acted on, and no agent events from
- * another person's private session.
+ * never emails, no metadata beyond what was acted on, and no events from or
+ * about another person's private session.
  */
 export function createAuditEventsTool(scope: FactoryToolScope, deps: FactoryAuditToolDependencies) {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
@@ -113,7 +113,7 @@ export function createAuditEventsTool(scope: FactoryToolScope, deps: FactoryAudi
 
       const actorId = input.actor === 'me' ? scope.userId : input.actor;
       const limit = input.limit ?? DEFAULT_LIMIT;
-      const visible = agentVisibility(scope, deps);
+      const visible = eventVisibility(scope, deps);
 
       const events: ReturnType<typeof summarize>[] = [];
       let before = input.cursor ?? (until ? auditCursorAt(until) : undefined);
@@ -163,14 +163,37 @@ function summarize(event: AuditEventRow) {
   };
 }
 
+/** Sessions an event names: its session targets and the session it records it acted in. */
+function sessionRefs(event: AuditEventRow): string[] {
+  const ids = event.targets.filter(target => target.type === 'session').map(target => target.id);
+  const recorded = event.metadata?.sessionId;
+  if (typeof recorded === 'string') ids.push(recorded);
+  return [...new Set(ids)];
+}
+
 /**
- * Whether the caller may see an event. People's own acts show what the board
- * already shows; an agent's act belongs to the session it ran in, which may be
- * someone's private session. Fails closed when the session can't be found.
+ * Whether the caller may see an event. An event that names a session, or an
+ * agent's act (which belongs to the session it ran in), is only visible when
+ * every such session is shared or the caller's own. Fails closed when a
+ * session can't be found.
  */
-function agentVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependencies) {
-  const cache = new Map<string, Promise<boolean>>();
+function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependencies) {
+  const sessions = new Map<string, Promise<boolean>>();
+  const threads = new Map<string, Promise<boolean>>();
   let runThreads: Promise<Set<string>> | undefined;
+
+  const sessionVisible = (sessionId: string): Promise<boolean> => {
+    let result = sessions.get(sessionId);
+    if (!result) {
+      result = (async () => {
+        const row = await deps.sessions?.getBySessionId(sessionId);
+        if (!row || row.orgId !== scope.orgId || row.factoryProjectId !== scope.factoryProjectId) return false;
+        return row.visibility !== 'private' || row.userId === scope.userId;
+      })().catch(() => false);
+      sessions.set(sessionId, result);
+    }
+    return result;
+  };
 
   const threadVisible = async (threadId: string): Promise<boolean> => {
     // Work item runs are on the board for everyone in the Factory.
@@ -180,26 +203,30 @@ function agentVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependen
     if ((await runThreads).has(threadId)) return true;
 
     const controller = (await deps.messaging?.())?.controller;
-    if (!controller || !deps.sessions) return false;
+    if (!controller) return false;
     const thread = await controller.queryThreadById({ threadId });
     if (!thread) return false;
     const stamped = thread.metadata?.factorySessionId;
-    const sessionId = typeof stamped === 'string' ? stamped : thread.id;
-    const row = await deps.sessions.getBySessionId(sessionId);
-    if (!row || row.orgId !== scope.orgId || row.factoryProjectId !== scope.factoryProjectId) return false;
-    return row.visibility !== 'private' || row.userId === scope.userId;
+    return sessionVisible(typeof stamped === 'string' ? stamped : thread.id);
   };
 
-  return async (event: AuditEventRow): Promise<boolean> => {
-    if (event.actorType !== 'agent') return true;
+  const agentVisible = (event: AuditEventRow): Promise<boolean> | boolean => {
     if (startedBy(event) === scope.userId) return true;
     if (!event.actorId.startsWith(AGENT_ACTOR_PREFIX)) return false;
     const threadId = event.actorId.slice(AGENT_ACTOR_PREFIX.length);
-    let result = cache.get(threadId);
+    let result = threads.get(threadId);
     if (!result) {
       result = threadVisible(threadId).catch(() => false);
-      cache.set(threadId, result);
+      threads.set(threadId, result);
     }
     return result;
+  };
+
+  return async (event: AuditEventRow): Promise<boolean> => {
+    if (event.actorType === 'agent' && !(await agentVisible(event))) return false;
+    for (const sessionId of sessionRefs(event)) {
+      if (!(await sessionVisible(sessionId))) return false;
+    }
+    return true;
   };
 }

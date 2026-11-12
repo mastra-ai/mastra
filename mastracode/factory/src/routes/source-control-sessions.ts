@@ -745,7 +745,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             orgId,
             actorId: userId,
             action: 'factory.session.owner_transferred',
-            targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
+            targets: [{ type: 'session', id: session.sessionId, name: session.title ?? session.branch }],
             metadata: { fromOwnerId: expectedOwnerId, toOwnerId: userId },
             factoryProjectId: session.factoryProjectId ?? undefined,
             projectRepositoryId: session.projectRepositoryId ?? undefined,
