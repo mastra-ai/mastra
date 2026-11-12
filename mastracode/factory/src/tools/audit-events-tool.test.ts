@@ -50,7 +50,7 @@ async function setup({
   sessions = [],
 }: {
   events: Array<Omit<RecordAuditEventInput, 'orgId'> & { orgId?: string; at: number }>;
-  bindings?: Array<Pick<FactoryRunBindingRecord, 'threadId'>>;
+  bindings?: Array<Pick<FactoryRunBindingRecord, 'threadId'> & Partial<FactoryRunBindingRecord>>;
   threads?: Thread[];
   sessions?: SessionRow[];
 }) {
@@ -182,8 +182,11 @@ describe('factory_list_audit_events', () => {
         { at: 4, ...agent('mine-thread') },
         { at: 5, ...agent('unknown-thread') },
         { at: 6, ...agent('own-run', 'user-1') },
+        { at: 7, ...agent('session:mine'), metadata: {} },
+        { at: 8, ...agent('session:private'), metadata: {} },
+        { at: 9, ...agent('session:run-session'), metadata: {} },
       ],
-      bindings: [{ threadId: 'run-thread' }],
+      bindings: [{ threadId: 'run-thread', sessionId: 'run-session' }],
       threads: [
         { id: 'shared-thread', metadata: { factorySessionId: 'shared' } },
         { id: 'private-thread', metadata: { factorySessionId: 'private' } },
@@ -198,12 +201,14 @@ describe('factory_list_audit_events', () => {
 
     const result = await run();
     expect(result.events.map(e => e.actor.id)).toEqual([
+      'agent:session:run-session',
+      'agent:session:mine',
       'agent:own-run',
       'agent:mine-thread',
       'agent:shared-thread',
       'agent:run-thread',
     ]);
-    expect(result.events[0]!.startedBy).toBe('user-1');
+    expect(result.events[2]!.startedBy).toBe('user-1');
   });
 
   it("leaves out people's events about another person's private session", async () => {

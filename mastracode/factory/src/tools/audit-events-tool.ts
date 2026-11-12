@@ -20,6 +20,7 @@ const PAGE_SIZE = 200;
 /** Pages read per call before handing back a cursor, so a narrow filter can't scan the whole trail at once. */
 const MAX_PAGES = 5;
 const AGENT_ACTOR_PREFIX = 'agent:';
+const SESSION_ACTOR_PREFIX = 'session:';
 
 export interface FactoryAuditToolDependencies {
   workItems: FactoryReadToolDependencies['workItems'];
@@ -180,7 +181,13 @@ function sessionRefs(event: AuditEventRow): string[] {
 function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependencies) {
   const sessions = new Map<string, Promise<boolean>>();
   const threads = new Map<string, Promise<boolean>>();
-  let runThreads: Promise<Set<string>> | undefined;
+  let runs: Promise<{ threads: Set<string>; sessions: Set<string> }> | undefined;
+  // Work item runs are on the board for everyone in the Factory.
+  const boardRuns = () =>
+    (runs ??= deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId).then(bindings => ({
+      threads: new Set(bindings.map(binding => binding.threadId)),
+      sessions: new Set(bindings.map(binding => binding.sessionId)),
+    })));
 
   const sessionVisible = (sessionId: string): Promise<boolean> => {
     let result = sessions.get(sessionId);
@@ -196,11 +203,7 @@ function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependen
   };
 
   const threadVisible = async (threadId: string): Promise<boolean> => {
-    // Work item runs are on the board for everyone in the Factory.
-    runThreads ??= deps.workItems
-      .listRunBindings(scope.orgId, scope.factoryProjectId)
-      .then(bindings => new Set(bindings.map(binding => binding.threadId)));
-    if ((await runThreads).has(threadId)) return true;
+    if ((await boardRuns()).threads.has(threadId)) return true;
 
     const controller = (await deps.messaging?.())?.controller;
     if (!controller) return false;
@@ -216,7 +219,15 @@ function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependen
     const threadId = event.actorId.slice(AGENT_ACTOR_PREFIX.length);
     let result = threads.get(threadId);
     if (!result) {
-      result = threadVisible(threadId).catch(() => false);
+      // Turns nobody signed in started are recorded as their session's agent: `agent:session:<sessionId>`.
+      const sessionId = threadId.startsWith(SESSION_ACTOR_PREFIX)
+        ? threadId.slice(SESSION_ACTOR_PREFIX.length)
+        : undefined;
+      result = (
+        sessionId
+          ? boardRuns().then(({ sessions }) => sessions.has(sessionId) || sessionVisible(sessionId))
+          : threadVisible(threadId)
+      ).catch(() => false);
       threads.set(threadId, result);
     }
     return result;
