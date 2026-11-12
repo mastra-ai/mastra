@@ -27,3 +27,29 @@ export function restartLeaseKey(runId: string): string {
 export function runLivenessKey(runId: string): string {
   return `${runId}::live`;
 }
+
+/**
+ * Key a run's end claims when it deletes the run's snapshot, because the
+ * workflow's `shouldPersistSnapshot` declined to keep the final one. A late
+ * step delivery that finds no snapshot reads it to tell an ended run from one
+ * that never saved a snapshot.
+ */
+export function runEndedKey(runId: string): string {
+  return `${runId}::ended`;
+}
+
+/**
+ * Key the end of a nested run claims before it hands its success to the parent
+ * step at `executionPath`, so a duplicate of that end continues the parent
+ * once. A rerun of the parent step starts a new nested run, with a new key.
+ */
+export function nestedHandOffKey(parentRunId: string, executionPath: number[], childRunId: string): string {
+  return `${stepOccurrenceKey(parentRunId, executionPath)}:from:${childRunId}`;
+}
+
+/**
+ * How long the keys above stay live. Long enough to outlast the redeliveries and
+ * restarts a broker backlog brings after a run moved on, short enough that a
+ * reused run ID or retention reclaims them. They are never released.
+ */
+export const LATE_DELIVERY_MARKER_TTL_MS = 6 * 60 * 60 * 1000;

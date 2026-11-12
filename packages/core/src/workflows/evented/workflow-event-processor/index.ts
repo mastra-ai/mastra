@@ -51,6 +51,7 @@ import type {
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
+import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
 import type { ScheduledWorkflowTrigger } from '../../scheduler/types';
 import {
@@ -70,7 +71,14 @@ import {
   RunFailure,
   withoutAuthToken,
 } from '../helpers';
-import { acquireStepLease, enterRunLiveness, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
+import {
+  acquireStepLease,
+  enterRunLiveness,
+  LATE_DELIVERY_MARKER_TTL_MS,
+  nestedHandOffKey,
+  stepOccurrenceKey,
+  UNLEASED_STEP,
+} from '../leases';
 import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../leases';
 import { StepExecutor } from '../step-executor';
 import { finishedOccurrence } from './finished-occurrence';
@@ -206,6 +214,9 @@ function readForeachResult(
 }
 
 /** Broadcast topic carrying cancellation to every processor that may be executing the run's steps. */
+/** Run statuses no step continues from: a run in one of them is not ended again. */
+const ENDED_RUN_STATUSES = new Set<string>(['success', 'failed', 'canceled', 'bailed', 'tripwire']);
+
 const WORKFLOW_CONTROL_TOPIC = 'workflow.control';
 const WORKFLOW_CONTROL_ABORT = 'workflow.control.abort';
 
@@ -1375,6 +1386,24 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 
+    // A late or duplicate continuation of the last step reaches this end after another one ended
+    // the run: ending again would publish a second finish. Time travel, restart and resume set the
+    // run back to running before they reach here. A cancel writes its status itself while its end
+    // is on the way, so it always ends. A nested run ends again: its end hands its result to the
+    // parent, which a redelivery may still have to do, and the hand-off drops duplicates itself.
+    // The read and the write below are separate calls: an end landing between them ends twice.
+    if (status !== 'canceled' && !parentWorkflow) {
+      const stored = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+      if (stored && ENDED_RUN_STATUSES.has(stored.status)) {
+        this.mastra.getLogger()?.debug('Skipping the end of a workflow run that already ended', {
+          workflowId,
+          runId,
+          status: stored.status,
+        });
+        return;
+      }
+    }
+
     // Check shouldPersistSnapshot option - default to true if not specified
     const finalStatus = perStep && status === 'success' ? 'paused' : status;
     const shouldPersist =
@@ -1543,24 +1572,40 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     let loopFailure: RunFailure | undefined;
-    if (parentWorkflow) {
-      await this.#handNestedSuccessToParent({
-        parentWorkflow,
-        nestedRunId: runId,
-        prevResult,
-        state: finalState,
-        resumeSteps,
-        resumeData,
-        activeStepsPath,
-        requestContext,
-        actor,
-        timeTravel,
-        perStep,
-      }).catch(error => {
-        // The child succeeded: finish it below, then let handle() fail the loop's run.
-        if (!(error instanceof RunFailure)) throw error;
-        loopFailure = error;
+    const handOff = parentWorkflow ? await this.#claimNestedHandOff(args, parentWorkflow) : undefined;
+    if (handOff === 'done') {
+      this.mastra.getLogger()?.debug('Dropping a nested workflow end its parent already continued from', {
+        workflowId,
+        runId,
+        parentRunId: parentWorkflow!.runId,
       });
+    } else if (parentWorkflow) {
+      try {
+        await this.#handNestedSuccessToParent({
+          parentWorkflow,
+          nestedRunId: runId,
+          prevResult,
+          state: finalState,
+          resumeSteps,
+          resumeData,
+          activeStepsPath,
+          requestContext,
+          actor,
+          timeTravel,
+          perStep,
+        });
+        await handOff?.keep();
+      } catch (error) {
+        // The parent did not continue: a redelivery of this end must be able to hand off again.
+        await handOff?.release();
+
+        // The child succeeded: finish it below, then let handle() fail the loop's run.
+        if (!(error instanceof RunFailure)) {
+          throw error;
+        }
+
+        loopFailure = error;
+      }
     }
 
     try {
@@ -1609,6 +1654,85 @@ export class WorkflowEventProcessor extends EventProcessor {
       throw loopFailure ?? error;
     }
     if (loopFailure) throw loopFailure;
+  }
+
+  /**
+   * Decides whether the end of nested run `args.runId` still hands its result
+   * to the parent step at `parentWorkflow.executionPath`. A broker redelivery
+   * of the end, or a second continuation that ended the child, would continue
+   * the parent again: running its next step twice, or a loop condition twice.
+   *
+   * `'done'` when the parent's stored record of the step is already this
+   * child's success, or when another end of this child holds the hand-off
+   * claim. A loop's body record is saved before the loop's next event is
+   * published, so for a loop only the claim counts. The claim, on stores with
+   * run fencing, lasts one lease TTL while the hand-off runs, so a worker that
+   * dies during it leaves it to a redelivery. Once the hand-off is published,
+   * `keep` extends it to {@link LATE_DELIVERY_MARKER_TTL_MS} and it is never
+   * released, so it outlasts late redeliveries. `release` is for a hand-off
+   * that failed, so a redelivery can retry it. A rerun of the parent step
+   * starts a new child run, with a new claim.
+   *
+   * Time travel, per-step runs and resumes hand the same child's result off
+   * again on purpose and are not checked. The record check and the claim are
+   * separate calls, so two ends racing past the check meet at the claim.
+   */
+  async #claimNestedHandOff(
+    args: Pick<ProcessorArgs, 'runId' | 'timeTravel' | 'perStep' | 'resumeSteps' | 'restart'>,
+    parentWorkflow: ParentWorkflow,
+  ): Promise<'done' | { keep: () => Promise<void>; release: () => Promise<void> } | undefined> {
+    if (args.timeTravel || args.perStep || parentWorkflow.timeTravel || args.resumeSteps?.length) {
+      return undefined;
+    }
+
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    if (!store) {
+      return undefined;
+    }
+
+    const parent = await store.loadWorkflowSnapshot({
+      workflowName: parentWorkflow.workflowId,
+      runId: parentWorkflow.runId,
+    });
+    const record = parent?.context?.[parentWorkflow.stepId] as
+      | { status?: string; metadata?: Record<string, any>; suspendPayload?: Record<string, any> }
+      | undefined;
+    const itemIndex = parentWorkflow.executionPath[1];
+    const step = parentWorkflow.stepGraph?.[parentWorkflow.executionPath[0]!];
+    const foreachItem = step?.type === 'foreach' && itemIndex !== undefined;
+    const continued = foreachItem
+      ? record?.metadata?.foreachNestedRunIds?.[itemIndex] === args.runId &&
+        record.suspendPayload?.__workflow_meta?.foreachOutput?.[itemIndex]?.status === 'success'
+      : step?.type !== 'loop' && record?.status === 'success' && record.metadata?.nestedRunId === args.runId;
+    if (continued) {
+      return 'done';
+    }
+
+    // A restart re-drives a child whose hand-off the parent may never have handled, so it hands
+    // off again whenever the parent's record shows the child unfinished.
+    if (args.restart || !(await store.supportsRunFencing())) {
+      return undefined;
+    }
+
+    const claim = await store.claimRunOwnership({
+      runId: nestedHandOffKey(parentWorkflow.runId, parentWorkflow.executionPath, args.runId),
+      ownerId: globalThis.crypto.randomUUID(),
+      leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+      force: false,
+    });
+    if (!claim.acquired) {
+      return 'done';
+    }
+
+    const { runId, generation, ownerId } = claim.record;
+    return {
+      keep: async () => {
+        await store.renewRunOwnership({ runId, generation, ownerId, leaseMs: LATE_DELIVERY_MARKER_TTL_MS });
+      },
+      release: async () => {
+        await store.releaseRunOwnership({ runId, generation, ownerId });
+      },
+    };
   }
 
   /** Hands a nested run's successful result to the parent step that runs it. */

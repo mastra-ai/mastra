@@ -6,7 +6,11 @@ import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../../../../packages/core/src/request-context';
 import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
-import { runLivenessKey, stepOccurrenceKey } from '../../../../../../packages/core/src/workflows/evented/leases';
+import {
+  nestedHandOffKey,
+  runLivenessKey,
+  stepOccurrenceKey,
+} from '../../../../../../packages/core/src/workflows/evented/leases';
 import { abandonLease } from '../../../../../../packages/core/src/workflows/evented/test-utils/abandon-lease';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
 import { connectionString, TEST_CONFIG } from '../../test-utils';
@@ -184,6 +188,11 @@ describe('Postgres evented occurrence replay', () => {
         await abandonLease(storage, stepOccurrenceKey(run.runId, [0], 0));
         const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
         await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
+        if (bodyKind === 'nested-completion') {
+          // The worker died after handing the child's result to the loop: the claim it took for that
+          // hand-off lapses instead of being kept, so the redelivered child end hands off again.
+          await abandonLease(storage, nestedHandOffKey(run.runId, [0], original.runId));
+        }
         await driver.redeliverEvent(original);
         expect(await result).toMatchObject({ status: 'success', result: { n: 3 } });
         expect(calls).toEqual([1, 2, 3]);

@@ -135,7 +135,7 @@ export function useLateDeliveryReplicas({
 
   /**
    * Starts a replica running `workflow` and the nested workflows its top-level
-   * steps call. `published` records the `workflows` events it publishes,
+   * steps, loops and foreach steps call. `published` records the `workflows` events it publishes,
    * `delivered` the same events as its subscribers receive them, with the id a
    * broker keeps on redelivery, and `finished` the events it published on
    * `workflows-finish`, one per end of a run.
@@ -144,7 +144,8 @@ export function useLateDeliveryReplicas({
     const { pubsub, published } = recordWorkflowEvents(new EventEmitterPubSub(), intercept);
     const graph = (workflow as unknown as { stepGraph: StepFlowEntry[] }).stepGraph;
     const nested = graph.flatMap(entry => {
-      const child = entry.type === 'step' ? getEntryWorkflow(entry) : null;
+      const leaf = entry.type === 'loop' || entry.type === 'foreach' ? entry.step : entry;
+      const child = leaf.type === 'step' ? getEntryWorkflow(leaf) : null;
       return child ? [[child.id, child] as const] : [];
     });
     const mastra = new Mastra({
