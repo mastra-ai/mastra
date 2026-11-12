@@ -275,16 +275,16 @@ describe('workflow recovery rule (#28712)', () => {
     }
 
     const list = store.listWorkflowRuns.bind(store);
-    let markSuspended!: () => void;
-    const suspended = new Promise<void>(resolve => (markSuspended = resolve));
+    let markWaiting!: () => void;
+    const waiting = new Promise<void>(resolve => (markWaiting = resolve));
     vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async (args = {}) => {
       if (args.workflowName !== 'recovered-wf') {
         return list(args);
       }
 
-      // The `waiting` listing reads only after a sleep step suspended every run the `running` one returned.
+      // The `waiting` listing reads only after a sleep step moved every run the `running` listing returned to `waiting`.
       if (args.status === 'waiting') {
-        await suspended;
+        await waiting;
         return list(args);
       }
 
@@ -293,7 +293,7 @@ describe('workflow recovery rule (#28712)', () => {
         await persistActiveRun(storage, run.runId, { status: 'waiting' });
       }
 
-      markSuspended();
+      markWaiting();
       return listed;
     });
     // The restarts never finish the runs, so every run is still waiting when that status is listed.
@@ -388,7 +388,6 @@ describe('workflow recovery rule (#28712)', () => {
     await mastra.restartAllActiveWorkflowRuns();
     // The run sleeps for a minute after its first step.
     await vi.waitFor(() => expect(executions).toEqual(['B:work']));
-    await sleep(100);
 
     const finishWaiters = (spy: typeof subscribe | typeof unsubscribe) =>
       spy.mock.calls.filter(([topic]) => topic === 'workflows-finish').length;

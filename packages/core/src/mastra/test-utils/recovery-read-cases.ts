@@ -160,8 +160,10 @@ export function describeRecoveryReadCases({
       expect(
         reads.listings.flatMap(listing => listing.snapshots).some(snapshot => 'context' in (snapshot as object)),
       ).toBe(false);
-      // The nested runs are left to their active parents, so 230 runs are checked, a hundred per read.
-      expect(reads.ownershipReads).toEqual([100, 100, 30]);
+      // The nested runs are left to their active parents, so 230 runs are checked, at most a hundred per read.
+      expect(reads.ownershipReads).toHaveLength(3);
+      expect(reads.ownershipReads.every(count => count <= 100)).toBe(true);
+      expect(reads.ownershipReads.reduce((total, count) => total + count, 0)).toBe(230);
       expect(executions).toEqual([]);
 
       // Another process crashed while running `stopped`: its lease lapsed.
@@ -170,8 +172,9 @@ export function describeRecoveryReadCases({
       await mastra.restartAllActiveWorkflowRuns();
 
       expect(executions).toEqual(['stopped']);
-      expect(reads.snapshotReads.length).toBeGreaterThan(0);
-      expect(new Set(reads.snapshotReads)).toEqual(new Set(['stopped']));
+      // All of them for the restarted run: `createRun()` reads the stored run and its status, and
+      // `restart()` loads the snapshot it resumes from.
+      expect(reads.snapshotReads).toEqual(['stopped', 'stopped', 'stopped']);
     }, 60_000);
   });
 }

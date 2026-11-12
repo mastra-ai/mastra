@@ -1,9 +1,9 @@
 /**
  * An in-memory stand-in for a broker that several Mastra instances connect to,
- * the way pods share one Redis or queue. Every connection delivers the events
- * any connection publishes, so instances compete for the same events and step
- * leases decide who runs each step. A connection is not an
- * `EventEmitterPubSub`, so Mastra treats it as a broker.
+ * the way pods share one Redis or queue. It fans every event out to every
+ * connection at once, and never holds or redelivers an event, so instances
+ * compete for the same events and step leases decide who runs each step. A
+ * connection is not an `EventEmitterPubSub`, so Mastra treats it as a broker.
  */
 import { EventEmitter } from 'node:events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
