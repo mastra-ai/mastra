@@ -943,8 +943,6 @@ interface RecoveryPass {
    * probe failed. Any other pass restarts every active run then.
    */
   skipped: boolean;
-  /** Whether a shutdown or a `stopWorkers()` call stopped the pass before it handed out every restart. */
-  stopped: boolean;
   /** Settles once every restart the pass handed out settled; never rejects. */
   settled: Promise<void>;
 }
@@ -4640,12 +4638,12 @@ export class Mastra<
       const workflowsStore = await this.#storage?.getStore('workflows');
       if (!workflowsStore) {
         this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
-        return { runFencing, skipped: false, stopped: stopped(), settled: Promise.resolve() };
+        return { runFencing, skipped: false, settled: Promise.resolve() };
       }
 
       runFencing = await this.#supportsRunFencing(workflowsStore);
       if (runFencing !== true && fencedOnly) {
-        return { runFencing, skipped: true, stopped: stopped(), settled: Promise.resolve() };
+        return { runFencing, skipped: true, settled: Promise.resolve() };
       }
 
       const listed = await this.#listActiveRunSummaries(workflowsStore);
@@ -4734,13 +4732,7 @@ export class Mastra<
     }
 
     // Each restart logs its own failure and never rejects.
-    return {
-      earliestDueAt,
-      runFencing,
-      skipped: false,
-      stopped: stopped(),
-      settled: Promise.all(restarts).then(() => {}),
-    };
+    return { earliestDueAt, runFencing, skipped: false, settled: Promise.all(restarts).then(() => {}) };
   }
 
   /**
@@ -5021,7 +5013,6 @@ export class Mastra<
     this.#stopWorkflowRecoveryLoop = stop;
 
     let dueAt: number | undefined;
-    const loopStops = this.#workerStops;
     // Never rejects, as `repeatAfterSettled` requires: the pass reports its own failures. Tracked so
     // shutdown() waits for a pass in flight and for the restarts it handed out, but the tick only waits
     // for the handing out: a long default-engine restart never holds up the next pass.
@@ -5029,13 +5020,7 @@ export class Mastra<
       // Fenced only: without run fencing nothing tells a live run from a stopped one, and every instance
       // that starts workers would restart the runs the others still run. An explicit
       // restartAllActiveWorkflowRuns() call, such as the server's at boot, restarts them there instead.
-      let pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ fencedOnly: true }));
-      // A pass that started before the last stopWorkers() call, and that this loop joined, stopped
-      // without doing its work; this loop's workers run, so it does that work in a pass of its own.
-      if (pass.stopped && this.#workerStops === loopStops && !this.#shuttingDown) {
-        pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ fencedOnly: true }));
-      }
-
+      const pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ fencedOnly: true }));
       // `settled` never rejects.
       void this.#trackDurableRecovery(pass.settled);
       // A store without run fencing won't get it while this instance runs, so the loop stops. A failed
@@ -8184,9 +8169,11 @@ export class Mastra<
     // honor them, but they must not resurrect workers behind a stopped instance.
     this.#workersStarted = false;
     // The workers a restarted run needs are going away: the loop stops, and so does a pass in flight
-    // (see `#runRecoveryPass`). Restarts already running go on.
+    // (see `#runRecoveryPass`). Restarts already running go on. A later call gets a pass of its own
+    // instead of joining the stopped one.
     this.#workerStops++;
     this.#stopWorkflowRecoveryLoop?.();
+    this.#recoveryPass = undefined;
 
     // A runtime signal may have kicked off a lazy worker start that is still in
     // flight. Wait for it so the teardown below covers what it started —
