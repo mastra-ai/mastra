@@ -15,9 +15,12 @@ import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-rou
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
+import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
-import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
+import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
+import { useBoardCatalog } from '../hooks/useBoardCatalog';
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
@@ -30,6 +33,7 @@ import {
   createLoadOnEntry,
   prefetchBoard,
   prefetchComposer,
+  prefetchDraft,
   prefetchFactories,
   prefetchFactoryLayout,
   prefetchRuleDecisions,
@@ -59,6 +63,22 @@ const KnowledgePage = lazyPage(
 );
 const SettingsPage = lazyPage(
   () => import('./pages/SettingsPage').then(module => module.SettingsPage),
+  <AppPageLoader />,
+);
+const FactorySkillsPage = lazyPage(
+  () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
+  <AppPageLoader />,
+);
+const CardMovesPage = lazyPage(
+  () => import('./pages/CardMovesPage').then(module => module.CardMovesPage),
+  <AppPageLoader />,
+);
+const NewBoardPage = lazyPage(
+  () => import('./pages/NewBoardPage').then(module => module.NewBoardPage),
+  <AppPageLoader />,
+);
+const BoardConfigPage = lazyPage(
+  () => import('./pages/BoardConfigPage').then(module => module.BoardConfigPage),
   <AppPageLoader />,
 );
 const SlackConnectionPage = lazyPage(
@@ -102,6 +122,23 @@ function RootLanding() {
   if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
+}
+
+/**
+ * The retired Review board's links (`/review?item=…`) open that board while the project still has open
+ * cards on it, and otherwise Work filtered to pull requests alone, keeping the rest of their query.
+ */
+function RetiredReviewBoardRedirect() {
+  const { search } = useLocation();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const catalog = useBoardCatalog(factoryId);
+  if (catalog.isPending) return null;
+  if (catalog.data?.some(board => board.id === 'review'))
+    return <Navigate to={`../boards/review${search}`} relative="path" replace />;
+  const params = new URLSearchParams(search);
+  // Picked sources widen the filter, so any other source would show cards the Review board never held.
+  params.set('source', PULL_REQUEST_SOURCE_FILTER);
+  return <Navigate to={`../work?${params}`} relative="path" replace />;
 }
 
 function FactoryHomeRedirect() {
@@ -150,6 +187,26 @@ function ConnectionsRedirect() {
   if (!firstFactory) return null;
 
   return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
+}
+
+/**
+ * Boards used to be edited in Settings: old links (`?board=…`, `?new=1`) open that board's settings, the
+ * new-board form, or the Work board's settings.
+ */
+function BoardSettingsRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const { search } = useLocation();
+  if (!factoryId) return null;
+  const params = new URLSearchParams(search);
+  if (params.has('new')) return <Navigate to={newBoardPath(factoryId)} replace />;
+  return <Navigate to={boardConfigPath(factoryId, params.get('board') ?? 'work')} replace />;
+}
+
+/** Skills used to live in Settings; old links open them beside the Work board's settings. */
+function SkillsSettingsRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  if (!factoryId) return null;
+  return <Navigate to={boardSkillsPath(factoryId, 'work')} replace />;
 }
 
 function KnowledgeRoute() {
@@ -202,13 +259,21 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { index: true, element: <FactoryHomeRedirect /> },
                         { path: 'workspaces/:sessionId', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
-                        { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchComposer) },
+                        { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchDraft) },
                         { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
+                        { path: 'new-board', ...lazyRoute(NewBoardPage) },
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
-                        { path: 'review', element: <ReviewBoardPage />, ...loadOnEntry(prefetchBoard) },
+                        // The Review board was retired: new pull requests live on Work.
+                        { path: 'review', element: <RetiredReviewBoardRedirect />, ...loadOnEntry(prefetchBoard) },
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
+                        { path: 'work/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
+                        { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
+                        { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'work/moves', ...lazyRoute(CardMovesPage) },
+                        { path: 'boards/:boardId/moves', ...lazyRoute(CardMovesPage) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },
@@ -222,6 +287,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                           children: [
                             { index: true, element: <Navigate to="preferences" replace /> },
                             { path: 'connections/slack', ...lazyRoute(SlackConnectionPage) },
+                            { path: 'board', element: <BoardSettingsRedirect /> },
+                            { path: 'skills', element: <SkillsSettingsRedirect /> },
                             { path: ':section', ...lazyRoute(SettingsPage) },
                           ],
                         },

@@ -567,7 +567,10 @@ setup (with runtime-injected auth) does the clone.
 Setup commands that need their own credentials — a registry token, a private
 index URL — take them through `buildEnv`, which accepts a record or an async
 resolver. Those values are part of the template's identity, so changing one
-produces a new template.
+produces a new template. To keep values out of the template name, also pass a
+`buildEnvRevision`. The values still reach the build steps like the clone
+credential, but only the revision names the template. Change the revision
+whenever the values change.
 
 `repoTemplateRef` computes the tagged ref for a spec without building
 anything — useful for pruning old sha tags with the E2B CLI.

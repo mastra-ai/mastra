@@ -128,6 +128,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
     await seedConnection({ workspaceUrlKey: null });
     const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools.linear_get_issue?.description).not.toContain('linear.app');
+    expect(tools.linear_get_issue?.description).toContain('`url` field');
   });
 
   it('resolves a board run from its factory project instead of its work-item session id', async () => {

@@ -59,7 +59,7 @@ const buildingCard: WireWorkItem = {
   ],
   sessions: { triage: triageSession, work: workSession },
   metadata: {},
-  commentCount: 0,
+  description: null,
   revision: 4,
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T03:00:00.000Z',

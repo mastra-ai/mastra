@@ -24,8 +24,14 @@ const SELECTION_CLOCK = new Date(0);
  * Dragging across bars narrows the list to their time span as a custom range.
  */
 export function TracesExplorerHistogram() {
-  const { withQueryTrace, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields } =
-    useTracesConfig();
+  const {
+    rootSource,
+    withQueryTrace,
+    withRootDuration,
+    withTimeToFirstChunk,
+    withTimeToFirstToken,
+    withOutcomeFields,
+  } = useTracesConfig();
   const { filters, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
   const aggregateAvailable = useTraceAggregateAvailable();
 
@@ -66,7 +72,11 @@ export function TracesExplorerHistogram() {
   }, [filters, dateFrom, dateTo, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, now]);
 
   const hidden =
-    !withQueryTrace || !aggregateAvailable.enabled || runningSelected || exceedsAggregateWindow(request.timeRange);
+    rootSource === 'aggregated' ||
+    !withQueryTrace ||
+    !aggregateAvailable.enabled ||
+    runningSelected ||
+    exceedsAggregateWindow(request.timeRange);
 
   const { data, isLoading, isError, isPlaceholderData } = useTraceAggregate({
     request,
