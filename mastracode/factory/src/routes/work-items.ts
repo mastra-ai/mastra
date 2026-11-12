@@ -47,13 +47,22 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
-import { workItemColumns } from '../work-items/board-columns.js';
 import { workItemFilterOptions } from '../work-items/board-filter-options.js';
+import { boardPhases } from '../work-items/board-phases.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { relatedCardsIn } from '../work-items/list-related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { boardSnapshot, hashedBody, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
+import {
+  boardSnapshot,
+  hashedBody,
+  listCheck,
+  matchesEtag,
+  movedBody,
+  namedBody,
+  scopedSnapshot,
+  sha1,
+} from './board-snapshot.js';
 import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
@@ -96,6 +105,24 @@ function toWireWorkItem(item: Card): Card {
     // Keep the legacy wire metadata for one release; storage remains strictly split.
     metadata: publicWorkItemMetadata({ ...item.workItem.metadata, ...item.metadata }) ?? {},
   };
+}
+
+// One hash per card object: `listShared` keeps a card's object until the card changes.
+const wireVersions = new WeakMap<Card, string>();
+
+/**
+ * Names the body a card is sent with. It is a hash of that body, not a stamp: two bodies of one
+ * card can carry the same `changedAt`, and a card can read differently without a write.
+ */
+function wireVersion(card: Card): string {
+  let version = wireVersions.get(card);
+  if (version === undefined) wireVersions.set(card, (version = sha1(JSON.stringify(toWireWorkItem(card)))));
+  return version;
+}
+
+/** The card for a reader that keeps it between reads, and tells by `version` whether it holds this body. */
+function toVersionedWireWorkItem(card: Card): Card & { version: string } {
+  return { ...toWireWorkItem(card), version: wireVersion(card) };
 }
 
 /** Session ids of the listed cards that the predicate picks, each once. */
@@ -516,7 +543,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             });
           }
           const snapshot = part
-            ? scopedSnapshot(part, toWireWorkItem, running, parked, unstarted?.total)
+            ? // A reader asks for cards by id to hold the bodies a phases answer names by version.
+              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, running, parked, unstarted?.total)
             : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           return sendRevalidated(context, snapshot);
@@ -604,16 +632,20 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
-      // ── What each column of a board view shows, a page of it at a time ──────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemColumns.path, {
-        method: FACTORY_ROUTE_CONTRACTS.workItemColumns.method,
+      // ── What each phase of a board view lists, a page of it at a time ───────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardPhases.path, {
+        method: FACTORY_ROUTE_CONTRACTS.boardPhases.method,
         requiresAuth: false,
         handler: async c => {
           const context = loose(c);
           const resolved = await this.#resolveProject(context);
           if ('response' in resolved) return resolved.response;
-          const query = FACTORY_ROUTE_CONTRACTS.workItemColumns.querySchema.safeParse({
-            board: context.req.query('board'),
+          const path = FACTORY_ROUTE_CONTRACTS.boardPhases.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            boardKey: context.req.param('boardKey'),
+          });
+          if (!path.success) return c.json({ error: 'board_not_found' }, 404);
+          const query = FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema.safeParse({
             sort: context.req.query('sort'),
             q: context.req.query('q'),
             source: context.req.queries('source'),
@@ -630,24 +662,30 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             cards: context.req.query('cards'),
           });
           // A view that fails to parse must not answer as another view.
-          if (!query.success) return c.json({ error: 'invalid_columns_query' }, 400);
-          const { board: boardId, cards: withBodies, ...view } = query.data;
+          if (!query.success) return c.json({ error: 'invalid_phases_query' }, 400);
+          const { cards: withBodies, ...view } = query.data;
           const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
           await workItems.ensureReady();
           const [list, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
-          const board = boards.get(boardId);
+          const board = boards.get(path.data.boardKey);
           if (!board) return c.json({ error: 'board_not_found' }, 404);
           const phases = Object.keys(board.phases);
-          const { body, named } = workItemColumns(list, { id: boardId, phases }, view, resolved.userId);
+          const { body, named } = boardPhases(
+            list,
+            { id: path.data.boardKey, phases },
+            view,
+            resolved.userId,
+            wireVersion,
+          );
+          const names = {
+            ...body,
+            runningSessionIds: sessionIdsWhere(named, sessionId => liveSessions.isRunning(sessionId)),
+            parkedSessionIds: sessionIdsWhere(named, sessionId => liveSessions.parked(sessionId) !== undefined),
+          };
           // The board asks again on each feed frame; most frames change nothing it shows.
           return sendRevalidated(
             context,
-            hashedBody({
-              ...body,
-              ...(withBodies ? { workItems: named.map(toWireWorkItem) } : {}),
-              runningSessionIds: sessionIdsWhere(named, sessionId => liveSessions.isRunning(sessionId)),
-              parkedSessionIds: sessionIdsWhere(named, sessionId => liveSessions.parked(sessionId) !== undefined),
-            }),
+            namedBody(names, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
           );
         },
       }),

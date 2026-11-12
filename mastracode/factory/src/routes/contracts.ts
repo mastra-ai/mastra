@@ -480,7 +480,10 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
-    /** Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing. */
+    /**
+     * Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing.
+     * Each card comes with the `version` the phases read names it by.
+     */
     workItemId: z.array(uuidSchema).min(1).max(100).optional(),
     /**
      * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
@@ -544,7 +547,7 @@ export const workItemActivityResponseSchema = z.object({
   doneAt: z.array(z.string()),
 });
 
-export const WORK_ITEM_COLUMN_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
+export const BOARD_PHASES_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
 
 /** Repeatable. The values picked for one filter: a card matches on any of them, and none picks every card. */
 const pickedValuesSchema = z
@@ -553,10 +556,10 @@ const pickedValuesSchema = z
   .default([])
   .transform(values => new Set(values));
 
-/** `<stage>:<count>`: how many cards of one column to list. */
-const columnWindowSchema = z
+/** `<phase>:<count>`: how many cards of one phase to list. */
+const phaseWindowSchema = z
   .string()
-  .transform((entry): [stage: string, count: string] => {
+  .transform((entry): [phase: string, count: string] => {
     const colon = entry.lastIndexOf(':');
     return [entry.slice(0, Math.max(colon, 0)), entry.slice(colon + 1)];
   })
@@ -570,11 +573,10 @@ const columnWindowSchema = z
     ]),
   );
 
-/** One board view: the board, its order, its search and filters, and how deep each column is listed. */
-export const workItemColumnsQuerySchema = z.object({
-  board: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
-  /** `recent-mine` puts the cards the signed-in user last moved into the column before the others. */
-  sort: z.enum(WORK_ITEM_COLUMN_SORTS).default('recent'),
+/** One view of a board: its order, its search and filters, and how deep each phase is listed. */
+export const boardPhasesQuerySchema = z.object({
+  /** `recent-mine` puts the cards the signed-in user last moved into the phase before the others. */
+  sort: z.enum(BOARD_PHASES_SORTS).default('recent'),
   /** Words that must all be in the card's title, key, number or source id. */
   q: z.string().max(200).optional(),
   /** A provider (`github`, `linear`, `manual`…), or `pull-request` for every card that has one. */
@@ -590,47 +592,68 @@ export const workItemColumnsQuerySchema = z.object({
   reviewer: pickedValuesSchema,
   /** Factory users who created the card, moved it or started a session on it. */
   worked: pickedValuesSchema,
-  /** How many cards each column lists. */
+  /** How many cards each phase lists. */
   limit: boundedLimitSchema(50, 200),
   /**
-   * Repeatable `<stage>:<count>`: lists that column's first `count` cards instead of `limit`.
-   * One for a stage the board does not have is ignored.
+   * Repeatable `<phase>:<count>`: lists that phase's first `count` cards instead of `limit`.
+   * One for a phase the board does not have is ignored.
    */
   window: z
-    .array(columnWindowSchema)
+    .array(phaseWindowSchema)
     .max(64)
     .default([])
-    .refine(windows => new Set(windows.map(([stage]) => stage)).size === windows.length, {
-      message: 'Send one window per stage',
+    .refine(windows => new Set(windows.map(([phase]) => phase)).size === windows.length, {
+      message: 'Send one window per phase',
     })
     .transform(windows => new Map(windows)),
-  /** A card to list in every column that holds it, however deep it is there. */
+  /**
+   * A card to answer for wherever it lies: the answer names it with its place in each phase, and
+   * `cards=true` sends its body. No phase is listed deeper for it.
+   */
   item: uuidSchema.optional(),
   /** `true` also sends the body of every card the answer names. */
   cards: z.enum(['true']).optional(),
 });
 
-/** Names a card and the version of it the answer was read from. */
-const cardStampSchema = z.object({ id: z.string(), changedAt: z.string().nullable() });
+/**
+ * Names a card and the body the answer was read from. `version` is another value whenever any of
+ * the body is, so a reader that holds the card at this version holds this body.
+ */
+const cardStampSchema = z.object({ id: z.string(), version: z.string() });
 
-export const workItemColumnsResponseSchema = z.object({
+export const boardPhasesResponseSchema = z.object({
   /** The board's phases in declaration order. */
-  columns: z.array(
+  phases: z.array(
     z.object({
-      stage: z.string(),
-      /** Cards of this column that match the view. */
+      phase: z.string(),
+      /** Cards of this phase that match the view. */
       total: countSchema,
       /** The first of them in the view's order: what the reader shows. */
       cards: z.array(cardStampSchema),
     }),
   ),
-  /** Cards related to a listed card that no column lists. */
+  /** With `item`: the asked card, when the board holds it. */
+  item: cardStampSchema
+    .extend({
+      /**
+       * Each phase the view lists the card under, and how many cards it lists before it there.
+       * Empty when the search or filters leave the card out.
+       */
+      places: z.array(z.object({ phase: z.string(), position: countSchema })),
+    })
+    .optional(),
+  /**
+   * Cards related to a listed card or to the asked one that no phase lists: the first `limit` of
+   * each card's, in the board's order.
+   */
   related: z.array(cardStampSchema),
+  /** How many such cards there are, named in `related` or not. */
+  relatedTotal: countSchema,
   /** Cards of the board, whatever the search and filters. */
   boardTotal: countSchema,
-  /** Cards of the board that match the view, each counted once: a card in two columns is one. */
+  /** Cards of the board that match the view, each counted once: a card in two phases is one. */
   matchingTotal: countSchema,
-  /** With `cards=true`: the body of every card named in `columns` and `related`. */
+  /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
   workItems: z.array(cardSchema).optional(),
   /** Among the named cards. */
   runningSessionIds: z.array(z.string()),
@@ -653,8 +676,8 @@ export const workItemFilterOptionsResponseSchema = z.object({
   actorIds: z.array(z.string()),
 });
 
-export type WorkItemColumnsQuery = z.output<typeof workItemColumnsQuerySchema>;
-export type WorkItemColumnsResponse = z.infer<typeof workItemColumnsResponseSchema>;
+export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
+export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
 export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
@@ -1113,6 +1136,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: boardPathSchema,
     responseSchema: storedBoardResponseSchema,
   },
+  boardPhases: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards/:boardKey/phases',
+    description: 'List the cards under each phase of a board view, in order, with how many match',
+    pathSchema: boardPathSchema,
+    querySchema: boardPhasesQuerySchema,
+    responseSchema: boardPhasesResponseSchema,
+  },
   boardCreate: {
     method: 'POST',
     path: '/web/factory/projects/:id/boards',
@@ -1227,14 +1258,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: workItemActivityQuerySchema,
     responseSchema: workItemActivityResponseSchema,
-  },
-  workItemColumns: {
-    method: 'GET',
-    path: '/web/factory/projects/:id/work-items/columns',
-    description: 'List the cards each column of a board view shows, in order, with how many match',
-    pathSchema: projectPathSchema,
-    querySchema: workItemColumnsQuerySchema,
-    responseSchema: workItemColumnsResponseSchema,
   },
   workItemFilterOptions: {
     method: 'GET',
