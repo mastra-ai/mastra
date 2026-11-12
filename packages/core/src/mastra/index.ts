@@ -82,7 +82,7 @@ import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { runOutsideRunFenceScope } from '../storage/run-fencing';
 import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
-import type { StorageResolvedPromptBlockType } from '../storage/types';
+import type { StorageResolvedPromptBlockType, WorkflowRun } from '../storage/types';
 import { trackFeatureUsage } from '../telemetry/feature-telemetry';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -117,8 +117,8 @@ import {
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
+import type { WorkflowRunStatus } from '../workflows/types';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
-import { activeWorkflowRunPages } from './active-workflow-run-pages';
 import {
   declaredSchedulesOf,
   findFsAgentScheduleHandler,
@@ -746,10 +746,20 @@ export interface MastraRecoveryConfig {
    * Maximum number of workflow runs restarted at the same time by
    * {@link Mastra.restartAllActiveWorkflowRuns}. Use `Infinity` for no limit.
    * A default-engine run holds its slot until it finishes. An evented run
-   * holds it until a worker starts the run, for at most one lease TTL.
+   * holds it until its restart is published to the workers.
    * @default 5
    */
   workflowConcurrency?: number;
+  /**
+   * How long a RUNNING/WAITING workflow run must show no sign of life before
+   * {@link Mastra.restartAllActiveWorkflowRuns} restarts it: no instance is
+   * running it, and neither the run nor the lease of the instance that last
+   * ran it changed for this long. Covers the time an event can spend between
+   * instances, so it should exceed how long your pubsub can hold a message
+   * before a worker takes it.
+   * @default 2000 with the in-process pubsub, 60000 otherwise
+   */
+  workflowGraceMs?: number;
   /**
    * Auto-recover orphaned RUNNING durable agent runs on server boot.
    * @default 'off'
@@ -840,6 +850,86 @@ const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
 const DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS = 30_000;
 const DURABLE_RECOVERY_RECHECK_MAX_RETRIES = 5;
 const DURABLE_RECOVERY_ATTEMPT_TIMEOUT_MS = 30_000;
+// Default `recovery.workflowGraceMs`: long enough for an event a broker holds between instances.
+const DEFAULT_WORKFLOW_GRACE_MS = 60_000;
+// Default `recovery.workflowGraceMs` with the in-process pubsub, where one process drives a run and
+// expires its liveness keys at shutdown. Two instances sharing runs need a grace above one and a half
+// liveness renew intervals: an instance whose key write another instance superseded cannot expire it,
+// so the key's last expiry can sit up to that far in the past while the other instance still works.
+const IN_PROCESS_WORKFLOW_GRACE_MS = 2_000;
+// The active runs whose liveness keys one `getRunOwnerships` call reads during a recovery pass.
+const RECOVERY_OWNERSHIP_BATCH_SIZE = 100;
+
+/** `recovery.workflowGraceMs` as configured, or `fallback` when it is unset or not a non-negative number. */
+function normalizeGraceMs(graceMs: number | undefined, fallback: number): number {
+  if (typeof graceMs !== 'number' || Number.isNaN(graceMs) || graceMs < 0) {
+    return fallback;
+  }
+
+  return graceMs;
+}
+
+// The statuses of the runs a recovery pass looks at.
+const ACTIVE_RUN_STATUSES: readonly WorkflowRunStatus[] = ['running', 'waiting'];
+
+/** An active run a recovery pass listed, with the registered workflow it belongs to. */
+interface RecoveryCandidate {
+  workflow: AnyWorkflow;
+  run: WorkflowRun;
+}
+
+/** Whether the recovery rule restarts a run now, or when it should look at it again. */
+type RecoveryVerdict = { restart: true } | { restart: false; live: boolean; dueAt: number };
+
+/**
+ * The keys whose leases show that some process still runs `runId`: the run's
+ * liveness key for an evented run, which every process handling one of its
+ * events renews, and the run lease a default-engine run holds while it executes.
+ */
+function livenessKeysOf(workflow: AnyWorkflow, runId: string): string[] {
+  return workflow.engineType === 'evented' ? [runLivenessKey(runId)] : [runId];
+}
+
+/** Identifies a run across the workflows of one recovery pass. */
+function recoveryRunKey(workflowName: string, runId: string): string {
+  return JSON.stringify([workflowName, runId]);
+}
+
+/**
+ * The recovery rule. An active run is restarted when none of its liveness
+ * keys is live and `graceMs` passed since the later of the keys' last expiry
+ * and the run's last write. Otherwise `dueAt` is when that could next be true.
+ *
+ * A released or missing key carries no expiry, so the run's own last write
+ * anchors the grace then: a run between two long steps is not restarted while
+ * its next event is on its way to another instance.
+ */
+function recoveryVerdict({
+  records,
+  updatedAt,
+  graceMs,
+  now,
+}: {
+  records: (RunOwnershipRecord | undefined)[];
+  updatedAt: Date | string | number | undefined;
+  graceMs: number;
+  now: number;
+}): RecoveryVerdict {
+  const lastWrite = updatedAt === undefined ? NaN : new Date(updatedAt).getTime();
+  const anchor = Math.max(
+    // A store that lost the timestamp leaves only the keys to go by.
+    Number.isNaN(lastWrite) ? -Infinity : lastWrite,
+    ...records.map(record => record?.leaseExpiresAt?.getTime() ?? -Infinity),
+  );
+  const dueAt = anchor + graceMs;
+  const live = records.some(record => record?.live);
+
+  if (live || now < dueAt) {
+    return { restart: false, live, dueAt };
+  }
+
+  return { restart: true };
+}
 
 /**
  * Whether boot-time recovery restarts runs of `workflow`. Processor workflows only run inside an
@@ -925,6 +1015,8 @@ export class Mastra<
   #durableRecoveryRechecks = new Map<string, ReturnType<typeof setTimeout>>();
   #durableRecoveryRechecksInFlight = new Set<Promise<unknown>>();
   #shuttingDown = false;
+  /** The workflow recovery pass in flight; see `#recoverStoppedRuns`. */
+  #recoveryPass?: Promise<number | undefined>;
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
   #tools?: TTools;
@@ -1663,6 +1755,8 @@ export class Mastra<
     this.#recoveryConfig = {
       workflows: config?.recovery?.workflows ?? 'auto',
       workflowConcurrency: normalizeConcurrency(config?.recovery?.workflowConcurrency),
+      // Set once the pubsub is known; see below.
+      workflowGraceMs: DEFAULT_WORKFLOW_GRACE_MS,
       durableAgents: config?.recovery?.durableAgents ?? 'off',
     };
 
@@ -1687,6 +1781,13 @@ export class Mastra<
     } else {
       this.#pubsub = new EventEmitterPubSub();
     }
+
+    // Nothing but this process delivers an in-process pubsub's events, so a short grace only has to
+    // absorb an event loop stall or a dev reload. A broker can hold an event for much longer.
+    this.#recoveryConfig.workflowGraceMs = normalizeGraceMs(
+      config?.recovery?.workflowGraceMs,
+      this.#pubsub instanceof EventEmitterPubSub ? IN_PROCESS_WORKFLOW_GRACE_MS : DEFAULT_WORKFLOW_GRACE_MS,
+    );
 
     this.#events = {};
     for (const topic in config?.events ?? {}) {
@@ -4390,103 +4491,154 @@ export class Mastra<
   }
 
   /**
-   * Restart every RUNNING/WAITING run of the registered default-engine and
-   * evented workflows, `recovery.workflowConcurrency` at a time (default 5).
-   * The promise resolves once every default-engine restart has finished and
-   * a worker started every evented restart, or one lease TTL passed since it
-   * was published. Failures are logged per run and never reject the sweep.
-   * Once `shutdown()` starts, no further runs are restarted.
+   * Restarts the RUNNING/WAITING runs of the registered default-engine and
+   * evented workflows that no process runs any more, `recovery.workflowConcurrency`
+   * at a time (default 5). A run counts as stopped once no instance keeps it
+   * live and `recovery.workflowGraceMs` passed since it or its liveness last
+   * changed; a run still in its grace period is checked again when it ends.
+   * Without run fencing in the store, every active run is restarted.
    *
-   * Each workflow's active runs are listed once per status and handled in
-   * batches of a hundred. Before restarting a batch, one `getRunOwnerships()`
-   * call reads whether another process still holds each run: its liveness key
-   * for an evented run, its run lease for a default-engine run. Held runs are
-   * skipped without being loaded and checked again once their lease could have
-   * lapsed. The claim `restart()` takes stays the final check, so a run
-   * another process took in between is still refused.
+   * Resolves once every default-engine restart finished and every evented
+   * restart was published to the workers. A call made while another is in
+   * flight joins it. Failures are logged per run and never reject. Once
+   * `shutdown()` starts, no further runs are restarted.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
-    const workflowsStore = await this.#storage?.getStore('workflows');
-    if (!workflowsStore) {
-      this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
-      return;
+    await this.#recoverStoppedRuns();
+  }
+
+  /**
+   * The recovery pass in flight, or a new one. Callers that arrive while a
+   * pass runs share it, so one instance never restarts a run twice for two
+   * overlapping calls. Resolves to the earliest time a run the pass left in its
+   * grace period becomes due, or `undefined` when none is.
+   */
+  #recoverStoppedRuns(): Promise<number | undefined> {
+    if (!this.#recoveryPass) {
+      const pass = this.#runRecoveryPass();
+      this.#recoveryPass = pass;
+      // `#runRecoveryPass` never rejects. A pass that already ended must not clear a newer one.
+      void pass.finally(() => {
+        if (this.#recoveryPass === pass) {
+          this.#recoveryPass = undefined;
+        }
+      });
     }
 
-    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
-    // the same parent.
-    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
-    const readsOwnership = await this.#supportsRunFencing(workflowsStore);
-    // Shared by every batch, so a long default-engine restart holds one slot rather than the next batch.
-    const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency, error =>
-      this.#logger.error('Failed to restart workflow run', { error }),
-    );
+    return this.#recoveryPass;
+  }
 
-    for (const workflow of this.#restartableWorkflows()) {
-      if (this.#shuttingDown) {
-        break;
+  /**
+   * One recovery pass. Lists every restartable workflow's active runs as
+   * summaries (no step results), skips the nested runs whose parent is active
+   * in the same pass, reads the liveness keys of the rest a hundred runs per
+   * call, and restarts the runs the recovery rule picks (see
+   * {@link recoveryVerdict}). Snapshots are read only for those runs, and for
+   * the parents of nested runs whose parent is not active.
+   *
+   * A run left live or in its grace period gets a re-check when it could next
+   * become due. Never rejects.
+   */
+  async #runRecoveryPass(): Promise<number | undefined> {
+    try {
+      const workflowsStore = await this.#storage?.getStore('workflows');
+      if (!workflowsStore) {
+        this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
+        return undefined;
       }
 
-      // Evented runs are kept alive through their liveness key, default-engine runs through their run lease.
-      const ownershipKey = workflow.engineType === 'evented' ? runLivenessKey : (runId: string) => runId;
+      const readsLiveness = await this.#supportsRunFencing(workflowsStore);
+      const listed = await this.#listActiveRunSummaries(workflowsStore);
+      const candidates = await this.#recoveryCandidates(workflowsStore, listed);
+      // Shared by every batch, so a long default-engine restart holds one slot rather than the next batch.
+      const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency, error =>
+        this.#logger.error('Failed to restart workflow run', { error }),
+      );
+
+      let earliestDueAt: number | undefined;
       try {
-        for await (const page of activeWorkflowRunPages({ store: workflowsStore, workflowName: workflow.id })) {
+        for (let start = 0; start < candidates.length; start += RECOVERY_OWNERSHIP_BATCH_SIZE) {
           if (this.#shuttingDown) {
             break;
           }
 
-          const runs = await this.#recoverableRuns(page, workflowsStore, parentStatusOf);
-          const owners = readsOwnership
-            ? await this.#readRunOwners(
-                workflowsStore,
-                workflow.id,
-                runs.map(run => ownershipKey(run.runId)),
-              )
-            : undefined;
+          const batch = candidates.slice(start, start + RECOVERY_OWNERSHIP_BATCH_SIZE);
+          const owners = readsLiveness ? await this.#readRunOwners(workflowsStore, batch) : undefined;
+          const now = Date.now();
 
-          const orphaned = runs.filter(run => !owners?.get(ownershipKey(run.runId))?.live);
-          if (orphaned.length > 0) {
-            this.#logger.debug(`Restarting ${orphaned.length} active workflow run${orphaned.length > 1 ? 's' : ''}`, {
-              workflow: workflow.id,
-            });
-          }
-
-          for (const run of runs) {
+          for (const { workflow, run } of batch) {
             if (this.#shuttingDown) {
               break;
             }
 
-            const owner = owners?.get(ownershipKey(run.runId));
-            if (owner?.live) {
-              this.#logger.debug('Skipped restarting workflow run owned by a live process', {
-                workflow: run.workflowName,
-                runId: run.runId,
-              });
-              // Checked again once the lease could have lapsed, in case its owner died meanwhile.
-              this.#scheduleWorkflowRecoveryRecheck(
-                run.workflowName,
-                run.runId,
-                owner.leaseExpiresAt?.getTime() ?? Date.now(),
-              );
+            const verdict = this.#batchVerdict({ workflow, run, readsLiveness, owners, now });
+            if (verdict.restart) {
+              // Waits for a free slot, so the pass reads the next batch only once a restart frees one.
+              await restarts.start(() => this.#restartStoppedRun(workflow, run.runId));
               continue;
             }
 
-            // Waits for a free slot, so the sweep reads the next batch only once a restart frees one.
-            await restarts.start(() => this.#restartWorkflowRun(run.workflowName, run.runId));
+            if (!verdict.live) {
+              earliestDueAt = Math.min(earliestDueAt ?? Infinity, verdict.dueAt);
+            }
+
+            // Nothing else looks at the run again before the next boot: a process that dies later leaves it to this.
+            this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, verdict.dueAt);
           }
         }
-      } catch (error) {
-        // A store error while listing one workflow's runs must not leave the other workflows unrecovered.
-        this.#logger.error('Failed to list active workflow runs for recovery', { workflow: workflow.id, error });
+      } finally {
+        await restarts.drain();
       }
+
+      return earliestDueAt;
+    } catch (error) {
+      this.#logger.error('Failed to recover stopped workflow runs', { error });
+      return undefined;
+    }
+  }
+
+  /** What the pass does with one run of a batch whose liveness keys `owners` holds. */
+  #batchVerdict({
+    workflow,
+    run,
+    readsLiveness,
+    owners,
+    now,
+  }: {
+    workflow: AnyWorkflow;
+    run: WorkflowRun;
+    readsLiveness: boolean;
+    owners: Map<string, RunOwnershipRecord> | undefined;
+    now: number;
+  }): RecoveryVerdict {
+    // Without run fencing nothing tells a live run from a stopped one, so every active run is
+    // restarted, as on a store without leases.
+    if (!readsLiveness) {
+      return { restart: true };
     }
 
-    await restarts.drain();
+    // The keys could not be read: look again once a grace period passed instead of guessing.
+    if (!owners) {
+      return { restart: false, live: true, dueAt: now + this.#workflowGraceMs() };
+    }
+
+    return recoveryVerdict({
+      records: livenessKeysOf(workflow, run.runId).map(key => owners.get(key)),
+      updatedAt: run.updatedAt,
+      graceMs: this.#workflowGraceMs(),
+      now,
+    });
+  }
+
+  /** The grace period of the recovery rule (`recovery.workflowGraceMs`). */
+  #workflowGraceMs(): number {
+    return this.#recoveryConfig.workflowGraceMs ?? DEFAULT_WORKFLOW_GRACE_MS;
   }
 
   /**
-   * Whether the sweep can read run ownership before restarting. A failed probe
-   * counts as no: `restart()` probes again and decides per run, so the sweep
-   * only loses its pre-check.
+   * Whether the pass can read run liveness. A failed probe counts as no, which
+   * restarts every active run as a store without leases does: `restart()`
+   * probes again and refuses a run another process still holds.
    */
   async #supportsRunFencing(workflowsStore: WorkflowsStorage): Promise<boolean> {
     try {
@@ -4498,44 +4650,73 @@ export class Mastra<
   }
 
   /**
-   * The ownership records of one batch of runs, read in one call. `undefined`
-   * when the read fails: `restart()` checks ownership itself, so a failed read
-   * only costs the snapshot loads it would have saved.
+   * Every RUNNING/WAITING run of the restartable workflows, as summaries:
+   * status, timestamp and parent pointer, no step results. A workflow whose
+   * listing fails is logged and left out of the pass.
    */
-  async #readRunOwners(
-    workflowsStore: WorkflowsStorage,
-    workflowId: string,
-    ownershipKeys: string[],
-  ): Promise<Map<string, RunOwnershipRecord> | undefined> {
-    if (ownershipKeys.length === 0) {
-      return undefined;
-    }
+  async #listActiveRunSummaries(workflowsStore: WorkflowsStorage): Promise<RecoveryCandidate[]> {
+    const listed = await Promise.all(
+      this.#restartableWorkflows().map(async workflow => {
+        try {
+          const byStatus = await Promise.all(
+            ACTIVE_RUN_STATUSES.map(status =>
+              workflowsStore.listWorkflowRuns({ workflowName: workflow.id, status, perPage: false, summary: true }),
+            ),
+          );
 
-    try {
-      return await workflowsStore.getRunOwnerships({ runIds: ownershipKeys });
-    } catch (error) {
-      this.#logger.warn('Failed to read workflow run ownership before restarting', { workflow: workflowId, error });
-      return undefined;
-    }
+          // A run that moved from one status to the other between the two reads is listed under both.
+          const runs = new Map<string, WorkflowRun>();
+          for (const { runs: listedRuns } of byStatus) {
+            for (const run of listedRuns) {
+              if (!runs.has(run.runId)) {
+                runs.set(run.runId, run);
+              }
+            }
+          }
+
+          return [...runs.values()].map(run => ({ workflow, run }));
+        } catch (error) {
+          // A store error while listing one workflow's runs must not leave the other workflows unrecovered.
+          this.#logger.error('Failed to list active workflow runs for recovery', { workflow: workflow.id, error });
+          return [];
+        }
+      }),
+    );
+
+    return listed.flat();
   }
 
   /**
-   * The runs of one batch the sweep should restart. A nested run is left out
-   * when its parent still drives it, and canceled when its parent already
-   * finished.
+   * The listed runs the recovery rule applies to. A nested run whose parent
+   * is active in the same listing is left out: the parent's recovery re-drives
+   * it, and restarting it as well would run it twice. A nested run whose parent
+   * is not active goes by the parent's stored status: kept when nothing else can
+   * drive it, canceled when the parent already finished.
+   *
+   * Every workflow is listed before this runs, since a nested run's parent can
+   * belong to a workflow listed after it.
    */
-  async #recoverableRuns(
-    page: WorkflowRuns['runs'],
+  async #recoveryCandidates(
     workflowsStore: WorkflowsStorage,
-    parentStatusOf: ReturnType<typeof createNestedRunParentStatusLookup>,
-  ): Promise<WorkflowRuns['runs']> {
-    const runs: WorkflowRuns['runs'] = [];
-    for (const run of page) {
+    listed: RecoveryCandidate[],
+  ): Promise<RecoveryCandidate[]> {
+    const activeRuns = new Set(listed.map(({ run }) => recoveryRunKey(run.workflowName, run.runId)));
+    // One lookup per parent per pass: a crashed foreach leaves one nested run per item, all under the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
+    const candidates: RecoveryCandidate[] = [];
+
+    for (const candidate of listed) {
+      const { run } = candidate;
       const parent = nestedRunParentOf(run.snapshot);
       if (!parent) {
-        runs.push(run);
+        candidates.push(candidate);
         continue;
       }
+
+      if (activeRuns.has(recoveryRunKey(parent.workflowName, parent.runId))) {
+        continue;
+      }
+
       // A nested run is collected by its parent's step, so the parent's stored status decides what
       // restarting it standalone would do: run it twice while the parent drives it, or re-run the
       // item after the parent already finished it.
@@ -4543,7 +4724,7 @@ export class Mastra<
         const parentStatus = await parentStatusOf(parent);
         const recovery = nestedRunRecoveryAction(parentStatus);
         if (recovery === 'restart') {
-          runs.push(run);
+          candidates.push(candidate);
         } else if (recovery === 'cancel') {
           await cancelNestedRun({
             store: workflowsStore,
@@ -4552,7 +4733,7 @@ export class Mastra<
             expectedStatus: nestedRunStatusOf(run.snapshot),
             logger: this.#logger,
           });
-        } else if (recovery === 'skip') {
+        } else {
           // Nothing is wrong here: the parent can still drive this run. Logged because a nested
           // run left waiting on a parent that never restarts is otherwise only visible in the
           // nested workflow's own active runs.
@@ -4565,7 +4746,7 @@ export class Mastra<
           });
         }
       } catch (error) {
-        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        // One nested run's lookup must not stop the pass, or unrelated runs go unrecovered.
         this.#logger.error('Failed to recover nested workflow run', {
           workflow: run.workflowName,
           runId: run.runId,
@@ -4574,93 +4755,170 @@ export class Mastra<
       }
     }
 
-    return runs;
+    return candidates;
   }
 
   /**
-   * Restarts one active run. A run whose ownership lease is still live belongs to another
-   * process (or to this one before a crash), so it is skipped and re-checked once the lease
-   * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
-   * A re-check that throws is retried with backoff; `recheck.failures` counts the
-   * consecutive ones.
-   *
-   * An evented restart settles once a worker took the run over, or one lease TTL after it was
-   * published. Waiting for the result would hold a sweep slot for the whole run; waiting for the
-   * hand-off bounds how many published restarts no worker has started yet.
+   * The ownership records of the liveness keys of one batch of runs, read in
+   * one call. `undefined` when the read fails.
    */
-  async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
-    // A sweep's wait for a free slot can outlast the start of shutdown.
+  async #readRunOwners(
+    workflowsStore: WorkflowsStorage,
+    batch: RecoveryCandidate[],
+  ): Promise<Map<string, RunOwnershipRecord> | undefined> {
+    try {
+      return await workflowsStore.getRunOwnerships({
+        runIds: batch.flatMap(({ workflow, run }) => livenessKeysOf(workflow, run.runId)),
+      });
+    } catch (error) {
+      this.#logger.warn('Failed to read workflow run liveness before restarting', { runs: batch.length, error });
+      return undefined;
+    }
+  }
+
+  /**
+   * Restarts one run of a recovery pass, and logs a restart that fails. See
+   * {@link Mastra.#restartWorkflowRun}.
+   */
+  async #restartStoppedRun(workflow: AnyWorkflow, runId: string): Promise<void> {
+    try {
+      await this.#restartWorkflowRun(workflow, runId);
+    } catch (error) {
+      this.#logger.error('Failed to restart workflow run', { workflow: workflow.id, runId, error });
+    }
+  }
+
+  /**
+   * Restarts one run the recovery rule picked. When another process won the
+   * run in the meantime, `restart()` refuses with `WORKFLOW_RESTART_RUN_OWNED`
+   * and the run is checked again once that lease and a grace period could have
+   * passed. Other failures reject, for the caller to log or retry.
+   *
+   * An evented restart resolves once it is published: the workers run the
+   * steps, and waiting for the result would hold a recovery slot for the whole
+   * run. A default-engine restart runs here and holds its slot until the run ends.
+   */
+  async #restartWorkflowRun(workflow: AnyWorkflow, runId: string): Promise<void> {
+    // A pass's wait for a free slot can outlast the start of shutdown.
     if (this.#shuttingDown) {
       return;
     }
 
+    const run = await workflow.createRun({ runId });
     try {
-      const workflow = this.#recoveryRestartableWorkflow(workflowName);
-      if (!workflow) {
-        this.#logger.debug('Skipped restarting a run of a workflow recovery does not restart', {
-          workflow: workflowName,
-          runId,
-        });
-        return;
-      }
-      const run = await workflow.createRun({ runId });
-      // A re-check can find the run already settled or suspended by its owner.
-      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') {
-        return;
-      }
-
       if (workflow.engineType === 'evented') {
         await run.restartInBackground();
       } else {
         await run.restart();
       }
-
-      this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
     } catch (error) {
-      if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {
-        this.#logger.debug('Skipped restarting workflow run owned by a live process', {
-          workflow: workflowName,
-          runId,
-        });
-        const leaseExpiresAt = error.details?.leaseExpiresAt;
-        const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
-        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, Number.isNaN(retryAt) ? Date.now() : retryAt);
+      if (!(error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED')) {
+        throw error;
+      }
+
+      this.#logger.debug('Skipped restarting workflow run owned by a live process', { workflow: workflow.id, runId });
+      const leaseExpiresAt = error.details?.leaseExpiresAt;
+      const expiresAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
+      this.#scheduleWorkflowRecoveryRecheck(
+        workflow.id,
+        runId,
+        (Number.isNaN(expiresAt) ? Date.now() : expiresAt) + this.#workflowGraceMs(),
+      );
+      return;
+    }
+
+    this.#logger.debug('Restarted workflow run', { workflow: workflow.id, runId });
+  }
+
+  /**
+   * Applies the recovery rule to one run again, at `retryAt` plus jitter, for a
+   * run a pass left live or in its grace period. Nothing else looks at such a
+   * run before the next boot.
+   */
+  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number, failures = 0): void {
+    if (this.#shuttingDown) {
+      return;
+    }
+
+    const key = JSON.stringify(['workflow', workflowName, runId]);
+    clearTimeout(this.#durableRecoveryRechecks.get(key));
+    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const timer = setTimeout(() => {
+      this.#durableRecoveryRechecks.delete(key);
+      if (this.#shuttingDown) {
         return;
       }
+
+      // `#recheckWorkflowRun` logs its own failures and never rejects.
+      void this.#trackDurableRecovery(this.#recheckWorkflowRun(workflowName, runId, failures));
+    }, delay);
+    timer.unref?.();
+    this.#durableRecoveryRechecks.set(key, timer);
+  }
+
+  /**
+   * One re-check: restarts the run if the recovery rule picks it now, checks
+   * again when it could next become due, and drops it once it is no longer
+   * active. A re-check that throws is retried with backoff; `failures` counts
+   * the consecutive ones. Never rejects.
+   */
+  async #recheckWorkflowRun(workflowName: string, runId: string, failures: number): Promise<void> {
+    try {
+      const workflow = this.#recoveryRestartableWorkflow(workflowName);
+      const workflowsStore = await this.#storage?.getStore('workflows');
+      if (!workflow || !workflowsStore) {
+        return;
+      }
+
+      // The keys first: a run another process still drives costs no snapshot read.
+      const keys = livenessKeysOf(workflow, runId);
+      const owners = (await this.#supportsRunFencing(workflowsStore))
+        ? await workflowsStore.getRunOwnerships({ runIds: keys })
+        : new Map<string, RunOwnershipRecord>();
+      const records = keys.map(key => owners.get(key));
+      const liveUntil = records.filter(record => record?.live).map(record => record!.leaseExpiresAt?.getTime() ?? 0);
+      if (liveUntil.length > 0) {
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, Math.max(...liveUntil) + this.#workflowGraceMs());
+        return;
+      }
+
+      // The run can have settled, or been suspended by its owner, since the pass listed it.
+      const run = await workflowsStore.getWorkflowRunById({ workflowName, runId });
+      const status = run ? nestedRunStatusOf(run.snapshot) : undefined;
+      if (!run || (status !== 'running' && status !== 'waiting')) {
+        return;
+      }
+
+      const verdict = recoveryVerdict({
+        records,
+        updatedAt: run.updatedAt,
+        graceMs: this.#workflowGraceMs(),
+        now: Date.now(),
+      });
+      if (!verdict.restart) {
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, verdict.dueAt);
+        return;
+      }
+
+      await this.#restartWorkflowRun(workflow, runId);
+    } catch (error) {
       const context = { workflow: workflowName, runId, error };
-      if (!recheck) {
-        this.#logger.error('Failed to restart workflow run', context);
-        return;
-      }
-      if (recheck.failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+      if (failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
         this.#logger.error(
           'Failed to re-check workflow run for recovery; leaving it for the next boot or a manual restart()',
           context,
         );
         return;
       }
+
       this.#logger.warn('Failed to re-check workflow run for recovery; retrying', context);
       this.#scheduleWorkflowRecoveryRecheck(
         workflowName,
         runId,
-        Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** recheck.failures,
-        recheck.failures + 1,
+        Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** failures,
+        failures + 1,
       );
     }
-  }
-
-  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number, failures = 0): void {
-    if (this.#shuttingDown) return;
-    const key = JSON.stringify(['workflow', workflowName, runId]);
-    clearTimeout(this.#durableRecoveryRechecks.get(key));
-    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
-    const timer = setTimeout(() => {
-      this.#durableRecoveryRechecks.delete(key);
-      if (this.#shuttingDown) return;
-      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, { failures }));
-    }, delay);
-    timer.unref?.();
-    this.#durableRecoveryRechecks.set(key, timer);
   }
 
   /**
