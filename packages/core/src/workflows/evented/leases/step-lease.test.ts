@@ -332,6 +332,33 @@ describe('evented step leases (#28712)', () => {
     expect(tracked.executions).toEqual(['A:a']);
   }, 20_000);
 
+  it('hands an exhausted delivery of a running step back to the broker when its replica shuts down', async () => {
+    const storage = new InMemoryStore();
+    const tracked = track({ blocks: ['a'] });
+    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
+    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
+    let delivery: Event | undefined;
+    await a.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.step.run') {
+        delivery = structuredClone(event);
+      }
+    });
+    const result = (await a.workflow.createRun()).start({ inputData: { n: 1 } });
+    await tracked.allBlocked;
+
+    // B schedules no re-check while shutting down, so it must not acknowledge the delivery.
+    const shutdown = b.mastra.shutdown({ drainTimeout: 0 });
+    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({
+      ok: false,
+      retry: true,
+    });
+    await shutdown;
+
+    tracked.release();
+    expect((await result).status).toBe('success');
+    expect(tracked.executions).toEqual(['A:a']);
+  }, 20_000);
+
   it('runs a step whose deliveries used up their attempts deferring to a replica that then crashed', async () => {
     const storage = new InMemoryStore();
     const tracked = track({ blocks: ['a'] }, { hangForever: true });

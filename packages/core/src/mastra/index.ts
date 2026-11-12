@@ -4522,13 +4522,13 @@ export class Mastra<
   /**
    * Re-checks a workflow run for recovery at `retryAt`, as the boot-time sweep does for a run
    * another process still drove: the run is restarted then unless it settled or is still live,
-   * in which case the re-check is scheduled again. Returns `false` without scheduling when
-   * recovery would not restart runs of `workflowName` on this instance, and a no-op while
-   * shutting down.
+   * in which case the re-check is scheduled again. Returns whether a re-check was scheduled:
+   * `false` when recovery would not restart runs of `workflowName` on this instance, or while
+   * this instance shuts down.
    * @internal
    */
   __scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number): boolean {
-    if (!this.#recoveryRestartableWorkflow(workflowName)) {
+    if (this.#shuttingDown || !this.#recoveryRestartableWorkflow(workflowName)) {
       return false;
     }
 

@@ -5273,6 +5273,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         // recovery does not restart, or one this instance cannot resolve, gets no re-check.
         const lease = event.type === 'workflow.step.run' ? await this.#stepLeaseElsewhere(event) : null;
         if (lease && 'live' in lease) {
+          // A process shutting down schedules no re-check, so acknowledging here would leave no way
+          // back if the holder dies. Hand the delivery back to the transport, as a deferral does.
+          if (this.mastra.__shuttingDown) {
+            return { ok: false, retry: true };
+          }
+
           const holder = lease.live;
           this.deliveryAttempts.delete(eventKey);
           // Recovery restarts top-level runs; a nested run is driven again through its root.
