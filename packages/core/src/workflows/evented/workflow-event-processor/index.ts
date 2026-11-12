@@ -1887,10 +1887,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // A claim kept for hours belongs to a hand-off that was published, and a restart that still
     // finds the parent unhandled takes it over. A claim at one lease TTL is a hand-off in progress,
-    // whose holder continues the parent: the restart leaves it.
+    // whose holder continues the parent: the restart leaves it. The expiry is the store's clock
+    // read against this worker's, so the cut sits at two TTLs to leave room for skew.
     const handedOff =
       !claim.acquired && claim.record?.live && claim.record.leaseExpiresAt
-        ? claim.record.leaseExpiresAt.getTime() - Date.now() > WORKFLOW_RUN_LEASE_TTL_MS
+        ? claim.record.leaseExpiresAt.getTime() - Date.now() > 2 * WORKFLOW_RUN_LEASE_TTL_MS
         : false;
     if (args.restart && handedOff) {
       claim = await store.claimRunOwnership({

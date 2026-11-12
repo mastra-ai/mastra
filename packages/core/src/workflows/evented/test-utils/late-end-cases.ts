@@ -603,47 +603,71 @@ export function describeLateEndCases({
       expect(checks).toEqual([1, 2]);
     }, 20_000);
 
-    it('leaves a nested hand-off in progress to its holder when a restart reaches the finished child', async () => {
-      const slow = deferred<void>();
-      const conditionRuns = deferred<void>();
-      let evaluations = 0;
-      // Only the first evaluation is slow.
-      const { checks, iterations, build } = nestedLoop({
-        condition: async () => {
-          if (++evaluations > 1) {
-            return;
+    it.each([
+      { clocks: 'agree', skew: 0 },
+      { clocks: 'run almost a lease TTL apart', skew: 0.9 },
+    ])(
+      "leaves a nested hand-off in progress to its holder when a restart reaches the finished child and the store's and worker's clocks $clocks",
+      async ({ skew }) => {
+        const slow = deferred<void>();
+        const conditionRuns = deferred<void>();
+        let evaluations = 0;
+        // Only the first evaluation is slow.
+        const { checks, iterations, build } = nestedLoop({
+          condition: async () => {
+            if (++evaluations > 1) {
+              return;
+            }
+
+            conditionRuns.resolve();
+            await slow.promise;
+          },
+        });
+        const fromA = heldQueue(() => false);
+        const a = await startReplica(build(), fromA.intercept);
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 0 });
+        await conditionRuns.promise;
+
+        // A's liveness lapses while it still evaluates the condition, so B's restart is accepted and
+        // reaches the finished child.
+        await abandonLease(getStorage(), runLivenessKey(run.runId));
+        const fromB = heldQueue(() => true);
+        const b = await startReplica(build(), fromB.intercept);
+
+        // B reads the claim's expiry off a store clock that runs ahead of B's own.
+        const store = (await b.mastra.getStorage()!.getStore('workflows'))!;
+        const claimOwnership = store.claimRunOwnership.bind(store);
+        const spy = vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+          const claim = await claimOwnership(args);
+          if (claim.acquired || !claim.record?.leaseExpiresAt || !args.runId.includes(':from:')) {
+            return claim;
           }
 
-          conditionRuns.resolve();
-          await slow.promise;
-        },
-      });
-      const fromA = heldQueue(() => false);
-      const a = await startReplica(build(), fromA.intercept);
-      const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      startInBackground(run, { n: 0 });
-      await conditionRuns.promise;
+          const leaseExpiresAt = new Date(claim.record.leaseExpiresAt.getTime() + skew * WORKFLOW_RUN_LEASE_TTL_MS);
+          return { ...claim, record: { ...claim.record, leaseExpiresAt } };
+        });
+        try {
+          (await b.workflow.createRun({ runId: run.runId }))
+            .restart()
+            .catch(error => console.error('The restart rejected', error));
+          await fromB.firstHeld;
+          await fromB.drain(b);
+        } finally {
+          spy.mockRestore();
+        }
 
-      // A's liveness lapses while it still evaluates the condition, so B's restart is accepted and
-      // reaches the finished child.
-      await abandonLease(getStorage(), runLivenessKey(run.runId));
-      const fromB = heldQueue(() => true);
-      const b = await startReplica(build(), fromB.intercept);
-      (await b.workflow.createRun({ runId: run.runId }))
-        .restart()
-        .catch(error => console.error('The restart rejected', error));
-      await fromB.firstHeld;
-      await fromB.drain(b);
+        fromA.holdAll();
+        slow.resolve();
+        await expect.poll(() => fromA.queue.length).toBeGreaterThan(0);
+        await fromA.drain(a);
 
-      fromA.holdAll();
-      slow.resolve();
-      await expect.poll(() => fromA.queue.length).toBeGreaterThan(0);
-      await fromA.drain(a);
-
-      expect(checks).toEqual([1, 2]);
-      expect(iterations).toEqual([1, 2]);
-      expect((await storedRun(run.runId))?.status).toBe('success');
-    }, 20_000);
+        expect(checks).toEqual([1, 2]);
+        expect(iterations).toEqual([1, 2]);
+        expect((await storedRun(run.runId))?.status).toBe('success');
+      },
+      20_000,
+    );
 
     it.each([
       { outcome: 'decides', throws: false, checked: [1, 2, 1] },
