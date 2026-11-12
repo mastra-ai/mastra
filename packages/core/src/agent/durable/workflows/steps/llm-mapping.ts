@@ -233,6 +233,7 @@ export function createDurableLLMMappingStep() {
       }
 
       if (toolResults.length > 0) {
+        const runStopped = toolResults.some(result => result.deadlineTimeout || result.runAborted);
         for (const toolResult of toolResults) {
           const backgroundTask = (
             toolResult.providerMetadata as
@@ -246,8 +247,8 @@ export function createDurableLLMMappingStep() {
             continue;
           }
           if (toolResult.mappingError) {
-            // The run was stopped while this call settled: end it as the deadline or abort, not as the mapping failure.
-            if (toolResult.deadlineTimeout || toolResult.runAborted) continue;
+            // Cancellation of this call or a sibling takes precedence over a mapping failure.
+            if (runStopped) continue;
             const mappingError = new Error(toolResult.mappingError.message);
             mappingError.name = toolResult.mappingError.name;
             mappingError.stack = toolResult.mappingError.stack;

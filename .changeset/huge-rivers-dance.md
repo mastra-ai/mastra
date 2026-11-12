@@ -2,4 +2,10 @@
 '@mastra/core': patch
 ---
 
-Durable agent tool steps now listen for abort requests from other processes, so `abort()` can signal a tool running on a different worker to stop. When the run carries its `modelSettings.timeout.totalMs` deadline, each worker arms it and aborts the tool's `abortSignal` at that deadline, and the run stops waiting for the tool once the abort grace window passes, ending as a `MastraTimeoutError`. A tool that ignores its `abortSignal` keeps running; its step is saved with the aborted-tool notice. A tool step that starts after the run has already stopped does not invoke the tool. A run whose stream gets the same deadline error from more than one process reports it once.
+Durable agents now deliver `abort()` requests to a tool's `abortSignal` even when the tool runs on another worker.
+
+Each worker also enforces the run's `modelSettings.timeout.totalMs` deadline through that signal. After the abort grace window, the run stops waiting for the tool and ends with a `MastraTimeoutError`. A tool that ignores its signal can keep running; its step is saved with the aborted-tool notice.
+
+Tool steps queued after the run stops do not invoke the tool. Cancellation while waiting for an awaited background task preserves the run's timeout or abort outcome. A sibling tool's mapping failure does not mask that outcome.
+
+The stream reports the same deadline error only once, even if it arrives from multiple processes.

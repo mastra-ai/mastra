@@ -2059,7 +2059,19 @@ export function createDurableToolCallStep() {
 
       if (bgOutcome.status !== 'sync') {
         if (bgOutcome.disposition === 'awaited') {
-          const completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+          let completedTask: Awaited<ReturnType<typeof bgOutcome.waitForCompletion>>;
+          try {
+            completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+          } catch (error) {
+            if (!toolAbortSignal?.aborted || error !== toolAbortSignal.reason) throw error;
+            return {
+              ...typedInput,
+              args: cleanedArgs,
+              result: TOOL_ABORT_NOTICE,
+              aborted: true,
+              ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
+            };
+          }
           // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
           if (completedTask.status !== 'cancelled') {
             const reconciliation = await reconciliationComplete;

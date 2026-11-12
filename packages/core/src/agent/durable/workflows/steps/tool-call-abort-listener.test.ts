@@ -134,8 +134,8 @@ describe('durable tool-call remote abort listener', () => {
   });
 
   describe.each(['foreground', 'background'])('%s dispatch after a run stops', mode => {
-    it.each(['deadline', 'abort', 'running'])(
-      'does not start stopped tools but preserves running tools (%s)',
+    it.each(['deadline', 'abort', 'running', 'deadline-during', 'abort-during', 'failure'])(
+      'preserves tool outcomes before and during execution (%s)',
       async stop => {
         const pubsub = new EventEmitterPubSub();
         const mastra = new Mastra({ logger: false, storage: new MockStore() });
@@ -145,7 +145,15 @@ describe('durable tool-call remote abort listener', () => {
         await manager.init(pubsub);
         const controller = new AbortController();
         if (stop === 'abort') controller.abort(new Error('Aborted'));
-        const execute = vi.fn(async () => 'done');
+        const execute = vi.fn(async () => {
+          if (stop === 'failure') throw new Error('background execution failed');
+          if (stop === 'deadline-during') {
+            controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 100 }));
+          } else if (stop === 'abort-during') {
+            controller.abort(new Error('Aborted'));
+          }
+          return 'done';
+        });
         const entry = {
           tools: {
             wait: {
@@ -196,12 +204,21 @@ describe('durable tool-call remote abort listener', () => {
             } else {
               expect(tasks).toHaveLength(0);
             }
+          } else if (stop === 'failure') {
+            expect(execute).toHaveBeenCalledTimes(1);
+            if (mode === 'background') {
+              expect(output).toBeInstanceOf(Error);
+              expect(output.message).toBe('background execution failed');
+            } else {
+              expect(output.error?.message).toContain('background execution failed');
+            }
           } else {
-            expect(execute).not.toHaveBeenCalled();
-            expect(tasks).toHaveLength(0);
+            const started = stop.endsWith('-during');
+            expect(execute).toHaveBeenCalledTimes(started ? 1 : 0);
+            expect(tasks).toHaveLength(started && mode === 'background' ? 1 : 0);
             expect(output).not.toBeInstanceOf(Error);
-            expect(output.aborted).toBe(true);
-            if (stop === 'deadline') {
+            if (!started || mode === 'background') expect(output.aborted).toBe(true);
+            if (stop.startsWith('deadline')) {
               expect(output.deadlineTimeout).toEqual({ timeoutType: 'total', timeoutMs: 100 });
             } else {
               expect(output.runAborted).toBe(true);

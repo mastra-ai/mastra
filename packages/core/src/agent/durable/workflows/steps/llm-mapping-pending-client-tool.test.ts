@@ -282,6 +282,26 @@ describe('durable mapping step when the run stopped while a call settled', () =>
     expect(stored(TOOL_CALL_ID)?.state).toBe('call');
   });
 
+  it.each([
+    ['deadline first', { deadlineTimeout: { timeoutType: 'total' as const, timeoutMs: 100 } }, false],
+    ['deadline last', { deadlineTimeout: { timeoutType: 'total' as const, timeoutMs: 100 } }, true],
+    ['abort first', { runAborted: true as const }, false],
+    ['abort last', { runAborted: true as const }, true],
+  ])('preserves a sibling stop regardless of result order (%s)', async (_label, stop, mappingFirst) => {
+    const calls = [
+      { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
+      { toolCallId: SERVER_CALL_ID, toolName: SERVER_TOOL, args: SERVER_ARGS },
+    ];
+    const failed = { ...calls[0], mappingError };
+    const stopped = { ...calls[1], aborted: true, ...stop };
+    const { output, stored } = await runMappingStep(mappingFirst ? [failed, stopped] : [stopped, failed], calls);
+
+    expect(output).toMatchObject(stop);
+    expect(output.stepResult.isContinued).toBe(false);
+    expect(stored(TOOL_CALL_ID)?.state).toBe('call');
+    expect(stored(SERVER_CALL_ID)?.state).toBe('call');
+  });
+
   it('still fails the run on a mapping failure the run was not stopped during', async () => {
     await expect(
       runMappingStep([{ toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS, mappingError }]),
