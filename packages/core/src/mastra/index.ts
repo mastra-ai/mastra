@@ -1131,6 +1131,8 @@ export class Mastra<
    * stops: the workers it would hand runs to, or start the loop for, are going away.
    */
   #workerStops = 0;
+  /** The `stopWorkers()` calls still running. A start they wait for must not resume sleep wakes. */
+  #workerStopsInProgress = 0;
   #durableRecoveryRechecks = new Map<string, ReturnType<typeof setTimeout>>();
   #durableRecoveryRechecksInFlight = new Set<Promise<unknown>>();
   #shuttingDown = false;
@@ -8045,6 +8047,13 @@ export class Mastra<
     if (handlesWorkflowEvents && this.#workerStops === stops) {
       this.#startWorkflowRecoveryLoop();
       // The wakes of sleeps this instance started before its workers last stopped.
+      this.#resumeSleepWakes();
+    }
+  }
+
+  /** Resumes the paused sleep wakes, unless a `stopWorkers()` call is still tearing the workers down. */
+  #resumeSleepWakes(): void {
+    if (this.#workerStopsInProgress === 0) {
       resumeSleepWakes(this);
     }
   }
@@ -8193,7 +8202,7 @@ export class Mastra<
     await this.#wirePushWorkflowSubscription();
     this.#executionWorkersStarted = true;
     // A lazy start, for example from a restart, takes up the wakes the last stopWorkers() put aside.
-    resumeSleepWakes(this);
+    this.#resumeSleepWakes();
   }
 
   /**
@@ -8204,6 +8213,15 @@ export class Mastra<
    * pubsub is flushed.
    */
   public async stopWorkers(options?: WorkerStopOptions): Promise<void> {
+    this.#workerStopsInProgress++;
+    try {
+      await this.#stopWorkers(options);
+    } finally {
+      this.#workerStopsInProgress--;
+    }
+  }
+
+  async #stopWorkers(options?: WorkerStopOptions): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'stopWorkers');
     // One deadline for the whole call. Each worker's transport drain and the
     // push-event drain below typically wait on the same stuck step, so giving

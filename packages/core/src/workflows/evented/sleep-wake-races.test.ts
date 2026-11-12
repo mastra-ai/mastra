@@ -755,52 +755,63 @@ describe('waking an evented sleep once (#30012)', () => {
     expect(seen.executions).toEqual(['A:before', 'A:after', 'A:final']);
   }, 20_000);
 
-  it('keeps a sleep whose wake time comes while stopping the workers drains another run', async () => {
-    const storage = new InMemoryStore();
-    const executions: string[] = [];
-    const draining = Promise.withResolvers<void>();
-    const drained = Promise.withResolvers<void>();
-    const workflow = createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-      .then(
-        createStep({
-          id: 'before',
-          inputSchema: Num,
-          outputSchema: Num,
-          execute: async ({ inputData }) => {
-            executions.push(`before:${inputData.n}`);
-            // The second run's first step holds the drain until the test lets it finish.
-            if (inputData.n === 2) {
-              draining.resolve();
-              await drained.promise;
-            }
-            return inputData;
-          },
-        }),
-      )
-      .sleep(200)
-      .then(work('after', async () => void executions.push('after')))
-      .commit();
-    const a = await startReplica(storage, workflow as unknown as Built, { recovery: { workflows: 'off' } });
-    const sleeping = await a.workflow.createRun();
-    startInBackground(sleeping, { n: 1 });
-    await sleepingRunId(storage, sleeping.runId);
-    const held = await a.workflow.createRun();
-    startInBackground(held, { n: 2 });
-    await draining.promise;
+  it.each([
+    { lazyStart: false, during: 'drains another run' },
+    // As a restart() issued on the instance meanwhile does.
+    { lazyStart: true, during: 'drains another run and a lazy start brings the workers up' },
+  ])(
+    'keeps a sleep whose wake time comes while stopping the workers $during',
+    async ({ lazyStart }) => {
+      const storage = new InMemoryStore();
+      const executions: string[] = [];
+      const draining = Promise.withResolvers<void>();
+      const drained = Promise.withResolvers<void>();
+      const workflow = createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
+        .then(
+          createStep({
+            id: 'before',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              executions.push(`before:${inputData.n}`);
+              // The second run's first step holds the drain until the test lets it finish.
+              if (inputData.n === 2) {
+                draining.resolve();
+                await drained.promise;
+              }
+              return inputData;
+            },
+          }),
+        )
+        .sleep(200)
+        .then(work('after', async () => void executions.push('after')))
+        .commit();
+      const a = await startReplica(storage, workflow as unknown as Built, { recovery: { workflows: 'off' } });
+      const sleeping = await a.workflow.createRun();
+      startInBackground(sleeping, { n: 1 });
+      await sleepingRunId(storage, sleeping.runId);
+      const held = await a.workflow.createRun();
+      startInBackground(held, { n: 2 });
+      await draining.promise;
 
-    const stopping = a.mastra.stopWorkers({ drainTimeout: 5_000 });
-    // Past the sleep's wake time, while the drain still waits for the second run.
-    const wakeAt = await storedWakeTime(storage, 'leased', sleeping.runId);
-    await sleep(Math.max(0, wakeAt + 200 - Date.now()));
-    drained.resolve();
-    await stopping;
-    expect(await storedSleeps(storage, sleeping.runId)).toEqual(['waiting']);
+      const stopping = a.mastra.stopWorkers({ drainTimeout: 5_000 });
+      if (lazyStart) {
+        await a.mastra.__ensureExecutionWorkersStarted();
+      }
+      // Past the sleep's wake time, while the drain still waits for the second run.
+      const wakeAt = await storedWakeTime(storage, 'leased', sleeping.runId);
+      await sleep(Math.max(0, wakeAt + 200 - Date.now()));
+      drained.resolve();
+      await stopping;
+      expect(await storedSleeps(storage, sleeping.runId)).toEqual(['waiting']);
 
-    await a.mastra.startWorkers();
-    await vi.waitFor(async () => expect(await runStatus(storage, sleeping.runId)).toBe('success'), {
-      timeout: 5_000,
-    });
-  }, 20_000);
+      await a.mastra.startWorkers();
+      await vi.waitFor(async () => expect(await runStatus(storage, sleeping.runId)).toBe('success'), {
+        timeout: 5_000,
+      });
+    },
+    20_000,
+  );
 
   it('stops a wake whose lease another process took before it marked the sleep finished', async () => {
     const storage = new InMemoryStore();
