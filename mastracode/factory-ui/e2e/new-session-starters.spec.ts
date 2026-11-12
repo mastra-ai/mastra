@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { http, HttpResponse } from 'msw';
 
+import type { VoiceSettingsResponse } from '../src/api/types';
 import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from '../src/ui/pages/__tests__/fixtures/draftRoute';
 import { server } from './ui/msw-server';
 import { TEST_BASE_URL } from './ui/render';
@@ -15,6 +17,15 @@ const fiveKinds = {
   untriaged: 7,
   unplannedBugs: 1,
   sweep: { area: 'Observability, tracing and evaluation scorers', count: 3 },
+};
+
+const noVoice: VoiceSettingsResponse = {
+  scope: 'user',
+  selected: null,
+  canEdit: true,
+  effective: null,
+  models: [],
+  keys: [],
 };
 
 const drafts = [
@@ -106,6 +117,14 @@ test.describe('New session page', () => {
 
   test.beforeEach(async ({ context, baseURL }) => {
     stubDraftRoute({ starters: { untriaged: 7 } });
+    // The whole app runs here: its layout opens the feed and its composer reads the voice settings.
+    server.use(
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/feed-events`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/voice/settings`, () => HttpResponse.json(noVoice)),
+    );
     await context.route(
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
