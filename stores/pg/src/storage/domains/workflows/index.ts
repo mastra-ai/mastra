@@ -188,6 +188,20 @@ function stateBaseIndexSQL(indexName: string, schemaName?: string, concurrently 
   return `CREATE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}IF NOT EXISTS "${indexName}" ON ${tableName} (${STATE_BASE_RUN_EXPR}) WHERE kind = 'state-base'`;
 }
 
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns, built from the jsonb
+ * expression `state` (a v1 snapshot or a storage v2 header): `status`, `timestamp`, and for a
+ * nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths are read,
+ * so `context` is never sent.
+ */
+function summarySnapshotSql(state: string): string {
+  const parent = `${state} -> 'parentWorkflow'`;
+  return `(jsonb_build_object('status', ${state} -> 'status', 'timestamp', ${state} -> 'timestamp')
+    || CASE WHEN jsonb_typeof(${parent}) = 'object'
+      THEN jsonb_build_object('parentWorkflow', jsonb_build_object('workflowId', ${parent} -> 'workflowId', 'runId', ${parent} -> 'runId'))
+      ELSE '{}'::jsonb END)`;
+}
+
 /** A storage v2 entry as written: one element of the jsonb array the write statements unpack. */
 interface EntryInput {
   kind: WorkflowRunEntry['kind'];
@@ -756,7 +770,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
     if (v2Where !== null) {
       const columns = summary
-        ? `jsonb_build_object('status', header -> 'status', 'timestamp', header -> 'timestamp') AS snapshot, NULL::jsonb AS header`
+        ? `${summarySnapshotSql('header')} AS snapshot, NULL::jsonb AS header`
         : `NULL AS snapshot, header`;
       branches.push(
         `SELECT workflow_name, run_id, "resourceId", ${columns},
@@ -1946,7 +1960,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : 0;
 
-      // In summary mode only read status/timestamp out of the snapshot so large snapshots aren't transferred.
+      // In summary mode only read the summary fields out of the snapshot so large snapshots aren't transferred.
       // Legacy json/text columns get the same sanitizing path as the status filter so bad escapes can't fail the list.
       let v1Snapshot = 'snapshot';
       if (summary) {
@@ -1955,7 +1969,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           snapshotType === 'jsonb'
             ? 'snapshot'
             : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb`;
-        v1Snapshot = `jsonb_build_object('status', ${snapshotJson} -> 'status', 'timestamp', ${snapshotJson} -> 'timestamp')`;
+        v1Snapshot = summarySnapshotSql(snapshotJson);
       }
 
       const query = await this.#runsQuery({
