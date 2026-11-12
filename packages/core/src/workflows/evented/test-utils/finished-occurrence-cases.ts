@@ -286,8 +286,8 @@ export function describeFinishedOccurrenceCases({
     }
 
     /** Hands `event` to `replica` the way a broker redelivers a message whose ack was lost. */
-    const redeliver = (replica: { mastra: Mastra }, event: Event) =>
-      replica.mastra.handleWorkflowEvent({ ...structuredClone(event), deliveryAttempt: 2 });
+    const redeliver = (replica: { mastra: Mastra }, event: Event, deliveryAttempt = 2) =>
+      replica.mastra.handleWorkflowEvent({ ...copyEvent(event), deliveryAttempt });
 
     it('does not run a step again when its original message arrives after a restart ran it', async () => {
       const executions: string[] = [];
@@ -699,11 +699,7 @@ export function describeFinishedOccurrenceCases({
         // The first step's original message, with its original id, comes back once more after
         // using up its delivery attempts. On a store with step guards its record carries that id.
         const b = await startReplica(build('B'));
-        expect(await b.mastra.handleWorkflowEvent({ ...copyEvent(first), deliveryAttempt: EXHAUSTED_ATTEMPT })).toEqual(
-          {
-            ok: true,
-          },
-        );
+        expect(await redeliver(b, first, EXHAUSTED_ATTEMPT)).toEqual({ ok: true });
 
         expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
         expect(b.published.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
