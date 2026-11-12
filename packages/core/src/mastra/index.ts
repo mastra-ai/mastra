@@ -763,10 +763,9 @@ export interface MastraRecoveryConfig {
    * running it, and neither the run nor the lease of the instance that last
    * ran it changed for this long. Covers the time an event can spend between
    * instances, so it should exceed how long your pubsub can hold a message
-   * before a worker takes it. A run skipped as live or in its grace period is
-   * looked at again up to 5 s after that period ends, so with the in-process
-   * pubsub a run that a graceful shutdown left behind is recovered 2 to 7 s
-   * after the shutdown.
+   * before a worker takes it. A run left alone in its grace period moves the
+   * recovery loop's next check up to the end of that period, at least 1 s out.
+   * A run left alone as live waits for the next `workflowScanIntervalMs`.
    * @default 2000 with the default in-process pubsub, 60000 with any other pubsub
    */
   workflowGraceMs?: number;
