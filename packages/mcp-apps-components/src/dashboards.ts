@@ -61,16 +61,30 @@ export type DashboardValueExpr =
 
 export type DashboardValueFormat = 'count' | 'usd' | 'duration' | 'percent' | 'score';
 
-export type DashboardChartColor = 'green' | 'sky' | 'violet' | 'teal' | 'indigo' | 'warning' | 'error' | 'neutral';
+export type DashboardChartColor =
+  | 'green'
+  | 'sky'
+  | 'violet'
+  | 'teal'
+  | 'indigo'
+  | 'warning'
+  | 'error'
+  | 'neutral'
+  | 'blue'
+  | 'orange'
+  | 'pink'
+  | 'yellow'
+  | 'red'
+  | 'purple';
 
 /** A `kpis` view's options: a row of headline numbers. */
 export type DashboardKpisOptions = {
   items: {
     label: string;
-    icon: 'bot' | 'coins' | 'hash' | 'threads';
-    format: 'count' | 'usd';
+    icon?: 'bot' | 'coins' | 'hash' | 'threads';
+    format: DashboardValueFormat;
     value: DashboardValueExpr;
-    detail: string;
+    detail?: string;
     lowerIsBetter?: boolean;
   }[];
 };
@@ -116,7 +130,7 @@ export type DashboardTableOptions = {
   groupBy: string[];
   defaultSort: { column: string; direction: 'asc' | 'desc' };
   pageSize?: number;
-  emptyMessage: string;
+  emptyMessage?: string;
   ariaLabel?: string;
   hideUnnamed?: boolean;
   dropped?: boolean;
@@ -147,7 +161,7 @@ export type DashboardTimeseriesOptions = {
   series: {
     dataKey: string;
     label: string;
-    color: DashboardChartColor;
+    color?: DashboardChartColor;
     emphasis?: boolean;
     value: DashboardValueExpr;
     rangeTotal?: DashboardValueExpr;

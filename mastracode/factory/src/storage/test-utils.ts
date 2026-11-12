@@ -41,6 +41,7 @@ export async function demoteCardsToLegacyForTests(storage: FactoryStorage, cardI
     const workItemId = (legacy.work_item as { id: string }).id;
     delete legacy.work_item;
     delete legacy.work_item_sources;
+    delete legacy.changed_at;
     await storage.ops.insertOne('work_items', legacy);
     await storage.ops.deleteMany('factory_board_items', { id });
     await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: workItemId });

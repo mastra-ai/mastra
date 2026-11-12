@@ -62,9 +62,8 @@ export const surfaceStateLayerStyle = 'state-layer';
 
 /**
  * Same layer, driven by an ancestor marked `group` rather than the surface
- * itself. A utility cannot read an ancestor's state, so this one stays composed
- * from variants — `isolate` and the negative z-index do the same job as the
- * utility's, and `inset-px` likewise keeps the inset rim visible.
+ * itself. A utility cannot read an ancestor's state, so this one is composed from
+ * variants that paint the same `background-image`.
  */
 export const surfaceGroupStateLayerStyle =
-  'relative isolate before:pointer-events-none before:absolute before:-z-1 before:inset-px before:rounded-[inherit] before:transition-colors before:duration-fast motion-reduce:before:transition-none group-hover:before:bg-fill-subtle group-focus-visible:before:bg-fill-subtle';
+  'group-hover:bg-[linear-gradient(var(--fill-subtle),var(--fill-subtle))] group-focus-visible:bg-[linear-gradient(var(--fill-subtle),var(--fill-subtle))]';

@@ -1510,6 +1510,21 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
   },
 });
 
+/**
+ * Tool-approval rules are saved on thread metadata by the agent controller.
+ * Clients writing thread metadata must not be able to set them, or a metadata
+ * write could turn an approval gate off. Drops the key from client input and
+ * carries over the stored value, if any.
+ */
+function withServerOwnedThreadMetadata(
+  metadata: Record<string, unknown> | undefined,
+  stored?: Record<string, unknown> | null,
+): Record<string, unknown> | undefined {
+  if (metadata === undefined) return undefined;
+  const { permissionRules: _ignored, ...rest } = metadata;
+  return stored && 'permissionRules' in stored ? { ...rest, permissionRules: stored.permissionRules } : rest;
+}
+
 export const CREATE_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/threads',
@@ -1546,7 +1561,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
             id: effectiveThreadId,
             resourceId: effectiveResourceId!,
             title,
-            metadata,
+            metadata: withServerOwnedThreadMetadata(metadata, existing?.thread.metadata),
           });
           return toLocalThread(result.thread);
         }
@@ -1572,7 +1587,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
       const result = await memory.createThread({
         resourceId: effectiveResourceId!,
         title,
-        metadata,
+        metadata: withServerOwnedThreadMetadata(metadata, existing?.metadata),
         threadId: effectiveThreadId,
       });
       return result;
@@ -1617,7 +1632,10 @@ export const UPDATE_THREAD_ROUTE = createRoute({
               permission: MastraFGAPermissions.MEMORY_WRITE,
             });
           }
-          const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
+          const result = await gwClient.updateThread(effectiveThreadId!, {
+            title,
+            metadata: withServerOwnedThreadMetadata(metadata, existing?.thread.metadata),
+          });
           if (!result) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
@@ -1649,7 +1667,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       const updatedThread = {
         ...thread,
         title: title !== undefined ? title : thread.title,
-        metadata: metadata !== undefined ? metadata : thread.metadata,
+        metadata: metadata !== undefined ? withServerOwnedThreadMetadata(metadata, thread.metadata) : thread.metadata,
         // Don't allow changing resourceId if effectiveResourceId is set (prevents reassigning threads)
         resourceId: effectiveResourceId || resourceId || thread.resourceId,
         createdAt: thread.createdAt,
@@ -1784,7 +1802,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
         newThreadId: effectiveNewThreadId,
         resourceId: cloneResourceId,
         title,
-        metadata,
+        metadata: withServerOwnedThreadMetadata(metadata),
         options,
       });
 

@@ -3,7 +3,7 @@ export async function publishResolvedRecord(
   url: URL,
   body: string,
   headers: Record<string, string>,
-  method: 'POST' | 'PUT' = 'POST',
+  method: 'POST' | 'PUT' | 'PATCH' = 'POST',
 ): Promise<void> {
   // This deadline includes response bodies and backoff, so flush/shutdown cannot
   // wait indefinitely for an anchor that never arrives.
@@ -18,8 +18,11 @@ export async function publishResolvedRecord(
     const error = (await response.json().catch(() => null)) as { code?: string; error?: { code?: string } } | null;
     const code = error?.code ?? error?.error?.code;
     const retryable =
-      (response.status === 404 && (code === 'TRACE_NOT_FOUND' || code === 'SPAN_NOT_FOUND')) ||
-      (response.status === 503 && code === 'ANCHOR_LOOKUP_UNAVAILABLE');
+      method === 'PATCH'
+        ? (response.status === 404 && code === 'FEEDBACK_NOT_FOUND') ||
+          (response.status === 503 && code === 'FEEDBACK_LOOKUP_UNAVAILABLE')
+        : (response.status === 404 && (code === 'TRACE_NOT_FOUND' || code === 'SPAN_NOT_FOUND')) ||
+          (response.status === 503 && code === 'ANCHOR_LOOKUP_UNAVAILABLE');
     if (!retryable || attempt === 5) {
       throw new Error(`Platform record delivery failed: HTTP ${response.status}${code ? ` (${code})` : ''}`);
     }

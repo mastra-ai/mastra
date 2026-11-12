@@ -537,3 +537,39 @@ describe('span text search', () => {
     );
   });
 });
+
+describe('span duration ordering', () => {
+  const request = { timeRange, orderBy: [{ field: 'durationMs', direction: 'desc' }] };
+  it('keeps duration ordering opt-in so older hosts cannot forward it to unsupported stores', () => {
+    expect(() => planSpanQuery(request)).toThrow();
+    const plan = planSpanQuery(request, { allowSpanDurationOrdering: true });
+    expect(plan.orderBy).toEqual({ field: 'durationMs', direction: 'desc' });
+    expect(() => parseTraceQueryRequest(request)).toThrow();
+  });
+
+  it('walks a numeric duration cursor and rejects changed queries and invalid boundaries', () => {
+    const options = { allowSpanDurationOrdering: true, scope };
+    const plan = planSpanQuery(request, options);
+    const after = encodeSpanQueryCursor(plan, { ...identity, sortValue: 1000 });
+    expect(planSpanQuery({ ...request, page: { after } }, options).cursor?.sortValue).toBe(1000);
+    for (const change of [
+      { orderBy: [{ field: 'durationMs', direction: 'asc' }] },
+      { orderBy: [{ field: 'endedAt', direction: 'desc' }] },
+      { where },
+    ]) {
+      expect(() => planSpanQuery({ ...request, ...change, page: { after } }, options)).toThrow(
+        'The cursor does not match the query',
+      );
+    }
+    expect(() =>
+      planSpanQuery({ ...request, page: { after } }, { ...options, scope: { organizationId: 'other' } }),
+    ).toThrow('The cursor does not match the query');
+    for (const sortValue of [null, -1, '2026-10-01T12:00:00Z']) {
+      const malformed = Buffer.from(
+        JSON.stringify({ version: 1, result: 'spans', binding: plan.binding, values: { ...identity, sortValue } }),
+      ).toString('base64url');
+      expect(() => planSpanQuery({ ...request, page: { after: malformed } }, options)).toThrow(TraceQueryCursorError);
+      expect(() => encodeSpanQueryCursor(plan, { ...identity, sortValue })).toThrow();
+    }
+  });
+});

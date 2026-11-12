@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useQuery } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { act, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
@@ -10,7 +11,13 @@ import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '..
 import { queryKeys } from '../../../../../api/keys';
 import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResources';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
-import { useTransitionWorkItemMutation, useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import {
+  useSessionWorkItemsQuery,
+  useTransitionWorkItemMutation,
+  useWorkItemsQuery,
+  workItemActivityQueryOptions,
+  workItemStartersQueryOptions,
+} from '../../../../../hooks/useWorkItems';
 import { createQueryClient } from '../../../../../query-client';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { FeedEventsProvider } from '../FeedEventsProvider';
@@ -410,6 +417,145 @@ describe('FeedEventsProvider, on the board', () => {
 
     expect(stream.opens).toBe(1);
     expect(stream.open).toBe(true);
+    await waitForMutationsIdle(rendered.client);
+  });
+});
+
+describe('FeedEventsProvider, on a session page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps a session’s card current, change after change, while the board read hangs', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const shown = { title: 'Fix login' };
+    let releaseBoard = () => {};
+    const boardHeld = new Promise<void>(resolve => {
+      releaseBoard = resolve;
+    });
+    server.use(
+      stream.handler,
+      http.get(BOARD_URL, async ({ request }) => {
+        const snapshot = boardSnapshot(shown.title);
+        if (!new URL(request.url).searchParams.has('sessionId')) await boardHeld;
+        return HttpResponse.json(snapshot);
+      }),
+    );
+    // The sidebar reads the whole board on a session page; the header reads the session's cards.
+    const rendered = renderHookWithProviders(
+      () => ({ board: useWorkItemsQuery(PROJECT_ID), session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1') }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    const sessionCardTitle = () => rendered.result.current.session.data?.[0]?.title;
+    await waitFor(() => expect(sessionCardTitle()).toBe('Fix login'));
+
+    for (const title of ['Fix logout', 'Fix signup']) {
+      shown.title = title;
+      stream.push();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+      await waitFor(() => expect(sessionCardTitle()).toBe(title));
+    }
+
+    releaseBoard();
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    await waitForMutationsIdle(rendered.client);
+  });
+});
+
+describe('FeedEventsProvider, on a draft page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps the starter counts and the activity current when the board changes', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const board = { untriaged: 1, cards: 1 };
+    server.use(
+      stream.handler,
+      http.get(`${BOARD_URL}/starters`, () =>
+        HttpResponse.json({
+          failed: 0,
+          changesRequested: 0,
+          review: { count: 0 },
+          undecided: 0,
+          untriaged: board.untriaged,
+          unplannedBugs: 0,
+          stale: 0,
+        }),
+      ),
+      http.get(`${BOARD_URL}/activity`, () => HttpResponse.json({ total: board.cards, createdAt: [], doneAt: [] })),
+    );
+    const rendered = renderHookWithProviders(
+      () => ({
+        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
+        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    const shown = () => ({
+      untriaged: rendered.result.current.starters.data?.untriaged,
+      cards: rendered.result.current.activity.data?.total,
+    });
+    await waitFor(() => expect(shown()).toEqual({ untriaged: 1, cards: 1 }));
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+
+    board.untriaged = 2;
+    board.cards = 2;
+    stream.push();
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
+
+    await waitFor(() => expect(shown()).toEqual({ untriaged: 2, cards: 2 }));
+    await waitForMutationsIdle(rendered.client);
+  });
+
+  it('stops asking a server too old to count starters or activity, while frames keep refreshing the rest', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const { requests } = boardEndpoints();
+    const counted = { starters: 0, activity: 0 };
+    server.use(
+      stream.handler,
+      http.get(`${BOARD_URL}/starters`, () => {
+        counted.starters += 1;
+        return HttpResponse.json({ error: 'not_found' }, { status: 404 });
+      }),
+      http.get(`${BOARD_URL}/activity`, () => {
+        counted.activity += 1;
+        return HttpResponse.json({ error: 'not_found' }, { status: 404 });
+      }),
+    );
+    const rendered = renderHookWithProviders(
+      () => ({
+        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
+        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+        decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    await waitFor(() => {
+      expect(rendered.result.current.starters.isError).toBe(true);
+      expect(rendered.result.current.activity.isError).toBe(true);
+    });
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    const before = { ...counted, decisions: requests.decisions };
+
+    for (let frame = 0; frame < 2; frame += 1) {
+      stream.push();
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    }
+
+    expect(requests.decisions).toBe(before.decisions + 2);
+    expect(counted).toEqual({ starters: before.starters, activity: before.activity });
     await waitForMutationsIdle(rendered.client);
   });
 });

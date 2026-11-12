@@ -29,6 +29,45 @@ import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
 
+/** Replaces error text exported from traces that hide input or output. */
+export const REDACTED_ERROR_MESSAGE = '[REDACTED]';
+
+/**
+ * The error as exported from a trace that hides input or output: keeps what
+ * identifies the error (id, name, domain, category, stack frames) and drops
+ * text and free-form details, which can quote the hidden data.
+ */
+export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo: T, stackMessage?: string): T {
+  if (!errorInfo) return errorInfo;
+
+  const { id, name, domain, category, stack } = errorInfo;
+
+  return {
+    ...(id !== undefined ? { id } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(domain !== undefined ? { domain } : {}),
+    ...(category !== undefined ? { category } : {}),
+    message: REDACTED_ERROR_MESSAGE,
+    ...(stack !== undefined
+      ? { stack: redactStackHeader(stack, stackMessage ?? errorInfo.message, errorInfo.name) }
+      : {}),
+  } as T;
+}
+
+/** Preserve stack frames only when they follow the complete captured message. */
+function redactStackHeader(stack: string, message: string, name = 'Error'): string {
+  const redactedHeader = `${name}: ${REDACTED_ERROR_MESSAGE}`;
+  const separator = `: ${message}`;
+  const separatorIndex = stack.indexOf(separator);
+
+  if (separatorIndex <= 0 || stack.slice(0, separatorIndex).includes('\n')) {
+    return redactedHeader;
+  }
+
+  const suffix = stack.slice(separatorIndex + separator.length);
+  return suffix === '' || suffix.startsWith('\n') ? `${redactedHeader}${suffix}` : redactedHeader;
+}
+
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
 type AnyBaseSpan = AnySpan & {
   getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined;
@@ -218,6 +257,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     category?: string;
     details?: Record<string, any>;
   };
+  protected errorStackMessage?: string;
   public metadata?: Record<string, any>;
   public requestContext?: Record<string, any>;
   public tags?: string[];
@@ -774,7 +814,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       endTime: this.endTime,
       input: hideInput ? undefined : this.input,
       output: hideOutput ? undefined : this.output,
-      errorInfo: this.errorInfo,
+      // An error's message, stack header and details often quote the data the flags hide.
+      errorInfo: hideInput || hideOutput ? redactErrorInfo(this.errorInfo, this.errorStackMessage) : this.errorInfo,
       ...(this.localErrorCount !== undefined ? { errorCount: this.localErrorCount } : {}),
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
