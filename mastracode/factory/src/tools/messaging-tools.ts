@@ -19,13 +19,13 @@ import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { workItemNumber } from '../work-items/card-number.js';
 import {
   FACTORY_SESSION_NOTIFICATION_SOURCE,
   deliverFactorySessionNotification,
   resolveSessionThread,
 } from './deliver.js';
 import type { FactoryDeliveryController, FactoryDeliveryResult } from './deliver.js';
-import { workItemNumber } from './read-tools.js';
 import { reportNotification, workItemReportAttributes, workItemReportRecipients } from './reports.js';
 import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
