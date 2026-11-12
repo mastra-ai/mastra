@@ -173,6 +173,11 @@ export interface BackgroundProcessExitMeta extends BackgroundProcessMeta {
    * cancelled the run). False for normal exits and for `kill_process`.
    */
   killedByAbort?: boolean;
+  /**
+   * True when the process was stopped with the process manager's `kill(pid)`: the `kill_process`
+   * tool, the HTTP kill route, or a host calling it directly. False for normal exits and aborts.
+   */
+  killedOnRequest?: boolean;
 }
 
 /**
@@ -190,7 +195,10 @@ export interface BackgroundProcessConfig {
    * Tell the agent when a background process exits (default: false). The agent's thread gets a
    * notification with the command, exit code and the end of its output: an active run sees it on its
    * next step and an idle thread wakes up. Needs an agent registered on Mastra and a run with a memory
-   * thread and resource. Processes stopped with `kill_process` or by the run's abort signal are skipped.
+   * thread and resource. Processes stopped on purpose send nothing: kills through the process
+   * manager's `kill(pid)` (the `kill_process` tool or the HTTP kill route), the run's abort signal, and
+   * a sandbox shutting down. Pair it with `abortSignal: null`: by default, aborting the run kills the
+   * process, and that exit sends no notification.
    */
   notifyAgent?: boolean;
   /**

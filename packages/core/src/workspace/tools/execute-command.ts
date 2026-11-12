@@ -301,6 +301,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
             stdoutDroppedBytes: result.stdoutDroppedBytes,
             stderrDroppedBytes: result.stderrDroppedBytes,
             killedByAbort: handle.killedByAbort,
+            killedOnRequest: wasKilledOnRequest(handle),
             toolCallId,
             ...owner,
           };
@@ -317,7 +318,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
           }
           // Killed on purpose, by the run's abort or a sandbox shutting down: nothing for the agent to act on.
           const stopped =
-            handle.killedByAbort || wasKilledOnRequest(handle) || SANDBOX_TEARDOWN_STATUSES.has(sandbox.status);
+            exitMeta.killedByAbort || exitMeta.killedOnRequest || SANDBOX_TEARDOWN_STATUSES.has(sandbox.status);
           if (notifyAgent && !stopped) {
             await notifyAgentOfExit(exitMeta, { command, context, workspace, tokenLimit });
           }

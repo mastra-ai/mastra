@@ -133,6 +133,8 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       return processes.map(info => {
         const handle = this._tracked.get(info.pid);
         if (!handle?.metadata || info.metadata) return info;
+        // A running process under an exited handle's PID is a new process that reused the PID.
+        if (info.running && handle.exitCode !== undefined) return info;
         return { ...info, command: info.command ?? handle.command, metadata: handle.metadata };
       });
     };

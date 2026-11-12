@@ -587,9 +587,10 @@ export class BackgroundTaskManager {
             ?.getLogger?.()
             ?.warn(`background-task cancellation callback failed for ${taskId}:`, error as any);
         }
-        // Cancelling answers nothing, but the open request on the tool call
-        // must go so a client doesn't offer to answer a dead task.
-        if (previousStatus === 'suspended') await this.runLocalExecutionHook(cancelledTask);
+        // A cancelled task never delivers a result, so tell the dispatcher here:
+        // the tool call is marked cancelled, and an open request on it must go
+        // so a client doesn't offer to answer a dead task.
+        await this.runLocalExecutionHook(cancelledTask);
       }
       this.deregisterTaskContext(taskId);
 
@@ -1864,6 +1865,7 @@ export class BackgroundTaskManager {
         threadId: task.threadId,
         resourceId: task.resourceId,
         startedAt: task.startedAt!,
+        ...(task.status === 'cancelled' ? { cancelledAt: task.completedAt ?? new Date() } : {}),
       });
     } catch {
       //fail silently

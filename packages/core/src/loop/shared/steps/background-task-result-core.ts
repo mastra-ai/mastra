@@ -1,4 +1,4 @@
-import type { MessageList } from '../../../agent/message-list';
+import type { MastraMessagePart, MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
@@ -233,6 +233,7 @@ export interface BackgroundToolExecutionParams {
   startedAt: Date;
   suspendedAt?: Date;
   suspendPayload?: unknown;
+  cancelledAt?: Date;
 }
 
 /** A `tool-call-suspended` chunk, as handed to the run's tool payload transform. */
@@ -251,9 +252,10 @@ export interface BackgroundSuspensionChunk {
  * that reloads the thread can still see and answer the open request. The
  * entry's args and payload go through the run's transcript transform, as a
  * foreground suspension's do. When the manager reports the task running again
- * (resume) or cancels it, the entry this task wrote is removed. Returns
- * whether that entry changed, so an engine that doesn't flush every lifecycle
- * update knows it must flush now.
+ * (resume) or cancels it, the entry this task wrote is removed. A cancelled
+ * task never delivers a result, so its call is marked `cancelled` here and
+ * keeps the placeholder. Returns whether anything a reload would see changed,
+ * so an engine that doesn't flush every lifecycle update knows it must flush now.
  */
 export async function applyBackgroundToolExecution(deps: {
   params: BackgroundToolExecutionParams;
@@ -264,6 +266,10 @@ export async function applyBackgroundToolExecution(deps: {
   transformChunk: (chunk: BackgroundSuspensionChunk) => Promise<BackgroundSuspensionChunk>;
 }): Promise<boolean> {
   const { params, messageList } = deps;
+  if (params.cancelledAt) {
+    const cancelled = markToolCallCancelled(messageList, params);
+    return writeSuspendedToolEntry(messageList, params.toolCallId, params.taskId, undefined) || cancelled;
+  }
   messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
     mode: 'stream',
     backgroundTasks: {
@@ -306,6 +312,46 @@ export async function applyBackgroundToolExecution(deps: {
     taskId: params.taskId,
     suspendedAt: params.suspendedAt,
   });
+}
+
+/**
+ * Marks this task's tool call `cancelled` and records when it ended, keeping its
+ * placeholder result. Only the newest part with the tool-call id is checked, and
+ * only if it belongs to this task and hasn't finished: providers reuse tool-call
+ * ids across turns. Returns whether the call was marked.
+ */
+function markToolCallCancelled(messageList: MessageList, params: BackgroundToolExecutionParams): boolean {
+  let part: Extract<MastraMessagePart, { type: 'tool-invocation' }> | undefined;
+  const messages = messageList.get.all.db();
+  for (let m = messages.length - 1; m >= 0 && !part; m--) {
+    const message = messages[m]!;
+    if (message.role !== 'assistant') continue;
+    const parts = message.content?.parts ?? [];
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const candidate = parts[i];
+      if (candidate?.type === 'tool-invocation' && candidate.toolInvocation?.toolCallId === params.toolCallId) {
+        part = candidate;
+        break;
+      }
+    }
+  }
+  const backgroundTask = (part?.providerMetadata as any)?.mastra?.backgroundTask as
+    | { taskId?: string; status?: string }
+    | undefined;
+  if (!part || backgroundTask?.taskId !== params.taskId) return false;
+  if (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') return false;
+
+  return messageList.updateToolInvocation(
+    {
+      type: 'tool-invocation',
+      toolInvocation: part.toolInvocation,
+      providerMetadata: { mastra: { backgroundTask: { ...backgroundTask, status: 'cancelled' } } } as ProviderMetadata,
+    },
+    {
+      mode: 'stream',
+      backgroundTasks: { [params.toolCallId]: { taskId: params.taskId, completedAt: params.cancelledAt } },
+    },
+  );
 }
 
 /**

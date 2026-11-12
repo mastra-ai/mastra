@@ -916,6 +916,7 @@ describe('background processes killed by an aborted run', () => {
         resourceId: 'user-1',
         runId: 'run-1',
         killedByAbort: true,
+        killedOnRequest: false,
       });
     } finally {
       await cleanup();
@@ -927,6 +928,7 @@ describe('background processes killed by an aborted run', () => {
       when: 'exits on its own',
       command: `node -e "console.log('started'); setTimeout(() => process.exit(3), 100)"`,
       stop: async () => {},
+      killedOnRequest: false,
     },
     {
       when: 'is stopped with kill_process',
@@ -934,8 +936,9 @@ describe('background processes killed by an aborted run', () => {
       stop: async (pid: string, workspace: Workspace) => {
         await killProcessTool.execute!({ pid }, { workspace } as any);
       },
+      killedOnRequest: true,
     },
-  ])('does not report an abort to onExit when the process $when', async ({ command, stop }) => {
+  ])('tells onExit how the process ended when it $when', async ({ command, stop, killedOnRequest }) => {
     const exits: BackgroundProcessExitMeta[] = [];
     const { start, cleanup, workspace } = await setup({ onExit: meta => void exits.push(meta) });
     try {
@@ -947,7 +950,7 @@ describe('background processes killed by an aborted run', () => {
       await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
       controller.abort();
 
-      expect(exits[0]).toMatchObject({ pid, runId: 'run-1', killedByAbort: false });
+      expect(exits[0]).toMatchObject({ pid, runId: 'run-1', killedByAbort: false, killedOnRequest });
     } finally {
       await cleanup();
     }

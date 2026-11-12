@@ -577,6 +577,8 @@ export type ToolExecutionInjector = (params: {
   suspendedAt?: Date;
   /** The payload the task suspended with; set together with `suspendedAt`. */
   suspendPayload?: unknown;
+  /** Set when the task was cancelled; it never delivers a result. */
+  cancelledAt?: Date;
 }) => void | Promise<void>;
 
 // --- Per-task context ---

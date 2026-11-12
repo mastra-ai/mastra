@@ -36,8 +36,10 @@ describeForAllEngines('AIMock loop scenario: background process exit notices', e
   const getMock = useLoopScenarioAimock();
   let dir: string;
   let workspace: Workspace;
+  let abort: AbortController;
 
   beforeEach(async () => {
+    abort = new AbortController();
     dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aimock-bg-process-'));
     workspace = new Workspace({
       sandbox: new LocalSandbox({ workingDirectory: dir }),
@@ -107,26 +109,42 @@ describeForAllEngines('AIMock loop scenario: background process exit notices', e
     expect(notice).toContain('tests passed: 12, failed: 1');
   }, 30_000);
 
-  it('does not wake the agent for a background command that was killed on purpose', async () => {
-    const prompt = 'Start the dev server in the background';
-    const exits: string[] = [];
-    workspace.setToolsConfig({
-      [EXECUTE_COMMAND]: { backgroundProcesses: { notifyAgent: true, onExit: ({ pid }) => void exits.push(pid) } },
-    });
-    const { llm } = await startInBackground(
-      'bg-process-killed',
-      prompt,
-      gatedCommand('server stopped', 0),
-      'The server exited.',
-    );
-    const [server] = await workspace.sandbox!.processes!.list();
+  it.each([
+    {
+      how: 'killed through the process manager',
+      // The same kill the `kill_process` tool and the HTTP kill route use.
+      stop: async (pid: string) => expect(await workspace.sandbox!.processes!.kill(pid)).toBe(true),
+    },
+    { how: 'killed by its abort signal', stop: async () => abort.abort() },
+  ])(
+    'does not wake the agent for a background command $how',
+    async ({ how, stop }) => {
+      const prompt = `Start the dev server in the background (${how})`;
+      const exits: string[] = [];
+      workspace.setToolsConfig({
+        [EXECUTE_COMMAND]: {
+          backgroundProcesses: {
+            notifyAgent: true,
+            abortSignal: abort.signal,
+            onExit: ({ pid }) => void exits.push(pid),
+          },
+        },
+      });
+      const { llm } = await startInBackground(
+        `bg-process-${how.replaceAll(' ', '-')}`,
+        prompt,
+        gatedCommand('server stopped', 0),
+        'The server exited.',
+      );
+      const [server] = await workspace.sandbox!.processes!.list();
 
-    // The same kill the `kill_process` tool and the HTTP kill route use.
-    expect(await workspace.sandbox!.processes!.kill(server!.pid)).toBe(true);
-    await vi.waitFor(() => expect(exits).toEqual([server!.pid]), { timeout: 5_000 });
-    // A notice would reach the model within this window (the waking test sees it well within it).
-    await new Promise(resolve => setTimeout(resolve, 1_000));
+      await stop(server!.pid);
+      await vi.waitFor(() => expect(exits).toEqual([server!.pid]), { timeout: 5_000 });
+      // A notice would reach the model within this window (the waking test sees it well within it).
+      await new Promise(resolve => setTimeout(resolve, 1_000));
 
-    expect(requestsFor(llm, prompt)).toHaveLength(2);
-  }, 30_000);
+      expect(requestsFor(llm, prompt)).toHaveLength(2);
+    },
+    30_000,
+  );
 });

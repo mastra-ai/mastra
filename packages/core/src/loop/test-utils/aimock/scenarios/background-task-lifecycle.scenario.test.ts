@@ -511,6 +511,8 @@ describeForAllEngines(
       return {
         suspended: (message?.content.metadata as any)?.suspendedTools?.['call-bg-1'],
         invocation: part?.toolInvocation,
+        backgroundTask: part?.providerMetadata?.mastra?.backgroundTask,
+        entry: (message?.content.metadata as any)?.backgroundTasks?.['call-bg-1'],
       };
     }
 
@@ -630,10 +632,60 @@ describeForAllEngines(
 
       await manager.cancel(taskId);
       expect(await manager.getTask(taskId)).toMatchObject({ status: 'cancelled' });
-      await waitFor(
+      const stored = await waitFor(
         () => storedToolCall(memory, thread),
         s => s.suspended === undefined,
       );
+      expect(stored.backgroundTask).toEqual({ taskId, status: 'cancelled' });
+    }, 30_000);
+
+    // Technical: a cancelled task never calls onResult, so the stored call kept
+    // `backgroundTask.status: 'running'` and a reloaded chat showed it running forever.
+    it('a cancelled deferred call reads as cancelled after the thread is reloaded', async () => {
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-cancel-running-thread', resourceId: 'bg-cancel-running-user' };
+      const prompt = 'Research tidal power in the background';
+      const { chunks, mastra, llm } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt,
+        // Never released: the task is still running when it is cancelled.
+        tools: { research: makeResearchTool(new Promise<void>(() => {})) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: mock =>
+          onReportTurns(mock, prompt, {
+            dispatch: { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'tidal power' } }] },
+            ack: 'Working on it.',
+            report: 'The tidal research is finished.',
+          }),
+      });
+      const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+      const manager = mastra.backgroundTaskManager!;
+      await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status === 'running',
+      );
+      const placeholder = (await storedToolCall(memory, thread)).invocation?.result;
+
+      await manager.cancel(taskId);
+
+      const stored = await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.backgroundTask?.status === 'cancelled',
+      );
+      expect(stored.backgroundTask).toEqual({ taskId, status: 'cancelled' });
+      expect(stored.invocation.result).toEqual(placeholder);
+      expect(stored.entry).toMatchObject({ taskId });
+      expect(new Date(stored.entry.completedAt).getTime()).toBe(
+        (await manager.getTask(taskId))!.completedAt!.getTime(),
+      );
+      // Cancelling is the caller's own decision: the agent is not asked to report it.
+      expect(requestsFor(llm, prompt)).toHaveLength(2);
     }, 30_000);
 
     // A deferred task that finishes after the stream that started it has ended must still
