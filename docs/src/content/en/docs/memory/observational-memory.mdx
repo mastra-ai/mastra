@@ -78,7 +78,7 @@ If your Mastra instance already has storage, you can leave `storage` out of `Mem
 - **Smaller context**: Raw messages and tool results compress into a dense observation log, which lowers the cost and latency of every call.
 - **Less context rot**: The agent reads what matters instead of stale tool output and noise, which keeps it on task over long sessions.
 
-Mastra's own agents run on OM. [Mastra Code](https://code.mastra.ai/), a coding agent for the terminal, uses it so a session can run for days without compacting. See its [Observational Memory settings](https://code.mastra.ai/configuration#observational-memory). [Mastra Factory](https://factory.mastra.ai/) runs its planning, implementation and review sessions on Mastra Code. Each agent keeps the context of a long task from start to finish.
+Mastra's own agents run on OM. [Mastra Code](https://code.mastra.ai/), a coding agent for the terminal, uses it so a session can run for days without compacting. [Mastra Factory](https://factory.mastra.ai/) runs its planning, implementation and review sessions on Mastra Code. Each agent keeps the context of a long task from start to finish.
 
 ## How it works
 
