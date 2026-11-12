@@ -390,10 +390,13 @@ export function describeLateDeliveryCases({
         const b = await startReplica(build('B'), fromB.intercept);
         const store = (await b.mastra.getStorage()!.getStore('workflows'))!;
         const readOwnership = store.getRunOwnership.bind(store);
+        // Only while B handles the start event: the restart call reads the marker too, before it
+        // publishes that event.
+        let handlingStart = false;
         let delivered = false;
         const drained = deferred<void>();
         const spy = vi.spyOn(store, 'getRunOwnership').mockImplementation(async args => {
-          if (!delivered && args.runId === runEndedKey(run.runId)) {
+          if (handlingStart && !delivered && args.runId === runEndedKey(run.runId)) {
             delivered = true;
             fromA.holdAll();
             await fromA.drain(a);
@@ -408,6 +411,7 @@ export function describeLateDeliveryCases({
             .catch(error => console.error('The restart rejected', error));
           // B handles its start event and everything it publishes from there.
           await fromB.firstHeld;
+          handlingStart = true;
           await fromB.drain(b);
           await drained.promise;
 
