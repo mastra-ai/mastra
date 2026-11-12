@@ -408,7 +408,7 @@ When using the `headers` option, the markdown strategy ignores all general optio
     name: 'maxSize',
     type: 'number',
     description:
-      'Target maximum size of each JSON chunk. Must be at least 21. Long string values nested inside objects are not split, so their chunks can exceed this size.',
+      'Target maximum size of each JSON chunk. Must be at least 21. Only string values directly under a top-level key are split; long strings in nested objects or arrays are kept whole, so their chunks can exceed this size.',
   },
   {
     name: 'minSize',
