@@ -123,9 +123,10 @@ export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: s
     pending: sessionCards.isLoading || search.unstarted.isLoading,
     failed: sessionCards.isError || search.unstarted.isError || search.filed.isError,
     retry: () => {
-      void sessionCards.refetch();
-      void search.unstarted.refetch();
-      void search.filed.refetch();
+      // Only what failed: with no candidate the lookup has nothing to run, and refetching it would fail.
+      for (const query of [sessionCards, search.unstarted, search.filed]) {
+        if (query.isError) void query.refetch();
+      }
     },
   };
 }

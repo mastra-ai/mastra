@@ -12,6 +12,7 @@ import { releaseBoard, workBoardInfo } from '../../../../../e2e/ui/board-catalog
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
+import type { GithubIssue, GithubPullRequest } from '../../factory/services/factory';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { createAppRoutes } from '../../../router';
@@ -59,8 +60,12 @@ interface StubSearchOptions {
   activeRepositories?: LinkedRepositoryPayload[];
   activeFactoryHasRepositories?: boolean;
   failSessionAttempts?: number;
+  /** How many reads of the cards holding a session fail before one answers. */
+  failSessionCardAttempts?: number;
   failIntake?: boolean;
   failWorkItems?: boolean;
+  /** The live GitHub intake of `FIRST_REPOSITORY_ID`, instead of the fixtures. */
+  intake?: { issues: GithubIssue[]; pullRequests: GithubPullRequest[] };
   /**
    * A server that narrows the list by session only, as before the palette's reads existed: it
    * ignores `started`, `q`, `limit` and `source`, and sends the whole board with no `total`.
@@ -136,6 +141,10 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       const query = new URL(request.url).searchParams;
       state.workItemQueries.push(query.toString());
       if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
+      const sessionCardReads = state.workItemQueries.filter(asked => asked === 'scope=sessions').length;
+      if (query.get('scope') === 'sessions' && sessionCardReads <= (options.failSessionCardAttempts ?? 0)) {
+        return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
+      }
       const cards = String(params.factoryProjectId) === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems) : [];
       if (options.serverNarrowsBySessionOnly) {
         for (const ignored of ['started', 'q', 'limit', 'source']) query.delete(ignored);
@@ -162,13 +171,19 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
       const label = new URL(request.url).searchParams.get('label');
       const serveFixtures = !label && String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
-      return HttpResponse.json({ issues: serveFixtures ? intakeIssues : [], nextPage: null });
+      return HttpResponse.json({
+        issues: serveFixtures ? (options.intake?.issues ?? intakeIssues) : [],
+        nextPage: null,
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/prs`, ({ params }) => {
       state.intakeRequests += 1;
       if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
       const serveFixtures = String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
-      return HttpResponse.json({ pullRequests: serveFixtures ? intakePullRequests : [], nextPage: null });
+      return HttpResponse.json({
+        pullRequests: serveFixtures ? (options.intake?.pullRequests ?? intakePullRequests) : [],
+        nextPage: null,
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/sessions`, async ({ params, request }) => {
       const factoryProjectId = String(params.factoryProjectId);
@@ -817,6 +832,22 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(3));
     expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
     expect(screen.queryByText('Sessions could not be loaded.')).not.toBeInTheDocument();
+  });
+
+  // Technical: with no candidate the filed-cards lookup is disabled, and refetching it fails for good.
+  it('recovers from a failed read of the session cards on retry when the intake offers nothing', async () => {
+    stubSearchApi({ failSessionCardAttempts: 1, intake: { issues: [], pullRequests: [] } });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    await openWithShortcut();
+
+    expect(await screen.findByText(/^Board cards could not be loaded/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Retry/ }));
+
+    expect(await screen.findByText('Add universal command search')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/^Board cards could not be loaded/)).not.toBeInTheDocument());
+    expect(screen.getByText('Bump the command palette dependencies')).toBeInTheDocument();
   });
 
   it('keeps branch-based review results when work-item enrichment fails', async () => {
