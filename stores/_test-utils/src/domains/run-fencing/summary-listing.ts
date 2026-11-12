@@ -3,14 +3,10 @@ import type { WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-const runSnapshot = (
-  runId: string,
-  status: WorkflowRunStatus,
-  timestamp: number,
-  extra: Record<string, unknown> = {},
-) =>
-  ({
-    runId,
+/** A stored run's snapshot; `timestamp: undefined` leaves the key out. */
+const runSnapshot = (status: WorkflowRunStatus, timestamp: number | undefined, extra: Record<string, unknown> = {}) => {
+  const snapshot: Record<string, unknown> = {
+    runId: `run-${randomUUID()}`,
     status,
     value: { counter: 1 },
     context: {
@@ -23,9 +19,14 @@ const runSnapshot = (
     suspendedPaths: {},
     resumeLabels: {},
     waitingPaths: {},
-    timestamp,
     ...extra,
-  }) as unknown as WorkflowRunState;
+  };
+  if (timestamp !== undefined) {
+    snapshot.timestamp = timestamp;
+  }
+
+  return snapshot as unknown as WorkflowRunState;
+};
 
 const parsed = (run: WorkflowRun) =>
   (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot) as WorkflowRunState;
@@ -44,48 +45,66 @@ export function createSummaryListingTests(getWorkflows: () => WorkflowsStorage) 
       }
 
       const workflowName = `wf-${randomUUID()}`;
+      const resourceId = `resource-${randomUUID()}`;
       const parent = { workflowId: 'parent-workflow', runId: `run-${randomUUID()}` };
       const nestedParent = { ...parent, stepId: 'nested-step', foreachIndex: 0 };
 
-      const runs = [
-        runSnapshot(`run-${randomUUID()}`, 'running', 1_000),
-        runSnapshot(`run-${randomUUID()}`, 'running', 2_000, { parentWorkflow: nestedParent }),
-        runSnapshot(`run-${randomUUID()}`, 'waiting', 3_000, { parentWorkflow: nestedParent }),
-        runSnapshot(`run-${randomUUID()}`, 'success', 4_000),
+      // Each stored snapshot with the summary it must list as. A parent counts only with both IDs,
+      // and a missing field is left out rather than returned as null.
+      const runs: Array<{ snapshot: WorkflowRunState; summary: Record<string, unknown>; resourceId?: string }> = [
+        { snapshot: runSnapshot('running', 1_000), summary: { status: 'running', timestamp: 1_000 }, resourceId },
+        {
+          snapshot: runSnapshot('running', 2_000, { parentWorkflow: nestedParent }),
+          summary: { status: 'running', timestamp: 2_000, parentWorkflow: parent },
+        },
+        {
+          snapshot: runSnapshot('waiting', 3_000, { parentWorkflow: nestedParent }),
+          summary: { status: 'waiting', timestamp: 3_000, parentWorkflow: parent },
+        },
+        { snapshot: runSnapshot('success', 4_000), summary: { status: 'success', timestamp: 4_000 } },
+        {
+          snapshot: runSnapshot('running', 5_000, { parentWorkflow: null }),
+          summary: { status: 'running', timestamp: 5_000 },
+        },
+        {
+          snapshot: runSnapshot('running', 6_000, { parentWorkflow: { runId: parent.runId } }),
+          summary: { status: 'running', timestamp: 6_000 },
+        },
+        { snapshot: runSnapshot('running', undefined), summary: { status: 'running' } },
       ];
-      for (const snapshot of runs) {
-        await workflows.persistWorkflowSnapshot({ workflowName, runId: snapshot.runId, snapshot });
+      for (const { snapshot, resourceId: runResourceId } of runs) {
+        await workflows.persistWorkflowSnapshot({
+          workflowName,
+          runId: snapshot.runId,
+          snapshot,
+          ...(runResourceId ? { resourceId: runResourceId } : {}),
+        });
       }
 
       // Storage v2 keeps the parent in the run's header rather than in a snapshot.
       if (workflows.supportsRunJournal()) {
-        for (const snapshot of [
-          runSnapshot(`run-${randomUUID()}`, 'running', 5_000),
-          runSnapshot(`run-${randomUUID()}`, 'running', 6_000, { parentWorkflow: nestedParent }),
+        for (const run of [
+          { snapshot: runSnapshot('running', 7_000), summary: { status: 'running', timestamp: 7_000 } },
+          {
+            snapshot: runSnapshot('running', 8_000, { parentWorkflow: nestedParent }),
+            summary: { status: 'running', timestamp: 8_000, parentWorkflow: parent },
+          },
+          {
+            snapshot: runSnapshot('running', 9_000, { parentWorkflow: { runId: parent.runId } }),
+            summary: { status: 'running', timestamp: 9_000 },
+          },
         ]) {
-          const { context, value, ...header } = snapshot;
+          const { context, value, ...header } = run.snapshot;
           await workflows.writeWorkflowRunCheckpoint({
             workflowName,
-            runId: snapshot.runId,
+            runId: run.snapshot.runId,
             header,
             steps: context,
             state: value,
           });
-          runs.push(snapshot);
+          runs.push(run);
         }
       }
-
-      const expectedSummary = (status: WorkflowRunStatus) =>
-        Object.fromEntries(
-          runs
-            .filter(snapshot => snapshot.status === status)
-            .map(snapshot => [
-              snapshot.runId,
-              snapshot.parentWorkflow
-                ? { status, timestamp: snapshot.timestamp, parentWorkflow: parent }
-                : { status, timestamp: snapshot.timestamp },
-            ]),
-        );
 
       for (const status of ['running', 'waiting'] as const) {
         const summary = await workflows.listWorkflowRuns({ workflowName, status, perPage: false, summary: true });
@@ -93,7 +112,9 @@ export function createSummaryListingTests(getWorkflows: () => WorkflowsStorage) 
 
         // toStrictEqual also fails on a `parentWorkflow: undefined` or `null` key.
         expect(Object.fromEntries(summary.runs.map(run => [run.runId, parsed(run)]))).toStrictEqual(
-          expectedSummary(status),
+          Object.fromEntries(
+            runs.filter(run => run.snapshot.status === status).map(run => [run.snapshot.runId, run.summary]),
+          ),
         );
         expect(summary.total).toBe(full.total);
 
@@ -103,11 +124,20 @@ export function createSummaryListingTests(getWorkflows: () => WorkflowsStorage) 
         expect(withoutSnapshot(summary.runs)).toEqual(withoutSnapshot(full.runs));
 
         for (const run of full.runs) {
-          const stored = runs.find(snapshot => snapshot.runId === run.runId)!;
+          const stored = runs.find(({ snapshot }) => snapshot.runId === run.runId)!.snapshot;
           expect(parsed(run).context).toEqual(stored.context);
           expect(parsed(run).parentWorkflow).toEqual(stored.parentWorkflow);
         }
       }
+
+      // toEqual above treats a missing resourceId like an undefined one, so check it by key.
+      const { runs: running } = await workflows.listWorkflowRuns({
+        workflowName,
+        status: 'running',
+        perPage: false,
+        summary: true,
+      });
+      expect(running.find(run => run.runId === runs[0]!.snapshot.runId)).toHaveProperty('resourceId', resourceId);
     });
   });
 }
