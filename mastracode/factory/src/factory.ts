@@ -2131,6 +2131,7 @@ export class MastraFactory {
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
                 ...(githubIntegration
                   ? {
@@ -2430,6 +2431,8 @@ export class MastraFactory {
               boardRegistry: this.#projectBoards ?? this.#boards,
               factoryReady,
               domains,
+              // The Platform GitHub lane only receives pushes through its polling worker.
+              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,

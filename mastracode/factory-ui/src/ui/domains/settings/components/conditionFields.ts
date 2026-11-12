@@ -26,7 +26,7 @@ const CARD_FACT_PROPERTIES = {
       kind: { type: 'string', title: 'Kind' },
       integration: { type: 'string', title: 'Integration' },
       provider: { type: 'string', title: 'Provider' },
-      // A GitHub repository or GitLab project path, a Linear team key, a Jira project key.
+      // A GitHub repository or GitLab project path, a Linear team key (ENG), a Jira project key (PLAT).
       repository: { type: 'string', title: 'Repository, team or project' },
     },
   },
@@ -128,6 +128,9 @@ const yesNo = (yes = 'Yes', no = 'No'): FilterBarOption[] => [
 
 type FieldShape = { label?: string; options?: FilterBarOption[]; strict?: boolean; list?: boolean };
 
+/** What a value typed for a fact looks like, shown until one is typed. */
+export const VALUE_PLACEHOLDERS: Record<string, string> = { 'source.repository': 'owner/repo, ENG, PLAT' };
+
 /** Facts only tested for being there, such as a card's open pull request. */
 const PRESENCE_OPERATORS = ['exists', 'not_exists'];
 const PRESENCE_LABELS: Record<string, string> = { exists: 'exists', not_exists: 'does not exist' };
@@ -154,7 +157,8 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
   },
   'source.integration': { label: 'Integration', options: INTEGRATIONS },
   'source.provider': { label: 'Provider', options: INTEGRATIONS },
-  'source.repository': { label: 'Repository, team or project' },
+  // Suggested from the project's repositories, teams and projects, but any value can be typed: `strict: false`.
+  'source.repository': { label: 'Repository, team or project', strict: false },
   'pullRequest.closesIssue': { label: 'Pull request closes an issue', options: yesNo(), strict: true },
   'closedIssue.phase': { label: 'Closed issue phase' },
   'closedIssue.hasPullRequest': { label: 'Closed issue has a pull request', options: yesNo(), strict: true },
@@ -204,7 +208,7 @@ export function conditionFields(facts: Facts, options: Record<string, FilterBarO
       return {
         id,
         label,
-        operators: suggestions ? CHOICE_OPERATORS : TEXT_OPERATORS,
+        operators: suggestions && shape.strict !== false ? CHOICE_OPERATORS : TEXT_OPERATORS,
         suggestions,
         strict: shape.strict,
       };

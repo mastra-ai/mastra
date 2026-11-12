@@ -10,7 +10,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { groupSessionsByBoard } from './fixtures/sessionProperties';
+import { groupSessionsByBoard, pickSessionProperty } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -107,6 +107,24 @@ describe('Sessions sidebar show more', () => {
 
     await user.click(within(group).getByRole('button', { name: 'Show less' }));
     expect(links()).toHaveLength(5);
+  });
+
+  it('filters every session, not only the ones shown so far', async () => {
+    // The oldest session lists last: three "Show more" clicks away from the five shown.
+    const [oldest, ...newer] = Array.from({ length: 68 }, (_, index) => reviewSession(index + 1));
+    stubSessions([{ ...oldest, userId: 'user-grace', owner: { id: 'user-grace', name: 'Grace Hopper' } }, ...newer]);
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
+    expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
+    expect(within(group).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
+
+    await pickSessionProperty(user, 'Owner', 'Grace Hopper');
+
+    expect(await screen.findByRole('link', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(1);
   });
 
   it.each([1, 30])(

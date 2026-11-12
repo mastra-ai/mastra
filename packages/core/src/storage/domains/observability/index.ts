@@ -46,6 +46,7 @@ export {
   traceSelectionSchema,
   threadPredicateSchema,
   traceQueryRequestSchema,
+  traceQueryRootSourceSchema,
   queryThreadsInputSchema,
   traceQueryTraceSchema,
   traceQueryTraceResponseSchema,
