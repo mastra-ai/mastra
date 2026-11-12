@@ -86,6 +86,8 @@ During mixed-version deployments, a changed legacy row is recopied only while it
 
 Factory can send health metrics through `mastra.metrics` (so through whatever observability exporter the Mastra instance has; on Mastra Platform that's added for you). They're off by default: every record counts towards observability usage, so you turn on only the groups you want.
 
+See [Health metrics](https://factory.mastra.ai/configure/metrics) for what each metric means, its unit, and how to read it when Factory is slow.
+
 ```ts
 new MastraFactory({
   // ...
