@@ -1,8 +1,8 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { WorkflowGraphCanvas, WorkflowNodeFrame } from '@mastra/playground-ui/components/Workflow';
-import { ReactFlowProvider } from '@xyflow/react';
-import type { Dimensions, NodeChange, NodeProps } from '@xyflow/react';
+import { ReactFlowProvider, useStore } from '@xyflow/react';
+import type { Dimensions, Edge, Node, NodeChange, NodeProps } from '@xyflow/react';
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -13,7 +13,7 @@ import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
 import { EventMoveCard, PhaseCard } from './MapCards';
 import { MoveEdge } from './MoveEdge';
-import { EVENT_NODE, GUTTER_NODE, MOVE_EDGE, movesLayout, PHASE_NODE } from './movesLayout';
+import { EVENT_NODE, GUTTER_NODE, MOVE_EDGE, movesCanvasVariant, movesLayout, PHASE_NODE } from './movesLayout';
 import type { EventNodeModel, MapFocus, PhaseNodeModel } from './movesLayout';
 import { movesMap } from './movesMap';
 import type { MovesMap } from './movesMap';
@@ -172,19 +172,39 @@ function MovesFlow({
           style={{ height: Math.min(1100, Math.max(map.phases.length * 150, map.eventMoves.length * 150) + 80) }}
         >
           <ReactFlowProvider>
-            <WorkflowGraphCanvas
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={NODE_TYPES}
-              edgeTypes={EDGE_TYPES}
-              onNodesChange={measure}
-              variant="inline"
-            />
+            <MovesCanvas nodes={nodes} edges={edges} onNodesChange={measure} />
           </ReactFlowProvider>
         </div>
         <MovesList factoryId={factoryId} board={board} map={map} moveHref={moveHref} />
       </div>
     </MapContext.Provider>
+  );
+}
+
+/** The canvas, fit to its box while the cards stay readable, pannable and zoomable once they wouldn't. */
+function MovesCanvas({
+  nodes,
+  edges,
+  onNodesChange,
+}: {
+  nodes: Node[];
+  edges: Edge[];
+  onNodesChange: (changes: NodeChange[]) => void;
+}) {
+  const width = useStore(state => state.width);
+  const height = useStore(state => state.height);
+  const variant = movesCanvasVariant(nodes, width, height);
+  return (
+    <div className="size-full" data-canvas-variant={variant}>
+      <WorkflowGraphCanvas
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
+        onNodesChange={onNodesChange}
+        variant={variant}
+      />
+    </div>
   );
 }
 

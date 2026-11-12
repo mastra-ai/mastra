@@ -128,3 +128,30 @@ export function movesLayout(map: MovesMap, focus: MapFocus, heights: ReadonlyMap
     edges: [...transitionEdges, ...eventEdges],
   };
 }
+
+/** Below this scale the cards are too small to read, so the map lets people zoom and drag around it instead. */
+export const PAN_ZOOM_BELOW = 0.6;
+/** The padding the inline canvas fits the map with, on each side. */
+const FIT_PADDING = 20;
+
+type Placed = { position: { x: number; y: number }; width?: number; measured?: { width?: number; height?: number } };
+
+/** The scale the inline canvas fits these nodes into a `width` by `height` canvas at; never above 1. */
+export function fitScale(nodes: readonly Placed[], width: number, height: number): number {
+  if (nodes.length === 0) return 1;
+  const right = (node: Placed) => node.position.x + (node.measured?.width ?? node.width ?? 0);
+  const bottom = (node: Placed) => node.position.y + (node.measured?.height ?? 0);
+  const spanX = Math.max(...nodes.map(right)) - Math.min(...nodes.map(node => node.position.x));
+  const spanY = Math.max(...nodes.map(bottom)) - Math.min(...nodes.map(node => node.position.y));
+  const fits = [spanX > 0 ? (width - 2 * FIT_PADDING) / spanX : 1, spanY > 0 ? (height - 2 * FIT_PADDING) / spanY : 1];
+  return Math.min(1, ...fits);
+}
+
+/**
+ * The canvas a map fits in: inline (fit to the box, page scroll untouched) while its cards stay readable, and
+ * the pannable canvas with a zoom slider once fitting would shrink them below `PAN_ZOOM_BELOW`. Unmeasured, inline.
+ */
+export function movesCanvasVariant(nodes: readonly Placed[], width: number, height: number): 'inline' | 'default' {
+  if (!width || !height) return 'inline';
+  return fitScale(nodes, width, height) < PAN_ZOOM_BELOW ? 'default' : 'inline';
+}
