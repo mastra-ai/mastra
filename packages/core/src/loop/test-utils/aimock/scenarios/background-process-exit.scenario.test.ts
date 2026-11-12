@@ -88,6 +88,19 @@ describeForAllEngines('AIMock loop scenario: background process exit notices', e
 
   it('wakes the agent with the exit code and output of a background command that finishes after the turn', async () => {
     const prompt = 'Run the test suite in the background';
+    const exits: string[] = [];
+    // A host's onExit that never settles must not hold back the agent's notice.
+    workspace.setToolsConfig({
+      [EXECUTE_COMMAND]: {
+        backgroundProcesses: {
+          notifyAgent: true,
+          onExit: ({ pid }) => {
+            exits.push(pid);
+            return new Promise<void>(() => {});
+          },
+        },
+      },
+    });
     const { llm, storedText } = await startInBackground(
       'bg-process-tests',
       prompt,
@@ -107,6 +120,7 @@ describeForAllEngines('AIMock loop scenario: background process exit notices', e
     const notice = JSON.stringify(requests[2]!.body);
     expect(notice).toContain('exited with code 3');
     expect(notice).toContain('tests passed: 12, failed: 1');
+    expect(exits).toHaveLength(1);
   }, 30_000);
 
   it.each([

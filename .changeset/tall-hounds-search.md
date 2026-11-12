@@ -13,8 +13,11 @@ const { data } = useSandboxProcesses({ workspaceId, threadId, queryOptions: { re
 const output = useSandboxProcess({ workspaceId, pid, threadId, tail: 100 });
 const kill = useKillSandboxProcess();
 
-cancel.mutate(taskId);
-kill.mutate({ workspaceId, pid: data.processes[0].pid, threadId });
+const onCancel = () => cancel.mutate(taskId);
+const onKill = () => {
+  const pid = data?.processes[0]?.pid;
+  if (pid) kill.mutate({ workspaceId, pid, threadId });
+};
 ```
 
 `useBackgroundTaskStream` now keeps each task's latest output chunks on `task.output` instead of dropping them. Set `maxOutputChunks` to change how many are kept (200 by default).

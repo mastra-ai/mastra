@@ -600,7 +600,14 @@ export class BackgroundTaskManager {
 
       const cancelledTask = await storage.getTask(taskId);
       if (cancelledTask) {
-        await this.publishLifecycleEvent('task.cancelled', cancelledTask, { cancelReason: reason });
+        // The row is already cancelled: a failed publish must not keep the dispatcher from hearing of it.
+        try {
+          await this.publishLifecycleEvent('task.cancelled', cancelledTask, { cancelReason: reason });
+        } catch (error) {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn(`background-task cancellation event publish failed for ${taskId}:`, error as any);
+        }
         try {
           await this.config.onTaskCancelled?.(cancelledTask);
         } catch (error) {

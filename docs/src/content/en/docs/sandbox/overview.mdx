@@ -319,10 +319,14 @@ const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
 const workspace = client.getWorkspace('my-workspace')
 
 const { processes } = await workspace.listSandboxProcesses({ threadId: 'thread-1' })
-const server = await workspace.getSandboxProcess(processes[0].pid, { threadId: 'thread-1' })
-console.log(server.stdout)
+const running = processes.find(process => process.running)
 
-await workspace.killSandboxProcess(server.pid, { threadId: 'thread-1' })
+if (running) {
+  const server = await workspace.getSandboxProcess(running.pid, { threadId: 'thread-1', tail: 50 })
+  console.log(server.stdout)
+
+  await workspace.killSandboxProcess(running.pid, { threadId: 'thread-1' })
+}
 ```
 
 In React, `useSandboxProcesses`, `useSandboxProcess`, and `useKillSandboxProcess` from `@mastra/react/hooks/workspace` wrap the same calls.
@@ -330,6 +334,8 @@ In React, `useSandboxProcesses`, `useSandboxProcess`, and `useKillSandboxProcess
 The routes never create or start a sandbox. A sandbox that isn't running lists no processes, and reading or killing one of its processes returns `404`.
 
 For a [sandbox resolved per request](#sandboxes-per-user-or-thread), the routes only find a sandbox that an agent run already created and cached under its `sandboxCacheKey`. The key is computed from the request context, with the requested `threadId` and `resourceId` set as `MASTRA_THREAD_ID_KEY` and `MASTRA_RESOURCE_ID_KEY`, so pass the ID your `sandboxCacheKey` reads. When nothing is cached under the key, or the workspace has no `sandboxCacheKey`, the routes return `404`.
+
+The cache lives on the `Workspace` instance, and the routes look up the instance registered on the `Mastra` instance. If an agent's `workspace` function returns a new `Workspace` on each call, its runs cache their sandboxes on instances the routes never see, and the routes return `404`. Return the same `Workspace` instance from the function, for example one created once at module level.
 
 ## Lifecycle and persistence
 

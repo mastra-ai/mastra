@@ -1801,9 +1801,10 @@ export const WORKSPACE_SKILLS_SH_ROUTES = [
 // Sandbox Process Routes
 // =============================================================================
 
-// Same wording as `getDynamicSandboxCacheKeyHint` in the `get_process_output` and `kill_process` tools.
+// These routes only read sandboxes cached under `sandboxCacheKey`, so unlike the tools' hint,
+// a resolver that returns the same sandbox doesn't help here.
 const NO_CACHE_KEY_HINT =
-  ' If this process was started from a dynamic sandbox resolver, configure sandboxCacheKey or have the resolver return the same sandbox for follow-up calls.';
+  ' The workspace resolves its sandbox per request: configure sandboxCacheKey so these routes can find the sandbox an agent run used.';
 const CACHE_KEY_HINT =
   " If this process was started in a sandbox resolved per thread or resource, pass the threadId or resourceId the workspace's sandboxCacheKey reads.";
 
