@@ -118,7 +118,10 @@ export function observeSessionFirstExec(
         seen = true;
         unsubscribe();
         void sourceControl.sessions
-          .markFirstMeaningfulExec({ sessionId: session.identity.getId() })
+          .markFirstMeaningfulExec({
+            sessionId: session.identity.getId(),
+            ...(factoryMetrics().enabled('sessions') && { withCreatedAt: true }),
+          })
           .then(createdAt => {
             if (createdAt) {
               factoryMetrics().observe(

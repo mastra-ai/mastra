@@ -178,3 +178,45 @@ describe('call-site helpers', () => {
     expect(JSON.stringify(records)).not.toContain('acme');
   });
 });
+
+describe('process collector', () => {
+  it('reports GC pauses by kind and the heap limit', async () => {
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['process'] }, {}), 'all');
+    const { records, targets } = capture();
+    const stop = startFactoryMetrics(metrics, targets, { storage: undefined, vector: undefined, pubsub: undefined });
+    let garbage: unknown[] = [];
+    for (let i = 0; i < 200_000; i++) garbage.push({ i });
+    garbage = [];
+    // GC entries are delivered asynchronously.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await metrics.tick();
+    await stop();
+
+    expect(garbage).toEqual([]);
+    const gc = records.filter(r => r.name === 'mastra_factory_gc_ms');
+    expect(gc.length).toBeGreaterThan(0);
+    expect(gc.every(r => ['minor', 'major', 'incremental', 'weakcb', 'other'].includes(r.labels.kind!))).toBe(true);
+    expect(records.some(r => r.name === 'mastra_factory_process_memory_bytes' && r.labels.kind === 'heap_limit')).toBe(
+      true,
+    );
+  });
+});
+
+describe('first-message capture', () => {
+  it('asks storage for the creation time only when the sessions group is on', async () => {
+    const { observeSessionFirstMessage } = await import('../session/first-message-capture.js');
+    for (const groups of [['process'], ['sessions']] as const) {
+      installFactoryMetrics(new FactoryMetrics(resolveMetricsConfig({ groups: [...groups] }, {}), 'all'));
+      let listener: ((event: never) => void) | undefined;
+      const markFirstMessage = vi.fn().mockResolvedValue(undefined);
+      observeSessionFirstMessage(
+        { identity: { getId: () => 's1' }, subscribe: l => ((listener = l as never), () => {}) },
+        { sourceControl: { sessions: { markFirstMessage } } },
+      );
+      listener!({ type: 'message_start', message: { role: 'assistant' } } as never);
+      expect(markFirstMessage).toHaveBeenCalledWith(
+        groups[0] === 'sessions' ? { sessionId: 's1', withCreatedAt: true } : { sessionId: 's1' },
+      );
+    }
+  });
+});

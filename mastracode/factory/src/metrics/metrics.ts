@@ -18,6 +18,8 @@ export interface MetricSink {
 /** Sampled once per interval. */
 export interface MetricsCollector {
   collect(sink: MetricSink): Promise<void> | void;
+  /** Releases anything the collector holds (observers, histograms). */
+  stop?(): void;
 }
 
 export interface MetricsTargets {
@@ -130,6 +132,8 @@ export class FactoryMetrics {
   stop(): void {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = undefined;
+    for (const collector of this.#collectors) collector.stop?.();
+    this.#collectors = [];
   }
 
   /**

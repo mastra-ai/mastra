@@ -1,13 +1,35 @@
-import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { constants, monitorEventLoopDelay, PerformanceObserver } from 'node:perf_hooks';
+import type { PerformanceEntry } from 'node:perf_hooks';
+import { getHeapStatistics } from 'node:v8';
 
 import type { MetricsCollector } from '../metrics.js';
 
 const LOOP_RESOLUTION_MS = 20;
 
-/** Event-loop delay, memory, CPU and uptime of this Node process. */
-export function processCollector(): MetricsCollector {
+const GC_KINDS: Record<number, string> = {
+  [constants.NODE_PERFORMANCE_GC_MINOR]: 'minor',
+  [constants.NODE_PERFORMANCE_GC_MAJOR]: 'major',
+  [constants.NODE_PERFORMANCE_GC_INCREMENTAL]: 'incremental',
+  [constants.NODE_PERFORMANCE_GC_WEAKCB]: 'weakcb',
+};
+
+/**
+ * Event-loop delay, memory against the heap limit, CPU and uptime of this Node process. Each GC
+ * pause is passed to `onGcPause` as it happens, to be aggregated per interval.
+ */
+export function processCollector(onGcPause?: (kind: string, ms: number) => void): MetricsCollector {
   const loop = monitorEventLoopDelay({ resolution: LOOP_RESOLUTION_MS });
   loop.enable();
+  let gc: PerformanceObserver | undefined;
+  if (onGcPause) {
+    gc = new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) {
+        const kind = GC_KINDS[(entry as PerformanceEntry & { detail?: { kind?: number } }).detail?.kind ?? -1];
+        onGcPause(kind ?? 'other', entry.duration);
+      }
+    });
+    gc.observe({ entryTypes: ['gc'] });
+  }
   let lastCpu = process.cpuUsage();
   let lastAt = performance.now();
   return {
@@ -23,6 +45,7 @@ export function processCollector(): MetricsCollector {
       const memory = process.memoryUsage();
       sink.emit('mastra_factory_process_memory_bytes', memory.rss, { kind: 'rss' });
       sink.emit('mastra_factory_process_memory_bytes', memory.heapUsed, { kind: 'heap_used' });
+      sink.emit('mastra_factory_process_memory_bytes', getHeapStatistics().heap_size_limit, { kind: 'heap_limit' });
 
       // Share of one core used since the last sample (1 = one core fully busy).
       const cpu = process.cpuUsage(lastCpu);
@@ -32,6 +55,10 @@ export function processCollector(): MetricsCollector {
       lastAt = now;
 
       sink.emit('mastra_factory_process_uptime_s', process.uptime());
+    },
+    stop() {
+      loop.disable();
+      gc?.disconnect();
     },
   };
 }

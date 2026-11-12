@@ -44,7 +44,11 @@ export function observeSessionFirstMessage(
     seen = true;
     unsubscribe();
     void sourceControl.sessions
-      .markFirstMessage({ sessionId: session.identity.getId() })
+      .markFirstMessage({
+        sessionId: session.identity.getId(),
+        // The extra read for the creation time only happens when the metric is on.
+        ...(factoryMetrics().enabled('sessions') && { withCreatedAt: true }),
+      })
       .then(createdAt => {
         if (createdAt)
           factoryMetrics().observe(

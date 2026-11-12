@@ -38,7 +38,8 @@ export function startFactoryMetrics(
   const collectors: MetricsCollector[] = [];
   let redisClient: RedisMonitorClient | undefined;
 
-  if (metrics.enabled('process')) collectors.push(processCollector());
+  if (metrics.enabled('process'))
+    collectors.push(processCollector((kind, ms) => metrics.observe('process', 'mastra_factory_gc_ms', ms, { kind })));
 
   if (metrics.enabled('postgres')) {
     const pools: Record<string, PoolLike> = {};

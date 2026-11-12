@@ -584,17 +584,17 @@ export interface SourceControlStorageHandle {
      * NULL, so retries and process restarts are no-ops. Keyed by the
      * controller-facing `sessionId` (not the row id) because the caller —
      * the session observer — only knows the controller resourceId.
-     * Resolves to the session's creation time when this call set the stamp,
-     * `undefined` when it was already set or there is no row.
+     * With `withCreatedAt`, resolves to the session's creation time when this
+     * call set the stamp (one extra read); otherwise always `undefined`.
      */
-    markFirstMessage(args: { sessionId: string }): Promise<Date | undefined>;
+    markFirstMessage(args: { sessionId: string; withCreatedAt?: boolean }): Promise<Date | undefined>;
     /**
      * Record when the session's agent completed its first successful sandbox
      * exec (TTFME anchor). Same write-once contract as `markFirstMessage`:
      * guarded on the column being NULL, keyed by the controller-facing
      * `sessionId`.
      */
-    markFirstMeaningfulExec(args: { sessionId: string }): Promise<Date | undefined>;
+    markFirstMeaningfulExec(args: { sessionId: string; withCreatedAt?: boolean }): Promise<Date | undefined>;
     /** Removes the session and its repository rows. */
     delete(id: string): Promise<void>;
   };
@@ -1755,7 +1755,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             { materialized_at: new Date(), updated_at: new Date() },
           );
         },
-        markFirstMessage: async ({ sessionId }) => {
+        markFirstMessage: async ({ sessionId, withCreatedAt }) => {
           // `first_message_at: null` in the filter compiles to `IS NULL`, making
           // this an atomic one-shot: concurrent callers and later messages
           // match zero rows. Sessions without a source-control row (chat-only
@@ -1765,10 +1765,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
             { session_id: sessionId, first_message_at: null },
             { first_message_at: new Date(), updated_at: new Date() },
           );
-          if (stamped === 0) return undefined;
+          if (stamped === 0 || !withCreatedAt) return undefined;
           return (await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId }))?.created_at;
         },
-        markFirstMeaningfulExec: async ({ sessionId }) => {
+        markFirstMeaningfulExec: async ({ sessionId, withCreatedAt }) => {
           // Same atomic one-shot shape as markFirstMessage: the NULL filter
           // makes concurrent callers and later execs zero-row no-ops.
           const stamped = await db().updateMany(
@@ -1776,7 +1776,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             { session_id: sessionId, first_meaningful_exec_at: null },
             { first_meaningful_exec_at: new Date(), updated_at: new Date() },
           );
-          if (stamped === 0) return undefined;
+          if (stamped === 0 || !withCreatedAt) return undefined;
           return (await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId }))?.created_at;
         },
         delete: async id => {
