@@ -402,6 +402,8 @@ export class FactoryTransitionService {
     if (!board || board.id !== request.board || !board.phaseKind(request.stage) || board.isTerminal(request.stage)) {
       return undefined;
     }
+    // Saving refuses a terminal `from`, but a later board edit can make the phase terminal.
+    if (!board.phaseKind(fromStage) || board.isTerminal(fromStage)) return undefined;
     const routes = phaseExitRoutes(
       await reader.listIntakeRoutes({ orgId: request.orgId, factoryProjectId: request.factoryProjectId }),
       board.id,

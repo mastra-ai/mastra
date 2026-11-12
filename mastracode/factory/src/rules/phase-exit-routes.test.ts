@@ -27,7 +27,8 @@ const shipyard = {
       nextPhases: ['planning', 'shipped'],
     },
     { key: 'planning', name: 'Planning', kind: 'resting' as const, nextPhases: ['shipped'] },
-    { key: 'shipped', name: 'Shipped', kind: 'terminal' as const },
+    // A shipped card can be reopened into Planning.
+    { key: 'shipped', name: 'Shipped', kind: 'terminal' as const, nextPhases: ['planning'] },
   ],
 };
 
@@ -290,6 +291,21 @@ describe('phase-exit routes', () => {
     const closed = await move(card.id, 'shipyard', 'shipped');
 
     expect(closed).toMatchObject({ status: 'accepted', stage: 'shipped' });
+    expect((await get(card.id)).board).toBe('shipyard');
+    expect(fetchIssue).not.toHaveBeenCalled();
+  });
+
+  it('does not route a card leaving a phase that is terminal by now', async () => {
+    const { github, card, route, move, get, fetchIssue } = await setup();
+    // Saved before a board edit made the phase terminal: saving refuses a terminal `from` today.
+    await route({ when: null, from: { boardKey: 'shipyard', phaseKey: 'shipped' } });
+    github.issue = { ...github.issue, labels: ['area: docs'] };
+    await move(card.id, 'shipyard', 'shipped');
+
+    const reopened = await move(card.id, 'shipyard', 'planning');
+
+    expect(reopened).toMatchObject({ status: 'accepted', stage: 'planning' });
+    expect(reopened).not.toHaveProperty('route');
     expect((await get(card.id)).board).toBe('shipyard');
     expect(fetchIssue).not.toHaveBeenCalled();
   });
