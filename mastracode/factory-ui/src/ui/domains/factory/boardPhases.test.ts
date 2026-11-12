@@ -120,6 +120,24 @@ describe('shownBoardPhases', () => {
     expect(shown.get('planning')?.total).toBe(1);
   });
 
+  it('leaves a card of two phases out of the one that holds it below its window, where nothing moved', () => {
+    const shown = shownBoardPhases(
+      snapshot(
+        [
+          { phase: 'intake', total: 1, ids: ['both'] },
+          // Planning counts `both` among its 51 cards and lists it further down than this window.
+          { phase: 'planning', total: 51, ids: ['c'] },
+        ],
+        [card('both', ['intake', 'planning']), card('c', ['planning'])],
+      ),
+      stages,
+    );
+
+    expect(titles(shown, 'intake')).toEqual(['both']);
+    expect(titles(shown, 'planning')).toEqual(['c']);
+    expect(shown.get('planning')).toMatchObject({ total: 51, listed: 1, listedAll: false });
+  });
+
   it('shows empty phases with nothing to load before the first answer', () => {
     const shown = shownBoardPhases(undefined, stages);
 

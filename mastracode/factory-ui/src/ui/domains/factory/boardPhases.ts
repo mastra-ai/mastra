@@ -22,6 +22,7 @@ const NO_CARDS: WorkItem[] = [];
  * Where a named card sits is read from the card itself, so a card moved in this tab leaves its
  * phase and tops the one it entered at once, before the next read lists it there. The asked card
  * tops each phase that holds it deeper than it is listed: it shows without the cards above it.
+ * A card of two phases that one of them holds below its window has not moved: it stays out of it.
  */
 export function shownBoardPhases(
   snapshot: BoardPhasesSnapshot | undefined,
@@ -34,9 +35,18 @@ export function shownBoardPhases(
   }
   const held = new Map(snapshot.workItems.map(card => [card.id, card]));
   const asked = snapshot.asked;
-  // The cards the view places somewhere. An asked card the view leaves out is in no phase.
-  const placed = new Set(snapshot.phases.flatMap(listed => listed.ids));
-  if (asked && asked.phases.length > 0) placed.add(asked.id);
+  // The phases the read put each card in: the ones that list it, and the ones that hold the asked
+  // card. An asked card the view leaves out is in no phase.
+  const put = new Map<string, string[]>();
+  for (const listed of snapshot.phases) {
+    for (const id of listed.ids) put.set(id, [...(put.get(id) ?? []), listed.phase]);
+  }
+  if (asked && asked.phases.length > 0) put.set(asked.id, [...(put.get(asked.id) ?? []), ...asked.phases]);
+  // A card moved in this tab has left a phase the read put it in.
+  const moved = [...put].flatMap(([id, phases]) => {
+    const card = held.get(id);
+    return card && phases.some(phase => !itemAppearsInStage(card, phase, stages)) ? [id] : [];
+  });
   for (const stage of stages) {
     const listed = snapshot.phases.find(candidate => candidate.phase === stage.id);
     const ids = new Set(listed?.ids);
@@ -48,7 +58,7 @@ export function shownBoardPhases(
     // Held by the phase below what it lists: its total counts the card already.
     const heldDeeper = asked !== undefined && asked.phases.includes(stage.id) && !ids.has(asked.id);
     const deeper = heldDeeper ? sits(asked.id) : [];
-    const arrived = [...placed].filter(id => !ids.has(id) && !(heldDeeper && id === asked.id)).flatMap(sits);
+    const arrived = moved.filter(id => !ids.has(id) && !(heldDeeper && id === asked.id)).flatMap(sits);
     // The cards the total counted that have left the phase since: the listed ones, and the asked one.
     const left = ids.size - stayed.length + (heldDeeper ? 1 - deeper.length : 0);
     shown.set(stage.id, {
