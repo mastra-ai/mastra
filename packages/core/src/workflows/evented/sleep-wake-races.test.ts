@@ -670,9 +670,8 @@ describe('waking an evented sleep once (#30012)', () => {
       inputData: { n: 1 },
     } as any);
 
-    expect(await Promise.race([travelled.then(result => result.status), sleep(3_000).then(() => 'stalled')])).toBe(
-      'success',
-    );
+    // A time travel that stalls fails the test on its timeout.
+    expect((await travelled).status).toBe('success');
     expect(seen.executions).toEqual(['A:before', 'A:after', 'A:after']);
   }, 20_000);
 
@@ -681,6 +680,9 @@ describe('waking an evented sleep once (#30012)', () => {
     const seen = observe('leased');
     const report = seen.reporter('A');
     let travelling = false;
+    // Set once the canceled run's timer claimed the sleep's wake lease and read the run.
+    const oldWake = Promise.withResolvers<void>();
+    let wokeWhileTravelling = false;
     // Time travel hands a step after a sleep `{}` as its input.
     const anyInput = (id: string) =>
       createStep({
@@ -691,7 +693,7 @@ describe('waking an evented sleep once (#30012)', () => {
           await report(id);
           // The time-travelled run is still running when the canceled run's timer fires.
           if (travelling && id === 'after') {
-            await sleep(600);
+            await oldWake.promise;
           }
 
           return inputData;
@@ -708,6 +710,29 @@ describe('waking an evented sleep once (#30012)', () => {
       recovery: { workflows: 'off' },
     });
     const run = await a.workflow.createRun();
+    const store = (await storage.getStore('workflows'))!;
+    const claim = store.claimRunOwnership.bind(store);
+    const load = store.loadWorkflowSnapshot.bind(store);
+    let wakeClaimed = false;
+    vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+      const result = await claim(args);
+      if (result.acquired && isSleepKeyOf(args.runId, run.runId)) {
+        wakeClaimed = true;
+        wokeWhileTravelling = travelling;
+      }
+
+      return result;
+    });
+    // The wake's read of the run after its claim is its last step before it decides.
+    vi.spyOn(store, 'loadWorkflowSnapshot').mockImplementation(async args => {
+      const result = await load(args);
+      if (wakeClaimed && args.runId === run.runId) {
+        // Lets the wake act on what it read before the time travel goes on.
+        setImmediate(() => oldWake.resolve());
+      }
+
+      return result;
+    });
     startInBackground(run, { n: 1 });
     await sleepingRunId(storage, run.runId);
     await run.cancel();
@@ -724,6 +749,7 @@ describe('waking an evented sleep once (#30012)', () => {
 
     // The time travel stores the sleep without its wake time, so the timer finds a different sleep
     // and publishes nothing: only the time travel's own event starts `after`.
+    expect(wokeWhileTravelling).toBe(true);
     expect(travelled.status).toBe('success');
     expect(seen.continuations).toEqual(['A']);
     expect(seen.executions).toEqual(['A:before', 'A:after', 'A:final']);
@@ -816,9 +842,8 @@ describe('waking an evented sleep once (#30012)', () => {
 
     // Either the wake found its lease gone, or it went on and published.
     await vi.waitFor(() => expect(refused || seen.continuations.length > 0).toBe(true));
-    for (let i = 0; i < 3; i++) {
-      await new Promise(resolve => setImmediate(resolve));
-    }
+    // A refused check makes the wake stop at once; one turn lets it finish.
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(seen.continuations).toEqual([]);
     expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']);
