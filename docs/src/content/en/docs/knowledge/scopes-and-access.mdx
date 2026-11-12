@@ -130,7 +130,7 @@ await support.generate('How do I handle a chargeback?', {
 })
 ```
 
-With Memory, the run also holds the `resource:` and `thread:` scopes from the `memory` option, here `resource:dana` and `thread:ticket-91`. A run can hold only one of each. If you pass a `resource:` scope that differs from `memory.resource`, the run fails. Pass raw IDs. Knowledge encodes them for you.
+With Memory, the run also holds the `resource:` and `thread:` scopes from the `memory` option, here `resource:dana` and `thread:ticket-91`. A run can hold only one of each. If you pass a `resource:` scope that differs from `memory.resource`, the run fails. `resource:` and `thread:` scopes take Memory's IDs unchanged, and Knowledge encodes them. Every other scope is a canonical address: encode an ID that contains `:`, `/`, `#` or `%` with [`encodeKnowledgeScopeId()`](/reference/knowledge/knowledge-memory-scopes#encodeknowledgescopeid), such as `` `org:${encodeKnowledgeScopeId(user.orgId)}` ``.
 
 ### For one agent
 
