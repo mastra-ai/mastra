@@ -10,11 +10,6 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   endedSpan,
-  modelSortPage,
-  modelSortNewSpan,
-  refreshedModelSortPage,
-  updatedModelSortSpan,
-  reorderedModelSortPage,
   fullSpanHeadPage,
   spanHeadPage,
   spanRowsPage,
@@ -93,51 +88,6 @@ const nextTick = () =>
 const spanIds = (spans: QuerySpansResult['spans'] | undefined) => spans?.map(span => span.spanId);
 
 describe('useSpansListSource', () => {
-  it.each(['model', 'provider'] as const)(
-    'keeps the server %s order across refreshes, including legacy display values',
-    async field => {
-      let listRequests = 0;
-      let updated = false;
-      server.use(
-        http.post(SPANS_QUERY_URL, async ({ request }) => {
-          const body = await request.json();
-          if (
-            body &&
-            typeof body === 'object' &&
-            'orderBy' in body &&
-            Array.isArray(body.orderBy) &&
-            body.orderBy[0]?.field === 'endedAt'
-          ) {
-            return HttpResponse.json({
-              spans: [updated ? updatedModelSortSpan : modelSortNewSpan],
-              page: { next: null },
-            } satisfies QuerySpansResult);
-          }
-          listRequests++;
-          return HttpResponse.json(
-            updated ? reorderedModelSortPage : listRequests === 1 ? modelSortPage : refreshedModelSortPage,
-          );
-        }),
-      );
-      const { result } = renderSource({
-        query: { ...rollingQuery, orderBy: [{ field, direction: 'asc' }] },
-        rolling: true,
-      });
-      await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['unicode-bmp', 'unicode-astral', 'legacy']));
-      await nextTick();
-      await waitFor(() =>
-        expect(spanIds(result.current.spans)).toEqual(['new-model', 'unicode-bmp', 'unicode-astral', 'legacy']),
-      );
-      await nextTick();
-      expect(listRequests).toBe(2);
-      updated = true;
-      await nextTick();
-      await waitFor(() =>
-        expect(spanIds(result.current.spans)).toEqual(['unicode-astral', 'new-model', 'unicode-bmp', 'legacy']),
-      );
-    },
-  );
-
   describe('when the window is rolling and a span ends while the list is open', () => {
     it('shows the new span at the top after one poll, without reloading the list', async () => {
       const { listBodies, headBodies } = setHandlers([spanHeadPage]);

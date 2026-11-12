@@ -24,13 +24,7 @@ import { SORT_DIR_PARAM, SORT_KEY_PARAM, readUrlSort } from '@/lib/sort/use-url-
 export const OBSERVABILITY_LIST_FILTER_PARAM_PREFIX = 'filter.';
 export const OBSERVABILITY_LIST_SORT_FIELDS = ['startedAt'] as const;
 /** Spans can also be ordered by their streaming timings, where the store supports it. */
-export const SPAN_LIST_SORT_FIELDS = [
-  'startedAt',
-  'timeToFirstChunkMs',
-  'timeToFirstTokenMs',
-  'model',
-  'provider',
-] as const;
+export const SPAN_LIST_SORT_FIELDS = ['startedAt', 'timeToFirstChunkMs', 'timeToFirstTokenMs'] as const;
 export const OBSERVABILITY_LIST_DEFAULT_DATE_PRESET: TraceDatePreset = DEFAULT_TRACES_FILTERS.datePreset;
 
 export type ObservabilityListSortDirection = 'asc' | 'desc';

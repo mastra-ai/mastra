@@ -380,39 +380,6 @@ describe('SpansExplorerBody', () => {
     });
   });
 
-  describe.each(['model', 'provider'] as const)('sorting by %s', field => {
-    it('sends ascending and descending orders through client-js and keeps them in the URL', async () => {
-      setHandlers(spanRowsPage, {
-        ...spanModelCapabilities,
-        capabilities: {
-          ...spanModelCapabilities.capabilities,
-          spanQueryModelProviderSort: true,
-        },
-      });
-      const { queries } = renderBodyAtUrl('');
-      await openColumnsMenu();
-      const label = field === 'model' ? 'Model' : 'Provider';
-      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: label }));
-      fireEvent.keyDown(document, { key: 'Escape' });
-      fireEvent.click(await screen.findByRole('button', { name: `${label}, not sorted, sort ascending` }));
-      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field, direction: 'asc' }]));
-      expect(currentSearchParams().get('sort')).toBe(field);
-      fireEvent.click(screen.getByRole('button', { name: `${label}, sorted ascending, sort descending` }));
-      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field, direction: 'desc' }]));
-      expect(currentSearchParams().get('dir')).toBe('desc');
-    });
-
-    it('shows an ordinary column and uses the default order with an older backend', async () => {
-      setHandlers(spanRowsPage, spanModelCapabilities);
-      const { queries } = renderBodyAtUrl(`sort=${field}&dir=asc`);
-      await openColumnsMenu();
-      const label = field === 'model' ? 'Model' : 'Provider';
-      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: label }));
-      expect(screen.queryByRole('button', { name: new RegExp(`^${label},`) })).toBeNull();
-      expect(queries.at(-1)?.orderBy).toEqual([{ field: 'startedAt', direction: 'desc' }]);
-    });
-  });
-
   describe('when the user turns on the Model and Provider columns', () => {
     it("shows each span's model and provider in the list", async () => {
       setHandlers(spanRowsPage);

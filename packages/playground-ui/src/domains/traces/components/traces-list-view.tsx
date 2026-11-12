@@ -105,12 +105,12 @@ function AbbreviatedLabel({ abbreviation, title }: { abbreviation: string; title
 }
 
 /** Columns the list can be ordered by, named like the query `orderBy` fields. */
-export type TracesListSortField = 'startedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'model' | 'provider';
-export type TracesListSort<F extends TracesListSortField = TracesListSortField> = { field: F; direction: DataListSort };
+export type TracesListSortField = 'startedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
+export type TracesListSort = { field: TracesListSortField; direction: DataListSort };
 
-const DEFAULT_SORTABLE_FIELDS = ['startedAt'] as const;
+const DEFAULT_SORTABLE_FIELDS: readonly TracesListSortField[] = ['startedAt'];
 
-export type TracesListViewProps<F extends TracesListSortField = TracesListSortField> = {
+export type TracesListViewProps = {
   traces: TracesListViewTrace[];
   isLoading?: boolean;
   isFetchingNextPage?: boolean;
@@ -140,10 +140,10 @@ export type TracesListViewProps<F extends TracesListSortField = TracesListSortFi
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
   /** Current order of the list; only the header of `sort.field` shows a direction. */
-  sort?: TracesListSort<F | 'startedAt'>;
+  sort?: TracesListSort;
   /** Headers that become sortable when `onSortChange` is provided. Defaults to Start only. */
-  sortableFields?: readonly F[];
-  onSortChange?: (sort: TracesListSort<F | 'startedAt'>) => void;
+  sortableFields?: readonly TracesListSortField[];
+  onSortChange?: (sort: TracesListSort) => void;
   /** When provided, custom column headers offer an `is <value>` filter for every value currently listed. */
   onFilterByField?: (field: TraceCustomColumn, value: string) => void;
   /** Storage id for the persisted column order. Use a distinct id per page so each keeps its own order. */
@@ -156,7 +156,7 @@ export type TracesListViewProps<F extends TracesListSortField = TracesListSortFi
  * Virtualized presentational list. Renders only the visible window via TanStack Virtual, and
  * uses DataList primitives for layout (CSS Grid with subgrid rows).
  */
-export function TracesListView<F extends TracesListSortField>({
+export function TracesListView({
   traces,
   isLoading,
   isFetchingNextPage,
@@ -172,22 +172,19 @@ export function TracesListView<F extends TracesListSortField>({
   usageByTraceId,
   onTraceClick,
   sort,
-  sortableFields,
+  sortableFields = DEFAULT_SORTABLE_FIELDS,
   onSortChange,
   onFilterByField,
   listId = 'all-traces',
   outcomeColumn = true,
-}: TracesListViewProps<F>) {
+}: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences, { outcomeColumn });
   const columnKeys = buildTraceListColumnKeys(columnPreferences, { outcomeColumn });
-  const availableSortFields = sortableFields ?? DEFAULT_SORTABLE_FIELDS;
-  const isSortable = (field: TracesListSortField): field is F | 'startedAt' =>
-    !!onSortChange && availableSortFields.some(allowed => allowed === field);
+  const isSortable = (field: TracesListSortField) => !!onSortChange && sortableFields.includes(field);
   const sortFor = (field: TracesListSortField) => (sort?.field === field ? sort.direction : undefined);
-  const handleSortChange = (direction: DataListSort, field: TracesListSortField) => {
-    if (isSortable(field)) onSortChange?.({ field, direction });
-  };
+  const handleSortChange = (direction: DataListSort, field: TracesListSortField) =>
+    onSortChange?.({ field, direction });
 
   const virtualizer = useVirtualizer({
     count: traces.length,
@@ -290,32 +287,8 @@ export function TracesListView<F extends TracesListSortField>({
         {hasTraceColumn(columnPreferences, 'environment') && (
           <TracesDataList.TopCell>Environment</TracesDataList.TopCell>
         )}
-        {hasTraceColumn(columnPreferences, 'model') &&
-          (isSortable('model') ? (
-            <TracesDataList.SortableTopCell
-              sortKey="model"
-              sort={sortFor('model')}
-              onSortChange={handleSortChange}
-              label="Model"
-            >
-              Model
-            </TracesDataList.SortableTopCell>
-          ) : (
-            <TracesDataList.TopCell>Model</TracesDataList.TopCell>
-          ))}
-        {hasTraceColumn(columnPreferences, 'provider') &&
-          (isSortable('provider') ? (
-            <TracesDataList.SortableTopCell
-              sortKey="provider"
-              sort={sortFor('provider')}
-              onSortChange={handleSortChange}
-              label="Provider"
-            >
-              Provider
-            </TracesDataList.SortableTopCell>
-          ) : (
-            <TracesDataList.TopCell>Provider</TracesDataList.TopCell>
-          ))}
+        {hasTraceColumn(columnPreferences, 'model') && <TracesDataList.TopCell>Model</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'provider') && <TracesDataList.TopCell>Provider</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'inputTokens') && (
           <TracesDataList.TopCell className="justify-end text-right">Input tokens</TracesDataList.TopCell>
         )}
