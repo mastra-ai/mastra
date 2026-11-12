@@ -191,6 +191,8 @@ export const queryKeys = {
     ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (agentControllerId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'settings'] as const,
+  agentControllerGoal: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'goal'] as const,
   agentControllerPermissions: (agentControllerId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'permissions'] as const,
   agentControllerThreads: (agentControllerId: string | undefined, sessionId: string | undefined) =>

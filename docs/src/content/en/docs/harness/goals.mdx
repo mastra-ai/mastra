@@ -101,9 +101,11 @@ const worker = new Agent({
   memory,
   goal: {
     // A resolver function lets you inject provider credentials and read the
-    // current judge selection at runtime; returning `undefined` keeps the
-    // goal step a no-op.
-    judge: ({ requestContext }) => resolveJudgeModel(requestContext),
+    // current judge selection at runtime. `judgeModelId` is the goal's own
+    // judge model, when one was set for the goal. Returning `undefined` falls
+    // back to that id, and keeps the goal step a no-op when there is none. If
+    // the resolver throws, the goal is paused.
+    judge: ({ requestContext, judgeModelId }) => resolveJudgeModel(requestContext, judgeModelId),
     maxRuns: 30,
     prompt: 'Only mark the goal complete when tests pass.',
   },

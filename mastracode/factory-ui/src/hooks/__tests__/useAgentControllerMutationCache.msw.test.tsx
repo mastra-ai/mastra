@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
-import { useSetAgentControllerGoalMutation } from '../useAgentControllerGoalMutations';
+import {
+  useAgentControllerGoal,
+  useClearAgentControllerGoalMutation,
+  useSetAgentControllerGoalMutation,
+} from '../useAgentControllerGoalMutations';
 import { useSendAgentControllerMessageMutation } from '../useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../useAgentControllerSettings';
 import { useSetAgentControllerStateMutation } from '../useAgentControllerStateMutations';
@@ -91,7 +95,43 @@ describe('agent-controller mutation hooks cache behavior', () => {
 
     expect(result.current.settingsQuery.data?.smartEditing).toBe(false);
     expect(onReadState).toHaveBeenCalledTimes(1);
-    expect(onSetGoal).toHaveBeenCalledWith({ objective: 'ship refactor' });
+    expect(onSetGoal).toHaveBeenCalledWith({ objective: 'ship refactor', start: true });
+  });
+
+  it('keeps the cached goal in step with set and clear', async () => {
+    server.use(
+      http.get(`${sessionUrl}/goal`, () => HttpResponse.json({})),
+      http.post(`${sessionUrl}/goal`, () =>
+        HttpResponse.json({
+          goal: {
+            objective: 'ship refactor',
+            status: 'active',
+            runsUsed: 0,
+            maxRuns: 5,
+            startedAt: '2026-11-06T00:00:00.000Z',
+            updatedAt: '2026-11-06T00:00:00.000Z',
+          },
+        }),
+      ),
+      http.delete(`${sessionUrl}/goal`, () => HttpResponse.json({ ok: true })),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      goal: useAgentControllerGoal(hookArgs),
+      setGoal: useSetAgentControllerGoalMutation(hookArgs),
+      clearGoal: useClearAgentControllerGoalMutation(hookArgs),
+    }));
+
+    await waitFor(() => expect(result.current.goal.isSuccess).toBe(true));
+    expect(result.current.goal.data).toBeNull();
+
+    await act(async () => result.current.setGoal.mutateAsync('ship refactor'));
+    await waitForMutationsIdle(client);
+    expect(result.current.goal.data).toMatchObject({ objective: 'ship refactor', status: 'active', maxRuns: 5 });
+
+    await act(async () => result.current.clearGoal.mutateAsync());
+    await waitForMutationsIdle(client);
+    expect(result.current.goal.data).toBeNull();
   });
 
   it('refreshes only the exact project thread list after creating a thread', async () => {
