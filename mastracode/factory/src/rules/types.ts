@@ -660,6 +660,8 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   source: WorkItemSource;
   sourceKey: string;
   title: string;
+  /** The new card's own description. Only seeds a card being created; an existing card's is left alone. */
+  description?: string;
   url: string | null;
   stage: FactoryRuleStage;
   /**
