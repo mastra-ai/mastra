@@ -1,6 +1,6 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { queryKeys } from '../../../../api/keys';
@@ -44,13 +44,71 @@ function callbackErrorMessage(code: string | null): string | undefined {
   return code && Object.hasOwn(callbackErrorMessages, code) ? callbackErrorMessages[code] : undefined;
 }
 
+export type GitHubAppCallbackResult =
+  | { kind: 'requested' }
+  | { kind: 'installed' }
+  | { kind: 'user_authorized' }
+  | { kind: 'error'; message: string };
+
+const GITHUB_CONNECTION_FAILED = 'GitHub connection failed';
+
+function callbackResult(searchParams: URLSearchParams): GitHubAppCallbackResult | undefined {
+  if (searchParams.get('github_app_requested') === 'true') return { kind: 'requested' };
+  if (searchParams.get('github_app_installed') === 'true') return { kind: 'installed' };
+  if (searchParams.get('github_app_user_authorized') === 'true') return { kind: 'user_authorized' };
+  if (searchParams.has('github_app_error'))
+    return {
+      kind: 'error',
+      message: callbackErrorMessage(searchParams.get('github_app_error')) ?? GITHUB_CONNECTION_FAILED,
+    };
+  return undefined;
+}
+
+function toastCallbackResult(result: GitHubAppCallbackResult): void {
+  switch (result.kind) {
+    case 'requested':
+      toast.success(
+        'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
+      );
+      return;
+    case 'installed':
+      toast.success('GitHub App installed');
+      return;
+    case 'user_authorized':
+      toast.success('GitHub account connected');
+      return;
+    case 'error':
+      if (result.message === GITHUB_CONNECTION_FAILED) {
+        toast.error(result.message);
+        return;
+      }
+      // Mapped messages explain what to do next, so keep them up until dismissed.
+      toast.error(result.message, { duration: Infinity });
+  }
+}
+
 function hasGitHubAppCallback(searchParams: URLSearchParams): boolean {
   return callbackParamNames.some(name => searchParams.has(name));
 }
 
-export function GitHubAppCallbackHandler() {
+/**
+ * With `onResult`, the page shows the requested and error states inline and only success toasts remain.
+ * Without it, every result is a toast.
+ */
+export function GitHubAppCallbackHandler({ onResult }: { onResult?: (result: GitHubAppCallbackResult) => void } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const reportResult = useEffectEvent((result: GitHubAppCallbackResult) => {
+    onResult?.(result);
+    // The route tree mounts before the app-level Toaster sibling in main.tsx.
+    // Defer one microtask so the toaster's own passive effects subscribe before
+    // this callback emits a notification on initial page load.
+    queueMicrotask(() => {
+      // A page with `onResult` shows the requested and error states inline instead.
+      if (onResult && (result.kind === 'requested' || result.kind === 'error')) return;
+      toastCallbackResult(result);
+    });
+  });
 
   useEffect(() => {
     if (!hasGitHubAppCallback(searchParams)) return;
@@ -59,34 +117,12 @@ export function GitHubAppCallbackHandler() {
     if (handledCallbackKeys.has(callbackKey)) return;
     handledCallbackKeys.add(callbackKey);
 
-    const requested = searchParams.get('github_app_requested') === 'true';
-    const installed = searchParams.get('github_app_installed') === 'true';
-    const userAuthorized = searchParams.get('github_app_user_authorized') === 'true';
-    const failed = searchParams.has('github_app_error');
-    const errorMessage = callbackErrorMessage(searchParams.get('github_app_error'));
+    const result = callbackResult(searchParams);
 
     void queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
 
-    // The route tree mounts before the app-level Toaster sibling in main.tsx.
-    // Defer one microtask so the toaster's own passive effects subscribe before
-    // this callback emits a notification on initial page load.
-    queueMicrotask(() => {
-      if (requested) {
-        toast.success(
-          'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
-        );
-      } else if (installed) {
-        toast.success('GitHub App installed');
-      } else if (userAuthorized) {
-        toast.success('GitHub account connected');
-      } else if (errorMessage) {
-        // These explain what to do next, so keep them up until dismissed.
-        toast.error(errorMessage, { duration: Infinity });
-      } else if (failed) {
-        toast.error('GitHub connection failed');
-      }
-    });
+    if (result) reportResult(result);
 
     setSearchParams(
       prev => {

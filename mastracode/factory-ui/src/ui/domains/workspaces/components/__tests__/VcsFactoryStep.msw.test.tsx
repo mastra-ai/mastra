@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { VcsFactoryStep } from '../VcsFactoryStep';
+import type { VcsFactoryStepProps } from '../VcsFactoryStep';
 
 const connectedGithub = {
   enabled: true,
@@ -28,6 +29,19 @@ const repo = {
   sandboxWorkdir: '/workspace/hello',
 };
 
+function renderStep(props: Partial<VcsFactoryStepProps> = {}) {
+  return renderWithProviders(
+    <VcsFactoryStep
+      githubRedirecting={false}
+      onDismissGithubCallback={vi.fn()}
+      onConnect={vi.fn()}
+      onManageConnection={vi.fn()}
+      onSelectRepository={vi.fn()}
+      {...props}
+    />,
+  );
+}
+
 describe('VCS Factory step', () => {
   beforeEach(() => {
     server.use(http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })));
@@ -36,14 +50,7 @@ describe('VCS Factory step', () => {
   it('requires an explicit selection and Continue, and clears selection when searching', async () => {
     server.use(http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)));
     const onSelectRepository = vi.fn();
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={onSelectRepository}
-      />,
-    );
+    renderStep({ onSelectRepository });
     const user = userEvent.setup();
     const radio = await screen.findByRole('radio', { name: 'octo/hello' });
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
@@ -67,14 +74,7 @@ describe('VCS Factory step', () => {
       }),
     );
 
-    const { client } = renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    const { client } = renderStep();
 
     const search = await screen.findByLabelText('Search repositories');
     await waitForMutationsIdle(client);
@@ -100,14 +100,7 @@ describe('VCS Factory step', () => {
         return HttpResponse.json({ repos: [repo] });
       }),
     );
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('503');
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -126,16 +119,9 @@ describe('VCS Factory step', () => {
         return HttpResponse.json({ enabled: true, configured: false, reauthRequired: false, reason: 'not_connected' });
       }),
     );
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'GitLab' }));
     expect(await screen.findByText("Couldn't load GitLab status.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Retry GitLab' }));
     expect(await screen.findByRole('button', { name: /Connect GitLab/ })).toBeEnabled();
@@ -172,25 +158,21 @@ describe('VCS Factory step', () => {
       ),
     );
 
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep();
 
-    expect(await screen.findByLabelText('Search repositories')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Change provider' }));
-    expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Continue with GitLab/ })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'GitHub' })).toBeChecked();
 
-    await userEvent.click(screen.getByRole('button', { name: /Continue with GitLab/ }));
+    await userEvent.click(screen.getByRole('radio', { name: 'GitLab' }));
 
-    expect(await screen.findByLabelText('Search repositories')).toBeInTheDocument();
-    expect(await screen.findByText('group/project')).toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'group/project' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Search repositories')).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'octo/hello' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'GitHub' }));
+
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'group/project' })).not.toBeInTheDocument();
   });
 
   it('prefers the deployment GitHub connect flow when it is configured', async () => {
@@ -210,14 +192,7 @@ describe('VCS Factory step', () => {
     const onConnect = vi.fn();
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={onConnect}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep({ onConnect });
 
     await userEvent.click(await screen.findByRole('button', { name: 'Connect GitHub' }));
 
@@ -235,18 +210,10 @@ describe('VCS Factory step', () => {
       ),
     );
 
-    renderWithProviders(
-      <VcsFactoryStep
-        initialRepository={repo}
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep({ initialRepository: repo });
 
     expect(await screen.findByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
-    expect(screen.queryByText('GitHub connected')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
 
@@ -281,16 +248,9 @@ describe('VCS Factory step', () => {
     );
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'GitLab' }));
     expect(await screen.findByText('Projects, branches, and merge requests.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
 
@@ -324,14 +284,7 @@ describe('VCS Factory step', () => {
     );
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep();
 
     const github = await screen.findByRole('button', { name: /Connect GitHub/ });
     const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
@@ -366,16 +319,9 @@ describe('VCS Factory step', () => {
       }),
     );
 
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'GitLab' }));
     expect(await screen.findByText('Join an organization to connect GitLab.')).toBeInTheDocument();
     const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
     expect(gitlab).toBeDisabled();
@@ -399,18 +345,67 @@ describe('VCS Factory step', () => {
       ),
     );
 
-    renderWithProviders(
-      <VcsFactoryStep
-        githubRedirecting={false}
-        onConnect={vi.fn()}
-        onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
-      />,
-    );
+    renderStep();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'GitLab' }));
     expect(await screen.findByText('Projects, branches, and merge requests.')).toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN_TYPE')).not.toBeInTheDocument();
+  });
+
+  it('re-checks GitHub when an approval was requested', async () => {
+    let statusCalls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => {
+        statusCalls += 1;
+        return HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' });
+      }),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+      ),
+    );
+
+    const { client } = renderStep({ githubCallback: { kind: 'requested' } });
+
+    expect(await screen.findByText('GitHub App installation requested')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    const before = statusCalls;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitForMutationsIdle(client);
+
+    expect(statusCalls).toBe(before + 1);
+  });
+
+  it('lists repositories once an approval requested from a connected GitHub account is granted', async () => {
+    let statusCalls = 0;
+    const refreshes: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => {
+        statusCalls += 1;
+        return HttpResponse.json(connectedGithub);
+      }),
+      // The new installation only shows up once the server re-syncs installations.
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        const refresh = new URL(request.url).searchParams.get('refresh');
+        if (refresh) refreshes.push(refresh);
+        return HttpResponse.json({ repos: refresh ? [repo] : [] });
+      }),
+    );
+
+    const { client } = renderStep({ githubCallback: { kind: 'requested' } });
+
+    expect(await screen.findByText('No GitHub repositories found.')).toBeInTheDocument();
+    expect(screen.getByText('GitHub App installation requested')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    const before = statusCalls;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(refreshes).toHaveLength(1);
+    expect(statusCalls).toBe(before + 1);
+    expect(screen.queryByText('GitHub App installation requested')).not.toBeInTheDocument();
   });
 });

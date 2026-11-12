@@ -1,13 +1,4 @@
-@keyframes onboarding-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* Opacity only: a transform on the open section would break its pinned mobile action (position: fixed). */
 @keyframes onboarding-fade {
   from {
     opacity: 0;
@@ -16,12 +7,10 @@
     opacity: 1;
   }
 }
-.onboarding-progress-fill {
-  transform-origin: left;
-}
 @media (prefers-reduced-motion: no-preference) {
+  /* Backwards, not both: a held opacity keeps the card a stacking context that paints its shadow over the next row. */
   .onboarding-reveal {
-    animation: onboarding-reveal 240ms ease-out both;
+    animation: onboarding-fade 240ms ease-out backwards;
   }
   .onboarding-account-labels {
     animation: onboarding-fade 240ms ease-out 540ms backwards;
@@ -29,9 +18,90 @@
   .onboarding-context {
     animation: onboarding-fade 240ms ease-out backwards;
   }
-  .onboarding-progress-fill {
-    transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * Model step folds share one time and curve, so a choice that opens while another folds keeps the group's
+ * height. Content blurs out and in rather than popping. `filter: none` at rest: a lasting filter, like a
+ * transform, would trap the pinned mobile action.
+ */
+.onboarding-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  filter: blur(4px);
+}
+.onboarding-fold[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  filter: none;
+}
+/*
+ * Clip the Base UI panel with room around it, so a lane card's rim and shadow still show at rest.
+ * clip-path, not overflow-clip-margin: Safari has no overflow-clip-margin.
+ */
+.onboarding-collapse > [data-slot='collapsible-content'] {
+  overflow: visible;
+  clip-path: inset(-8px);
+}
+.onboarding-collapse > [data-slot='collapsible-content']:is([data-starting-style], [data-ending-style]) > * {
+  opacity: 0;
+  filter: blur(4px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-fold {
+    transition:
+      grid-template-rows var(--duration-normal) var(--ease-out-custom),
+      opacity var(--duration-normal) var(--ease-out-custom),
+      filter var(--duration-normal) var(--ease-out-custom);
   }
+  .onboarding-collapse > [data-slot='collapsible-content'] > *,
+  .onboarding-enter {
+    transition:
+      opacity var(--duration-normal) var(--ease-out-custom),
+      filter var(--duration-normal) var(--ease-out-custom);
+  }
+  .onboarding-enter {
+    @starting-style {
+      opacity: 0;
+      filter: blur(4px);
+    }
+  }
+}
+/* Reduced motion drops the height changes and blurs; a choice's description still fades. */
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-fold {
+    transition: opacity var(--duration-normal) var(--ease-out-custom);
+  }
+  .onboarding-collapse > [data-slot='collapsible-content'] {
+    transition: none;
+  }
+}
+
+/*
+ * Card shadows after ChatGPT's composer: a 1px-blurred hairline instead of a hard rim, then one soft drop
+ * (short at rest, long for the open section). Dark keeps the DS inset rim, since a black hairline vanishes
+ * on a dark canvas, and lets the drops carry further.
+ */
+.onboarding-card {
+  box-shadow:
+    inset 0 0 0 1px var(--surface-rim),
+    0 2px 6px oklch(0% 0 0deg / 25%);
+}
+.onboarding-card-open {
+  box-shadow:
+    inset 0 0 0 1px var(--surface-rim),
+    0 8px 24px oklch(0% 0 0deg / 40%);
+}
+html.light .onboarding-card {
+  box-shadow:
+    0 0 1px oklch(0% 0 0deg / 40%),
+    0 4px 4px oklch(0% 0 0deg / 4%);
+}
+html.light .onboarding-card-open {
+  box-shadow:
+    0 0 1px oklch(0% 0 0deg / 40%),
+    0 8px 16px oklch(0% 0 0deg / 8%);
 }
 
 .onboarding-sketch {
@@ -83,8 +153,6 @@
 .onboarding-preview {
   display: grid;
   align-content: center;
-  align-self: start;
-  height: calc(100dvh - 5rem);
 }
 .onboarding-diagram {
   aspect-ratio: 5 / 4;
@@ -109,96 +177,5 @@
     transition:
       opacity 240ms ease-out 540ms,
       visibility 0s;
-  }
-}
-
-@media (max-width: 899px) {
-  .onboarding-page {
-    height: 100dvh;
-    min-height: 0;
-    padding-bottom: 76px;
-    overflow-y: auto;
-  }
-  .onboarding-layout {
-    height: 100%;
-    min-height: 0;
-    padding: 20px 24px 8px;
-    grid-template-areas: 'brand' 'back' 'heading' 'description' 'form' 'visual';
-    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
-  }
-  .onboarding-form-column,
-  .onboarding-content {
-    display: contents;
-  }
-  .onboarding-brand {
-    grid-area: brand;
-    margin-bottom: 12px;
-  }
-  .onboarding-back {
-    grid-area: back;
-    margin-bottom: 12px;
-  }
-  .onboarding-heading {
-    grid-area: heading;
-    min-height: 0;
-    max-width: none;
-  }
-  .onboarding-description {
-    grid-area: description;
-    min-height: 0;
-    margin-top: 8px;
-  }
-  .onboarding-form {
-    grid-area: form;
-    margin-top: 16px;
-    max-width: none;
-    width: 100%;
-    max-height: 53dvh;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-bottom: 2px;
-  }
-  .onboarding-form > section,
-  .onboarding-form > div {
-    max-width: none;
-    width: 100%;
-  }
-  .onboarding-form[data-step='project-management'] {
-    display: flex;
-    overflow: visible;
-  }
-  .onboarding-preview {
-    grid-area: visual;
-    container-type: size;
-    padding: 0;
-    min-height: 0;
-    width: 100%;
-    height: 100%;
-    align-self: stretch;
-  }
-  .onboarding-diagram {
-    width: min(100cqw, 125cqh, 400px);
-    height: auto;
-    display: none;
-  }
-  @container (min-width: 260px) and (min-height: 208px) {
-    .onboarding-diagram {
-      display: block;
-    }
-  }
-  .onboarding-intake-detail,
-  .onboarding-ticket-title {
-    display: none;
-  }
-  .onboarding-scene-detail {
-    display: none;
-  }
-}
-@media (min-width: 600px) and (max-width: 899px) {
-  .onboarding-layout {
-    padding-inline: 40px;
-  }
-  .onboarding-diagram {
-    width: min(100cqw, 125cqh, 500px);
   }
 }

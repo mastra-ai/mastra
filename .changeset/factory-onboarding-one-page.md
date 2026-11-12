@@ -1,0 +1,5 @@
+---
+'mastra': patch
+---
+
+Redesigned Factory onboarding as one page with Codebase, Work, Accounts and Model sections. Finished sections collapse to a summary you can change in place, with sections sliding smoothly as they open and close, GitHub install problems appear inside the Codebase section, and Create factory stays disabled until every required account and model is ready. Accounts asks who pays for model usage (one company account, company for Factory work and personal accounts for sessions, or everyone's own account), and Model, right below it, shows the accounts that answer needs. Each account switches between the recommended Mastra Gateway and your own provider, picked from one searchable list of API key and subscription providers. Since the gateway bills the organization's credits, personal session accounts under company work and personal sessions use your own provider only. The gateway connects from its own button in the account, and Create factory sits below the cards. The account menu on the onboarding page now lets you switch between System, Light and Dark themes.

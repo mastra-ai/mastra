@@ -9,8 +9,13 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import type { ProviderInfo } from '../../../../../api/types';
 import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
 import { CreateFactoryModelStep } from '../create-factory/CreateFactoryModelStep';
-import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
-import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
+import {
+  chooseProvider,
+  chooseSubscription,
+  modelSectionRepository,
+  openProviderList,
+  renderModelSection,
+} from './fixtures/modelSection';
 
 function registerAuthHandler() {
   server.use(
@@ -33,6 +38,8 @@ function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void, on
   );
 }
 
+const openaiModels = [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }];
+
 describe('Model provider onboarding', () => {
   describe('when the provider catalog cannot be loaded', () => {
     it('shows the request error instead of an empty provider result', async () => {
@@ -44,15 +51,16 @@ describe('Model provider onboarding', () => {
         http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
       );
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Provider catalog unavailable');
       expect(screen.queryByText(/No providers match/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     });
   });
 
   describe('when the provider catalog contains sign-in and API-key providers', () => {
-    it('shows API-key providers by default and filters them through search', async () => {
+    it('shows API-key providers first, switches to subscriptions, and searches across both', async () => {
       const providers: ProviderInfo[] = [
         { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: [] } },
         { provider: 'amazon-bedrock', source: 'none' },
@@ -65,16 +73,26 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
 
-      expect(await screen.findByRole('tab', { name: 'Provider sign-in' })).toBeInTheDocument();
+      await openProviderList(user);
+      expect(screen.getByRole('radio', { name: 'API key' })).toBeChecked();
       expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Groq' })).toBeInTheDocument();
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'bedrock');
 
       expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Groq' })).not.toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: 'Provider sign-in' })).toBeInTheDocument();
+
+      await user.clear(screen.getByRole('searchbox', { name: 'Search model providers' }));
+      await user.click(screen.getByRole('radio', { name: 'Subscription' }));
+      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
+
+      // A match only under API key brings that tab forward instead of showing an empty list.
+      await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'bedrock');
+      expect(screen.getByRole('radio', { name: 'API key' })).toBeChecked();
+      expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
 
       await user.clear(screen.getByRole('searchbox', { name: 'Search model providers' }));
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'no-such-provider');
@@ -99,6 +117,7 @@ describe('Model provider onboarding', () => {
           HttpResponse.json({
             providers: [
               { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: [] } },
+              { provider: 'groq', source: 'none' },
               connected
                 ? {
                     provider: 'mastra',
@@ -143,24 +162,82 @@ describe('Model provider onboarding', () => {
     it('connects the Mastra Gateway in one click and starts on its default model', async () => {
       registerAuthHandler();
       const { connectBodies } = registerGatewayHandlers({ remainingCredits: 12.4 });
-      const onComplete = vi.fn();
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
+      const { onCreate } = renderModelSection();
 
       const useGateway = await screen.findByRole('button', { name: 'Connect Mastra Gateway' });
       expect(await screen.findByText('Pay with your organization’s Mastra credits ($12.40 left)')).toBeVisible();
       expect(screen.queryByRole('button', { name: 'Mastra Gateway' })).not.toBeInTheDocument();
       await user.click(useGateway);
 
-      await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
       expect(connectBodies).toEqual([{ scope: 'org' }]);
-      expect(onComplete).toHaveBeenCalledWith({
-        providerId: 'mastra',
-        method: 'api_key',
-        modelId: 'mastra/anthropic/claude-opus-5.5',
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'factory',
+        model: { providerId: 'mastra', method: 'api_key', modelId: 'mastra/anthropic/claude-opus-5.5' },
       });
       expect(screen.queryByText('No gateway credits left')).not.toBeInTheDocument();
+    });
+
+    it('shows the gateway connection and its model in the lane', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 12.4 });
+      const user = userEvent.setup();
+
+      const { onCreate } = renderModelSection();
+
+      expect(await screen.findByRole('radio', { name: 'Mastra Gateway' })).toBeChecked();
+      expect(screen.getByText('Recommended')).toBeVisible();
+      expect(screen.queryByText('Connected')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Connect Mastra Gateway' }));
+
+      expect(await screen.findByText('Connected')).toBeVisible();
+      expect(screen.getByText('Pay with your organization’s Mastra credits ($12.40 left)')).toBeVisible();
+      expect(await screen.findByRole('combobox')).toHaveValue('Claude Opus 5.5');
+      expect(screen.getByRole('radio', { name: 'Mastra Gateway' })).toBeChecked();
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'factory',
+        model: { providerId: 'mastra', method: 'api_key', modelId: 'mastra/anthropic/claude-opus-5.5' },
+      });
+    });
+
+    it('drops a connected gateway when the account switches to its own provider', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 12.4 });
+      const user = userEvent.setup();
+
+      renderModelSection();
+      await user.click(await screen.findByRole('button', { name: 'Connect Mastra Gateway' }));
+      expect(await screen.findByRole('combobox')).toHaveValue('Claude Opus 5.5');
+
+      await user.click(screen.getByRole('radio', { name: 'Your own provider' }));
+
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Choose a provider' })).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+    });
+
+    it('keeps the organization-billed gateway to Factory work when sessions use personal accounts', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 12.4 });
+      const user = userEvent.setup();
+
+      renderModelSection({ draft: { modelScope: 'hybrid' } });
+      const work = within(await screen.findByRole('group', { name: 'Factory work' }));
+      expect(await work.findByRole('radio', { name: 'Mastra Gateway' })).toBeChecked();
+      await user.click(screen.getByRole('button', { name: 'Connect Mastra Gateway' }));
+      expect(await work.findByRole('combobox')).toHaveValue('Claude Opus 5.5');
+
+      const sessions = within(screen.getByRole('group', { name: 'Your sessions' }));
+      expect(sessions.queryByRole('radio', { name: 'Mastra Gateway' })).not.toBeInTheDocument();
+      expect(sessions.getByRole('button', { name: 'Choose a provider' })).toBeVisible();
+      expect(screen.queryByRole('button', { name: /Mastra Gateway/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     });
 
     it('sends the organization to add credits on Mastra in a new tab when it has none left', async () => {
@@ -168,14 +245,14 @@ describe('Model provider onboarding', () => {
       registerGatewayHandlers({ remainingCredits: 0 });
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
       await user.click(await screen.findByRole('button', { name: 'Connect Mastra Gateway' }));
 
       expect(await screen.findByText('No gateway credits left')).toBeVisible();
       const addCredits = screen.getByRole('link', { name: 'Add credits' });
       expect(addCredits).toHaveAttribute('href', 'https://projects.mastra.ai/add-credits/org-1');
       expect(addCredits).toHaveAttribute('target', '_blank');
-      expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
     });
 
     it('asks a member who is not a Mastra admin to get an admin to add credits', async () => {
@@ -183,7 +260,7 @@ describe('Model provider onboarding', () => {
       registerGatewayHandlers({ remainingCredits: 0, canAddCredits: false });
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
       await user.click(await screen.findByRole('button', { name: 'Connect Mastra Gateway' }));
 
       expect(await screen.findByText('Ask an admin of your Mastra organization to add credits.')).toBeVisible();
@@ -195,11 +272,32 @@ describe('Model provider onboarding', () => {
       registerGatewayHandlers({});
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
       await user.click(await screen.findByRole('button', { name: 'Connect Mastra Gateway' }));
 
-      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
+      expect(await screen.findByRole('combobox')).toHaveValue('Claude Opus 5.5');
       expect(screen.queryByText('No gateway credits left')).not.toBeInTheDocument();
+    });
+
+    it('connects the gateway from its account while Create factory waits for a ready model', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 12.4 });
+      const user = userEvent.setup();
+
+      renderModelSection({ draft: { modelScope: 'user' } });
+
+      const account = within(await screen.findByRole('group', { name: 'Your account' }));
+      expect(await account.findByRole('radio', { name: 'Mastra Gateway' })).toBeChecked();
+      expect(account.getByRole('button', { name: 'Connect Mastra Gateway' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+
+      await user.click(account.getByRole('radio', { name: 'Your own provider' }));
+      expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+      await chooseProvider(user, 'Groq', account);
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     });
   });
 
@@ -218,10 +316,13 @@ describe('Model provider onboarding', () => {
         http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
       );
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      const user = userEvent.setup();
 
-      expect(await screen.findByRole('button', { name: 'Mastra Gateway' })).toBeInTheDocument();
+      renderModelSection();
+
       expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+      await openProviderList(user);
+      expect(screen.getByRole('button', { name: 'Mastra Gateway' })).toBeInTheDocument();
     });
   });
 
@@ -263,7 +364,8 @@ describe('Model provider onboarding', () => {
 
     async function createCustomProvider() {
       const user = userEvent.setup();
-      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await openProviderList(user);
+      await user.click(screen.getByRole('button', { name: 'Add a custom provider' }));
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
       await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
@@ -275,10 +377,11 @@ describe('Model provider onboarding', () => {
     it('requires a model before creating a provider during setup', async () => {
       registerAuthHandler();
       registerCustomProviderHandlers();
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
       const user = userEvent.setup();
 
-      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await openProviderList(user);
+      await user.click(screen.getByRole('button', { name: 'Add a custom provider' }));
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
       await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -289,20 +392,17 @@ describe('Model provider onboarding', () => {
     it('refreshes the catalogs and continues to organization model selection', async () => {
       registerAuthHandler();
       registerCustomProviderHandlers();
-      const onComplete = vi.fn<() => void>();
-      const { client } = renderWithProviders(
-        <ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />,
-      );
+      const { client, onCreate } = renderModelSection();
 
       const user = await createCustomProvider();
       await waitForMutationsIdle(client);
 
       expect(await screen.findByRole('combobox')).toHaveValue('Model A');
-      await user.click(screen.getByRole('button', { name: 'Continue' }));
-      expect(onComplete).toHaveBeenCalledWith({
-        providerId: 'my-llm',
-        modelId: 'my-llm/model-a',
-        method: 'api_key',
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'factory',
+        model: { providerId: 'my-llm', modelId: 'my-llm/model-a', method: 'api_key' },
       });
     });
 
@@ -314,18 +414,17 @@ describe('Model provider onboarding', () => {
           HttpResponse.json({ modelId: null, thinkingLevel: null }),
         ),
       );
-      const onContinue = vi.fn<() => void>();
-      const { client } = renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
+      const { client, onCreate } = renderModelSection({ draft: { modelScope: 'user' } });
 
       const user = await createCustomProvider();
       await waitForMutationsIdle(client);
 
       expect(await screen.findByRole('combobox')).toHaveValue('Model A');
-      await user.click(screen.getByRole('button', { name: 'Review setup' }));
-      expect(onContinue).toHaveBeenCalledWith({
-        providerId: 'my-llm',
-        modelId: 'my-llm/model-a',
-        method: 'api_key',
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'user',
+        personal: { providerId: 'my-llm', method: 'api_key', modelId: 'my-llm/model-a' },
       });
     });
   });
@@ -353,10 +452,9 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
 
-      await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
-      await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
+      await chooseSubscription(user, 'Continue with Anthropic');
 
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
       expect(onStart).toHaveBeenCalledWith({ mode: 'paste-code', scope: 'org' });
@@ -367,7 +465,6 @@ describe('Model provider onboarding', () => {
     it('keeps the suggested Factory model in the draft without saving defaults', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
       const onOMDefaults = vi.fn<(body: unknown) => void>();
-      const onComplete = vi.fn<() => void>();
       const providers: ProviderInfo[] = [
         {
           provider: 'openai',
@@ -382,33 +479,27 @@ describe('Model provider onboarding', () => {
       registerPersistenceHandlers(onFactoryModel, onOMDefaults);
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
-        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-          HttpResponse.json({
-            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
-          }),
-        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
+      const { onCreate } = renderModelSection();
 
-      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+      await chooseProvider(user, 'OpenAI');
 
-      // Once the provider is set, the picker gives way to a focused model
-      // selection view: provider name, model field, and a Change escape hatch.
-      expect(screen.getByText('OpenAI')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
+      // Once the provider is set, the list closes and the lane shows the provider and its model.
+      expect(screen.getByRole('button', { name: 'Provider: OpenAI' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveValue('GPT-5.6 Sol');
-      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
 
-      await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+      await waitFor(() => expect(onCreate).toHaveBeenCalledOnce());
       expect(onFactoryModel).not.toHaveBeenCalled();
       expect(onOMDefaults).not.toHaveBeenCalled();
-      expect(onComplete).toHaveBeenCalledWith({
-        providerId: 'openai',
-        modelId: 'openai/gpt-5.6-sol',
-        method: 'api_key',
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'factory',
+        model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
       });
     });
   });
@@ -417,7 +508,6 @@ describe('Model provider onboarding', () => {
     it('still requires an organization credential and fixes the dialog to org scope', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
       const onOMDefaults = vi.fn<(body: unknown) => void>();
-      const onComplete = vi.fn<() => void>();
       let connected = false;
       registerAuthHandler();
       registerPersistenceHandlers(onFactoryModel, onOMDefaults);
@@ -437,11 +527,7 @@ describe('Model provider onboarding', () => {
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-          HttpResponse.json({
-            models: connected
-              ? [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }]
-              : [],
-          }),
+          HttpResponse.json({ models: connected ? openaiModels : [] }),
         ),
         http.put(`${TEST_BASE_URL}/web/config/providers/openai/key`, async ({ request }) => {
           // Factory setup defaults to an org-wide key so the whole team can
@@ -453,25 +539,25 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
+      const { onCreate } = renderModelSection();
 
-      // Unconnected providers are browseable without searching; picking the
-      // badge opens the API key dialog directly.
-      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+      // Picking an unconnected provider opens the API key dialog directly.
+      await chooseProvider(user, 'OpenAI');
       const dialog = within(screen.getByRole('dialog'));
       expect(dialog.queryByRole('button', { name: 'Just me' })).not.toBeInTheDocument();
       expect(dialog.queryByRole('button', { name: 'Everyone in org' })).not.toBeInTheDocument();
       await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-test');
       await user.click(dialog.getByRole('button', { name: 'Save' }));
-      await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
 
-      await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+      await waitFor(() => expect(onCreate).toHaveBeenCalledOnce());
       expect(onFactoryModel).not.toHaveBeenCalled();
       expect(onOMDefaults).not.toHaveBeenCalled();
-      expect(onComplete).toHaveBeenCalledWith({
-        providerId: 'openai',
-        modelId: 'openai/gpt-5.6-sol',
-        method: 'api_key',
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'factory',
+        model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
       });
     });
   });
@@ -501,15 +587,13 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
 
-      const bedrock = await screen.findByRole('button', { name: 'Amazon Bedrock' });
-      expect(bedrock).toBeEnabled();
-      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
-      await user.click(bedrock);
+      expect(await screen.findByRole('button', { name: 'Choose a provider' })).toBeVisible();
+      await chooseProvider(user, 'Amazon Bedrock');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveValue('Claude Sonnet 4.5');
+      expect(await screen.findByRole('combobox')).toHaveValue('Claude Sonnet 4.5');
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled();
     });
   });
 
@@ -527,28 +611,25 @@ describe('Model provider onboarding', () => {
             ],
           }),
         ),
-        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-          HttpResponse.json({
-            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
-          }),
-        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderModelSection();
 
-      expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeEnabled();
-      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
+      await openProviderList(user);
+      expect(screen.getByRole('button', { name: 'OpenAI' })).toBeEnabled();
       expect(screen.getByRole('button', { name: 'Groq' })).toBeDisabled();
-      await user.click(screen.getByRole('tab', { name: 'Provider sign-in' }));
+      await user.click(screen.getByRole('radio', { name: 'Subscription' }));
       expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeDisabled();
-      await user.click(screen.getByRole('tab', { name: 'API key' }));
+      await user.click(screen.getByRole('radio', { name: 'API key' }));
 
       await user.click(screen.getByRole('button', { name: 'OpenAI' }));
-      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled();
     });
 
-    it('sends members back to setup when no organization provider is connected', async () => {
+    it('switches members without a company account to personal accounts', async () => {
       registerAuthHandler();
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -559,14 +640,100 @@ describe('Model provider onboarding', () => {
         ),
       );
 
-      const onComplete = vi.fn();
-      const onChangeSetup = vi.fn();
-      const user = userEvent.setup();
-      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={onChangeSetup} />);
-      await user.click(await screen.findByRole('button', { name: 'Change setup' }));
-      expect(onChangeSetup).toHaveBeenCalledOnce();
-      expect(onComplete).not.toHaveBeenCalled();
-      expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+      renderModelSection({ draft: { modelScope: 'factory' } });
+
+      // Base UI renders radios as spans, so the disabled state is carried by aria-disabled.
+      expect(await screen.findByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('radio', { name: 'Company work and personal sessions' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      expect(screen.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
+      expect(
+        within(screen.getByRole('group', { name: 'Your account' })).getByRole('button', { name: 'Choose a provider' }),
+      ).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+    });
+  });
+
+  describe('when a saved choice no longer resolves', () => {
+    it('keeps Create disabled and explains a retired saved model', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: [{ provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
+      );
+
+      renderModelSection({
+        draft: {
+          modelScope: 'factory',
+          model: { providerId: 'openai', method: 'api_key', modelId: 'openai/retired-model' },
+        },
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Your previous model is no longer available. Choose another model.',
+      );
+      expect(screen.getByRole('combobox')).toHaveValue('');
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+    });
+
+    it('reopens the picker without a warning when a saved provider was never connected', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [{ provider: 'groq', source: 'none', envVar: 'GROQ_API_KEY' }] }),
+        ),
+      );
+
+      // Picking Groq and closing its key dialog persists the provider without a model.
+      renderModelSection({
+        draft: { modelScope: 'factory', model: { providerId: 'groq', method: 'api_key', modelId: '' } },
+      });
+
+      await openProviderList(userEvent.setup());
+      expect(screen.getByRole('button', { name: 'Groq' })).toBeEnabled();
+      expect(screen.queryByText(/connection changed since you chose it/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+    });
+
+    it('explains a saved connection whose method changed', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: [
+              {
+                provider: 'openai',
+                source: 'oauth-org',
+                orgCredential: 'oauth',
+                orgKey: true,
+                oauth: { supported: true, modes: ['device-code'] },
+              },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
+      );
+
+      renderModelSection({
+        draft: {
+          modelScope: 'factory',
+          model: { providerId: 'openai', method: 'api_key', modelId: 'openai/gpt-5.6-sol' },
+        },
+      });
+
+      expect(
+        await screen.findByText(
+          'Your OpenAI connection changed since you chose it. Connect it again or choose another provider.',
+        ),
+      ).toBeVisible();
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     });
   });
 
@@ -637,18 +804,20 @@ describe('Model provider onboarding', () => {
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
           HttpResponse.json({ providers: [{ provider: 'openai', source: 'stored' }] }),
         ),
-        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-          HttpResponse.json({
-            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
-          }),
-        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      const { onCreate } = renderModelSection({ local: true });
 
-      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
+      await chooseProvider(user, 'OpenAI');
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'factory',
+        model: { providerId: 'openai', method: 'api_key', modelId: 'openai/gpt-5.6-sol' },
+      });
     });
   });
 });

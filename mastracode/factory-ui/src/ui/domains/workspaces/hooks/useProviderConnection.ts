@@ -105,12 +105,20 @@ function offersApiKey(provider: ProviderInfo): boolean {
   return ['stored-org', 'stored-user', 'stored'].includes(provider.source);
 }
 
+export interface ProviderSelection {
+  providerId: string;
+  method: ProviderConnectionMethod;
+}
+
 export function useProviderConnection({
   scope,
   initialSelection,
+  onSelectionChange,
 }: {
   scope?: ProviderCredentialScope;
-  initialSelection?: { providerId: string; method: ProviderConnectionMethod };
+  initialSelection?: ProviderSelection;
+  /** Called whenever the user picks or clears a provider, before it is connected. */
+  onSelectionChange?: (selection: ProviderSelection | undefined) => void;
 } = {}): ProviderConnection {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
@@ -118,7 +126,7 @@ export function useProviderConnection({
   const startOAuthMutation = useStartProviderOAuth();
   const cancelOAuthMutation = useCancelProviderOAuth();
   const connectGatewayMutation = useConnectMastraGateway();
-  const [selection, setSelection] = useState(initialSelection);
+  const [selection, setSelection] = useState<ProviderSelection | undefined>(initialSelection);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveProviderOAuth>();
   const [error, setError] = useState<string>();
@@ -138,9 +146,10 @@ export function useProviderConnection({
   const gatewayProvider = providers.find(candidate => candidate.connectWithMastraAccount);
   const providerChoices = providers.filter(candidate => candidate !== gatewayProvider);
 
-  const select = (nextSelection: typeof selection) => {
+  const select = (nextSelection: ProviderSelection | undefined) => {
     setSelection(nextSelection);
     setError(undefined);
+    onSelectionChange?.(nextSelection);
   };
 
   const startOAuth = async (chosen: ProviderInfo) => {

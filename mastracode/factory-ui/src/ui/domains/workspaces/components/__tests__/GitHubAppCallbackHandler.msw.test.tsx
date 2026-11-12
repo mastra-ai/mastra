@@ -5,11 +5,14 @@
  * real router search params and toaster, with no component mocks.
  */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { OnboardingPage } from '../../../../pages/OnboardingPage';
 import { GitHubAppCallbackHandler } from '../GitHubAppCallbackHandler';
 
@@ -110,7 +113,12 @@ describe('GitHubAppCallbackHandler', () => {
 });
 
 describe('OnboardingPage GitHub callback', () => {
-  it('given the install callback returns to onboarding with a refusal, when onboarding renders, then it shows the reason instead of landing silently', async () => {
+  function renderOnboarding(initialEntry: string) {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
     const router = createMemoryRouter(
       [
         {
@@ -123,13 +131,39 @@ describe('OnboardingPage GitHub callback', () => {
           ),
         },
       ],
-      { initialEntries: ['/onboarding?github_app_error=github_app_installation_preexisting'] },
+      { initialEntries: [initialEntry] },
     );
     renderWithProviders(<RouterProvider router={router} />);
+    return router;
+  }
 
+  it('given the install callback returns to onboarding with a refusal, when onboarding renders, then it shows the reason in the Codebase section instead of a toast', async () => {
+    const router = renderOnboarding('/onboarding?github_app_error=github_app_installation_preexisting');
+
+    const codebase = await screen.findByRole('region', { name: 'Codebase' });
     expect(
-      await screen.findByText(/Uninstall the Mastra GitHub App from that GitHub account or organization/),
+      await within(codebase).findByText(/Uninstall the Mastra GitHub App from that GitHub account or organization/),
     ).toBeInTheDocument();
     await waitFor(() => expect(router.state.location.search).toBe(''));
+    expect(screen.getAllByText(/Uninstall the Mastra GitHub App/)).toHaveLength(1);
+
+    // Dismissing clears the page-owned callback state; the host choices stay so the user can retry.
+    await userEvent.click(within(codebase).getByRole('button', { name: 'Dismiss notice' }));
+    expect(within(codebase).queryByText(/Uninstall the Mastra GitHub App/)).not.toBeInTheDocument();
+    expect(within(codebase).getByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
+  });
+
+  it('shows an approval request inline on onboarding', async () => {
+    const router = renderOnboarding('/onboarding?github_app_requested=true');
+
+    const codebase = await screen.findByRole('region', { name: 'Codebase' });
+    expect(await within(codebase).findByText('GitHub App installation requested')).toBeInTheDocument();
+    expect(within(codebase).getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+    expect(
+      screen.queryByText(
+        'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
+      ),
+    ).not.toBeInTheDocument();
   });
 });
