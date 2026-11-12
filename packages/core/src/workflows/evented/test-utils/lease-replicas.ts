@@ -136,7 +136,14 @@ export async function startReplica<W extends Built>(
   workflow: W,
   { pubsub = new EventEmitterPubSub() as PubSub, nested = {} as Record<string, Built> } = {},
 ) {
-  const mastra = new Mastra({ logger: false, storage, pubsub, workflows: { leased: workflow, ...nested } as any });
+  const mastra = new Mastra({
+    logger: false,
+    storage,
+    pubsub,
+    workflows: { leased: workflow, ...nested } as any,
+    // A zero grace leaves only the leases to keep a replica's recovery off a run, which is what these tests check.
+    recovery: { workflowGraceMs: 0 },
+  });
   await mastra.startWorkers();
   replicas.push(mastra);
   return { mastra, pubsub, workflow };
