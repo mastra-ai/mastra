@@ -4482,6 +4482,10 @@ export class Mastra<
     return workflow as TWorkflows[TWorkflowName];
   }
 
+  /**
+   * Every RUNNING/WAITING run of the workflows recovery restarts, with full snapshots, read in one
+   * call per workflow and status. `restartAllActiveWorkflowRuns()` lists summaries instead.
+   */
   public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
     const storage = this.#storage;
     if (!storage) {
