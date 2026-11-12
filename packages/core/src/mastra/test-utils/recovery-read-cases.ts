@@ -42,6 +42,8 @@ async function countReads(storage: MastraStorage) {
   const snapshotReads: string[] = [];
   const listings: { summary?: boolean; snapshots: unknown[] }[] = [];
   const ownershipReads: number[] = [];
+  // The runs each ownership read is for: an evented run's keys are its run ID with a `::` suffix.
+  const ownershipReadRuns: number[] = [];
 
   const load = store.loadWorkflowSnapshot.bind(store);
   vi.spyOn(store, 'loadWorkflowSnapshot').mockImplementation(async args => {
@@ -62,10 +64,11 @@ async function countReads(storage: MastraStorage) {
   const owners = store.getRunOwnerships.bind(store);
   vi.spyOn(store, 'getRunOwnerships').mockImplementation(async args => {
     ownershipReads.push(args.runIds.length);
+    ownershipReadRuns.push(new Set(args.runIds.map(key => key.split('::')[0])).size);
     return owners(args);
   });
 
-  return { snapshotReads, listings, ownershipReads };
+  return { snapshotReads, listings, ownershipReads, ownershipReadRuns };
 }
 
 /** `getStorage` is the store the test writes and the recovering instance reads, cleared before each case. */
@@ -153,6 +156,8 @@ export function describeRecoveryReadCases({ getStorage }: { getStorage: () => Ma
       // the run lease of each of the 150 default-engine runs, and the liveness and wake keys of each of the
       // 80 evented runs.
       expect(reads.ownershipReads).toHaveLength(3);
+      expect(reads.ownershipReadRuns.every(count => count <= 100)).toBe(true);
+      expect(reads.ownershipReadRuns.reduce((total, count) => total + count, 0)).toBe(230);
       expect(reads.ownershipReads.reduce((total, count) => total + count, 0)).toBe(150 + 2 * 80);
       expect(executions).toEqual([]);
 
