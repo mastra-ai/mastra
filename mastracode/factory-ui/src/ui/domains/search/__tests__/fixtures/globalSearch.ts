@@ -139,6 +139,16 @@ export const workItems: WorkItem[] = [
     stageHistory: [],
     sessions: {},
     metadata: { number: 4242 },
+    workItem: {
+      provider: 'github',
+      key: null,
+      url: 'https://github.com/mastra-ai/mastra/pull/4242',
+      title: 'Bump the command palette dependencies',
+      state: 'open',
+      labels: [],
+      author: null,
+      metadata: { number: 4242 },
+    },
     triageType: null,
     acceptedAt: null,
     description: null,
@@ -242,6 +252,7 @@ export function toWireWorkItem(item: WorkItem) {
 export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams) {
   const sessionIds = query.getAll('sessionId');
   const sources = query.getAll('source');
+  const ids = query.getAll('workItemId');
   const scope = query.get('scope');
   const holdsSession = (card: WorkItem) => Object.keys(card.sessions).length > 0;
   let listed = cards;
@@ -252,7 +263,11 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
     const matches = cards
       .filter(card => !holdsSession(card))
       .filter(card => {
-        const text = [card.title, card.workItem?.key, `#${card.metadata.number}`, card.sourceKey]
+        // The number the server's `workItemNumber` reads: the source's own, else the one given to a card filed by hand.
+        const facts = card.workItem?.metadata;
+        const number =
+          facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? card.metadata.cardNumber;
+        const text = [card.title, card.workItem?.key, typeof number === 'number' ? `#${number}` : null, card.sourceKey]
           .join(' ')
           .toLowerCase();
         return words.every(word => text.includes(word));
@@ -266,6 +281,8 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
     listed = cards.filter(card => Object.values(card.sessions).some(ref => sessionIds.includes(ref.sessionId)));
   } else if (sources.length > 0) {
     listed = cards.filter(card => [card.sourceKey, card.url].some(key => key !== null && sources.includes(key)));
+  } else if (ids.length > 0) {
+    listed = cards.filter(card => ids.includes(card.id));
   }
   return {
     workItems: listed.map(toWireWorkItem),

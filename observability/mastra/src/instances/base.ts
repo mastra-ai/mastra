@@ -393,6 +393,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // The rebuilt span has no live parent, so restore the lineage computed before export
     if (span instanceof BaseSpan) {
       span.restoreEntityLineage(cached);
+      span.restoreErrorCount(cached);
     }
 
     // Rebuilding an existing completed segment must not reopen its outcome.

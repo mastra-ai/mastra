@@ -3564,7 +3564,7 @@ type Shared_Type_62 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3703,7 +3703,7 @@ type Shared_Type_64 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3935,6 +3935,8 @@ type Shared_Type_69 = {
   spanQuery: boolean;
   /** Whether completed spans can be sorted by duration */
   spanQueryDurationSort: boolean;
+  /** Whether spans can be sorted by model and provider */
+  spanQueryModelProviderSort: boolean;
   /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
   spanQueryContextFields: boolean;
   /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
@@ -10705,6 +10707,8 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'SCORER'
+          | 'PROCESSOR'
           | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
@@ -11139,7 +11143,7 @@ export type PostObservabilitySpansQuery_Body = {
   where?: InputShared_Auxiliary_231 | undefined;
   textSearch?: string | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'durationMs';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'durationMs' | 'model' | 'provider';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -15266,6 +15270,24 @@ export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
   request: PostWorkflowsWorkflowIdObserveStreamLegacy_Request;
   response: PostWorkflowsWorkflowIdObserveStreamLegacy_Response;
   responseType: 'stream';
+}
+
+// ============================================================================
+// Route: ALL /mcp
+// ============================================================================
+export type AllMcp_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface AllMcp_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: AllMcp_Request;
+  response: unknown;
+  responseType: 'mcp-http';
 }
 
 // ============================================================================
@@ -25703,6 +25725,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-legacy': PostAgentsAgentIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/stream-legacy': PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/observe-stream-legacy': PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
+  'ALL /mcp': AllMcp_RouteContract;
   'GET /mcp/v0/servers': GetMcpV0Servers_RouteContract;
   'GET /mcp/v0/servers/:id': GetMcpV0ServersId_RouteContract;
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
@@ -26441,6 +26464,9 @@ export interface Client {
   };
   '/logs/transports': {
     GET: GetLogsTransports_RouteContract;
+  };
+  '/mcp': {
+    ALL: AllMcp_RouteContract;
   };
   '/mcp/:serverId/events': {
     GET: GetMcpServerIdEvents_RouteContract;

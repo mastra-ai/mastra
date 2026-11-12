@@ -687,7 +687,29 @@ export function registerApiCommand(program: CommanderCommand): void {
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
   addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {
     description: 'List Factory work items and running sessions',
+    input: 'optional',
     routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Find work items nobody has started by title, key, number or source id',
+        command: `mastra api factory work-item list <project-id> '{"started":"false","q":"login flow","limit":10}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'starters', FACTORY_API_ROUTE_CATALOG.workItemStarters, {
+    description: 'Count the cards behind each new-session starter',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'activity', FACTORY_API_ROUTE_CATALOG.workItemActivity, {
+    description: 'List when Factory work items were created and completed since an instant',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Activity since the start of June',
+        command: `mastra api factory work-item activity <project-id> '{"since":"2026-06-01T00:00:00.000Z"}'`,
+      },
+    ],
   });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
     description: 'Create a Factory work item in Intake',

@@ -465,7 +465,7 @@ const boundedLimitSchema = (defaultValue: number, max: number) =>
       const parsed = value ? Number.parseInt(value, 10) : defaultValue;
       return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
     });
-/** Without `sessionId`, `scope`, `started` or `source`, the list is the whole board. */
+/** Without `sessionId`, `scope`, `started`, `source` or `workItemId`, the list is the whole board. */
 const workItemListQuerySchema = z
   .object({
     /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
@@ -480,6 +480,17 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
+    /** Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing. */
+    workItemId: z.array(uuidSchema).min(1).max(100).optional(),
+    /**
+     * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
+     * this server did not issue reads as none, and the board answers whole.
+     */
+    since: z
+      .string()
+      .regex(/^\d{1,15}$/)
+      .optional()
+      .catch(undefined),
   })
   .refine(query => !(query.scope && query.sessionId), {
     path: ['scope'],
@@ -496,7 +507,42 @@ const workItemListQuerySchema = z
   .refine(query => !(query.source && (query.started || query.scope || query.sessionId)), {
     path: ['source'],
     message: 'Send source without started, scope or sessionId',
-  });
+  })
+  .refine(query => !(query.workItemId && (query.source || query.started || query.scope || query.sessionId)), {
+    path: ['workItemId'],
+    message: 'Send workItemId without source, started, scope or sessionId',
+  })
+  // A narrowed list is not the board a cursor names, so it answers as it does without one.
+  .transform(query =>
+    query.sessionId || query.scope || query.started || query.source || query.workItemId
+      ? { ...query, since: undefined }
+      : query,
+  );
+
+const countSchema = z.number().int().nonnegative();
+
+/** What the draft page's starter buttons count on the project's default board. */
+export const workItemStartersResponseSchema = z.object({
+  failed: countSchema,
+  changesRequested: countSchema,
+  review: z.object({ count: countSchema, oldestOpenedAt: z.string().optional() }),
+  undecided: countSchema,
+  untriaged: countSchema,
+  unplannedBugs: countSchema,
+  sweep: z.object({ area: z.string(), count: countSchema }).optional(),
+  stale: countSchema,
+});
+
+export const workItemActivityQuerySchema = z.object({
+  since: z.iso.datetime({ offset: true }).transform(since => Date.parse(since)),
+});
+
+/** When the project's cards were created and completed since an instant, and how many cards it has in all. */
+export const workItemActivityResponseSchema = z.object({
+  total: countSchema,
+  createdAt: z.array(z.string()),
+  doneAt: z.array(z.string()),
+});
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
@@ -1040,12 +1086,34 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
     responseSchema: z.object({
+      /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
       /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
       total: z.number().int().nonnegative().optional(),
+      /** Names this read of the whole board. Absent when the next read must list it whole again. */
+      cursor: z.string().optional(),
+      /** Cards gone since the `since` sent. Its presence marks an answer that holds only what moved. */
+      removedIds: z.array(z.string()).optional(),
+      /** With `removedIds`: `boardCheck` of the whole board, for a reader to check its merged copy against. */
+      check: z.string().optional(),
     }),
+  },
+  workItemStarters: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/starters',
+    description: 'Count the cards behind each new-session starter on the default board',
+    pathSchema: projectPathSchema,
+    responseSchema: workItemStartersResponseSchema,
+  },
+  workItemActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/activity',
+    description: 'List when cards were created and completed since an instant',
+    pathSchema: projectPathSchema,
+    querySchema: workItemActivityQuerySchema,
+    responseSchema: workItemActivityResponseSchema,
   },
   workItemCreate: {
     method: 'POST',

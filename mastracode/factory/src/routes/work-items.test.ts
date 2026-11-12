@@ -63,6 +63,7 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
@@ -2310,6 +2311,210 @@ describe('run activity on the work-item listing', () => {
     return workItem;
   };
 
+  describe('a board read that sends its cursor back (?since=)', () => {
+    // Steps past the window a `since` read goes back to catch a writer whose clock runs behind.
+    const later = () => vi.setSystemTime(Date.now() + 10_000);
+    const read = async (since?: string) => {
+      const res = await buildApp(orgUser).request(since === undefined ? boardPath() : `${boardPath()}?since=${since}`);
+      const text = await res.text();
+      return { ...FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(JSON.parse(text)), bytes: text.length };
+    };
+    /** A board of `count` cards, read in full once every write to it is older than the window. */
+    const boardOf = async (count: number) => {
+      const cards: { id: string }[] = [];
+      for (let from = 0; from < count; from += 50) {
+        const ids = Array.from({ length: Math.min(50, count - from) }, (_, i) => `issue-${from + i}`);
+        cards.push(...(await Promise.all(ids.map(id => createCard(id)))));
+      }
+      later();
+      return { cards, board: await read() };
+    };
+
+    /** The card tables read from here on, and the table of deleted ids. */
+    const cardReads = () => {
+      const tables = ['factory_board_items', 'factory_work_items', 'factory_work_item_sources', 'work_items'];
+      const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+      return () =>
+        findMany.mock.calls
+          .map(([collection]) => collection)
+          .filter(collection => [...tables, 'factory_board_item_tombstones'].includes(collection));
+    };
+
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }));
+
+    it('sends only the cards written and the ids removed since the cursor', async () => {
+      const { cards, board } = await boardOf(4);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+      await json('PATCH', `/web/factory/work-items/${cards[2]!.id}`, { title: 'Reworded' });
+      await json('DELETE', `/web/factory/work-items/${cards[3]!.id}`);
+      later();
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title).sort()).toEqual(['Renamed', 'Reworded']);
+      expect(next).toMatchObject({ removedIds: [cards[3]!.id], check: boardCheck((await read()).workItems) });
+      later();
+      expect(await read(next.cursor)).toMatchObject({ workItems: [], removedIds: [], check: next.check });
+    });
+
+    it('sends a card stamped before the cursor that the cursor’s read did not hold', async () => {
+      const { board } = await boardOf(1);
+      // A second writer: its card lands after the read, stamped by a clock behind this one.
+      vi.setSystemTime(Date.now() - 2_000);
+      const late = await createCard('late');
+      later();
+
+      expect((await read(board.cursor)).workItems.map(card => card.id)).toEqual([late.id]);
+    });
+
+    it.each(['not-a-cursor', ''])('sends the whole board for the cursor %j, which it did not issue', async since => {
+      await boardOf(2);
+
+      const answer = await read(since);
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toEqual(expect.any(String));
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers one changed card in the same bytes on a board of 50 cards and of 2,000', async () => {
+      const bytes = [];
+      for (const count of [50, 2_000]) {
+        await seedProject();
+        const { cards, board } = await boardOf(count);
+        later();
+        await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+        const answer = await read(board.cursor);
+        bytes.push(answer.bytes - answer.check!.length);
+      }
+
+      expect(bytes[1]).toBe(bytes[0]);
+    }, 60_000);
+
+    it('names a board that holds an edit its reader was never sent', async () => {
+      const { cards, board } = await boardOf(2);
+      // A writer whose clock runs further behind than a `since` read goes back.
+      vi.setSystemTime(Date.now() - 6_000);
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      // Past the age at which the list is read whole again, which finds the edit.
+      vi.setSystemTime(Date.now() + 70_000);
+
+      const next = await read(board.cursor);
+
+      expect(next).toMatchObject({ workItems: [], removedIds: [] });
+      expect(next.check).not.toBe(boardCheck(board.workItems));
+      const whole = await read();
+      expect(whole.workItems.map(card => card.title)).toContain('Renamed');
+      expect(next.check).toBe(boardCheck(whole.workItems));
+    });
+
+    it.each([50, 2_000])(
+      'reads no card to answer a reader that holds the cached board of %i cards',
+      async count => {
+        const { board } = await boardOf(count);
+        const reads = cardReads();
+
+        for (let poll = 0; poll < 3; poll++) {
+          expect(await read(board.cursor)).toMatchObject({ workItems: [], removedIds: [], cursor: board.cursor });
+        }
+
+        expect(reads()).toEqual([]);
+      },
+      60_000,
+    );
+
+    it('reads only the deleted ids to answer a cursor older than the cached board', async () => {
+      const { cards, board } = await boardOf(3);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      await read(board.cursor);
+      const reads = cardReads();
+
+      const next = await read(board.cursor);
+      const all = await read('1');
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(all.workItems).toHaveLength(3);
+      expect(reads()).toEqual(['factory_board_item_tombstones', 'factory_board_item_tombstones']);
+    });
+
+    it('gzips what moved for a reader that accepts it', async () => {
+      const { cards, board } = await boardOf(1);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+
+      const res = await buildApp(orgUser).request(`${boardPath()}?since=${board.cursor}`, {
+        headers: { 'accept-encoding': 'gzip, br' },
+      });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      expect(res.headers.get('vary')).toBe('Accept-Encoding');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
+      expect(body.workItems.map((card: { title: string }) => card.title)).toEqual(['Renamed']);
+    });
+
+    it('leaves a card deleted after the list was read for the next read to remove', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      const listed = await read();
+      const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+      let deleting: Promise<unknown> | undefined;
+      vi.spyOn(seed.storage.ops, 'findMany').mockImplementation(async (collection, ...rest) => {
+        // The delete lands between this read's list and its read of the deleted ids.
+        if (collection === 'factory_board_item_tombstones') {
+          await (deleting ??= json('DELETE', `/web/factory/work-items/${cards[1]!.id}`));
+        }
+        return findMany(collection, ...rest);
+      });
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(next).toMatchObject({ removedIds: [], check: boardCheck(listed.workItems) });
+      later();
+      expect((await read(next.cursor)).removedIds).toEqual([cards[1]!.id]);
+    });
+
+    it('sends a board showing Review cards whole, without a cursor', async () => {
+      const card = await createCard('pull-request');
+      await createCard('issue');
+      // A row as the retired Review board left it.
+      await seed.storage.ops.updateMany('factory_board_items', { id: card.id }, { board: 'review' });
+
+      const answer = await read('1');
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toBeUndefined();
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers a narrowed list as it does without a cursor', async () => {
+      const held = await startRun('session-mine');
+      await startRun('session-other');
+      const { cursor } = await read();
+      later();
+      await json('PATCH', `/web/factory/work-items/${held.id}`, { title: 'Renamed' });
+
+      const narrowed = `${boardPath()}?sessionId=session-mine`;
+      const answer = await buildApp(orgUser).request(`${narrowed}&since=${cursor}`);
+
+      expect(answer.headers.get('etag')).toBe((await buildApp(orgUser).request(narrowed)).headers.get('etag'));
+      expect(await answer.json()).not.toHaveProperty('removedIds');
+    });
+
+    it('lists the card named by its id, not what moved since the cursor', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+
+      const answer = await buildApp(orgUser).request(`${boardPath()}?workItemId=${cards[0]!.id}&since=${board.cursor}`);
+
+      expect(await listedIds(answer)).toEqual([cards[0]!.id]);
+    });
+  });
+
   describe('one session’s cards (?sessionId=)', () => {
     const scopedPath = (...sessionIds: string[]) =>
       `${boardPath()}?${sessionIds.map(sessionId => `sessionId=${encodeURIComponent(sessionId)}`).join('&')}`;
@@ -2630,6 +2835,39 @@ describe('run activity on the work-item listing', () => {
     });
   });
 
+  describe('the cards named by their ids (?workItemId=)', () => {
+    const idPath = (...ids: string[]) => `${boardPath()}?${ids.map(id => `workItemId=${id}`).join('&')}`;
+
+    it('lists only the named cards, in board order, whatever sessions they hold and without their relatives', async () => {
+      const parent = await createCard('github:7:issue:12');
+      const child = await createCard('github:7:issue:13', { parentWorkItemId: parent.id });
+      const started = await createCard('github:7:pull-request:14');
+      await json('PATCH', `/web/factory/work-items/${started.id}`, {
+        sessions: { review: { sessionId: 'session-review', branch: 'factory/pr-14', threadId: 'thread-review' } },
+      });
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+
+      const res = await buildApp(orgUser).request(idPath(started.id, child.id));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
+        board.filter(id => id === started.id || id === child.id),
+      );
+      expect(body).not.toHaveProperty('total');
+    });
+
+    it('lists nothing, without an error, when no card has the id', async () => {
+      await createCard('github:7:issue:12');
+
+      const res = await buildApp(orgUser).request(idPath('11111111-2222-4333-8444-555555555555'));
+
+      expect(res.status).toBe(200);
+      expect(await listedIds(res)).toEqual([]);
+    });
+  });
+
   it.each([
     ['a wish for the started cards', '?started=true', 'invalid_started'],
     ['unstarted cards combined with a scope', '?started=false&scope=sessions', 'invalid_started'],
@@ -2643,6 +2881,16 @@ describe('run activity on the work-item listing', () => {
     ['sources combined with a scope', '?source=github-issue:1&scope=sessions', 'invalid_source'],
     ['sources combined with unstarted cards', '?source=github-issue:1&started=false', 'invalid_source'],
     ['sources combined with session ids', '?source=github-issue:1&sessionId=session-mine', 'invalid_source'],
+    ['an id that is not a card id', '?workItemId=backlog-1', 'invalid_work_item_id'],
+    [
+      'more than 100 ids',
+      `?${Array.from({ length: 101 }, () => `workItemId=${PROJECT_ID}`).join('&')}`,
+      'invalid_work_item_id',
+    ],
+    ['ids combined with sources', `?workItemId=${PROJECT_ID}&source=github-issue:1`, 'invalid_work_item_id'],
+    ['ids combined with a scope', `?workItemId=${PROJECT_ID}&scope=sessions`, 'invalid_work_item_id'],
+    ['ids combined with unstarted cards', `?workItemId=${PROJECT_ID}&started=false`, 'invalid_work_item_id'],
+    ['ids combined with session ids', `?workItemId=${PROJECT_ID}&sessionId=session-mine`, 'invalid_work_item_id'],
   ])('refuses %s rather than sending the whole board', async (_case, query, error) => {
     await createCard('github-issue:1');
 
@@ -2650,6 +2898,178 @@ describe('run activity on the work-item listing', () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error });
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/starters', () => {
+  const startersPath = () => `/web/factory/projects/${PROJECT_ID}/work-items/starters`;
+  const create = async (overrides: Record<string, unknown>) =>
+    (await (await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides))).json())
+      .workItem;
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', startersPath(), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', startersPath())).status).toBe(404);
+  });
+
+  it('counts the cards behind each starter on the default board', async () => {
+    const issue = (externalId: string) => ({ integrationId: 'github', type: 'issue', externalId });
+    await create({ externalSource: issue('1'), metadata: { labels: ['bug', 'Memory'] } });
+    await create({ externalSource: issue('2'), metadata: { labels: ['Memory'] } });
+    await create({ externalSource: issue('3'), stages: ['intake'], sessions: { triage: run.execute } });
+    await create({
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+      metadata: { number: 7, state: 'open', sourceCreatedAt: '2030-01-10T00:00:00.000Z' },
+    });
+    vi.useFakeTimers({ now: new Date('2030-01-12T00:00:00.000Z'), toFake: ['Date'] });
+
+    const res = await json('GET', startersPath());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      failed: 0,
+      changesRequested: 0,
+      review: { count: 1, oldestOpenedAt: '2030-01-10T00:00:00.000Z' },
+      undecided: 1,
+      untriaged: 2,
+      unplannedBugs: 1,
+      sweep: { area: 'Memory', count: 2 },
+      stale: 0,
+    });
+  });
+
+  it('counts an open card whose newest run decision failed', async () => {
+    const card = await create({});
+    const now = new Date(Date.now() + 1_000);
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: card.id,
+      ingress: { identity: 'failing-run', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: 'failing-run' }],
+      causalChain: [],
+      now,
+    });
+    expect((await (await json('GET', startersPath())).json()).failed).toBe(0);
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    await seed.workItems.failDeferredDecision({
+      id: claimed!.id,
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Sandbox quota exceeded',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+
+    expect((await (await json('GET', startersPath())).json()).failed).toBe(1);
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/activity', () => {
+  const activityPath = (since: string) =>
+    `/web/factory/projects/${PROJECT_ID}/work-items/activity?since=${encodeURIComponent(since)}`;
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    const since = '2026-06-01T00:00:00.000Z';
+    expect((await json('GET', activityPath(since), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', activityPath(since))).status).toBe(404);
+  });
+
+  it('lists when cards were created and completed since the instant, and counts every card', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-10T12:00:00.000Z'), toFake: ['Date'] });
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    vi.setSystemTime(new Date('2026-06-16T09:00:00.000Z'));
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
+      board: 'work',
+      stage: 'done',
+      expectedRevision: workItem.revision,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
+      cause: 'board_drag',
+    });
+
+    const res = await json('GET', activityPath('2026-06-12T00:00:00.000Z'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      total: 2,
+      createdAt: ['2026-06-15T12:00:00.000Z'],
+      doneAt: ['2026-06-16T09:00:00.000Z'],
+    });
+  });
+
+  describe('asked again by a tab that kept the answer', () => {
+    const since = '2026-06-12T00:00:00.000Z';
+    const createAt = async (instant: string) => {
+      vi.setSystemTime(new Date(instant));
+      await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    };
+
+    it('answers 304 without a body while no card of the period changed', async () => {
+      vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
+      await createAt('2026-06-15T12:00:00.000Z');
+      const app = buildApp(orgUser);
+
+      const first = await app.request(activityPath(since));
+      const etag = first.headers.get('etag');
+      expect(first.status).toBe(200);
+      expect(etag).toBeTruthy();
+
+      const again = await app.request(activityPath(since), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe('');
+    });
+
+    it('sends the instants again once a card is created inside the period', async () => {
+      vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
+      await createAt('2026-06-15T12:00:00.000Z');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(activityPath(since))).headers.get('etag');
+      expect(etag).toBeTruthy();
+
+      await createAt('2026-06-16T09:00:00.000Z');
+
+      const after = await app.request(activityPath(since), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      expect(after.headers.get('etag')).not.toBe(etag);
+      const body = await after.json();
+      expect(body.total).toBe(2);
+      // The instants follow the board's order, which this case does not pin.
+      expect(body.createdAt.toSorted()).toEqual(['2026-06-15T12:00:00.000Z', '2026-06-16T09:00:00.000Z']);
+      expect(body.doneAt).toEqual([]);
+    });
+  });
+
+  it.each([
+    ['no instant', ''],
+    ['a date without a time', '?since=2026-06-12'],
+    ['text that is not an instant', '?since=last-week'],
+  ])('refuses %s rather than guessing a window', async (_case, query) => {
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/activity${query}`);
+
+    expect(res.status).toBe(400);
   });
 });
 

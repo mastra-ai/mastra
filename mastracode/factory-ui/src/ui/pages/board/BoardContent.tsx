@@ -149,7 +149,7 @@ export function BoardContent({
     sourceFilters: filters,
   });
   const sourceFiltered = hasBoardSourceFilters(filters);
-  const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
+  const runs = useBoardRuns({ factoryProjectId, refetchItems: () => items.refetch() });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,

@@ -1,6 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraQueryOptions } from '../shared/query-options';
 
@@ -71,6 +71,9 @@ export function useAuthCapabilities<TData = AuthCapabilities>({
     queryFn: () => makeAuthCapabilitiesRequest(client),
     staleTime: 60 * 1000, // Cache for 1 minute
     retry: false, // Don't retry auth requests
+    // A changed connection (Settings) makes a new client and so a new key. Keep the last answer while the
+    // new one loads, so guards keep the page up instead of blanking it on every save.
+    placeholderData: keepPreviousData,
     ...queryOptions,
   });
 }

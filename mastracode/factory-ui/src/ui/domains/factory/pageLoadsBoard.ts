@@ -1,4 +1,4 @@
-/** Pages that load the whole board themselves: the boards, and a draft session for its starters. */
+/** Pages that load the whole board themselves: the boards. */
 export function pageLoadsBoard(pathname: string) {
-  return /^\/factories\/[^/]+\/(?:work|review|boards\/[^/]+|user\/new\/[^/]+)\/?$/.test(pathname);
+  return /^\/factories\/[^/]+\/(?:work|review|boards\/[^/]+)\/?$/.test(pathname);
 }

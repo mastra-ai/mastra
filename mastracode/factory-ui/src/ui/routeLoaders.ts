@@ -18,11 +18,12 @@ import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/u
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
-import { boardQueryOptions } from '../hooks/useWorkItems';
+import { boardQueryOptions, workItemActivityQueryOptions, workItemStartersQueryOptions } from '../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
 import { pageLoadsBoard } from './domains/factory/pageLoadsBoard';
+import { DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
 import { hasLinkedRepository } from './domains/workspaces/services/factoryRepositories';
@@ -122,12 +123,14 @@ export const prefetchComposer: Prefetch = ({ queryClient, api }, { params }) => 
   void queryClient.query(providersQueryOptions(api.client)).catch(noop);
 };
 
-/** A draft offers the board's cards as starters, and its activity, around the composer. */
+/** A draft offers starters counted off the board, and the board's activity, around the composer. */
 export const prefetchDraft: Prefetch = (services, args) => {
   prefetchComposer(services, args);
   const { factoryId } = args.params;
   if (!factoryId) return;
-  void services.queryClient.query(boardQueryOptions(services.api.baseUrl, factoryId)).catch(noop);
+  const { queryClient, api } = services;
+  void queryClient.query(workItemStartersQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(workItemActivityQueryOptions(api.baseUrl, factoryId, DEFAULT_ACTIVITY_PERIOD)).catch(noop);
 };
 
 export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, request }) => {

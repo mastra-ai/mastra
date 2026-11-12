@@ -72,6 +72,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     factoryId,
     repositories: sessions.repositories,
     workItems: workItems.withSessions,
+    boards: catalog.data,
   });
   const unstartedItems = createWorkItemSearchResults({
     factoryId,

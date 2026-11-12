@@ -2,10 +2,11 @@ import { boardOf } from '../../factory/boardFlow';
 import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../../factory/boardCandidates';
-import { SOURCE_LABELS } from '../../factory/boardItems';
+import { cardContextSessions, SOURCE_LABELS } from '../../factory/boardItems';
+import type { CardContextSession } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
-import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
+import type { WorkItem } from '../../factory/services/workItems';
 import { stageLabel } from '../../factory/stages';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {
@@ -41,7 +42,8 @@ export interface WorkItemSearchResult {
 
 interface SessionWorkItem {
   item: WorkItem;
-  ref: WorkItemSessionRef;
+  /** The context the card holds this session under, so sessions on one card read apart. */
+  session: CardContextSession;
 }
 
 function joinValue(parts: (string | undefined | null)[]): string {
@@ -54,10 +56,12 @@ function buildValue(
   title: string,
   identifier: string | undefined,
   item: WorkItem | undefined,
+  contextLabel?: string,
 ): string {
   return joinValue([
     title,
     kind,
+    contextLabel,
     session.branch,
     session.baseBranch,
     session.sessionId,
@@ -76,8 +80,12 @@ function createFactorySessionResult(
   const factoryKind = getFactorySessionKind(session, item);
   const kind: SessionSearchResult['kind'] = factoryKind === 'review' ? 'review-session' : 'work-session';
   const title = item?.title ?? session.branch;
-  const context = [`${factoryKind === 'review' ? 'Review' : 'Work'} session`, session.branch];
-  const threadId = association?.ref.threadId ?? session.sessionId;
+  const contextSession = association?.session;
+  // A card holds a session per context on one branch; the context label is what tells them apart.
+  const context = contextSession
+    ? [contextSession.label, ...(contextSession.current ? ['current'] : []), session.branch]
+    : [`${factoryKind === 'review' ? 'Review' : 'Work'} session`, session.branch];
+  const threadId = contextSession?.ref.threadId ?? session.sessionId;
   // Work items carry the issue/PR number; when they fail to load the review branch is the only place it survives.
   const identifier = (item ? workItemIdentifier(item) : undefined) ?? getReviewBranchIdentifier(session.branch);
 
@@ -87,7 +95,7 @@ function createFactorySessionResult(
     title,
     context,
     identifier,
-    value: buildValue(session, kind, title, identifier, item),
+    value: buildValue(session, kind, title, identifier, item, contextSession?.label),
     path: `/factories/${factoryId}/workspaces/${session.sessionId}/threads/${threadId}`,
     preserveOrigin: true,
     updatedAt: item?.updatedAt ?? session.updatedAt,
@@ -114,11 +122,15 @@ function newestFirst(a: { updatedAt: string }, b: { updatedAt: string }): number
   return b.updatedAt.localeCompare(a.updatedAt);
 }
 
-function workItemsBySessionId(workItems: WorkItem[]): Map<string, SessionWorkItem> {
+function workItemsBySessionId(
+  workItems: WorkItem[],
+  boards: readonly BoardInfo[] | undefined,
+): Map<string, SessionWorkItem> {
   const bySessionId = new Map<string, SessionWorkItem>();
   for (const item of [...workItems].sort(newestFirst)) {
-    for (const ref of Object.values(item.sessions)) {
-      if (!bySessionId.has(ref.sessionId)) bySessionId.set(ref.sessionId, { item, ref });
+    const phases = boardOf(boards, item)?.phases;
+    for (const session of cardContextSessions(item, phases, item.stages[0] ?? '')) {
+      if (!bySessionId.has(session.ref.sessionId)) bySessionId.set(session.ref.sessionId, { item, session });
     }
   }
   return bySessionId;
@@ -128,12 +140,18 @@ export function createSessionSearchGroups(input: {
   factoryId: string;
   repositories: WorkspacesData[];
   workItems: WorkItem[];
+  /** The project's boards, once loaded, so each session reads by the phase it runs. */
+  boards?: readonly BoardInfo[];
 }): {
   work: SessionSearchResult[];
   review: SessionSearchResult[];
   user: SessionSearchResult[];
 } {
-  const bySessionId = workItemsBySessionId(input.workItems);
+  const bySessionId = workItemsBySessionId(input.workItems, input.boards);
+  // Sessions on one card share its update time; the one its current phase runs in leads.
+  const newestThenCurrent = (a: SessionSearchResult, b: SessionSearchResult) =>
+    newestFirst(a, b) ||
+    Number(bySessionId.get(b.id)?.session.current ?? false) - Number(bySessionId.get(a.id)?.session.current ?? false);
   const work: SessionSearchResult[] = [];
   const review: SessionSearchResult[] = [];
   const user: SessionSearchResult[] = [];
@@ -150,10 +168,21 @@ export function createSessionSearchGroups(input: {
   }
 
   return {
-    work: work.sort(newestFirst),
-    review: review.sort(newestFirst),
+    work: work.sort(newestThenCurrent),
+    review: review.sort(newestThenCurrent),
     user: user.sort(newestFirst),
   };
+}
+
+/**
+ * The card's number as the server's search reads it (`workItemNumber` in `@mastra/factory`): the
+ * source's own, else the one given to a card filed by hand.
+ */
+function searchedNumber(item: WorkItem): string | undefined {
+  const facts = item.workItem?.metadata;
+  const number =
+    facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? item.metadata.cardNumber;
+  return typeof number === 'number' ? `#${number}` : undefined;
 }
 
 function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
@@ -166,11 +195,37 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
     title: item.title,
     context: [sourceLabel, stage, 'not started'],
     identifier,
-    value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
+    // Everything the server's search reads is in it, so a row the server matched passes the palette's filter too.
+    value: joinValue([
+      item.title,
+      'work item',
+      sourceLabel,
+      stage,
+      identifier,
+      // Not always in the identifier, which leaves out the key of a card filed in Factory itself.
+      item.workItem?.key,
+      searchedNumber(item),
+      item.sourceKey,
+    ]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
     target: { kind: 'work-item', item },
   };
+}
+
+/**
+ * The text a candidate's row is filtered on. The search ranks candidates on it too before looking
+ * up the best ones, so it never cuts a candidate the palette would list.
+ */
+export function candidateSearchValue(candidate: BoardCandidate): string {
+  return joinValue([
+    candidate.title,
+    'work item',
+    SOURCE_LABELS[candidate.source],
+    stageLabel(candidate.column),
+    workItemIdentifier(candidate),
+    candidate.sourceKey,
+  ]);
 }
 
 function createCandidateResult(factoryId: string, candidate: BoardCandidate, updatedAt: string): WorkItemSearchResult {
@@ -183,7 +238,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
     title: candidate.title,
     context: [sourceLabel, stage, 'not filed'],
     identifier,
-    value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
+    value: candidateSearchValue(candidate),
     path: relationshipPath(candidate, factoryId),
     updatedAt,
     target: { kind: 'candidate', candidate },

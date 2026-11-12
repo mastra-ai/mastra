@@ -105,9 +105,27 @@ export interface FactoryTransitionServiceOptions {
     fromStage: string | undefined;
     toStage: string;
   }) => Promise<void> | void;
+  /**
+   * Called after a transition commits out of the last phase that runs in a
+   * context: the new phase runs in another context (or none) and is not
+   * terminal, e.g. Triage → Planning. The context's session gets no more
+   * runs until the card comes back, so its sandbox can stop. Awaited under
+   * the same bound as `onTerminalStage`, and failures are swallowed.
+   */
+  onContextLeft?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    /** The context the card left. */
+    context: string;
+    /** The context the new phase runs in, if it runs one. */
+    toContext: string | undefined;
+    revision: number;
+    actor: FactoryRuleActor;
+  }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
-   * `onTerminalStage` before returning (default 30s). The cleanup continues
-   * in the background past the bound. */
+   * `onTerminalStage` or `onContextLeft` before returning (default 30s). The
+   * cleanup continues in the background past the bound. */
   terminalCleanupTimeoutMs?: number;
   /**
    * Called after a person moves a Work card from Intake or Triage into Planning or
@@ -271,6 +289,7 @@ export class FactoryTransitionService {
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
+  readonly #onContextLeft: FactoryTransitionServiceOptions['onContextLeft'];
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
@@ -283,6 +302,7 @@ export class FactoryTransitionService {
     this.#audit = options.audit;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
+    this.#onContextLeft = options.onContextLeft;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
@@ -608,6 +628,7 @@ export class FactoryTransitionService {
         ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
         : {},
       boards,
+      fromStage,
     );
   }
 
@@ -635,6 +656,7 @@ export class FactoryTransitionService {
     options: TransitionConsentOptions,
     // The registry the move was evaluated against; rejected moves never release resources.
     boards: BoardRegistry | undefined,
+    fromStage?: string,
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
@@ -678,38 +700,48 @@ export class FactoryTransitionService {
         });
     }
     // Only an installed board's declaration releases resources; an unknown board or phase never does.
-    if (
-      this.#onTerminalStage &&
-      result.status === 'accepted' &&
-      boards?.get(request.board)?.isTerminal(result.stage) === true
-    ) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        const cleanup = Promise.resolve(
-          this.#onTerminalStage({
-            orgId: request.orgId,
-            factoryProjectId: request.factoryProjectId,
-            workItemId: request.workItemId,
-            stage: result.stage,
-            revision: result.revision,
-            actor: request.actor,
-          }),
-        );
-        // A late rejection after the timeout wins the race must not surface
-        // as an unhandled rejection.
-        cleanup.catch(() => {});
-        await Promise.race([
-          cleanup,
-          new Promise<void>(resolve => {
-            timer = setTimeout(resolve, this.#terminalCleanupTimeoutMs);
-          }),
-        ]);
-      } catch {
-        // Resource release is best-effort — never fail a committed transition.
-      } finally {
-        clearTimeout(timer);
+    const board = result.status === 'accepted' ? boards?.get(request.board) : undefined;
+    if (board && result.status === 'accepted') {
+      const hooks = {
+        orgId: request.orgId,
+        factoryProjectId: request.factoryProjectId,
+        workItemId: request.workItemId,
+        revision: result.revision,
+        actor: request.actor,
+      };
+      if (board.isTerminal(result.stage)) {
+        const onTerminalStage = this.#onTerminalStage;
+        if (onTerminalStage) await this.#bounded(() => onTerminalStage({ ...hooks, stage: result.stage }));
+      } else if (fromStage !== undefined && this.#onContextLeft) {
+        const context = board.roleForPhase(fromStage);
+        const toContext = board.roleForPhase(result.stage);
+        const onContextLeft = this.#onContextLeft;
+        if (context !== undefined && context !== toContext) {
+          await this.#bounded(() => onContextLeft({ ...hooks, context, toContext }));
+        }
       }
     }
     return result;
+  }
+
+  /** Run a resource-release hook, waiting at most the cleanup bound; it never fails the committed transition. */
+  async #bounded(release: () => Promise<void> | void): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const cleanup = Promise.resolve().then(release);
+      // A late rejection after the timeout wins the race must not surface
+      // as an unhandled rejection.
+      cleanup.catch(() => {});
+      await Promise.race([
+        cleanup,
+        new Promise<void>(resolve => {
+          timer = setTimeout(resolve, this.#terminalCleanupTimeoutMs);
+        }),
+      ]);
+    } catch {
+      // Resource release is best-effort — never fail a committed transition.
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }

@@ -164,6 +164,35 @@ describe('TransactionClient COMMIT/ROLLBACK drain (dsql)', () => {
     expect(client.release).toHaveBeenCalledWith(true);
   });
 
+  it('awaits a rejecting asynchronous rollback reporter without masking the original error', async () => {
+    const { client, query } = createStrictClient();
+    const primary = new Error('operation failed');
+    const rollbackError = new Error('rollback failed');
+    query.mockResolvedValueOnce({ rows: [] } as QueryResult);
+    query.mockRejectedValueOnce(rollbackError);
+    const events: string[] = [];
+    let reportedError: unknown;
+    const reporter = async (error: unknown) => {
+      reportedError = error;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      events.push('reported');
+      throw new Error('async logger failed');
+    };
+    vi.mocked(client.release).mockImplementation(() => {
+      events.push('released');
+    });
+    const adapter = new PoolAdapter({ connect: vi.fn(async () => client) } as unknown as Pool, reporter);
+    await expect(
+      adapter.tx(async () => {
+        throw primary;
+      }),
+    ).rejects.toBe(primary);
+    events.push('tx-settled');
+    expect(reportedError).toBe(rollbackError);
+    expect(client.release).toHaveBeenCalledWith(true);
+    expect(events).toEqual(['reported', 'released', 'tx-settled']);
+  });
+
   it('logs rollback failure without a diagnostic callback', async () => {
     const { client, query } = createStrictClient();
     const primary = new Error('operation failed');

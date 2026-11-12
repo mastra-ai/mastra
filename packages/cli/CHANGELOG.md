@@ -1,5 +1,65 @@
 # mastra
 
+## 1.39.0-alpha.14
+
+### Patch Changes
+
+- Added `mastra api factory work-item starters` and `mastra api factory work-item activity`. The first counts the cards behind each new-session starter on a project's default board. The second lists when a project's cards were created and completed since an instant: ([#30097](https://github.com/mastra-ai/mastra/pull/30097))
+
+  ```bash
+  mastra api factory work-item starters <project-id>
+  mastra api factory work-item activity <project-id> '{"since":"2026-06-01T00:00:00.000Z"}'
+  ```
+
+- Added a "Join the issue's card instead" switch to intake routes in the Factory UI. A route for pull requests that close an issue can now put the pull request on that issue's card instead of giving it a card of its own; until now only the route Factory seeds could do this. The switch shows on new and saved routes whose conditions include "Source kind is Pull request" and "Pull request closes an issue is Yes". ([#30197](https://github.com/mastra-ai/mastra/pull/30197))
+
+- Improved the Factory new session page on large boards. Its starters and its activity band now load the counts and dates they show instead of downloading every card of the project. They show the same content as before. ([#30097](https://github.com/mastra-ai/mastra/pull/30097))
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+  - @mastra/deployer@1.83.0-alpha.12
+
+## 1.39.0-alpha.13
+
+### Patch Changes
+
+- Fixed `mastra api factory work-item list` ignoring its filters. The command now accepts JSON input, so `sessionId`, `scope`, `started`, `q`, `limit` and `source` reach the server, for example `mastra api factory work-item list <project-id> '{"started":"false","q":"login flow"}'`. ([#30153](https://github.com/mastra-ai/mastra/pull/30153))
+
+  Fixed list filters on Factory commands. A list such as `{"source":["a","b"]}` or `{"kind":["automation-failed","agent-waiting"]}` on `mastra api factory attention list` is now sent the way Factory reads it, instead of being rejected or matched as one literal value.
+
+## 1.39.0-alpha.12
+
+### Patch Changes
+
+- Fixed Factory search (⌘K) refusing to start a listed card with "This card no longer exists" after a more recent card took its place in the results, and its Retry button leaving the failure notice up when the intake had nothing to offer. Search now also lists a card found by its number alone, and an intake item found by its source label. ([#30154](https://github.com/mastra-ai/mastra/pull/30154))
+
+- Factory search (Cmd/Ctrl+K) now shows which phase each work session belongs to, such as **Triage** or **Work**, and marks the session for the card's current phase as **current**. Before, a card's sessions all showed the same title, branch, and issue number, so they looked like duplicates. You can also search by phase name, for example `triage 30123`. ([#30142](https://github.com/mastra-ai/mastra/pull/30142))
+
+- Updated dependencies [[`a0cd52c`](https://github.com/mastra-ai/mastra/commit/a0cd52cdc15c67c5e3d225b90428efde1c15d8a3), [`c1fb13f`](https://github.com/mastra-ai/mastra/commit/c1fb13f325096d244285907d0dd4b0ad35d2cfca), [`6f7eb69`](https://github.com/mastra-ai/mastra/commit/6f7eb696e9c629f5659072947fbed0e09d5e02d3)]:
+  - @mastra/core@1.83.0-alpha.11
+  - @mastra/deployer@1.83.0-alpha.11
+
+## 1.39.0-alpha.11
+
+### Patch Changes
+
+- Improved Factory boards with thousands of cards. An open board now downloads only the cards that changed when something moves, instead of the whole board, so large boards update faster and use far less data. ([#30099](https://github.com/mastra-ai/mastra/pull/30099))
+
+- Improved Factory search (⌘K) on large boards. Opening it no longer downloads every card of the project: it loads the 20 most recently updated cards nobody has started, and asks the server for the cards matching what you type once you pause typing. ([#30081](https://github.com/mastra-ai/mastra/pull/30081))
+
+  What changes when you search:
+
+  - A card nobody has started is found by its title, key, number or source id. Typing a stage name, a source label, a URL or a branch no longer finds it.
+  - A card that holds a session is still found the way it was, through its session row.
+  - Up to 20 matching unstarted cards are listed. The "Work items" count still counts every one of them.
+  - Up to 20 open issues and pull requests that have no card yet are offered, the best matches for what you typed first.
+
+  `mastra api` can also pass the work-item list route's new filters: `started`, `q`, `limit` and `source`.
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83)]:
+  - @mastra/core@1.83.0-alpha.10
+  - @mastra/deployer@1.83.0-alpha.10
+
 ## 1.39.0-alpha.10
 
 ### Minor Changes

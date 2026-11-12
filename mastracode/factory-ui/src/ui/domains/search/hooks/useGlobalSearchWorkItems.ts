@@ -11,6 +11,7 @@ import { isPersistedCandidate, persistedSourceKeys } from '../../factory/boardIt
 import { pageLoadsBoard } from '../../factory/pageLoadsBoard';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { BoardSnapshot, WorkItem } from '../../factory/services/workItems';
+import { candidateSearchValue } from '../services/searchResults';
 
 type Candidate = { candidate: BoardCandidate; updatedAt: string };
 
@@ -25,13 +26,15 @@ function selectUnstarted(board: BoardSnapshot) {
   return { cards, total: board.total ?? cards.length };
 }
 
-/** The candidates that best match `search`: the most words found, then the most recently updated. */
+/**
+ * The candidates that best match `search`: the most words found, then the most recently updated.
+ * Words are looked for in the text the palette filters a candidate's row on.
+ */
 function bestCandidates(candidates: Candidate[], search: string): Candidate[] {
   const words = search.toLowerCase().split(/\s+/).filter(Boolean);
   return candidates
     .map(entry => {
-      const { title, sourceKey, url, meta } = entry.candidate;
-      const text = [title, sourceKey, url, ...meta].join(' ').toLowerCase();
+      const text = candidateSearchValue(entry.candidate).toLowerCase();
       return { entry, found: words.filter(word => text.includes(word)).length };
     })
     .toSorted((a, b) => b.found - a.found || b.entry.updatedAt.localeCompare(a.entry.updatedAt))
@@ -91,6 +94,7 @@ function useUnstartedSearch(factoryId: string | undefined, search: string, candi
  * once typing pauses, and so are the cards already filed from the best unfiled candidates.
  */
 export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: string, candidates: Candidate[]) {
+  const { baseUrl } = useApiConfig();
   const { pathname } = useLocation();
   const sessionCards = useSidebarWorkItemsQuery(factoryId, pageLoadsBoard(pathname));
   const withSessions = sessionCards.data?.workItems ?? NO_CARDS;
@@ -113,19 +117,29 @@ export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: s
     /** Every card either search loaded, for acting on a row. A card several reads sent is in it several times. */
     loaded,
     count: everything.count,
-    /** Both lists again, read fresh: a row's card may have gained a session since it was listed. */
-    refetch: async (): Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }> => {
-      const [started, unstarted] = await Promise.all([sessionCards.refetch(), search.unstarted.refetch()]);
-      if (!started.isSuccess) return started;
-      if (!unstarted.isSuccess) return unstarted;
-      return { isSuccess: true, data: [...started.data.workItems, ...unstarted.data.cards] };
+    /**
+     * The clicked row's card alone, read fresh: it may have gained a session since it was listed,
+     * or been deleted. Not the lists again: a card can leave the search's first rows and still exist.
+     */
+    refetch: async (
+      itemId: string,
+    ): Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }> => {
+      // Without a Factory no row is listed, so none is clicked.
+      if (!factoryId) return { isSuccess: true, data: NO_CARDS };
+      try {
+        const card = await listWorkItems(baseUrl, factoryId, undefined, { workItemId: [itemId] });
+        return { isSuccess: true, data: card.workItems };
+      } catch (error) {
+        return { isSuccess: false, error };
+      }
     },
     pending: sessionCards.isLoading || search.unstarted.isLoading,
     failed: sessionCards.isError || search.unstarted.isError || search.filed.isError,
     retry: () => {
-      void sessionCards.refetch();
-      void search.unstarted.refetch();
-      void search.filed.refetch();
+      // Only what failed: with no candidate the lookup has nothing to run, and refetching it would fail.
+      for (const query of [sessionCards, search.unstarted, search.filed]) {
+        if (query.isError) void query.refetch();
+      }
     },
   };
 }

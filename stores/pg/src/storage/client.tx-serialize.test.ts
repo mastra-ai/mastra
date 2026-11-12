@@ -231,6 +231,46 @@ describe('TransactionClient COMMIT/ROLLBACK drain', () => {
     else expect(adapter.shouldDestroyClient).toBe(true);
   });
 
+  it.each(['pool', 'pinned'] as const)('awaits a rejecting asynchronous %s rollback reporter', async kind => {
+    const { client, query } = createStrictClient();
+    const primary = new Error('operation failed');
+    const rollbackError = new Error('rollback failed');
+    query.mockResolvedValueOnce({ rows: [] } as QueryResult);
+    query.mockRejectedValueOnce(rollbackError);
+    const events: string[] = [];
+    let reportedError: unknown;
+    const reporter = async (error: unknown) => {
+      reportedError = error;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      events.push('reported');
+      throw new Error('async logger failed');
+    };
+    if (kind === 'pool') {
+      vi.mocked(client.release).mockImplementation(() => {
+        events.push('released');
+      });
+    }
+    const adapter =
+      kind === 'pool'
+        ? new PoolAdapter({ connect: vi.fn(async () => client) } as unknown as Pool, reporter)
+        : new PinnedClientAdapter({} as Pool, client, reporter);
+
+    await expect(
+      adapter.tx(async () => {
+        throw primary;
+      }),
+    ).rejects.toBe(primary);
+    events.push('tx-settled');
+    expect(reportedError).toBe(rollbackError);
+    if (kind === 'pool') {
+      expect(client.release).toHaveBeenCalledWith(true);
+      expect(events).toEqual(['reported', 'released', 'tx-settled']);
+    } else {
+      expect(adapter.shouldDestroyClient).toBe(true);
+      expect(events).toEqual(['reported', 'tx-settled']);
+    }
+  });
+
   it('logs rollback failure when no reporter is configured', async () => {
     const { client, query } = createStrictClient();
     const primary = new Error('operation failed');
@@ -287,24 +327,31 @@ describe('PoolAdapter rollback failure with a real PostgreSQL pool', () => {
     const pool = new Pool({ connectionString, max: 1, query_timeout: 100 });
     try {
       const client = await pool.connect();
-      const original = await client.query('SELECT pg_backend_pid() AS pid');
-      const query = client.query.bind(client);
-      vi.spyOn(client, 'query').mockImplementation(((sql: string) =>
-        sql === 'BEGIN' ? query('BEGIN; SELECT pg_sleep(0.5)') : query(sql)) as typeof client.query);
-      const pinned = new PinnedClientAdapter(pool, client);
+      let originalPid: number;
+      let destroyClient = false;
       try {
-        await expect(
-          pinned.tx(async () => {
-            throw new Error('callback must not run');
-          }),
-        ).rejects.toThrow(/timeout/i);
-        await expect(pinned.query('SELECT 1')).rejects.toThrow(/timeout/i);
-        await pinned.drain();
+        const original = await client.query('SELECT pg_backend_pid() AS pid');
+        originalPid = original.rows[0].pid;
+        const query = client.query.bind(client);
+        vi.spyOn(client, 'query').mockImplementation(((sql: string) =>
+          sql === 'BEGIN' ? query('BEGIN; SELECT pg_sleep(0.5)') : query(sql)) as typeof client.query);
+        const pinned = new PinnedClientAdapter(pool, client);
+        try {
+          await expect(
+            pinned.tx(async () => {
+              throw new Error('callback must not run');
+            }),
+          ).rejects.toThrow(/timeout/i);
+          await expect(pinned.query('SELECT 1')).rejects.toThrow(/timeout/i);
+          await pinned.drain();
+        } finally {
+          destroyClient = pinned.shouldDestroyClient;
+        }
       } finally {
-        client.release(pinned.shouldDestroyClient || undefined);
+        client.release(destroyClient || undefined);
       }
       const next = await pool.query('SELECT pg_backend_pid() AS pid');
-      expect(next.rows[0].pid).not.toBe(original.rows[0].pid);
+      expect(next.rows[0].pid).not.toBe(originalPid);
     } finally {
       await pool.end();
     }

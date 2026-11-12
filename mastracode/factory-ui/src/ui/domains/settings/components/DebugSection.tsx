@@ -1,11 +1,10 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
 import type { ServerVersions } from '../../../../hooks/useServerVersions';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
 
@@ -44,7 +43,7 @@ export function DebugSection() {
     >
       {query.isPending ? (
         <SettingsContainer>
-          <SettingsRowsSkeleton label="Loading versions" />
+          <SettingsSkeleton label="Loading versions" />
         </SettingsContainer>
       ) : query.isError ? (
         <SettingsContainer>

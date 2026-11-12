@@ -699,6 +699,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'server/create-route', label: 'createRoute()' },
+        { type: 'doc', id: 'server/dispatch-route', label: 'dispatchRoute()' },
         { type: 'doc', id: 'server/elysia-adapter', label: 'Elysia Adapter' },
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },

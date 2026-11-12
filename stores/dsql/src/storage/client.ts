@@ -108,7 +108,7 @@ function truncateQuery(query: string, maxLength = 100): string {
 export class PoolAdapter implements DbClient {
   constructor(
     public readonly $pool: Pool,
-    private readonly onRollbackError?: (error: unknown) => void,
+    private readonly onRollbackError?: (error: unknown) => void | Promise<void>,
   ) {}
 
   connect(): Promise<PoolClient> {
@@ -190,7 +190,7 @@ export class PoolAdapter implements DbClient {
         } catch (rollbackError) {
           destroyClient = true;
           try {
-            if (this.onRollbackError) this.onRollbackError(rollbackError);
+            if (this.onRollbackError) await this.onRollbackError(rollbackError);
             else console.error('Failed to rollback transaction:', rollbackError);
           } catch {
             // A diagnostic callback must not replace the transaction failure.
