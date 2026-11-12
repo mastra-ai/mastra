@@ -326,17 +326,20 @@ export class MessageHistory implements Processor {
 
     await policy?.authorize(threadId, resourceId);
     const responseIds = new Set(newOutput.map(message => message.id));
-    const previous = policy ? (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages : [];
+    const previous = policy?.trackUndo
+      ? (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages
+      : [];
     await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
-    policy?.undo.push(async () => {
-      const saved = (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages.filter(
-        message => message.threadId === threadId,
-      );
-      const previousIds = new Set(previous.map(message => message.id));
-      const newIds = saved.filter(message => !previousIds.has(message.id)).map(message => message.id);
-      if (newIds.length > 0) await this.storage.deleteMessages(newIds);
-      if (previous.length > 0) await this.storage.saveMessages({ messages: previous });
-    });
+    if (policy?.trackUndo)
+      policy.undo.push(async () => {
+        const saved = (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages.filter(
+          message => message.threadId === threadId,
+        );
+        const previousIds = new Set(previous.map(message => message.id));
+        const newIds = saved.filter(message => !previousIds.has(message.id)).map(message => message.id);
+        if (newIds.length > 0) await this.storage.deleteMessages(newIds);
+        if (previous.length > 0) await this.storage.saveMessages({ messages: previous });
+      });
     // add extra 1ms latency to make sure the next generate has not the same input
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -357,7 +360,11 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    const filtered = filterMessagesForPersistence(messages).map(message => ({ ...message, threadId, resourceId }));
+    const filtered = filterMessagesForPersistence(messages).map(message => ({
+      ...message,
+      threadId,
+      resourceId: resourceId ?? message.resourceId,
+    }));
 
     if (filtered.length === 0) {
       return;

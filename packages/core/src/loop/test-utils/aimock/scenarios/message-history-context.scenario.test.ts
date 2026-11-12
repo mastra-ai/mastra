@@ -19,6 +19,8 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
       'read-only',
       'context-read-only',
       'tripwire',
+      'undo-failure',
+      'missing-resource',
       'redirect-denied',
       'conflicting-threads',
       'run-denied',
@@ -45,7 +47,7 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
           requestContext.set('user', { id: 'reader' });
           requestContext.set('MastraMemory', {
             thread: { id: threadId },
-            resourceId,
+            ...(variant === 'missing-resource' ? {} : { resourceId }),
             ...(variant === 'context-read-only' ? { memoryConfig: { readOnly: true } } : {}),
           });
           const deniedThread =
@@ -80,8 +82,24 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
                 return messageList;
               },
             });
+          if (variant === 'missing-resource')
+            processors.push({
+              id: 'retain-message-resource',
+              processOutputResult: ({ messageList }) => {
+                for (const message of messageList.get.all.db()) message.resourceId = resourceId;
+                return messageList;
+              },
+            });
           processors.push(new MessageHistory({ storage }));
-          if (variant === 'tripwire')
+          const failingStorage =
+            variant === 'undo-failure' ? (await new InMemoryStore().getStore('memory'))! : undefined;
+          if (failingStorage) {
+            failingStorage.deleteMessages = async () => {
+              throw new Error('Storage unavailable during rollback');
+            };
+            processors.push(new MessageHistory({ storage: failingStorage }));
+          }
+          if (variant === 'tripwire' || variant === 'undo-failure')
             processors.push({
               id: 'block-response',
               processOutputResult: ({ abort }) => abort('Blocked response'),
@@ -132,7 +150,7 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
             const redirected = await storage.listMessages({ threadId: deniedThread, perPage: false });
             const runMessages = await storage.listMessages({ threadId: runThreadId, perPage: false });
             expect(runMessages.messages).toEqual([]);
-            if (variant === 'allowed' || variant === 'conflicting-threads') {
+            if (variant === 'allowed' || variant === 'conflicting-threads' || variant === 'missing-resource') {
               expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
               expect(messages.every(message => message.resourceId === resourceId)).toBe(true);
               expect(events.indexOf(`authorize:${threadId}`)).toBeGreaterThanOrEqual(0);
@@ -141,9 +159,13 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
                 expect(events.indexOf(`authorize:${runThreadId}`)).toBeGreaterThanOrEqual(0);
                 expect(events.indexOf(`authorize:${runThreadId}`)).toBeLessThan(events.indexOf('save'));
               }
-            } else if (variant === 'tripwire') {
+            } else if (variant === 'tripwire' || variant === 'undo-failure') {
               expect(events).toContain('save');
               expect(messages.map(message => message.role)).toEqual(['user']);
+              if (failingStorage) {
+                const remaining = await failingStorage.listMessages({ threadId, perPage: false });
+                expect(remaining.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+              }
             } else {
               expect(messages).toEqual([]);
               expect(redirected.messages).toEqual([]);

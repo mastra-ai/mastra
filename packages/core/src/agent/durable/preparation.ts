@@ -84,7 +84,6 @@ import { isJsonSafe } from './workflows/shared/schemas';
  */
 function snapshotRequestContextEntries(
   requestContext: RequestContext | undefined,
-  includeMemoryContext = false,
 ): Record<string, unknown> | undefined {
   if (!requestContext) return undefined;
   const out: Record<string, unknown> = {};
@@ -97,7 +96,7 @@ function snapshotRequestContextEntries(
     if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
     // Framework-managed per-run memory context is rebuilt from persisted run
     // state. A caller may carry a parent run's serializable value here.
-    if (key === 'MastraMemory' && !includeMemoryContext) continue;
+    if (key === 'MastraMemory') continue;
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
@@ -525,6 +524,18 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Setting the context first keeps read (inject) and write (tool) in sync.
   const memory = await typedAgent.getMemory({ requestContext });
   const memoryConfig = execOptions?.memory?.options;
+  const explicitContext = !memory
+    ? (requestContext.get('MastraMemory') as
+        | { thread?: { id?: string }; resourceId?: string; memoryConfig?: MemoryConfig }
+        | undefined)
+    : undefined;
+  const explicitMemoryContext = explicitContext?.thread?.id
+    ? {
+        thread: { id: explicitContext.thread.id },
+        resourceId: explicitContext.resourceId,
+        memoryConfig: explicitContext.memoryConfig,
+      }
+    : undefined;
   const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
   const authorizeMemory = (permission: MastraFGAPermissionInput) =>
     authorizeDurableMemory(memoryAuthorizationChecks, {
@@ -730,7 +741,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // snapshotRequestContextEntries; the versions entry is pinned back to the
   // caller's own value (captured at step 3, before the merge) so persisted
   // input still reflects only caller intent.
-  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext, !memory);
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
   // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
   // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
   // snapshot (key absent, supplied scopes are adopted). The live run context deliberately
@@ -1003,6 +1014,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     },
     state: {
       memoryConfig,
+      explicitMemoryContext,
       threadId,
       resourceId,
       threadExists,

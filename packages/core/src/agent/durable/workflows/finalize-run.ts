@@ -177,12 +177,17 @@ export async function runDurableFinishSideEffects({
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
-  if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
-    effectiveRequestContext.set('MastraMemory', {
-      thread: { id: durableState.threadId },
-      resourceId: durableState.resourceId,
-      memoryConfig: durableState.memoryConfig,
-    });
+  if (!effectiveRequestContext.has('MastraMemory')) {
+    const memoryContext =
+      durableState?.explicitMemoryContext ??
+      (durableState?.threadId
+        ? {
+            thread: { id: durableState.threadId },
+            resourceId: durableState.resourceId,
+            memoryConfig: durableState.memoryConfig,
+          }
+        : undefined);
+    if (memoryContext) effectiveRequestContext.set('MastraMemory', memoryContext);
   }
   // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
   // holds that instance and reads it during final processing, so swapping in a new one
@@ -199,6 +204,7 @@ export async function runDurableFinishSideEffects({
   }
   setPersistencePolicy(messageList, {
     readOnly: !!durableState?.memoryConfig?.readOnly,
+    trackUndo: !(registryEntry?.memory ?? rebuiltMemory),
     authorize: async (threadId, resourceId) => {
       const threadIds = new Set([threadId, durableState?.threadId].filter(Boolean));
       for (const id of threadIds) {
@@ -582,12 +588,17 @@ export async function runDurableDeadlineOutputPass({
 }): Promise<void> {
   const durableState = initData.state;
   const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
-  if (!requestContext.has('MastraMemory') && durableState?.threadId) {
-    requestContext.set('MastraMemory', {
-      thread: { id: durableState.threadId },
-      resourceId: durableState.resourceId,
-      memoryConfig: durableState.memoryConfig,
-    });
+  if (!requestContext.has('MastraMemory')) {
+    const memoryContext =
+      durableState?.explicitMemoryContext ??
+      (durableState?.threadId
+        ? {
+            thread: { id: durableState.threadId },
+            resourceId: durableState.resourceId,
+            memoryConfig: durableState.memoryConfig,
+          }
+        : undefined);
+    if (memoryContext) requestContext.set('MastraMemory', memoryContext);
   }
   const memoryContext = requestContext.get('MastraMemory') as
     | { thread?: { id?: string }; resourceId?: string; memoryConfig?: { readOnly?: boolean } }
@@ -638,6 +649,7 @@ export async function runDurableDeadlineOutputPass({
   );
   setPersistencePolicy(messageList, {
     readOnly: !!durableState?.memoryConfig?.readOnly,
+    trackUndo: !entry.memory,
     authorize: async (threadId, targetResourceId) => {
       for (const id of new Set([threadId, durableState?.threadId].filter((id): id is string => !!id))) {
         await checkThreadFGA({

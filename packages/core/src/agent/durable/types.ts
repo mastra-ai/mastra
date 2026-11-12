@@ -139,6 +139,8 @@ export type SerializableScorersConfig = Record<string, SerializableScorerEntry>;
 export interface SerializableDurableState {
   /** Memory configuration options */
   memoryConfig?: MemoryConfig;
+  /** Explicit processor identity, separate from caller request-context entries. */
+  explicitMemoryContext?: { thread: { id: string }; resourceId?: string; memoryConfig?: MemoryConfig };
   /** Thread identifier for memory persistence */
   threadId?: string;
   /** Resource/user identifier */

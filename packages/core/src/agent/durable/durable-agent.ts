@@ -1538,7 +1538,9 @@ export class DurableAgent<
     // `requestContextEntries` contains caller state captured before preparation
     // installed the run's framework-managed memory context. Rebuild that entry
     // from persisted run state so recovery never inherits a caller/parent thread.
-    if (threadId && resourceId) {
+    if (workflowInput.state?.explicitMemoryContext) {
+      requestContext.set('MastraMemory', workflowInput.state.explicitMemoryContext);
+    } else if (threadId && resourceId) {
       requestContext.set('MastraMemory', {
         thread: { id: threadId },
         resourceId,
@@ -5827,7 +5829,9 @@ export class DurableAgent<
       const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
       memoryInfo = threadId && resourceId ? { threadId, resourceId } : undefined;
 
-      if (threadId && resourceId) {
+      if (workflowInput.state?.explicitMemoryContext) {
+        requestContext.set('MastraMemory', workflowInput.state.explicitMemoryContext);
+      } else if (threadId && resourceId) {
         requestContext.set('MastraMemory', {
           thread: { id: threadId },
           resourceId,

@@ -2,7 +2,6 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ScoringFilter } from '../../../evals/predicate';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
-import type { MemoryConfig } from '../../../memory/types';
 import type { CoreTool } from '../../../tools/types';
 import { boundedStringify } from '../../../utils/safe-stringify';
 import type { MessageList } from '../../message-list';
@@ -154,17 +153,10 @@ export function serializeScorersConfig(
 /**
  * Extract serializable state from _internal-like objects
  */
-export function serializeDurableState(params: {
-  memoryConfig?: MemoryConfig;
-  threadId?: string;
-  resourceId?: string;
-  threadExists?: boolean;
-  savePerStep?: boolean;
-  observationalMemory?: boolean;
-  fixedMemory?: boolean;
-}): SerializableDurableState {
+export function serializeDurableState(params: SerializableDurableState): SerializableDurableState {
   return {
     memoryConfig: params.memoryConfig,
+    explicitMemoryContext: params.explicitMemoryContext,
     threadId: params.threadId,
     resourceId: params.resourceId,
     threadExists: params.threadExists,

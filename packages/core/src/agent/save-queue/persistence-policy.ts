@@ -2,6 +2,7 @@ import type { MessageList } from '../message-list';
 
 interface PersistencePolicy {
   readOnly: boolean;
+  trackUndo: boolean;
   authorize: (threadId: string, resourceId?: string) => Promise<void>;
   undo: Array<() => Promise<void>>;
 }
@@ -25,5 +26,13 @@ export function inheritPersistencePolicy(source: MessageList, target: MessageLis
 export async function undoProcessorPersistence(messageList: MessageList): Promise<void> {
   const policy = policies.get(messageList);
   if (!policy) return;
-  for (const undo of policy.undo.splice(0).reverse()) await undo();
+  const errors: unknown[] = [];
+  for (const undo of policy.undo.splice(0).reverse()) {
+    try {
+      await undo();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw new AggregateError(errors, 'Failed to undo processor persistence');
 }
