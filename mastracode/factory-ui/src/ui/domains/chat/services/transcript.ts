@@ -713,13 +713,13 @@ function claimOnScreenEntries(
 
     for (const [index, candidate] of onScreen.entries()) {
       if (!candidate || (eligible && !eligible(candidate.entry))) continue;
-      const sameMessage =
-        candidate.entry.id === message.id ||
-        candidate.entry.message.id === message.id ||
-        toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
+      const sameId = candidate.entry.id === message.id || candidate.entry.message.id === message.id;
+      // Tool call ids are unique, so every persisted step of a streamed run
+      // anchors to that run's one entry, not just the first step.
+      const sharesToolCall = toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
       const alreadyDrawn = redrawsEntry(candidate, displayed, texts, toolCallIds);
 
-      const claimsIdentity = sameMessage && !claimedEntries.has(index);
+      const claimsIdentity = sharesToolCall || (sameId && !claimedEntries.has(index));
       const claimsText = alreadyDrawn && !claimedTexts.has(textClaim(index));
       if (!claimsIdentity && !claimsText) continue;
 

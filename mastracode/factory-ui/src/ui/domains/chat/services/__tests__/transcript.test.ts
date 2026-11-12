@@ -1358,6 +1358,39 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries).toHaveLength(1);
   });
 
+  it('does not redraw a tool-only step of a streamed run as a second turn', () => {
+    // Each persisted step shares tool calls with the one streamed entry; a later
+    // step used to land as a new entry, drawing its submit_plan card twice.
+    const invocation = (toolCallId: string, toolName: string, state: 'call' | 'result'): MastraMessagePart => ({
+      type: 'tool-invocation',
+      toolInvocation:
+        state === 'result'
+          ? { state, toolCallId, toolName, args: {}, result: 'ok' }
+          : { state, toolCallId, toolName, args: {} },
+    });
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('streamed-turn', 'assistant', [
+          invocation('tool-1', 'execute_command', 'result'),
+          invocation('plan-1', 'submit_plan', 'call'),
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('step-1', 'assistant', [invocation('tool-1', 'execute_command', 'result')]),
+        dbMessage('step-2', 'assistant', [invocation('plan-1', 'submit_plan', 'call')]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+  });
+
   it('does not redraw a step the stream has already written further', () => {
     // A focus revalidation lands mid-run: the persisted step holds a prefix of
     // the text still streaming on screen — same step, older snapshot.
