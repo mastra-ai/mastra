@@ -3181,6 +3181,7 @@ export class Agent<
           source: 'agent',
           agentId: this.id,
           agentName: this.name,
+          agentSource: this.source,
         });
       }
 
@@ -4448,7 +4449,7 @@ export class Agent<
           }
         }
         // Always register the configuration with agent context
-        mastra.addProcessorConfiguration(processor, this.id, 'input');
+        mastra.addProcessorConfiguration(processor, this.id, 'input', this.source);
       });
     }
 
@@ -4464,7 +4465,7 @@ export class Agent<
           }
         }
         // Always register the configuration with agent context
-        mastra.addProcessorConfiguration(processor, this.id, 'output');
+        mastra.addProcessorConfiguration(processor, this.id, 'output', this.source);
       });
     }
 
@@ -4780,6 +4781,7 @@ export class Agent<
         source: 'agent',
         agentId: this.id,
         agentName: this.name,
+        agentSource: this.source,
       });
     }
   }
