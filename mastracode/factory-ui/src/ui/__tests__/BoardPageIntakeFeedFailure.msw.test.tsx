@@ -121,7 +121,10 @@ describe('Intake column when the candidate list fails', () => {
     let secondPageHealthy = false;
     const requested: string[] = [];
     stubBoardEndpoints(request => {
-      const cursor = new URL(request.url).searchParams.get('cursor');
+      const query = new URL(request.url).searchParams;
+      // Triage reads the auto-triaged issues on its own, and there are none.
+      if (query.has('label')) return page({ candidates: [] });
+      const cursor = query.get('cursor');
       requested.push(cursor ?? 'first');
       if (!cursor) return page({ candidates: [issue], nextCursor: 'second' });
       return secondPageHealthy ? page({ candidates: [githubIssueRecord(8, { title: 'Fix signup' })] }) : unavailable();

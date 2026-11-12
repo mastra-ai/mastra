@@ -70,8 +70,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake candidat
           },
         })
       ).item;
-    const candidates = async (filter: { kind?: 'issue' | 'pull-request'; integrationId?: string } = {}) =>
-      (await workItems.listIntakeCandidates({ ...scope, ...filter, limit: 50 })).candidates;
+    const candidates = async (
+      filter: { kind?: 'issue' | 'pull-request'; sources?: { integrationId: string }[] } = {},
+    ) => (await workItems.listIntakeCandidates({ ...scope, ...filter, limit: 50 })).candidates;
     const cards = () => workItems.list(scope);
     const sourceRows = () =>
       storage.ops.findMany<WorkItemSourceDbRecord>('factory_work_item_sources', {
@@ -461,6 +462,58 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake candidat
     expect(await sourceRows()).toHaveLength(2);
   });
 
+  it('lists the records of the picked sources only, each with the kind picked for it', async () => {
+    const { workItems, scope, offer } = await setup();
+    const linear = { integrationId: 'linear', type: 'issue', externalId: 'lin-1' };
+    await offer(issue(1), { state: 'open', createdAt: '2026-01-01T00:00:00.000Z' });
+    await offer(pullRequest(2), { state: 'open', createdAt: '2026-01-02T00:00:00.000Z' });
+    await offer(linear, { linearStateType: 'started', createdAt: '2026-01-03T00:00:00.000Z' });
+    await offer(
+      { integrationId: 'jira', type: 'issue', externalId: 'jira-1' },
+      { state: 'open', createdAt: '2026-01-04T00:00:00.000Z' },
+    );
+
+    const listed = async (sources: { integrationId: string; kind?: 'issue' | 'pull-request' }[]) =>
+      (await workItems.listIntakeCandidates({ ...scope, sources, limit: 50 })).candidates.map(
+        candidate => candidate.externalSource,
+      );
+
+    expect(await listed([{ integrationId: 'linear' }, { integrationId: 'github' }])).toEqual([
+      linear,
+      pullRequest(2),
+      issue(1),
+    ]);
+    // Linear's issues beside GitHub's pull requests: GitHub's issues are not asked for.
+    expect(await listed([{ integrationId: 'linear' }, { integrationId: 'github', kind: 'pull-request' }])).toEqual([
+      linear,
+      pullRequest(2),
+    ]);
+    expect(await listed([{ integrationId: 'github', kind: 'issue' }])).toEqual([issue(1)]);
+  });
+
+  it('lists the records that carry a label, however many newer records lack it', async () => {
+    const { workItems, scope, offer } = await setup();
+    const day = (n: number) => new Date(Date.UTC(2026, 0, 1) + n * 60_000).toISOString();
+    // The two oldest records carry the label, behind more unlabelled ones than one read holds.
+    await offer(issue(1), { state: 'open', labels: ['Status: Auto-Triaged'], createdAt: day(1) });
+    await offer(issue(2), { state: 'open', labels: ['bug', 'status: auto-triaged'], createdAt: day(2) });
+    await offer(pullRequest(3), { state: 'open', labels: ['status: auto-triaged'], createdAt: day(3) });
+    for (let n = 4; n <= 520; n += 1) await offer(issue(n), { state: 'open', labels: ['bug'], createdAt: day(n) });
+
+    const triaged = {
+      ...scope,
+      sources: [{ integrationId: 'github', kind: 'issue' as const }],
+      label: 'status: auto-triaged',
+      limit: 1,
+    };
+    const first = await workItems.listIntakeCandidates(triaged);
+    const second = await workItems.listIntakeCandidates({ ...triaged, after: first.next! });
+
+    expect(first.candidates.map(candidate => candidate.externalSource)).toEqual([issue(2)]);
+    expect(second.candidates.map(candidate => candidate.externalSource)).toEqual([issue(1)]);
+    expect(second.next).toBeNull();
+  }, 60_000);
+
   it('lists candidates newest first, by kind and provider, a page at a time', async () => {
     const { workItems, scope, offer, file, candidates } = await setup();
     await file(issue(100), { state: 'open' });
@@ -477,18 +530,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake candidat
 
     const ids = (page: { candidates: { externalSource: ExternalWorkItemSource }[] }) =>
       page.candidates.map(candidate => candidate.externalSource.externalId);
-    const first = await workItems.listIntakeCandidates({ ...scope, kind: 'issue', integrationId: 'github', limit: 2 });
+    const first = await workItems.listIntakeCandidates({
+      ...scope,
+      kind: 'issue',
+      sources: [{ integrationId: 'github' }],
+      limit: 2,
+    });
     const second = await workItems.listIntakeCandidates({
       ...scope,
       kind: 'issue',
-      integrationId: 'github',
+      sources: [{ integrationId: 'github' }],
       limit: 2,
       after: first.next!,
     });
     const third = await workItems.listIntakeCandidates({
       ...scope,
       kind: 'issue',
-      integrationId: 'github',
+      sources: [{ integrationId: 'github' }],
       limit: 2,
       after: second.next!,
     });
@@ -498,9 +556,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake candidat
     expect(ids(third)).toEqual([issue(1).externalId]);
     expect(third.next).toBeNull();
     expect((await candidates({ kind: 'pull-request' })).map(item => item.externalSource)).toEqual([pullRequest(50)]);
-    expect((await candidates({ integrationId: 'linear' })).map(item => item.externalSource.externalId)).toEqual([
-      'lin-1',
-    ]);
+    expect(
+      (await candidates({ sources: [{ integrationId: 'linear' }] })).map(item => item.externalSource.externalId),
+    ).toEqual(['lin-1']);
     expect(await candidates()).toHaveLength(7);
   });
 

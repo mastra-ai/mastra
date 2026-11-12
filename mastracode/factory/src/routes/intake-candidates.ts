@@ -42,6 +42,12 @@ function decodeCursor(cursor: string): Position | null {
   }
 }
 
+/** `github` is every record of the integration, `github:pull-request` one kind of them. */
+function sourceFilter(source: string): { integrationId: string; kind?: 'issue' | 'pull-request' } {
+  const [integrationId = source, kind] = source.split(':');
+  return kind === 'issue' || kind === 'pull-request' ? { integrationId, kind } : { integrationId };
+}
+
 export function buildIntakeCandidateRoutes(deps: IntakeCandidateRouteDependencies): ApiRoute[] {
   const { auth, projects, workItems, settings } = deps;
   return [
@@ -60,7 +66,8 @@ export function buildIntakeCandidateRoutes(deps: IntakeCandidateRouteDependencie
         if (!path.success) return c.json({ error: 'Project not found' }, 404);
         const query = contract.querySchema.safeParse({
           kind: c.req.query('kind'),
-          source: c.req.query('source'),
+          source: c.req.queries('source'),
+          label: c.req.query('label'),
           cursor: c.req.query('cursor'),
           limit: c.req.query('limit'),
         });
@@ -78,7 +85,8 @@ export function buildIntakeCandidateRoutes(deps: IntakeCandidateRouteDependencie
           workItems.listIntakeCandidates({
             ...scope,
             ...(query.data.kind ? { kind: query.data.kind } : {}),
-            ...(query.data.source ? { integrationId: query.data.source } : {}),
+            ...(query.data.source ? { sources: query.data.source.map(sourceFilter) } : {}),
+            ...(query.data.label ? { label: query.data.label } : {}),
             ...(after ? { after } : {}),
             limit: query.data.limit,
           }),

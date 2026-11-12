@@ -1,4 +1,5 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIntakeCandidatesQuery } from '../../../../hooks/useIntakeCandidates';
 import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
@@ -22,8 +23,9 @@ import type { BoardStageId } from '../stages';
  * routes place it, so only the default board lists records that have no card
  * yet. The server keeps that list (GitHub issues from the selected
  * repositories, the linked repositories' pull requests, and the issues of
- * provider sources bound to the project), so one read serves every source and
- * no provider is asked from here.
+ * provider sources bound to the project), so no provider is asked from here.
+ * One read serves every source; Triage and a source filter each read the list
+ * again, narrowed by the server.
  */
 const INTAKE_CARD_SOURCES: Record<IntakeSource, BoardCandidate['source']> = {
   github: 'github-issue',
@@ -45,6 +47,9 @@ const INTAKE_PASSES: Record<IntakeSource, { integrationId: string; kind: 'issue'
   jira: { integrationId: 'jira', kind: 'issue' },
   incidentio: { integrationId: 'incidentio', kind: 'issue' },
 };
+
+/** A source as the list route names it: the integration with the kind of record wanted of it. */
+const passFilter = (source: IntakeSource) => `${INTAKE_PASSES[source].integrationId}:${INTAKE_PASSES[source].kind}`;
 
 /** Sources a board gets only through a binding to its project. */
 const BOUND_SOURCES: ReadonlySet<IntakeSource> = new Set(['gitlab', 'linear', 'jira', 'incidentio']);
@@ -177,34 +182,65 @@ export function useBoardIntake({
   );
   const browsesGithub = browsedSources.includes('github');
 
-  // One read for every source. It is asked for as soon as the board is known, beside the
-  // configuration above rather than after it; only the default board lists records with no card.
-  const list = useIntakeCandidatesQuery(defaultBoard ? factoryProjectId : undefined);
+  // The lists are asked for as soon as the board is known, beside the configuration above rather
+  // than after it; only the default board lists records with no card. The server narrows each one
+  // before it pages it, so no column waits on the pages another has loaded.
+  const everything = useIntakeCandidatesQuery(defaultBoard ? factoryProjectId : undefined);
+  // A source filter hides some sources: the first column then pages the picked ones alone.
+  const narrowed = browsedSources.length < feedSources.length;
+  const picked = useIntakeCandidatesQuery(
+    defaultBoard && narrowed && browsedSources.length > 0 ? factoryProjectId : undefined,
+    { sources: browsedSources.map(passFilter) },
+  );
+  // Auto-triaged issues land in the default board's Triage, which pages them alone.
+  const triaged = useIntakeCandidatesQuery(triageColumn && browsesGithub ? factoryProjectId : undefined, {
+    sources: [passFilter('github')],
+    label: AUTO_TRIAGED_LABEL,
+  });
+  const list = narrowed ? picked : everything;
   const offers = (sources: readonly IntakeSource[], candidate: BoardCandidate) =>
     sources.some(source => INTAKE_CARD_SOURCES[source] === candidate.source);
-  // Every configured source counts here, so person and label filters know the people and labels
-  // of a source that a source filter hides.
-  const participantCandidates = (list.data?.pages ?? [])
-    .flatMap(page => page.candidates)
-    .flatMap(record => intakeCandidate(record) ?? [])
-    .filter(candidate => offers(feedSources, candidate));
-  // Auto-triaged issues land in the default board's Triage; everything else starts in the first column.
-  const candidates = participantCandidates
-    .filter(candidate => offers(browsedSources, candidate))
-    .map(candidate =>
-      triageColumn && candidate.column === 'triage' ? candidate : { ...candidate, column: initialPhase },
-    );
+  const loaded = (query: typeof everything) =>
+    (query.data?.pages ?? []).flatMap(page => page.candidates).flatMap(record => intakeCandidate(record) ?? []);
+  // Every configured source counts here, so person and label filters know the people and labels of
+  // a source that a source filter hides. A record two lists hold counts once.
+  const participantCandidates = [
+    ...new Map(
+      [everything, picked, triaged]
+        .flatMap(loaded)
+        .filter(candidate => offers(feedSources, candidate))
+        .map(candidate => [`${candidate.source}:${candidate.sourceKey}`, candidate]),
+    ).values(),
+  ];
+  const candidates = [
+    // Work without Triage offers an auto-triaged issue in its first column; with Triage it is on the Triage list.
+    ...loaded(list)
+      .filter(candidate => offers(browsedSources, candidate) && !(triageColumn && candidate.column === 'triage'))
+      .map(candidate => ({ ...candidate, column: initialPhase })),
+    ...loaded(triaged).filter(candidate => candidate.column === 'triage'),
+  ];
 
   // A pass that failed keeps what it last read, so the list still shows but may be behind.
-  const passes = list.data?.pages[0]?.passes ?? [];
-  const staleSource = browsedSources.find(source =>
+  const passes = (list.data ?? everything.data ?? triaged.data)?.pages[0]?.passes ?? [];
+  const failed = (source: IntakeSource) =>
     passes.some(
       pass =>
         pass.failed &&
         pass.integrationId === INTAKE_PASSES[source].integrationId &&
         pass.kind === INTAKE_PASSES[source].kind,
-    ),
-  );
+    );
+  const staleSource = browsedSources.find(failed);
+  const listFeedOf = (query: typeof everything, stale: boolean): IntakeFeed & { isPending: boolean } => ({
+    error: query.error,
+    isPending: query.isPending,
+    isFetchNextPageError: query.isFetchNextPageError,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    // A column asked twice for its next page joins the read in flight.
+    fetchNextPage: () => query.fetchNextPage({ cancelRefetch: false }),
+    refetch: () => query.refetch(),
+    stale,
+  });
   // Routing failures retry discovery rather than the list: without bindings the board cannot tell
   // which provider sources are its own.
   const unroutedSource = bindingsFailed ? browsedSources.find(source => BOUND_SOURCES.has(source)) : undefined;
@@ -215,17 +251,7 @@ export function useBoardIntake({
         fetchNextPage: () => undefined,
         refetch: () => bindingsQuery.refetch(),
       }
-    : {
-        error: list.error,
-        isPending: list.isPending,
-        isFetchNextPageError: list.isFetchNextPageError,
-        hasNextPage: list.hasNextPage,
-        isFetchingNextPage: list.isFetchingNextPage,
-        // Triage and the first column page the same list: the second to ask joins the read in flight.
-        fetchNextPage: () => list.fetchNextPage({ cancelRefetch: false }),
-        refetch: () => list.refetch(),
-        stale: staleSource !== undefined,
-      };
+    : listFeedOf(list, staleSource !== undefined);
   const feed = intakeRoutesFailed
     ? {
         error: intakeRoutesQuery.error,
@@ -236,9 +262,9 @@ export function useBoardIntake({
     : browsedSources.length > 0
       ? listFeed
       : undefined;
-  // Triage shows auto-triaged issues out of the same list, so it reports the same read.
+  // Triage reads its own list, so it pages, fails and retries on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
-    ...(triageColumn && browsesGithub ? { triage: feed } : {}),
+    ...(triageColumn && browsesGithub ? { triage: listFeedOf(triaged, failed('github')) } : {}),
     [initialPhase]: feed,
   };
 
@@ -263,6 +289,6 @@ export function useBoardIntake({
     participantCandidates,
     feedByColumn,
     isPending,
-    isTriagePending: triageColumn && browsesGithub && list.isPending,
+    isTriagePending: triageColumn && browsesGithub && triaged.isPending,
   };
 }

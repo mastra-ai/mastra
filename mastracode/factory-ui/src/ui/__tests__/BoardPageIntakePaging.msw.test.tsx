@@ -73,7 +73,7 @@ function stubIntersectionObserver(startsInView: boolean) {
   };
 }
 
-/** Stubs the review board's endpoints and records which candidate pages were requested. */
+/** Stubs Work narrowed to pull requests, and records which pages of them were requested. */
 function stubReviewBoard() {
   const requestedPages: string[] = [];
   server.use(
@@ -106,7 +106,15 @@ function stubReviewBoard() {
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, ({ request }) => {
-      const page = new URL(request.url).searchParams.get('cursor') ?? '1';
+      const query = new URL(request.url).searchParams;
+      // Triage asks for the auto-triaged issues, and this project has none.
+      if (query.has('label')) return HttpResponse.json({ candidates: [], passes: [] });
+      // The whole list, read for the person and label filters, holds the same pull requests in one page.
+      if (query.getAll('source').join() !== 'github:pull-request') {
+        const candidates = Object.values(pullRequestPages).flatMap(listed => listed.candidates);
+        return HttpResponse.json({ candidates, passes: [] });
+      }
+      const page = query.get('cursor') ?? '1';
       requestedPages.push(page);
       return HttpResponse.json(pullRequestPages[page]);
     }),
@@ -115,7 +123,7 @@ function stubReviewBoard() {
   return requestedPages;
 }
 
-/** Stubs Work, whose Triage and Intake columns page the one list between them. */
+/** Stubs Work, whose Triage pages the auto-triaged issues on its own, and records the pages it asked for. */
 function stubWorkBoard() {
   const requestedTriagePages: string[] = [];
   let releaseSecondPage = () => {};
@@ -153,7 +161,13 @@ function stubWorkBoard() {
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, async ({ request }) => {
-      const page = new URL(request.url).searchParams.get('cursor') ?? '1';
+      const query = new URL(request.url).searchParams;
+      // Intake reads the whole list, which holds the same issues in one page.
+      if (!query.has('label')) {
+        const candidates = Object.values(triageIssuePages).flatMap(listed => listed.candidates);
+        return HttpResponse.json({ candidates, passes: [] });
+      }
+      const page = query.get('cursor') ?? '1';
       requestedTriagePages.push(page);
       if (page === '2') await secondPageGate;
       return HttpResponse.json(triageIssuePages[page]);

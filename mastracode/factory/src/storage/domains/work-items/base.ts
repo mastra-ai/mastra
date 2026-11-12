@@ -2453,19 +2453,29 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows && toIntakeCandidate(rows);
   }
 
-  /** One page of a project's intake candidates, newest record first. Reads no card. */
+  /**
+   * One page of a project's intake candidates, newest record first. Reads no card.
+   *
+   * `kind`, the integrations of `sources` and a kind they all name are read off the candidate
+   * index. A `label`, or sources that name different kinds, are not in it: the page is then filled
+   * by reading the project's candidates in order, 500 at a time, until it is full or they end.
+   */
   async listIntakeCandidates({
     orgId,
     factoryProjectId,
     kind,
-    integrationId,
+    sources,
+    label,
     after,
     limit,
   }: {
     orgId: string;
     factoryProjectId: string;
     kind?: 'issue' | 'pull-request';
-    integrationId?: string;
+    /** Records of any of these integrations; one that names a `kind` gives only that kind of its records. */
+    sources?: readonly { integrationId: string; kind?: 'issue' | 'pull-request' }[];
+    /** Records that carry this label, in any letter case. */
+    label?: string;
     after?: { createdAt: Date; id: string };
     limit: number;
   }): Promise<IntakeCandidatePage> {
@@ -2474,7 +2484,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       orgId,
       factoryProjectId,
       sourceType: kind,
-      integrationId,
+      sources: sources?.map(source => ({ integrationId: source.integrationId, sourceType: source.kind })),
+      label,
       after,
       limit,
     });

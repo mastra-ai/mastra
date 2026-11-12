@@ -256,6 +256,26 @@ describe('GET /web/factory/projects/:id/intake/candidates', () => {
     expect((await t.read('?source=linear')).candidates).toEqual([]);
   });
 
+  it('narrows the list to the picked sources, each with its kind, and to a label', async () => {
+    const t = await setup();
+    t.open.issues = [
+      listedIssue('acme/repo-0', 1, '2020-01-01T00:00:00Z'),
+      { ...listedIssue('acme/repo-0', 2, '2020-01-02T00:00:00Z'), labels: ['Status: Auto-Triaged'] },
+    ];
+    t.open.pullRequests = [listedPullRequest('acme/repo-0', 3, '2020-01-03T00:00:00Z')];
+    await t.pass();
+
+    const titles = async (query: string) => (await t.read(query)).candidates.map(candidate => candidate.title);
+
+    expect(await titles('?source=linear&source=github:pull-request')).toEqual(['Pull request 3']);
+    expect(await titles('?source=github:issue')).toEqual(['Issue 2', 'Issue 1']);
+    expect(await titles(`?source=github:issue&label=${encodeURIComponent('status: auto-triaged')}`)).toEqual([
+      'Issue 2',
+    ]);
+    expect(await titles('?label=nobody-uses-this')).toEqual([]);
+    expect((await t.app.request(`${t.path}?source=github:thread`)).status).toBe(400);
+  });
+
   it('says when each provider was last read to the end, and when the latest pass failed', async () => {
     const t = await setup();
     t.open.issues = [listedIssue('acme/repo-0', 1, BEFORE_LINK)];

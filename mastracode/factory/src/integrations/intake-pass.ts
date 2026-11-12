@@ -85,7 +85,7 @@ async function storedCandidates(listing: IntakeListing<never>): Promise<Map<stri
       orgId: listing.orgId,
       factoryProjectId: listing.factoryProjectId,
       kind: listing.kind,
-      integrationId: listing.integrationId,
+      sources: [{ integrationId: listing.integrationId }],
       ...(after ? { after } : {}),
       limit: CANDIDATE_PAGE,
     });

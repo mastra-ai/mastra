@@ -206,14 +206,46 @@ export function recordOfGithubPullRequest(pull: ListedGithubItem): IntakeCandida
   });
 }
 
-/** A candidates route that answers with one page, or with whatever `page` returns per request. */
+/** The records the server lists for a request: narrowed to its `source` and `label`, as the route does. */
+export function narrowedIntakeCandidates(
+  records: readonly IntakeCandidateInfo[],
+  request: Request,
+): IntakeCandidateInfo[] {
+  const query = new URL(request.url).searchParams;
+  const sources = query.getAll('source').map(source => source.split(':'));
+  const label = query.get('label')?.toLowerCase();
+  return records.filter(
+    ({ externalSource, labels }) =>
+      (sources.length === 0 ||
+        sources.some(
+          ([integrationId, kind]) =>
+            integrationId === externalSource.integrationId && (!kind || kind === externalSource.type),
+        )) &&
+      (label === undefined || labels.some(item => item.toLowerCase() === label)),
+  );
+}
+
+/**
+ * A candidates route that answers the way the server does, narrowing the records to the request
+ * and paging them by its `limit`, or with whatever `answer` returns per request.
+ */
 export function intakeCandidatesHandler(
   baseUrl: string,
   answer: readonly IntakeCandidateInfo[] | ((request: Request) => IntakeCandidateListResponse | Response),
   passes: readonly Pass[] = [],
 ) {
   return http.get(`${baseUrl}/web/factory/projects/:id/intake/candidates`, ({ request }) => {
-    if (typeof answer !== 'function') return HttpResponse.json({ candidates: answer, passes });
+    if (typeof answer !== 'function') {
+      const query = new URL(request.url).searchParams;
+      const matching = narrowedIntakeCandidates(answer, request);
+      const from = Number(query.get('cursor') ?? 0);
+      const to = from + Number(query.get('limit') ?? 50);
+      return HttpResponse.json({
+        candidates: matching.slice(from, to),
+        ...(to < matching.length ? { nextCursor: String(to) } : {}),
+        passes,
+      });
+    }
     const page = answer(request);
     return page instanceof Response ? page : HttpResponse.json(page);
   });

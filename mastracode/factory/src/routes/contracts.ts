@@ -817,8 +817,22 @@ const intakeCandidateList = {
   pathSchema: projectPathSchema,
   querySchema: z.object({
     kind: z.enum(['issue', 'pull-request']).optional(),
-    /** The integration to list for, such as `github` or `linear`. */
-    source: z.string().min(1).max(128).optional(),
+    /**
+     * Repeatable. Narrows the list to the records of these integrations, such as `github` or
+     * `linear`. One followed by a kind, as in `github:pull-request`, gives only that kind of its records.
+     */
+    source: z
+      .array(
+        z
+          .string()
+          .max(128)
+          .regex(/^[^:]+(:(issue|pull-request))?$/),
+      )
+      .min(1)
+      .max(20)
+      .optional(),
+    /** Narrows the list to the records that carry this label, in any letter case. */
+    label: z.string().min(1).max(256).optional(),
     /** The `nextCursor` of the page before. */
     cursor: z.string().min(1).max(512).optional(),
     limit: boundedLimitSchema(50, 100),

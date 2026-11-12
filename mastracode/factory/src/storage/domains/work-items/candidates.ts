@@ -56,7 +56,10 @@ export interface CandidateListInput {
   orgId: string;
   factoryProjectId: string;
   sourceType?: string;
-  integrationId?: string;
+  /** Records of any of these integrations; one that names a `sourceType` gives only that kind of its records. */
+  sources?: readonly { integrationId: string; sourceType?: string }[];
+  /** Records that carry this label, in any letter case. */
+  label?: string;
   /** The last candidate of the previous page. */
   after?: { createdAt: Date; id: string };
   limit: number;
@@ -322,23 +325,64 @@ export async function adoptCandidate(
   return { source: adopted, work: adoptedWork };
 }
 
-/** One page of a project's candidates, newest record first. Reads `limit + 1` sources and the page's work items. */
+/**
+ * Rows read at a time when the list is narrowed by something the candidate index does not hold:
+ * a label, which is one entry of a JSON column, or sources that name different kinds.
+ */
+const CANDIDATE_SCAN_ROWS = 500;
+
+/**
+ * One page of a project's candidates, newest record first. Reads `limit + 1` sources and the
+ * page's work items, or, for a narrowing the index does not hold, the project's candidates in
+ * order until the page is full or they end.
+ */
 export async function listCandidates(
   ops: FactoryStorageOps,
-  { orgId, factoryProjectId, sourceType, integrationId, after, limit }: CandidateListInput,
+  { orgId, factoryProjectId, sourceType, sources = [], label, after, limit }: CandidateListInput,
 ): Promise<{ candidates: CandidateRows[]; next: { createdAt: Date; id: string } | null }> {
   const where: CollectionWhere = { org_id: orgId, factory_project_id: factoryProjectId, candidate: true };
-  if (sourceType !== undefined) where.source_type = sourceType;
-  if (integrationId !== undefined) where.integration_id = integrationId;
-  const sources = await ops.findMany<WorkItemSourceDbRecord>(SOURCES, where, {
-    orderBy: [
-      ['source_created_at', 'desc'],
-      ['id', 'desc'],
-    ],
-    limit: limit + 1,
-    ...(after ? { cursor: { values: [after.createdAt, after.id] } } : {}),
-  });
-  const page = sources.slice(0, limit);
+  if (sources.length > 0) where.integration_id = { in: [...new Set(sources.map(source => source.integrationId))] };
+  // Sources that all name one kind are the list of that kind, which the index holds.
+  const kinds = new Set(sources.map(source => source.sourceType));
+  const indexedKind = sourceType ?? (kinds.size === 1 ? [...kinds][0] : undefined);
+  if (indexedKind !== undefined) where.source_type = indexedKind;
+  const ownKinds = [...kinds].some(kind => kind !== undefined && kind !== indexedKind);
+  const wanted = label?.toLowerCase();
+  const matches = (row: WorkItemSourceDbRecord) =>
+    (!ownKinds ||
+      sources.some(
+        source =>
+          source.integrationId === row.integration_id &&
+          (source.sourceType === undefined || source.sourceType === row.source_type),
+      )) &&
+    (wanted === undefined || row.labels.some(item => item.toLowerCase() === wanted));
+  // Without such a narrowing every row matches, and one read of a page and one row more answers.
+  const rowsPerRead = ownKinds || wanted !== undefined ? Math.max(CANDIDATE_SCAN_ROWS, limit + 1) : limit + 1;
+
+  const page: WorkItemSourceDbRecord[] = [];
+  let more = false;
+  let position = after;
+  scan: for (;;) {
+    const rows = await ops.findMany<WorkItemSourceDbRecord>(SOURCES, where, {
+      orderBy: [
+        ['source_created_at', 'desc'],
+        ['id', 'desc'],
+      ],
+      limit: rowsPerRead,
+      ...(position ? { cursor: { values: [position.createdAt, position.id] } } : {}),
+    });
+    for (const row of rows) {
+      if (!matches(row)) continue;
+      if (page.length === limit) {
+        more = true;
+        break scan;
+      }
+      page.push(row);
+    }
+    const last = rows.at(-1);
+    if (!last || rows.length < rowsPerRead) break;
+    position = { createdAt: candidateCreatedAt(last), id: last.id };
+  }
   const works = new Map<string, WorkItemDbRecord>();
   if (page.length > 0) {
     const rows = await ops.findMany<WorkItemDbRecord>(WORK_ITEMS, {
@@ -352,7 +396,7 @@ export async function listCandidates(
       const work = works.get(source.work_item_id);
       return work ? [{ source, work }] : [];
     }),
-    next: sources.length > limit ? { createdAt: candidateCreatedAt(page.at(-1)!), id: page.at(-1)!.id } : null,
+    next: more ? { createdAt: candidateCreatedAt(page.at(-1)!), id: page.at(-1)!.id } : null,
   };
 }
 

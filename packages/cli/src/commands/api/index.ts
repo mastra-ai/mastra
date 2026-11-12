@@ -891,7 +891,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     examples: [
       {
         description: 'List the first ten GitHub issues waiting in Intake',
-        command: `mastra api factory intake-candidate list <project-id> '{"kind":"issue","source":"github","limit":10}'`,
+        command: `mastra api factory intake-candidate list <project-id> '{"source":["github:issue"],"limit":10}'`,
       },
     ],
   });

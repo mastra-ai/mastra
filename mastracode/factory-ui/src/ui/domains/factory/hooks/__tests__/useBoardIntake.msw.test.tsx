@@ -30,18 +30,30 @@ import { githubWithLinearConfig, gitlabOnlyConfig, connectedLinear, disabledGitl
 
 const repository: LinkedRepositoryPayload = { projectRepositoryId: 'repo-1', slug: 'acme/app' };
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
+/** The read Triage makes of the list: the auto-triaged GitHub issues, whichever pages Intake has loaded. */
+const TRIAGE_LIST = 'source=github:issue&label=status: auto-triaged';
+/** More records than one read of the list returns. */
+const INTAKE_PAGE = 100;
 const PROVIDER_LIST = /^\/web\/(github|gitlab|linear|jira|incidentio|intake)\/(.*\/)?(issues|prs|items)$/;
 
 /** The paths this test's hook asked for, so a test can say which lists it read and which it left alone. */
 function recordRequests() {
   const paths: string[] = [];
+  const lists: string[] = [];
   const listener = ({ request }: { request: Request }) => {
-    paths.push(new URL(request.url).pathname);
+    const url = new URL(request.url);
+    paths.push(url.pathname);
+    if (url.pathname.endsWith('/intake/candidates')) {
+      url.searchParams.delete('limit');
+      lists.push(decodeURIComponent(url.searchParams.toString().replaceAll('+', ' ')));
+    }
   };
   server.events.on('request:start', listener);
   onTestFinished(() => server.events.removeListener('request:start', listener));
   return {
     candidateReads: () => paths.filter(path => path.endsWith('/intake/candidates')),
+    /** What each read of the list asked the server to narrow it to; `''` is the whole list. */
+    candidateLists: () => [...lists].sort(),
     providerReads: () => paths.filter(path => PROVIDER_LIST.test(path)),
     cardReads: () => paths.filter(path => path.endsWith('/work-items')),
   };
@@ -234,7 +246,7 @@ describe('useBoardIntake reading the list the server keeps', () => {
     );
   }
 
-  it('reads issues and pull requests of every source in one request and asks no provider', async () => {
+  it('reads issues and pull requests of every source in one request, Triage in another, and asks no provider', async () => {
     stubEverySource([githubIssueRecord(1), githubPullRequestRecord(2), jiraRecord('jira-1', 'OPS-1')]);
     const requests = recordRequests();
 
@@ -247,14 +259,16 @@ describe('useBoardIntake reading the list the server keeps', () => {
       'github-pr',
       'jira-issue',
     ]);
-    expect(requests.candidateReads()).toEqual(['/web/factory/projects/factory-1/intake/candidates']);
+    expect(requests.candidateLists()).toEqual(['', TRIAGE_LIST]);
     expect(requests.providerReads()).toEqual([]);
   });
 
   it('asks for the next page with the cursor the server gave', async () => {
     const cursors: Array<string | null> = [];
     stubEverySource(request => {
-      const cursor = new URL(request.url).searchParams.get('cursor');
+      const query = new URL(request.url).searchParams;
+      if (query.has('label')) return { candidates: [], passes: [] };
+      const cursor = query.get('cursor');
       cursors.push(cursor);
       return cursor
         ? { candidates: [githubIssueRecord(2)], passes: [] }
@@ -412,7 +426,7 @@ describe('useBoardIntake GitHub issues', () => {
     expect(result.current.isTriagePending).toBe(false);
   });
 
-  it('offers an auto-triaged issue in Triage on Work that kept Triage, out of the same read', async () => {
+  it('offers an auto-triaged issue in Triage on Work that kept Triage, out of a read of its own', async () => {
     stubGithub([...records, triaged]);
     const requests = recordRequests();
 
@@ -424,7 +438,23 @@ describe('useBoardIntake GitHub issues', () => {
       expect.objectContaining({ column: 'triage' }),
     ]);
     expect(result.current.feedByColumn).toHaveProperty('triage');
-    expect(requests.candidateReads()).toHaveLength(1);
+    expect(requests.candidateLists()).toEqual(['', TRIAGE_LIST]);
+  });
+
+  it('offers in Triage an auto-triaged issue older than the first page of the list', async () => {
+    const newer = Array.from({ length: INTAKE_PAGE }, (_, index) => githubIssueRecord(100 + index));
+    stubGithub([...newer, triaged]);
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    await waitFor(() => expect(result.current.isTriagePending).toBe(false));
+    // Intake has loaded its first page only, and Triage did not wait for the rest of it.
+    expect(result.current.feedByColumn.intake?.hasNextPage).toBe(true);
+    expect(result.current.candidates.filter(candidate => candidate.column === 'triage')).toEqual([
+      expect.objectContaining({ sourceKey: 'github:10:issue:4' }),
+    ]);
+    expect(result.current.feedByColumn.triage?.hasNextPage).toBe(false);
   });
 
   it('offers Work every issue of a selected repository, whatever its labels', async () => {
@@ -608,6 +638,71 @@ describe('useBoardIntake Jira gating', () => {
   });
 });
 
+describe('useBoardIntake with a source picked', () => {
+  const jiraBinding: IntakeSourceBinding = { integrationId: 'jira', sourceId: '10001', factoryProjectId: 'factory-1' };
+
+  function stubGithubAndJira(records: IntakeCandidateInfo[]) {
+    stubIntake([jiraBinding], ['factory-1'], records);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: false, sourceIds: null },
+            jira: { enabled: true, sourceIds: ['10001'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: true,
+          mode: 'platform',
+          site: null,
+          sites: [],
+          reason: 'ready',
+        }),
+      ),
+    );
+  }
+
+  const pick = (...sources: string[]) =>
+    renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repositories: [repository],
+        definition: workBoard,
+        sourceFilters: { source: new Set(sources), linearProject: new Set() },
+      }),
+    );
+
+  it('offers the records of the picked source that are older than the first page of the whole list', async () => {
+    const newer = Array.from({ length: INTAKE_PAGE }, (_, index) => githubIssueRecord(100 + index));
+    stubGithubAndJira([...newer, jiraRecord('jira-1', 'OPS-1')]);
+    const requests = recordRequests();
+
+    const { result } = pick('jira');
+
+    await waitFor(() => expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual(['jira-1']));
+    expect(result.current.feedByColumn.intake?.hasNextPage).toBe(false);
+    // Jira issues never reach Triage, so nothing reads it while only Jira is picked.
+    expect(requests.candidateLists()).toEqual(['', 'source=jira:issue']);
+  });
+
+  it('asks the server for pull requests alone when only they are picked', async () => {
+    stubGithubAndJira([githubIssueRecord(1), githubPullRequestRecord(2), jiraRecord('jira-1', 'OPS-1')]);
+    const requests = recordRequests();
+
+    const { result } = pick('pull-request');
+
+    await waitFor(() =>
+      expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual(['github:10:pull-request:2']),
+    );
+    expect(requests.candidateLists()).toEqual(['', 'source=github:pull-request']);
+  });
+});
+
 describe('useBoardIntake query loading', () => {
   describe('when GitHub intake is ready and Linear status is still loading', () => {
     it('keeps intake pending until all configured sources are discovered', async () => {
@@ -640,7 +735,7 @@ describe('useBoardIntake query loading', () => {
   });
 
   describe('when intake configuration is still loading', () => {
-    it('starts GitLab status and the list before configuration resolves', async () => {
+    it('starts GitLab status and the lists before configuration resolves', async () => {
       stubIntake([]);
       const requests = recordRequests();
       let release = () => {};
@@ -661,7 +756,7 @@ describe('useBoardIntake query loading', () => {
       const { unmount } = renderIntake('factory-1');
       try {
         await waitFor(() => expect(requested).toBe(true));
-        await waitFor(() => expect(requests.candidateReads()).toHaveLength(1));
+        await waitFor(() => expect(requests.candidateLists()).toEqual(['', TRIAGE_LIST]));
       } finally {
         release();
         unmount();
@@ -714,7 +809,7 @@ describe('useBoardIntake across linked repositories', () => {
     ).toEqual(['github:1:issue:5', 'github:2:issue:5']);
   });
 
-  it('offers Work the pull requests of every linked GitHub repository, filed onto its Intake, in the one read', async () => {
+  it('offers Work the pull requests of every linked GitHub repository, filed onto its Intake, in one read', async () => {
     stubRepositories();
     const requests = recordRequests();
 
@@ -729,8 +824,8 @@ describe('useBoardIntake across linked repositories', () => {
     ]);
     // Pull requests are not an issue source: Work still lists only its issue feeds.
     expect(result.current.available).toEqual(['github']);
-    // Three repositories and two kinds of record cost the same single request as one repository.
-    expect(requests.candidateReads()).toHaveLength(1);
+    // Three repositories and two kinds of record cost the same requests as one repository.
+    expect(requests.candidateLists()).toEqual(['', TRIAGE_LIST]);
     expect(requests.providerReads()).toEqual([]);
     // Intake no longer compares its list with the cards, so it reads no board.
     expect(requests.cardReads()).toEqual([]);

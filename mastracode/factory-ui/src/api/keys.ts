@@ -93,8 +93,16 @@ export const queryKeys = {
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
-  intakeCandidates: (factoryProjectId: string | undefined) =>
-    ['intake', 'candidates', factoryProjectId ?? null] as const,
+  // Every list of a project, narrowed or not, sits under the project's key: one reread reaches them all.
+  intakeCandidates: (factoryProjectId: string | undefined, filter?: { sources?: readonly string[]; label?: string }) =>
+    filter && (filter.sources || filter.label)
+      ? ([
+          'intake',
+          'candidates',
+          factoryProjectId ?? null,
+          { sources: filter.sources ?? [], label: filter.label ?? null },
+        ] as const)
+      : (['intake', 'candidates', factoryProjectId ?? null] as const),
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.

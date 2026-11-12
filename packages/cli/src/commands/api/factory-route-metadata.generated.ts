@@ -325,6 +325,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [
       "cursor",
       "kind",
+      "label",
       "limit",
       "source"
     ],
@@ -3390,9 +3391,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "source": {
+          "minItems": 1,
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "label": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 256
         },
         "cursor": {
           "type": "string",
@@ -3401,6 +3410,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "limit": {
           "type": "string"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[^:]+(:(issue|pull-request))?$"
         }
       }
     },

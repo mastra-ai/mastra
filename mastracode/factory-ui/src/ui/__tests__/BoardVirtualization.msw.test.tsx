@@ -217,7 +217,10 @@ describe('Large factory boards', () => {
           HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
         ),
         http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, async ({ request }) => {
-          const page = new URL(request.url).searchParams.get('cursor') ?? 'first';
+          const query = new URL(request.url).searchParams;
+          // Triage reads the auto-triaged issues on its own, and none of these is one.
+          if (query.has('label')) return HttpResponse.json({ candidates: [], passes: [] });
+          const page = query.get('cursor') ?? 'first';
           requestedPages.push(page);
           if (page === 'first') {
             return HttpResponse.json({ candidates: largeCandidates(30), nextCursor: 'second', passes: [] });
