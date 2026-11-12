@@ -38,6 +38,16 @@ describe('routeSources', () => {
     ).toEqual(['linear']);
   });
 
+  it('reads source names the way rules compare them, trimmed and case-blind', () => {
+    expect(routeSources({ operator: 'AND', conditions: [provider(' GitHub ')] })).toEqual(['github']);
+    expect(
+      routeSources({
+        operator: 'AND',
+        conditions: [{ field: 'source.integration', operator: 'not_in', value: ['LINEAR'] }],
+      }),
+    ).not.toContain('linear');
+  });
+
   it('takes any source when nothing names one', () => {
     expect(routeSources(null)).toBeUndefined();
     expect(routeSources({ operator: 'AND', conditions: [] })).toBeUndefined();

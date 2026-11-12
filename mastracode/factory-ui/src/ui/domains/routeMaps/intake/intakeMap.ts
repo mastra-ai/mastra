@@ -35,7 +35,10 @@ function isIntakeSource(value: unknown): value is IntakeSource {
 function conditionSources(condition: RuleCondition): IntakeSource[] | undefined {
   if (!SOURCE_FIELDS.has(condition.field)) return undefined;
   const values = Array.isArray(condition.value) ? condition.value : [condition.value];
-  const named = values.filter(isIntakeSource);
+  // Rules compare strings trimmed and case-blind, so " GitHub " names GitHub here too.
+  const named = values
+    .map(value => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+    .filter(isIntakeSource);
   if (condition.operator === 'equals' || condition.operator === 'in') return named;
   if (condition.operator === 'not_equals' || condition.operator === 'not_in') {
     return INTAKE_SOURCES.filter(source => !named.includes(source));

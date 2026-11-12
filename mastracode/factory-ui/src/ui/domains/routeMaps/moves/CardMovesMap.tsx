@@ -167,6 +167,11 @@ function MovesFlow({
           Phases run top to bottom, with the moves between them on the right and the moves an issue or pull request
           triggers on the left. Hover a phase to see every move out of it, including the ones that finish a card.
         </Txt>
+        {map.eventMoves.length > 0 && (
+          <Txt as="p" variant="caption" tone="muted">
+            A move’s number is the order moves are checked in; the first that matches wins.
+          </Txt>
+        )}
         <div
           className="border-border hidden overflow-hidden rounded-xl border @min-[48rem]:block"
           style={{ height: Math.min(1100, Math.max(map.phases.length * 150, map.eventMoves.length * 150) + 80) }}
@@ -195,7 +200,8 @@ function MovesCanvas({
   const height = useStore(state => state.height);
   const variant = movesCanvasVariant(nodes, width, height);
   return (
-    <div className="size-full" data-canvas-variant={variant}>
+    // Studio's inline canvas hides React Flow's attribution; the pannable one doesn't, so hide it here too.
+    <div className="size-full [&_[class*=attribution]]:hidden" data-canvas-variant={variant}>
       <WorkflowGraphCanvas
         nodes={nodes}
         edges={edges}

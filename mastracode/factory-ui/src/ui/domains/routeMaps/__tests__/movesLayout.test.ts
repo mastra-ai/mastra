@@ -47,13 +47,21 @@ describe('movesLayout', () => {
     expect(emphasisByEdge(movesLayout(withOff, { kind: 'event', id: 'closed-completed' }).edges)[id]).toBe('dimmed');
   });
 
-  it('numbers event moves in the order they are tried, though they sit beside the phase they lead to', () => {
-    const nodes = movesLayout(map, undefined).nodes.flatMap(node => ('move' in node.data ? [node.data.move] : []));
+  it('groups event moves beside the phase they lead to, in the order they are checked within each group', () => {
+    // However the moves arrive, each group reads in check order.
+    const shuffled = { ...map, eventMoves: [...map.eventMoves].reverse() };
+    const placed = movesLayout(shuffled, undefined)
+      .nodes.flatMap(node => ('move' in node.data ? [{ move: node.data.move, y: node.position.y }] : []))
+      .sort((a, b) => a.y - b.y)
+      .map(({ move }) => move);
 
-    expect([...nodes].sort((a, b) => a.position - b.position).map(move => move.route.id)).toEqual(
-      map.eventMoves.map(move => move.route.id),
-    );
-    expect(map.eventMoves.map(move => move.position)).toEqual(map.eventMoves.map((_, index) => index + 1));
+    const phaseOrder = map.phases.map(entry => entry.phase.id);
+    const groups = phaseOrder.map(phase => placed.filter(move => move.to === phase).map(move => move.position));
+    for (const positions of groups) expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    // Groups follow the phases top to bottom.
+    const targets = placed.map(move => phaseOrder.indexOf(move.to));
+    expect(targets).toEqual([...targets].sort((a, b) => a - b));
+    expect(groups.filter(positions => positions.length > 1).length).toBeGreaterThan(0);
   });
 
   it('starts each card below the measured height of the one above, so tall cards never overlap', () => {

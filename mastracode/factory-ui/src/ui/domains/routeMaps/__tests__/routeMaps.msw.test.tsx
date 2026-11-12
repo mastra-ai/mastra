@@ -212,6 +212,9 @@ describe('card moves map', () => {
     renderMoves(workBoard);
 
     const moves = within(await screen.findByRole('list', { name: 'Moves when an issue changes' }));
+    expect(
+      screen.getByText('A move’s number is the order moves are checked in; the first that matches wins.'),
+    ).toBeVisible();
     const closed = moves.getByRole('link', { name: /Closed issues go to Done/ });
     // The route's name, what sets it off, and where it lands, each said once.
     expect(closed).toHaveTextContent('Closed issues go to DoneWhen a card is closed');

@@ -70,7 +70,8 @@ export function movesLayout(map: MovesMap, focus: MapFocus, heights: ReadonlyMap
   );
   let nextFree = 0;
   const eventNodes = [...map.eventMoves]
-    .sort((a, b) => (top.get(a.to) ?? 0) - (top.get(b.to) ?? 0))
+    // Grouped beside the phase they lead to, and in the order they're checked within each group.
+    .sort((a, b) => (top.get(a.to) ?? 0) - (top.get(b.to) ?? 0) || a.position - b.position)
     .map((move): EventNodeModel => {
       const id = `event:${move.route.id}`;
       const y = Math.max(top.get(move.to) ?? 0, nextFree);
