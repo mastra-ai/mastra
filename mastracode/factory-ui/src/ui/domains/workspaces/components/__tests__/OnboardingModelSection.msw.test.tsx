@@ -164,7 +164,7 @@ describe('Model provider onboarding', () => {
       const { connectBodies } = registerGatewayHandlers({ remainingCredits: 12.4 });
       const user = userEvent.setup();
 
-      const { onCreate } = renderModelSection();
+      const { onCreate, client } = renderModelSection();
 
       const useGateway = await screen.findByRole('button', { name: 'Connect Mastra Gateway' });
       expect(await screen.findByText('Pay with your organization’s Mastra credits ($12.40 left)')).toBeVisible();
@@ -172,6 +172,7 @@ describe('Model provider onboarding', () => {
       await user.click(useGateway);
 
       await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
+      await waitForMutationsIdle(client);
       await user.click(screen.getByRole('button', { name: 'Create factory' }));
       expect(connectBodies).toEqual([{ scope: 'org' }]);
       expect(onCreate).toHaveBeenCalledWith({
@@ -298,6 +299,33 @@ describe('Model provider onboarding', () => {
 
       expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+    });
+
+    it('holds the account answer while a personal gateway connection is in flight', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 12.4 });
+      let answerConnect = () => {};
+      const connectAnswered = new Promise<void>(resolve => {
+        answerConnect = resolve;
+      });
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, async () => {
+          await connectAnswered;
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderModelSection({ draft: { modelScope: 'user' } });
+
+      const account = within(await screen.findByRole('group', { name: 'Your account' }));
+      await user.click(await account.findByRole('button', { name: 'Connect Mastra Gateway' }));
+      // A late gateway result would otherwise land on a hybrid personal lane, which can't use the gateway.
+      const hybrid = await screen.findByRole('radio', { name: 'Company work and personal sessions' });
+      expect(hybrid).toHaveAttribute('aria-disabled', 'true');
+
+      answerConnect();
+      await waitFor(() => expect(hybrid).not.toHaveAttribute('aria-disabled', 'true'));
     });
   });
 

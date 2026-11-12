@@ -152,8 +152,12 @@ export function OnboardingProviderPicker({
             <OnboardingProviderOption
               icon={<Plus aria-hidden="true" />}
               title="Add a custom provider"
+              // A sign-in still starting would open its dialog over this one.
+              disabled={connection.pending}
               onClick={() => {
                 close();
+                // Closing programmatically skips onOpenChange, so the hovered provider's preview stays otherwise.
+                restorePreview();
                 setAddingCustom(true);
               }}
             />

@@ -79,7 +79,8 @@ export function OnboardingModelSection({
             <OnboardingScopeChoice
               scope={setup.scope}
               companyLocked={setup.companyLocked}
-              disabled={creating}
+              // A personal gateway connect that lands after a switch to hybrid would select a gateway it can't use.
+              disabled={creating || setup.personal.connection.connectingGateway}
               onScopeChange={next => {
                 // Hybrid sessions can't run on the gateway, so a personal lane left on it starts over.
                 const { connection } = setup.personal;

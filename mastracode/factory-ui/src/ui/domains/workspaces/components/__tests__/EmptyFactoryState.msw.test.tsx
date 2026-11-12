@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Routes, Route } from 'react-router';
@@ -334,6 +334,21 @@ describe('Draft Factory onboarding', () => {
     await findActiveSection('Model');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
     expect(writes).toEqual([]);
+  });
+
+  it('says connections could not be checked, not "Set up later", while Linear status is down', async () => {
+    registerSetup();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ error: 'Temporary outage' }, { status: 503 }),
+      ),
+    );
+    seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+    renderOnboarding();
+
+    const work = within(await screen.findByRole('region', { name: 'Work' }));
+    expect(await work.findByText("Couldn't check connections")).toBeInTheDocument();
+    expect(work.queryByText('Set up later')).not.toBeInTheDocument();
   });
 
   it('moves keyboard focus to the section that opens instead of dropping it', async () => {
@@ -820,6 +835,43 @@ describe('Account presets', () => {
     renderOnboarding();
     const account = within(await screen.findByRole('group', { name: 'Your account' }));
     await chooseProvider(user, 'OpenAI', account);
+    expect(await account.findByRole('combobox')).toHaveValue('GPT-6.1 Sol');
+    await user.click(await enabledCreateButton());
+    await screen.findByRole('heading', { name: 'Factory ready' });
+    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'openai/gpt-6.1-sol' });
+  });
+
+  it('waits for the personal default before offering Create, so a fallback never overwrites it', async () => {
+    const writes = registerSetup();
+    let answerDefault = () => {};
+    const defaultAnswered = new Promise<void>(resolve => {
+      answerDefault = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
+        await defaultAnswered;
+        return HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null });
+      }),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            { id: model.modelId, provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true },
+            { id: 'openai/gpt-6.1-sol', provider: 'openai', modelName: 'gpt-6.1-sol', hasApiKey: true },
+          ],
+        }),
+      ),
+    );
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'user' });
+    const user = userEvent.setup();
+    const { client } = renderOnboarding();
+    const account = within(await screen.findByRole('group', { name: 'Your account' }));
+    await chooseProvider(user, 'OpenAI', account);
+    // Everything but the held default has settled, so a fallback suggestion would have enabled Create by now.
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    await act(() => new Promise(resolve => setTimeout(resolve, 50)));
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+
+    answerDefault();
     expect(await account.findByRole('combobox')).toHaveValue('GPT-6.1 Sol');
     await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });

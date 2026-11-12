@@ -738,20 +738,24 @@ describe('VCS Factory step', () => {
 
   it('says when a repository refresh fails and retries it', async () => {
     let failRefresh = true;
+    const refreshStatuses: number[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
       http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
-        if (new URL(request.url).searchParams.get('refresh') && failRefresh)
-          return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        if (!new URL(request.url).searchParams.get('refresh')) return HttpResponse.json({ repos: [repo] });
+        refreshStatuses.push(failRefresh ? 503 : 200);
+        if (failRefresh) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
         return HttpResponse.json({ repos: [repo] });
       }),
     );
-    renderStep();
+    const { client } = renderStep();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh GitHub repositories' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('503');
     failRefresh = false;
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(refreshStatuses).toEqual([503, 200]);
   });
 });

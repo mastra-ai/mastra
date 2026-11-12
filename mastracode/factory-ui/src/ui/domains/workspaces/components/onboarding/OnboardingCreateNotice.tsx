@@ -19,7 +19,7 @@ export function OnboardingCreateNotice({
     );
   if (!blockedReason) return null;
   return (
-    <Txt id={id} as="p" variant="meta" tone="muted" className="m-0 text-end max-[899px]:text-center">
+    <Txt id={id} as="p" role="status" variant="meta" tone="muted" className="m-0 text-end max-[899px]:text-center">
       {blockedReason}
     </Txt>
   );

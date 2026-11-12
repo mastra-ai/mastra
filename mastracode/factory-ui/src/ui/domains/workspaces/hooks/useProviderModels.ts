@@ -43,12 +43,17 @@ export function useProviderModels(providerId: string | undefined, scope?: 'org' 
     scope === 'user' ? models.find(model => model.id === personalDefault.data?.modelId)?.id : undefined;
   const preferredModelId = savedDefault ?? (providerId ? preferredFactoryModel(providerId) : undefined);
 
+  const isPending = enabled && (modelsQuery.isPending || (scope === 'user' && personalDefault.isPending));
+
   return {
-    isPending: enabled && (modelsQuery.isPending || (scope === 'user' && personalDefault.isPending)),
+    isPending,
     catalogError: modelsQuery.error ?? undefined,
     retrying: modelsQuery.isFetching,
     models,
-    suggestedModelId: models.find(model => model.id === preferredModelId)?.id ?? models[0]?.id,
+    // Unknown until the personal default answers: a fallback chosen sooner could overwrite that default on Create.
+    suggestedModelId: isPending
+      ? undefined
+      : (models.find(model => model.id === preferredModelId)?.id ?? models[0]?.id),
     retry: () => {
       void modelsQuery.refetch();
     },

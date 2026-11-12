@@ -32,8 +32,11 @@ export function useWorkSourceConnectionsStatus(): WorkSourceConnectionsStatus {
       'incident-io': incidentIo.data?.some(connection => connection.status === 'active') === true,
     },
     isPending: linear.isPending || platforms.some(query => query.isPending),
+    // Linear reports a failed status request as `reason: 'unavailable'` rather than a query error.
     isError:
-      linear.isError || platforms.some(query => query.isError && !isPlatformConnectUnavailableError(query.error)),
+      linear.isError ||
+      linear.data?.reason === 'unavailable' ||
+      platforms.some(query => query.isError && !isPlatformConnectUnavailableError(query.error)),
   };
 }
 
