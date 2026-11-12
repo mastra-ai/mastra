@@ -129,6 +129,7 @@ export class DevBundler extends Bundler {
         sourcemap: sourcemapEnabled,
         analysisEntries: [entryFile, devServerAnalysisEntry, ...Object.values(toolsInputOptions)],
         outputDir: join(outputDirectory, this.analyzeOutputDir),
+        configEntryFile: this.getConfigEntryFile(entryFile),
       },
     );
 

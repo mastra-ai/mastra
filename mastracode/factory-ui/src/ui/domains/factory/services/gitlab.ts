@@ -223,10 +223,9 @@ export async function registerGitLabRepository(
 export async function listGitLabIssues(
   baseUrl: string,
   factoryProjectId: string,
-  board: string,
   after?: string,
 ): Promise<GitLabIssuePage> {
-  const params = new URLSearchParams({ factoryProjectId, board });
+  const params = new URLSearchParams({ factoryProjectId });
   if (after) params.set('after', after);
   return getGitLabResource<GitLabIssuePage>(baseUrl, '/web/gitlab/issues?' + params.toString());
 }

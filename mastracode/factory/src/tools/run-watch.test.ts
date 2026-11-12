@@ -49,7 +49,7 @@ describe('observeSessionRunReports', () => {
     session.emit(end('suspended'));
 
     expect(report).toHaveBeenCalledWith(
-      { status: 'blocked', toolName: 'factory_transition_work_item', approval: true },
+      { status: 'blocked', toolName: 'factory_transition_work_item', toolCallId: 'call-1', approval: true },
       expect.any(Date),
     );
   });

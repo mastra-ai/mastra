@@ -3,6 +3,20 @@ import { NO_OBSERVABILITY_STORAGE_CAPABILITIES } from '../handlers/observability
 import { observabilityStorageCapabilitiesSchema } from './system';
 
 describe('observabilityStorageCapabilitiesSchema', () => {
+  it('treats omitted search capabilities from older servers as unavailable', () => {
+    const {
+      traceQueryAggregatedRoots: _roots,
+      spanQueryTextSearch: _span,
+      traceQueryTextSearch: _trace,
+      ...legacyCapabilities
+    } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+    expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
+      traceQueryAggregatedRoots: false,
+      spanQueryTextSearch: false,
+      traceQueryTextSearch: false,
+    });
+  });
+
   it('treats an omitted span context capability from an older server as unavailable', () => {
     const { spanQueryContextFields: _, ...legacyCapabilities } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
     expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
@@ -33,4 +47,9 @@ describe('observabilityStorageCapabilitiesSchema', () => {
       }).success,
     ).toBe(false);
   });
+});
+
+it('treats missing duration ordering support from an older server as unavailable', () => {
+  const { spanQueryDurationSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+  expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryDurationSort).toBe(false);
 });
