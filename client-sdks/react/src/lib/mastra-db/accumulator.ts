@@ -1735,9 +1735,51 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'object-result':
       return result;
 
+    // A cancelled task never reconciles a result, so its call keeps the placeholder:
+    // record the end and mark the call cancelled so it stops reading as running.
+    case 'background-task-cancelled': {
+      const location = locateToolPart(result, chunk.payload.toolCallId, true);
+      if (!location) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = toolPartIndex >= 0 ? parts[toolPartIndex] : undefined;
+      const mastraMeta = (toolPart as MastraToolInvocationPart | undefined)?.providerMetadata?.mastra as
+        | { backgroundTask?: { taskId?: string } }
+        | undefined;
+      if (toolPart && mastraMeta?.backgroundTask?.taskId === chunk.payload.taskId) {
+        parts[toolPartIndex] = {
+          ...toolPart,
+          providerMetadata: {
+            ...(toolPart as MastraToolInvocationPart).providerMetadata,
+            mastra: { ...mastraMeta, backgroundTask: { ...mastraMeta.backgroundTask, status: 'cancelled' } },
+          },
+        } as MastraMessagePart;
+      }
+
+      const nextMetadata = mergeBgTaskMetadata(
+        targetMessage.content.metadata as MastraDBMessageMetadata | undefined,
+        metadata.mode,
+        {
+          resetRunningCount: true,
+          perTaskEntry: {
+            toolCallId: chunk.payload.toolCallId,
+            completedAt: chunk.payload.completedAt,
+            taskId: chunk.payload.taskId,
+          },
+        },
+      );
+
+      return replaceAt(result, messageIndex, {
+        ...targetMessage,
+        content: { ...targetMessage.content, parts, metadata: nextMetadata },
+      });
+    }
+
     // ----- Background-task lifecycle markers not folded into messages -----
     case 'background-task-started':
-    case 'background-task-cancelled':
     case 'background-task-resumed':
       return result;
 

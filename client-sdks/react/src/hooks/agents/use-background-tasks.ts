@@ -2,12 +2,18 @@ import type { MastraClient, StreamBackgroundTasksParams } from '@mastra/client-j
 import type { BackgroundTaskStatus } from '@mastra/core/background-tasks';
 import type { AgentChunkType } from '@mastra/core/stream';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraQueryOptions } from '../shared/query-options';
+import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 
 type BackgroundTaskStreamReader = ReturnType<Awaited<ReturnType<MastraClient['streamBackgroundTasks']>>['getReader']>;
+
+/** A chunk a running background task streamed, such as a nested agent's text or a workflow step. */
+export type BackgroundTaskOutputChunk = Extract<
+  AgentChunkType,
+  { type: 'background-task-output' }
+>['payload']['payload'];
 
 export interface BackgroundTaskEvent {
   taskId: string;
@@ -20,11 +26,21 @@ export interface BackgroundTaskEvent {
   status: BackgroundTaskStatus;
   args: Record<string, unknown>;
   suspendPayload?: unknown;
+  /** The latest output chunks the task streamed while this hook was connected, oldest first. */
+  output?: BackgroundTaskOutputChunk[];
 }
+
+/** Default number of output chunks kept per task. */
+export const DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS = 200;
 
 export interface UseBackgroundTaskStreamOptions extends StreamBackgroundTasksParams {
   /** Whether the stream is active. Default: true */
   enabled?: boolean;
+  /**
+   * How many of a task's latest output chunks to keep on its `output`. Older chunks are dropped.
+   * Set to 0 to keep none. Default: {@link DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS}.
+   */
+  maxOutputChunks?: number;
 }
 
 export interface UseBackgroundTaskStreamReturn {
@@ -88,7 +104,15 @@ const EVENT_STATUS_MAP: Record<EventType['type'], BackgroundTaskStatus> = {
 };
 
 export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions = {}): UseBackgroundTaskStreamReturn {
-  const { enabled = true, agentId, runId, threadId, resourceId, taskId } = options;
+  const {
+    enabled = true,
+    agentId,
+    runId,
+    threadId,
+    resourceId,
+    taskId,
+    maxOutputChunks = DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS,
+  } = options;
   const client = useMastraClient();
 
   const [tasks, setTasks] = useState<Record<string, BackgroundTaskEvent>>({});
@@ -97,6 +121,9 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
   const abortRef = useRef<AbortController | null>(null);
   const readerRef = useRef<BackgroundTaskStreamReader | null>(null);
   const connectSeqRef = useRef(0);
+  // Read when each chunk arrives, so changing the limit doesn't reconnect the stream.
+  const maxOutputChunksRef = useRef(maxOutputChunks);
+  maxOutputChunksRef.current = maxOutputChunks;
 
   const runningTasks = useMemo(() => {
     return Object.values(tasks).filter(task => task.status === 'running');
@@ -147,7 +174,24 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
         if (done) break;
 
         const event = value as EventType;
-        if (event.type !== 'background-task-output') {
+        if (event.type === 'background-task-output') {
+          const keep = maxOutputChunksRef.current;
+          if (keep <= 0) continue;
+          const { payload: chunk, ...ids } = event.payload;
+          setTasks(prev => {
+            const existing = prev[ids.taskId];
+            return {
+              ...prev,
+              [ids.taskId]: {
+                ...ids,
+                ...existing,
+                status: existing?.status ?? 'running',
+                args: existing?.args ?? {},
+                output: [...(existing?.output ?? []), chunk].slice(-keep),
+              },
+            };
+          });
+        } else {
           setTasks(prev => ({
             ...prev,
             [event.payload.taskId]: {
@@ -234,6 +278,22 @@ export const useGetBackgroundTaskById = <TData = BackgroundTaskResponse>({
   return useQuery({
     queryKey: ['background-task', backgroundTaskId],
     queryFn: () => client.getBackgroundTask(backgroundTaskId),
+    ...queryOptions,
+  });
+};
+
+/**
+ * Cancels a background task by id. A task that already finished is returned unchanged.
+ * `useBackgroundTaskStream` sees the cancellation as a `cancelled` event.
+ */
+export const useCancelBackgroundTask = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<BackgroundTaskResponse, string> } = {}) => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  return useMutation<BackgroundTaskResponse, Error, string>({
+    mutationFn: backgroundTaskId => client.cancelBackgroundTask(backgroundTaskId),
+    onSuccess: task => queryClient.setQueryData(['background-task', task.id], task),
     ...queryOptions,
   });
 };

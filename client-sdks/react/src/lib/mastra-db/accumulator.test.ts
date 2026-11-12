@@ -266,12 +266,12 @@ const bgTaskFailedChunk = (toolCallId: string, taskId: string, error: string): C
     payload: { toolCallId, taskId, error, completedAt: new Date() },
   }) as unknown as ChunkType;
 
-const bgTaskCancelledChunk = (toolCallId: string, taskId: string): ChunkType =>
+const bgTaskCancelledChunk = (toolCallId: string, taskId: string, completedAt = new Date()): ChunkType =>
   ({
     type: 'background-task-cancelled',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, taskId },
+    payload: { toolCallId, taskId, completedAt },
   }) as unknown as ChunkType;
 
 const bgTaskOutputChunk = (toolCallId: string, output: unknown): ChunkType =>
@@ -1306,10 +1306,33 @@ describe('accumulateChunk - background tasks', () => {
     expect(toolPart.toolInvocation).toMatchObject({ state: 'output-error', errorText: 'task failed' });
   });
 
-  it('background-task-cancelled is a no-op (lifecycle marker)', () => {
-    const initial = reduce([startChunk(), toolCallChunk('tc-1', 'longRun', {})]);
-    const out = reduce([bgTaskCancelledChunk('tc-1', 'bg-1')], streamMeta(), initial);
-    expect(out).toEqual(initial);
+  it('background-task-cancelled stops a deferred call reading as running', () => {
+    const placeholder = {
+      type: 'tool-result',
+      runId: RUN_ID,
+      from: 'AGENT',
+      payload: {
+        toolCallId: 'tc-1',
+        result: 'Background task started',
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'bg-1', status: 'running' } } },
+      },
+    } as unknown as ChunkType;
+    const completedAt = new Date('2024-01-01T00:01:00Z');
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'longRun', {}),
+      placeholder,
+      bgTaskRunningChunk('tc-1', 'bg-1', new Date('2024-01-01T00:00:00Z')),
+      bgTaskProgressChunk(1),
+      bgTaskCancelledChunk('tc-1', 'bg-1', completedAt),
+    ]);
+
+    const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    expect(toolPart.providerMetadata).toEqual({ mastra: { backgroundTask: { taskId: 'bg-1', status: 'cancelled' } } });
+    expect((toolPart.toolInvocation as { result: unknown }).result).toBe('Background task started');
+    const meta = out[0].content.metadata as MastraDBMessageMetadata;
+    expect(meta.backgroundTasks?.['tc-1']).toMatchObject({ taskId: 'bg-1', completedAt });
+    expect(meta.runningBackgroundTasksCount).toBeUndefined();
   });
 
   it('background-task-output appends output to a partial-call result array', () => {
