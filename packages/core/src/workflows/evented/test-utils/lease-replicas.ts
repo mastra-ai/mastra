@@ -334,14 +334,11 @@ export async function runIsLive(storage: Store, runId: string) {
   return (await store.getRunOwnership({ runId: runLivenessKey(runId) }))?.live;
 }
 
-/** Restarts the run from `replica`: `resolved:<status>`, or the error id and lease expiry it threw. */
+/** Restarts the run from `replica`: `resolved:<status>`, or the id of the error it threw. */
 export async function restartOutcome(replica: { workflow: Built }, runId: string) {
   return (await replica.workflow.createRun({ runId })).restart().then(
-    result => ({ id: `resolved:${result.status}`, leaseExpiresAt: undefined }),
-    (error: { id?: string; details?: { leaseExpiresAt?: string | null } }) => ({
-      id: error.id,
-      leaseExpiresAt: error.details?.leaseExpiresAt,
-    }),
+    result => ({ id: `resolved:${result.status}` }),
+    (error: { id?: string }) => ({ id: error.id }),
   );
 }
 
