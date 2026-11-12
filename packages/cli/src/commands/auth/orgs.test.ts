@@ -109,15 +109,40 @@ describe('resolveCurrentOrg', () => {
     expect(selectMock).not.toHaveBeenCalled();
   });
 
-  test('MASTRA_ORG_ID overrides forcePrompt and skips picker', async () => {
+  test('MASTRA_ORG_ID wins outright: no listing, no picker, raw id as name', async () => {
     process.env.MASTRA_ORG_ID = 'org_a';
     fetchOrgsMock.mockResolvedValue([ORG_A, ORG_B]);
     getCurrentOrgIdMock.mockResolvedValue('org_b');
 
     const result = await resolveCurrentOrg('tok', { forcePrompt: true });
 
-    expect(result).toEqual({ orgId: 'org_a', orgName: 'Org A' });
+    expect(result).toEqual({ orgId: 'org_a', orgName: 'org_a' });
+    expect(fetchOrgsMock).not.toHaveBeenCalled();
     expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  test('resolves from MASTRA_ORG_ID when the org listing is empty (API-token headless)', async () => {
+    process.env.MASTRA_ORG_ID = 'org_from_env';
+    process.env.CI = '1';
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    fetchOrgsMock.mockResolvedValue([]);
+    getCurrentOrgIdMock.mockResolvedValue(null);
+
+    const result = await resolveCurrentOrg('tok');
+
+    expect(result).toEqual({ orgId: 'org_from_env', orgName: 'org_from_env' });
+    expect(fetchOrgsMock).not.toHaveBeenCalled();
+  });
+
+  test('MASTRA_ORG_ID wins over a single-org auto-selection', async () => {
+    process.env.MASTRA_ORG_ID = 'org_from_env';
+    fetchOrgsMock.mockResolvedValue([ORG_A]);
+
+    const result = await resolveCurrentOrg('tok');
+
+    expect(result).toEqual({ orgId: 'org_from_env', orgName: 'org_from_env' });
+    expect(fetchOrgsMock).not.toHaveBeenCalled();
   });
 
   test('prompts when multiple orgs and no current org is persisted', async () => {

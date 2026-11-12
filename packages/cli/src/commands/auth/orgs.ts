@@ -30,6 +30,8 @@ function isInteractive(): boolean {
 /**
  * Resolve the current org, auto-selecting if only one exists.
  * If multiple orgs exist and none is currently set, prompts the user.
+ * `MASTRA_ORG_ID` takes precedence over everything else, so headless
+ * API-token runs never need the (session-only) org listing.
  * Pass `{ forcePrompt: true }` to always prompt when there's more than one
  * org, even if a current org is persisted. In non-interactive environments,
  * a persisted current org is reused and otherwise a clear setup error is
@@ -39,6 +41,14 @@ export async function resolveCurrentOrg(
   token: string,
   opts: ResolveCurrentOrgOptions = {},
 ): Promise<{ orgId: string; orgName: string }> {
+  // MASTRA_ORG_ID always wins; never prompt in headless/CI mode. Read it
+  // before listing orgs so API-token callers (whose listing is empty)
+  // resolve the org, mirroring `mastra deploy`.
+  const envOrgId = process.env.MASTRA_ORG_ID;
+  if (envOrgId) {
+    return { orgId: envOrgId, orgName: envOrgId };
+  }
+
   const orgs = await fetchOrgs(token);
 
   if (orgs.length === 0) {
@@ -47,13 +57,6 @@ export async function resolveCurrentOrg(
 
   if (orgs.length === 1) {
     return { orgId: orgs[0]!.id, orgName: orgs[0]!.name };
-  }
-
-  // MASTRA_ORG_ID always wins; never prompt in headless/CI mode.
-  const envOrgId = process.env.MASTRA_ORG_ID;
-  if (envOrgId) {
-    const match = orgs.find(o => o.id === envOrgId);
-    if (match) return { orgId: match.id, orgName: match.name };
   }
 
   const currentOrgId = await getCurrentOrgId();
