@@ -159,30 +159,6 @@ describe('recovery of evented runs in a sleep (#30012)', () => {
     expect([...seen.executions].sort()).toEqual(['A:after', 'A:quick']);
   }, 20_000);
 
-  it('recovers a sleeping run whose process died at about its wake time plus the grace period, though the scan interval is long', async () => {
-    const storage = new InMemoryStore();
-    const seen = observe('leased');
-    const a = await startReplica(storage, sleepingFor(2_000)(seen.reporter('A')));
-    const run = await a.workflow.createRun();
-    startInBackground(run, { n: 1 });
-    await sleepingRunId(storage, run.runId);
-    const wakeAt = await storedWakeTime(storage, 'leased', run.runId);
-    const restarts = await recordRestarts(storage, run.runId);
-    await crash(a, storage, [runLivenessKey(run.runId)]);
-
-    // B's first pass finds the run asleep, and its next pass comes when the sleep is due, not a
-    // scan interval later.
-    await startReplica(storage, sleepingFor(2_000)(seen.reporter('B')), {
-      recovery: { workflows: 'auto', workflowGraceMs: GRACE_MS, workflowScanIntervalMs: 60_000 },
-    });
-
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 10_000 });
-    expect(seen.executions).toEqual(['A:before', 'B:after']);
-    expect(restarts.map(restart => restart.acquired)).toEqual([true]);
-    expect(restarts[0]!.at).toBeGreaterThanOrEqual(wakeAt + GRACE_MS);
-    expect(restarts[0]!.at).toBeLessThan(wakeAt + GRACE_MS + 1_500);
-  }, 20_000);
-
   it.each([
     { sleep: 'sleep', until: false },
     { sleep: 'sleepUntil', until: true },

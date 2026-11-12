@@ -295,18 +295,32 @@ describe('workflow recovery loop (#28712)', () => {
     ['a run in its grace period', {}, 1_500, 1_500 * 1.198],
     // No sooner than a second out.
     ['a run whose grace period ends within a second', {}, 600, 1_000 * 1.198],
+    // An evented run left alone only for its sleep is due at its wake time plus the grace period,
+    // which no process moves, so a sleep whose process died is recovered then.
+    ['an evented run in a sleep', { wakeMs: 3_000 }, 500, 3_500 * 1.198],
   ])(
     'schedules the next pass after a pass that saw %s, on a timer that does not keep the process alive',
     async (_, run, workflowGraceMs, expectedDelay) => {
-      const { stored = true, leaseMs }: { stored?: boolean; leaseMs?: number } = run;
+      const { stored = true, leaseMs, wakeMs }: { stored?: boolean; leaseMs?: number; wakeMs?: number } = run;
       const storage = new InMemoryStore();
       const store = (await storage.getStore('workflows'))!;
-      const mastra = replica(storage, 'default', 'B', [], { workflowGraceMs, workflowScanIntervalMs: scanIntervalMs });
+      const mastra = replica(storage, wakeMs ? 'evented' : 'default', 'B', [], {
+        workflowGraceMs,
+        workflowScanIntervalMs: scanIntervalMs,
+      });
       if (stored) {
         await persistActiveRun(storage, 'run');
       }
       if (leaseMs) {
         await store.claimRunOwnership({ runId: 'run', ownerId: 'other-process', leaseMs });
+      }
+      if (wakeMs) {
+        await store.claimRunOwnership({
+          runId: runWakeKey('run'),
+          ownerId: 'other-process',
+          leaseMs: wakeMs,
+          force: true,
+        });
       }
       const timers: { delay: number; timer: ReturnType<typeof setTimeout> }[] = [];
       const setTimer = globalThis.setTimeout;
