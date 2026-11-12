@@ -1525,9 +1525,13 @@ export const GET_RESOURCE_WORKING_MEMORY_ROUTE = createRoute({
           ? { ...template, content: JSON.stringify(generateEmptyFromSchema(template.content)) }
           : template;
       const store = await memory.storage.getStore('memory');
-      const resource = config.workingMemory?.enabled
-        ? await store?.getResourceById({ resourceId: effectiveResourceId! })
-        : null;
+      let resource: Awaited<ReturnType<NonNullable<typeof store>['getResourceById']>> = null;
+      if (config.workingMemory?.enabled) {
+        if (!store) {
+          throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        }
+        resource = await store.getResourceById({ resourceId: effectiveResourceId! });
+      }
       return {
         workingMemory: resource?.workingMemory || null,
         source: 'resource' as const,

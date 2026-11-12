@@ -7,7 +7,7 @@ import { SimpleAuth } from '@mastra/core/server';
 import type { ServerMCPConfig } from '@mastra/core/server';
 import { InMemoryStore, MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
 import type { MastraStorage } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../../memory/src/index';
 import {
@@ -153,6 +153,7 @@ async function workingMemoryAccess({
   );
   return {
     db,
+    memory,
     context,
     user,
     read: (args: Record<string, unknown> = {}) =>
@@ -179,6 +180,15 @@ describe('working-memory inspection authorization', () => {
     const access = await workingMemoryAccess({ serverFga: { check: async () => false } });
     await expect(access.read({ threadId: 't1' })).rejects.toThrow(/403/);
     await expect(access.read()).rejects.toThrow(/403/);
+  });
+
+  it('reports missing memory storage instead of an empty resource', async () => {
+    const access = await workingMemoryAccess({});
+    vi.spyOn(access.memory.storage, 'getStore').mockResolvedValue(undefined as any);
+    await expect(access.handlerRead()).rejects.toMatchObject({
+      status: 400,
+      message: 'Memory storage is not initialized',
+    });
   });
 
   it('authorizes the context-owned resource, not the caller-supplied resource or a thread grant', async () => {
