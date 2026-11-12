@@ -335,6 +335,11 @@ export class RedeliveryDriver {
     return { event, handled };
   }
 
+  /** Resolves once every processor that received a delivery of `event`'s id finished handling it. */
+  async settled(event: Event): Promise<void> {
+    await Promise.all(this.#handled.filter(h => h.event.id === event.id).map(h => h.result));
+  }
+
   /** Restores the processor spy and rejects any step-end wait that never matched. */
   dispose(): void {
     if (this.#disposed) return;

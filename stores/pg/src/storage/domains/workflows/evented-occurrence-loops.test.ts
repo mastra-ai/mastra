@@ -133,6 +133,12 @@ describe('Postgres evented occurrence replay of loops', () => {
       await expect.poll(() => executions, { timeout: 1_500 }).toBe(3);
       expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
       expect(states).toEqual([{ n: 0 }, { n: 1 }]);
+      // The slower original delivery lost the completion: once it settles, the saved state is still
+      // the committed one.
+      await driver.settled(original);
+      const store = await storage.getStore('workflows');
+      const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+      expect(snapshot?.context.__state).toEqual({ n: 2 });
     } finally {
       release();
       interrupted.mockRestore();
