@@ -104,25 +104,6 @@ export class AgentStreamBus {
   }
 
   /**
-   * The config a fork of the owner is built with. The pubsub is only passed
-   * when the user provided it; a wired Mastra bus is carried over with
-   * {@link AgentStreamBus.adoptInnerPubsub} instead.
-   */
-  get forkConfig(): AgentStreamsConfig {
-    return {
-      pubsub: this.#hasCustomPubsub ? this.#innerPubsub : undefined,
-      cache: this.#cacheConfig,
-      cleanupTimeoutMs: this.#cleanupTimeoutMs,
-      shouldCache: this.#shouldCache,
-    };
-  }
-
-  /** Carry the inner pubsub wired on `source` (e.g. mastra.pubsub) over to this bus. */
-  adoptInnerPubsub(source: AgentStreamBus): void {
-    this.#innerPubsub = source.#innerPubsub;
-  }
-
-  /**
    * Wire Mastra's bus once the owner is registered, so observers subscribing
    * through Mastra see the frames this agent publishes.
    */

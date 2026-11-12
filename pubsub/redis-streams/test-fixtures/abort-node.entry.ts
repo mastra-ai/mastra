@@ -13,7 +13,7 @@ import { createInterface } from 'node:readline';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
-import { CachingPubSub } from '@mastra/core/events';
+import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { createNodeServer } from '@mastra/deployer/server';
@@ -56,19 +56,25 @@ async function main() {
 
   const storage = new LibSQLStore({ id: 'abort-storage', url: STORAGE_URL! });
   const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${LLM_URL}/v1` });
+  const redisPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+  const agentOwnedBus = process.env.BUS_LOCATION === 'agent';
   const base = new Agent({
     id: 'abort-agent',
     name: 'Abort Agent',
     instructions: 'You are a test agent driven by scripted AIMock responses.',
     model: openai('gpt-4o-mini'),
     tools: { wait: waitTool },
+    pubsub: agentOwnedBus ? redisPubsub : undefined,
   });
-  const redisPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
   const cache = new RedisServerCache(
     { client: cacheClient as any },
     { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
   );
-  const pubsub = ENGINE === 'evented' ? new CachingPubSub(redisPubsub, cache) : redisPubsub;
+  const pubsub = agentOwnedBus
+    ? new EventEmitterPubSub()
+    : ENGINE === 'evented'
+      ? new CachingPubSub(redisPubsub, cache)
+      : redisPubsub;
   const agent = ENGINE === 'evented' ? createEventedAgent({ agent: base }) : createDurableAgent({ agent: base });
 
   const mastra = new Mastra({
@@ -82,7 +88,10 @@ async function main() {
   const durable: any = mastra.getAgent('abort-agent' as any);
 
   async function stream(cmd: any) {
-    const run = await durable.stream('Wait, then reply.', { maxSteps: 3 });
+    const run = await durable.stream('Wait, then reply.', {
+      maxSteps: 3,
+      memory: cmd.threadId ? { thread: cmd.threadId, resource: cmd.resourceId } : undefined,
+    });
     emit({ type: 'run', runId: run.runId });
     let finishReason: string | undefined;
     const chunkTypes: string[] = [];
@@ -97,7 +106,23 @@ async function main() {
     emit({ type: 'stream-done', runId: run.runId, finishReason, chunkTypes });
   }
 
-  const handlers: Record<string, (cmd: any) => Promise<void> | void> = { stream };
+  async function observe(cmd: any) {
+    const observation = await durable.observe(cmd.runId);
+    for await (const chunk of observation.fullStream) {
+      emit({ type: 'observed-chunk', runId: cmd.runId, chunkType: chunk.type });
+    }
+    emit({ type: 'observe-done', runId: cmd.runId });
+  }
+
+  async function subscribe(cmd: any) {
+    const subscription = await durable.subscribeToThread({ threadId: cmd.threadId, resourceId: cmd.resourceId });
+    emit({ type: 'subscribed' });
+    for await (const chunk of subscription.stream) {
+      emit({ type: 'thread-chunk', chunkType: chunk.type });
+    }
+  }
+
+  const handlers: Record<string, (cmd: any) => Promise<void> | void> = { stream, observe, subscribe };
 
   createInterface({ input: process.stdin }).on('line', line => {
     if (!line.trim()) return;
