@@ -166,8 +166,14 @@ export class EventedExecutionEngine extends ExecutionEngine {
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
-      return this.executeInRunSpan(params.runId, workflowSpan, onDetachedSettled =>
-        this.execute<TState, TInput, TOutput>({ ...executeParams, onDetachedSettled }),
+      return this.executeInRunSpan(params.runId, workflowSpan, settleSpan =>
+        this.execute<TState, TInput, TOutput>({
+          ...executeParams,
+          onDetachedSettled: outcome => {
+            settleSpan(outcome);
+            params.onDetachedSettled?.(outcome);
+          },
+        }),
       );
     }
 

@@ -6263,24 +6263,34 @@ export class Run<
         storageVersion: this.storageVersion,
         storedState: this.runStorage.storedState(snapshot),
         detachAfterDispatch,
+        // A detached restart has no result below, so its run is settled here once it ends.
+        onDetachedSettled: outcome => {
+          if ('result' in outcome) {
+            this.#settleRestart(outcome.result);
+          }
+        },
       });
     } finally {
       await ownership.release();
     }
 
-    // A detached restart has no result here; the workers report the run's own.
     if (result === undefined) {
       return result;
     }
 
-    this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+    this.#settleRestart(result);
 
     result.traceId = traceId;
     result.spanId = spanId;
     return result;
+  }
+
+  /** Records how a restarted run ended, and drops it from its workflow's runs unless it suspended. */
+  #settleRestart(result: { status: WorkflowRunStatus }): void {
+    this.workflowRunStatus = result.status;
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
   }
 
   protected async _timeTravel<TInput>({

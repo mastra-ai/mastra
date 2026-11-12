@@ -551,6 +551,19 @@ describe('workflow recovery rule (#28712)', () => {
     expect(onFinish).toHaveBeenCalledTimes(1);
   });
 
+  it('drops an evented run it restarted from the workflow once the run finishes', async () => {
+    const storage = new InMemoryStore();
+    const b = startReplica(storage, 'evented', 'B', [], { recovery: { workflowGraceMs: 0 } });
+    await b.startWorkers();
+    await persistActiveRun(storage, 'stopped');
+    const workflow = b.getWorkflow('recovered-wf');
+
+    await b.restartAllActiveWorkflowRuns();
+
+    await vi.waitFor(async () => expect(await statusOf(storage, 'stopped')).toBe('success'));
+    await vi.waitFor(() => expect(workflow.runs.has('stopped')).toBe(false));
+  });
+
   it('ends the trace span of an evented run it restarted with its final status', async () => {
     const storage = new InMemoryStore();
     const observability = new NoOpObservability();

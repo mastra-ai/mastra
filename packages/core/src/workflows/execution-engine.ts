@@ -277,5 +277,7 @@ export abstract class ExecutionEngine extends MastraBase {
      * the run in the caller ignore it. @internal
      */
     detachAfterDispatch?: boolean;
+    /** Called once a detached execution's run settled, with what it would have resolved to. @internal */
+    onDetachedSettled?: (outcome: { result: TOutput } | { error: unknown }) => void;
   }): Promise<TOutput>;
 }
