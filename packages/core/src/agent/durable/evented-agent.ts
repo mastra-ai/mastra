@@ -190,6 +190,31 @@ export class EventedAgent<
   }
 
   /**
+   * The thread this run claimed before it persisted its input, or undefined when
+   * it did not claim one. Both the pre-persist claim and a failed input write
+   * resolve it the same way, so the lease is given back by the same owner that
+   * took it.
+   */
+  #threadClaimTarget(runId: string, workflowInput: DurableAgenticWorkflowInput) {
+    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
+    const executionFence = entry?.executionFence;
+    const { pubsub, sharedExecution } = this.#sharedExecutionState(runId);
+    if (!sharedExecution || !pubsub || !entry?.requestContext || !executionFence) return undefined;
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
+    if (!threadId) return undefined;
+    return {
+      pubsub,
+      requestContext: entry.requestContext,
+      executionFence,
+      threadId,
+      resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+    };
+  }
+
+  /**
    * Claim the cross-process thread lease before the initial input is persisted,
    * so a run that loses the race rejects without writing a user message to the
    * thread (see #30069).
@@ -204,33 +229,65 @@ export class EventedAgent<
     workflowInput: DurableAgenticWorkflowInput,
   ): Promise<void> {
     const entry = getRunRegistryEntry(runId, this.getMastraInstance());
-    const executionFence = entry?.executionFence;
-    const { pubsub, sharedExecution } = this.#sharedExecutionState(runId);
-    if (entry) entry.eventedExecution = sharedExecution;
-    if (!sharedExecution || !pubsub || !entry?.requestContext || !executionFence) return;
-    const memoryInfo = (
-      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-    )?.memoryInfo;
-    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-    if (!threadId) return;
-    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+    if (entry) entry.eventedExecution = this.#sharedExecutionState(runId).sharedExecution;
+    const target = this.#threadClaimTarget(runId, workflowInput);
+    if (!target) return;
     await agentThreadStreamRuntime.claimDurableThreadLease(
-      pubsub,
+      target.pubsub,
       runId,
-      threadId,
-      resourceId,
-      executionFence.generation,
-      executionFence.executionId,
+      target.threadId,
+      target.resourceId,
+      target.executionFence.generation,
+      target.executionFence.executionId,
     );
     agentThreadStreamRuntime.holdDurableThreadLease(
-      pubsub,
+      target.pubsub,
       runId,
-      threadId,
-      resourceId,
-      executionFence.generation,
-      executionFence.executionId,
+      target.threadId,
+      target.resourceId,
+      target.executionFence.generation,
+      target.executionFence.executionId,
     );
-    setExecutionClaim(entry.requestContext, runId, { ...executionFence.claim, threadId, resourceId });
+    setExecutionClaim(target.requestContext, runId, {
+      ...target.executionFence.claim,
+      threadId: target.threadId,
+      resourceId: target.resourceId,
+    });
+  }
+
+  /**
+   * Give the thread lease back when the input write fails. The run claimed the
+   * thread but never starts, so nothing else settles that claim and this process
+   * would keep renewing a lease on a thread no run holds.
+   * @internal
+   */
+  protected override async persistInitialInput(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<void> {
+    try {
+      await super.persistInitialInput(runId, workflowInput);
+    } catch (error) {
+      const target = this.#threadClaimTarget(runId, workflowInput);
+      if (target) {
+        await agentThreadStreamRuntime
+          .abandonDurableThreadLease(
+            target.pubsub,
+            runId,
+            target.threadId,
+            target.resourceId,
+            target.executionFence.generation,
+            target.executionFence.executionId,
+          )
+          .catch(leaseError =>
+            this.logger.warn('Failed to release the thread lease of a run that could not save its input', {
+              runId,
+              error: leaseError,
+            }),
+          );
+      }
+      throw error;
+    }
   }
 
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {

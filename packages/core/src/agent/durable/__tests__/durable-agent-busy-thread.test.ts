@@ -478,6 +478,31 @@ describe('run ownership around the initial input write', () => {
     }
   }, 30_000);
 
+  it('gives the thread lease back when the input write fails', async () => {
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');
+    const proc = await startProcess({ engine: 'evented', sharedTransport: true });
+    try {
+      const { durableAgent, memory, options } = proc;
+      const lease = proc.pubsub as unknown as LeaseDouble;
+      vi.spyOn(memory, 'saveMessages').mockRejectedValue(new Error('storage unavailable'));
+
+      const result = durableAgent.generate('unsaveable message', options);
+      await expect(result).rejects.toThrow();
+
+      // The run never started, so nothing renews its claim: the lease must be
+      // given back instead of being held for the process lifetime.
+      expect(proc.modelCalls()).toBe(0);
+      await vi.waitFor(async () => {
+        expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
+      });
+      expect(await lease.acquireLease(proc.threadKey, 'rival-replica', 300)).toMatchObject({ acquired: true });
+    } finally {
+      vi.unstubAllEnvs();
+      await proc.stop();
+    }
+  }, 30_000);
+
   it('keeps renewing the thread lease it claimed before the input is persisted', async () => {
     vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
     vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');

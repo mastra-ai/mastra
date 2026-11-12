@@ -2405,7 +2405,12 @@ export class DurableAgent<
     }
   }
 
-  private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+  /**
+   * Persist a run's initial input. Subclasses that take execution ownership
+   * before this runs must release it again if the write fails.
+   * @internal
+   */
+  protected async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     await persistDurableRunInput(runId, workflowInput, this.#mastra);
   }
 
