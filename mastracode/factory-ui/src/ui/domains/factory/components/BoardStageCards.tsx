@@ -19,6 +19,7 @@ export function BoardStageCards({
   intakeSource,
   intakeSetup,
   filtersExcludeAll,
+  alreadyMaterialized,
   composer,
   emptyStateActions,
   children,
@@ -32,6 +33,7 @@ export function BoardStageCards({
   intakeSource?: IntakeSource;
   intakeSetup?: IntakeSetup;
   filtersExcludeAll: boolean;
+  alreadyMaterialized: number;
   composer?: ReactNode;
   emptyStateActions?: ReactNode;
   children: ReactNode;
@@ -48,6 +50,7 @@ export function BoardStageCards({
           isInitialPhase={isInitialPhase}
           intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
+          alreadyMaterialized={alreadyMaterialized}
           layout={layout}
           actionSlot={emptyStateActions}
         />

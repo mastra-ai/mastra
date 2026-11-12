@@ -11,17 +11,11 @@ import { queryKeys } from '../../api/keys';
 import { createAppRoutes } from '../router';
 import type { GithubIssueDetail } from '../domains/factory/services/factory';
 import { saveKanbanView } from './boardLayoutQueries';
-import { intakeCandidatesHandler } from './fixtures/intakeCandidates';
-import { largeBoard, largeCandidates } from './fixtures/largeBoard';
+import { boardViewport, mockBoardRowLayout } from './boardRowLayout';
+import { largeBoard, largeCandidatePage, largeCardId } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 const ITEM_COUNT = 250;
-
-function viewport() {
-  const element = screen.getByTestId('board-column-triage').closest<HTMLElement>('.overflow-auto');
-  if (!element) throw new Error('Missing board scroll container');
-  return element;
-}
 
 function serveWorkItems(count: number) {
   server.use(
@@ -46,21 +40,7 @@ function renderBoard(search = '', itemCount = ITEM_COUNT) {
 }
 
 describe('Large factory boards', () => {
-  beforeEach(() => {
-    const height = function (this: Element) {
-      return this.matches('.overflow-auto') ? 600 : 48;
-    };
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(height);
-    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1200);
-    // TanStack Virtual sizes the scroll viewport from its client box.
-    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(height);
-    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(1200);
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-      const scroller = this.closest<HTMLElement>('.overflow-auto');
-      const height = this.matches('.overflow-auto') ? 600 : 48;
-      return new DOMRect(0, this === scroller ? 0 : -(scroller?.scrollTop ?? 0), 1200, height);
-    });
-  });
+  beforeEach(mockBoardRowLayout);
   afterEach(() => vi.restoreAllMocks());
 
   it.each(['list', 'board'] as const)(
@@ -71,18 +51,18 @@ describe('Large factory boards', () => {
       if (layout === 'board') await saveKanbanView(userEvent.setup());
 
       expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
-      fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
       await waitFor(() => expect(screen.queryByLabelText('Large task 249')).not.toBeInTheDocument());
       expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
 
-      fireEvent.scroll(viewport(), { target: { scrollTop: 0 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 0 } });
       expect(await screen.findByLabelText('Large task 249')).toBeInTheDocument();
       expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
     },
   );
 
   it('given a deep link to the last issue, shows and focuses it without mounting all preceding issues', async () => {
-    renderBoard('?item=large-0');
+    renderBoard(`?item=${largeCardId(0)}`);
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Details for Large task 0' })).toHaveFocus();
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
@@ -94,27 +74,27 @@ describe('Large factory boards', () => {
     onTestFinished(() => {
       Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
     });
-    const { router } = renderBoard('?item=large-100');
+    const { router } = renderBoard(`?item=${largeCardId(100)}`);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Details for Large task 100' })).toHaveFocus());
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 0 } });
-    const scrollTo = vi.spyOn(viewport(), 'scrollTo');
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=large-100&sort=created-oldest`));
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 0 } });
+    const scrollTo = vi.spyOn(boardViewport(), 'scrollTo');
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=${largeCardId(100)}&sort=created-oldest`));
 
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(scrollTo).not.toHaveBeenCalled();
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(viewport().scrollTop).toBe(0);
+    expect(boardViewport().scrollTop).toBe(0);
   });
 
-  it('given an offscreen issue, finds it by searching the full dataset', async () => {
+  it('given an issue the board has not loaded, finds it by searching the full dataset', async () => {
     const { router } = renderBoard();
     await screen.findByLabelText('Large task 249');
-    expect(screen.queryByLabelText('Large task 0')).not.toBeInTheDocument();
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?search=Large+task+0`));
-    expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
-    expect(screen.getAllByTestId('work-item-card')).toHaveLength(1);
+    expect(screen.queryByLabelText('Large task 137')).not.toBeInTheDocument();
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?search=task+137`));
+    expect(await screen.findByLabelText('Large task 137')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(1));
   });
 
   it('given open details, scrolling keeps the card and its description draft alive', async () => {
@@ -126,7 +106,7 @@ describe('Large factory boards', () => {
     const draft = within(details).getByRole('textbox', { name: 'Description' });
     await user.type(draft, 'Keep this draft while I scroll');
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Large task 248' })).not.toBeInTheDocument());
     expect(details).toBeInTheDocument();
     expect(draft).toHaveValue('Keep this draft while I scroll');
@@ -177,7 +157,7 @@ describe('Large factory boards', () => {
     const details = await screen.findByRole('button', { name: 'Details for Large task 249' });
     act(() => details.focus());
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByLabelText('Large task 248')).not.toBeInTheDocument());
     expect(details).toHaveFocus();
 
@@ -192,7 +172,7 @@ describe('Large factory boards', () => {
     const dataTransfer = { setData: (type: string, value: string) => transferred.set(type, value) };
     fireEvent.dragStart(card, { dataTransfer });
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByLabelText('Large task 248')).not.toBeInTheDocument());
     expect(card).toBeInTheDocument();
 
@@ -204,7 +184,7 @@ describe('Large factory boards', () => {
     'given 30 candidates in %s layout, when another query page arrives, preserves an open prompt and bounds mounted cards',
     async layout => {
       const { client } = renderBoard();
-      const requestedPages: string[] = [];
+      const requestedPages: number[] = [];
       let releasePage = () => {};
       const nextPage = new Promise<void>(resolve => {
         releasePage = resolve;
@@ -216,28 +196,20 @@ describe('Large factory boards', () => {
         http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
           HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
         ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, async ({ request }) => {
-          const query = new URL(request.url).searchParams;
-          // Triage reads the auto-triaged issues on its own, and none of these is one.
-          if (query.has('label')) return HttpResponse.json({ candidates: [], passes: [] });
-          const page = query.get('cursor') ?? 'first';
+        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, async ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          if (params.has('label')) return HttpResponse.json(largeCandidatePage(0));
+          const page = Number(params.get('page') ?? 1);
           requestedPages.push(page);
-          if (page === 'first') {
-            return HttpResponse.json({ candidates: largeCandidates(30), nextCursor: 'second', passes: [] });
-          }
-          await nextPage;
-          return HttpResponse.json({ candidates: largeCandidates(100, 30), passes: [] });
+          if (page === 2) await nextPage;
+          return HttpResponse.json({
+            ...largeCandidatePage(page === 1 ? 30 : 100, page === 1 ? 0 : 30),
+            nextPage: page === 1 ? 2 : null,
+          });
         }),
         http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues/1`, () =>
           HttpResponse.json({
-            number: 1,
-            title: 'Candidate 0',
-            url: 'https://github.com/acme/app/issues/1',
-            author: 'alice',
-            labels: [],
-            comments: 0,
-            createdAt: '2026-08-01T00:00:00.000Z',
-            updatedAt: '2026-08-01T00:00:00.000Z',
+            ...largeCandidatePage(1).issues[0],
             description: 'Candidate description',
           } satisfies GithubIssueDetail),
         ),
@@ -245,10 +217,8 @@ describe('Large factory boards', () => {
       const user = userEvent.setup();
       await screen.findByRole('article', { name: 'Candidate 0' });
       if (layout === 'board') await saveKanbanView(user);
-      // Triage reads the same list, so it offers the same button.
-      const intake = within(screen.getByTestId('board-column-intake'));
-      await user.click(intake.getByRole('button', { name: 'Load more candidates' }));
-      await intake.findByRole('status', { name: 'Loading more candidates' });
+      await user.click(screen.getByRole('button', { name: 'Load more candidates' }));
+      await screen.findByRole('status', { name: 'Loading more candidates' });
       await user.click(screen.getByRole('button', { name: 'Details for Candidate 0' }));
       const details = await screen.findByRole('dialog', { name: 'Candidate 0' });
       await user.click(within(details).getByRole('button', { name: 'Custom prompt…' }));
@@ -263,16 +233,14 @@ describe('Large factory boards', () => {
       expect(prompt).toHaveFocus();
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
       expect(screen.queryByRole('button', { name: 'Load more candidates' })).not.toBeInTheDocument();
-      fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
       await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 1' })).not.toBeInTheDocument());
       expect(prompt).toHaveValue('Keep this guidance while loading more');
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
-      // StrictMode's remount abandons the first read and starts it again, so only the later page is counted.
-      expect(requestedPages.filter(page => page === 'second')).toEqual(['second']);
-      const readsBeforeRefetch = requestedPages.length;
+      expect(requestedPages).toEqual([1, 2]);
 
-      await act(() => client.refetchQueries({ queryKey: queryKeys.intakeCandidates(FACTORY_ID) }));
-      expect(requestedPages.slice(readsBeforeRefetch)).toEqual(['first', 'second']);
+      await act(() => client.refetchQueries({ queryKey: queryKeys.githubIssues(['repo-1']) }));
+      expect(requestedPages).toEqual([1, 2, 1, 2]);
       expect(prompt).toBeInTheDocument();
       expect(prompt).toHaveValue('Keep this guidance while loading more');
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
@@ -290,13 +258,15 @@ describe('Large factory boards', () => {
         http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
           HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
         ),
-        intakeCandidatesHandler(TEST_BASE_URL, largeCandidates(ITEM_COUNT)),
+        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
+          HttpResponse.json(largeCandidatePage(new URL(request.url).searchParams.has('label') ? 0 : ITEM_COUNT)),
+        ),
       );
       await screen.findByRole('article', { name: 'Candidate 0' });
       if (layout === 'board') await saveKanbanView(userEvent.setup());
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
 
-      fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
       await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 0' })).not.toBeInTheDocument());
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
     },

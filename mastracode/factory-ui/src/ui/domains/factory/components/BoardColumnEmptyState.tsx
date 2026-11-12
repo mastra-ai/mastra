@@ -85,6 +85,7 @@ function boardEmptyCopy(
   stage: BoardStageId,
   intakeSetup: IntakeSetup | undefined,
   filtersExcludeAll: boolean,
+  alreadyMaterialized: number,
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (filtersExcludeAll) {
@@ -93,7 +94,14 @@ function boardEmptyCopy(
       description: 'Try adjusting or clearing your filters.',
     };
   }
-  return boardColumnEmptyCopy(stage, intakeSetup, isInitialPhase);
+  const copy = boardColumnEmptyCopy(stage, intakeSetup, isInitialPhase);
+  if (alreadyMaterialized <= 0) return copy;
+  const itemsLabel =
+    alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have';
+  return {
+    title: copy.title,
+    description: `${alreadyMaterialized} ${itemsLabel} a card on another board, so the feed only offers new ones.`,
+  };
 }
 
 export function BoardColumnEmptyState({
@@ -101,6 +109,7 @@ export function BoardColumnEmptyState({
   isInitialPhase,
   intakeSetup,
   filtersExcludeAll = false,
+  alreadyMaterialized = 0,
   layout,
   actionSlot,
 }: {
@@ -108,10 +117,12 @@ export function BoardColumnEmptyState({
   isInitialPhase: boolean;
   intakeSetup?: IntakeSetup;
   filtersExcludeAll?: boolean;
+  /** Feed items withheld because their card sits on another board in this Factory. */
+  alreadyMaterialized?: number;
   layout: BoardLayout;
   actionSlot?: ReactNode;
 }) {
-  const copy = boardEmptyCopy(stage, intakeSetup, filtersExcludeAll, isInitialPhase);
+  const copy = boardEmptyCopy(stage, intakeSetup, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
   if (layout === 'list') {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">

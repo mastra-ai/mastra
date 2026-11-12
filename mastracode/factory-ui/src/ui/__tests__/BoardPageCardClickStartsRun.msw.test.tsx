@@ -13,14 +13,7 @@ import { workBoardInfo } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
-import type { IntakeCandidateInfo } from '../../api/types';
 import { createAppRoutes } from '../router';
-import {
-  gitlabIssueRecord,
-  intakeCandidatesHandler,
-  linearRecord,
-  recordOfGithubIssue,
-} from './fixtures/intakeCandidates';
 import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
@@ -50,13 +43,16 @@ const issueWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
-const logoutIssue = recordOfGithubIssue({
+const logoutIssue = {
   number: 9,
   title: 'Crash on logout',
   url: 'https://github.com/acme/app/issues/9',
   author: 'octocat',
+  labels: [],
+  comments: 0,
   createdAt: '2026-07-18T00:00:00.000Z',
-});
+  updatedAt: '2026-07-18T00:00:00.000Z',
+};
 
 const intakeWorkItem = { ...issueWorkItem, stages: ['intake'] };
 
@@ -91,11 +87,23 @@ const gitlabWorkItem = {
   },
 };
 
-const gitlabCandidateIssue = gitlabIssueRecord('gitlab-issue:encoded-issue-2', 'acme/app#2', {
+const gitlabCandidateIssue = {
+  id: '2',
+  externalId: 'gitlab-issue:encoded-issue-2',
+  identifier: 'acme/app#2',
   title: 'GitLab candidate issue',
+  url: 'https://gitlab.com/acme/app/-/work_items/2',
+  state: 'opened',
+  stateType: 'unstarted',
+  priority: null,
+  assignee: null,
   author: 'grace',
+  source: 'acme/app',
+  sourceId: 'gitlab-source-1',
+  labels: [],
   createdAt: '2026-09-01T00:00:00Z',
-});
+  updatedAt: '2026-09-01T00:00:00Z',
+};
 
 interface TransitionRequest {
   itemId: string;
@@ -104,10 +112,11 @@ interface TransitionRequest {
 
 /** Stubs the board's data endpoints and captures everything a card click writes. */
 function stubBoardEndpoints({
-  candidates = [] as IntakeCandidateInfo[],
+  issues = [] as object[],
   workItems = [issueWorkItem] as object[],
   multiRepository = false,
   mappedLinearRepository = false,
+  linearIssues = [] as object[],
 } = {}) {
   const transitions: TransitionRequest[] = [];
   const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
@@ -160,7 +169,17 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: multiRepository, connected: multiRepository, workspace: null }),
     ),
-    intakeCandidatesHandler(TEST_BASE_URL, candidates),
+    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: linearIssues, nextCursor: null })),
+    // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
+    // serves the candidate under test.
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
+      const label = new URL(request.url).searchParams.get('label');
+      if (label && label !== 'status: auto-triaged') {
+        return HttpResponse.error();
+      }
+
+      return HttpResponse.json({ issues: label ? [] : issues, nextPage: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues/:number`, ({ params }) =>
       HttpResponse.json({
         number: Number(params.number),
@@ -392,12 +411,23 @@ describe('Board card buttons move the card', () => {
     const { created, transitions } = stubBoardEndpoints({
       multiRepository: true,
       workItems: [],
-      candidates: [
-        linearRecord('ENG-42', {
+      linearIssues: [
+        {
+          id: 'linear-issue-1',
+          identifier: 'ENG-42',
           title: 'Fix intake sync',
+          url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
+          state: 'Todo',
+          stateType: 'unstarted',
+          priorityLabel: 'High',
+          assignee: null,
+          team: 'Engineering',
+          sourceId: 'linear-project-1',
           projectId: 'linear-project-1',
-          metadata: { linearIssueId: 'linear-issue-1' },
-        }),
+          labels: [],
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
       ],
     });
     renderWorkBoard();
@@ -462,7 +492,7 @@ describe('Board card buttons move the card', () => {
   it("keeps Work's moves and its unfiled issues against a server older than the board loop", async () => {
     // A server from before the catalog named each board's loop parts sends no `flow` for Work.
     const { flow: _flow, ...olderWork } = workBoardInfo;
-    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem], candidates: [logoutIssue] });
+    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem], issues: [logoutIssue] });
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
         HttpResponse.json({ boards: [olderWork] }),
@@ -479,7 +509,7 @@ describe('Board card buttons move the card', () => {
 
   it('files a candidate in Intake, saves its custom prompt as the description, then moves it', async () => {
     const { transitions, created } = stubBoardEndpoints({
-      candidates: [logoutIssue],
+      issues: [logoutIssue],
     });
     const { client } = renderWorkBoard();
 
@@ -559,7 +589,9 @@ describe('Board card buttons move the card', () => {
           ],
         }),
       ),
-      intakeCandidatesHandler(TEST_BASE_URL, [gitlabCandidateIssue]),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
+        HttpResponse.json({ issues: [gitlabCandidateIssue], nextCursor: null }),
+      ),
       http.get(`${TEST_BASE_URL}/web/gitlab/issues/:issueId`, ({ params, request }) => {
         expect(new URL(request.url).searchParams.get('factoryProjectId')).toBe(FACTORY_ID);
         const description =

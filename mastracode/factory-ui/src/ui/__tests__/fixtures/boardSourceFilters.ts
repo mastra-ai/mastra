@@ -1,7 +1,6 @@
-import type { IntakeCandidateInfo } from '../../../api/types';
-import type { LinearProject } from '../../domains/factory/services/linear';
+import type { GithubIssue } from '../../domains/factory/services/factory';
+import type { LinearIssue, LinearProject } from '../../domains/factory/services/linear';
 import type { WorkItem } from '../../domains/factory/services/workItems';
-import { githubIssueRecord, linearRecord } from './intakeCandidates';
 
 const now = '2026-10-06T12:00:00.000Z';
 
@@ -10,15 +9,32 @@ export const linearProjects: LinearProject[] = [
   { id: 'project-b', name: 'Billing', state: 'started', teams: [] },
 ];
 
-/** A Linear issue with no card yet, as the server's list offers it. */
-export function offeredLinearIssue(identifier: string, projectId?: string, title = identifier): IntakeCandidateInfo {
-  return linearRecord(identifier, { projectId, title, labels: ['feature'], author: 'alice', createdAt: now });
+export function linearIssue(identifier: string, projectId: string | null, title = identifier): LinearIssue {
+  return {
+    id: identifier,
+    identifier,
+    title,
+    url: `https://linear.app/acme/issue/${identifier}`,
+    state: 'Todo',
+    stateType: 'unstarted',
+    priorityLabel: 'Normal',
+    assignee: null,
+    creator: 'alice',
+    team: 'ENG',
+    sourceId: 'linear-team:eng',
+    projectId,
+    labels: ['feature'],
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
-export const offeredLinearIssues: IntakeCandidateInfo[] = [
-  offeredLinearIssue('ENG-101', 'project-a', 'Portal: add account switcher'),
-  offeredLinearIssue('ENG-201', 'project-b', 'Billing: export invoices'),
-  offeredLinearIssue('ENG-401', undefined, 'Unassigned project'),
+export const linearIssues: LinearIssue[] = [
+  linearIssue('ENG-101', 'project-a', 'Portal: add account switcher'),
+  linearIssue('ENG-201', 'project-b', 'Billing: export invoices'),
+  // Already filed: the board shows its card, in the project the server last synced it to.
+  linearIssue('ENG-301', 'project-b', 'Move to Billing'),
+  linearIssue('ENG-401', null, 'Unassigned project'),
 ];
 
 function card(id: string, title: string, source: WorkItem['source'], stage: string, projectId?: string): WorkItem {
@@ -56,12 +72,16 @@ export const sourceCards: WorkItem[] = [
   card('manual', 'Manual follow-up', 'manual', 'intake'),
 ];
 
-export const offeredGithubIssue = githubIssueRecord(42, {
+export const githubIssue: GithubIssue = {
+  number: 42,
   title: 'GitHub: improve error messages',
-  labels: ['feature'],
+  url: 'https://github.com/acme/app/issues/42',
   author: 'alice',
+  labels: ['feature'],
+  comments: 0,
   createdAt: now,
-});
+  updatedAt: now,
+};
 
 function wireSourceCard({ githubProjectId, source, sourceKey, url, ...item }: WorkItem) {
   const base = { ...item, factoryProjectId: githubProjectId };

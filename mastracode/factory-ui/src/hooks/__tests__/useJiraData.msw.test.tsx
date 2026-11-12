@@ -16,9 +16,9 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
 import { isJiraAuthError } from '../../ui/domains/factory/services/jira';
-import type { JiraProject, JiraStatus } from '../../ui/domains/factory/services/jira';
+import type { JiraIssue, JiraProject, JiraStatus } from '../../ui/domains/factory/services/jira';
 import { useIntakeConfigQuery, useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../useIntakeConfig';
-import { useJiraIssueDetail, useJiraProjectsQuery, useJiraStatusQuery } from '../useJiraData';
+import { useJiraIssueDetail, useJiraIssuesQuery, useJiraProjectsQuery, useJiraStatusQuery } from '../useJiraData';
 
 const STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
 const ISSUES_URL = `${TEST_BASE_URL}/web/jira/issues`;
@@ -28,7 +28,7 @@ const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
 
 const FACTORY_A = '11111111-1111-4111-8111-111111111111';
 
-const issue = {
+const issue: JiraIssue = {
   id: '10010',
   identifier: 'ENG-42',
   title: 'Fix intake sync',
@@ -93,6 +93,107 @@ describe('useJiraStatusQuery', () => {
   });
 });
 
+describe('useJiraIssuesQuery', () => {
+  it('given a factory, when pages are fetched, then every request carries the factoryProjectId and pages accumulate', async () => {
+    const pageTwoIssue: JiraIssue = { ...issue, id: '10011', identifier: 'ENG-43', title: 'Page two issue' };
+    const requested: Array<{ factoryProjectId: string | null; after: string | null }> = [];
+    server.use(
+      http.get(ISSUES_URL, ({ request }) => {
+        const url = new URL(request.url);
+        const after = url.searchParams.get('after');
+        requested.push({ factoryProjectId: url.searchParams.get('factoryProjectId'), after });
+        return after === 'cursor-2'
+          ? HttpResponse.json({ issues: [pageTwoIssue], nextCursor: null })
+          : HttpResponse.json({ issues: [issue], nextCursor: 'cursor-2' });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useJiraIssuesQuery(FACTORY_A));
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data).toEqual([issue]);
+    expect(result.current.hasNextPage).toBe(true);
+
+    await result.current.fetchNextPage();
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+    expect(result.current.data).toEqual([issue, pageTwoIssue]);
+    expect(result.current.hasNextPage).toBe(false);
+    expect(requested).toEqual([
+      { factoryProjectId: FACTORY_A, after: null },
+      { factoryProjectId: FACTORY_A, after: 'cursor-2' },
+    ]);
+  });
+
+  it('given no factory, when the hook mounts, then no request is made', async () => {
+    const hit = vi.fn();
+    server.use(
+      http.get(ISSUES_URL, () => {
+        hit();
+        return HttpResponse.json({ issues: [issue], nextCursor: null });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => useJiraIssuesQuery(undefined));
+
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(hit).not.toHaveBeenCalled();
+  });
+
+  it('given two factories, when both hooks resolve, then each caches its own page (no cross-factory bleed)', async () => {
+    const FACTORY_B = '22222222-2222-4222-8222-222222222222';
+    const issueB: JiraIssue = { ...issue, id: '10012', identifier: 'OPS-7', title: 'Factory B issue', project: 'OPS' };
+    server.use(
+      http.get(ISSUES_URL, ({ request }) => {
+        const factoryProjectId = new URL(request.url).searchParams.get('factoryProjectId');
+        return factoryProjectId === FACTORY_A
+          ? HttpResponse.json({ issues: [issue], nextCursor: null })
+          : HttpResponse.json({ issues: [issueB], nextCursor: null });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => ({
+      a: useJiraIssuesQuery(FACTORY_A),
+      b: useJiraIssuesQuery(FACTORY_B),
+    }));
+
+    await waitFor(() => expect(result.current.a.data).toBeDefined());
+    await waitFor(() => expect(result.current.b.data).toBeDefined());
+    expect(result.current.a.data).toEqual([issue]);
+    expect(result.current.b.data).toEqual([issueB]);
+  });
+
+  it('given the credentials are rejected, when the hook resolves, then the error is recognized as a Jira auth error', async () => {
+    server.use(
+      http.get(ISSUES_URL, () =>
+        HttpResponse.json(
+          { error: 'jira_auth_failed', message: 'Jira rejected the configured credentials' },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => useJiraIssuesQuery(FACTORY_A));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(isJiraAuthError(result.current.error)).toBe(true);
+    expect((result.current.error as Error).message).toBe('Jira rejected the configured credentials');
+  });
+
+  it('given the server fails, when the hook resolves, then it surfaces the server message without claiming an auth error', async () => {
+    server.use(
+      http.get(ISSUES_URL, () => HttpResponse.json({ error: 'jira_fetch_failed', message: 'boom' }, { status: 502 })),
+    );
+
+    const { result } = renderHookWithProviders(() => useJiraIssuesQuery(FACTORY_A));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect((result.current.error as Error).message).toBe('boom');
+    expect(isJiraAuthError(result.current.error)).toBe(false);
+  });
+});
+
 describe('useJiraIssueDetail', () => {
   it('loads a routed Jira issue description with its opaque issue reference', async () => {
     const requested = vi.fn();
@@ -154,5 +255,59 @@ describe('intake config and bindings drive the Jira issue cache', () => {
 
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data!.jira).toEqual({ enabled: false, sourceIds: null });
+  });
+
+  it('given a config save, when it succeeds, then the mounted jira issue feed refetches', async () => {
+    let issueHits = 0;
+    server.use(
+      http.get(CONFIG_URL, () => HttpResponse.json({ config })),
+      http.put(CONFIG_URL, async ({ request }) =>
+        HttpResponse.json({ config: { ...config, ...((await request.json()) as Partial<IntakeConfig>) } }),
+      ),
+      http.get(ISSUES_URL, () => {
+        issueHits += 1;
+        return HttpResponse.json({ issues: [issue], nextCursor: null });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => ({
+      issues: useJiraIssuesQuery(FACTORY_A),
+      save: useSaveIntakeSelectionMutation('jira'),
+    }));
+
+    await waitFor(() => expect(result.current.issues.data).toBeDefined());
+    expect(issueHits).toBe(1);
+
+    result.current.save.mutate(config.jira);
+
+    await waitFor(() => expect(issueHits).toBe(2));
+  });
+
+  it('given a binding save, when it succeeds, then the mounted jira issue feed refetches', async () => {
+    let issueHits = 0;
+    server.use(
+      http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: [] })),
+      http.put(BINDINGS_URL, () =>
+        HttpResponse.json({
+          bindings: [{ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A }],
+        }),
+      ),
+      http.get(ISSUES_URL, () => {
+        issueHits += 1;
+        return HttpResponse.json({ issues: [issue], nextCursor: null });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => ({
+      issues: useJiraIssuesQuery(FACTORY_A),
+      bind: useSaveIntakeBindingMutation(),
+    }));
+
+    await waitFor(() => expect(result.current.issues.data).toBeDefined());
+    expect(issueHits).toBe(1);
+
+    result.current.bind.mutate({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A });
+
+    await waitFor(() => expect(issueHits).toBe(2));
   });
 });

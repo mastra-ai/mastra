@@ -9,7 +9,14 @@
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
-import type { WorkItemActivity, WorkItemListResponse, WorkItemStarters } from '../../../../api/types';
+import type {
+  WorkItemActivity,
+  BoardPhasesRequest,
+  BoardPhasesResponse,
+  WorkItemFilterOptions,
+  WorkItemListResponse,
+  WorkItemStarters,
+} from '../../../../api/types';
 import { requestJson } from './request';
 
 export type WorkItemSource =
@@ -135,8 +142,11 @@ export interface WorkItem {
   revision: number;
   createdAt: string;
   updatedAt: string;
-  /** When the card last changed in any way, which `boardCheck` reads. */
-  changedAt?: string | null;
+  /**
+   * What the server names this body by: the board read names each card with the version of the
+   * body it would send. A card a write answered, or one changed here, has none until it is read again.
+   */
+  version?: string;
 }
 
 /** Session ref as sent by the client — `startedBy` is stamped server-side. */
@@ -183,7 +193,7 @@ interface WireCreateWorkItemInput extends Omit<CreateWorkItemInput, 'source' | '
   externalSource?: ExternalWorkItemSource;
 }
 
-export function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkItemSource {
+function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
@@ -303,53 +313,92 @@ export interface BoardSnapshot {
   parkedSessionIds: string[];
   /** How many cards matched a `started: 'false'` read, of which `workItems` holds the first. */
   total?: number;
-  /** Names this read of the whole board to the server. Kept with the cards it was read with. */
-  cursor?: string;
 }
 
-/** A board read as the server answers it. With `removedIds` it holds only what moved since the cursor sent. */
-export type BoardRead = BoardSnapshot & Pick<WorkItemListResponse, 'removedIds' | 'check'>;
-
 /**
- * List the org's work items for a Factory project: the whole board, or with `only` a part of it.
+ * List a part of the org's work items for a Factory project: never the whole of them.
  * `sessionId` and `scope: 'sessions'` ask for the cards holding that session or any session, with
  * the cards related to them; `started: 'false'` for the most recently updated cards holding no
  * session whose text has every word of `q`; `source` for the cards filed from those source ids or
  * URLs; `workItemId` for the cards with those ids.
- * With `since`, the cursor of a board already held, a server that can sends only what moved.
  */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
-  signal?: AbortSignal,
-  only?:
+  signal: AbortSignal | undefined,
+  only:
     | { sessionId: string }
     | { scope: 'sessions' }
     | { started: 'false'; q: string }
     | { source: string[] }
-    | { workItemId: string[] }
-    | { since: string },
-): Promise<BoardRead> {
-  const params =
-    only &&
-    new URLSearchParams(
-      'source' in only
-        ? only.source.map(source => ['source', source])
-        : 'workItemId' in only
-          ? only.workItemId.map(id => ['workItemId', id])
-          : only,
-    );
-  const { workItems, runningSessionIds, parkedSessionIds, ...rest } = await requestJson<
+    | { workItemId: string[] },
+): Promise<BoardSnapshot> {
+  const params = new URLSearchParams(
+    'source' in only
+      ? only.source.map(source => ['source', source])
+      : 'workItemId' in only
+        ? only.workItemId.map(id => ['workItemId', id])
+        : only,
+  );
+  // No id and no source asked for: no card. Sent bare, the request would read the whole project.
+  if (params.size === 0) return { workItems: [], runningSessionIds: [], parkedSessionIds: [] };
+  const { workItems, runningSessionIds, parkedSessionIds, total } = await requestJson<
     Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
-  >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${params ? `?${params}` : ''}`, {
-    signal,
-  });
+  >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items?${params}`, { signal });
   return {
-    ...rest,
     workItems: workItems.map(fromWireWorkItem),
     runningSessionIds: runningSessionIds ?? [],
     parkedSessionIds: parkedSessionIds ?? [],
+    ...(total === undefined ? {} : { total }),
   };
+}
+
+/** The board read's answer. It holds the cards' bodies only when they were asked for. */
+export interface BoardPhasesAnswer extends Omit<BoardPhasesResponse, 'workItems'> {
+  workItems?: WorkItem[];
+}
+
+/**
+ * Which cards each phase of a board view lists, in the view's order, and how many match.
+ * `cards` also asks for the body of every card the answer names.
+ */
+export async function fetchBoardPhases(
+  baseUrl: string,
+  factoryProjectId: string,
+  request: BoardPhasesRequest,
+  cards: boolean,
+  signal?: AbortSignal,
+): Promise<BoardPhasesAnswer> {
+  // One order of parameters per view: the browser revalidates an address it has already read.
+  const params = new URLSearchParams({ sort: request.sort });
+  if (request.q) params.set('q', request.q);
+  for (const [filter, picked] of Object.entries(request.filters).sort(([left], [right]) => left.localeCompare(right))) {
+    for (const value of picked) params.append(filter, value);
+  }
+  for (const [phase, count] of Object.entries(request.windows).sort(([left], [right]) => left.localeCompare(right))) {
+    params.append('window', `${phase}:${count}`);
+  }
+  if (request.item) params.set('item', request.item);
+  if (cards) params.set('cards', 'true');
+  const { workItems, ...answer } = await requestJson<
+    Omit<BoardPhasesResponse, 'workItems'> & { workItems?: WireWorkItem[] }
+  >(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/boards/${encodeURIComponent(request.board)}/phases?${params}`,
+    { signal },
+  );
+  return workItems ? { ...answer, workItems: workItems.map(fromWireWorkItem) } : answer;
+}
+
+/** The labels and people the project's cards can be filtered by. */
+export function fetchWorkItemFilterOptions(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal?: AbortSignal,
+): Promise<WorkItemFilterOptions> {
+  return requestJson(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/filter-options`,
+    { signal },
+  );
 }
 
 /** What the draft page's starter buttons count on the project's default board. */

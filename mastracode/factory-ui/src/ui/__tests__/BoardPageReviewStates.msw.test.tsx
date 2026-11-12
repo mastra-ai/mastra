@@ -14,7 +14,6 @@ import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/fac
 import type { GithubPullRequestDetail } from '../domains/factory/services/factory';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
 import { createAppRoutes } from '../router';
-import { intakeCandidatesHandler, recordOfGithubPullRequest } from './fixtures/intakeCandidates';
 import { reviewCandidate, reviewDecision, reviewItem } from './fixtures/reviewCard';
 
 const FACTORY_ID = reviewItem.factoryProjectId;
@@ -62,8 +61,14 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
+    // Work browses the repository's issues beside its pull requests.
+    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
+      HttpResponse.json({ issues: [], nextPage: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    intakeCandidatesHandler(TEST_BASE_URL, candidate ? [recordOfGithubPullRequest(reviewCandidate)] : []),
+    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
+      HttpResponse.json({ pullRequests: candidate ? [reviewCandidate] : [], nextPage: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs/42`, () =>
       HttpResponse.json({
         ...reviewCandidate,
@@ -127,7 +132,9 @@ describe('Review card action lifecycle', () => {
     const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard(candidate);
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
-    await user.click(await screen.findByRole('button', { name: 'Review' }));
+    // The Review column's own header is a button of that name: press the card's.
+    const card = await screen.findByRole('article', { name: reviewItem.title });
+    await user.click(within(card).getByRole('button', { name: 'Review' }));
 
     const reviewing = screen.getByRole('region', { name: 'Review' });
     await waitFor(() => expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled());

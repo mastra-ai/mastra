@@ -1,13 +1,26 @@
 import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
-import type { IntakeCandidateInfo } from '../../../api/types';
+import { hasEveryLabel, metadataLabels } from '@mastra/factory/work-items/card-labels';
+import { matchesPeople, providerPeople } from '@mastra/factory/work-items/card-people';
+import type { ProviderPerson } from '@mastra/factory/work-items/card-people';
+import { matchesSourceFilters } from '@mastra/factory/work-items/card-source-filters';
+import { hasEveryWord } from '@mastra/factory/work-items/search-words';
 import { relativeTime } from '../../../lib/date/relativeTime';
-import { githubSourceKey, hasLabel } from './boardItems';
-import { itemAppearsInStage } from './boardStages';
+import type { BoardFilterState } from './boardFilters';
+import { githubSourceKey, hasLabel, workItemKey } from './boardItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { GitLabIssue, GitLabMergeRequest } from './services/gitlab';
-import { sourceFromExternalSource } from './services/workItems';
-import type { WorkItem, WorkItemSource } from './services/workItems';
+import type { IncidentioIssue } from './services/incidentio';
+import type { JiraIssue } from './services/jira';
+import type { LinearIssue } from './services/linear';
+import { isPullRequestSource } from './services/workItems';
+import type { WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
+
+const NOBODY: ReadonlySet<string> = new Set();
+
+function participantIds(people: readonly ProviderPerson[]): ReadonlySet<string> {
+  return new Set(people.map(person => person.id));
+}
 
 export type IntakeSource = 'github' | 'github-prs' | 'gitlab-prs' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
 
@@ -20,11 +33,11 @@ export interface IntakeFeed {
   isFetchingNextPage?: boolean;
   fetchNextPage: () => unknown;
   refetch: () => unknown;
-  /** The server could not read a source on its last pass, so the list is what it read before. */
-  stale?: boolean;
+  /** Retries only the failed provider in a combined feed. */
+  retryFailed?: () => unknown;
 }
 
-/** An open issue or pull request that has no card yet. */
+/** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
 export interface BoardCandidate {
   sourceKey: string;
   source: WorkItemSource;
@@ -121,52 +134,99 @@ export function gitlabMergeRequestCandidate(pr: GitLabMergeRequest): BoardCandid
   };
 }
 
-function text(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined;
-}
-
-/** The fields under a candidate's title, from the facts the server keeps for its record. */
-function candidateMeta(source: WorkItemSource, record: IntakeCandidateInfo): string[] {
-  const { metadata } = record;
-  const author = record.author ? [record.author] : [];
-  const branches = `${text(metadata.headBranch) ?? ''} → ${text(metadata.baseBranch) ?? ''}`;
-  if (source === 'github-issue') return [`#${String(metadata.number)}`, ...author, relativeTime(record.createdAt)];
-  if (source === 'github-pr') return [`#${String(metadata.number)}`, ...author, branches];
-  if (source === 'gitlab-pr') return [`!${String(metadata.gitlabMergeRequestIid)}`, ...author, branches];
-  const assignee = text(metadata.assignee);
-  return [
-    ...[text(metadata.identifier) ?? record.key, record.state].flatMap(field => field ?? []),
-    ...(assignee ? [assignee] : []),
-  ];
-}
-
-/**
- * A record the server offers for filing. Its source key is the id the server holds the record
- * under, so the card filed from it takes over that record instead of becoming a second one.
- */
-export function intakeCandidate(record: IntakeCandidateInfo): BoardCandidate | undefined {
-  const source = sourceFromExternalSource(record.externalSource);
-  if (source === 'manual' || source === 'slack-thread') return undefined;
+export function linearCandidate(issue: LinearIssue): BoardCandidate {
   return {
-    sourceKey: record.externalSource.externalId,
-    source,
-    title: record.title,
-    url: record.url ?? '',
-    meta: candidateMeta(source, record),
-    column: source === 'github-issue' && hasLabel(record.labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
-    metadata: record.metadata,
+    sourceKey: `linear:${issue.identifier}`,
+    source: 'linear-issue',
+    title: issue.title,
+    url: issue.url,
+    meta: [issue.identifier, issue.state, ...(issue.assignee ? [issue.assignee] : [])],
+    column: 'intake',
+    metadata: {
+      linearIssueId: issue.id,
+      ...(issue.projectId ? { linearProjectId: issue.projectId } : {}),
+      identifier: issue.identifier,
+      state: issue.state,
+      assignee: issue.assignee,
+      creator: issue.creator ?? null,
+      labels: issue.labels,
+    },
   };
 }
 
-export function stageContentCount(
-  stage: BoardStageId,
-  stages: ReadonlyArray<{ id: BoardStageId }>,
-  workItems: readonly WorkItem[],
-  candidates: readonly BoardCandidate[],
-): number {
-  let count = candidates.filter(candidate => candidate.column === stage).length;
-  for (const item of workItems) {
-    if (itemAppearsInStage(item, stage, stages)) count += 1;
-  }
-  return count;
+export function jiraCandidate(issue: JiraIssue): BoardCandidate {
+  return {
+    sourceKey: issue.id,
+    source: 'jira-issue',
+    title: issue.title,
+    url: issue.url,
+    meta: [issue.identifier, issue.state, ...(issue.assignee ? [issue.assignee] : [])],
+    column: 'intake',
+    metadata: {
+      identifier: issue.identifier,
+      issueRef: issue.id,
+      state: issue.state,
+      stateType: issue.stateType,
+      priority: issue.priorityLabel,
+      project: issue.project,
+      site: issue.site ?? null,
+      assignee: issue.assignee,
+      assignees: issue.assignee ? [issue.assignee] : [],
+      creator: issue.author ?? null,
+      author: issue.author ?? null,
+      labels: issue.labels,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+    },
+  };
+}
+
+export function incidentioCandidate(issue: IncidentioIssue): BoardCandidate {
+  return {
+    sourceKey: issue.id,
+    source: 'incidentio-follow-up',
+    title: issue.title,
+    url: issue.url,
+    meta: [issue.identifier, issue.state, ...(issue.assignee ? [issue.assignee] : [])],
+    column: 'intake',
+    metadata: {
+      identifier: issue.identifier,
+      issueRef: issue.id,
+      state: issue.state,
+      stateType: issue.stateType,
+      priority: issue.priorityLabel,
+      incident: issue.incident,
+      assignee: issue.assignee,
+      assignees: issue.assignee ? [issue.assignee] : [],
+      creator: issue.author ?? null,
+      author: issue.author ?? null,
+      labels: issue.labels,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+    },
+  };
+}
+
+/**
+ * Whether a board view keeps an issue not filed yet, by the rules the server lists cards with.
+ * `filters` names people by every id they go by, as the server is asked.
+ */
+export function candidateMatchesView(
+  candidate: BoardCandidate,
+  filters: BoardFilterState,
+  words: readonly string[],
+): boolean {
+  const people = providerPeople(candidate);
+  const relations = {
+    worked: NOBODY,
+    authored: participantIds(people.authored),
+    assigned: participantIds(people.assigned),
+    'review-requested': participantIds(people['review-requested']),
+  };
+  return (
+    matchesPeople(relations, filters) &&
+    hasEveryLabel(new Set(metadataLabels(candidate.metadata)), filters.label) &&
+    matchesSourceFilters({ ...candidate, hasPullRequest: isPullRequestSource(candidate.source) }, filters) &&
+    hasEveryWord(`${candidate.title} ${workItemKey(candidate) ?? ''}`.toLowerCase(), words)
+  );
 }

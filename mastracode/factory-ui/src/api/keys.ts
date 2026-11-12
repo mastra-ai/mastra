@@ -1,4 +1,4 @@
-import type { WorkspaceChangesScope } from './types';
+import type { BoardPhasesRequest, WorkspaceChangesScope } from './types';
 
 /**
  * Stable, scoped React Query keys for the settings API.
@@ -23,6 +23,17 @@ export interface AvailableModelsFilter {
   sessionId?: string;
   resourceId?: string;
   threadId?: string;
+}
+
+/**
+ * Whether a `boardPhasesView` key is of a view that searches and filters nothing: the one view
+ * every card of its board is in.
+ */
+export function isUnnarrowedBoardView(boardPhasesViewKey: readonly unknown[]): boolean {
+  const view = boardPhasesViewKey.at(-2);
+  if (typeof view !== 'object' || view === null || !('q' in view) || !('filters' in view)) return false;
+  const { q, filters } = view;
+  return q === '' && typeof filters === 'object' && filters !== null && Object.keys(filters).length === 0;
 }
 
 export const queryKeys = {
@@ -78,31 +89,30 @@ export const queryKeys = {
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,
+  linearIssuesAll: () => ['linear', 'issues'] as const,
+  linearIssues: (githubProjectId: string | undefined) =>
+    [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueId: string | undefined) =>
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   connectTools: () => ['connect-tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
+  jiraIssuesAll: () => ['jira', 'issues'] as const,
+  jiraIssues: (factoryProjectId: string | undefined) =>
+    [...queryKeys.jiraIssuesAll(), factoryProjectId ?? null] as const,
   jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
     ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
   incidentioSources: () => ['incidentio', 'sources'] as const,
   incidentioStatus: () => ['incidentio', 'status'] as const,
+  incidentioIssuesAll: () => ['incidentio', 'issues'] as const,
+  incidentioIssues: (factoryProjectId: string | undefined) =>
+    [...queryKeys.incidentioIssuesAll(), factoryProjectId ?? null] as const,
   incidentioIssue: (factoryProjectId: string | undefined, issueRef: string | undefined) =>
     ['incidentio', 'issue', factoryProjectId ?? null, issueRef ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
-  // Every list of a project, narrowed or not, sits under the project's key: one reread reaches them all.
-  intakeCandidates: (factoryProjectId: string | undefined, filter?: { sources?: readonly string[]; label?: string }) =>
-    filter && (filter.sources || filter.label)
-      ? ([
-          'intake',
-          'candidates',
-          factoryProjectId ?? null,
-          { sources: filter.sources ?? [], label: filter.label ?? null },
-        ] as const)
-      : (['intake', 'candidates', factoryProjectId ?? null] as const),
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
@@ -112,14 +122,24 @@ export const queryKeys = {
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
     [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
+  workItemsFiledFromAny: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'sources'] as const,
   workItemsFiledFrom: (factoryProjectId: string | undefined, sources: readonly string[]) =>
-    [...queryKeys.workItems(factoryProjectId), 'sources', sources] as const,
+    [...queryKeys.workItemsFiledFromAny(factoryProjectId), sources] as const,
+  /** Every view of one board the tab holds. */
+  boardPhases: (factoryProjectId: string | undefined, board: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'phases', board] as const,
+  /** One view of a board; `windows` is how deep each of its phases is listed. */
+  boardPhasesView: (factoryProjectId: string | undefined, { board, windows, ...view }: BoardPhasesRequest) =>
+    [...queryKeys.boardPhases(factoryProjectId, board), view, windows] as const,
   // Outside the board's key: these hold counts and dates, not cards, so a rewrite of the cached cards must not reach them.
   boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
   workItemStarters: (factoryProjectId: string | undefined) =>
     [...queryKeys.boardFacts(factoryProjectId), 'starters'] as const,
   workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
     [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
+  workItemFilterOptions: (factoryProjectId: string | undefined) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'filter-options'] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>

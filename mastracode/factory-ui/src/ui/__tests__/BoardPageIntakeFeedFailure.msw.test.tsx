@@ -1,7 +1,7 @@
 /**
- * A candidate list that fails reads as an empty backlog unless the column says
- * otherwise: "Intake is clear" next to a list that never loaded is a lie the
- * board must not tell.
+ * A candidate feed that fails reads as an empty backlog unless the column says
+ * otherwise: "Intake is clear" next to a dead GitHub is a lie the board must
+ * not tell.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,22 +12,28 @@ import { describe, expect, it } from 'vitest';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
-import type { IntakeCandidateListResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
-import { githubIssueRecord } from './fixtures/intakeCandidates';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 
-const issue = githubIssueRecord(7, { title: 'Fix login' });
+const AUTO_TRIAGED = 'status: auto-triaged';
 
-function page(answer: Partial<IntakeCandidateListResponse>) {
-  return HttpResponse.json({ candidates: [], passes: [], ...answer });
+function githubIssue(number: number, title: string, labels: string[] = []) {
+  return {
+    number,
+    title,
+    url: `https://github.com/acme/app/issues/${number}`,
+    author: 'alice',
+    assignee: null,
+    labels,
+    createdAt: '2026-08-01T00:00:00.000Z',
+  };
 }
 
-const unavailable = () => HttpResponse.json({ error: 'Candidates are unavailable' }, { status: 502 });
+const issue = githubIssue(7, 'Fix login');
 
-function stubBoardEndpoints(candidatesResponse: (request: Request) => Response) {
+function stubBoardEndpoints(issuesResponse: (request: Request) => Response) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -60,9 +66,7 @@ function stubBoardEndpoints(candidatesResponse: (request: Request) => Response) 
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, ({ request }) =>
-      candidatesResponse(request),
-    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => issuesResponse(request)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
 }
@@ -72,15 +76,19 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('Intake column when the candidate list fails', () => {
+describe('Intake column when the candidate feed fails', () => {
   it('names the failure instead of claiming the backlog is clear, and recovers on retry', async () => {
     let healthy = false;
-    stubBoardEndpoints(() => (healthy ? page({ candidates: [issue] }) : unavailable()));
+    stubBoardEndpoints(() =>
+      healthy
+        ? HttpResponse.json({ issues: [issue], nextPage: null })
+        : HttpResponse.json({ error: 'GitHub is unavailable' }, { status: 502 }),
+    );
     const { client } = renderWorkBoard();
 
     const intake = await screen.findByTestId('board-column-intake');
     const alert = await within(intake).findByRole('alert');
-    expect(alert).toHaveTextContent('Candidates are unavailable');
+    expect(alert).toHaveTextContent('GitHub is unavailable');
     expect(within(intake).queryByText('Intake is clear')).not.toBeInTheDocument();
 
     healthy = true;
@@ -91,43 +99,30 @@ describe('Intake column when the candidate list fails', () => {
     expect(within(intake).queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('reports the failure in the Triage column too, not as nothing to triage', async () => {
-    stubBoardEndpoints(unavailable);
+  it('reports a failing triage feed in the Triage column, not as nothing to triage', async () => {
+    stubBoardEndpoints(request =>
+      new URL(request.url).searchParams.get('label') === AUTO_TRIAGED
+        ? HttpResponse.json({ error: 'GitHub rate limit exceeded' }, { status: 502 })
+        : HttpResponse.json({ issues: [issue], nextPage: null }),
+    );
     renderWorkBoard();
 
     const triage = await screen.findByTestId('board-column-triage');
-    await waitFor(() => expect(within(triage).getByRole('alert')).toHaveTextContent('Candidates are unavailable'));
+    await waitFor(() => expect(within(triage).getByRole('alert')).toHaveTextContent('GitHub rate limit exceeded'));
     expect(within(triage).queryByText('Nothing to triage')).not.toBeInTheDocument();
-  });
-
-  it('keeps what the server last listed and says so when it could not read GitHub', async () => {
-    stubBoardEndpoints(() =>
-      page({
-        candidates: [issue],
-        passes: [{ integrationId: 'github', kind: 'issue', completeAt: '2026-08-01T00:00:00.000Z', failed: true }],
-      }),
-    );
-    const { client } = renderWorkBoard();
-    await waitForMutationsIdle(client);
-
-    const intake = await screen.findByTestId('board-column-intake');
-    expect(await within(intake).findByText('Fix login')).toBeInTheDocument();
-    expect(within(intake).getByText('GitHub could not be read. This list may be out of date.')).toBeInTheDocument();
-    // The server reads GitHub again on its own, so there is nothing here to retry.
-    expect(within(intake).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    // The intake feed answered, so its own column keeps listing candidates.
+    expect(within(screen.getByTestId('board-column-intake')).getByText('Fix login')).toBeInTheDocument();
   });
 
   it('retries the page that failed, not the pages already loaded', async () => {
     let secondPageHealthy = false;
-    const requested: string[] = [];
     stubBoardEndpoints(request => {
-      const query = new URL(request.url).searchParams;
-      // Triage reads the auto-triaged issues on its own, and there are none.
-      if (query.has('label')) return page({ candidates: [] });
-      const cursor = query.get('cursor');
-      requested.push(cursor ?? 'first');
-      if (!cursor) return page({ candidates: [issue], nextCursor: 'second' });
-      return secondPageHealthy ? page({ candidates: [githubIssueRecord(8, { title: 'Fix signup' })] }) : unavailable();
+      const params = new URL(request.url).searchParams;
+      if (params.get('label') === AUTO_TRIAGED) return HttpResponse.json({ issues: [], nextPage: null });
+      if (params.get('page') === '1') return HttpResponse.json({ issues: [issue], nextPage: 2 });
+      return secondPageHealthy
+        ? HttpResponse.json({ issues: [githubIssue(8, 'Fix signup')], nextPage: null })
+        : HttpResponse.json({ error: 'GitHub is unavailable' }, { status: 502 });
     });
     const { client } = renderWorkBoard();
 
@@ -142,6 +137,5 @@ describe('Intake column when the candidate list fails', () => {
 
     expect(within(intake).getByText('Fix signup')).toBeInTheDocument();
     expect(within(intake).getByText('Fix login')).toBeInTheDocument();
-    expect(requested).toEqual(['first', 'second', 'second']);
   });
 });

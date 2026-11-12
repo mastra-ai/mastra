@@ -3642,6 +3642,18 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /mcp/builtin": {
+    "method": "GET",
+    "path": "/mcp/builtin",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /mcp/v0/servers": {
     "method": "GET",
     "path": "/mcp/v0/servers",

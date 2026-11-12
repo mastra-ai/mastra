@@ -1,6 +1,5 @@
-import type { IntakeCandidateInfo } from '../../../api/types';
-import type { LinearProject } from '../../domains/factory/services/linear';
-import { offeredLinearIssue, wireSourceCards } from './boardSourceFilters';
+import type { LinearIssue, LinearProject } from '../../domains/factory/services/linear';
+import { linearIssue, wireSourceCards } from './boardSourceFilters';
 
 // Hosted project picker values are opaque source IDs, not Linear's raw UUIDs.
 export const docsWatchId = 'linear-project:eyJ3b3Jrc3BhY2VJZCI6IndvcmtzcGFjZS0xIiwicHJvamVjdElkIjoicHJvamVjdC1hIn0';
@@ -14,10 +13,16 @@ export const hostedProjects: LinearProject[] = [
   { id: otherWorkspaceProjectId, name: 'Other workspace project', state: 'started', teams: [] },
 ];
 
-export const hostedIssues: IntakeCandidateInfo[] = [
-  offeredLinearIssue('ENG-101', docsWatchId, 'DocsWatch: new documentation request'),
-  offeredLinearIssue('ENG-401', undefined, 'Unassigned project'),
-];
+export const hostedIssues: LinearIssue[] = [
+  linearIssue('ENG-101', docsWatchId, 'DocsWatch: new documentation request'),
+  // Already filed: the board shows its card, not the issue.
+  linearIssue('ENG-103', docsWatchId, 'DocsWatch: filed planning issue'),
+  linearIssue('ENG-301', otherWorkspaceProjectId, 'Other workspace card'),
+  linearIssue('ENG-401', null, 'Unassigned project'),
+].map(issue => ({
+  ...issue,
+  sourceId: issue.projectId === otherWorkspaceProjectId ? otherHostedTeamId : hostedTeamId,
+}));
 
 export const hostedCards = wireSourceCards.map(item => {
   if (item.id === 'ENG-301')

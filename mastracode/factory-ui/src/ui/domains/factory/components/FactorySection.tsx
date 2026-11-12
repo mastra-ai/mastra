@@ -11,6 +11,7 @@ import { boardConfigPath, newBoardPath } from '../../boardConfig/boardConfigPath
 import { boardPath, orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
+import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 
 export function FactorySection() {
@@ -60,9 +61,15 @@ export function FactorySection() {
               <SidebarNavigationSkeleton label="Loading boards" rows={2} />
             </li>
           ) : catalog.isError ? (
-            <li role="alert">Unable to load boards.</li>
+            <li>
+              <SidebarLoadError onRetry={() => void catalog.refetch()} retrying={catalog.isFetching}>
+                Couldn’t load boards
+              </SidebarLoadError>
+            </li>
           ) : catalog.data.length === 0 ? (
-            <li>No boards installed.</li>
+            <li>
+              <SidebarEmptyNote>No boards installed.</SidebarEmptyNote>
+            </li>
           ) : (
             boards.map(board => (
               <FactoryLink

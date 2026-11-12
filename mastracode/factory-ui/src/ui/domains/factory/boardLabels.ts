@@ -1,28 +1,17 @@
-import type { BoardCandidate } from './boardCandidates';
-import { metadataLabels, sourceMetadata } from './boardItems';
-import type { WorkItem } from './services/workItems';
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 
+import type { BoardCandidate } from './boardCandidates';
+
+/** The labels the label filter offers: the ones the project's cards carry, and the ones of issues not filed yet. */
 export function boardLabels({
-  items,
+  labels: filed,
   candidates,
 }: {
-  items: readonly WorkItem[];
+  /** The labels of the project's cards, as the server lists them. */
+  labels: readonly string[];
   candidates: readonly BoardCandidate[];
 }): string[] {
-  const labels = new Set<string>();
-  for (const card of [...items, ...candidates])
-    for (const label of metadataLabels(sourceMetadata(card))) labels.add(label);
+  const labels = new Set(filed);
+  for (const candidate of candidates) for (const label of metadataLabels(candidate.metadata)) labels.add(label);
   return [...labels].sort((left, right) => left.localeCompare(right));
-}
-
-export function workItemMatchesLabels(item: WorkItem, selectedLabels: ReadonlySet<string>): boolean {
-  if (selectedLabels.size === 0) return true;
-  const itemLabels = new Set(metadataLabels(sourceMetadata(item)));
-  return [...selectedLabels].every(label => itemLabels.has(label));
-}
-
-export function candidateMatchesLabels(candidate: BoardCandidate, selectedLabels: ReadonlySet<string>): boolean {
-  if (selectedLabels.size === 0) return true;
-  const labels = new Set(metadataLabels(candidate.metadata));
-  return [...selectedLabels].every(label => labels.has(label));
 }

@@ -13,9 +13,9 @@ import type {
 
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { workItemNumber } from '../work-items/card-number.js';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE } from './deliver.js';
 import type { FactoryDeliveryResult, FactoryDeliveryTarget } from './deliver.js';
-import { workItemNumber } from './read-tools.js';
 
 export type FactoryReportStatus = 'progress' | 'blocked' | 'done' | 'failed';
 

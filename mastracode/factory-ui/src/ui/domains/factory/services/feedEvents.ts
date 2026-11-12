@@ -7,7 +7,7 @@ const FEED_SILENCE_LIMIT_MS = 60_000;
 export async function streamFeedEvents(
   baseUrl: string,
   factoryProjectId: string,
-  handlers: { onEvent: () => void; onIntake: () => void; onConnected: () => void },
+  handlers: { onEvent: () => void; onConnected: () => void },
   signal: AbortSignal,
 ): Promise<void> {
   const silence = new AbortController();
@@ -35,8 +35,6 @@ export async function streamFeedEvents(
     });
     await readSSE(response.body.pipeThrough(heardBytes, { signal: closedOrSilent }), (event, data) => {
       if (event === 'feed') handlers.onEvent();
-      // Sent only when the records with no card changed; a server that predates it never sends one.
-      else if (event === 'intake') handlers.onIntake();
     });
   } finally {
     clearTimeout(silenceTimer);

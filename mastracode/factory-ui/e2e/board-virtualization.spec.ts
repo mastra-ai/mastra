@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
-import { largeBoard, largeCandidates } from '../src/ui/__tests__/fixtures/largeBoard';
+import { largeBoard, largeCandidatePage, largeCardId } from '../src/ui/__tests__/fixtures/largeBoard';
 import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
@@ -34,6 +34,8 @@ test.describe('Factory board virtualization', () => {
       ),
       http.get('*/web/factory/projects/fp-1/work-items', () => HttpResponse.json({ workItems: largeBoard(2000) })),
       http.get('*/web/factory/projects/fp-1/sessions', () => HttpResponse.json({ sessions: [] })),
+      http.get('*/web/github/projects/repo-1/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
+      http.get('*/web/github/projects/repo-1/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
       http.get('*/web/intake/config', () =>
         HttpResponse.json({
           config: { github: { enabled: false, sourceIds: null }, linear: { enabled: false, sourceIds: null } },
@@ -42,6 +44,8 @@ test.describe('Factory board virtualization', () => {
       http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
       http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false })),
       http.get('*/api/agent-controller/code/sessions/fp-1/permissions', () => HttpResponse.json({ permissions: [] })),
+      // The feed sends nothing here: the board is read once and scrolled.
+      http.get('*/web/factory/projects/fp-1/feed-events', () => new HttpResponse(null, { status: 404 })),
     );
     await page.route(
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
@@ -84,7 +88,7 @@ test.describe('Factory board virtualization', () => {
         }),
       ),
     );
-    await page.goto('/factories/fp-1/work?item=large-1');
+    await page.goto(`/factories/fp-1/work?item=${largeCardId(1)}`);
     const halos = page.getByTestId('work-item-card').locator('.session-wick');
     await expect(halos).toHaveCount(2);
 
@@ -123,7 +127,7 @@ test.describe('Factory board virtualization', () => {
         test('appends query pages without jumps or duplicate requests and can retry a failed page', async ({
           page,
         }) => {
-          const requestedPages: string[] = [];
+          const requestedPages: number[] = [];
           let releasePage = () => {};
           const secondPage = new Promise<void>(resolve => {
             releasePage = resolve;
@@ -134,21 +138,19 @@ test.describe('Factory board virtualization', () => {
             http.get('*/web/intake/config', () =>
               HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
             ),
-            http.get('*/web/factory/projects/fp-1/intake/candidates', async ({ request }) => {
-              const query = new URL(request.url).searchParams;
-              // Triage asks for its own labelled list; none of these candidates is auto-triaged.
-              if (query.has('label')) return HttpResponse.json({ candidates: [], passes: [] });
-              const cursor = query.get('cursor') ?? 'first';
-              requestedPages.push(cursor);
-              if (cursor === 'first') {
-                return HttpResponse.json({ candidates: largeCandidates(30), nextCursor: 'second', passes: [] });
+            http.get('*/web/github/projects/repo-1/issues', async ({ request }) => {
+              const params = new URL(request.url).searchParams;
+              if (params.has('label')) return HttpResponse.json(largeCandidatePage(0));
+              const pageNumber = Number(params.get('page') ?? 1);
+              requestedPages.push(pageNumber);
+              if (pageNumber === 2) await secondPage;
+              if (pageNumber === 3 && failLastPage) {
+                return HttpResponse.json({ error: 'Candidate page unavailable' }, { status: 503 });
               }
-              if (cursor === 'second') {
-                await secondPage;
-                return HttpResponse.json({ candidates: largeCandidates(100, 30), nextCursor: 'third', passes: [] });
-              }
-              if (failLastPage) return HttpResponse.json({ error: 'Candidate page unavailable' }, { status: 503 });
-              return HttpResponse.json({ candidates: largeCandidates(100, 130), passes: [] });
+              return HttpResponse.json({
+                ...largeCandidatePage(pageNumber === 1 ? 30 : 100, pageNumber === 1 ? 0 : 30 + (pageNumber - 2) * 100),
+                nextPage: pageNumber < 3 ? pageNumber + 1 : null,
+              });
             }),
           );
           await page.goto('/factories/fp-1/work');
@@ -163,9 +165,7 @@ test.describe('Factory board virtualization', () => {
           const scroll = page
             .getByTestId('board-column-intake')
             .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " overflow-auto ")][1]');
-          // The dev server's StrictMode remount abandons the first read and starts it again.
-          const later = () => requestedPages.filter(cursor => cursor !== 'first');
-          expect(later()).toEqual([]);
+          expect(requestedPages).toEqual([1]);
           await scroll.evaluate(element => {
             element.scrollTop = element.scrollHeight;
           });
@@ -179,7 +179,7 @@ test.describe('Factory board virtualization', () => {
               await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
             }
           });
-          expect(later()).toEqual(['second']);
+          expect(requestedPages).toEqual([1, 2]);
           releasePage();
           await expect(page.getByRole('status', { name: 'Loading more candidates' })).toHaveCount(0);
           await expect(anchor).toBeInViewport();
@@ -187,7 +187,7 @@ test.describe('Factory board virtualization', () => {
             Math.abs((await anchor.evaluate(element => element.getBoundingClientRect().top)) - before),
           ).toBeLessThan(2);
           expect(await cards.count()).toBeLessThan(40);
-          expect(later()).toEqual(['second']);
+          expect(requestedPages).toEqual([1, 2]);
 
           await scroll.evaluate(element => {
             element.scrollTop = element.scrollHeight;
@@ -203,14 +203,14 @@ test.describe('Factory board virtualization', () => {
           });
           await expect(page.getByRole('article', { name: 'Candidate 229', exact: true })).toBeInViewport();
           expect(await cards.count()).toBeLessThan(40);
-          expect(later()).toEqual(['second', 'third', 'third']);
+          expect(requestedPages).toEqual([1, 2, 3, 3]);
 
           await scroll.evaluate(element => {
             element.scrollTop = 0;
           });
           await expect(page.getByRole('article', { name: 'Candidate 0', exact: true })).toBeInViewport();
           expect(await cards.count()).toBeLessThan(40);
-          expect(later()).toEqual(['second', 'third', 'third']);
+          expect(requestedPages).toEqual([1, 2, 3, 3]);
         });
       });
 
@@ -230,10 +230,15 @@ test.describe('Factory board virtualization', () => {
           const scroll = page
             .getByTestId('board-column-triage')
             .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " overflow-auto ")][1]');
-          await scroll.evaluate(element => {
-            element.scrollTop = element.scrollHeight;
-          });
-          await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeVisible();
+          // The column lists itself deeper each time its end scrolls into view, down to its last card.
+          await expect(async () => {
+            await scroll.evaluate(element => {
+              element.scrollTop = element.scrollHeight;
+            });
+            await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeVisible({
+              timeout: 2_000,
+            });
+          }).toPass({ timeout: 25_000 });
           await expect(page.getByRole('article', { name: 'Large task 1999', exact: true })).toHaveCount(0);
           expect(await cards.count()).toBeLessThan(40);
           const bounds = await cards.evaluateAll(elements =>
@@ -293,7 +298,7 @@ test.describe('Factory board virtualization', () => {
               HttpResponse.json({ workItems: largeBoard(count) }),
             ),
           );
-          await page.goto('/factories/fp-1/work?item=large-0');
+          await page.goto(`/factories/fp-1/work?item=${largeCardId(0)}`);
           await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeInViewport();
           await expect(page.getByRole('button', { name: 'Details for Large task 0', exact: true })).toBeFocused();
           expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
@@ -301,6 +306,39 @@ test.describe('Factory board virtualization', () => {
       });
     }
   }
+
+  test.describe('when the ends of two board columns scroll into view together', () => {
+    test.use(viewports[0].use);
+    test('lists both columns deeper', async ({ page }) => {
+      server.use(
+        http.get('*/web/factory/projects/fp-1/work-items', () =>
+          HttpResponse.json({
+            workItems: largeBoard(240).map((item, index) => ({
+              ...item,
+              stages: [index < 120 ? 'triage' : 'planning'],
+            })),
+          }),
+        ),
+      );
+      await page.goto('/factories/fp-1/work');
+      await expect(page.getByRole('article', { name: 'Large task 119', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'New view', exact: true }).click();
+      await page.getByRole('radio', { name: 'Board', exact: true }).click();
+      await page.getByRole('button', { name: 'Save view', exact: true }).click();
+      await expect(page.getByRole('group', { name: 'Board columns' })).toBeVisible();
+
+      await page
+        .getByTestId('board-column-triage')
+        .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " overflow-auto ")][1]')
+        .evaluate(element => {
+          element.scrollTop = element.scrollHeight;
+        });
+
+      // Each column listed its newest fifty: the fifty-first of each follows.
+      await expect(page.getByRole('article', { name: 'Large task 69', exact: true })).toBeVisible();
+      await expect(page.getByRole('article', { name: 'Large task 189', exact: true })).toBeVisible();
+    });
+  });
 
   test.describe('when a card with open details is sorted out of the rendered range', () => {
     test.use(viewports[0].use);
@@ -311,7 +349,8 @@ test.describe('Factory board virtualization', () => {
         .getByText('Large task 1999', { exact: true })
         .click();
       const details = page.getByRole('dialog', { name: 'Large task 1999' });
-      await details.getByRole('textbox', { name: 'Comment' }).fill('Keep this draft');
+      await details.getByRole('button', { name: 'Add a description', exact: true }).click();
+      await details.getByRole('textbox', { name: 'Description', exact: true }).fill('Keep this draft');
 
       await page.evaluate(() => {
         history.pushState(null, '', '?sort=created-oldest');
@@ -321,7 +360,7 @@ test.describe('Factory board virtualization', () => {
       expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
 
       await page.getByRole('article', { name: 'Large task 1999', exact: true }).scrollIntoViewIfNeeded();
-      await expect(details.getByRole('textbox', { name: 'Comment' })).toHaveValue('Keep this draft');
+      await expect(details.getByRole('textbox', { name: 'Description', exact: true })).toHaveValue('Keep this draft');
     });
   });
 });
