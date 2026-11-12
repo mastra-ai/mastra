@@ -15,6 +15,9 @@ import type { EnvironmentBuildWorkflowOptions } from './build-workflow.js';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome, EnvironmentBuildTrigger } from './build.js';
 import { environmentBuildContextWithEnv, errorReason, resolveEnvironmentHeads } from './build.js';
 
+/** Tries at a `settings` run that keeps finding the build-start lease held, a second apart and doubling. */
+const SETTINGS_RETRY_ATTEMPTS = 5;
+
 export type StartEnvironmentBuild = (
   projectId: string,
   trigger: EnvironmentBuildTrigger,
@@ -38,6 +41,7 @@ export class EnvironmentBuildRunner {
   readonly #getMastra: () => Mastra | undefined;
   readonly #logger: EnvironmentBuildRunnerOptions['logger'];
   readonly #pending = new Map<string, (outcome: EnvironmentBuildOutcome) => void>();
+  readonly #sleep: (ms: number) => Promise<void>;
   #scheduleAvailable = false;
 
   constructor(deps: EnvironmentBuildDeps, options: EnvironmentBuildRunnerOptions) {
@@ -45,6 +49,7 @@ export class EnvironmentBuildRunner {
     this.#deps = deps;
     this.#getMastra = getMastra;
     this.#logger = logger;
+    this.#sleep = workflowOptions.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
     this.workflow = createEnvironmentBuildWorkflow(deps, {
       ...workflowOptions,
       onStart: (runId, outcome) => {
@@ -122,6 +127,30 @@ export class EnvironmentBuildRunner {
   };
 
   /**
+   * A saved change to a project's environment (settings, setup commands,
+   * repositories, Build variables) starts a `settings` run, which builds only
+   * when the template inputs changed. A run that finds another one holding
+   * the build-start lease (which may have read the environment before this
+   * save) tries again shortly; a lease held through a provider start ends in
+   * a build, whose completion checks the inputs once more. Fire and forget:
+   * the save never waits on it or fails because of it.
+   */
+  readonly onEnvironmentSaved = (projectId: string): void => {
+    void (async () => {
+      for (let attempt = 0; attempt < SETTINGS_RETRY_ATTEMPTS; attempt++) {
+        if (attempt > 0) await this.#sleep(1000 * 2 ** (attempt - 1));
+        const outcome = await this.start(projectId, 'settings');
+        if (outcome.outcome !== 'skipped' || outcome.reason !== 'starting') return;
+      }
+    })().catch((error: unknown) => {
+      this.#logger?.info('environment build settings hand-off failed', {
+        factoryProjectId: projectId,
+        reason: errorReason(error),
+      });
+    });
+  };
+
+  /**
    * Start a run and resolve with the first step's answer; the poll step keeps
    * running in the background. Resolves `unavailable` before the host booted
    * or when the host never registered the workflow, and `failed` when the run
@@ -144,13 +173,17 @@ export class EnvironmentBuildRunner {
     const outcome = new Promise<EnvironmentBuildOutcome>(resolve => this.#pending.set(run.runId, resolve));
     run
       .start({ inputData: { projectId, trigger } })
-      .then(result => {
+      .then(async result => {
         if (result.status !== 'success') {
           this.#logger?.info('environment build run did not succeed', {
             factoryProjectId: projectId,
             runId: run.runId,
           });
         }
+        // A save that landed while this build ran skipped as `in_progress`;
+        // once the build is over, build again if the inputs moved on.
+        // Still pending means the first step never answered: nothing started.
+        if (!this.#pending.has(run.runId) && (await outcome).outcome === 'started') this.onEnvironmentSaved(projectId);
       })
       .catch((error: unknown) => {
         this.#logger?.info('environment build run threw', {

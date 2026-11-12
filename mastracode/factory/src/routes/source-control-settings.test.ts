@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -11,6 +11,7 @@ const route = (id: string) => `/web/source-control/projects/${id}/settings`;
 function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
   user?: { workosId: string; organizationId?: string },
+  onEnvironmentSaved?: (projectId: string) => void,
 ) {
   const app = new Hono();
   if (user) {
@@ -19,7 +20,14 @@ function buildApp(
       await next();
     });
   }
-  mountApiRoutes(app as never, buildSourceControlSettingsRoutes({ auth: fakeRouteAuth(), sourceControls }));
+  mountApiRoutes(
+    app as never,
+    buildSourceControlSettingsRoutes({
+      auth: fakeRouteAuth(),
+      sourceControls,
+      ...(onEnvironmentSaved ? { onEnvironmentSaved } : {}),
+    }),
+  );
   return app;
 }
 
@@ -55,13 +63,14 @@ async function seedRepository(integrationId: 'github' | 'gitlab') {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/acme',
   });
-  return { sourceControl, linked };
+  return { sourceControl, linked, project };
 }
 
 describe('provider-neutral repository settings', () => {
   it.each(['github', 'gitlab'] as const)('reads and writes %s sandbox commands', async integrationId => {
-    const { sourceControl, linked } = await seedRepository(integrationId);
-    const app = buildApp([sourceControl], { workosId: 'user-1', organizationId: 'org-1' });
+    const { sourceControl, linked, project } = await seedRepository(integrationId);
+    const onEnvironmentSaved = vi.fn();
+    const app = buildApp([sourceControl], { workosId: 'user-1', organizationId: 'org-1' }, onEnvironmentSaved);
 
     const initial = await app.request(route(linked.id));
     expect(initial.status).toBe(200);
@@ -78,6 +87,8 @@ describe('provider-neutral repository settings', () => {
       setupCommand: 'pnpm install',
       teardownCommand: 'pnpm clean',
     });
+    // Setup commands are template inputs: the saved link's project goes to builds.
+    expect(onEnvironmentSaved.mock.calls).toEqual([[project.id]]);
 
     const cleared = await app.request(route(linked.id), {
       method: 'POST',

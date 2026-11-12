@@ -916,6 +916,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           } catch (error) {
             console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
           }
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.json(
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
@@ -1048,6 +1049,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
             if (!result) return context.json({ error: 'Project not found' }, 404);
             updated = result;
+            runner?.onEnvironmentSaved(updated.id);
           }
           if (buildTriggers?.schedule && runner?.scheduleAvailable) {
             const stored = await readSchedule(runner.schedules()!, project.id);
@@ -1062,8 +1064,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                   : {}),
               });
           }
-          // Saving never builds: the next Build now, schedule or push run
-          // picks the changed template up.
           return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
@@ -1087,6 +1087,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             id: projectRepositoryId,
             input,
           });
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.json({
             projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository!),
           });
@@ -1109,6 +1110,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'session_retirement_unavailable' }, 409);
           }
           await found.handle.projectRepositories.unlink({ orgId: tenant.orgId, id: projectRepositoryId });
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.body(null, 204);
         },
       }),

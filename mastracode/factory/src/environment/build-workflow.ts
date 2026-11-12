@@ -15,6 +15,7 @@ import {
   ENVIRONMENT_BUILD_TRIGGERS,
   environmentBuildContextWithEnv,
   errorReason,
+  MAX_BUILD_WAIT_MS,
   redactCredentials,
   runEnvironmentBuild,
 } from './build.js';
@@ -22,7 +23,6 @@ import type { EnvironmentBuildDeps, EnvironmentBuildOutcome } from './build.js';
 
 export const ENVIRONMENT_BUILD_WORKFLOW_ID = 'factory-environment-build';
 export const DEFAULT_BUILD_POLL_MS = 15_000;
-export const MAX_BUILD_WAIT_MS = 30 * 60_000;
 
 export const environmentBuildInputSchema = z.object({
   projectId: z.string().min(1),

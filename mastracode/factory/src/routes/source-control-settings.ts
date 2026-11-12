@@ -9,6 +9,8 @@ import type { RouteAuth } from './route.js';
 interface SourceControlSettingsRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
+  /** Called with the link's project after a saved command; setup commands are part of the environment template. */
+  onEnvironmentSaved?: (projectId: string) => void;
 }
 
 async function loadRepository(
@@ -100,6 +102,13 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
           },
         });
         if (!saved) return c.json({ error: 'project_repository_not_found' }, 404);
+        if (options.onEnvironmentSaved) {
+          const connection = await loaded.sourceControl.connections.get({
+            orgId: loaded.orgId,
+            id: saved.connectionId,
+          });
+          if (connection) options.onEnvironmentSaved(connection.factoryProjectId);
+        }
         return c.json({ setupCommand: saved.setupCommand, teardownCommand: saved.teardownCommand });
       },
     }),
