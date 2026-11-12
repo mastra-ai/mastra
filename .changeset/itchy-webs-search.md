@@ -11,7 +11,7 @@ const mastra = new Mastra({
 });
 ```
 
-Set the grace period above the longest time your pubsub can hold an event before a worker takes it. Otherwise a run whose next event is still queued in the pubsub can be restarted.
+Set the grace period above the longest time your pubsub can hold an event before a worker takes it. Otherwise a run whose next event is still queued in the pubsub can be restarted. With a broker pubsub, a recovery restart during a backlog longer than the lease TTL plus `workflowGraceMs` can run a step again whose result the run hadn't saved yet.
 
 Recovery is also faster when many runs are active: it reads the snapshot of a run only when it restarts it. With 3,000 active runs that another instance is running, among 30,000 finished runs, a call takes about 30 ms instead of 1.7 s on Postgres and 60 ms instead of 670 ms on LibSQL.
 
