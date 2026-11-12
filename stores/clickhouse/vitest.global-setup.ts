@@ -1,10 +1,10 @@
 import { createClient } from '@clickhouse/client';
 import type { TestProject } from 'vitest/node';
 
-import { workerName } from './vitest.setup';
+import { workerName, workerPassword } from './vitest.setup';
 
 async function forEachWorker(workers: number, queries: (name: string, password: string) => string[]) {
-  const password = process.env.CLICKHOUSE_PASSWORD || 'password';
+  const password = workerPassword();
   const admin = createClient({
     url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
     username: process.env.CLICKHOUSE_USERNAME || 'default',
