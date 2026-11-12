@@ -59,6 +59,20 @@ function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
   };
 }
 
+/** A run with its snapshot reduced to what `listWorkflowRuns({ summary: true })` returns. */
+function summarizeWorkflowRun(run: WorkflowRun): WorkflowRun {
+  // A snapshot that failed to parse stays a string, as it does without summary.
+  if (typeof run.snapshot === 'string') {
+    return run;
+  }
+
+  const { status, timestamp, parentWorkflow } = run.snapshot;
+  const snapshot = parentWorkflow
+    ? { status, timestamp, parentWorkflow: { workflowId: parentWorkflow.workflowId, runId: parentWorkflow.runId } }
+    : { status, timestamp };
+  return { ...run, snapshot: snapshot as WorkflowRunState };
+}
+
 type SnapshotRecord = {
   namespace: string;
   workflow_name: string;
@@ -513,6 +527,10 @@ export class WorkflowsRedis extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first. With `summary`, each snapshot keeps only its status, timestamp and
+   * parent run; the full snapshots are still read from Redis.
+   */
   public async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -521,6 +539,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
     page,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       if (page !== undefined && page < 0) {
@@ -605,7 +624,8 @@ export class WorkflowsRedis extends WorkflowsStorage {
         runs = runs.slice(offset, offset + normalizedPerPage);
       }
 
-      return { runs, total };
+      // Every snapshot is fetched whole, so summary mode only trims the result, after the status filter.
+      return { runs: summary ? runs.map(summarizeWorkflowRun) : runs, total };
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
