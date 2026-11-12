@@ -1232,6 +1232,14 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     const stepRuns = (step: string) => probe.runs.filter(run => run.tool === step);
     // The run a killed server held lapses sooner.
     const shortLeases = { MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000' };
+    /**
+     * `options` for an instance that boots while the killed server's run still looks live. Its recovery
+     * loop checks that run again a scan interval later, so a short one keeps the test well under a minute.
+     */
+    const scanningSoon = ({ mastraExtra, ...options }: { mastraExtra?: Record<string, unknown> } = {}) => ({
+      ...options,
+      mastraExtra: { ...mastraExtra, recovery: { workflowScanIntervalMs: 2_000 } },
+    });
 
     /**
      * Starts the workers and the boot-time workflow restart, as a deployed server does. The
@@ -1424,7 +1432,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       await until(() => stepsIn(stepsFile).includes('crunch'));
       dying.process.kill('SIGKILL');
 
-      const survivor = await workflowInstance(traced());
+      const survivor = await workflowInstance(scanningSoon(traced()));
       await bootLikeServer(survivor.mastra);
       await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
       const root = await spanNamed(survivor.mastra, 'tools/call run_nightly');
@@ -1442,7 +1450,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       dying.process.kill('SIGKILL');
 
       // The next instance boots like a deployed server: Mastra recovers the workflow runs it finds.
-      const survivor = await workflowInstance();
+      const survivor = await workflowInstance(scanningSoon());
       await bootLikeServer(survivor.mastra);
       const done = await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
       expect(done.result).toMatchObject({ isError: false });
