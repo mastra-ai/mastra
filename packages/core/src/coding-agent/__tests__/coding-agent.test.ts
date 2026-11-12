@@ -417,6 +417,15 @@ describe('buildBasePrompt', () => {
     expect(prompt).not.toContain('Co-Authored-By: mastra-platform[bot] (openai/gpt-4o)');
   });
 
+  it('drops the parallel-only subagent rule when subagents can run in the background', () => {
+    const parallelOnly = 'Only use subagents when you will spawn **multiple subagents in parallel**';
+
+    expect(buildBasePrompt(promptContext())).toContain(parallelOnly);
+    const prompt = buildBasePrompt(promptContext({ backgroundSubagents: true }));
+    expect(prompt).not.toContain(parallelOnly);
+    expect(prompt).toContain('# Subagent Rules\n- Use `forked: true`');
+  });
+
   it('parameterizes the Co-Authored-By email', () => {
     const prompt = buildBasePrompt(promptContext({ coAuthorName: 'Acme Bot', coAuthorEmail: 'bot@acme.dev' }));
     expect(prompt).toContain('Co-Authored-By: Acme Bot <bot@acme.dev>');
