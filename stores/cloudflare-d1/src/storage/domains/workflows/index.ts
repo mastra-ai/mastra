@@ -47,6 +47,32 @@ const RUN_OWNER_COLUMNS = `generation, ownerId, leaseExpiresAt, ${DB_NOW_MS} AS 
  */
 const FIRST_GENERATION = `MAX(1, ${DB_NOW_MS})`;
 
+/**
+ * The snapshot fields a `listWorkflowRuns({ summary: true })` row carries, read in SQL so the
+ * snapshot itself is never sent. One multi-path `json_extract` parses each snapshot once and
+ * returns `[status, timestamp, parentWorkflowId, parentRunId]` as a JSON array.
+ */
+const SUMMARY_FIELDS_COLUMN = `CASE WHEN json_valid(snapshot) THEN json_extract(snapshot, '$.status', '$.timestamp', '$.parentWorkflow.workflowId', '$.parentWorkflow.runId') END AS summaryFields`;
+
+/**
+ * Builds the reduced snapshot of a summary row from `SUMMARY_FIELDS_COLUMN`: `status`,
+ * `timestamp`, and `parentWorkflow` only for nested runs.
+ */
+function summarySnapshot(summaryFields: unknown): WorkflowRunState {
+  const [status, timestamp, parentWorkflowId, parentRunId] =
+    typeof summaryFields === 'string' ? (JSON.parse(summaryFields) as unknown[]) : [];
+  const snapshot: Record<string, unknown> = {
+    status: status ?? undefined,
+    timestamp: timestamp === null || timestamp === undefined ? undefined : Number(timestamp),
+  };
+
+  if (parentWorkflowId && parentRunId) {
+    snapshot.parentWorkflow = { workflowId: parentWorkflowId, runId: parentRunId };
+  }
+
+  return snapshot as unknown as WorkflowRunState;
+}
+
 function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunOwnershipRecord {
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
   return {
@@ -432,8 +458,12 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     }
   }
 
-  private parseWorkflowRun(row: any): WorkflowRun {
-    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+  /**
+   * Maps a row to a workflow run. With `summary`, the row has `summaryFields` instead of the
+   * snapshot.
+   */
+  private parseWorkflowRun(row: any, { summary }: { summary?: boolean } = {}): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = summary ? summarySnapshot(row.summaryFields) : row.snapshot;
     if (typeof parsedSnapshot === 'string') {
       try {
         parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
@@ -453,6 +483,21 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     };
   }
 
+  /**
+   * Rewrites the listing's `SELECT *` to the summary columns. The SQL builder only selects plain
+   * column names, so the JSON expressions go in here. Tables created before `resourceId` existed
+   * still list, with no resource ID.
+   */
+  async #summarySql(tableName: string, selectAllSql: string): Promise<string> {
+    const resourceId = (await this.#db.hasColumn(tableName, 'resourceId')) ? 'resourceId' : 'NULL AS resourceId';
+    const columns = ['workflow_name', 'run_id', resourceId, 'createdAt', 'updatedAt', SUMMARY_FIELDS_COLUMN];
+    return `SELECT ${columns.join(', ')}${selectAllSql.slice('SELECT *'.length)}`;
+  }
+
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -461,6 +506,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     perPage,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
@@ -497,7 +543,8 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
         builder.offset(offset);
       }
 
-      const { sql, params } = builder.build();
+      const { sql: selectAllSql, params } = builder.build();
+      const sql = summary ? await this.#summarySql(fullTableName, selectAllSql) : selectAllSql;
 
       let total = 0;
 
@@ -512,7 +559,9 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       }
 
       const results = await this.#db.executeQuery({ sql, params });
-      const runs = (isArrayOfRecords(results) ? results : []).map((row: any) => this.parseWorkflowRun(row));
+      const runs = (isArrayOfRecords(results) ? results : []).map((row: any) =>
+        this.parseWorkflowRun(row, { summary }),
+      );
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(
