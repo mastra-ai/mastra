@@ -9,8 +9,13 @@ import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { Mastra } from './index';
+import type { MastraRecoveryConfig } from './index';
 
-function buildReplica(storage: InMemoryStore, onExecute: (runId: string) => Promise<void>) {
+function buildReplica(
+  storage: InMemoryStore,
+  onExecute: (runId: string) => Promise<void>,
+  recovery?: MastraRecoveryConfig,
+) {
   const step = createStep({
     id: 'side-effect',
     inputSchema: z.object({}),
@@ -27,7 +32,7 @@ function buildReplica(storage: InMemoryStore, onExecute: (runId: string) => Prom
   })
     .then(step)
     .commit();
-  return new Mastra({ logger: false, storage, workflows: { workflow } });
+  return new Mastra({ logger: false, storage, workflows: { workflow }, recovery });
 }
 
 const replicas: Mastra[] = [];
@@ -94,15 +99,19 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
   it('recovers a run whose owner crashed from the recovery loop, once its lease expired and a grace period passed', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];
-    const replica = buildReplica(storage, async runId => {
-      executions.push(runId);
-    });
+    const replica = buildReplica(
+      storage,
+      async runId => {
+        executions.push(runId);
+      },
+      { workflowScanIntervalMs: 500 },
+    );
     replicas.push(replica);
     // A crashed replica left a running snapshot and a lease it can no longer renew.
     const { workflow, run, workflowsStore } = await persistOrphanedRun(storage, replica, 300);
 
-    // The loop's first pass sees the lease live; its next pass comes once the lease and the 2 s
-    // in-process grace ran out, well before the 60 s scan interval.
+    // The loop's first pass sees the lease live, so its next pass waits a scan interval. That pass
+    // sees the lease lapsed and moves the one after it to the end of the 2 s in-process grace.
     const startedAt = Date.now();
     await replica.startWorkers();
     await expect.poll(() => executions, { timeout: 6_000, interval: 50 }).toEqual([run.runId]);
