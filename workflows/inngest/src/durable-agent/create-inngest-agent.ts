@@ -60,6 +60,7 @@ import {
   deleteRunRegistryEntry,
   publishAbortRequest,
   requestAcknowledgedAbort,
+  RUN_DEADLINE_KEY,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -68,6 +69,7 @@ import type {
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableToolCallInput,
+  RunDeadline,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
@@ -77,7 +79,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { RequestContext, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import { matchesRunFence } from '@mastra/core/storage';
 import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -994,16 +996,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * one execution session (stream or resume) and compose it into the registry
    * entry's `abortSignal`, which co-located durable steps read. At the
    * deadline the run is reported failed: the stream gets one
-   * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
+   * `MastraTimeoutError` and the snapshot rows are deleted. A step on another
+   * worker stops at the same deadline through the timer it arms from the
+   * carried deadline. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
-   * Returns the timer teardown; a no-op when no budget is configured.
+   * Returns the timer teardown (a no-op when no budget is configured) and the
+   * segment's absolute deadline, which the segment's event carries to workers.
    */
   function armTotalTimeout(
     entry: { abortSignal?: AbortSignal },
     abortController: AbortController,
     runId: string,
     timeoutMs: number | undefined,
-  ): () => void {
+  ): { clear: () => void; deadline: RunDeadline | undefined } {
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
       timeoutMs,
@@ -1012,14 +1017,30 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       detachParentOnCleanup: false,
     });
     entry.abortSignal = totalTimeout.signal;
+    const deadline = timeoutMs !== undefined && timeoutMs > 0 ? { at: Date.now() + timeoutMs, timeoutMs } : undefined;
     void totalTimeout.timeoutPromise?.catch(async error => {
-      if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      // A worker in this process can abort the shared controller with its own copy of the
+      // deadline a tick earlier; that is still this deadline, not a caller abort.
+      if (!isMastraTimeoutError(error) || !isMastraTimeoutError(totalTimeout.signal?.reason)) return;
       // The worker owns span finalization and accumulated usage/output (OBS-754).
       // Ending caller copies here races that finalization.
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });
-    return totalTimeout.cleanup;
+    return { clear: () => totalTimeout.cleanup(), deadline };
+  }
+
+  /**
+   * The request context a segment's event carries: the caller's, plus this segment's absolute
+   * deadline (or none), so a worker that subscribes after the deadline's abort request went out
+   * still stops at it.
+   */
+  function withSegmentDeadline(
+    requestContext: Record<string, any>,
+    deadline: RunDeadline | undefined,
+  ): Record<string, any> {
+    const { [RUN_DEADLINE_KEY]: _stale, ...rest } = requestContext;
+    return deadline ? { ...rest, [RUN_DEADLINE_KEY]: deadline } : rest;
   }
 
   async function deleteRunSnapshots(runId: string): Promise<void> {
@@ -1250,6 +1271,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     workflowInput: any,
     tracingOptions?: { traceId: string; parentSpanId: string },
     actor?: ActorSignal,
+    deadline?: RunDeadline,
   ): Promise<void> {
     const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
@@ -1259,7 +1281,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: workflowInput.requestContextEntries ?? {},
+        requestContext: withSegmentDeadline(workflowInput.requestContextEntries ?? {}, deadline),
         tracingOptions,
         actor,
       }),
@@ -1457,7 +1479,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         { onExternalAbort: () => void requestRemoteAbort(runId) },
       );
       registryEntry.abortController = abortController;
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: segmentDeadline } = armTotalTimeout(
         registryEntry,
         abortController,
         runId,
@@ -1594,7 +1616,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             return;
           }
           try {
-            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor, segmentDeadline);
           } catch (error) {
             if (persistedRunning) await deleteRunSnapshots(runId);
             throw error;
@@ -1778,9 +1800,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // defaults pick the same callbacks they did for the original run. A resume
       // in a fresh process has no registry entry, so use the suspended snapshot
       // that dispatch resumes from.
-      const savedRequestContext: Iterable<readonly [string, unknown]> =
-        existingRegistryEntry?.requestContext?.entries() ??
-        Object.entries((await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext ?? {});
+      // The run's user and token are left out, so they come only from this resume.
+      const savedRequestContext = Object.entries(
+        withoutLiveRequestKeys(
+          existingRegistryEntry?.requestContext
+            ? Object.fromEntries(existingRegistryEntry.requestContext.entries())
+            : (await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext,
+        ),
+      );
       const callbackOptions = await withDefaultOptions(agent, {
         ...resumeOptions,
         requestContext: new RequestContext([
@@ -1912,7 +1939,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: segmentDeadline } = armTotalTimeout(
         existingEntry,
         abortController,
         runId,
@@ -2124,7 +2151,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             inputData: resumeData,
             runId,
             resourceId: resumeOptions?.resourceId,
-            requestContext,
+            requestContext: withSegmentDeadline(requestContext, segmentDeadline),
             tracingOptions,
             actor: resumeOptions?.actor,
             resume: {

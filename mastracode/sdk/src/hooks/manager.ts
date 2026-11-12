@@ -13,6 +13,7 @@ import type {
   HookStdinUserPrompt,
   HookStdinStop,
   HookStdinSession,
+  SessionStartSource,
   HookStdinNotification,
   HookStdinAgentStart,
   HookStdinAgentEnd,
@@ -37,6 +38,13 @@ export class HookManager {
   private homeDir?: string;
   private runId?: string;
   private worktree?: SessionWorktreeInfo;
+  /** True once SessionStart has fired, so later thread binds announce themselves. */
+  private sessionStarted = false;
+  /**
+   * The latest queued SessionStart, settled or not. SessionStart runs one after another,
+   * and other events wait for it, so hooks see each session in order and before its events.
+   */
+  private pendingSessionStart?: Promise<void>;
 
   constructor(
     projectDir: string,
@@ -57,8 +65,24 @@ export class HookManager {
     this.config = loadHooksConfig(this.projectDir, this.configDirName, this.homeDir);
   }
 
+  /**
+   * Bind hooks to a thread. After SessionStart has fired, binding a different thread
+   * (the first message creating one, `/new`, a resumed thread) fires SessionStart again
+   * with `source: 'thread_change'`, so a hook that tracks sessions learns the new id
+   * before any event of that thread reaches it.
+   */
   setSessionId(sessionId: string): void {
+    if (sessionId === this.sessionId) return;
     this.sessionId = sessionId;
+    if (this.sessionStarted) {
+      this.runSessionStart('thread_change').catch(() => {});
+    }
+  }
+
+  /** Dispatch an event's hooks once any queued SessionStart has finished. */
+  private async dispatch(...args: Parameters<typeof runHooksForEvent>): Promise<HookEventResult> {
+    if (this.pendingSessionStart) await this.pendingSessionStart;
+    return runHooksForEvent(...args);
   }
 
   /** Set the active agent run id. Included as `run_id` in all hook stdin while a run is active. */
@@ -120,8 +144,9 @@ export class HookManager {
    * session events so a hook that provisions on start can tear down on end using
    * the same fields.
    */
-  private sessionStdin(hook_event_name: 'SessionStart' | 'SessionEnd'): HookStdinSession {
+  private sessionStdin(hook_event_name: 'SessionStart' | 'SessionEnd', source?: SessionStartSource): HookStdinSession {
     const stdin: HookStdinSession = this.baseStdinFields(hook_event_name);
+    if (source) stdin.source = source;
     if (this.worktree) {
       stdin.worktree_path = this.worktree.path;
       if (this.worktree.branch) stdin.branch = this.worktree.branch;
@@ -146,7 +171,7 @@ export class HookManager {
       tool_input: toolInput,
     };
 
-    return runHooksForEvent(hooks, stdin, { tool_name: toolName });
+    return this.dispatch(hooks, stdin, { tool_name: toolName });
   }
 
   async runPostToolUse(
@@ -168,7 +193,7 @@ export class HookManager {
       tool_error: toolError,
     };
 
-    return runHooksForEvent(hooks, stdin, { tool_name: toolName });
+    return this.dispatch(hooks, stdin, { tool_name: toolName });
   }
 
   async runUserPromptSubmit(userMessage: string): Promise<HookEventResult> {
@@ -182,7 +207,7 @@ export class HookManager {
       user_message: userMessage,
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   async runStop(
@@ -200,18 +225,29 @@ export class HookManager {
       stop_reason: stopReason,
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
-  async runSessionStart(): Promise<HookEventResult> {
+  async runSessionStart(source: SessionStartSource = 'startup'): Promise<HookEventResult> {
+    this.sessionStarted = true;
     const hooks = this.config.SessionStart;
     if (!hooks || hooks.length === 0) {
       return emptyResult();
     }
 
-    const stdin: HookStdinSession = this.sessionStdin('SessionStart');
-
-    return runHooksForEvent(hooks, stdin);
+    // Captured now, so a queued run still reports the session it was queued for.
+    const stdin: HookStdinSession = this.sessionStdin('SessionStart', source);
+    const previous = this.pendingSessionStart;
+    const run = previous ? previous.then(() => runHooksForEvent(hooks, stdin)) : runHooksForEvent(hooks, stdin);
+    const settled = run.then(
+      () => {},
+      () => {},
+    );
+    this.pendingSessionStart = settled;
+    void settled.then(() => {
+      if (this.pendingSessionStart === settled) this.pendingSessionStart = undefined;
+    });
+    return run;
   }
   async runSessionEnd(): Promise<HookEventResult> {
     const hooks = this.config.SessionEnd;
@@ -221,7 +257,7 @@ export class HookManager {
 
     const stdin: HookStdinSession = this.sessionStdin('SessionEnd');
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   /**
@@ -239,7 +275,7 @@ export class HookManager {
     };
 
     // Fire-and-forget — don't await
-    runHooksForEvent(hooks, stdin).catch(() => {});
+    this.dispatch(hooks, stdin).catch(() => {});
   }
 
   // =========================================================================
@@ -261,7 +297,7 @@ export class HookManager {
       run_id: runId,
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   async runAgentEnd(stopReason: 'complete' | 'aborted' | 'error' | 'suspended'): Promise<HookEventResult> {
@@ -280,7 +316,7 @@ export class HookManager {
       stop_reason: stopReason,
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   async runPermissionRequest(
@@ -307,7 +343,7 @@ export class HookManager {
       ...(toolInput !== undefined ? { tool_input: toolInput } : {}),
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   async runPermissionResult(
@@ -337,7 +373,7 @@ export class HookManager {
       ...(toolInput !== undefined ? { tool_input: toolInput } : {}),
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   async runInterrupt(reason: InterruptReason): Promise<HookEventResult> {
@@ -357,7 +393,7 @@ export class HookManager {
       reason,
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   async runSubagentStart(
@@ -386,7 +422,7 @@ export class HookManager {
       ...(forked !== undefined ? { forked } : {}),
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 
   async runSubagentEnd(
@@ -415,6 +451,6 @@ export class HookManager {
       duration_ms: durationMs,
     };
 
-    return runHooksForEvent(hooks, stdin);
+    return this.dispatch(hooks, stdin);
   }
 }

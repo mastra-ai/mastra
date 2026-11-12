@@ -23,6 +23,7 @@
     "@inner/alias-source": "workspace:*",
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
+    "@inner/optional-peer-host": "workspace:*",
     "@inner/subpath-only": "workspace:*",
     "@inner/transitive-a": "workspace:*",
     "@inner/transitive-only-dependent": "workspace:*",
