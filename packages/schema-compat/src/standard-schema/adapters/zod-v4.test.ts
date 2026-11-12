@@ -81,8 +81,9 @@ describe('zod-v4 standard-schema adapter', () => {
     });
 
     it('documents defaulted and transformed fields differently for input and output (#30050)', () => {
-      const standardSchema = toRoutedStandardSchema(
+      const standardSchema = toStandardSchema(
         z.object({ limit: z.string().transform(Number).default('10'), enabled: z.boolean().default(true) }),
+        { unrepresentable: 'any' },
       );
 
       const input = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
