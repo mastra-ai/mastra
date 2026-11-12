@@ -393,7 +393,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     description:
       'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
     isOptional: true,
-    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 60000 }",
+    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2000 }",
     properties: [
       {
         type: 'object',
@@ -426,7 +426,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             name: 'workflowGraceMs',
             type: 'number',
             isOptional: true,
-            defaultValue: '60000 (2000 with the in-process pubsub)',
+            defaultValue: '2000 with the default in-process pubsub, 60000 with any other pubsub',
             description:
               'How long a `running` or `waiting` workflow run must go without an instance running it, and without any change, before `restartAllActiveWorkflowRuns()` restarts it. A run that stopped more recently is checked again once this period ends. Set it above the longest time your pubsub can hold an event before a worker takes it.',
           },
