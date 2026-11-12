@@ -32,10 +32,6 @@ export function createUpdatedAtTests({ getStore }: { getStore: () => WorkflowsSt
       'advances updatedAt on %s',
       async (method, { skip }) => {
         const store = getStore();
-        if (typeof store[method] !== 'function') {
-          return skip();
-        }
-
         const { snapshot, runId } = createSampleWorkflowSnapshot('running');
         await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
         const updatedAt = async () =>
