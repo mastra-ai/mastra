@@ -233,6 +233,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       if (!entry || entry.kind !== 'message') return state;
 
       const parts = [...entry.message.content.parts];
+      let sourcePartIndexes = entry.sourcePartIndexes;
       if (event.event.type === 'text-delta') {
         if (event.event.delta.length === 0) return state;
         const partIndex = parts.findLastIndex(part => part.type === 'text');
@@ -240,28 +241,46 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         if (!part || part.type !== 'text') return state;
         parts[partIndex] = { ...part, text: part.text + event.event.delta };
       } else {
-        const mappedIndex = entry.sourcePartIndexes?.indexOf(event.event.index);
-        if (mappedIndex === -1) return state;
-        const partIndex = mappedIndex ?? event.event.index;
-        // Only the append slot sits past the end: a further index would leave a
-        // hole in `parts`, and `find`/`for…of` readers then see that hole as an
-        // undefined part. Dropping the update matches the mapped path; the next
-        // window merge reconciles skipped parts.
-        const outOfRange = mappedIndex === undefined ? partIndex > parts.length : partIndex >= parts.length;
-        if (outOfRange) return state;
-        if (event.event.type === 'reasoning-delta') {
-          const part = parts[partIndex];
+        const { index } = event.event;
+        const mappedIndex = sourcePartIndexes ? sourcePartIndexes.indexOf(index) : index;
+        // A new part lands in the append slot. With a mapping, that is any
+        // stream index past every mapped one, since filtered parts leave gaps.
+        // A further index without a mapping would leave a hole in `parts`, so
+        // it is dropped and the next window merge reconciles it.
+        const appends = sourcePartIndexes
+          ? mappedIndex === -1 && index > Math.max(-1, ...sourcePartIndexes)
+          : index === parts.length;
+        if (appends && event.event.type !== 'reasoning-delta') {
+          const toolCallId = toolCallIdForPart(event.event.part);
+          if (toolCallId && toolCallIdsDrawnElsewhere(state.entries, entryIndex).has(toolCallId)) {
+            // Another entry already draws this tool call; keep mapping later
+            // stream indexes past it instead of drawing it twice.
+            if (sourcePartIndexes) return state;
+            const mapped = parts.map((_, partIndex) => partIndex);
+            return {
+              ...state,
+              entries: state.entries.map((candidate, at) =>
+                at === entryIndex ? { ...entry, sourcePartIndexes: mapped } : candidate,
+              ),
+            };
+          }
+          parts.push(event.event.part);
+          if (sourcePartIndexes) sourcePartIndexes = [...sourcePartIndexes, index];
+        } else if (mappedIndex === -1 || mappedIndex >= parts.length) {
+          return state;
+        } else if (event.event.type === 'reasoning-delta') {
+          const part = parts[mappedIndex];
           if (!part || part.type !== 'reasoning') return state;
           const reasoning = part.reasoning + event.event.delta;
-          parts[partIndex] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
+          parts[mappedIndex] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
         } else {
-          parts[partIndex] = event.event.part;
+          parts[mappedIndex] = event.event.part;
         }
       }
 
       const message = { ...entry.message, content: { ...entry.message.content, parts } };
       const entries = state.entries.map((candidate, index) =>
-        index === entryIndex ? { ...entry, message, streaming: true } : candidate,
+        index === entryIndex ? { ...entry, message, sourcePartIndexes, streaming: true } : candidate,
       );
       const next = { ...state, entries };
       return message.role === 'assistant' && hasAssistantText(next) ? { ...next, pending: false } : next;
@@ -1153,11 +1172,7 @@ function isUnclaimedOptimisticCopy(entry: TimelineEntry, texts: Set<string>): bo
   );
 }
 
-function withoutToolPartsDrawnElsewhere(
-  message: MastraDBMessage,
-  entries: TimelineEntry[],
-  own: number,
-): { message: MastraDBMessage; sourcePartIndexes?: number[] } {
+function toolCallIdsDrawnElsewhere(entries: TimelineEntry[], own: number): Set<string> {
   const drawnElsewhere = new Set<string>();
   for (const [index, entry] of entries.entries()) {
     if (index === own || entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
@@ -1166,6 +1181,15 @@ function withoutToolPartsDrawnElsewhere(
       if (toolCallId) drawnElsewhere.add(toolCallId);
     }
   }
+  return drawnElsewhere;
+}
+
+function withoutToolPartsDrawnElsewhere(
+  message: MastraDBMessage,
+  entries: TimelineEntry[],
+  own: number,
+): { message: MastraDBMessage; sourcePartIndexes?: number[] } {
+  const drawnElsewhere = toolCallIdsDrawnElsewhere(entries, own);
   const sourcePartIndexes = message.content.parts.flatMap((part, index) => {
     const toolCallId = toolCallIdForPart(part);
     return toolCallId && drawnElsewhere.has(toolCallId) ? [] : [index];

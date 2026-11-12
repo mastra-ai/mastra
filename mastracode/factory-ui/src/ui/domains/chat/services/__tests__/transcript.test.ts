@@ -1495,6 +1495,43 @@ describe('transcript reducer mergeWindow', () => {
       expect(drawn(caughtUp).toolCallIds).toEqual(['a', 'b', 'plan']);
     });
 
+    it('does not redraw a folded tool call that the stream appends later', () => {
+      const state = streamRun([tool('a'), tool('b')], { end: false });
+      const window = [dbMessage('s1', 'assistant', [tool('a')]), dbMessage('s2', 'assistant', [tool('b'), plan])];
+      const [merged] = mergeTwice(state, window);
+      const update = (index: number, part: MastraMessagePart) => ({
+        type: 'event' as const,
+        event: { type: 'message_update' as const, id: 'streamed-turn', event: { type: 'part' as const, index, part } },
+      });
+
+      const withPlan = transcriptReducer(merged, update(2, plan));
+      expect(drawn(withPlan).toolCallIds).toEqual(['a', 'b', 'plan']);
+      const withText = transcriptReducer(withPlan, update(3, text('Final answer')));
+      expect(drawn(withText)).toMatchObject({ toolCallIds: ['a', 'b', 'plan'], texts: ['Final answer'] });
+    });
+
+    it('keeps new stream parts after a part the catch-up left to the folded entry', () => {
+      const state = streamRun([tool('a'), tool('b')], { end: false });
+      const window = [dbMessage('s1', 'assistant', [tool('a')]), dbMessage('s2', 'assistant', [tool('b'), plan])];
+      const [merged] = mergeTwice(state, window);
+      const caughtUp = transcriptReducer(merged, {
+        type: 'event',
+        event: {
+          type: 'message_start',
+          message: dbMessage('streamed-turn', 'assistant', [tool('a'), tool('b'), plan]),
+        },
+      });
+      const next = transcriptReducer(caughtUp, {
+        type: 'event',
+        event: {
+          type: 'message_update',
+          id: 'streamed-turn',
+          event: { type: 'part', index: 3, part: text('Final answer') },
+        },
+      });
+      expect(drawn(next)).toMatchObject({ toolCallIds: ['a', 'b', 'plan'], texts: ['Final answer'] });
+    });
+
     it('does not restore a stored prompt for a tool call already finished on screen', () => {
       const finished: MastraMessagePart = {
         type: 'tool-invocation',
