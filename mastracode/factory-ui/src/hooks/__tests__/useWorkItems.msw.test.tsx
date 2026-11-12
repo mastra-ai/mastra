@@ -1,3 +1,5 @@
+import { boardCheck } from '@mastra/factory/work-items/board-check';
+import { useMutation } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -317,8 +319,21 @@ describe('useSessionWorkItemsQuery', () => {
 });
 
 describe('useWorkItemsQuery', () => {
-  const card = (id: string, title = id) => ({ ...wireItem, id, title, createdAt: `2026-07-0${id}T00:00:00.000Z` });
-  const titles = (cards: WorkItem[] | undefined) => cards?.map(item => item.title);
+  const card = (id: string, title = id) => ({
+    ...wireItem,
+    id,
+    title,
+    createdAt: `2026-07-0${id}T00:00:00.000Z`,
+    // A write stamps the card, here with a day per title.
+    changedAt: `2026-08-${String(10 + title.length)}T00:00:00.000Z`,
+  });
+  /** What moved, as the server answers it for the board it lists. */
+  const moved = (workItems: object[], removedIds: string[], listed: Parameters<typeof boardCheck>[0]) => ({
+    workItems,
+    removedIds,
+    check: boardCheck(listed),
+  });
+  const titles = (cards: { title: string }[] | undefined) => cards?.map(item => item.title);
   /** Answers the board reads in turn, and records the `since` each one sent. */
   function serveBoard(...answers: unknown[]) {
     const sinces: Array<string | null> = [];
@@ -336,7 +351,14 @@ describe('useWorkItemsQuery', () => {
   it('reads the board whole, then merges what moved since its cursor into the cards it holds', async () => {
     const sinces = serveBoard(
       { workItems: [card('5'), card('4'), card('2'), card('1')], cursor: 'first' },
-      { workItems: [card('4', 'Renamed'), card('3'), card('6')], removedIds: ['5'], total: 5, cursor: 'second' },
+      {
+        ...moved(
+          [card('4', 'Renamed'), card('3'), card('6')],
+          ['5'],
+          [card('6'), card('4', 'Renamed'), card('3'), card('2'), card('1')],
+        ),
+        cursor: 'second',
+      },
     );
     const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
     await waitFor(() => expect(titles(result.current.data)).toEqual(['5', '4', '2', '1']));
@@ -370,19 +392,25 @@ describe('useWorkItemsQuery', () => {
     expect(result.current.data).toBe(cards);
   });
 
-  it('reads the board whole once when its count differs from the server’s', async () => {
+  it.each([
+    ['an edit', [card('1', 'Renamed')]],
+    ['a card', [card('2'), card('1')]],
+    ['a removal', []],
+  ])('reads the board whole once when the server lists %s it was never sent', async (_missed, listed) => {
     const sinces = serveBoard(
       { workItems: [card('1')], cursor: 'first' },
-      { workItems: [], removedIds: [], total: 2, cursor: 'second' },
-      { workItems: [card('2'), card('1')], cursor: 'third' },
+      { ...moved([], [], listed), cursor: 'second' },
+      { workItems: listed, cursor: 'third' },
+      { ...moved([], [], listed), cursor: 'third' },
     );
     const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
     await waitFor(() => expect(titles(result.current.data)).toEqual(['1']));
 
     await act(() => refresh(client));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(titles(listed)));
+    await act(() => refresh(client));
 
-    await waitFor(() => expect(titles(result.current.data)).toEqual(['2', '1']));
-    expect(sinces).toEqual([null, 'first', null]);
+    expect(sinces).toEqual([null, 'first', null, 'third']);
   });
 
   it('keeps a change the server has not answered through a merge, and drops it once the server refuses', async () => {
@@ -390,7 +418,7 @@ describe('useWorkItemsQuery', () => {
     let answerLate!: (answer: object) => void;
     const refusal = new Promise<void>(resolve => (refuse = resolve));
     const lateAnswer = new Promise<object>(resolve => (answerLate = resolve));
-    const nothingMoved = { workItems: [], removedIds: [], total: 2 };
+    const nothingMoved = moved([], [], [card('2'), card('1')]);
     const sinces = serveBoard(
       { workItems: [card('2'), card('1')], cursor: 'first' },
       { ...nothingMoved, cursor: 'second' },
@@ -428,13 +456,13 @@ describe('useWorkItemsQuery', () => {
     expect(sinces).toEqual([null, 'first', 'second', null]);
   });
 
-  it('does not take a card being deleted here for a drifted count', async () => {
+  it('does not take a card being deleted here for a drifted board', async () => {
     let finish!: () => void;
     const finished = new Promise<void>(resolve => (finish = resolve));
     const sinces = serveBoard(
       { workItems: [card('2'), card('1')], cursor: 'first' },
-      { workItems: [], removedIds: [], total: 2, cursor: 'second' },
-      { workItems: [], removedIds: ['1'], total: 1, cursor: 'third' },
+      { ...moved([], [], [card('2'), card('1')]), cursor: 'second' },
+      { ...moved([], ['1'], [card('2')]), cursor: 'third' },
     );
     server.use(
       http.delete(`${TEST_BASE_URL}/web/factory/work-items/1`, async () => {

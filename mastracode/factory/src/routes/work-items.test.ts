@@ -63,6 +63,7 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
@@ -2352,9 +2353,9 @@ describe('run activity on the work-item listing', () => {
       const next = await read(board.cursor);
 
       expect(next.workItems.map(card => card.title).sort()).toEqual(['Renamed', 'Reworded']);
-      expect(next).toMatchObject({ removedIds: [cards[3]!.id], total: 3 });
+      expect(next).toMatchObject({ removedIds: [cards[3]!.id], check: boardCheck((await read()).workItems) });
       later();
-      expect(await read(next.cursor)).toMatchObject({ workItems: [], removedIds: [], total: 3 });
+      expect(await read(next.cursor)).toMatchObject({ workItems: [], removedIds: [], check: next.check });
     });
 
     it('sends a card stamped before the cursor that the cursor’s read did not hold', async () => {
@@ -2384,11 +2385,29 @@ describe('run activity on the work-item listing', () => {
         const { cards, board } = await boardOf(count);
         later();
         await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
-        bytes.push((await read(board.cursor)).bytes - String(count).length);
+        const answer = await read(board.cursor);
+        bytes.push(answer.bytes - answer.check!.length);
       }
 
       expect(bytes[1]).toBe(bytes[0]);
     }, 60_000);
+
+    it('names a board that holds an edit its reader was never sent', async () => {
+      const { cards, board } = await boardOf(2);
+      // A writer whose clock runs further behind than a `since` read goes back.
+      vi.setSystemTime(Date.now() - 6_000);
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      // Past the age at which the list is read whole again, which finds the edit.
+      vi.setSystemTime(Date.now() + 70_000);
+
+      const next = await read(board.cursor);
+
+      expect(next).toMatchObject({ workItems: [], removedIds: [] });
+      expect(next.check).not.toBe(boardCheck(board.workItems));
+      const whole = await read();
+      expect(whole.workItems.map(card => card.title)).toContain('Renamed');
+      expect(next.check).toBe(boardCheck(whole.workItems));
+    });
 
     it.each([50, 2_000])(
       'reads no card to answer a reader that holds the cached board of %i cards',

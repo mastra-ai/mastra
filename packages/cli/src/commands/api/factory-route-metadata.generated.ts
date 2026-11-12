@@ -3585,6 +3585,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "type": "string"
           }
+        },
+        "check": {
+          "type": "string"
         }
       },
       "required": [

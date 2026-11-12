@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { gzip as gzipCallback } from 'node:zlib';
 
 import type { Card } from '../storage/domains/work-items/base.js';
+import { boardCheck } from '../work-items/board-check.js';
 
 const gzip = promisify(gzipCallback);
 
@@ -59,6 +60,15 @@ export function scopedSnapshot(
 export function movedBody(body: unknown): Pick<BoardSnapshot, 'json' | 'gzipped'> {
   const json = JSON.stringify(body);
   return { json, gzipped: () => gzip(json) };
+}
+
+const checks = new WeakMap<readonly Card[], string>();
+
+/** {@link boardCheck} of a cached list, computed once for every reader that sends its cursor. */
+export function listCheck(items: readonly Card[]): string {
+  let check = checks.get(items);
+  if (check === undefined) checks.set(items, (check = boardCheck(items)));
+  return check;
 }
 
 function snapshot(

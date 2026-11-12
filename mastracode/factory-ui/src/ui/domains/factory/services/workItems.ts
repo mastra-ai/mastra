@@ -135,6 +135,8 @@ export interface WorkItem {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  /** When the card last changed in any way, which `boardCheck` reads. */
+  changedAt?: string | null;
 }
 
 /** Session ref as sent by the client — `startedBy` is stamped server-side. */
@@ -306,7 +308,7 @@ export interface BoardSnapshot {
 }
 
 /** A board read as the server answers it. With `removedIds` it holds only what moved since the cursor sent. */
-export type BoardRead = BoardSnapshot & Pick<WorkItemListResponse, 'removedIds'>;
+export type BoardRead = BoardSnapshot & Pick<WorkItemListResponse, 'removedIds' | 'check'>;
 
 /**
  * List the org's work items for a Factory project: the whole board, or with `only` a part of it.

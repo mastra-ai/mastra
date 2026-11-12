@@ -53,7 +53,7 @@ import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/deci
 import { relatedCardIndex } from '../work-items/related-cards.js';
 import type { PullRequestFacts } from '../work-items/related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { boardSnapshot, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
+import { boardSnapshot, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
 import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
@@ -497,7 +497,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           // A tab that kept the board gets what moved since its cursor: a body the size of the change.
           if (list.changed) {
             const workItems = list.changed.map(toWireWorkItem);
-            const moved = { workItems, removedIds: list.removed, total: board.length, cursor: list.cursor };
+            const moved = { workItems, removedIds: list.removed, check: listCheck(board), cursor: list.cursor };
             return send(movedBody({ ...moved, runningSessionIds: running, parkedSessionIds: parked }), {
               'Cache-Control': 'no-store',
             });

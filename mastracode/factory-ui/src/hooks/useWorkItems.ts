@@ -1,4 +1,5 @@
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import { boardCheck } from '@mastra/factory/work-items/board-check';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   queryOptions,
@@ -78,20 +79,21 @@ async function readBoard(
   const held = () => client.getQueryData<BoardSnapshot>(queryKeys.workItems(factoryProjectId));
   const since = whole ? undefined : held()?.cursor;
   const only = since ? { since } : undefined;
-  const { removedIds, total, ...read } = await listWorkItems(baseUrl, factoryProjectId, signal, only);
+  const { removedIds, check, ...read } = await listWorkItems(baseUrl, factoryProjectId, signal, only);
   const board = held();
   const byId = new Map(board?.workItems.map(card => [card.id, card]));
   let cards = read.workItems.map(card => replaceEqualDeep(byId.get(card.id), card));
   if (removedIds) {
     for (const card of cards) byId.set(card.id, card);
     for (const id of removedIds) byId.delete(id);
-    // What moved fits only the board its cursor names, and leaves as many cards as the server
-    // counts once every change made here is answered. Otherwise this copy drifted: read it whole.
-    if (board?.cursor !== since || (byId.size !== total && !client.isMutating())) {
+    cards = [...byId.values()];
+    // What moved fits only the board its cursor names, and leaves the board the server checks
+    // once every card written here is answered. Otherwise this copy drifted: read it whole.
+    if (board?.cursor !== since || (check !== boardCheck(cards) && !client.isMutating())) {
       return readBoard(baseUrl, factoryProjectId, signal, client, true);
     }
     // The order a whole read lists them in: newest first, then by id.
-    cards = [...byId.values()].sort((a, b) => (a.createdAt + a.id < b.createdAt + b.id ? 1 : -1));
+    cards.sort((a, b) => (a.createdAt + a.id < b.createdAt + b.id ? 1 : -1));
   }
   if (!board) return { ...read, workItems: cards };
   const same = cards.length === board.workItems.length && cards.every((card, i) => card === board.workItems[i]);

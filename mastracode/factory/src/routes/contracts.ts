@@ -1046,15 +1046,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
-      /**
-       * With `started=false`: how many cards matched, of which `workItems` holds the first `limit`.
-       * With `removedIds`: how many cards the board holds, for a reader to check its copy against.
-       */
+      /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
       total: z.number().int().nonnegative().optional(),
       /** Names this read of the whole board. Absent when the next read must list it whole again. */
       cursor: z.string().optional(),
       /** Cards gone since the `since` sent. Its presence marks an answer that holds only what moved. */
       removedIds: z.array(z.string()).optional(),
+      /** With `removedIds`: `boardCheck` of the whole board, for a reader to check its merged copy against. */
+      check: z.string().optional(),
     }),
   },
   workItemCreate: {
