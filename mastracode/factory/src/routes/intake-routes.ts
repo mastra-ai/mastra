@@ -18,10 +18,12 @@ import type { StatusEvent } from '../boards/board-events.js';
 import { intakeTargetProblem } from '../boards/intake-routing.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
+import { applyReroute, planReroute, summarizeReroute } from '../boards/reroute.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
 import type { StoredBoardScope, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
@@ -30,6 +32,8 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   projects: FactoryProjectsStorage;
   storage: StoredBoardsStorage;
+  /** Cards an intake route change may move to another board. */
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'update' | 'supersedeDecisionsForWorkItem'>;
   /** The project's installed boards, to check route targets against. */
   boards: Pick<ProjectBoardCache, 'describe'>;
 }
@@ -123,6 +127,15 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });
   }
 
+  async #planReroute(scope: Resolved) {
+    const [registry, routes, items] = await Promise.all([
+      this.#registry(scope),
+      this.deps.storage.listIntakeRoutes(scope),
+      this.deps.workItems.listShared(scope),
+    ]);
+    return planReroute(routes, items, registry);
+  }
+
   async #list(c: Context, scope: Resolved, routes?: StoredIntakeRouteRecord[]) {
     const registry = await this.#registry(scope);
     routes ??= await this.deps.storage.listIntakeRoutes(scope);
@@ -181,6 +194,24 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     const contracts = FACTORY_ROUTE_CONTRACTS;
     return [
       this.#route(contracts.intakeRouteList, async c => this.#list(c, await this.#resolve(c))),
+
+      this.#route(contracts.intakeRouteReroutePreview, async c => {
+        const scope = await this.#resolve(c);
+        const moves = await this.#planReroute(scope);
+        return c.json({ total: moves.length, moves: summarizeReroute(moves) });
+      }),
+
+      this.#route(contracts.intakeRouteRerouteApply, async c => {
+        const scope = await this.#resolve(c);
+        await this.#requireAdmin(c, scope);
+        const result = await applyReroute({
+          moves: await this.#planReroute(scope),
+          workItems: this.deps.workItems,
+          registry: await this.#registry(scope),
+          userId: scope.userId,
+        });
+        return c.json(result);
+      }),
 
       this.#route(contracts.intakeRouteReorder, async c => {
         const scope = await this.#resolve(c);

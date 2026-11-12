@@ -102,6 +102,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         auth,
         audit,
         projects: domains.projects,
+        workItems: domains.workItems,
         storage: domains.boards,
         boards: cache,
       }).routes(),
@@ -555,6 +556,41 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
     expect(created.status).toBe(201);
     expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'App and ENG', when })]);
+  });
+
+  it('previews, then moves untouched cards a new route now files elsewhere to the start of that board', async () => {
+    const { a, scope, projectPath, base, replicaA } = await setup();
+    expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+    const card = async (title: string, stage: string, labels: string[]) =>
+      (
+        await a.workItems.upsert({
+          ...scope,
+          userId: ADMIN,
+          input: { title, board: 'work', stages: [stage], metadata: { labels } },
+        })
+      ).item;
+    const waiting = await card('Docs waiting', 'intake', ['docs']);
+    const started = await card('Docs started', 'triage', ['docs']);
+    const other = await card('Not docs', 'intake', []);
+
+    expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({ total: 0, moves: [] });
+    expect((await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } })).status).toBe(
+      201,
+    );
+    expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({
+      total: 1,
+      moves: [{ fromBoard: 'work', toBoard: 'docs', count: 1 }],
+    });
+    // Moving cards is an admin's call, like changing the routes.
+    expect((await replicaA.send('POST', `${base}/reroute`, undefined, MEMBER)).status).toBe(403);
+
+    expect(await replicaA.send('POST', `${base}/reroute`)).toEqual({ status: 200, body: { moved: 1, skipped: 0 } });
+    const after = await a.workItems.listShared(scope);
+    const where = (id: string) => after.find(item => item.id === id)!;
+    expect(where(waiting.id)).toMatchObject({ board: 'docs', stages: ['inbox'] });
+    expect(where(started.id)).toMatchObject({ board: 'work', stages: ['triage'] });
+    expect(where(other.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+    expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({ total: 0, moves: [] });
   });
 
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {
