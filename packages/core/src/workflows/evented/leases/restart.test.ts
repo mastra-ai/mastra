@@ -161,8 +161,9 @@ describe('evented restart refusal (#28712)', () => {
       await startQueued.promise;
       if (startQueuedPastTtl) {
         // The liveness the caller wrote lapses; the worker taking the start event writes it again.
-        await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
-        expect(await runIsLive(storage, run.runId)).toBe(false);
+        await vi.waitFor(async () => expect(await runIsLive(storage, run.runId)).toBe(false), {
+          timeout: WORKFLOW_RUN_LEASE_TTL_MS * 2,
+        });
         deliverStart.resolve();
         await stepQueued.promise;
       }
@@ -210,8 +211,9 @@ describe('evented restart refusal (#28712)', () => {
     const run = await a.workflow.createRun();
     expect((await run.start({ inputData: { n: 1 } })).status).toBe('failed');
     // The failed run's liveness lapses before it is time travelled.
-    await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
-    expect(await runIsLive(storage, run.runId)).toBe(false);
+    await vi.waitFor(async () => expect(await runIsLive(storage, run.runId)).toBe(false), {
+      timeout: WORKFLOW_RUN_LEASE_TTL_MS * 2,
+    });
 
     holding = true;
     const travelled = (await a.workflow.createRun({ runId: run.runId })).timeTravel({ step: 'a', inputData: { n: 2 } });
@@ -263,9 +265,11 @@ describe('evented restart refusal (#28712)', () => {
     const nestedRunId = (parentSnapshot?.context.child as { suspendPayload?: any }).suspendPayload?.__workflow_meta
       ?.runId as string;
     // The suspended runs' liveness lapses before the nested run is resumed.
-    await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
-    expect(await runIsLive(storage, run.runId)).toBe(false);
-    expect(await runIsLive(storage, nestedRunId)).toBe(false);
+    await vi.waitFor(
+      async () =>
+        expect([await runIsLive(storage, run.runId), await runIsLive(storage, nestedRunId)]).toEqual([false, false]),
+      { timeout: WORKFLOW_RUN_LEASE_TTL_MS * 2 },
+    );
 
     // Resuming the nested run directly makes its parent `running` again too.
     holding = true;

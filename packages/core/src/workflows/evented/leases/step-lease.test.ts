@@ -170,7 +170,7 @@ describe('evented step leases (#28712)', () => {
       force: true,
       expectedGeneration: generation,
     });
-    await sleep(5);
+    await vi.waitFor(async () => expect(await store.getRunOwnership({ runId: key })).toMatchObject({ live: false }));
 
     expect(await b.mastra.handleWorkflowEvent({ ...retry, deliveryAttempt: 2 })).toEqual({ ok: true });
     expect(executions).toEqual(['A', 'B']);

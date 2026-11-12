@@ -13,5 +13,11 @@ export async function abandonLease(storage: MastraCompositeStore, ...keys: strin
   for (const key of keys) {
     await store.claimRunOwnership({ runId: key, ownerId: 'crashed-process', leaseMs: 1, force: true });
   }
-  await new Promise(resolve => setTimeout(resolve, 5));
+
+  // The store's clock decides when a lease has lapsed.
+  for (const key of keys) {
+    while ((await store.getRunOwnership({ runId: key }))?.live) {
+      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+  }
 }
