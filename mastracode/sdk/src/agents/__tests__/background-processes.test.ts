@@ -66,7 +66,11 @@ describe('Mastra Code background shell exit notices', () => {
       );
       const pid = output.match(/PID: ([^)]+)/)?.[1];
       if (!pid) throw new Error(`No PID in ${output}`);
-      const exit = new Promise<void>(resolve => exited.set(pid, resolve));
+      // A command that ends at once can exit before its call returns.
+      const exit = new Promise<void>(resolve => {
+        if (exits.some(event => event.kind === 'process' && event.pid === pid)) resolve();
+        else exited.set(pid, resolve);
+      });
       return { pid, toolCallId, exit };
     };
     return { delivered, exits, notices, tools, start };
