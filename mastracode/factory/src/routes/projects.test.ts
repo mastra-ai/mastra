@@ -1681,7 +1681,10 @@ describe('ProjectRoutes', () => {
         }
       }
 
-      async function seedBuilding(sandbox = new BuildingSandbox()) {
+      async function seedBuilding(
+        sandbox = new BuildingSandbox(),
+        sleep: (ms: number) => Promise<void> = async () => {},
+      ) {
         const seed = await createFactoryStorageForTests();
         const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
         const github = seed.sourceControl.forIntegration('github');
@@ -1719,7 +1722,7 @@ describe('ProjectRoutes', () => {
               versionControl: { getRepositoryAccess: async () => ({ token: 't', cloneUrl: 'u' }) as never },
             },
           },
-          { getMastra: () => mastra, sleep: async () => {} },
+          { getMastra: () => mastra, sleep },
         );
         mastra = new Mastra({
           logger: false,
@@ -1858,30 +1861,125 @@ describe('ProjectRoutes', () => {
         expect(sandbox.reads).toHaveLength(readsBefore);
       });
 
-      it('never builds on save: repository patches, edits and unlinks only store the change', async () => {
+      it('builds on save once a template exists, and only when a template input changed', async () => {
         const { app, project, sandbox, seed } = await seedBuilding();
         const github = seed.sourceControl.forIntegration('github');
         const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+        const settle = () => new Promise(resolve => setTimeout(resolve, 50));
+        const setupCommands = () => sandbox.starts.length;
+        const saveSetup = (setupCommand: string) =>
+          patch(app, project.id, { repositories: [{ projectRepositoryId: link!.id, setupCommand }] });
 
-        const patched = await patch(app, project.id, {
-          repositories: [{ projectRepositoryId: link!.id, setupCommand: 'pnpm i' }],
-        });
-        expect(patched.status).toBe(200);
-        expect((await patched.json()).environment).not.toHaveProperty('buildRequested');
+        // Before the first build, saving only stores the change.
+        expect((await saveSetup('pnpm i')).status).toBe(200);
+        await settle();
+        expect(setupCommands()).toBe(0);
 
+        const built = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
+        expect(await built.json()).toMatchObject({ outcome: 'started' });
+        await until(async () => (await seed.projects.getById({ id: project.id }))?.activeTemplateId === 'tpl-1');
+        await settle();
+        expect(setupCommands()).toBe(1);
+
+        // A changed setup command rebuilds the template; the same save again does not.
+        expect((await saveSetup('pnpm i && pnpm build')).status).toBe(200);
+        await until(async () => setupCommands() === 2);
+        expect(setupCommands()).toBe(2);
+        await settle();
+        expect((await saveSetup('pnpm i && pnpm build')).status).toBe(200);
+        await settle();
+        expect(setupCommands()).toBe(2);
+
+        // So do the other environment fields and the repository's own edit route.
+        expect((await patch(app, project.id, { workspaceSetupCommand: 'pnpm lint' })).status).toBe(200);
+        await until(async () => setupCommands() === 3);
+        await settle();
         const edited = await app.request(`/web/factory/projects/${project.id}/repositories/${link!.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ setupCommand: 'pnpm build' }),
+          body: JSON.stringify({ setupCommand: 'pnpm i' }),
         });
         expect(edited.status).toBe(200);
+        await until(async () => setupCommands() === 4);
+        expect(setupCommands()).toBe(4);
+        await settle();
+        expect(await seed.projects.getById({ id: project.id })).toMatchObject({ buildStartUncertain: false });
 
+        // Unlinking the last repository leaves no environment to build.
         const unlinked = await app.request(`/web/factory/projects/${project.id}/repositories/${link!.id}`, {
           method: 'DELETE',
         });
         expect(unlinked.status).toBe(204);
-        await new Promise(resolve => setTimeout(resolve, 20));
-        expect(sandbox.starts).toEqual([]);
+        await settle();
+        expect(setupCommands()).toBe(4);
+      });
+
+      it('rebuilds once a deleted source-control connection took its repositories out of the environment', async () => {
+        const { app, project, sandbox, seed } = await seedBuilding();
+        const github = seed.sourceControl.forIntegration('github');
+        const installation = await github.installations.upsert({
+          orgId: 'org-1',
+          connectedByUserId: 'user-1',
+          externalId: 'gh-2',
+        });
+        const second = await github.connections.create({
+          orgId: 'org-1',
+          factoryProjectId: project.id,
+          installationId: installation.id,
+          createdByUserId: 'user-1',
+        });
+        const repository = await github.repositories.upsert({
+          orgId: 'org-1',
+          input: { installationId: installation.id, externalId: 'acme/web', slug: 'acme/web', defaultBranch: 'main' },
+        });
+        await github.projectRepositories.link({
+          orgId: 'org-1',
+          connectionId: second.id,
+          repositoryId: repository.id,
+          createdByUserId: 'user-1',
+          sandboxProvider: 'platform',
+          sandboxWorkdir: '/workspace',
+        });
+        const built = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
+        expect(await built.json()).toMatchObject({ outcome: 'started' });
+        await until(async () => (await seed.projects.getById({ id: project.id }))?.activeTemplateId === 'tpl-1');
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(sandbox.starts).toHaveLength(1);
+
+        const deleted = await app.request(
+          `/web/factory/projects/${project.id}/source-control-connections/${second.id}`,
+          { method: 'DELETE' },
+        );
+        expect(deleted.status).toBe(204);
+        await until(async () => sandbox.starts.length === 2);
+        expect(sandbox.starts).toHaveLength(2);
+      });
+
+      it('builds a change saved while a build ran once that build is over', async () => {
+        const sandbox = new BuildingSandbox();
+        let held = true;
+        const get = sandbox.builds.get;
+        sandbox.builds.get = async (ctx, settings, buildId) =>
+          held ? { buildId, status: 'building' } : get(ctx, settings, buildId);
+        const { app, project, seed } = await seedBuilding(sandbox, () => new Promise(r => setTimeout(r, 5)));
+        const github = seed.sourceControl.forIntegration('github');
+        const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+
+        const built = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
+        expect(await built.json()).toMatchObject({ outcome: 'started' });
+        await until(async () => (await seed.projects.getById({ id: project.id }))?.lastBuildId === 'tpl-1:build-1');
+        // Saved while the first build runs: it is never raced by a second one.
+        const saved = await patch(app, project.id, {
+          repositories: [{ projectRepositoryId: link!.id, setupCommand: 'pnpm i' }],
+        });
+        expect(saved.status).toBe(200);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(sandbox.starts).toHaveLength(1);
+
+        held = false;
+        await until(async () => sandbox.starts.length === 2);
+        expect(sandbox.starts).toHaveLength(2);
+        await until(async () => (await seed.projects.getById({ id: project.id }))?.activeTemplateId === 'tpl-1');
       });
 
       it('deletes the project schedule with the project', async () => {

@@ -1,16 +1,15 @@
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { useLocation } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { filedFromQueryOptions, useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import type { BoardCandidate } from '../../factory/boardCandidates';
 import { isPersistedCandidate, persistedSourceKeys } from '../../factory/boardItems';
-import { pageLoadsBoard } from '../../factory/pageLoadsBoard';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { BoardSnapshot, WorkItem } from '../../factory/services/workItems';
+import { candidateSearchValue } from '../services/searchResults';
 
 type Candidate = { candidate: BoardCandidate; updatedAt: string };
 
@@ -25,13 +24,15 @@ function selectUnstarted(board: BoardSnapshot) {
   return { cards, total: board.total ?? cards.length };
 }
 
-/** The candidates that best match `search`: the most words found, then the most recently updated. */
+/**
+ * The candidates that best match `search`: the most words found, then the most recently updated.
+ * Words are looked for in the text the palette filters a candidate's row on.
+ */
 function bestCandidates(candidates: Candidate[], search: string): Candidate[] {
   const words = search.toLowerCase().split(/\s+/).filter(Boolean);
   return candidates
     .map(entry => {
-      const { title, sourceKey, url, meta } = entry.candidate;
-      const text = [title, sourceKey, url, ...meta].join(' ').toLowerCase();
+      const text = candidateSearchValue(entry.candidate).toLowerCase();
       return { entry, found: words.filter(word => text.includes(word)).length };
     })
     .toSorted((a, b) => b.found - a.found || b.entry.updatedAt.localeCompare(a.entry.updatedAt))
@@ -60,11 +61,7 @@ function useUnstartedSearch(factoryId: string | undefined, search: string, candi
   const offered = bestCandidates(candidates, search);
   const sources = offered.flatMap(({ candidate }) => [candidate.sourceKey, candidate.url]).filter(Boolean);
   const filed = useQuery({
-    queryKey: queryKeys.workItemsFiledFrom(factoryId, sources),
-    queryFn:
-      factoryId && sources.length > 0
-        ? async ({ signal }) => ({ ...(await listWorkItems(baseUrl, factoryId, signal, { source: sources })), sources })
-        : skipToken,
+    ...filedFromQueryOptions(baseUrl, factoryId, sources),
     placeholderData: keepPreviousData,
   });
   const filedCards = filed.data?.workItems ?? NO_CARDS;
@@ -91,8 +88,7 @@ function useUnstartedSearch(factoryId: string | undefined, search: string, candi
  * once typing pauses, and so are the cards already filed from the best unfiled candidates.
  */
 export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: string, candidates: Candidate[]) {
-  const { pathname } = useLocation();
-  const sessionCards = useSidebarWorkItemsQuery(factoryId, pageLoadsBoard(pathname));
+  const sessionCards = useSidebarWorkItemsQuery(factoryId);
   const withSessions = sessionCards.data?.workItems ?? NO_CARDS;
   const settled = useDebouncedValue(typed.trim(), 150);
   // Clearing the box goes back to the cached empty search at once.
@@ -113,19 +109,13 @@ export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: s
     /** Every card either search loaded, for acting on a row. A card several reads sent is in it several times. */
     loaded,
     count: everything.count,
-    /** Both lists again, read fresh: a row's card may have gained a session since it was listed. */
-    refetch: async (): Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }> => {
-      const [started, unstarted] = await Promise.all([sessionCards.refetch(), search.unstarted.refetch()]);
-      if (!started.isSuccess) return started;
-      if (!unstarted.isSuccess) return unstarted;
-      return { isSuccess: true, data: [...started.data.workItems, ...unstarted.data.cards] };
-    },
     pending: sessionCards.isLoading || search.unstarted.isLoading,
     failed: sessionCards.isError || search.unstarted.isError || search.filed.isError,
     retry: () => {
-      void sessionCards.refetch();
-      void search.unstarted.refetch();
-      void search.filed.refetch();
+      // Only what failed: with no candidate the lookup has nothing to run, and refetching it would fail.
+      for (const query of [sessionCards, search.unstarted, search.filed]) {
+        if (query.isError) void query.refetch();
+      }
     },
   };
 }

@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { gzip as gzipCallback } from 'node:zlib';
 
 import type { Card } from '../storage/domains/work-items/base.js';
+import { boardCheck } from '../work-items/board-check.js';
 
 const gzip = promisify(gzipCallback);
 
@@ -33,9 +34,10 @@ export function boardSnapshot(
   toWire: (item: Card) => unknown,
   runningSessionIds: readonly string[],
   parkedSessionIds: readonly string[],
+  cursor?: string,
 ): BoardSnapshot {
   // Random per cached list, so an ETag from before a restart never matches a different board.
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, () => randomUUID());
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, () => randomUUID(), { cursor });
 }
 
 /**
@@ -51,7 +53,49 @@ export function scopedSnapshot(
   parkedSessionIds: readonly string[],
   total?: number,
 ): BoardSnapshot {
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, total);
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, { total });
+}
+
+/** What moved on a board, for the one reader whose cursor it answers: nothing of it is kept. */
+export function movedBody(body: unknown): Pick<BoardSnapshot, 'json' | 'gzipped'> {
+  const json = JSON.stringify(body);
+  return { json, gzipped: () => gzip(json) };
+}
+
+/**
+ * A computed answer's wire body, named by a hash of itself: a reader that kept it revalidates
+ * instead of downloading it again.
+ */
+export function hashedBody(body: unknown): BoardSnapshot {
+  const json = JSON.stringify(body);
+  return { etag: `W/"${sha1(json)}"`, json, gzipped: () => gzip(json) };
+}
+
+/**
+ * An answer whose `names` hold the version of every card body `bodies` adds: its ETag is a hash of
+ * `names`, and the bodies are serialized only for a reader that does not hold the answer.
+ */
+export function namedBody(names: object, bodies?: () => object): BoardSnapshot {
+  const named = JSON.stringify(names);
+  let whole: string | undefined;
+  const json = () => (whole ??= bodies ? JSON.stringify({ ...names, ...bodies() }) : named);
+  return {
+    // An answer with bodies is not one a reader of the names alone holds.
+    etag: `W/"${sha1(named)}${bodies ? '.bodies' : ''}"`,
+    get json() {
+      return json();
+    },
+    gzipped: () => gzip(json()),
+  };
+}
+
+const checks = new WeakMap<readonly Card[], string>();
+
+/** {@link boardCheck} of a cached list, computed once for every reader that sends its cursor. */
+export function listCheck(items: readonly Card[]): string {
+  let check = checks.get(items);
+  if (check === undefined) checks.set(items, (check = boardCheck(items)));
+  return check;
 }
 
 function snapshot(
@@ -60,7 +104,7 @@ function snapshot(
   runningSessionIds: readonly string[],
   parkedSessionIds: readonly string[],
   cardsId: (json: string) => string,
-  total?: number,
+  more: { total?: number; cursor?: string },
 ): BoardSnapshot {
   let cards = cardsJson.get(items);
   if (!cards) {
@@ -69,7 +113,7 @@ function snapshot(
     cardsJson.set(items, cards);
   }
   // Everything the body holds beside the cards: a 304 must never hide a change to any of it.
-  const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, total });
+  const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, ...more });
   const etag = `W/"${cards.id}.${sha1(rest)}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 
@@ -80,7 +124,8 @@ function snapshot(
   return cards.latest;
 }
 
-function sha1(text: string): string {
+/** Names a text: a reader holding another text holds another name. */
+export function sha1(text: string): string {
   return createHash('sha1').update(text).digest('base64url');
 }
 

@@ -14,6 +14,7 @@ import type { ThreadOwner } from '../services/reply-credential';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
+  isEndedPrompt,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
@@ -64,15 +65,25 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
   // Pinned: these reach every entry, and a fresh pair each token would redraw the lot.
   const onApprove = useCallback(
     async (toolCallId: string, approved: boolean, promptId: string) => {
-      await approve({ toolCallId, approved });
-      resolvePrompt(promptId);
+      const done = await approve({ toolCallId, approved }).then(
+        () => true,
+        // The mutation already reported it. Drop a prompt whose run has ended;
+        // keep any other so the card stays truthful.
+        isEndedPrompt,
+      );
+      if (done) resolvePrompt(promptId);
     },
     [approve, resolvePrompt],
   );
   const onRespond = useCallback(
     async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
-      await respond({ toolCallId, resumeData });
-      resolvePrompt(promptId);
+      const done = await respond({ toolCallId, resumeData }).then(
+        () => true,
+        // The mutation already reported it. Drop a prompt whose run has ended;
+        // keep any other so the card stays truthful.
+        isEndedPrompt,
+      );
+      if (done) resolvePrompt(promptId);
     },
     [respond, resolvePrompt],
   );

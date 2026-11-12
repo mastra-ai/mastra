@@ -1,5 +1,5 @@
 import type { Session } from '@mastra/core/agent-controller';
-import { knowledgeScopeAddress } from '@mastra/core/knowledge';
+import { encodeKnowledgeScopeId } from '@mastra/core/knowledge';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { parseKnowledgeWikilinks } from '@mastra/core/storage';
@@ -222,12 +222,6 @@ function badgeOf(address: string | undefined): KnowledgeInspectorScopeBadge {
   if (!address) return { level: 'unknown', id: '' };
   const separator = address.indexOf(':');
   return { level: address.slice(0, separator), id: address.slice(separator + 1) };
-}
-
-/** A session tag in Knowledge's canonical form; every type the session holds has one `$param`. */
-function canonical(tag: string): string {
-  const separator = tag.indexOf(':');
-  return knowledgeScopeAddress(`${tag.slice(0, separator)}:$value`, { value: tag.slice(separator + 1) });
 }
 
 function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
@@ -482,16 +476,16 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       }
       principals = [...binding.sessionTags];
     } else {
-      principals = [...binding.sessionTags, `resource:${binding.resourceId}`];
+      principals = [...binding.sessionTags, `resource:${encodeKnowledgeScopeId(binding.resourceId)}`];
       if (level === 'thread') {
         if (!binding.threadId) {
           throw new KnowledgeInspectorError('unavailable', 'The active thread does not belong to this project.');
         }
-        principals.push(`thread:${binding.threadId}`);
+        principals.push(`thread:${encodeKnowledgeScopeId(binding.threadId)}`);
       }
     }
     try {
-      return { level, read: await this.#knowledge.readScopeFor(principals.map(canonical)) };
+      return { level, read: await this.#knowledge.readScopeFor(principals) };
     } catch (error) {
       throw new KnowledgeInspectorError(
         'unavailable',
