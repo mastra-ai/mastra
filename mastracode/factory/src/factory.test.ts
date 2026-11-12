@@ -1250,6 +1250,25 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
+  it('tells the agent not to poll background commands only in projects that turned them on', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage });
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const instructions = async () => {
+      const context = new RequestContext();
+      const state = { factoryProjectId: project.id, factoryOrgId: 'org-1', untrustedCheckout: false };
+      context.set('controller', { sessionId: 'session-1', threadId: 'session-1', getState: () => state });
+      return (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
+        requestContext: context,
+      });
+    };
+
+    expect(await instructions()).toBeUndefined();
+    await projects.update({ orgId: 'org-1', id: project.id, input: { backgroundToolsEnabled: true } });
+    expect(await instructions()).toContain('Do not poll or sleep');
+  });
+
   it('installs a Web Factory session workspace resolver', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));

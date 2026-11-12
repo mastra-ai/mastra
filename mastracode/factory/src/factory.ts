@@ -132,7 +132,7 @@ import { peekSessionSandbox } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { createFactoryBackgroundNoticeDelivery } from './session/background-notices.js';
+import { BACKGROUND_COMMANDS_GUIDANCE, createFactoryBackgroundNoticeDelivery } from './session/background-notices.js';
 import { resolveFactoryCredentialTenant, resolveFactoryModelPolicy } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
@@ -1817,7 +1817,12 @@ export class MastraFactory {
               }
             }
           }
-          return undefined;
+          // The SDK adds its background guidance from the host's global settings; a Factory turns
+          // background commands on per project, so it says the same thing here when its project does.
+          const { factoryProjectId, factoryOrgId } = context?.getState() ?? {};
+          if (!factoryProjectId || !factoryOrgId || !storage.isDomainReady('projects')) return undefined;
+          const project = await factoryProjectsStorage.get({ orgId: factoryOrgId, id: factoryProjectId });
+          return project?.backgroundToolsEnabled ? BACKGROUND_COMMANDS_GUIDANCE : undefined;
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller

@@ -716,12 +716,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   } = options;
   // Built once: the dispatcher tracks launches across every session's workspace.
   const backgroundWorkspaceTools = backgroundProcesses
-    ? createMastraCodeWorkspaceTools(true, FACTORY_PLANS_DIR, {
-        ...backgroundProcesses,
-        // Kills from the Factory UI go straight to the process manager, which marks them
-        // `killedOnRequest`; the dispatcher skips only `killedByAbort`, so pass them as that.
-        onExit: meta => backgroundProcesses.onExit(meta.killedOnRequest ? { ...meta, killedByAbort: true } : meta),
-      })
+    ? createMastraCodeWorkspaceTools(true, FACTORY_PLANS_DIR, backgroundProcesses)
     : FACTORY_WORKSPACE_TOOLS;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??

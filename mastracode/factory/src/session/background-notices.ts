@@ -10,6 +10,11 @@ import { RequestContext } from '@mastra/core/request-context';
 import { prepareSessionRunContext } from '../integrations/subscription-session.js';
 import type { SubscriptionSessionLookup } from '../integrations/subscription-session.js';
 
+/** What a session's agent is told when its project has background commands on, worded like Mastra Code's. */
+export const BACKGROUND_COMMANDS_GUIDANCE = `**Background work**
+- Use \`execute_command\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on. They keep running when the run is stopped.
+- You get a notification when a background command exits. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`;
+
 // Exits that land while no session runs their thread wait for the next session; past this many the oldest go.
 const MAX_HELD_NOTICES = 100;
 

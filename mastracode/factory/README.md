@@ -1240,7 +1240,7 @@ A repository maintainer with write or admin access can start a Factory review fr
 
 ### Background commands
 
-An agent can start a long-running command, such as a dev server, with `execute_command` and `background: true`. Turn on **Background commands** in a project's environment settings (`backgroundToolsEnabled` on `PATCH /web/factory/projects/:id/environment`) to keep those commands running when someone stops the run, and to tell the session when one exits: the agent gets a notice with the exit code and the last lines of output, and an idle session wakes up to read it, running as the session's owner. The setting is off by default. A command started before the setting changed keeps the behavior it started with.
+An agent can start a long-running command, such as a dev server, with `execute_command` and `background: true`. Turn on **Background commands** in a project's environment settings (`backgroundToolsEnabled` on `PATCH /web/factory/projects/:id/environment`) to keep those commands running when someone stops the run, and to tell the session when one exits: the agent gets a notice with the exit code and the last lines of output, and an idle session wakes up to read it, running as the session's owner. The agent is also told to start such commands in the background and not to poll them. The setting is off by default. A command started before the setting changed keeps the behavior it started with.
 
 The Factory UI lists a thread's running background commands above the composer, with their output, and can stop them. Anyone who can read the session can stop its background work, the same people who can send it messages. A command stopped this way posts no exit notice.
 
@@ -1251,7 +1251,9 @@ The Factory UI lists a thread's running background commands above the composer, 
 | `POST` | `/web/user-sessions/:sessionId/background/processes/:pid/kill`  | `{ pid, killed }`.                                                                            |
 | `POST` | `/web/user-sessions/:sessionId/background/tasks/:taskId/cancel` | The cancelled background task. Needs a background task manager on the host's Mastra instance. |
 
-These routes read the sandbox held by the server process that runs the session, and never start one: a sandbox that isn't running, or runs on another replica, lists nothing. Recreating a session's sandbox ends its background commands without exit notices. After a Factory server restart, commands started before it are no longer tracked: they get no exit notice and the routes don't list them, even when the sandbox kept them running.
+With authentication on, Mastra's own routes for the same work (`/api/workspaces/:workspaceId/sandbox/processes`, its `/:pid` and `/:pid/kill` routes, and `POST /api/background-tasks/:id/cancel`) answer `403`: they don't check which session a caller can read. Until they do, Studio's background work dock can't list or stop processes on a Factory server.
+
+These routes read the sandbox held by the server process that runs the session, and never start one: a sandbox that isn't running lists nothing. With several replicas, only the replica that runs the session sees its background commands; a request that lands on another replica lists none and can't stop them. Recreating a session's sandbox ends its background commands without exit notices. After a Factory server restart, commands started before it are no longer tracked: they get no exit notice and the routes don't list them, even when the sandbox kept them running.
 
 ### Factory tools in user sessions
 

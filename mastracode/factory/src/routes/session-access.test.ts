@@ -113,6 +113,8 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
       ],
     }),
   );
+  app.all('/api/workspaces/*', c => c.json({ reached: true }));
+  app.all('/api/background-tasks/*', c => c.json({ reached: true }));
   app.get('/web/config/om', c => c.json({ reached: true }));
   app.post('/web/config/om/:role/model', async c => c.json({ reached: true, body: await adapterBody(c) }));
   return app;
@@ -197,6 +199,22 @@ describe('createSessionAccessGuard', () => {
     expect((await post(owner, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
     expect((await put(owner, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
     expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
+  });
+
+  // Mastra's process and cancel routes filter by a resource Factory never binds, so they would serve every org's work.
+  it.each([
+    ['GET', '/api/workspaces/mfw-link-row/sandbox/processes'],
+    ['GET', '/api/workspaces/mfw-link-row/sandbox/processes/4242'],
+    ['POST', '/api/workspaces/mfw-link-row/sandbox/processes/4242/kill'],
+    ['POST', '/api/background-tasks/task-1/cancel'],
+  ])('403s %s %s for everyone, the session owner included', async (method, path) => {
+    for (const app of [outsider, teammate, owner]) expect((await app.request(path, { method })).status).toBe(403);
+    expect((await buildApp(undefined, { authEnabled: false }).request(path, { method })).status).toBe(200);
+  });
+
+  it('leaves other workspace and background task routes to their own checks', async () => {
+    expect((await owner.request('/api/workspaces/mfw-link-row/fs/list')).status).toBe(200);
+    expect((await owner.request('/api/background-tasks/task-1')).status).toBe(200);
   });
 
   it('passes through a session on its own id that no Factory session row claims', async () => {
