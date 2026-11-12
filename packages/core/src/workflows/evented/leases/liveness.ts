@@ -53,6 +53,8 @@ class ProcessRunLiveness {
   #vouching = true;
   /** Stops the renewal timer; set while it runs. */
   #stopTimer?: () => void;
+  /** Set once a renewal pass ran longer than its interval, so the warning is logged once per process. */
+  #warnedSlowPass = false;
 
   constructor(readonly logger?: IMastraLogger) {}
 
@@ -299,8 +301,22 @@ class ProcessRunLiveness {
     }
 
     // Half an interval old is due: waiting a full interval could let the key lapse between ticks.
-    const due = [...this.#active].filter(([runId]) => this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS / 2);
+    // Oldest first, so a key waits at most one pass plus one interval between writes however the
+    // runs entered; a pass longer than the TTL minus one interval lets the last keys lapse.
+    const due = [...this.#active]
+      .filter(([runId]) => this.#age(runId) >= LIVENESS_RENEW_INTERVAL_MS / 2)
+      .sort(([a], [b]) => this.#age(b) - this.#age(a));
+    const startedAt = Date.now();
     await forEachBounded(due, LIVENESS_RENEW_CONCURRENCY, ([runId, { store }]) => this.#write(runId, store));
+
+    const tookMs = Date.now() - startedAt;
+    if (tookMs > LIVENESS_RENEW_INTERVAL_MS && !this.#warnedSlowPass) {
+      this.#warnedSlowPass = true;
+      this.logger?.warn(
+        'Renewing the liveness of evented workflow runs took longer than its interval; if it reaches the lease TTL, other instances may restart runs this process still drives',
+        { tookMs, runs: due.length, intervalMs: LIVENESS_RENEW_INTERVAL_MS, ttlMs: WORKFLOW_RUN_LEASE_TTL_MS },
+      );
+    }
   }
 }
 

@@ -15,6 +15,7 @@ import { createStep, createWorkflow } from '..';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
+import type { IMastraLogger } from '../../../logger';
 import { InMemoryStore } from '../../../storage/mock';
 import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import {
@@ -224,6 +225,45 @@ describe('evented run liveness (#28712)', () => {
       for (const leave of leaves) {
         leave();
       }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('renews the oldest liveness key first and warns once when a renewal pass outlasts its interval', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = (await new InMemoryStore().getStore('workflows'))!;
+      const scope = { __shuttingDown: false };
+      const logger = { warn: vi.fn() } as unknown as IMastraLogger;
+      const claim = store.claimRunOwnership.bind(store);
+      const written: string[] = [];
+      let slow = false;
+      vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+        written.push(args.runId);
+        if (slow) {
+          await new Promise(resolve => setTimeout(resolve, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS * 2));
+        }
+
+        return claim(args);
+      });
+      const leaveOld = await enterRunLiveness({ scope, store, runId: 'old', logger });
+      await vi.advanceTimersByTimeAsync(10);
+      const leaveNew = await enterRunLiveness({ scope, store, runId: 'new', logger });
+      // `old` comes back after `new`, while its key is still the one written first.
+      leaveOld();
+      const leaveOldAgain = await enterRunLiveness({ scope, store, runId: 'old', logger });
+      written.length = 0;
+      slow = true;
+
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 2);
+
+      expect(written.slice(0, 2)).toEqual([runLivenessKey('old'), runLivenessKey('new')]);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(logger.warn).mock.calls[0]![0]).toContain('took longer than its interval');
+
+      leaveNew();
+      leaveOldAgain();
     } finally {
       vi.useRealTimers();
     }
