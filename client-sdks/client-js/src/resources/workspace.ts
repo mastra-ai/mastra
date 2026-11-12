@@ -29,6 +29,10 @@ import type {
   SkillsShRemoveResponse,
   SkillsShUpdateParams,
   SkillsShUpdateResponse,
+  SandboxProcessesParams,
+  ListSandboxProcessesResponse,
+  SandboxProcessOutputResponse,
+  KillSandboxProcessResponse,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -85,6 +89,7 @@ export class WorkspaceSkillResource extends BaseResource {
  * - Search operations (search, index)
  * - Skills operations (list, get, search, references)
  * - skills.sh registry operations (search, popular, preview, install, remove, update)
+ * - Sandbox background processes (list, read output, kill)
  */
 export class Workspace extends BaseResource {
   private workspaceId: string;
@@ -360,5 +365,51 @@ export class Workspace extends BaseResource {
    */
   updateSkillsSh(params: SkillsShUpdateParams = {}): Promise<SkillsShUpdateResponse> {
     return this.request(`${this.basePath}/skills-sh/update`, { method: 'POST', body: params, retries: 0 });
+  }
+
+  // ==========================================================================
+  // Sandbox Process Operations
+  // ==========================================================================
+
+  private processQuery(params: SandboxProcessesParams): string {
+    const searchParams = new URLSearchParams();
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    const query = searchParams.toString();
+    return query ? `?${query}` : '';
+  }
+
+  /**
+   * Lists the sandbox's background processes, including exited ones whose output has not been read
+   * @param params - Optional thread and resource that started the processes. The thread also picks
+   *   the sandbox when the workspace resolves one per thread.
+   * @returns Promise containing the processes
+   */
+  listSandboxProcesses(params: SandboxProcessesParams = {}): Promise<ListSandboxProcessesResponse> {
+    return this.request(`${this.basePath}/sandbox/processes${this.processQuery(params)}`);
+  }
+
+  /**
+   * Gets a background process with its retained output. Does not release an exited process,
+   * so the agent can still read it.
+   * @param pid - Process ID
+   * @param params - Optional thread and resource that started the process
+   * @returns Promise containing the process status and output
+   */
+  getSandboxProcess(pid: string, params: SandboxProcessesParams = {}): Promise<SandboxProcessOutputResponse> {
+    return this.request(`${this.basePath}/sandbox/processes/${encodeURIComponent(pid)}${this.processQuery(params)}`);
+  }
+
+  /**
+   * Kills a background process
+   * @param pid - Process ID
+   * @param params - Optional thread and resource that started the process
+   * @returns Promise containing whether the process was still running when killed
+   */
+  killSandboxProcess(pid: string, params: SandboxProcessesParams = {}): Promise<KillSandboxProcessResponse> {
+    return this.request(
+      `${this.basePath}/sandbox/processes/${encodeURIComponent(pid)}/kill${this.processQuery(params)}`,
+      { method: 'POST', retries: 0 },
+    );
   }
 }

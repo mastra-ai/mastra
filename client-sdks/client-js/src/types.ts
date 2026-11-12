@@ -1568,6 +1568,15 @@ export type SkillsShUpdateParams = Body<'POST /workspaces/:workspaceId/skills-sh
 export type SkillsShUpdateResponse = GeneratedResponse<'POST /workspaces/:workspaceId/skills-sh/update'>;
 
 /**
+ * Sandbox background processes (started with `execute_command` and `background: true`)
+ */
+export type SandboxProcessesParams = QueryParams<'GET /workspaces/:workspaceId/sandbox/processes'>;
+export type ListSandboxProcessesResponse = GeneratedResponse<'GET /workspaces/:workspaceId/sandbox/processes'>;
+export type SandboxProcess = ListSandboxProcessesResponse['processes'][number];
+export type SandboxProcessOutputResponse = GeneratedResponse<'GET /workspaces/:workspaceId/sandbox/processes/:pid'>;
+export type KillSandboxProcessResponse = GeneratedResponse<'POST /workspaces/:workspaceId/sandbox/processes/:pid/kill'>;
+
+/**
  * Workspace search result
  */
 export interface WorkspaceSearchResult {

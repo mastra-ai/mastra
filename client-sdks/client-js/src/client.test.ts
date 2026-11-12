@@ -898,6 +898,25 @@ describe('MastraClient', () => {
       });
     });
 
+    describe('cancelBackgroundTask', () => {
+      it('POSTs to the cancel route and returns the task', async () => {
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ id: 'task/1', status: 'cancelled' }),
+        });
+
+        const result = await client.cancelBackgroundTask('task/1');
+
+        const [url, init] = (global.fetch as any).mock.calls[0];
+        expect({ url, method: init.method }).toEqual({
+          url: 'http://localhost:4111/api/background-tasks/task%2F1/cancel',
+          method: 'POST',
+        });
+        expect(result).toEqual({ id: 'task/1', status: 'cancelled' });
+      });
+    });
+
     describe('getBackgroundTask', () => {
       it('calls GET /background-tasks/:backgroundTaskId', async () => {
         const mockTask = { id: 'background-task-1', status: 'completed', toolName: 'tool' };
