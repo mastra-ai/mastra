@@ -34,6 +34,7 @@ export type {
   ApiRouteInput,
   ServerMCPConfig,
   ServerMCPPrimitiveFilter,
+  ServerMCPOAuthConfig,
   MastraMCPToolset,
 } from './types';
 export {
@@ -49,6 +50,7 @@ export {
 } from './auth';
 export type {
   IMastraAuthProvider,
+  MastraAuthOAuthMetadata,
   MastraAuthProviderOptions,
   AuthInitContext,
   IAuthHttpHandler,

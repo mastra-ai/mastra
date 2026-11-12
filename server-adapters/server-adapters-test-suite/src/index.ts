@@ -19,6 +19,7 @@ export {
   createRouteDispatchParityTestSuite,
   type RouteDispatchParityTestSuiteConfig,
 } from './route-dispatch-parity-test-suite';
+export { createBuiltinMCPOAuthTestSuite, type BuiltinMCPOAuthTestSuiteConfig } from './builtin-mcp-oauth-test-suite';
 export { createBuiltinMCPParityTestSuite, type BuiltinMCPParityTestSuiteConfig } from './builtin-mcp-parity-test-suite';
 
 export {

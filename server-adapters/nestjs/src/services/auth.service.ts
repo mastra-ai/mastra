@@ -6,7 +6,11 @@ import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
+  checkMCPAudience,
+  isMCPAudienceEnforced,
+  isMCPOAuthDiscoveryEnabled,
   isStudioClientTypeHeader,
+  mcpWWWAuthenticate,
 } from '@mastra/server/server-adapter';
 import type { MastraAuthMode } from '@mastra/server/server-adapter';
 import { ForbiddenException, HttpException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
@@ -140,6 +144,10 @@ export class AuthService {
       }
     }
 
+    if (bearerOnly && (isMCPOAuthDiscoveryEnabled(this.mastra) || isMCPAudienceEnforced(this.mastra))) {
+      await this.applyBearerChallenge(request, webRequest.url, requestContext, result, options.response);
+    }
+
     if (result.action === 'error') {
       const message = typeof result.body.error === 'string' ? result.body.error : 'Access denied';
       if (result.status === 401) throw new UnauthorizedException(message);
@@ -153,6 +161,36 @@ export class AuthService {
       (request as any).user = user;
     }
     return user;
+  }
+
+  /**
+   * Built-in MCP endpoint: 401s point clients at the OAuth protected-resource metadata, and when
+   * `server.mcp.oauth.resource` is set the token audience must include it.
+   */
+  private async applyBearerChallenge(
+    request: Request,
+    requestUrl: string,
+    requestContext: RequestContext,
+    result: Awaited<ReturnType<typeof coreAuthMiddleware>>,
+    response: Response | undefined,
+  ): Promise<void> {
+    const prefix = this.options.prefix ?? '/api';
+    if (result.action === 'error' && result.status === 401) {
+      if (!isMCPOAuthDiscoveryEnabled(this.mastra)) return;
+      // RFC 6750 §3: no error code when the request carried no credentials.
+      const error = request.headers.authorization?.trim() ? { error: 'invalid_token' } : undefined;
+      response?.setHeader('WWW-Authenticate', mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error));
+      return;
+    }
+    const user = requestContext.get(MASTRA_USER_KEY);
+    if (user !== undefined && !(await checkMCPAudience(this.mastra, user))) {
+      const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, {
+        error: 'invalid_token',
+        error_description: 'The token audience does not include this MCP server',
+      });
+      response?.setHeader('WWW-Authenticate', challenge);
+      throw new UnauthorizedException('Invalid token audience');
+    }
   }
 
   /**
