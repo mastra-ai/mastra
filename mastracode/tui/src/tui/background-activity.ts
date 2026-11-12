@@ -142,6 +142,8 @@ export function finishBackgroundProcessActivity(
 ): void {
   const key = processActivityKey(event.pid);
   const existing = activities.get(key);
+  // A late exit from an older call whose PID a running call now reuses.
+  if (existing?.status === 'accepted' && event.toolCallId && existing.toolCallId !== event.toolCallId) return;
   const sameProcess = existing && (!event.toolCallId || existing.toolCallId === event.toolCallId);
   if (!sameProcess && (!event.resourceId || !event.threadId)) return;
   const now = Date.now();

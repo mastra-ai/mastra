@@ -166,6 +166,32 @@ describe('background activity', () => {
     expect(activities.get(processActivityKey('42'))).toMatchObject({ status: 'accepted', toolCallId: 'call-new' });
   });
 
+  it('keeps a running shell when a late exit from an older call with the same PID arrives', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    startBackgroundProcessActivity(activities, '42', 'call-old', shellContext);
+    startBackgroundProcessActivity(activities, '42', 'call-new', shellContext);
+
+    finishBackgroundProcessActivity(activities, processExit({ toolCallId: 'call-old', exitCode: 1 }));
+
+    expect(activities.get(processActivityKey('42'))).toMatchObject({ status: 'accepted', toolCallId: 'call-new' });
+  });
+
+  it('records the exit of a new call over a finished older call with the same PID', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    startBackgroundProcessActivity(activities, '42', 'call-old', shellContext);
+    finishBackgroundProcessActivity(activities, processExit({ toolCallId: 'call-old' }));
+
+    // The new command ended before its call returned the PID.
+    finishBackgroundProcessActivity(activities, processExit({ toolCallId: 'call-new', exitCode: 3 }));
+    startBackgroundProcessActivity(activities, '42', 'call-new', shellContext);
+
+    expect(activities.get(processActivityKey('42'))).toMatchObject({
+      status: 'failed',
+      exitCode: 3,
+      toolCallId: 'call-new',
+    });
+  });
+
   it('sorts active work before terminal work and newest tasks first within each state', () => {
     const activities: BackgroundActivity[] = [
       {
