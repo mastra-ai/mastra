@@ -477,9 +477,9 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
     try {
       // Check if this is a gateway agent first
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      const isGateway = agent ? await isGatewayAgentAsync(agent, requestContext) : false;
       if (agent && isGateway) {
-        const gwClient = getGatewayClient();
+        const gwClient = getGatewayClient(mastra);
         if (gwClient) {
           // Gateway memory is available — check for OM status via gateway
           let omStatus:
@@ -615,7 +615,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       // For gateway agents, return config with default OM thresholds
       // These match @mastra/memory's OBSERVATIONAL_MEMORY_DEFAULTS
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (agent && (await isGatewayAgentAsync(agent)) && getGatewayClient()) {
+      if (agent && (await isGatewayAgentAsync(agent, requestContext)) && getGatewayClient(mastra)) {
         return {
           memoryType: 'gateway' as const,
           config: {
@@ -690,7 +690,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       const historyOptions = { from, to, offset };
 
       // Gateway OM: proxy to gateway API
-      const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
+      const gwClient = (await isGatewayAgentAsync(agent, requestContext)) ? getGatewayClient(mastra) : null;
       if (gwClient) {
         if (resourceId && threadId) {
           const [recordResult, historyResult] = await Promise.all([
@@ -784,7 +784,7 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       }
 
       // Gateway proxy: poll the gateway OM record until buffering flags clear
-      const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
+      const gwClient = (await isGatewayAgentAsync(agent, requestContext)) ? getGatewayClient(mastra) : null;
       if (gwClient) {
         if (resourceId && threadId) {
           const maxWaitMs = 30_000;
@@ -876,9 +876,9 @@ export const LIST_THREADS_ROUTE = createRoute({
 
       // Gateway proxy: list threads from gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      const isGateway = agent ? await isGatewayAgentAsync(agent, requestContext) : false;
       if (agent && isGateway) {
-        const gwClient = getGatewayClient();
+        const gwClient = getGatewayClient(mastra);
         if (gwClient) {
           if (shouldFilterThreadsWithFGA(mastra, requestContext)) {
             const initialResult = await gwClient.listThreads({
@@ -1036,9 +1036,9 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
 
       // Gateway proxy: get thread from gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      const isGateway = agent ? await isGatewayAgentAsync(agent, requestContext) : false;
       if (agent && isGateway) {
-        const gwClient = getGatewayClient();
+        const gwClient = getGatewayClient(mastra);
         if (gwClient) {
           const result = await gwClient.getThread(effectiveThreadId!);
           if (!result) {
@@ -1143,9 +1143,9 @@ export const LIST_MESSAGES_ROUTE = createRoute({
 
       // Gateway proxy: list messages from gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      const isGateway = agent ? await isGatewayAgentAsync(agent, requestContext) : false;
       if (agent && isGateway) {
-        const gwClient = getGatewayClient();
+        const gwClient = getGatewayClient(mastra);
         if (gwClient) {
           if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
             throw new HTTPException(501, {
@@ -1281,7 +1281,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
 
       // Gateway agents: working memory is not a local concept
       const gwAgent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (gwAgent && (await isGatewayAgentAsync(gwAgent)) && getGatewayClient()) {
+      if (gwAgent && (await isGatewayAgentAsync(gwAgent, requestContext)) && getGatewayClient(mastra)) {
         return { workingMemory: null, source: 'thread' as const, workingMemoryTemplate: null, threadExists: true };
       }
 
@@ -1449,8 +1449,8 @@ export const CREATE_THREAD_ROUTE = createRoute({
 
       // Gateway proxy: create thread via gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (agent && (await isGatewayAgentAsync(agent))) {
-        const gwClient = getGatewayClient();
+      if (agent && (await isGatewayAgentAsync(agent, requestContext))) {
+        const gwClient = getGatewayClient(mastra);
         if (gwClient) {
           // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
           const existing = threadId ? await gwClient.getThread(effectiveThreadId) : null;
@@ -1522,8 +1522,8 @@ export const UPDATE_THREAD_ROUTE = createRoute({
 
       // Gateway proxy: update thread via gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (agent && (await isGatewayAgentAsync(agent))) {
-        const gwClient = getGatewayClient();
+      if (agent && (await isGatewayAgentAsync(agent, requestContext))) {
+        const gwClient = getGatewayClient(mastra);
         if (gwClient) {
           // Validate ownership before mutating
           const existing = await gwClient.getThread(effectiveThreadId!);
@@ -1606,8 +1606,8 @@ export const DELETE_THREAD_ROUTE = createRoute({
 
       // Gateway proxy: delete thread via gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (agent && (await isGatewayAgentAsync(agent))) {
-        const gwClient = getGatewayClient();
+      if (agent && (await isGatewayAgentAsync(agent, requestContext))) {
+        const gwClient = getGatewayClient(mastra);
         if (gwClient) {
           // Validate ownership before deleting
           const existing = await gwClient.getThread(effectiveThreadId!);
@@ -1761,7 +1761,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       // sibling mutation routes rather than adding a route-specific restriction.
 
       const agent = agentId ? await getAgentFromContext({ mastra, agentId, requestContext }) : undefined;
-      if (agent && (await isGatewayAgentAsync(agent))) {
+      if (agent && (await isGatewayAgentAsync(agent, requestContext))) {
         throw new HTTPException(501, { message: 'Thread transfer is not supported for gateway agents' });
       }
 
@@ -1821,7 +1821,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
 
       // Gateway agents: working memory not applicable, no-op
       const gwAgent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (gwAgent && (await isGatewayAgentAsync(gwAgent)) && getGatewayClient()) {
+      if (gwAgent && (await isGatewayAgentAsync(gwAgent, requestContext)) && getGatewayClient(mastra)) {
         return { success: true };
       }
 
@@ -1997,7 +1997,7 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 
       // Gateway agents: semantic search not supported via gateway
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (agent && (await isGatewayAgentAsync(agent)) && getGatewayClient()) {
+      if (agent && (await isGatewayAgentAsync(agent, requestContext)) && getGatewayClient(mastra)) {
         return {
           results: [],
           count: 0,

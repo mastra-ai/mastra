@@ -318,10 +318,12 @@ let _gatewayClient: GatewayMemoryClient | null | undefined;
 
 /**
  * Get a GatewayMemoryClient instance, or null if gateway is not configured.
+ * Pass `mastra` so a registered v2 gateway configuration takes precedence
+ * over a v1 environment key.
  */
-export function getGatewayClient(): GatewayMemoryClient | null {
+export function getGatewayClient(mastra?: Parameters<typeof isGatewayV2>[0]): GatewayMemoryClient | null {
   // Gateway v2 has no memory REST API; Studio must use the agent's own memory configuration.
-  if (isGatewayV2()) return null;
+  if (isGatewayV2(mastra)) return null;
   if (_gatewayClient !== undefined) return _gatewayClient;
   const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;
@@ -359,7 +361,7 @@ export function isGatewayAgent(agent: any): boolean {
  * 3. Resolved LLM's getModel() to access the router's config
  */
 
-export async function isGatewayAgentAsync(agent: any): Promise<boolean> {
+export async function isGatewayAgentAsync(agent: any, requestContext?: unknown): Promise<boolean> {
   if (!agent) return false;
   try {
     const agentAny = agent as Record<string, unknown>;
@@ -373,7 +375,9 @@ export async function isGatewayAgentAsync(agent: any): Promise<boolean> {
     // llm.getModelId() returns stripped ID (e.g., 'gpt-5-mini'), so we need
     // to access the underlying ModelRouterLanguageModel's config.routerId
     if (typeof agent.getLLM === 'function') {
-      const llm = await Promise.resolve(agent.getLLM({}));
+      // Pass the request context so dynamic model functions that pick a
+      // mastra/ model per-request are detected correctly.
+      const llm = await Promise.resolve(agent.getLLM(requestContext ? { requestContext } : {}));
       if (llm) {
         // Try to access the underlying model's routerId via getModel()
         const llmAny = llm as Record<string, unknown>;
