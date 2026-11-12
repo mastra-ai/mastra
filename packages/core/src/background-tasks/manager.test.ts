@@ -912,15 +912,46 @@ describe('BackgroundTaskManager', () => {
           },
         );
         await vi.waitFor(() => expect(started).toBe(true));
+        const beforeShutdown = updates.length;
 
         await local.mgr.shutdown();
 
         expect((await local.mgr.getTask(task.id))?.status).toBe('cancelled');
-        expect(updates.length).toBeGreaterThan(0);
-        expect(updates.some(update => update.cancelledAt)).toBe(false);
+        expect(updates.slice(beforeShutdown)).toEqual([]);
       } finally {
         await local.cleanup();
       }
+    });
+
+    // The in-process pubsub delivers this process's own `task.cancelled` event while the cancel runs.
+    it.each<{ state: string; execute: TaskContext['executor']['execute']; reached: string }>([
+      {
+        state: 'running and ignores the abort',
+        execute: () => new Promise(() => {}),
+        reached: 'running',
+      },
+      {
+        state: 'suspended',
+        execute: async (_args, opts) => {
+          await opts?.suspend?.({ question: 'Approve?' });
+        },
+        reached: 'suspended',
+      },
+    ])('tells the dispatcher once that a task that is $state was cancelled', async ({ execute, reached }) => {
+      const updates: Array<{ cancelledAt?: Date }> = [];
+      const { task } = await manager.enqueue(
+        { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1' },
+        { executor: { execute }, onExecution: params => void updates.push(params) },
+      );
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe(reached));
+      if (reached === 'running') await vi.waitFor(() => expect(manager.activeAbortControllers.has(task.id)).toBe(true));
+      const beforeCancel = updates.length;
+
+      await manager.cancel(task.id);
+
+      const after = updates.slice(beforeCancel);
+      expect(after).toHaveLength(1);
+      expect(after[0]!.cancelledAt).toBeInstanceOf(Date);
     });
 
     it('cancels a pending task', async () => {
