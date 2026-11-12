@@ -13,6 +13,9 @@ import { createWorkflow } from './create';
 import { createStep } from './workflow';
 import type { AnyWorkflow } from './workflow';
 
+// These tests leave runs as a crash does, written just now; a zero grace lets recovery restart them at once.
+const stopped = { workflowGraceMs: 0 };
+
 const num = z.object({ n: z.number() });
 const items = z.object({ items: z.array(z.string()) });
 
@@ -84,7 +87,7 @@ describe('restarting a nested run whose process died', () => {
     await vi.waitFor(() => expect(died).toBe(true));
     await expireRunLeases(storage);
 
-    await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
 
     expect(innerBRuns).toBe(1);
     const state = { items: ['before:0', 'inner-a:1', 'inner-b:2'] };
@@ -137,13 +140,13 @@ describe('restarting a nested run whose process died', () => {
 
     // The parent re-drives the item that was running, under a new nested run id; the crash's
     // nested run is left behind.
-    await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
     expect(calls).toEqual([0, 1, 1, 2]);
     expect(await innerStatuses()).toContain('running');
 
     // The next boot no longer sees an active parent, so the leftover run must not be executed.
     await expireRunLeases(storage);
-    await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
     expect(calls).toEqual([0, 1, 1, 2]);
     expect(await innerStatuses()).not.toContain('running');
     expect(await innerStatuses()).toContain('canceled');
@@ -191,7 +194,7 @@ describe('restarting a nested run whose process died', () => {
     await expireRunLeases(storage);
 
     // The parent finishes and leaves the crash's nested run behind.
-    await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
     expect(calls).toEqual([0, 1, 1, 2]);
     expect(await innerStatuses()).toContain('running');
 
@@ -296,7 +299,7 @@ describe('restarting a nested run whose process died', () => {
     // The Mastra-level sweep is a separate loop over every active run, so its cache is its own.
     const lookups = vi.spyOn(store, 'loadWorkflowRunStatus');
     const third = build(calls);
-    await new Mastra({ logger: false, storage, workflows: third }).restartAllActiveWorkflowRuns();
+    await new Mastra({ logger: false, storage, workflows: third, recovery: stopped }).restartAllActiveWorkflowRuns();
 
     const parentLookups = lookups.mock.calls.filter(([args]) => args.workflowName === 'outer');
     expect(parentLookups).toHaveLength(1);
@@ -308,7 +311,12 @@ describe('restarting a nested run whose process died', () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('suspended');
 
     // A suspended parent waits for its child, so the child is the only way forward (#25979).
-    await new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns();
+    await new Mastra({
+      logger: false,
+      storage,
+      workflows: build(calls),
+      recovery: stopped,
+    }).restartAllActiveWorkflowRuns();
 
     expect(calls.length).toBeGreaterThan(2);
     expect(await innerStatuses()).not.toContain('canceled');
@@ -322,6 +330,7 @@ describe('restarting a nested run whose process died', () => {
       logger: { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
       storage,
       workflows: build(calls),
+      recovery: stopped,
     }).restartAllActiveWorkflowRuns();
 
     // The sweep never restarts a paused parent, so restarting the child here would run the item
@@ -363,7 +372,12 @@ describe('restarting a nested run whose process died', () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
     await storage.stores.workflows!.deleteWorkflowRunById({ workflowName: 'outer', runId: 'run-1' });
 
-    await new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns();
+    await new Mastra({
+      logger: false,
+      storage,
+      workflows: build(calls),
+      recovery: stopped,
+    }).restartAllActiveWorkflowRuns();
 
     // Nothing is left that could collect the run, so the sweep is its only way forward.
     expect(calls.length).toBeGreaterThan(2);
@@ -390,7 +404,7 @@ describe('restarting a nested run whose process died', () => {
         }),
       )
       .commit();
-    const mastra = new Mastra({ logger: false, storage, workflows: { ...build(calls), solo } });
+    const mastra = new Mastra({ logger: false, storage, workflows: { ...build(calls), solo }, recovery: stopped });
     void (await solo.createRun({ runId: 'solo-1' })).start({ inputData: { n: 0 } });
     await vi.waitFor(() => expect(soloCalls).toEqual([0]));
     await expireRunLeases(storage);

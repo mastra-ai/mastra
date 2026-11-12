@@ -252,6 +252,14 @@ export async function recordLeases(storage: Store) {
     notify();
     return result;
   });
+  // Recovery passes read the keys of many runs in one call.
+  const readMany = store.getRunOwnerships.bind(store);
+  vi.spyOn(store, 'getRunOwnerships').mockImplementation(async args => {
+    const result = await readMany(args);
+    reads.push(...args.runIds);
+    notify();
+    return result;
+  });
 
   // Re-checks `done` after every recorded claim or read.
   const until = async (done: () => boolean) => {

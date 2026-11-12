@@ -857,7 +857,12 @@ describe('Mastra.recoverAllDurableAgents', () => {
 
   it('exposes the recovery config via recoveryConfig (default off)', () => {
     const mastra = new Mastra({ storage: store });
-    expect(mastra.recoveryConfig).toEqual({ workflows: 'auto', workflowConcurrency: 5, durableAgents: 'off' });
+    expect(mastra.recoveryConfig).toEqual({
+      workflows: 'auto',
+      workflowConcurrency: 5,
+      workflowGraceMs: 2_000,
+      durableAgents: 'off',
+    });
   });
 
   it('reflects an explicit recovery.durableAgents = "auto" config', () => {
@@ -865,7 +870,12 @@ describe('Mastra.recoverAllDurableAgents', () => {
       storage: store,
       recovery: { durableAgents: 'auto' },
     });
-    expect(mastra.recoveryConfig).toEqual({ workflows: 'auto', workflowConcurrency: 5, durableAgents: 'auto' });
+    expect(mastra.recoveryConfig).toEqual({
+      workflows: 'auto',
+      workflowConcurrency: 5,
+      workflowGraceMs: 2_000,
+      durableAgents: 'auto',
+    });
   });
 
   it('does not auto-invoke recoverAllDurableAgents on construction', async () => {
