@@ -11,7 +11,7 @@ import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraRecoveryConfig } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
-import { restartLeaseKey, runLivenessKey, stepOccurrenceKey } from '../leases';
+import { restartLeaseKey, runLivenessKey, runWakeKey, stepOccurrenceKey } from '../leases';
 import { abandonLease } from './abandon-lease';
 import { createStep, createWorkflow } from '..';
 
@@ -123,24 +123,14 @@ export type Shape = (typeof shapes)[keyof typeof shapes];
 export type Built = ReturnType<Shape['build']>;
 
 /**
- * Steps `before` and `after` around a two-second sleep, and the nested
- * workflows to register. The `sleepUntil` date is computed when the sleep
- * starts, so every replica's copy of the workflow sleeps until the same time
- * after `before`.
+ * Steps `before` and `after` around a two-second sleep, in the run itself or
+ * in a nested workflow, and the nested workflows to register.
  */
 export const sleepingWorkflows = {
   sleep: (report: Report) => ({
     workflow: createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
       .then(work('before', report))
       .sleep(2_000)
-      .then(work('after', report))
-      .commit(),
-    nested: {},
-  }),
-  sleepUntil: (report: Report) => ({
-    workflow: createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-      .then(work('before', report))
-      .sleepUntil(async () => new Date(Date.now() + 2_000))
       .then(work('after', report))
       .commit(),
     nested: {},
@@ -407,21 +397,34 @@ export async function restartOutcome(replica: { workflow: Built }, runId: string
   );
 }
 
-/** Records every `restart()` of `runId` that got past the liveness check: each claims the restart lease. */
+/**
+ * Records every `restart()` of `runId` that got past the liveness check (each
+ * claims the restart lease): whether it took the lease, and when.
+ */
 export async function recordRestarts(storage: Store, runId: string) {
   const store = (await storage.getStore('workflows'))!;
   const claim = store.claimRunOwnership.bind(store);
-  const restarts: boolean[] = [];
+  const restarts: { acquired: boolean; at: number }[] = [];
   vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
     const result = await claim(args);
     if (args.runId === restartLeaseKey(runId)) {
-      restarts.push(result.acquired);
+      restarts.push({ acquired: result.acquired, at: Date.now() });
     }
 
     return result;
   });
 
   return restarts;
+}
+
+/** The wake time the sleep of the stored run `runId` of `workflowName` stored. */
+export async function storedWakeTime(storage: Store, workflowName: string, runId: string): Promise<number> {
+  const store = (await storage.getStore('workflows'))!;
+  const snapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+  const sleeping = Object.values(snapshot?.context ?? {}) as { status?: string; metadata?: { wakeAt?: number } }[];
+  const wakeAt = sleeping.find(result => result?.status === 'waiting')?.metadata?.wakeAt;
+  expect(wakeAt).toBeTypeOf('number');
+  return wakeAt!;
 }
 
 /** Waits `ms`, for the tests that must let a lease TTL pass. */
@@ -444,7 +447,10 @@ export const sleepingFor = (ms: number) => (report: Report) =>
     .then(work('after', report))
     .commit() as unknown as Built;
 
-/** Waits until the `leased` run, or the nested run of its `child` step, is in a sleep, and returns that run's id. */
+/**
+ * Waits until the `leased` run, or the nested run of its `child` step, is in a sleep whose setup
+ * finished (its wake key was written), and returns that run's id.
+ */
 export async function sleepingRunId(storage: Store, runId: string): Promise<string> {
   const store = (await storage.getStore('workflows'))!;
   let sleeping = '';
@@ -456,6 +462,8 @@ export async function sleepingRunId(storage: Store, runId: string): Promise<stri
       : parent;
     const results = Object.values(snapshot?.context ?? {}) as { status?: string }[];
     expect(results.some(result => result?.status === 'waiting')).toBe(true);
+    // Written last in the setup, and kept as a row once it expires.
+    expect(await store.getRunOwnership({ runId: runWakeKey(nestedRunId ?? runId) })).toBeTruthy();
     sleeping = nestedRunId ?? runId;
   });
 

@@ -18,7 +18,7 @@ import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { MastraWorker } from '../worker';
 import { createStep, createWorkflow } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
-import { runLivenessKey } from '../workflows/evented/leases';
+import { runLivenessKey, runWakeKey } from '../workflows/evented/leases';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { killableProcess } from './test-utils/killable-process';
 import { Mastra } from './index';
@@ -147,6 +147,9 @@ describe('workflow recovery loop (#28712)', () => {
       'recovered-wf': oneStep('default', 'X', []),
       'child-wf': createWorkflow({ id: 'child-wf', inputSchema: schema, outputSchema: schema }).commit(),
       'parent-wf': createWorkflow({ id: 'parent-wf', inputSchema: schema, outputSchema: schema }).commit(),
+      'sleeping-wf': createEventedWorkflow({ id: 'sleeping-wf', inputSchema: schema, outputSchema: schema })
+        .sleep(60_000)
+        .commit(),
     };
     const mastra = new Mastra({
       logger: false,
@@ -173,6 +176,13 @@ describe('workflow recovery loop (#28712)', () => {
     }
     await persistActiveRun(storage, 'parent', { workflowName: 'parent-wf' });
     await persistActiveRun(storage, 'nested-under-active-parent', { workflowName: 'child-wf', parentRunId: 'parent' });
+    // Evented runs in a sleep, whose liveness lapsed when they stopped handling events.
+    for (const runId of ['sleep-not-due', 'sleep-overdue']) {
+      await persistActiveRun(storage, runId, { workflowName: 'sleeping-wf' });
+      await claim(runLivenessKey(runId), -2 * graceMs);
+    }
+    await claim(runWakeKey('sleep-not-due'), 60_000);
+    await claim(runWakeKey('sleep-overdue'), -2 * graceMs);
     await claim('live', 60_000);
     await claim('parent', 60_000);
     await claim('expired-past-grace', -2 * graceMs);
@@ -187,7 +197,7 @@ describe('workflow recovery loop (#28712)', () => {
     const seen = listingsOf(listings);
     await vi.waitFor(() => expect(listingsOf(listings)).toBeGreaterThanOrEqual(seen + 6));
 
-    expect([...restarted].sort()).toEqual(['expired-past-grace', 'missing-key']);
+    expect([...restarted].sort()).toEqual(['expired-past-grace', 'missing-key', 'sleep-overdue']);
   }, 15_000);
 
   it('restarts a run whose instance crashed mid-step once its liveness lapsed and the grace period passed, though no instance boots', async () => {
