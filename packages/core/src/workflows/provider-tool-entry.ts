@@ -21,7 +21,21 @@ export function pickProviderToolStepOptions(
 
   const out: SerializedStepOptions = {};
   if (options.retries !== undefined) out.retries = options.retries;
-  if (options.metadata !== undefined) out.metadata = options.metadata;
+  if (options.metadata !== undefined) {
+    try {
+      JSON.stringify(options.metadata, (_key, value) => {
+        if (typeof value === 'function' || typeof value === 'bigint' || typeof value === 'symbol') {
+          throw new TypeError(`Unsupported ${typeof value} value`);
+        }
+        return value;
+      });
+    } catch (error) {
+      throw new Error(
+        `Provider tool step "${stepId}" cannot be stored: option "metadata" must be JSON serializable (${(error as Error).message}).`,
+      );
+    }
+    out.metadata = options.metadata;
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

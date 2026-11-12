@@ -260,7 +260,7 @@ export const githubWorkflow = createWorkflow({
   .commit()
 ```
 
-Mastra resolves exactly that tool when the step executes. Use an `author` connection for the persisted workflow owner's credentials, an `invoker` connection for the current execution identity, or a `caller-supplied` connection derived from request context.
+Mastra resolves exactly that tool when the step executes. Persisted dynamic workflows can use an `author` connection for the workflow owner's credentials. Use an `invoker` connection for the current execution identity. When the provider's default scope is `caller-supplied`, omit `connection` to derive the identity from request context.
 
 ## Related
 

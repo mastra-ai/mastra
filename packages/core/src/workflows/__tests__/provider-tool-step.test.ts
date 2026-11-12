@@ -176,6 +176,25 @@ describe.each(ENGINES)('provider-returned plain tool validation ($name engine)',
     }
     expect(execute).toHaveBeenCalledOnce();
   });
+
+  it('does not validate output when the tool suspends', async () => {
+    const execute = vi.fn(async (_input: unknown, context: any) => {
+      await context.workflow.suspend({ reason: 'waiting' });
+      return undefined;
+    });
+    const result = await runPlainTool(
+      {
+        id: 'mock.double',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+        execute,
+      },
+      { value: 2 },
+    );
+
+    expect(result.status).toBe('suspended');
+    expect(execute).toHaveBeenCalledOnce();
+  });
 });
 
 describe('provider tool step construction', () => {
@@ -191,6 +210,25 @@ describe('provider tool step construction', () => {
         scorers: { quality: {} },
       } as any),
     ).toThrow('option "scorers" is not supported');
+    expect(workflow.stepGraph).toEqual([]);
+  });
+
+  it.each([
+    ['function', { callback: () => 'nope' }],
+    ['bigint', { count: 1n }],
+  ])('rejects %s metadata before mutating the workflow graph', (_name, metadata) => {
+    const workflow = createWorkflow({
+      id: 'provider-tool-metadata',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ doubled: z.number() }),
+    });
+
+    expect(() =>
+      workflow.tool(
+        { type: 'provider', providerId: 'mock', toolSlug: 'mock.double' },
+        { metadata } as any,
+      ),
+    ).toThrow(/metadata.*JSON/i);
     expect(workflow.stepGraph).toEqual([]);
   });
 

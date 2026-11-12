@@ -40,8 +40,16 @@ export async function runProviderToolEntry(
     toolInput = validation.data;
   }
 
-  const output = await executeToolWithStepContext(tool, entry.options, { ...ctx, inputData: toolInput });
-  if (isPlainToolAction && tool.outputSchema && '~standard' in tool.outputSchema) {
+  let suspended = false;
+  const output = await executeToolWithStepContext(tool, entry.options, {
+    ...ctx,
+    inputData: toolInput,
+    suspend: async (...args: Parameters<typeof ctx.suspend>) => {
+      suspended = true;
+      return ctx.suspend(...args);
+    },
+  });
+  if (!suspended && isPlainToolAction && tool.outputSchema && '~standard' in tool.outputSchema) {
     const validation = validateToolOutput(tool.outputSchema, output, entry.toolSlug);
     if (validation.error) {
       throw new Error(validation.error.message);

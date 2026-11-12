@@ -6026,7 +6026,8 @@ export class Mastra<
             graph: def.graph,
             schedule: def.schedule,
           }),
-          authorId: 'authorId' in def && def.authorId !== undefined ? def.authorId : existing?.authorId,
+          authorId:
+            existing?.authorId ?? ('authorId' in def && def.authorId !== undefined ? def.authorId : undefined),
         };
       }),
     );

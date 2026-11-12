@@ -624,23 +624,27 @@ describe('storage round-trip', () => {
     expect(['author-a', 'author-b']).toContain(persisted?.authorId);
   });
 
-  it('rejects replacing an owned workflow with a different explicit owner', async () => {
+  it('preserves the original owner when a privileged caller submits a different author', async () => {
     const storage = new InMemoryStore({ id: 'owner-replacement-store' });
     const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
     const graph = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
-    const definition = (authorId: string) => ({
+    const definition = (authorId: string, description: string) => ({
       id: 'owned-workflow',
       authorId,
+      description,
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
       graph,
     });
 
-    await mastra.addDynamicWorkflow(definition('author-a'));
-    await expect(mastra.addDynamicWorkflow(definition('author-b'))).rejects.toThrow('owned by a different author');
+    await mastra.addDynamicWorkflow(definition('author-a', 'created'));
+    await mastra.addDynamicWorkflow(definition('admin', 'updated by admin'));
 
     const store = await storage.getStore('workflowDefinitions');
-    expect((await store.get('owned-workflow'))?.authorId).toBe('author-a');
+    expect(await store.get('owned-workflow')).toMatchObject({
+      authorId: 'author-a',
+      description: 'updated by admin',
+    });
   });
 
   it('does not allow an explicit owner to adopt an ownerless workflow', async () => {

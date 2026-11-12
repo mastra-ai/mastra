@@ -89,6 +89,19 @@ async function loadSchedule(mastra: Mastra, scheduleId: string): Promise<AnySche
   return schedule;
 }
 
+async function assertScheduleWorkflowAccess({
+  mastra,
+  schedule,
+  requestContext,
+}: {
+  mastra: Mastra;
+  schedule: AnySchedule;
+  requestContext: Parameters<typeof assertStoredWorkflowExecuteAccess>[0]['requestContext'];
+}): Promise<void> {
+  if (!schedule.workflowId) return;
+  await assertStoredWorkflowExecuteAccess({ mastra, workflowId: schedule.workflowId, requestContext });
+}
+
 export const LIST_SCHEDULES_ROUTE = createRoute({
   method: 'GET',
   path: '/schedules',
@@ -212,8 +225,9 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
     "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`. A recomputed cadence that can still fire reactivates a `completed` schedule, while a cadence with no future occurrence leaves the schedule `completed`.",
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, scheduleId, ...body }) => {
-    await loadSchedule(mastra, scheduleId);
+  handler: async ({ mastra, scheduleId, requestContext, ...body }) => {
+    const schedule = await loadSchedule(mastra, scheduleId);
+    await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
     return await mastra.schedules.update(scheduleId, {
       ...(body.cron !== undefined ? { cron: body.cron } : {}),
       ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
@@ -229,7 +243,7 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
       ...(body.providerOptions !== undefined ? { providerOptions: body.providerOptions } : {}),
       ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
       ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
-      ...(body.requestContext !== undefined ? { requestContext: body.requestContext } : {}),
+      ...(requestContext !== undefined ? { requestContext } : {}),
       ...(body.resourceId !== undefined ? { resourceId: body.resourceId } : {}),
     });
   },
@@ -245,8 +259,9 @@ export const DELETE_SCHEDULE_ROUTE = createRoute({
   description: 'Permanently deletes the schedule. 404 when the schedule does not exist.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
+  handler: async ({ mastra, scheduleId, requestContext }) => {
+    const schedule = await loadSchedule(mastra, scheduleId);
+    await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
     await mastra.schedules.delete(scheduleId);
     return { message: 'Schedule deleted' };
   },
@@ -263,8 +278,9 @@ export const PAUSE_SCHEDULE_ROUTE = createRoute({
     'Marks the schedule as paused. The scheduler tick loop will skip paused schedules. Idempotent — pausing an already-paused schedule returns the current state unchanged. Pause status survives redeploys.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
+  handler: async ({ mastra, scheduleId, requestContext }) => {
+    const schedule = await loadSchedule(mastra, scheduleId);
+    await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
     const updated = await mastra.schedules.pause(scheduleId);
     return hydrateScheduleResponse(mastra, updated);
   },
@@ -281,8 +297,9 @@ export const RESUME_SCHEDULE_ROUTE = createRoute({
     'Marks the schedule as active and recomputes nextFireAt from "now" so a long-paused schedule does not fire a backlog. Idempotent — resuming an already-active schedule returns the current state unchanged.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
+  handler: async ({ mastra, scheduleId, requestContext }) => {
+    const schedule = await loadSchedule(mastra, scheduleId);
+    await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
     const updated = await mastra.schedules.resume(scheduleId);
     return hydrateScheduleResponse(mastra, updated);
   },
@@ -299,8 +316,9 @@ export const RUN_SCHEDULE_ROUTE = createRoute({
     'Manually triggers a single schedule fire out-of-band from the cron schedule. Records a trigger row with `triggerKind: "manual"`. Does not advance `nextFireAt`.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
+  handler: async ({ mastra, scheduleId, requestContext }) => {
+    const schedule = await loadSchedule(mastra, scheduleId);
+    await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
     return await mastra.schedules.run(scheduleId);
   },
 });

@@ -126,7 +126,7 @@ const providerToolEntry = {
 }
 ```
 
-Mastra resolves exactly that tool when the step runs. It persists the workflow's original owner for `author` connections, uses the execution identity for `invoker` connections, and derives `caller-supplied` connections from request context. Later saves don't transfer workflow ownership.
+Mastra resolves exactly that tool when the step runs. An `author` connection uses the workflow's persisted original owner, while an `invoker` connection uses the current execution identity. When the provider's default scope is `caller-supplied`, omit `connection` to derive the identity from request context. Later saves preserve the original workflow owner.
 
 Use a `mapping` entry when one step's output doesn't match the next step's input. Mapping entries can read data from the workflow input and previous step results, along with workflow state and request context. The [definition reference](/reference/workflows/dynamic-workflow-definition#mapping-steps) lists the supported mapping descriptors.
 

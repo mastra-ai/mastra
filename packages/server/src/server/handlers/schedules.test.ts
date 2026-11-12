@@ -35,10 +35,14 @@ const makeSnapshot = (overrides: Partial<WorkflowRunState> = {}): WorkflowRunSta
   ...overrides,
 });
 
-const baseCtx = () => ({
-  requestContext: new RequestContext(),
-  abortSignal: new AbortController().signal,
-});
+const baseCtx = (resourceId?: string) => {
+  const requestContext = new RequestContext();
+  if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  return {
+    requestContext,
+    abortSignal: new AbortController().signal,
+  };
+};
 
 const makeWorkflowSchedule = (overrides: Partial<Schedule> = {}): Schedule => ({
   id: overrides.id ?? 'wf_test',
@@ -465,6 +469,28 @@ describe('Schedules handlers', () => {
   });
 
   describe('UPDATE_SCHEDULE_ROUTE', () => {
+    it('hides workflow schedules from callers who do not own the target workflow', async () => {
+      const definitionsStore = (await storage.getStore('workflowDefinitions'))!;
+      await definitionsStore.upsert({
+        id: 'test',
+        authorId: 'owner-a',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'object' },
+        graph: [],
+      });
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeWorkflowSchedule({ id: 'wf_owned' }));
+
+      await expect(
+        UPDATE_SCHEDULE_ROUTE.handler({
+          mastra,
+          scheduleId: 'wf_owned',
+          inputData: { secret: true },
+          ...baseCtx('owner-b'),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
     it('updates an agent schedule prompt without touching cron/nextFireAt', async () => {
       const schedulesStore = (await storage.getStore('schedules'))!;
       const schedule = makeAgentSchedule();
@@ -633,6 +659,27 @@ describe('Schedules handlers', () => {
   });
 
   describe('RUN_SCHEDULE_ROUTE', () => {
+    it('hides workflow schedules from callers who do not own the target workflow', async () => {
+      const definitionsStore = (await storage.getStore('workflowDefinitions'))!;
+      await definitionsStore.upsert({
+        id: 'test',
+        authorId: 'owner-a',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'object' },
+        graph: [],
+      });
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeWorkflowSchedule({ id: 'wf_owned' }));
+
+      await expect(
+        RUN_SCHEDULE_ROUTE.handler({
+          mastra,
+          scheduleId: 'wf_owned',
+          ...baseCtx('owner-b'),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
     it('fires an agent schedule manually and returns claim info', async () => {
       const schedulesStore = (await storage.getStore('schedules'))!;
       const schedule = makeAgentSchedule();

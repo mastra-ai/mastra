@@ -94,7 +94,7 @@ workflow
   .commit()
 ```
 
-Each provider-tool step resolves exactly one `toolSlug`. An `invoker` connection uses the execution identity, and a `caller-supplied` connection derives its identity from the run's request context. Persisted dynamic workflows may use an `author` connection, which binds to the workflow owner restored from storage. Code-defined workflows reject `author` connections because they do not have a persisted owner. The provider must implement `resolveToolsVNext()`.
+Each provider-tool step resolves exactly one `toolSlug`. An `invoker` connection uses the execution identity. When the provider's default scope is `caller-supplied`, omit `connection` to derive the identity from the run's request context. Persisted dynamic workflows may use an `author` connection, which binds to the workflow owner restored from storage. Code-defined workflows reject `author` connections because they don't have a persisted owner. The provider must implement `resolveToolsVNext()`.
 
 The optional `inputSchema` and `outputSchema` fields are JSON Schema snapshots for graph validation and visual editors. Mastra still resolves and executes the current provider tool at runtime.
 
