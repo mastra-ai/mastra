@@ -676,7 +676,7 @@ export class MCPServer extends MCPServerBase {
     return {};
   }
 
-  private createServerInstance(): Server {
+  private createServerInstance(era: 'legacy' | 'modern' = 'modern'): Server {
     const server = new Server(
       {
         name: this.name,
@@ -696,8 +696,9 @@ export class MCPServer extends MCPServerBase {
         requestState: { verify: this.requestStateCodec.verify },
       },
     );
-    // Deprecated session-level log control (SEP-2577): not served.
-    server.removeRequestHandler('logging/setLevel');
+    // Deprecated session-level log control (SEP-2577): not served on 2026-07-28. 2025-era clients
+    // still send it because `logging` is advertised, so legacy (stateless) instances keep it.
+    if (era === 'modern') server.removeRequestHandler('logging/setLevel');
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
@@ -2202,7 +2203,7 @@ export class MCPServer extends MCPServerBase {
 
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
-      this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
+      this.httpHandler = createMcpHandler(({ era }) => this.createServerInstance(era), {
         legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });

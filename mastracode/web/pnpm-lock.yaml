@@ -8,7 +8,7 @@ overrides:
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   hono@<4.13.11: 4.13.11
   postcss@<8.5.23: 8.5.23
-  undici@<8.12.2: 8.12.2
+  undici@<8.12.4: 8.12.4
   yargs@<18.1.0: 18.2.0
   nanoid@<5.1.16: 5.1.16
   yaml@>=2.0.0 <2.9.1: 2.9.1
@@ -597,8 +597,8 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@8.12.2:
-    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   varlock@1.24.0:
@@ -711,7 +711,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider@3.0.19':
@@ -1055,7 +1055,7 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@8.12.2: {}
+  undici@8.12.4: {}
 
   varlock@1.24.0:
     optionalDependencies:

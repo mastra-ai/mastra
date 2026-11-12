@@ -1,5 +1,17 @@
 # @mastra/auth-okta
 
+## 0.3.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
 ## 0.2.6
 
 ### Patch Changes

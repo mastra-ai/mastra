@@ -7,6 +7,10 @@ export class RecursiveJsonTransformer {
   private convertLists: boolean;
 
   constructor({ maxSize = 2000, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
+    if (!Number.isFinite(maxSize) || maxSize < 21) {
+      throw new RangeError('JSON maxSize must be at least 21');
+    }
+
     this.maxSize = maxSize;
     this.ensureAscii = ensureAscii;
     this.convertLists = convertLists;

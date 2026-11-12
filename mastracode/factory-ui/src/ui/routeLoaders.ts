@@ -1,3 +1,5 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import { noop } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import type { LoaderFunctionArgs } from 'react-router';
@@ -18,11 +20,22 @@ import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/u
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
-import { boardQueryOptions } from '../hooks/useWorkItems';
+import {
+  boardPhasesQueryOptions,
+  sessionCardsQueryOptions,
+  workItemActivityQueryOptions,
+  workItemFilterOptionsQueryOptions,
+  workItemStartersQueryOptions,
+} from '../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
+import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
+import { boardFiltersFromParams } from './domains/factory/boardFilters';
+import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
+import { BOARD_SORT_QUERY, DEFAULT_BOARD_SORT, isBoardSort } from './domains/factory/boardSort';
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
-import { pageLoadsBoard } from './domains/factory/pageLoadsBoard';
+import { BOARD_SEARCH_QUERY } from './domains/factory/hooks/useBoardView';
+import { DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
 import { hasLinkedRepository } from './domains/workspaces/services/factoryRepositories';
@@ -87,21 +100,32 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
   void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  // A page that loads the board shares it with the sidebar.
-  if (!pageLoadsBoard(pathname)) {
-    void queryClient.query(boardQueryOptions(api.baseUrl, factoryId, 'sessions')).catch(noop);
-  }
+  void queryClient.query(sessionCardsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   prefetchSessionRuns(services, factoryId);
 };
 
-export const prefetchBoard: Prefetch = (services, { params }) => {
+export const prefetchBoard: Prefetch = (services, { params, request }) => {
   const { factoryId } = params;
   if (!factoryId) return;
   const { queryClient, api } = services;
   // The page's largest read leaves with the Factory list, not once it answers: waiting to hear a
-  // repository is linked would start every board a round trip later.
-  void queryClient.query(boardQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  // repository is linked would start every board a round trip later. A saved view keeps its
+  // filters in the browser's storage, so the page asks for that one itself.
+  const { searchParams } = new URL(request.url);
+  if (!searchParams.has(BOARD_VIEW_QUERY)) {
+    const sort = searchParams.get(BOARD_SORT_QUERY);
+    const view = boardPhasesRequest({
+      board: params.boardId ?? DEFAULT_BOARD_ID,
+      sort: sort && isBoardSort(sort) ? sort : DEFAULT_BOARD_SORT,
+      search: searchParams.get(BOARD_SEARCH_QUERY) ?? '',
+      filters: boardFiltersFromParams(searchParams, true),
+      windows: {},
+      item: searchParams.get('item') ?? undefined,
+    });
+    void queryClient.query(boardPhasesQueryOptions(api.baseUrl, factoryId, view)).catch(noop);
+  }
+  void queryClient.query(workItemFilterOptionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   whenFactoryListed(services, factoryId, factory => {
     if (!hasLinkedRepository(factory)) return;
     void queryClient.query(intakeConfigQueryOptions(api.baseUrl)).catch(noop);
@@ -114,6 +138,21 @@ export const prefetchBoard: Prefetch = (services, { params }) => {
   });
 };
 
+/** Where a link to the retired Review board lands on Work: the link's query, with pull requests alone. */
+export function retiredReviewBoardSearch(search: string): URLSearchParams {
+  const params = new URLSearchParams(search);
+  // Picked sources widen the filter, so any other source would show cards the Review board never held.
+  params.set('source', PULL_REQUEST_SOURCE_FILTER);
+  return params;
+}
+
+/** A retired Review board link opens Work once the catalog says the board is gone: what Work reads starts now. */
+export const prefetchRetiredReviewBoard: Prefetch = (services, args) => {
+  const url = new URL(args.request.url);
+  url.search = retiredReviewBoardSearch(url.search).toString();
+  prefetchBoard(services, { ...args, request: new Request(url, { signal: args.request.signal }) });
+};
+
 export const prefetchComposer: Prefetch = ({ queryClient, api }, { params }) => {
   const { factoryId } = params;
   if (!factoryId) return;
@@ -122,12 +161,14 @@ export const prefetchComposer: Prefetch = ({ queryClient, api }, { params }) => 
   void queryClient.query(providersQueryOptions(api.client)).catch(noop);
 };
 
-/** A draft offers the board's cards as starters, and its activity, around the composer. */
+/** A draft offers starters counted off the board, and the board's activity, around the composer. */
 export const prefetchDraft: Prefetch = (services, args) => {
   prefetchComposer(services, args);
   const { factoryId } = args.params;
   if (!factoryId) return;
-  void services.queryClient.query(boardQueryOptions(services.api.baseUrl, factoryId)).catch(noop);
+  const { queryClient, api } = services;
+  void queryClient.query(workItemStartersQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(workItemActivityQueryOptions(api.baseUrl, factoryId, DEFAULT_ACTIVITY_PERIOD)).catch(noop);
 };
 
 export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, request }) => {

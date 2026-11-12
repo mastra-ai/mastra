@@ -40,8 +40,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     let lastRefreshAt = Number.NEGATIVE_INFINITY;
     let streaming = false;
     const cardsKey = queryKeys.workItems(factoryProjectId);
+    const factsKey = queryKeys.boardFacts(factoryProjectId);
     const boardKeys = [
       cardsKey,
+      factsKey,
       queryKeys.factoryDecisionsRoot(factoryProjectId),
       queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
     ];
@@ -51,6 +53,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     const reread = (boardKey: QueryKey, query: Query) => {
       // A card read taken mid-move puts the card back in the column it is leaving; the move re-reads the cards when it lands.
       if (boardKey === cardsKey && queryClient.isMutating({ mutationKey: cardMoveMutationKey(factoryProjectId) }) > 0) {
+        return;
+      }
+      // A server that predates these reads answers 404 for good: asking again on every frame cannot change it.
+      if (boardKey === factsKey && query.state.error instanceof RequestError && query.state.error.status === 404) {
         return;
       }
       const inFlight = reading.get(query.queryHash);
