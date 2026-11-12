@@ -225,6 +225,47 @@ export function describeLateEndCases({
       expect(executions).toEqual(['first', 'second', 'second']);
     }, 20_000);
 
+    it('does not end a time travel when a late event of the earlier execution arrives', async () => {
+      const executions: string[] = [];
+      const gate = deferred<void>();
+      const reached = deferred<void>();
+      const build = () =>
+        createWorkflow({
+          id: 'finished',
+          inputSchema: Num,
+          outputSchema: Num,
+          options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+        })
+          .then(
+            work('first', async id => {
+              executions.push(id);
+              // The time travel's run of this step waits until the late event was handled.
+              if (executions.filter(entry => entry === id).length === 2) {
+                reached.resolve();
+                await gate.promise;
+              }
+            }),
+          )
+          .then(work('second', async id => void executions.push(id)))
+          .commit();
+      const a = await startReplica(build());
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+      const lastStep = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [1]))!;
+
+      const travelled = run.timeTravel({ step: 'first', inputData: { n: 2 } });
+      await reached.promise;
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      expect(await redeliver(b, lastStep)).toEqual({ ok: true });
+      expect(fromB.queue).toEqual([]);
+      gate.resolve();
+
+      expect((await travelled).status).toBe('success');
+      expect(executions).toEqual(['first', 'second', 'first', 'second']);
+      expect(finishesOf(run.runId, a, b)).toHaveLength(2);
+    }, 20_000);
+
     // An outcome check: with the nested step last, the top-level end check alone also keeps the
     // second hand-off from ending the parent again.
     it('continues the parent once when a nested run ends twice', async () => {

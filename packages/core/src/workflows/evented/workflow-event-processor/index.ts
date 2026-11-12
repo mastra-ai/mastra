@@ -1399,9 +1399,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       }
     } else if (timeTravel && existingRun) {
-      // The stored run keeps the status it ended with when no running snapshot is saved, and the
-      // end of this time travel would read it as already ended. Only the status is written.
-      await workflowsStore?.updateWorkflowState({ workflowName: workflow.id, runId, opts: { status: 'running' } });
+      // No running snapshot is saved, so the stored run keeps the status and cursor of the run that
+      // ended: a late event of that run would find it still at its last step. Only the status and
+      // the time travel's cursor are written.
+      await workflowsStore?.updateWorkflowState({
+        workflowName: workflow.id,
+        runId,
+        opts: { status: 'running', activePaths: executionPath },
+      });
     }
 
     // Keep the captured cursor until the successor records its own input. A crash
