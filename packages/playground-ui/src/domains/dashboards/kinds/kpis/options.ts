@@ -69,12 +69,19 @@ function refFigures(ref: ValueRef, answers: KpiAnswers | undefined): KpiFigures 
 
 /**
  * A KPI's figures. A single ref keeps the API's own change; any other expression is evaluated over
- * the page's window and over the previous one, and the change is worked out from the two.
+ * the page's window and over the previous one, and the change is worked out from the two. Only when
+ * every part with a figure now has one before, too: a part that doesn't compare would otherwise
+ * count as 0 in the previous window and show a change that isn't there.
  */
 export function kpiFigures(expr: ValueExpr, answers: ReadonlyMap<string, KpiAnswers | undefined>): KpiFigures {
   if ('query' in expr) return refFigures(expr, answers.get(expr.query));
-  const value = evaluate(expr, ref => refFigures(ref, answers.get(ref.query)).value);
-  const previous = evaluate(expr, ref => refFigures(ref, answers.get(ref.query)).previous);
+  const figures = (ref: ValueRef) => refFigures(ref, answers.get(ref.query));
+  const value = evaluate(expr, ref => figures(ref).value);
+  const comparable = exprRefs(expr).every(ref => {
+    const { value, previous } = figures(ref);
+    return value === undefined || previous !== undefined;
+  });
+  const previous = comparable ? evaluate(expr, ref => figures(ref).previous) : undefined;
   return { value, previous, change: changeOf(value, previous) };
 }
 

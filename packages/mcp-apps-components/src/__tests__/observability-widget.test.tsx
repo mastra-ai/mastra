@@ -223,6 +223,58 @@ it('draws KPIs combining trace measures, each compared with the window before', 
   expect(mcp.calls.filter(readsPreviousWindow)).toHaveLength(1);
 });
 
+it('shows no change for a KPI whose parts do not all compare with the window before', async () => {
+  const mcp = observabilityServer({
+    answers: {
+      aggregateTraces: call => ({
+        data: {
+          rows: [{ measures: readsPreviousWindow(call) ? { count: 100 } : { count: 200, errorCount: 10 } }],
+          truncated: false,
+        },
+      }),
+    },
+  });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Runs',
+              kpis: {
+                items: [
+                  {
+                    label: 'Runs',
+                    format: 'count',
+                    value: { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                  },
+                  {
+                    label: 'Successful runs',
+                    format: 'count',
+                    value: {
+                      minus: [
+                        { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                        // Read over the page's window only: nothing to set against the 100 runs before.
+                        { traceAggregate: { measure: 'errorCount' } },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  // Runs' change shows once the previous window has answered, so Successful runs has it too.
+  await waitFor(() => expect(document.body.textContent).toContain('+100% vs previous 24h (100)'));
+  expect(screen.getByText('190')).toBeTruthy();
+  expect(document.body.textContent?.match(/vs previous/g)).toHaveLength(1);
+});
+
 it('draws a line chart of scores and a table, with the colors and empty message they leave out', async () => {
   const mcp = observabilityServer({
     answers: {
