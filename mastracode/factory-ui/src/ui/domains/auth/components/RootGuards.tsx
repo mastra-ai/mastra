@@ -8,6 +8,7 @@ import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { SessionExpiredDialog } from './SessionExpiredDialog';
+import { appRoot } from '../../../lib/app-root';
 
 export const RootGuards = () => {
   return (
@@ -32,7 +33,7 @@ const AuthGuard = () => {
 
   const returnTo = `${location.pathname}${location.search}${location.hash}`;
   if (!data.authenticated && !wasSignedIn) {
-    return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+    return <Navigate to={`${appRoot()}/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   return (
@@ -49,9 +50,9 @@ const OnboardingGuard = () => {
 
   if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
   if (!factories) return <FactoriesUnavailableScreen retrying={isFetching} onRetry={() => void refetch()} />;
-  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
-  if (factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
-    return <Navigate to={`/factories/${factories[0].id}`} replace />;
+  if (factories.length === 0 && pathname !== `${appRoot()}/onboarding`) return <Navigate to={`${appRoot()}/onboarding`} replace />;
+  if (factories.length > 0 && pathname === `${appRoot()}/onboarding` && !hasResumableFactoryOnboarding(factories)) {
+    return <Navigate to={`${appRoot()}/factories/${factories[0].id}`} replace />;
   }
 
   return (

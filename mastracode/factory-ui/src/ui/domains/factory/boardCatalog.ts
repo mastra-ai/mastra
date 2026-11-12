@@ -1,7 +1,8 @@
 import type { InstalledBoardInfo } from '../../../api/types';
+import { appRoot } from '../../lib/app-root';
 
 export function boardPath(factoryId: string, boardId: string) {
-  return `/factories/${factoryId}/${boardId === 'work' || boardId === 'review' ? boardId : `boards/${encodeURIComponent(boardId)}`}`;
+  return `${appRoot()}/factories/${factoryId}/${boardId === 'work' || boardId === 'review' ? boardId : `boards/${encodeURIComponent(boardId)}`}`;
 }
 
 export function orderedBoards<B extends { id: string }>(boards: readonly B[]): B[] {

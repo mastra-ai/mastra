@@ -40,6 +40,7 @@ import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { appRoot } from '../../../lib/app-root';
 
 export function WorkItemCard({
   item,
@@ -112,7 +113,7 @@ export function WorkItemCard({
   const sessionHref =
     threadSession === undefined
       ? undefined
-      : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
+      : `${appRoot()}/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
   const proposedRun = proposedCardRun(proposal, custom, definition, moves, primaryMove);
   const proposedRunLabel = proposedRun?.label;
 
@@ -189,7 +190,7 @@ export function WorkItemCard({
         <RelatedWorkItemLink
           key={related.id}
           item={related}
-          href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
+          href={`${appRoot()}/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
           kind="session"
         />
       );

@@ -9,7 +9,7 @@ import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
 import type { PlatformApiClient} from '../api-client.js';
-import { PlatformApiError } from '../api-client.js';
+import { PlatformApiError, pollEachPlatformTenant } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/linear';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
@@ -215,7 +215,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
     let nextDelay = this.#intervalMs;
     try {
       if (!(await this.#ensureLease())) return;
-      nextDelay = await this.#poll();
+      nextDelay = await pollEachPlatformTenant(() => this.#poll(), this.#intervalMs);
     } catch (error) {
       nextDelay = retryDelay(error, this.#intervalMs);
       this.deps?.logger.error('Platform Linear event polling cycle failed', {

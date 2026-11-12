@@ -9,6 +9,7 @@ import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import { appRoot } from '../../../lib/app-root';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -44,7 +45,7 @@ export function FactorySection() {
       </section>
       {features.data?.knowledge ? (
         <Sidebar.NavList>
-          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
+          <FactoryLink to={`${appRoot()}/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
         </Sidebar.NavList>
       ) : null}
     </nav>

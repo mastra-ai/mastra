@@ -28,6 +28,8 @@ export type {
 } from './boards/index.js';
 export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
+export { runWithPlatformTenant, type PlatformTenantLister } from './integrations/platform/api-client.js';
+export type { PlatformCredentials, PlatformCredentialsResolver } from './integrations/platform/api-client.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
   MastraArgs,

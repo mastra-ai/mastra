@@ -21,6 +21,7 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
@@ -69,7 +70,14 @@ import type { FactoryPullRequestProvenanceData } from './integrations/github/pro
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
+import {
+  hasPlatformCredentialsResolver,
+  PlatformApiClient,
+  platformApiClientConfigFromEnv,
+  setPlatformCredentialsResolver,
+  setPlatformTenantLister,
+} from './integrations/platform/api-client.js';
+import type { PlatformCredentialsResolver, PlatformTenantLister } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
@@ -217,6 +225,11 @@ export interface MastraFactoryConfig {
    */
   knowledge?: { key: string; instance: Knowledge };
   /**
+   * Host-owned memory for Factory sessions: an instance, or a function resolved per request
+   * (e.g. one memory per tenant). Omitted uses Mastra Code's built-in Memory on `storage`.
+   */
+  memory?: MastraCodeConfig['memory'];
+  /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
    * controller drops file-based thread locks in favor of pubsub-coordinated
@@ -342,6 +355,15 @@ export interface MastraFactoryConfig {
    * Platform-specific overrides.
    */
   platform?: {
+    /**
+     * Per-tenant Platform credentials. When set, the Platform integrations run
+     * for every tenant on this server, each call using the credentials of the
+     * tenant in context (see `runWithPlatformTenant`) instead of the
+     * process-wide `MASTRA_PLATFORM_ACCESS_TOKEN`. Calls with no tenant fail.
+     */
+    credentials?: PlatformCredentialsResolver;
+    /** Tenants the background Platform pollers run for. Required with `credentials` for polling. */
+    tenants?: PlatformTenantLister;
     /** Identifies Factory's own GitHub App writes so their webhook deliveries do not retrigger triage. */
     githubAppSlug?: string;
     /**
@@ -390,6 +412,11 @@ const WAKE_OWNER_UNRESOLVED = {
   'organization-unresolved': "its owner's organization is unresolved",
   'organization-mismatch': "its owner's organization doesn't match",
 } as const;
+
+/** Platform integrations run with env credentials or a per-tenant resolver. */
+function hasPlatformIntegrations(): boolean {
+  return hasPlatformCredentials() || hasPlatformCredentialsResolver();
+}
 
 function hasPlatformCredentials(): boolean {
   // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
@@ -562,6 +589,8 @@ export class MastraFactory {
     // registry or double-run one-time adapter init.
     if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
     this.#preparing = true;
+    if (this.#config.platform?.credentials) setPlatformCredentialsResolver(this.#config.platform.credentials);
+    if (this.#config.platform?.tenants) setPlatformTenantLister(this.#config.platform.tenants);
 
     const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
@@ -605,7 +634,7 @@ export class MastraFactory {
     // Whether this boot constructed the GitHub integration on the caller's
     // behalf — `platform.github` is only meaningful in that case.
     let installedPlatformGithub = false;
-    if (hasPlatformCredentials()) {
+    if (hasPlatformIntegrations()) {
       if (!explicitGithub) {
         // Forward `platform.github` to the integration the factory installs
         // itself. `slug` falls back to the sibling `githubAppSlug` so existing
@@ -1479,6 +1508,7 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        ...(this.#config.memory !== undefined ? { memory: this.#config.memory } : {}),
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
@@ -1894,7 +1924,7 @@ export class MastraFactory {
           // Connect/reconnect session minting for Platform-managed providers.
           // Server-side because only the deploy holds Platform machine
           // credentials; the SPA runs the OAuth popup with the minted token.
-          ...(hasPlatformCredentials()
+          ...(hasPlatformIntegrations()
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),

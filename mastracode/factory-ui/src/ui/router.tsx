@@ -4,12 +4,12 @@
  * Auth gating happens in React layout components, not loaders: `RequireAuth`
  * wraps the app routes and reads `/auth/me` through the `useFactoryAuth` custom
  * React Query hook (shared cache key with the rest of the UI), redirecting
- * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
+ * unauthenticated sessions to `${appRoot()}/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can choose the active factory's board or draft composer.
  *
  * The URL is the single source of truth for the active factory: everything
- * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
+ * factory-scoped lives under `${appRoot()}/factories/:factoryId/**` behind `FactoryLayout`.
  */
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
@@ -27,6 +27,7 @@ import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
+import { appRoot } from './lib/app-root';
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
@@ -75,9 +76,9 @@ function RootLanding() {
 
   // Onboarding does the same once its factory exists (created on repo pick): the
   // GitHub/Linear round-trips must resume the wizard, not land on the factory.
-  if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
+  if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`${appRoot()}/onboarding${search}`} replace />;
 
-  return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
+  return <Navigate to={`${appRoot()}/factories/${firstFactory.id}`} replace state={state} />;
 }
 
 function FactoryHomeRedirect() {
@@ -105,7 +106,7 @@ function ChannelThreadRedirect() {
 
   return (
     <Navigate
-      to={`/factories/${firstFactory.id}/workspaces/channel/threads/${encodeURIComponent(threadId)}${search}`}
+      to={`${appRoot()}/factories/${firstFactory.id}/workspaces/channel/threads/${encodeURIComponent(threadId)}${search}`}
       replace
     />
   );
@@ -125,7 +126,7 @@ function ConnectionsRedirect() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
+  return <Navigate to={`${appRoot()}/factories/${firstFactory.id}/settings/connections`} replace />;
 }
 
 function KnowledgeRoute() {
@@ -133,8 +134,63 @@ function KnowledgeRoute() {
   const features = useServerFeatures();
 
   if (features.isPending || !factoryId) return null;
-  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
+  if (!features.data?.knowledge) return <Navigate to={`${appRoot()}/factories/${factoryId}`} replace />;
   return <KnowledgePage />;
+}
+
+/** Everything below the auth guards, with relative paths so a host router can mount it under its own route. */
+export function createAppChildRoutes(): RouteObject[] {
+  return [
+    { index: true, element: <RootLanding /> },
+    { path: 'onboarding', element: <OnboardingPage /> },
+    {
+      path: 'factories/:factoryId',
+      element: <FactoryLayout />,
+      children: [
+        {
+          element: <AppLayout />,
+          children: [
+            {
+              // Errors replace only the page, preserving the shell and its providers.
+              errorElement: <AppRouteErrorPage />,
+              children: [
+                { index: true, element: <FactoryHomeRedirect /> },
+                { path: 'workspaces/:sessionId', element: <NewPage /> },
+                { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
+                { path: 'user/new/:draftSessionId', element: <NewPage /> },
+                { path: 'user/threads/:threadId', element: <ThreadPage /> },
+                { path: 'new', element: <NewPage /> },
+                { path: 'new-factory', element: <CreateFactoryPage /> },
+                { path: 'work', element: <WorkBoardPage /> },
+                { path: 'review', element: <ReviewBoardPage /> },
+                { path: 'boards/:boardId', element: <CustomBoardPage /> },
+                { path: 'activity', element: <FactoryHomeRedirect /> },
+                { path: 'overview', element: <FactoryHomeRedirect /> },
+                { path: 'attention', element: <FactoryHomeRedirect /> },
+                { path: 'metrics', element: <FactoryHomeRedirect /> },
+                { path: 'audit', element: <FactoryHomeRedirect /> },
+                { path: 'rules', element: <RulesPage /> },
+                { path: 'knowledge', element: <KnowledgeRoute /> },
+                {
+                  path: 'settings',
+                  children: [
+                    { index: true, element: <Navigate to="preferences" replace /> },
+                    { path: 'connections/slack', element: <SlackConnectionPage /> },
+                    { path: ':section', element: <SettingsPage /> },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    // Server-built thread deep links without a factory id (Slack cards).
+    { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
+    { path: 'settings/connections', element: <ConnectionsRedirect /> },
+    // Legacy deep links (the app used to serve everything at any path).
+    { path: '*', element: <Navigate to={appRoot() || '/'} replace /> },
+  ];
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -146,57 +202,7 @@ export function createAppRoutes(): RouteObject[] {
       path: '/',
       element: <RootGuards />,
       errorElement: <RouteErrorPage />,
-      children: [
-        { index: true, element: <RootLanding /> },
-        { path: 'onboarding', element: <OnboardingPage /> },
-        {
-          path: 'factories/:factoryId',
-          element: <FactoryLayout />,
-          children: [
-            {
-              element: <AppLayout />,
-              children: [
-                {
-                  // Errors replace only the page, preserving the shell and its providers.
-                  errorElement: <AppRouteErrorPage />,
-                  children: [
-                    { index: true, element: <FactoryHomeRedirect /> },
-                    { path: 'workspaces/:sessionId', element: <NewPage /> },
-                    { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
-                    { path: 'user/new/:draftSessionId', element: <NewPage /> },
-                    { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                    { path: 'new', element: <NewPage /> },
-                    { path: 'new-factory', element: <CreateFactoryPage /> },
-                    { path: 'work', element: <WorkBoardPage /> },
-                    { path: 'review', element: <ReviewBoardPage /> },
-                    { path: 'boards/:boardId', element: <CustomBoardPage /> },
-                    { path: 'activity', element: <FactoryHomeRedirect /> },
-                    { path: 'overview', element: <FactoryHomeRedirect /> },
-                    { path: 'attention', element: <FactoryHomeRedirect /> },
-                    { path: 'metrics', element: <FactoryHomeRedirect /> },
-                    { path: 'audit', element: <FactoryHomeRedirect /> },
-                    { path: 'rules', element: <RulesPage /> },
-                    { path: 'knowledge', element: <KnowledgeRoute /> },
-                    {
-                      path: 'settings',
-                      children: [
-                        { index: true, element: <Navigate to="preferences" replace /> },
-                        { path: 'connections/slack', element: <SlackConnectionPage /> },
-                        { path: ':section', element: <SettingsPage /> },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-        // Server-built thread deep links without a factory id (Slack cards).
-        { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
-        { path: 'settings/connections', element: <ConnectionsRedirect /> },
-        // Legacy deep links (the app used to serve everything at any path).
-        { path: '*', element: <Navigate to="/" replace /> },
-      ],
+      children: createAppChildRoutes(),
     },
     {
       path: '/signin',

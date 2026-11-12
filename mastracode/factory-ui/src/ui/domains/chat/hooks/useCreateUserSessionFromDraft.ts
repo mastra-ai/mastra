@@ -13,6 +13,7 @@ import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { stashHandoffFiles } from '../services/handoffFiles';
 import { startPromptHandoff } from './useHandoffPrompt';
+import { appRoot } from '../../../lib/app-root';
 
 /**
  * Starts the draft's session and opens its thread without waiting for the
@@ -40,7 +41,7 @@ export function useCreateUserSessionFromDraft() {
 
     const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
     const handoffModelId = draftKeepsServerDefaults ? undefined : activeModelId;
-    const draftPath = `/factories/${factoryId}/user/new/${draftSessionId}`;
+    const draftPath = `${appRoot()}/factories/${factoryId}/user/new/${draftSessionId}`;
     void queryClient
       .query({
         queryKey: queryKeys.userSession(draftSessionId),
@@ -79,7 +80,7 @@ export function useCreateUserSessionFromDraft() {
       [],
     );
     stashHandoffFiles(draftSessionId, files);
-    void navigate(`/factories/${factoryId}/user/threads/${draftSessionId}`, {
+    void navigate(`${appRoot()}/factories/${factoryId}/user/threads/${draftSessionId}`, {
       replace: true,
       state: startPromptHandoff(draftSessionId, prompt, {
         modelId: handoffModelId,

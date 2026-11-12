@@ -9,7 +9,7 @@ import type { GitLabWebhookDispatchIntegration } from '../../gitlab/webhook-disp
 import { parseGitLabWebhookBody, processGitLabWebhook } from '../../gitlab/webhook.js';
 import type { ParsedGitLabWebhook } from '../../gitlab/webhook.js';
 import type { PlatformApiClient } from '../api-client.js';
-import { PlatformApiError } from '../api-client.js';
+import { PlatformApiError, pollEachPlatformTenant } from '../api-client.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const EVENT_PAGE_SIZE = 500;
@@ -171,7 +171,7 @@ export class PlatformGitLabEventWorker extends MastraWorker {
     let nextDelay = this.#intervalMs;
     try {
       if (!(await this.#ensureLease())) return;
-      nextDelay = await this.#poll();
+      nextDelay = await pollEachPlatformTenant(() => this.#poll(), this.#intervalMs);
     } catch (error) {
       nextDelay = retryDelay(error, this.#intervalMs);
       this.deps?.logger.error('Platform GitLab event polling cycle failed', {

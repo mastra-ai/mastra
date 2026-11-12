@@ -2,6 +2,7 @@ import { KnowledgeLinksProvider } from '@mastra/playground-ui/domains/chat/knowl
 import { forwardRef } from 'react';
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router';
+import { appRoot } from '../../../../lib/app-root';
 
 const Link = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement>>(({ href = '', ...props }, ref) => (
   <RouterLink ref={ref} to={href} {...props} />
@@ -13,7 +14,7 @@ export function FactoryKnowledgeLinks({ children }: { children: ReactNode }) {
   const { factoryId } = useParams<{ factoryId?: string }>();
   const pageHref = (pageId: string) =>
     factoryId
-      ? `/factories/${encodeURIComponent(factoryId)}/knowledge?page=${encodeURIComponent(pageId)}&view=page`
+      ? `${appRoot()}/factories/${encodeURIComponent(factoryId)}/knowledge?page=${encodeURIComponent(pageId)}&view=page`
       : undefined;
   return (
     <KnowledgeLinksProvider pageHref={pageHref} Link={Link}>

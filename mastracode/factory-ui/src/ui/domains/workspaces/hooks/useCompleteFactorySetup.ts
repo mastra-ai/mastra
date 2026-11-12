@@ -25,6 +25,7 @@ import {
   readOnboardingLinkedRepositories,
 } from '../services/onboardingFlow';
 import type { OnboardingDraft } from '../services/onboardingFlow';
+import { appRoot } from '../../../lib/app-root';
 
 async function findPendingFactory(baseUrl: string, pendingId: string) {
   try {
@@ -107,7 +108,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
     onSuccess: async factoryId => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       clearOnboardingFlow();
-      void navigate(`/factories/${factoryId}`);
+      void navigate(`${appRoot()}/factories/${factoryId}`);
     },
   });
 }

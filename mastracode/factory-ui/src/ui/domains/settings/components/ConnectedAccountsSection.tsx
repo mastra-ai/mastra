@@ -10,6 +10,7 @@ import { connectSlackUrl } from '../services/channelAccounts';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 import { IntegrationLabel } from './IntegrationLabel';
+import { appRoot } from '../../../lib/app-root';
 
 const slackLabel = <IntegrationLabel provider="slack" name="Slack" />;
 
@@ -85,7 +86,7 @@ export function ConnectedAccountsSection() {
       }
     >
       {index === 0 && factoryId && (
-        <ConnectionManagementButton render={<Link to={`/factories/${factoryId}/settings/connections/slack`} />}>
+        <ConnectionManagementButton render={<Link to={`${appRoot()}/factories/${factoryId}/settings/connections/slack`} />}>
           Configure Slack
         </ConnectionManagementButton>
       )}

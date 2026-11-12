@@ -50,14 +50,15 @@ import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
+import { appRoot } from '../../../lib/app-root';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
-  const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
+  const onDraftComposer = useMatch(`${appRoot()}/factories/:factoryId/new`) !== null;
+  const onUserDraft = useMatch(`${appRoot()}/factories/:factoryId/user/new/:draftSessionId`) !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
@@ -152,7 +153,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       await sendMutation.mutateAsync({ text, files: outgoing });
       clearPendingHandoff(sessionId);
       seedThreadMessageCache(threadId, text, files);
-      void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
+      void navigate(`${appRoot()}/factories/${factoryId}/threads/${threadId}`, { replace: true });
       return;
     }
     localUser(text, false, outgoing);

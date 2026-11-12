@@ -55,5 +55,12 @@
   },
   "engines": {
     "node": ">=22.19.0"
+  },
+  "exports": {
+    "./embed": {
+      "types": "./src/ui/embed.types.d.ts",
+      "default": "./src/ui/embed.tsx"
+    },
+    "./tailwind.css": "./src/ui/tailwind.css"
   }
 }

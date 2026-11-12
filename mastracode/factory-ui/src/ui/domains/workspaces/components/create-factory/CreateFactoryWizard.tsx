@@ -17,6 +17,7 @@ import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
 import { CreateFactoryPalette } from './CreateFactoryPalette';
 import { CreateFactoryRepositoryRows } from './CreateFactoryRepositoryRows';
+import { appRoot } from '../../../../lib/app-root';
 
 interface StepChrome {
   title: string;
@@ -80,7 +81,7 @@ export function CreateFactoryWizard() {
   const committing = createFactory.isPending;
 
   const leave = () => {
-    if (location.key === 'default') void navigate(factoryId ? `/factories/${factoryId}` : '/');
+    if (location.key === 'default') void navigate(factoryId ? `${appRoot()}/factories/${factoryId}` : appRoot() || '/');
     else void navigate(-1);
   };
   useKeydown({ Escape: leave }, { enabled: !committing, insideFields: true });

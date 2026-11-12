@@ -19,6 +19,7 @@ import { isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
+import { appRoot } from '../../../lib/app-root';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
@@ -61,7 +62,7 @@ function activeWorkItem(
 export function FactorySessionPage({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   // User threads carry the session id as `threadId` (see ChatSessionProvider).
-  const isUserThread = Boolean(useMatch('/factories/:factoryId/user/threads/:threadId'));
+  const isUserThread = Boolean(useMatch(`${appRoot()}/factories/:factoryId/user/threads/:threadId`));
   const userSessionId = sessionId ?? threadId;
   const sessionQuery = useUserSessionQuery(userSessionId);
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
@@ -187,7 +188,7 @@ function WorkItemActions({
             variant="ghost"
             size="sm"
             aria-label={`Open ${label}: ${related.title}`}
-            render={<Link to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
+            render={<Link to={`${appRoot()}/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
           >
             <Link2 size={13} aria-hidden />
             {label}

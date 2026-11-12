@@ -12,6 +12,7 @@ import {
   getUserSessionLabel,
   isAutomaticUserSessionBranch,
 } from '../../workspaces/services/sessionPresentation';
+import { appRoot } from '../../../lib/app-root';
 
 export interface SessionSearchResult {
   id: string;
@@ -86,7 +87,7 @@ function createFactorySessionResult(
     context,
     identifier,
     value: buildValue(session, kind, title, identifier, item),
-    path: `/factories/${factoryId}/workspaces/${session.sessionId}/threads/${threadId}`,
+    path: `${appRoot()}/factories/${factoryId}/workspaces/${session.sessionId}/threads/${threadId}`,
     preserveOrigin: true,
     updatedAt: item?.updatedAt ?? session.updatedAt,
   };
@@ -102,7 +103,7 @@ function createUserSessionResult(factoryId: string, session: FactoryUserSession)
     title,
     context: isAutomaticUserSessionBranch(session) ? ['User session'] : ['User session', session.branch],
     value: buildValue(session, kind, title, undefined, undefined),
-    path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
+    path: `${appRoot()}/factories/${factoryId}/user/threads/${session.sessionId}`,
     preserveOrigin: false,
     updatedAt: session.updatedAt,
   };

@@ -2,6 +2,7 @@ import { matchPath, useLocation } from 'react-router';
 
 import { isSettingsSection } from '../settingsSections';
 import type { SettingsSection } from '../settingsSections';
+import { appRoot } from '../../../lib/app-root';
 
 /**
  * The active settings section is the `:section` URL segment of
@@ -14,8 +15,8 @@ import type { SettingsSection } from '../settingsSections';
 export function useSettingsSection(): SettingsSection {
   const { pathname } = useLocation();
   const section =
-    matchPath('/factories/:factoryId/settings/:section/*', pathname)?.params.section ??
-    matchPath('/factories/:factoryId/settings/:section', pathname)?.params.section ??
+    matchPath(`${appRoot()}/factories/:factoryId/settings/:section/*`, pathname)?.params.section ??
+    matchPath(`${appRoot()}/factories/:factoryId/settings/:section`, pathname)?.params.section ??
     matchPath('/settings/:section', pathname)?.params.section;
   return isSettingsSection(section) ? section : 'preferences';
 }

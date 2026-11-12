@@ -1,10 +1,12 @@
 import { FACTORY_WEB_PAGES } from '@mastra/factory/telemetry-types';
 import type { FactoryWebActivity } from '@mastra/factory/telemetry-types';
+import { appPathname } from '../../lib/app-root';
 
 /** Only known screen categories cross the network, never route parameters. */
 export function telemetryPage(pathname: string): FactoryWebActivity['page'] | undefined {
-  if (pathname === '/onboarding') return 'onboarding';
-  const match = /^\/factories\/[^/]+\/(.+?)\/?$/.exec(pathname);
+  const path = appPathname(pathname);
+  if (path === '/onboarding') return 'onboarding';
+  const match = /^\/factories\/[^/]+\/(.+?)\/?$/.exec(path);
   if (!match) return undefined;
   const screen = match[1];
   if (screen === 'settings/connections/slack') return 'slack_connection';

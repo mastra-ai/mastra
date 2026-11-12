@@ -1,5 +1,6 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { useNavigate } from 'react-router';
+import { appRoot } from '../../../lib/app-root';
 
 export function SessionExpiredDialog({ returnTo }: { returnTo: string }) {
   const navigate = useNavigate();
@@ -15,7 +16,7 @@ export function SessionExpiredDialog({ returnTo }: { returnTo: string }) {
           </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
-          <AlertDialog.Action onClick={() => void navigate(`/signin?returnTo=${encodeURIComponent(returnTo)}`)}>
+          <AlertDialog.Action onClick={() => void navigate(`${appRoot()}/signin?returnTo=${encodeURIComponent(returnTo)}`)}>
             Sign in again
           </AlertDialog.Action>
         </AlertDialog.Footer>

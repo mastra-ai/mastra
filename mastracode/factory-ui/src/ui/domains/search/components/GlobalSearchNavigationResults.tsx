@@ -5,6 +5,7 @@ import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucid
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
+import { appRoot } from '../../../lib/app-root';
 
 export function GlobalSearchNavigationResults({
   factoryId,
@@ -34,14 +35,14 @@ export function GlobalSearchNavigationResults({
         title="Rules"
         subtitle="Factory navigation"
         value={`Rules Factory navigation /factories/${factoryId}/rules`}
-        onSelect={() => onSelect(`/factories/${factoryId}/rules`, false)}
+        onSelect={() => onSelect(`${appRoot()}/factories/${factoryId}/rules`, false)}
       />
       <CommandPaletteItem
         icon={<Brain />}
         title="Knowledge"
         subtitle="Factory navigation"
         value={`Knowledge Factory navigation /factories/${factoryId}/knowledge`}
-        onSelect={() => onSelect(`/factories/${factoryId}/knowledge`, false)}
+        onSelect={() => onSelect(`${appRoot()}/factories/${factoryId}/knowledge`, false)}
       />
       <CommandPaletteItem
         icon={<Settings />}

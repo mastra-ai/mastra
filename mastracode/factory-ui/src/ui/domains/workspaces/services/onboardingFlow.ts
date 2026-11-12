@@ -1,5 +1,5 @@
 /**
- * Session-scoped markers for the `/onboarding` wizard (`EmptyFactoryState`).
+ * Session-scoped markers for the `${appRoot()}/onboarding` wizard (`EmptyFactoryState`).
  * The draft and step survive full-page OAuth redirects
  * (GitHub/Linear) so the flow can resume where it left off. The
  * create-Factory wizard uses separate keys (`useCreateFactoryFlow`) so
@@ -11,6 +11,7 @@
  */
 import { z } from 'zod';
 import type { SourceControlRepository } from './github';
+import { appRoot } from '../../../lib/app-root';
 
 export const ONBOARDING_REVIEW_RETURN_KEY = 'mastracode.factory-onboarding.return-to-review';
 export const ONBOARDING_DRAFT_KEY = 'mastracode.factory-onboarding.draft';
@@ -195,7 +196,7 @@ export function clearOnboardingFlow(): void {
 
 /**
  * Whether an onboarding flow is mid-way with its factory already created —
- * the only case where `/onboarding` may stay open (and `/` must route back
+ * the only case where `${appRoot()}/onboarding` may stay open (and `/` must route back
  * into it) even though a factory exists. A failed final confirmation can leave
  * a Factory to finish configuring. GitHub/Linear OAuth callbacks land on `/`, so
  * without this check the wizard would be abandoned at the factory home.

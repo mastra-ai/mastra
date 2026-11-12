@@ -1,6 +1,7 @@
 import type { FactoryModelScope } from '../workspaces/services/github';
 import { MODEL_ROUTES } from './components/models/routing/model-routes';
 import type { ModelDefaults } from './components/models/routing/model-routes';
+import { appRoot } from '../../lib/app-root';
 
 export type SettingsSection =
   | 'account'
@@ -59,6 +60,6 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
 }
 
 export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: ModelDefaultsAnchor): string {
-  const path = `/factories/${factoryId}/settings/${section}`;
+  const path = `${appRoot()}/factories/${factoryId}/settings/${section}`;
   return anchor ? `${path}#${anchor}` : path;
 }

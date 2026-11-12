@@ -1,6 +1,7 @@
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { Location } from 'react-router';
+import { appRoot } from '../../../lib/app-root';
 
 /**
  * Leaving settings is navigation: return to the page settings was opened from
@@ -15,7 +16,7 @@ export function useCloseSettings() {
 
   return function closeSettings() {
     const from = (location.state as { from?: Location } | null)?.from;
-    void navigate(from ?? (factoryId ? `/factories/${factoryId}` : '/'));
+    void navigate(from ?? (factoryId ? `${appRoot()}/factories/${factoryId}` : appRoot() || '/'));
     setOpenMobile(false);
 
     const focusTargetId = mobileDrawerOpen ? 'mobile-navigation-trigger' : 'user-menu-trigger';

@@ -9,6 +9,7 @@ import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { appRoot } from '../../../lib/app-root';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
@@ -57,7 +58,7 @@ export function useBoardRuns({
   };
 
   const openThread = async (session: WorkItemSessionRef) => {
-    navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
+    navigate(`${appRoot()}/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
   // Refetch failures here used to be silent: an expired auth cookie made every

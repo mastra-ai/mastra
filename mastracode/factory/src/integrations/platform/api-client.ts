@@ -1,5 +1,83 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+export interface PlatformCredentials {
+  accessToken: string;
+  projectId?: string;
+}
+
+/**
+ * Resolves Platform credentials for one tenant (Factory org id). Lets one
+ * Factory process serve many Platform projects: every Platform call uses the
+ * credentials of the tenant it runs for, never a process-wide token.
+ */
+export type PlatformCredentialsResolver = (tenantId: string) => PlatformCredentials | null;
+
+const tenantStorage = new AsyncLocalStorage<string>();
+let credentialsResolver: PlatformCredentialsResolver | null = null;
+
+/** Installs the per-tenant resolver; replaces the env credentials when set. */
+export function setPlatformCredentialsResolver(resolver: PlatformCredentialsResolver | null): void {
+  credentialsResolver = resolver;
+}
+
+export function hasPlatformCredentialsResolver(): boolean {
+  return credentialsResolver !== null;
+}
+
+/** Runs `fn` with Platform calls attributed to `tenantId`. */
+export function runWithPlatformTenant<T>(tenantId: string, fn: () => T): T {
+  return tenantStorage.run(tenantId, fn);
+}
+
+/** Lists the tenants background workers poll for, making their credentials resolvable. */
+export type PlatformTenantLister = () => Promise<string[]>;
+
+let tenantLister: PlatformTenantLister | null = null;
+
+export function setPlatformTenantLister(lister: PlatformTenantLister | null): void {
+  tenantLister = lister;
+}
+
+/**
+ * Runs a background poll once per tenant and returns the shortest next delay.
+ * Without a resolver the poll runs once on the env credentials. One tenant's
+ * failure does not skip the others; the first error is rethrown after all ran.
+ */
+export async function pollEachPlatformTenant(poll: () => Promise<number>, idleDelayMs: number): Promise<number> {
+  if (!credentialsResolver) return poll();
+  const tenants = tenantLister ? await tenantLister() : [];
+  let next = Number.POSITIVE_INFINITY;
+  let firstError: unknown;
+  for (const tenantId of tenants) {
+    try {
+      next = Math.min(next, await runWithPlatformTenant(tenantId, poll));
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (firstError !== undefined) throw firstError;
+  return Number.isFinite(next) ? next : idleDelayMs;
+}
+
+/**
+ * Credentials for this call. With a resolver installed, the tenant must come
+ * from `runWithPlatformTenant`; without one, fail closed rather than fall back
+ * to a shared token.
+ */
+export function resolvePlatformCredentials(config: PlatformApiClientConfig): PlatformCredentials {
+  if (!credentialsResolver) {
+    return { accessToken: config.accessToken, ...(config.projectId ? { projectId: config.projectId } : {}) };
+  }
+  const tenantId = tenantStorage.getStore();
+  if (!tenantId) throw new PlatformApiError('Platform integration: no tenant in context for this call.', 401);
+  const credentials = credentialsResolver(tenantId);
+  if (!credentials) throw new PlatformApiError(`Platform integration: no credentials for tenant ${tenantId}.`, 401);
+  return credentials;
+}
+
 export interface PlatformApiClientConfig {
   baseUrl: string;
+  /** Ignored when a credentials resolver is installed. */
   accessToken: string;
   /**
    * Mastra project this deployment belongs to. Sent as `x-mastra-project-id`
@@ -26,7 +104,9 @@ export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
   // written by project scaffolding. The platform API accepts both forms.
   const accessToken =
-    process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() ||
+    process.env.MASTRA_PLATFORM_SECRET_KEY?.trim() ||
+    (credentialsResolver ? 'resolved-per-tenant' : undefined);
   if (!accessToken) {
     throw new Error(
       'Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY).',
@@ -75,8 +155,7 @@ export class PlatformApiError extends Error {
 
 export class PlatformApiClient {
   readonly #baseUrl: string;
-  readonly #accessToken: string;
-  readonly #projectId: string | null;
+  readonly #config: PlatformApiClientConfig;
   readonly #fetch: typeof fetch;
 
   constructor(config: PlatformApiClientConfig) {
@@ -85,8 +164,7 @@ export class PlatformApiClient {
       throw new Error(`Platform integration: missing required config field(s): ${missing.join(', ')}.`);
     }
     this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
-    this.#accessToken = config.accessToken;
-    this.#projectId = config.projectId?.trim() || null;
+    this.#config = config;
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -96,9 +174,10 @@ export class PlatformApiClient {
     body?: unknown,
     options?: { signal?: AbortSignal; actingUserId?: string },
   ): Promise<T> {
-    const response = await this.#send(method, path, body, options);
+    const credentials = resolvePlatformCredentials(this.#config);
+    const response = await this.#send(credentials, method, path, body, options);
     if (!response.ok) {
-      const message = redact(await extractError(response), this.#accessToken);
+      const message = redact(await extractError(response), credentials.accessToken);
       const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
       logPlatformError('Platform API request failed', {
         method,
@@ -114,13 +193,14 @@ export class PlatformApiClient {
   }
 
   async requestRedirect(method: string, path: string, options?: { signal?: AbortSignal }): Promise<string> {
-    const response = await this.#send(method, path, undefined, options, 'manual');
+    const credentials = resolvePlatformCredentials(this.#config);
+    const response = await this.#send(credentials, method, path, undefined, options, 'manual');
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (location) return location;
     }
     if (!response.ok) {
-      const message = redact(await extractError(response), this.#accessToken);
+      const message = redact(await extractError(response), credentials.accessToken);
       const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
       logPlatformError('Platform API redirect request failed', {
         method,
@@ -136,6 +216,7 @@ export class PlatformApiClient {
   }
 
   async #send(
+    credentials: PlatformCredentials,
     method: string,
     path: string,
     body?: unknown,
@@ -144,13 +225,14 @@ export class PlatformApiClient {
   ): Promise<Response> {
     const headers: Record<string, string> = {
       accept: 'application/json',
-      authorization: `Bearer ${this.#accessToken}`,
+      authorization: `Bearer ${credentials.accessToken}`,
     };
     // Project attribution for proxied provider calls. Org-scoped machine
     // tokens carry no project claim, so without this header the platform
     // records proxy activity with no project.
-    if (this.#projectId) {
-      headers['x-mastra-project-id'] = this.#projectId;
+    const projectId = credentials.projectId?.trim();
+    if (projectId) {
+      headers['x-mastra-project-id'] = projectId;
     }
     // Acting end-user for platform GitHub writes: the platform resolves this
     // user's GitHub OAuth connection (org-scoped) so issues/PRs are authored
@@ -173,8 +255,8 @@ export class PlatformApiClient {
     try {
       return await this.#fetch(`${this.#baseUrl}${path}`, init);
     } catch (error) {
-      if (error instanceof Error && error.message.includes(this.#accessToken)) {
-        const redacted = new Error(redact(error.message, this.#accessToken));
+      if (error instanceof Error && error.message.includes(credentials.accessToken)) {
+        const redacted = new Error(redact(error.message, credentials.accessToken));
         redacted.name = error.name;
         logPlatformError('Platform API transport error', {
           method,

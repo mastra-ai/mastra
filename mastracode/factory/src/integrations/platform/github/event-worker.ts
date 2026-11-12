@@ -17,7 +17,7 @@ import type {
   ParsedGithubWebhook,
 } from '../../github/webhook.js';
 import type { PlatformApiClient } from '../api-client.js';
-import { PlatformApiError } from '../api-client.js';
+import { PlatformApiError, pollEachPlatformTenant } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
@@ -218,7 +218,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     let nextDelay = this.#intervalMs;
     try {
       if (!(await this.#ensureLease())) return;
-      nextDelay = await this.#poll();
+      nextDelay = await pollEachPlatformTenant(() => this.#poll(), this.#intervalMs);
     } catch (error) {
       nextDelay = retryDelay(error, this.#intervalMs);
       this.deps?.logger.error('Platform GitHub event polling cycle failed', {

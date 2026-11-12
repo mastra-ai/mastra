@@ -21,6 +21,7 @@ import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
 import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
+import { appRoot } from '../../../lib/app-root';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
 
@@ -187,7 +188,7 @@ export function buildFactorySessionRow({
   pinned,
   viewer,
 }: FactorySessionRowInput): SessionListRow {
-  const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
+  const url = `${appRoot()}/factories/${factoryId}/workspaces/${session.sessionId}`;
   const ownedByViewer = isOwnedByViewer(session, viewer);
   return {
     session,
@@ -239,7 +240,7 @@ export function buildUserSessionRow({
   pinned,
   viewer,
 }: UserSessionRowInput): SessionListRow {
-  const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
+  const url = `${appRoot()}/factories/${factoryId}/user/threads/${session.sessionId}`;
   const ownedByViewer = isOwnedByViewer(session, viewer);
   const fromSlack = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
   return {

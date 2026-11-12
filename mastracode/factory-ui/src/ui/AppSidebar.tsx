@@ -9,6 +9,21 @@ import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher
 import { SessionsSection } from './domains/workspaces/components/SessionsSection';
 import { SidebarNewSessionButton } from './domains/workspaces/components/SidebarNewSessionButton';
 
+/** Factory navigation alone, without the sidebar chrome, for hosts that supply their own. */
+export function EmbeddedSidebarNav() {
+  const settingsOpen = useSettingsOpen();
+  if (settingsOpen) return <SettingsNavigation />;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <SidebarNewSessionButton />
+      <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+        <FactorySection />
+        <SessionsSection />
+      </section>
+    </div>
+  );
+}
+
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
   const pageHeaderOwnsToggle = useSidebar().desktopState === 'collapsed';

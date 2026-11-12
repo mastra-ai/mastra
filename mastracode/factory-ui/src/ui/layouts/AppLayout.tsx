@@ -1,13 +1,15 @@
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
+import { createPortal } from 'react-dom';
 import { Outlet } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { OverlaysProvider } from '../lib/overlays';
-import { AppSidebar } from '../AppSidebar';
+import { AppSidebar, EmbeddedSidebarNav } from '../AppSidebar';
+import { useFactoryEmbed } from '../lib/embed';
 
 /**
  * Mobile-only bar above the page frame: the drawer trigger and global search.
@@ -34,6 +36,24 @@ function SidebarShortcuts() {
   return null;
 }
 
+/** Host-chrome frame: the page fills the host's content area and the nav portals into its sidebar. */
+function EmbeddedFrame({ sidebarContainer }: { sidebarContainer: HTMLElement | null }) {
+  return (
+    <>
+      {sidebarContainer &&
+        createPortal(
+          <nav aria-label="Factory" className="flex min-h-0 flex-1 flex-col">
+            <EmbeddedSidebarNav />
+          </nav>,
+          sidebarContainer,
+        )}
+      <div className="flex h-full min-h-0 flex-col">
+        <Outlet />
+      </div>
+    </>
+  );
+}
+
 function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
@@ -53,13 +73,14 @@ function AppFrame() {
  * Mounted under `FactoryLayout` so the sidebar only ever sees a valid factory.
  */
 export function AppLayout() {
+  const embed = useFactoryEmbed();
   return (
-    <div className="bg-sidebar h-dvh">
+    <div className={embed ? 'h-full' : 'bg-sidebar h-dvh'}>
       <Sidebar.Provider storageKey="mastracode-web" collapsedWidth={0}>
         <SidebarShortcuts />
         <OverlaysProvider>
           <ChatSessionRouteProvider>
-            <AppFrame />
+            {embed ? <EmbeddedFrame sidebarContainer={embed.sidebarContainer} /> : <AppFrame />}
             <ChatOverlays />
           </ChatSessionRouteProvider>
         </OverlaysProvider>

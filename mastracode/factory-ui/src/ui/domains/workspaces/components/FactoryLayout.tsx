@@ -8,6 +8,7 @@ import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
 import type { FactoryProject } from '../services/github';
 import { SessionRunObserver } from './SessionRunObserver';
+import { appRoot } from '../../../lib/app-root';
 
 const ActiveFactoryContext = createContext<FactoryProject | null>(null);
 
@@ -42,7 +43,7 @@ export function FactoryLayout() {
   // Unknown/deleted factory: bounce to the landing route, which redirects to
   // the first available factory (or onboarding when none exist).
   if (!factoryId || !factory) {
-    return <Navigate to="/" replace state={{ routeErrorNotice: 'Factory not found' }} />;
+    return <Navigate to={appRoot() || "/"} replace state={{ routeErrorNotice: 'Factory not found' }} />;
   }
 
   return (

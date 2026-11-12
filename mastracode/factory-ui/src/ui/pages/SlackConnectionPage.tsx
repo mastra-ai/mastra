@@ -26,6 +26,7 @@ import { SettingsSubsection } from '../domains/settings/components/SettingsSubse
 import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
+import { appRoot } from '../lib/app-root';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'long',
@@ -38,7 +39,7 @@ export function SlackConnectionPage() {
     <SettingsPageLayout
       breadcrumbs={
         <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
-          <Crumb as={Link} to={factoryId ? `/factories/${factoryId}/settings/connections` : '/'}>
+          <Crumb as={Link} to={factoryId ? `${appRoot()}/factories/${factoryId}/settings/connections` : '/'}>
             Connections
           </Crumb>
           <Crumb as="span" isCurrent>
