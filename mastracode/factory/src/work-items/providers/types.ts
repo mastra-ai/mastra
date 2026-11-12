@@ -30,4 +30,9 @@ export interface WorkItemProviderAdapter {
    * when the item doesn't say; absent for providers without such a scope.
    */
   repository?(item: Pick<ProviderWorkItemSource, 'key' | 'metadata'>): string | null;
+  /**
+   * Set by the providers whose open issues and pull requests Factory offers as intake: whether the
+   * provider has closed the record. A record of any other provider is never an intake candidate.
+   */
+  closed?(item: Pick<ProviderWorkItemSource, 'state' | 'metadata'>): boolean;
 }

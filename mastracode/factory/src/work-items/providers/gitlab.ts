@@ -30,6 +30,7 @@ export const gitlabWorkItemAdapter = externalAdapter('gitlab', {
     return typeof metadata.gitlabIssueIid === 'number' ? `#${metadata.gitlabIssueIid}` : null;
   },
   state: mergedState,
+  intake: {},
   // The project's full path, subgroups included: `acme/platform/api` from `acme/platform/api#3` or `…!7`.
   repository: ({ key }) => (key ? (/^([^#!]+\/[^#!]+)[#!]\d+$/.exec(key)?.[1] ?? null) : null),
 });

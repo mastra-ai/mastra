@@ -34,7 +34,15 @@ import {
   trackBoardWrites,
 } from './board-version.js';
 import type { BoardScope } from './board-version.js';
-import { Cards, splitCardRows } from './cards.js';
+import {
+  candidateCreatedAt,
+  listCandidates,
+  removeCandidate,
+  storeCandidate,
+  trackCandidateWrites,
+} from './candidates.js';
+import type { CandidateInput, CandidateWrite } from './candidates.js';
+import { Cards, externalSourceOf, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
 import {
@@ -1310,6 +1318,27 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
 /** The project whose board a committed card or decision write just changed. */
 export type FactoryBoardScope = Required<BoardScope>;
 
+export type { CandidateInput as IntakeCandidateInput, CandidateWrite as IntakeCandidateWrite } from './candidates.js';
+
+/** An open external record with no card. Filing it gives the card this work item. */
+export interface IntakeCandidate {
+  workItemId: string;
+  orgId: string;
+  factoryProjectId: string;
+  title: string;
+  description: string | null;
+  externalSource: ExternalWorkItemSource;
+  source: WorkItemSourceRow;
+  /** When the provider created the record; the list is ordered by it, newest first. */
+  createdAt: Date;
+}
+
+export interface IntakeCandidatePage {
+  candidates: IntakeCandidate[];
+  /** Pass as `after` to read the next page; `null` on the last one. */
+  next: { createdAt: Date; id: string } | null;
+}
+
 /** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
 const LIST_CACHE_MAX_PROJECTS = 100;
@@ -1326,6 +1355,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
+  #intakeChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
   #isTerminal: (item: Card) => boolean = () => false;
@@ -1381,6 +1411,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   onBoardChanged(listener: (scope: FactoryBoardScope) => void): void {
     this.#boardChanged = listener;
+  }
+
+  /**
+   * Wired once at boot. Fires after a committed write adds, changes or removes an intake
+   * candidate of the project, so open boards reread their candidates instead of polling.
+   */
+  onIntakeChanged(listener: (scope: FactoryBoardScope) => void): void {
+    this.#intakeChanged = listener;
   }
 
   /**
@@ -1573,8 +1611,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: WorkItemSourceSyncPatch | ((current: WorkItemSourceDbRecord) => WorkItemSourceSyncPatch | null);
     expectedRevision?: number;
   }): Promise<void> {
-    await this.#withTransaction(async ops => {
-      await this.#syncWorkItemSource(ops, params);
+    await this.#withTransaction(async (ops, candidates) => {
+      await this.#syncWorkItemSource(ops, params, candidates);
     });
   }
 
@@ -1588,17 +1626,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       patch,
       expectedRevision,
     }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
+    /** Writes a source that has no card, so the board version stays where it is. */
+    candidates: FactoryStorageOps = ops,
   ): Promise<Date | undefined> {
     const where = { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId };
     const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, where);
-    const card = source && { work_item_id: source.work_item_id };
-    // Lock the card's row before its source, the order every card write takes them in.
-    if (card) await ops.updateAtomic(FACTORY_BOARD_ITEMS_SCHEMA.name, card, () => null);
     let synced = false;
-    await ops.updateAtomic<WorkItemSourceDbRecord>(
-      FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
-      { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
-      current => {
+    const sync = (writer: FactoryStorageOps, sourceWhere: CollectionWhere) =>
+      writer.updateAtomic<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, sourceWhere, current => {
         if (expectedRevision !== undefined && current.revision !== expectedRevision) {
           throw new WorkItemUpdateConflictError('revision');
         }
@@ -1631,8 +1666,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           synced_at: new Date(),
           updated_at: new Date(),
         };
-      },
-    );
+      });
+    // The marker is part of the filter: a candidate filed since the read above takes the card's path.
+    if (source?.candidate === true && (await sync(candidates, { ...where, candidate: true }))) return undefined;
+    const card = source && { work_item_id: source.work_item_id };
+    // Lock the card's row before its source, the order every card write takes them in.
+    if (card) await ops.updateAtomic(FACTORY_BOARD_ITEMS_SCHEMA.name, card, () => null);
+    await sync(ops, where);
     // The card shows these facts but its own row did not move: stamp it so a board reload rereads it.
     if (!card || !synced) return undefined;
     const changed_at = new Date();
@@ -1783,7 +1823,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#withTransaction(ops => this.#cards(ops, { transaction: true }).deleteMany({}));
+    await this.#withTransaction(async ops => {
+      await this.#cards(ops, { transaction: true }).deleteMany({});
+      // What is left has no card: intake candidates.
+      await ops.deleteMany(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {});
+      await ops.deleteMany(FACTORY_WORK_ITEMS_SCHEMA.name, {});
+    });
     await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {});
     // A project with no version row is never served from cache, so this invalidates every replica.
     await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
@@ -1801,10 +1846,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       await bumpBoardVersions(ops, [scope]);
       this.#announceBoard(scope);
     });
-    return trackClaimableWrites(
-      trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
-      scope => this.#claimableWork(scope),
+    return trackCandidateWrites(
+      trackClaimableWrites(
+        trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
+        scope => this.#claimableWork(scope),
+      ),
+      scope => this.#announceIntake(scope),
     );
+  }
+
+  #announceIntake(scope: BoardScope): void {
+    if (scope.factoryProjectId) this.#intakeChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
   }
 
   /** Only legacy dry-run writes name no project, and no feed is keyed by org alone. */
@@ -1812,13 +1864,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
   }
 
-  /** `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits. */
+  /**
+   * `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits.
+   * `candidates` writes intake candidates: no card changes, so those writes leave the board version alone.
+   */
   async #withTransaction<T>(
-    fn: (ops: FactoryStorageOps) => Promise<T>,
+    fn: (ops: FactoryStorageOps, candidates: FactoryStorageOps) => Promise<T>,
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
     const changed = new BoardScopes();
     const touched = new BoardScopes();
+    const intake = new BoardScopes();
     const cardWritten = (scope: BoardScope) => {
       changed.add(scope);
       touched.add(scope);
@@ -1830,10 +1886,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return this.storage.withTransaction(
         ops =>
           fn(
-            trackClaimableWrites(
-              trackBoardWrites(trackBoardWrites(ops, CARD_TABLES, cardWritten), DECISION_TABLES, touched.add),
-              scope => queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+            trackCandidateWrites(
+              trackClaimableWrites(
+                trackBoardWrites(trackBoardWrites(ops, CARD_TABLES, cardWritten), DECISION_TABLES, touched.add),
+                scope => queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+              ),
+              intake.add,
             ),
+            trackCandidateWrites(ops, intake.add),
           ),
         options,
       );
@@ -1855,6 +1915,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       for (const scope of queued.values()) this.#claimableWork(scope);
     }
     for (const scope of touched.values()) this.#announceBoard(scope);
+    for (const scope of intake.values()) this.#announceIntake(scope);
     return result;
   }
 
@@ -2278,6 +2339,89 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async get({ orgId, id }: { orgId: string; id: string }): Promise<Card | null> {
     const row = await this.#cards(this.#db, { transaction: false }).findOne({ org_id: orgId, id });
     return row ? toWorkItem(row) : null;
+  }
+
+  /**
+   * Offer an open external record as intake, or refresh the offer already stored. A record that
+   * has a card returns `carded` and stores nothing. The dry-run legacy table keeps no candidates.
+   */
+  async storeIntakeCandidate(input: CandidateInput): Promise<CandidateWrite> {
+    if (this.#legacyMode) return 'unchanged';
+    const run = () =>
+      this.#withTransaction(async (ops, candidates) => {
+        // A card still in the legacy table has no source row yet; the lookup copies it.
+        const legacyCard =
+          this.#split.pending &&
+          (await this.#cards(ops, { transaction: true }).findOne({
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            source_key: externalSourceKey(input.source),
+          }));
+        return legacyCard ? 'carded' : storeCandidate(candidates, input);
+      });
+    try {
+      return await run();
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      // Another writer stored the record first, as a candidate or a card; the retry reads it.
+      return run();
+    }
+  }
+
+  /** Stop offering a record as intake, e.g. once its provider closed it. Returns whether it was a candidate. */
+  async removeIntakeCandidate({
+    orgId,
+    factoryProjectId,
+    source,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    source: ExternalWorkItemSource;
+  }): Promise<boolean> {
+    if (this.#legacyMode) return false;
+    return this.#withTransaction((_ops, candidates) =>
+      removeCandidate(candidates, { orgId, factoryProjectId }, source),
+    );
+  }
+
+  /** One page of a project's intake candidates, newest record first. Reads no card. */
+  async listIntakeCandidates({
+    orgId,
+    factoryProjectId,
+    kind,
+    integrationId,
+    after,
+    limit,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    kind?: 'issue' | 'pull-request';
+    integrationId?: string;
+    after?: { createdAt: Date; id: string };
+    limit: number;
+  }): Promise<IntakeCandidatePage> {
+    if (this.#legacyMode) return { candidates: [], next: null };
+    const page = await listCandidates(this.#db, {
+      orgId,
+      factoryProjectId,
+      sourceType: kind,
+      integrationId,
+      after,
+      limit,
+    });
+    return {
+      candidates: page.candidates.map(({ source, work }) => ({
+        workItemId: work.id,
+        orgId: work.org_id,
+        factoryProjectId: work.factory_project_id,
+        title: work.title,
+        description: work.description,
+        externalSource: externalSourceOf(source)!,
+        source: toSource(source),
+        createdAt: candidateCreatedAt(source),
+      })),
+      next: page.next,
+    };
   }
 
   /**
@@ -4187,7 +4331,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
       const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
-      const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
+      // A card deleted while its issue is open goes back to intake instead of being filed again.
+      const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where, { keepOpenRecords: true });
       if (deleted === 0) return null;
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
       if (purgeRuleState && existing.external_source?.externalId) {

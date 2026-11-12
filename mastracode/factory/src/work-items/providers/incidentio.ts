@@ -16,6 +16,7 @@ export const incidentioWorkItemAdapter = externalAdapter('incidentio', {
     'source',
   ],
   key: (_source, metadata) => stringValue(metadata.identifier),
+  intake: { stateTypeKey: 'incidentioStateType' },
   state: (_source, metadata) => stringValue(metadata.incidentioState) ?? stringValue(metadata.state),
   author: metadata => stringValue(metadata.author) ?? stringValue(metadata.creator),
 });

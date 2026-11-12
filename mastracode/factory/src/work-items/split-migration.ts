@@ -7,6 +7,7 @@ import { factoryDecisionHash } from '../storage/domains/work-items/base.js';
 import type { WorkItemDbRow } from '../storage/domains/work-items/base.js';
 import { bumpBoardVersions } from '../storage/domains/work-items/board-version.js';
 import type { BoardScope } from '../storage/domains/work-items/board-version.js';
+import { removeCandidateOf } from '../storage/domains/work-items/candidates.js';
 import {
   WORK_ITEMS_SCHEMA,
   FACTORY_BOARD_ITEMS_SCHEMA,
@@ -270,6 +271,8 @@ async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy
       if (existing.migrated_from_hash === card.boardItem.migrated_from_hash) return false;
       throw new MigrationConflict('Migration baseline changed since planning');
     }
+    // The record may have been offered as intake before its legacy card was copied; the card wins.
+    if (card.source) await removeCandidateOf(ops, card.source);
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, card.workItem);
     if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);
     await ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, { ...card.boardItem, changed_at: new Date() });
@@ -392,17 +395,16 @@ export async function copyLegacyRows(ops: FactoryStorageOps, rows: readonly Work
     } catch {
       continue;
     }
-    if (
+    const held =
       card.source &&
-      (await ops.findOne(SOURCES, {
+      (await ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
         org_id: card.source.org_id,
         factory_project_id: card.source.factory_project_id,
         provider: card.source.provider,
         external_id: card.source.external_id,
-      }))
-    ) {
-      continue;
-    }
+      }));
+    // An intake candidate is no card: `writeCard` drops it for the card being copied.
+    if (held && held.candidate !== true) continue;
     try {
       if (await writeCard(ops, card, false)) copied.push(row.id);
     } catch (error) {

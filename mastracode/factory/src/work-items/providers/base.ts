@@ -13,7 +13,12 @@ export interface ExternalAdapterSpec {
   state?(source: ExternalWorkItemSource, metadata: Record<string, unknown>): string | null;
   author?(metadata: Record<string, unknown>): string | null;
   repository?(item: Pick<ProviderWorkItemSource, 'key' | 'metadata'>): string | null;
+  /** The provider's open records are intake. `stateTypeKey` names its own state-type key, read beside the shared `stateType`. */
+  intake?: { stateTypeKey?: string };
 }
+
+const CLOSED_STATES: ReadonlySet<unknown> = new Set(['closed', 'merged']);
+const CLOSED_STATE_TYPES: ReadonlySet<unknown> = new Set(['completed', 'canceled']);
 
 /** The project or team part of an issue key such as `ENG-42`. */
 export function issueKeyPrefix(key: string | null): string | null {
@@ -37,10 +42,19 @@ export function mergedState(_source: ExternalWorkItemSource, metadata: Record<st
 /** An adapter for a provider whose cards carry an {@link ExternalWorkItemSource}. */
 export function externalAdapter(provider: WorkItemProvider, spec: ExternalAdapterSpec): WorkItemProviderAdapter {
   const providerMetadataKeys = [...SHARED_PROVIDER_METADATA_KEYS, ...spec.providerMetadataKeys];
+  const { intake } = spec;
   return {
     provider,
     providerMetadataKeys,
     ...(spec.repository ? { repository: spec.repository } : {}),
+    ...(intake
+      ? {
+          closed: ({ state, metadata }) =>
+            CLOSED_STATES.has(state) ||
+            CLOSED_STATE_TYPES.has(metadata?.stateType) ||
+            (intake.stateTypeKey !== undefined && CLOSED_STATE_TYPES.has(metadata?.[intake.stateTypeKey])),
+        }
+      : {}),
     toSource(source: ExternalWorkItemSource | null, metadata: Record<string, unknown> | null): ProviderWorkItemSource {
       if (!source) throw new Error(`A ${provider} work item needs an external source.`);
       const facts = metadata ?? {};

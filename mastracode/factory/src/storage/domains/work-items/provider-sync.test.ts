@@ -625,7 +625,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
       expect(await workItems.list(scope)).toMatchObject(
         mode === 'migration' ? [{ id: item.id, title: 'Original issue' }] : [],
       );
-      expect(await storage.ops.findMany('factory_work_items', {})).toHaveLength(mode === 'migration' ? 1 : 0);
+      // The deleted card's issue is still open, so its work item stays behind as an intake candidate.
+      expect(await storage.ops.findMany('factory_work_items', {})).toHaveLength(1);
+      expect(await storage.ops.findMany('factory_board_items', {})).toHaveLength(mode === 'migration' ? 1 : 0);
     },
   );
 

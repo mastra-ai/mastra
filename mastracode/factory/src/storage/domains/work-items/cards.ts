@@ -4,6 +4,7 @@ import type { CollectionListOptions, CollectionWhere, FactoryStorageOps } from '
 
 import { splitLegacyWorkItem } from '../../../work-items/split-migration.js';
 import type { ExternalWorkItemSource, WorkItemDbRow } from './base.js';
+import { adoptCandidate, candidateMarker, removeCandidateOf, staysAsCandidate } from './candidates.js';
 import {
   isLegacyReviewPlacement,
   LEGACY_REVIEW_BOARD,
@@ -68,7 +69,7 @@ export function splitCardRows(card: WorkItemDbRow, options: { workItemId: string
   return { ...rows, boardItem: { ...rows.boardItem, migrated_from_updated_at: null, migrated_from_hash: null } };
 }
 
-function externalSourceOf(source: WorkItemSourceDbRecord | undefined): ExternalWorkItemSource | null {
+export function externalSourceOf(source: WorkItemSourceDbRecord | undefined): ExternalWorkItemSource | null {
   if (!source) return null;
   const prefix = `${source.source_type}:${source.workspace_id ? `${source.workspace_id}:` : ''}`;
   return {
@@ -329,14 +330,18 @@ export class Cards {
       },
       { workItemId: randomUUID() },
     );
-    const work = await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, rows.workItem);
-    if (rows.source) await this.ops.insertOne(SOURCES, rows.source);
+    // A record already offered as intake keeps its work item: the card adopts the candidate's rows.
+    const adopted = rows.source ? await adoptCandidate(this.ops, rows.source, rows.workItem) : null;
+    const work = adopted?.work ?? (await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, rows.workItem));
+    const source =
+      adopted?.source ?? (rows.source ? await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, rows.source) : null);
     const board = await this.ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, {
       ...rows.boardItem,
+      work_item_id: work.id,
       changed_at: new Date(),
     });
     const reviewInUse = (await this.#projectsUsingReview([board])).size > 0;
-    return joinCard(board, work, rows.source ? [rows.source] : [], reviewInUse);
+    return joinCard(board, work, source ? [source] : [], reviewInUse);
   }
 
   async updateAtomic(
@@ -483,6 +488,8 @@ export class Cards {
       { workItemId: board.work_item_id },
     ).source;
     if (!next) throw new Error('[cards] an attached source must carry provider facts.');
+    // A record offered as intake is on this card from now on, so it stops being a candidate.
+    await removeCandidateOf(this.ops, next);
     const existing = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
       org_id: board.org_id,
       factory_project_id: board.factory_project_id,
@@ -532,7 +539,11 @@ export class Cards {
     return boards.length;
   }
 
-  async deleteMany(where: CollectionWhere): Promise<number> {
+  /**
+   * Deletes the matching cards. With `keepOpenRecords`, a card filed from a record its provider
+   * still has open leaves the work item and that source behind as an intake candidate.
+   */
+  async deleteMany(where: CollectionWhere, { keepOpenRecords = false } = {}): Promise<number> {
     if (this.legacyMode) return this.ops.deleteMany(WORK_ITEMS_SCHEMA.name, where);
     // Copy first so the delete tombstones the card; otherwise the backfill would bring it back.
     await this.#copyLegacy(where);
@@ -560,9 +571,17 @@ export class Cards {
         { orderBy: [['id', 'asc']] },
       );
       for (const source of sources) await this.ops.updateAtomic(SOURCES, { id: source.id }, () => null);
-      await this.ops.deleteMany(SOURCES, { ...scope, work_item_id: board.work_item_id });
-      await this.ops.deleteMany(BOARD_ITEMS, { ...scope, id: board.id });
-      await this.ops.deleteMany(WORK_ITEMS, { ...scope, id: board.work_item_id });
+      const origin = keepOpenRecords ? sources.find(isOriginSource) : undefined;
+      if (origin && staysAsCandidate(origin)) {
+        const attached = sources.filter(source => source.id !== origin.id).map(source => source.id);
+        if (attached.length > 0) await this.ops.deleteMany(SOURCES, { ...scope, id: { in: attached } });
+        await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id: origin.id }, candidateMarker);
+        await this.ops.deleteMany(BOARD_ITEMS, { ...scope, id: board.id });
+      } else {
+        await this.ops.deleteMany(SOURCES, { ...scope, work_item_id: board.work_item_id });
+        await this.ops.deleteMany(BOARD_ITEMS, { ...scope, id: board.id });
+        await this.ops.deleteMany(WORK_ITEMS, { ...scope, id: board.work_item_id });
+      }
       await this.ops.upsertOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, ['id'], {
         ...scope,
         id: board.id,

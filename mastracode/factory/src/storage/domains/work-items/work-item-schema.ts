@@ -51,6 +51,10 @@ export const FACTORY_WORK_ITEM_SOURCES_SCHEMA: CollectionSchema = {
     metadata: { type: 'json', nullable: true },
     /** `origin` for the record the work item was created from, `attached` for one added later. Null (rows written before this column) reads as `origin`. */
     role: { type: 'text', nullable: true },
+    /** `true` while the work item has no board item: an open external record offered as intake. Null once it has a card. */
+    candidate: { type: 'boolean', nullable: true },
+    /** When the provider created the record. Set on candidates, whose list it orders newest first. */
+    source_created_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     synced_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
@@ -65,6 +69,11 @@ export const FACTORY_WORK_ITEM_SOURCES_SCHEMA: CollectionSchema = {
   indexes: [
     { name: 'factory_work_item_sources_work_item_idx', columns: ['work_item_id'] },
     { name: 'factory_work_item_sources_source_key_idx', columns: ['source_key'] },
+    {
+      // One project's candidates in list order, without touching the sources of its cards.
+      name: 'factory_work_item_sources_project_candidate_idx',
+      columns: ['org_id', 'factory_project_id', 'candidate', 'source_created_at', 'id'],
+    },
   ],
 };
 
@@ -142,6 +151,8 @@ export interface WorkItemSourceDbRecord extends Record<string, unknown> {
   author: string | null;
   metadata: Record<string, unknown> | null;
   role?: WorkItemSourceRole | null;
+  candidate?: boolean | null;
+  source_created_at?: Date | null;
   revision: number;
   synced_at: Date | null;
   created_at: Date;
