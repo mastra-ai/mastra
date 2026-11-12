@@ -15,6 +15,11 @@ export { createMultipartTestSuite, type MultipartTestSuiteConfig } from './multi
 export { createHttpLoggingTestSuite, type HttpLoggingTestSuiteConfig } from './http-logging-test-suite';
 export { createBodyLimitTestSuite, type BodyLimitTestSuiteConfig } from './body-limit-test-suite';
 export { createCustomRouteFGATestSuite, type CustomRouteFGATestSuiteConfig } from './custom-route-fga-test-suite';
+export {
+  createRouteDispatchParityTestSuite,
+  type RouteDispatchParityTestSuiteConfig,
+} from './route-dispatch-parity-test-suite';
+export { createBuiltinMCPParityTestSuite, type BuiltinMCPParityTestSuiteConfig } from './builtin-mcp-parity-test-suite';
 
 export {
   createDefaultTestContext,

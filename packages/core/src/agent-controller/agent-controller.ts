@@ -28,6 +28,7 @@ import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
 import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
+import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import type { Workspace } from '../workspace/workspace';
 
 import { SessionNotStartedError } from './errors';
@@ -777,12 +778,18 @@ export class AgentController<TState = {}> {
 
     let workspaceToConnect = overrides?.workspace ?? this.workspace;
     if (typeof workspaceToConnect === 'function') {
-      workspaceToConnect = await workspaceToConnect({ requestContext, mastra: this.getMastra() });
+      workspaceToConnect = await resolveDynamicArgument(workspaceToConnect, {
+        requestContext,
+        mastra: this.getMastra(),
+      });
     }
 
     let browserToConnect = overrides?.browser ?? this.browser;
     if (typeof browserToConnect === 'function') {
-      browserToConnect = await browserToConnect({ requestContext, mastra: this.getMastra() });
+      browserToConnect = await resolveDynamicArgument(browserToConnect, {
+        requestContext,
+        mastra: this.getMastra(),
+      });
     }
 
     const session = this.#wireSession(
@@ -1057,7 +1064,9 @@ export class AgentController<TState = {}> {
     if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
+    return (
+      (await resolveDynamicArgument(this.workspace, { requestContext: ctx, mastra: this.getMastra() })) ?? undefined
+    );
   }
 
   /**
@@ -2497,8 +2506,7 @@ export class AgentController<TState = {}> {
     // Resolve user-configured controller tools (needed for both the controller toolset and subagent allowedControllerTools)
     let resolvedControllerTools: ToolsInput | undefined = undefined;
     if (this.config.tools) {
-      const tools =
-        typeof this.config.tools === 'function' ? await this.config.tools({ requestContext }) : this.config.tools;
+      const tools = await resolveDynamicArgument(this.config.tools, { requestContext });
       if (tools) {
         resolvedControllerTools = { ...tools };
       }
@@ -2746,7 +2754,7 @@ export class AgentController<TState = {}> {
       return mem;
     }
     const requestContext = await this.buildRequestContext(session, callerContext);
-    const resolved = await Promise.resolve(mem({ requestContext }));
+    const resolved = await resolveDynamicArgument(mem, { requestContext, mastra: this.getMastra() });
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');
     }

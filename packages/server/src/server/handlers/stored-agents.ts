@@ -1106,8 +1106,34 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
           ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
       }
 
+      // A record with the id of a code-defined agent is only an override; the code agent and the workspace it
+      // registered stay. Check before clearCache, which unregisters stored agents.
+      let overridesCodeAgent = false;
+      try {
+        overridesCodeAgent = mastra.getAgentById(storedAgentId).source !== 'stored';
+      } catch {
+        // Not registered: a stored agent that hasn't been loaded yet.
+      }
+
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);
+
+      // The agent registered its workspace on first use. With the record gone, GET /workspaces can't check who may
+      // see it, so unregister it. The record is already gone, so a cleanup failure is logged rather than failing the
+      // delete.
+      try {
+        if (!overridesCodeAgent && typeof mastra.listWorkspaces === 'function') {
+          for (const [workspaceId, entry] of Object.entries(mastra.listWorkspaces())) {
+            if (entry.source === 'agent' && entry.agentId === storedAgentId) {
+              await mastra.removeWorkspace(workspaceId);
+            }
+          }
+        }
+      } catch (cleanupError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to unregister workspace of deleted agent', { storedAgentId, error: cleanupError });
+      }
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

@@ -32,9 +32,13 @@ export type {
   ServerConfig,
   ServerConfigInput,
   ApiRouteInput,
+  ServerMCPConfig,
+  ServerMCPPrimitiveFilter,
+  MastraMCPToolset,
 } from './types';
 export {
   MastraAuthProvider,
+  normalizeMastraUser,
   isSSOProvider,
   isSessionProvider,
   isUserProvider,

@@ -66,6 +66,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { withoutLiveRequestKeys } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
@@ -80,6 +81,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
+import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { HAND_BACK_STATE_SYMBOL, PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
@@ -3406,7 +3408,7 @@ export class Workflow<
         let scorersToUse = step.scorers;
 
         if (typeof scorersToUse === 'function') {
-          scorersToUse = await scorersToUse({ requestContext });
+          scorersToUse = await resolveDynamicArgument(scorersToUse, { requestContext });
         }
 
         for (const [id, scorer] of Object.entries(scorersToUse)) {
@@ -5719,7 +5721,7 @@ export class Run<
 
     const requestContextToUse = params.requestContext ?? new RequestContext();
 
-    Object.entries(snapshot?.requestContext ?? {}).forEach(([key, value]) => {
+    Object.entries(withoutLiveRequestKeys(snapshot?.requestContext)).forEach(([key, value]) => {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
@@ -6075,7 +6077,7 @@ export class Run<
     }
 
     const requestContextToUse = requestContext ?? new RequestContext();
-    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+    for (const [key, value] of Object.entries(withoutLiveRequestKeys(snapshot.requestContext))) {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
@@ -6228,7 +6230,7 @@ export class Run<
     });
 
     const requestContextToUse = requestContext ?? new RequestContext();
-    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+    for (const [key, value] of Object.entries(withoutLiveRequestKeys(snapshot.requestContext))) {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
