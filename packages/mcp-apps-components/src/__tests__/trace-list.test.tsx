@@ -82,25 +82,29 @@ const lastHour = () => ({
   to: new Date(Date.now() + 60_000).toISOString(),
 });
 
-it("keeps the model's trace query applied until the user clears it", async () => {
+it("shows the model's trace filters as chips and keeps the rest applied until the user clears it", async () => {
   const mcp = traceListServer({ traceQuery: true });
   const where = { op: 'eq', left: { path: 'entityName' }, right: { literal: 'support-agent' } };
-  await openList(mcp, 'query_traces', { timeRange: lastHour(), where });
+  await openList(mcp, 'query_traces', { timeRange: lastHour(), where, textSearch: 'refund' });
 
   expect(await screen.findByText('support-agent')).toBeTruthy();
   expect(screen.queryByText('weather-agent')).toBeNull();
-  expect(screen.getByText('Also filtered by the query from the conversation.')).toBeTruthy();
-  // Every trace query the explorer sent carried the model's predicate, and passed the real request schema.
-  const queries = mcp.calls.filter(call => call.tool === 'query_traces');
-  expect(queries.length).toBeGreaterThan(0);
-  for (const query of queries) expect(JSON.stringify(query.args.where)).toContain('support-agent');
+  const banner = "Also filtered by conditions from the conversation that the filter bar can't show.";
+  expect(screen.getByText(banner)).toBeTruthy();
+  // Every trace query carried the predicate (from the chip) and the text search, and passed the real request schema.
+  await waitFor(() => expect(mcp.calls.some(call => call.tool === 'query_traces')).toBe(true), { timeout: 3000 });
+  for (const query of mcp.calls.filter(call => call.tool === 'query_traces')) {
+    expect(JSON.stringify(query.args.where)).toContain('support-agent');
+    expect(query.args.textSearch).toBe('refund');
+  }
 
   fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
 
-  expect(await screen.findByText('weather-agent')).toBeTruthy();
-  expect(screen.getByText('support-agent')).toBeTruthy();
-  expect(screen.queryByText('Also filtered by the query from the conversation.')).toBeNull();
-  expect(JSON.stringify(mcp.calls.at(-1)?.args.where ?? null)).not.toContain('support-agent');
+  await waitFor(() => expect(screen.queryByText(banner)).toBeNull());
+  await waitFor(() => expect(mcp.calls.at(-1)?.args.textSearch).toBeUndefined());
+  // The chip is the user's filter now: clearing the leftover conditions keeps it.
+  expect(JSON.stringify(mcp.calls.at(-1)?.args.where)).toContain('support-agent');
+  expect(screen.queryByText('weather-agent')).toBeNull();
 });
 
 it('opens a picked trace on the timeline through get_trace', async () => {
@@ -169,13 +173,17 @@ it('tells the model the tab, filters, and opened trace on screen, and links each
   const context = contexts.at(-1)!;
   expect(context).toMatch(/^The user has Mastra's trace explorer open\./);
   expect(context).toContain("The trace list's filters, as Studio URL params: datePreset=custom&dateFrom=");
-  expect(context).toContain(
-    `It's also filtered by the query the model opened it with: {"where":${JSON.stringify(where)}}.`,
-  );
+  // The model's predicate became a chip, so it travels in the URL params rather than as a leftover query.
+  expect(context).toMatch(/Studio URL params: [^\n]*support-agent/);
+  expect(context).not.toContain("It's also filtered by the query the model opened it with");
   fireEvent.click(screen.getByRole('button', { name: 'Open in Studio' }));
-  await waitFor(() => expect(links.at(-1)).toMatch(/^http:\/\/studio\.test\/traces\?datePreset=custom&dateFrom=/));
+  await waitFor(() =>
+    expect(links.at(-1)).toMatch(/^http:\/\/studio\.test\/traces\?datePreset=custom&dateFrom=.*support-agent/),
+  );
 
-  fireEvent.click(await screen.findByText('support-agent'));
+  // The chip shows the agent's name too; pick the trace row's.
+  const names = await screen.findAllByText('support-agent');
+  fireEvent.click(names.find(name => !name.closest('button[aria-label="Value: support-agent"]'))!);
   await waitFor(() => expect(contexts.at(-1)).toContain("They're viewing trace trace-2"), { timeout: 3000 });
   fireEvent.click(screen.getByRole('button', { name: 'Open in Studio' }));
   await waitFor(() => expect(links.at(-1)).toBe('http://studio.test/traces?traceId=trace-2'));

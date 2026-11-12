@@ -17,15 +17,6 @@ import type {
   TracesFilters,
   TracesSort,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
-import {
-  TRACE_DATE_FROM_PARAM,
-  TRACE_DATE_PRESET_PARAM,
-  TRACE_DATE_PRESET_VALUES,
-  TRACE_DATE_TO_PARAM,
-  applyTracePropertyFilterTokens,
-  getTraceFilterGroups,
-  getTracePropertyFilterTokens,
-} from '@mastra/playground-ui/domains/traces/trace-filters';
 import { MastraReactProvider } from '@mastra/react';
 import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import type { App } from '@modelcontextprotocol/ext-apps';
@@ -40,6 +31,7 @@ import { TraceView } from '../../shared/trace-view';
 import { LogsTab } from './logs-tab';
 import { MetricsTab } from './metrics-tab';
 import type { Drilldown } from './metrics-tab';
+import { decodeTraceFilters, encodeTraceFilters, logArgsToParams, whereToTraceFilters } from './opened-filters';
 
 type Args = Record<string, unknown>;
 type View = 'traces' | 'spans' | 'threads' | 'logs' | 'metrics';
@@ -65,55 +57,31 @@ const LOG_PAGING_ARGS = new Set(['page', 'perPage', 'field', 'direction', 'order
 function toOpenedLogs(args: Args | undefined, opened: Opened): Opened {
   opened.view = 'logs';
   const timestamp = args?.timestamp as { start?: string; end?: string } | undefined;
+  const dates = new URLSearchParams();
   if (timestamp?.start || timestamp?.end) {
-    const params = new URLSearchParams({ datePreset: 'custom' });
-    if (timestamp.start) params.set('dateFrom', new Date(timestamp.start).toISOString());
-    if (timestamp.end) params.set('dateTo', new Date(timestamp.end).toISOString());
-    opened.logParams = params.toString();
+    dates.set('datePreset', 'custom');
+    if (timestamp.start) dates.set('dateFrom', new Date(timestamp.start).toISOString());
+    if (timestamp.end) dates.set('dateTo', new Date(timestamp.end).toISOString());
   }
   const logs = Object.fromEntries(
     Object.entries(args ?? {}).filter(
       ([key, value]) => key !== 'timestamp' && !LOG_PAGING_ARGS.has(key) && value != null,
     ),
   );
-  if (Object.keys(logs).length > 0) opened.filter = { logs };
+  // The filters the logs filter bar can draw become its chips; the rest stays applied, shown above the list.
+  const { params, rest } = logArgsToParams(logs, dates);
+  opened.logParams = params.toString();
+  if (rest) opened.filter = { logs: rest };
   return opened;
-}
-
-/** The traces filters in a Studio traces URL, as Studio's traces page reads them. */
-function decodeTraceFilters(params: URLSearchParams): TracesFilters {
-  const parseDate = (raw: string | null) => {
-    const date = raw ? new Date(raw) : undefined;
-    return date && !Number.isNaN(date.getTime()) ? date : undefined;
-  };
-  const preset = params.get(TRACE_DATE_PRESET_PARAM) as TracesFilters['datePreset'] | null;
-  return {
-    datePreset:
-      preset && preset !== 'all' && TRACE_DATE_PRESET_VALUES.has(preset) ? preset : DEFAULT_TRACES_FILTERS.datePreset,
-    dateFrom: parseDate(params.get(TRACE_DATE_FROM_PARAM)),
-    dateTo: parseDate(params.get(TRACE_DATE_TO_PARAM)),
-    tokens: getTracePropertyFilterTokens(params),
-    groups: getTraceFilterGroups(params),
-  };
-}
-
-/** The traces filters as a Studio traces URL's params, the inverse of `decodeTraceFilters`. */
-function encodeTraceFilters(filters: TracesFilters): URLSearchParams {
-  const params = new URLSearchParams();
-  if (filters.datePreset) params.set(TRACE_DATE_PRESET_PARAM, filters.datePreset);
-  if (filters.dateFrom) params.set(TRACE_DATE_FROM_PARAM, filters.dateFrom.toISOString());
-  if (filters.dateTo) params.set(TRACE_DATE_TO_PARAM, filters.dateTo.toISOString());
-  applyTracePropertyFilterTokens(params, filters.tokens, filters.groups);
-  return params;
 }
 
 const NO_METRICS = { supported: false, isLoading: false };
 const FEATURES = { spanQuery: true, threadQuery: true, feedback: false };
 
 /**
- * `query_traces` arguments become the explorer's starting time range and sort, and their `where` and
- * `textSearch` stay applied to every trace query (shown above the list, where they can be cleared), since
- * Studio's filter bar can't draw every predicate. `list_traces` opens on the default view.
+ * `query_traces` arguments become the explorer's starting time range, sort, and filter chips. The parts of
+ * `where` the filter bar can't draw, and `textSearch`, stay applied to every trace query, shown above the
+ * list where they can be cleared. `list_traces` opens on the default view.
  */
 function toOpened(tool: string | undefined, args: Args | undefined): Opened {
   const opened: Opened = { view: 'traces', filters: DEFAULT_TRACES_FILTERS, sort: DEFAULT_TRACES_SORT, logParams: '' };
@@ -134,7 +102,10 @@ function toOpened(tool: string | undefined, args: Args | undefined): Opened {
   if (order?.field && (TRACES_SORT_FIELDS as readonly string[]).includes(order.field) && order.direction) {
     opened.sort = { field: order.field as TracesSort['field'], direction: order.direction };
   }
-  if (args?.where || args?.textSearch) opened.filter = { where: args.where, textSearch: args.textSearch };
+  // The predicate's conditions the filter bar can draw become its chips; the rest stays applied, shown above it.
+  const { tokens, groups, rest } = whereToTraceFilters(args?.where);
+  opened.filters = { ...opened.filters, tokens, groups };
+  if (rest || args?.textSearch) opened.filter = { where: rest, textSearch: args?.textSearch };
   return opened;
 }
 
@@ -144,7 +115,7 @@ function OpenedQueryBar({ query, onClear }: { query: Args; onClear: () => void }
     <div className="border-border1 flex flex-col gap-1 border-b px-3 py-2">
       <div className="flex items-center gap-2">
         <Txt variant="body-sm" tone="muted">
-          Also filtered by the query from the conversation.
+          Also filtered by conditions from the conversation that the filter bar can't show.
         </Txt>
         <button type="button" className="text-body-sm underline" onClick={() => setOpen(v => !v)}>
           {open ? 'Hide' : 'Show'}
