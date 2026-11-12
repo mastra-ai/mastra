@@ -237,10 +237,19 @@ describe('TransactionClient COMMIT/ROLLBACK drain', () => {
     const rollbackError = new Error('rollback failed');
     query.mockResolvedValueOnce({ rows: [] } as QueryResult);
     query.mockRejectedValueOnce(rollbackError);
-    const reporter = vi.fn(async () => {
-      await Promise.resolve();
+    const events: string[] = [];
+    let reportedError: unknown;
+    const reporter = async (error: unknown) => {
+      reportedError = error;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      events.push('reported');
       throw new Error('async logger failed');
-    });
+    };
+    if (kind === 'pool') {
+      vi.mocked(client.release).mockImplementation(() => {
+        events.push('released');
+      });
+    }
     const adapter =
       kind === 'pool'
         ? new PoolAdapter({ connect: vi.fn(async () => client) } as unknown as Pool, reporter)
@@ -251,9 +260,15 @@ describe('TransactionClient COMMIT/ROLLBACK drain', () => {
         throw primary;
       }),
     ).rejects.toBe(primary);
-    expect(reporter).toHaveBeenCalledWith(rollbackError);
-    if (kind === 'pool') expect(client.release).toHaveBeenCalledWith(true);
-    else expect(adapter.shouldDestroyClient).toBe(true);
+    events.push('tx-settled');
+    expect(reportedError).toBe(rollbackError);
+    if (kind === 'pool') {
+      expect(client.release).toHaveBeenCalledWith(true);
+      expect(events).toEqual(['reported', 'released', 'tx-settled']);
+    } else {
+      expect(adapter.shouldDestroyClient).toBe(true);
+      expect(events).toEqual(['reported', 'tx-settled']);
+    }
   });
 
   it('logs rollback failure when no reporter is configured', async () => {
