@@ -142,6 +142,7 @@ export async function handleContextCommand(ctx: SlashCommandContext): Promise<vo
     const instructionSections = await getDynamicInstructionSections({
       requestContext: requestContextForSession(ctx),
       coAuthor: TUI_CO_AUTHOR,
+      backgroundTools: ctx.state.options?.backgroundToolsEnabled,
     });
 
     let skillsCatalog: string | undefined;

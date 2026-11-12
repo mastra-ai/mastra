@@ -8,6 +8,7 @@ import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
 import type { KnowledgeInspector } from '@mastra/code-sdk';
 import type { BackgroundCompletionEvents } from '@mastra/code-sdk/agents/background-completion-events';
+import type { BackgroundProcessNotices } from '@mastra/code-sdk/agents/background-processes';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
@@ -191,6 +192,9 @@ export interface MastraTUIBaseOptions {
   /** Process-local background completion events used for cross-thread discovery. */
   backgroundCompletionEvents?: BackgroundCompletionEvents;
 
+  /** Reads and kills background shells for the user; a kill posts no exit notice. */
+  backgroundProcesses?: Pick<BackgroundProcessNotices, 'read' | 'kill'>;
+
   /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
   storageMaintenance?: StorageMaintenance;
 
@@ -251,6 +255,14 @@ export interface TUIState {
   globalBackgroundNotice: GlobalBackgroundNoticeComponent;
   backgroundActivities: Map<string, BackgroundActivity>;
   backgroundToolContexts: Map<string, BackgroundToolContext>;
+  /** Background shell rows by tool call id, updated when the process exits. */
+  backgroundShellRows: Map<string, IToolExecutionComponent>;
+  /**
+   * Background subagent calls by tool call id. A deferred subagent's
+   * `subagent_start` can arrive after its placeholder result, so the task id and
+   * the chat position are kept until its box exists.
+   */
+  backgroundSubagentCalls: Map<string, { taskId: string; anchor?: Component; component?: SubagentExecutionComponent }>;
   voiceController?: VoiceController;
 
   // ── Agent / streaming ─────────────────────────────────────────────────
@@ -488,6 +500,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     globalBackgroundNotice,
     backgroundActivities: new Map(),
     backgroundToolContexts: new Map(),
+    backgroundShellRows: new Map(),
+    backgroundSubagentCalls: new Map(),
 
     // Agent / streaming
     isInitialized: false,

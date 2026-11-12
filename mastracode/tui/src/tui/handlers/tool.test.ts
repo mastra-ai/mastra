@@ -1,10 +1,11 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 
 import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 import type { TUIState } from '../state.js';
+import { handleSubagentStart, markBackgroundSubagent } from './subagent.js';
 import {
   clearToolInputParsers,
   handleCommandExit,
@@ -86,7 +87,7 @@ describe('background placeholder opt-in', () => {
     });
     expect(ctx.state.pendingTools.has('background-call')).toBe(false);
     expect(ctx.state.pendingSubagents.has('background-call')).toBe(false);
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('✓ background · trusted-task');
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toMatch(/✓ background( · trusted-task)?/);
   });
 
   it.each(['execute_command', 'mastra_expert'])(
@@ -132,9 +133,7 @@ describe('background placeholder opt-in', () => {
       mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } },
     });
     expect(ctx.state.pendingSubagents.has('collision')).toBe(enabled === true);
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
-      enabled === true,
-    );
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('◌ background')).toBe(enabled === true);
   });
 });
 
@@ -497,5 +496,32 @@ describe('inline tool approval', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(output).toContain('Allow mcp_search?');
     expect(output).toContain('query: release notes');
+  });
+});
+
+describe('deferred background subagent', () => {
+  // A deferred subagent starts as a background task: its placeholder result and
+  // even the end of the parent run can arrive before its `subagent_start`.
+  it('shows the box where the call was made, as background work, when it starts after the run ended', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = true;
+    ctx.state.backgroundSubagentCalls = new Map();
+
+    handleToolInputStart(ctx, 'sub-1', 'subagent');
+    handleToolStart(ctx, 'sub-1', 'subagent', { agentType: 'explore', task: 'Find the auth middleware' });
+    handleToolEnd(ctx, 'sub-1', 'Background task started.', false, {
+      mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } },
+    });
+    markBackgroundSubagent(ctx, 'sub-1', 'task-1');
+    const later = new Text('LATER_OUTPUT', 0, 0);
+    ctx.addChildBeforeFollowUps(later);
+    ctx.state.streamingComponent = undefined;
+
+    handleSubagentStart(ctx, 'sub-1', 'explore', 'Find the auth middleware');
+
+    const children = visibleChildren(ctx);
+    const box = ctx.state.pendingSubagents.get('sub-1')!;
+    expect(children.indexOf(box)).toBeLessThan(children.indexOf(later));
+    expect(stripAnsi(box.render(100).join('\n'))).toContain('◌ background');
   });
 });

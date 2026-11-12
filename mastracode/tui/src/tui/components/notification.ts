@@ -13,11 +13,40 @@ export interface NotificationOptions {
   status?: string;
   previewLineLimit?: number;
   backgroundCompletion?: {
-    taskId: string;
+    taskId?: string;
+    kind?: 'process';
+    pid?: string;
+    exitCode?: number;
     toolName?: string;
+    title?: string;
+    summary?: string;
+    interrupted?: boolean;
     argsSummary?: string;
     errorSummary?: string;
   };
+}
+
+/** One-line card for finished background work, e.g. `↳ Shell finished · Running tests (exit 1)`. */
+function formatBackgroundCompletionLine(
+  completion: NonNullable<NotificationOptions['backgroundCompletion']>,
+  status: string | undefined,
+): string {
+  const title = completion.title ?? completion.toolName ?? 'Background task';
+  const summary = completion.summary ? theme.fg('muted', ` · ${completion.summary}`) : '';
+  if (completion.kind === 'process') {
+    const failed = completion.exitCode !== 0;
+    const exit = completion.exitCode === undefined ? '' : theme.fg(failed ? 'error' : 'muted', ` (exit ${completion.exitCode})`);
+    return `${theme.fg(failed ? 'error' : 'success', '↳')} ${theme.fg('toolTitle', title)} finished${summary}${exit}`;
+  }
+  const verb = completion.interrupted
+    ? 'interrupted by a restart'
+    : status === 'cancelled'
+      ? 'cancelled'
+      : status === 'failed'
+        ? 'failed'
+        : 'finished';
+  const arrowColor = status === 'cancelled' ? 'muted' : status === 'failed' ? 'error' : 'success';
+  return `${theme.fg(arrowColor, '↳')} ${theme.fg('toolTitle', title)} ${verb}${summary}`;
 }
 
 function normalizePreviewLineLimit(limit: number | undefined): number {
@@ -113,18 +142,8 @@ export class NotificationComponent extends WidthAwareContainer {
     // that is their compact form — and their detail rows only exist once expanded.
     const compact = !this.expanded;
     if (options.backgroundCompletion && !this.expanded) {
-      const completion = options.backgroundCompletion;
-      const failed = options.status === 'failed';
-      const cancelled = options.status === 'cancelled';
-      const icon = cancelled ? theme.fg('muted', '■') : failed ? theme.fg('error', '✗') : theme.fg('success', '✓');
-      const toolName = theme.fg('toolTitle', completion.toolName ?? 'background task');
-      const status = cancelled
-        ? 'cancelled in background'
-        : failed
-          ? 'failed in background'
-          : 'completed in background';
-      const taskId = theme.fg('muted', ` · ${completion.taskId}`);
-      this.addChild(new Text(`${icon} ${toolName} ${status}${taskId}`, BOX_INDENT, 0));
+      const line = formatBackgroundCompletionLine(options.backgroundCompletion, options.status);
+      this.addChild(new Text(truncateToWidth(line, Math.max(1, width - BOX_INDENT)), BOX_INDENT, 0));
       return;
     }
     const titleText = options.source ? `notification from ${options.source}` : 'notification';
@@ -142,7 +161,9 @@ export class NotificationComponent extends WidthAwareContainer {
       : [];
     const backgroundDetailLines = options.backgroundCompletion
       ? [
-          `task · ${options.backgroundCompletion.taskId}`,
+          options.backgroundCompletion.taskId
+            ? `task · ${options.backgroundCompletion.taskId}`
+            : `PID · ${options.backgroundCompletion.pid}`,
           options.backgroundCompletion.argsSummary
             ? `invocation · ${options.backgroundCompletion.argsSummary}`
             : undefined,

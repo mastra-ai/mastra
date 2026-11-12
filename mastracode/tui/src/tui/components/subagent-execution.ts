@@ -180,7 +180,11 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.done = true;
     this.isError = isError;
     this.finalResult = isDuplicateFinalResult(result, this.activity, this.lastTextSnapshot) ? undefined : result;
-    if (this.expandOnComplete) {
+    // Background work finishes while the user is doing something else, so it
+    // stays compact rather than unfolding into the chat.
+    if (this.backgroundTaskId) {
+      this.expanded = false;
+    } else if (this.expandOnComplete) {
       this.expanded = true;
     } else if (this.collapseOnComplete) {
       this.expanded = false;
@@ -238,11 +242,11 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     const statusIcon = this.backgroundTaskId
       ? this.done
         ? this.cancelled
-          ? theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`)
+          ? theme.fg('muted', ' ■ background')
           : this.isError
-            ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
-            : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`)
-        : theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`)
+            ? theme.fg('error', ' ✗ background')
+            : theme.fg('success', ' ✓ background')
+        : theme.fg('warning', ' ◌ background')
       : this.done && this.isError
         ? colorText(this.colors.icon, ` ${this.icons.error}`, (text: string) => theme.fg('error', text))
         : ''; // The title's ● dot shows running / done; a failure also gets the error icon.
@@ -259,6 +263,16 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     // Completed background work follows the ordinary tool display model: compact by default,
     // with the authoritative result available through Ctrl+E expansion.
     if ((this.collapseOnComplete || this.backgroundTaskId) && this.done && !this.expanded) {
+      emit();
+      return;
+    }
+
+    // A running background box stays small while the chat moves on below it:
+    // only its latest activity line.
+    if (this.backgroundTaskId && !this.done && !this.expanded) {
+      const latest = this.activity.at(-1);
+      const latestLine = latest ? formatActivityLine(latest, maxLineWidth, this.icons, this.colors.icon).at(-1) : '';
+      if (latestLine) output.push(latestLine);
       emit();
       return;
     }

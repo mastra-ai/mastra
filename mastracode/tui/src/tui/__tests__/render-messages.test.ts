@@ -542,7 +542,7 @@ describe('addUserMessage', () => {
     const component = state.messageComponentsById.get('completion-compact') as NotificationComponent;
     const collapsed = component.render(100).map(line => stripAnsi(line));
     expect(collapsed).toHaveLength(1);
-    expect(collapsed[0]).toContain('mastra_expert failed in background');
+    expect(collapsed[0]).toContain('↳ mastra_expert failed');
 
     // Expanding is a request to see everything: the full message and the detail rows, untrimmed.
     component.setExpanded(true);
@@ -552,6 +552,46 @@ describe('addUserMessage', () => {
     expect(expanded).toContain('invocation · question: why');
     expect(expanded).toContain('failure · boom');
     expect(expanded).not.toContain('…');
+  });
+
+  it.each([
+    [
+      'a background subagent',
+      { taskId: 'task-s', toolName: 'subagent', title: 'Explore', summary: 'Find the auth middleware' },
+      'completed',
+      '↳ Explore finished · Find the auth middleware',
+    ],
+    [
+      'a subagent orphaned by a restart',
+      { taskId: 'task-r', toolName: 'subagent', title: 'Explore', interrupted: true },
+      'failed',
+      '↳ Explore interrupted by a restart',
+    ],
+    [
+      'a background shell',
+      { kind: 'process', pid: '4242', exitCode: 1, toolName: 'execute_command', title: 'Shell', summary: 'Running tests' },
+      'failed',
+      '↳ Shell finished · Running tests (exit 1)',
+    ],
+  ])('names %s on its one-line completion card', (_case, completion, status, line) => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'completion-card',
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'Background work ended.',
+        attributes: { source: 'background-work', kind: 'background-task-completed', priority: 'low', status },
+        metadata: {
+          backgroundCompletion: { eventId: 'event-1', originToolCallId: 'call-1', status, ...completion },
+        },
+      }).toDBMessage(),
+    );
+
+    const component = state.messageComponentsById.get('completion-card') as NotificationComponent;
+    expect(component.render(100).map(rendered => stripAnsi(rendered).trim())).toEqual([line]);
   });
 
   it.each(['work-deferred', 'work-awaited'] as const)(
@@ -1344,7 +1384,7 @@ describe('renderExistingMessages tools', () => {
     // The compact search row counts the authoritative result rather than a placeholder.
     expect(rendered).toContain('backgroundCompletion (1 results)');
     expect(rendered).toContain('✓ background · task-result-1');
-    expect(rendered).toContain('search_content completed in background');
+    expect(rendered).toContain('↳ search_content finished');
     expect(state.pendingTools.has('tool-background-result-1')).toBe(false);
     expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
   });
@@ -1458,9 +1498,7 @@ describe('renderExistingMessages subagents', () => {
     } as unknown as TUIState['session'];
     await renderExistingMessages(state);
     expect(state.pendingSubagents.has('plugin-call')).toBe(enabled === true);
-    expect(stripAnsi(state.chatContainer.render(120).join('\n')).includes('background · visible-demo-123')).toBe(
-      enabled === true,
-    );
+    expect(stripAnsi(state.chatContainer.render(120).join('\n')).includes('◌ background')).toBe(enabled === true);
   });
 
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {
@@ -1545,9 +1583,9 @@ describe('renderExistingMessages subagents', () => {
       .render(120)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(collapsed).toContain('background · task-plugin-1');
-    // Completed subagents replay expanded, so the authoritative result is visible.
-    expect(collapsed).toContain('Authoritative Alexandria audit');
+    expect(collapsed).toContain('✓ background');
+    // Background work replays compact, like it finished live; Ctrl+E shows the result.
+    expect(collapsed).not.toContain('Authoritative Alexandria audit');
 
     subagent.setExpanded(true);
     const expanded = subagent
@@ -1651,7 +1689,7 @@ describe('renderExistingMessages subagents', () => {
       .render(120)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('■ background · task-plugin-cancelled');
+    expect(rendered).toContain('■ background');
     expect(rendered).not.toContain('◌ background');
     expect(state.pendingTools.has('tool-background-plugin-cancelled')).toBe(false);
     expect(state.pendingTaskToolIds.has('tool-background-plugin-cancelled')).toBe(false);

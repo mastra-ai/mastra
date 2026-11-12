@@ -13,6 +13,7 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
+import { parseBackgroundProcessPid } from './background-activity.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -586,7 +587,12 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
         reconcileChatBoundarySpacers(state.chatContainer);
       }
     }
-    if (backgroundCompletion?.status === 'cancelled') {
+    if (backgroundCompletion?.kind === 'process' && backgroundCompletion.exitCode !== undefined) {
+      state.backgroundShellRows
+        ?.get(backgroundCompletion.originToolCallId)
+        ?.setBackgroundProcessExit?.({ exitCode: backgroundCompletion.exitCode, killed: false });
+    }
+    if (backgroundCompletion?.taskId && backgroundCompletion.status === 'cancelled') {
       const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
       const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
       toolComponent?.setBackgroundTaskId?.(backgroundCompletion.taskId);
@@ -951,14 +957,18 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   state.messageComponentsById.clear();
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
+  state.backgroundShellRows?.clear();
 
   const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
+  const backgroundProcessExits = new Map<string, number>();
   const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
     if (message.role !== 'signal') continue;
     const completion = getBackgroundCompletionView(message);
-    if (completion) {
+    if (completion?.kind === 'process' && completion.exitCode !== undefined) {
+      backgroundProcessExits.set(completion.originToolCallId, completion.exitCode);
+    } else if (completion?.taskId) {
       backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
       if (completion.status === 'cancelled') cancelledBackgroundToolCalls.add(completion.originToolCallId);
     }
@@ -1041,6 +1051,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                 subComponent.addToolEnd(tc.name, '', tc.isError);
               }
             }
+            const subagentTaskId = part.backgroundTask?.taskId ?? backgroundTasksByToolCallId.get(part.toolCallId);
+            if (subagentTaskId && state.options?.backgroundToolsEnabled) subComponent.setBackgroundTaskId(subagentTaskId);
             // Mark as finished with result
             subComponent.finish(isErr ?? false, durationMs, resultText);
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
@@ -1163,6 +1175,16 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             toolComponent.cancelBackground();
           } else if (isBackgroundPlaceholder) {
             state.pendingTools.set(part.toolCallId, toolComponent);
+          }
+
+          if (toolName === 'execute_command' && state.options?.backgroundToolsEnabled && hasResult) {
+            const processExit = backgroundProcessExits.get(part.toolCallId);
+            if (processExit !== undefined) {
+              toolComponent.setBackgroundProcessExit({ exitCode: processExit, killed: false });
+            } else if (parseBackgroundProcessPid(resultValue)) {
+              // Still running, or its exit notice is yet to arrive.
+              state.backgroundShellRows?.set(part.toolCallId, toolComponent);
+            }
           }
 
           // Successful task transition tools render through the pinned task UI,

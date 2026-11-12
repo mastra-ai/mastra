@@ -37,14 +37,37 @@ describe('BackgroundActivitySelectorComponent', () => {
 
     const output = stripAnsi(component.render(100).join('\n'));
     expect(output).toContain('Background activity');
-    expect(output).toContain('◌ view');
-    expect(output).toContain('✓ search_content');
-    expect(output).toContain('✗ mastra_expert');
-    expect(output).toContain('■ find_files');
+    expect(output).toContain('◌ • view');
+    expect(output).toContain('✓ • search_content');
+    expect(output).toContain('✗ • mastra_expert');
+    expect(output).toContain('■ • find_files');
     expect(output).toContain('running · task task-1');
     expect(output).not.toContain('thread-123456789');
     expect(output).toContain('↑↓ inspect · D abort running · Esc close');
     expect(output).not.toContain('open thread');
+  });
+
+  it('offers no shell actions when the sandbox is out of reach', () => {
+    const onAbort = vi.fn();
+    const onOpen = vi.fn();
+    const shell = activity({ taskId: 'process:1', kind: 'process', pid: '1', toolName: 'execute_command' });
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [shell],
+      getActivity: () => shell,
+      onCancel: vi.fn(),
+      onAbort,
+      onOpen,
+      canControlProcesses: false,
+    });
+    component.focused = true;
+
+    component.handleInput('d');
+    component.handleInput('\r');
+
+    expect(onAbort).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(stripAnsi(component.render(100).join('\n'))).toContain('↑↓ inspect · Esc close');
   });
 
   it('aborts only the selected running task', () => {

@@ -83,9 +83,8 @@ describe('width-aware custom component rendering', () => {
       },
     });
 
-    const compact = component.render(140).join('\n');
-    expect(compact).toContain('failed in background');
-    expect(compact).toContain('task-1');
+    const compact = stripVTControlCharacters(component.render(140).join('\n'));
+    expect(compact).toContain('↳ view failed');
     expect(compact).not.toContain('File not found');
 
     component.setExpanded(true);

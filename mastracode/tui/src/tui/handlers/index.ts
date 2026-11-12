@@ -17,7 +17,13 @@ export {
   handleOMActivation,
 } from './om.js';
 export { handleAskQuestion, handleSandboxAccessRequest, handlePlanApproval } from './prompts.js';
-export { handleSubagentStart, handleSubagentToolStart, handleSubagentToolEnd, handleSubagentEnd } from './subagent.js';
+export {
+  handleSubagentStart,
+  handleSubagentToolStart,
+  handleSubagentToolEnd,
+  handleSubagentEnd,
+  markBackgroundSubagent,
+} from './subagent.js';
 export {
   formatToolResult,
   handleToolApprovalRequired,

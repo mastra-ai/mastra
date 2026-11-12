@@ -117,19 +117,30 @@ describe('SubagentExecutionComponent', () => {
     expect(lines.some(l => l.includes('subagent explore fork'))).toBe(false);
   });
 
-  it('matches ordinary tool background lifecycle indicators', () => {
-    const comp = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui);
+  it('keeps a background subagent to its title and latest activity, and compact once done', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui, undefined, {
+      expandOnComplete: true,
+    });
     comp.setBackgroundTaskId('task-1');
+    comp.addToolStart('view', { path: 'first.ts' });
+    comp.addToolStart('view', { path: 'latest.ts' });
 
-    expect(renderPlain(comp).join('\n')).toContain('◌ background · task-1');
+    const running = renderPlain(comp).join('\n');
+    expect(running).toContain('◌ background');
+    expect(running).toContain('latest.ts');
+    expect(running).not.toContain('first.ts');
+    expect(running).not.toContain('Inspect architecture');
+    expect(running).not.toContain('task-1');
 
-    comp.finish(false, 1000, 'done');
-    expect(renderPlain(comp).join('\n')).toContain('✓ background · task-1');
+    comp.finish(false, 1000, 'FINAL_RESULT');
+    const done = renderPlain(comp).join('\n');
+    expect(done).toContain('✓ background');
+    expect(done).not.toContain('FINAL_RESULT');
 
     const failed = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui);
     failed.setBackgroundTaskId('task-2');
     failed.finish(true, 1000, 'failed');
-    expect(renderPlain(failed).join('\n')).toContain('✗ background · task-2');
+    expect(renderPlain(failed).join('\n')).toContain('✗ background');
   });
 
   it('renders tool call activity while running', () => {
