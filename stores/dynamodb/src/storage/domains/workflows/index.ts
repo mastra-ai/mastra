@@ -61,6 +61,21 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
   };
 }
 
+/**
+ * Reduces a snapshot to what `listWorkflowRuns({ summary: true })` returns: `status`,
+ * `timestamp`, and `parentWorkflow` only for nested runs.
+ */
+function summarySnapshot(snapshot: WorkflowRunState): WorkflowRunState {
+  const summary: Record<string, unknown> = { status: snapshot?.status, timestamp: snapshot?.timestamp };
+  const parent = snapshot?.parentWorkflow;
+
+  if (parent?.workflowId && parent.runId) {
+    summary.parentWorkflow = { workflowId: parent.workflowId, runId: parent.runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
+}
+
 interface RunOwnerItem {
   run_id: string;
   generation: number;
@@ -694,6 +709,10 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     this.logger.debug('Getting workflow runs', { args });
 
@@ -772,6 +791,13 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
               return snapshot.resourceId === args.resourceId;
             });
           }
+
+          // The snapshot is one JSON string attribute, so DynamoDB can't project fields out of it.
+          // Reducing each page here keeps only the summary fields of the matching runs in memory.
+          if (args?.summary) {
+            pageFilteredData = pageFilteredData.map(item => ({ ...item, snapshot: summarySnapshot(item.snapshot) }));
+          }
+
           allMatchingSnapshots.push(...pageFilteredData);
         }
 
