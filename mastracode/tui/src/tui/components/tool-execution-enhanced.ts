@@ -1528,8 +1528,20 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return lines;
     };
 
-    const failed = this.getShellFailureLine() !== undefined;
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
+    // A background shell's result only says it started; how it ended comes from its exit.
+    const processExit = this.backgroundProcessExit;
+    if (processExit) {
+      const exitFailed = !processExit.killed && processExit.exitCode !== 0;
+      const status = processExit.killed
+        ? theme.fg('muted', ' ■ killed')
+        : exitFailed
+          ? theme.fg('error', ` ✗ exit ${processExit.exitCode}`)
+          : theme.fg('muted', ` exit ${processExit.exitCode}`);
+      renderShellBlock(status, prepareOutputLines(output), exitFailed);
+      return;
+    }
+    const failed = this.getShellFailureLine() !== undefined;
     renderShellBlock(this.getStatusIndicator(failed), prepareOutputLines(output), failed);
   }
 
