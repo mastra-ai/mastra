@@ -36,7 +36,8 @@ function disposeRemovedComponentReferences(state: TUIState, removed: ReadonlySet
   }
   for (const [toolCallId, call] of state.backgroundSubagentCalls ?? []) {
     if (call.component && removed.has(call.component)) state.backgroundSubagentCalls.delete(toolCallId);
-    else if (call.anchor && removed.has(call.anchor)) call.anchor = undefined;
+    if (call.insertBefore && removed.has(call.insertBefore)) call.insertBefore = undefined;
+    if (call.insertAfter && removed.has(call.insertAfter)) call.insertAfter = undefined;
   }
   deleteRemovedMapValues(state.pendingAskUserComponents, removed);
   deleteRemovedMapValues(state.pendingSubmitPlanComponents, removed);

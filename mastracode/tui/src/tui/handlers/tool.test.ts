@@ -67,7 +67,11 @@ function createToolHandlerContext(): EventHandlerContext {
 }
 
 describe('background placeholder opt-in', () => {
-  it.each(['view', 'mastra_expert'])('reconciles trusted background metadata for %s', toolName => {
+  it.each([
+    // Tool rows name the task; subagent boxes leave the id out of their title.
+    ['view', /✓ background · trusted-task/],
+    ['mastra_expert', /subagent alexandria \d+ms ✓ background(?! ·)/],
+  ])('reconciles trusted background metadata for %s', (toolName, title) => {
     const ctx = createToolHandlerContext();
     ctx.state.options.backgroundToolsEnabled = true;
     if (toolName === 'mastra_expert') {
@@ -87,7 +91,9 @@ describe('background placeholder opt-in', () => {
     });
     expect(ctx.state.pendingTools.has('background-call')).toBe(false);
     expect(ctx.state.pendingSubagents.has('background-call')).toBe(false);
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toMatch(/✓ background( · trusted-task)?/);
+    const rendered = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(rendered).toMatch(title);
+    if (toolName === 'mastra_expert') expect(rendered).not.toContain('trusted-task');
   });
 
   it.each(['execute_command', 'mastra_expert'])(
@@ -523,5 +529,24 @@ describe('deferred background subagent', () => {
     const box = ctx.state.pendingSubagents.get('sub-1')!;
     expect(children.indexOf(box)).toBeLessThan(children.indexOf(later));
     expect(stripAnsi(box.render(100).join('\n'))).toContain('◌ background');
+  });
+
+  it('places the box after what the chat showed at the placeholder result when nothing was streaming', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = true;
+    ctx.state.backgroundSubagentCalls = new Map();
+    const before = new Text('BEFORE_CALL', 0, 0);
+    ctx.addChildBeforeFollowUps(before);
+    ctx.state.streamingComponent = undefined;
+
+    markBackgroundSubagent(ctx, 'sub-2', 'task-2');
+    const later = new Text('LATER_OUTPUT', 0, 0);
+    ctx.addChildBeforeFollowUps(later);
+    handleSubagentStart(ctx, 'sub-2', 'explore', 'Find the auth middleware');
+
+    const children = visibleChildren(ctx);
+    const box = ctx.state.pendingSubagents.get('sub-2')!;
+    expect(children.indexOf(box)).toBe(children.indexOf(before) + 1);
+    expect(children.indexOf(box)).toBeLessThan(children.indexOf(later));
   });
 });

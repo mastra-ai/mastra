@@ -20,7 +20,7 @@ export interface NotificationOptions {
     toolName?: string;
     title?: string;
     summary?: string;
-    interrupted?: boolean;
+    interrupted?: 'restart' | 'shutdown';
     argsSummary?: string;
     errorSummary?: string;
   };
@@ -40,7 +40,7 @@ function formatBackgroundCompletionLine(
     return `${theme.fg(failed ? 'error' : 'success', '↳')} ${theme.fg('toolTitle', title)} finished${summary}${exit}`;
   }
   const verb = completion.interrupted
-    ? 'interrupted by a restart'
+    ? `interrupted by a ${completion.interrupted}`
     : status === 'cancelled'
       ? 'cancelled'
       : status === 'failed'

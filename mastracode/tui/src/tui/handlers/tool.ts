@@ -226,7 +226,8 @@ export function createStaticSubagentComponent(
     renderConfig.modelId,
     {
       collapseOnComplete: false,
-      expandOnComplete: true,
+      expandOnComplete: renderConfig.expandOnComplete ?? true,
+      expandBackgroundOnComplete: renderConfig.expandOnComplete === true,
       forked: renderConfig.forked,
       label: renderConfig.label,
       maxActivityLines: renderConfig.maxActivityLines,

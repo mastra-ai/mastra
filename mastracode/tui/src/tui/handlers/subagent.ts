@@ -3,6 +3,7 @@
  * subagent_start, subagent_tool_start, subagent_tool_end, subagent_end.
  */
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { flushRender, requestRender } from '../render-scheduler.js';
 
@@ -32,9 +33,13 @@ export function handleSubagentStart(
     component.setBackgroundTaskId(background.taskId);
     background.component = component;
   }
-  const anchorIndex = background?.anchor ? state.chatContainer.children.indexOf(background.anchor as any) : -1;
-  if (anchorIndex >= 0) {
-    insertChatComponentWithBoundarySpacing(state.chatContainer, component, anchorIndex);
+  const children = state.chatContainer.children as unknown[];
+  const beforeIndex = background?.insertBefore ? children.indexOf(background.insertBefore) : -1;
+  const afterIndex = background?.insertAfter ? children.indexOf(background.insertAfter) : -1;
+  if (beforeIndex >= 0) {
+    insertChatComponentWithBoundarySpacing(state.chatContainer, component, beforeIndex);
+  } else if (afterIndex >= 0) {
+    insertChatComponentWithBoundarySpacing(state.chatContainer, component, afterIndex + 1);
   } else if (state.streamingComponent) {
     // Insert before the current streamingComponent so subagent box
     // appears between pre-subagent text and post-subagent text
@@ -59,10 +64,12 @@ export function handleSubagentStart(
 export function markBackgroundSubagent(ctx: EventHandlerContext, toolCallId: string, taskId: string): void {
   const { state } = ctx;
   const component = state.pendingSubagents.get(toolCallId);
-  state.backgroundSubagentCalls.set(toolCallId, {
-    taskId,
-    ...(component ? { component } : { anchor: state.streamingComponent }),
-  });
+  // The call's place in the chat: before the text that followed it, or, with
+  // nothing streaming, after whatever the chat ends with now.
+  const position = state.streamingComponent
+    ? { insertBefore: state.streamingComponent }
+    : { insertAfter: [...state.chatContainer.children].reverse().find(child => !isChatBoundarySpacer(child)) };
+  state.backgroundSubagentCalls.set(toolCallId, { taskId, ...(component ? { component } : position) });
   if (component) {
     component.setBackgroundTaskId(taskId);
     requestRender(state);

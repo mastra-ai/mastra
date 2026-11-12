@@ -262,7 +262,10 @@ export interface TUIState {
    * `subagent_start` can arrive after its placeholder result, so the task id and
    * the chat position are kept until its box exists.
    */
-  backgroundSubagentCalls: Map<string, { taskId: string; anchor?: Component; component?: SubagentExecutionComponent }>;
+  backgroundSubagentCalls: Map<
+    string,
+    { taskId: string; insertBefore?: Component; insertAfter?: Component; component?: SubagentExecutionComponent }
+  >;
   voiceController?: VoiceController;
 
   // ── Agent / streaming ─────────────────────────────────────────────────

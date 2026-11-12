@@ -411,7 +411,8 @@ export class MastraTUI {
   private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
     try {
       if (activity.kind === 'process') {
-        if (this.state.local) await this.state.options.backgroundProcesses?.kill(activity.pid!);
+        const killed = this.state.local ? await this.state.options.backgroundProcesses?.kill(activity.pid!) : false;
+        if (!killed) showError(this.state, `Process ${activity.pid} is not running.`);
         return;
       }
       const manager = this.state.local?.controller.getMastra()?.backgroundTaskManager;

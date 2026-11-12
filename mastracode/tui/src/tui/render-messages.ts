@@ -5,6 +5,7 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import { readPlanFile, resolvePlanPath } from '@mastra/code-sdk/utils/plans';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { parseSubagentMeta } from '@mastra/core/agent-controller';
@@ -1091,7 +1092,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               pluginRenderConfig.modelId,
               {
                 collapseOnComplete: false,
-                expandOnComplete: true,
+                expandOnComplete: pluginRenderConfig.expandOnComplete ?? true,
+                expandBackgroundOnComplete: pluginRenderConfig.expandOnComplete === true,
                 forked: pluginRenderConfig.forked,
                 label: pluginRenderConfig.label,
                 maxActivityLines: pluginRenderConfig.maxActivityLines,
@@ -1178,7 +1180,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             state.pendingTools.set(part.toolCallId, toolComponent);
           }
 
-          if (toolName === 'execute_command' && state.options?.backgroundToolsEnabled && hasResult) {
+          if (toolName === MC_TOOLS.EXECUTE_COMMAND && state.options?.backgroundToolsEnabled && hasResult) {
             const processExit = backgroundProcessExits.get(part.toolCallId);
             if (processExit !== undefined) {
               toolComponent.setBackgroundProcessExit({ exitCode: processExit, killed: false });

@@ -563,7 +563,7 @@ describe('addUserMessage', () => {
     ],
     [
       'a subagent orphaned by a restart',
-      { taskId: 'task-r', toolName: 'subagent', title: 'Explore', interrupted: true },
+      { taskId: 'task-r', toolName: 'subagent', title: 'Explore', interrupted: 'restart' },
       'failed',
       '↳ Explore interrupted by a restart',
     ],

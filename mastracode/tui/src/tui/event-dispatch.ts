@@ -1,6 +1,7 @@
 /**
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type {
   AgentControllerEvent,
@@ -344,10 +345,9 @@ export async function dispatchEvent(
         const background = getBackgroundToolMetadata(event.providerMetadata);
         const taskId = !event.isError && background?.status === 'running' ? background.taskId : undefined;
         const context = state.backgroundToolContexts.get(event.toolCallId);
-        // Background shells keep the PID design: the result names the PID, and the
-        // exit arrives later as a `process` completion event.
+        // The result names the PID; the exit arrives later as a `process` completion event.
         const pid =
-          !event.isError && context?.toolName === 'execute_command'
+          !event.isError && context?.toolName === MC_TOOLS.EXECUTE_COMMAND
             ? parseBackgroundProcessPid(event.result)
             : undefined;
         if (pid && context) {

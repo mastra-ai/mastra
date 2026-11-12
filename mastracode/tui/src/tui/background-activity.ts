@@ -2,6 +2,11 @@ import type {
   BackgroundProcessExitEvent,
   BackgroundTaskCompletionEvent,
 } from '@mastra/code-sdk/agents/background-completion-events';
+import { parseBackgroundProcessPid } from '@mastra/code-sdk/agents/background-processes';
+import { builtinSubagents } from '@mastra/code-sdk/agents/subagents/index';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
+
+const SUBAGENT_TOOL_NAME = 'subagent';
 
 export type BackgroundActivityStatus = 'accepted' | 'completed' | 'failed' | 'cancelled';
 
@@ -32,13 +37,7 @@ export interface BackgroundToolContext {
   args?: unknown;
 }
 
-const BACKGROUND_PROCESS_RESULT = /^Started background process \(PID: ([^)]+)\)/;
-
-/** The PID in an `execute_command` background result. */
-export function parseBackgroundProcessPid(result: unknown): string | undefined {
-  const text = typeof result === 'string' ? result : undefined;
-  return text?.match(BACKGROUND_PROCESS_RESULT)?.[1];
-}
+export { parseBackgroundProcessPid };
 
 export function processActivityKey(pid: string): string {
   return `process:${pid}`;
@@ -53,11 +52,13 @@ function firstLine(value: unknown): string | undefined {
 /** The label a background call shows in the activity list. */
 export function describeBackgroundCall(toolName: string, args: unknown): string | undefined {
   const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
-  if (toolName === 'execute_command') return firstLine(record.description) ?? firstLine(record.command);
-  if (toolName === 'subagent') {
+  if (toolName === MC_TOOLS.EXECUTE_COMMAND) return firstLine(record.description) ?? firstLine(record.command);
+  if (toolName === SUBAGENT_TOOL_NAME) {
     const task = firstLine(record.task);
     const agentType = firstLine(record.agentType);
-    return task && agentType ? `${agentType}: ${task}` : (task ?? agentType);
+    // Named like the completion card; custom subagents fall back to their id.
+    const name = builtinSubagents.find(subagent => subagent.id === agentType)?.name ?? agentType;
+    return task && name ? `${name}: ${task}` : (task ?? name);
   }
   return undefined;
 }
@@ -144,7 +145,7 @@ export function finishBackgroundProcessActivity(
     pid: event.pid,
     exitCode: event.exitCode,
     toolCallId: event.toolCallId ?? existing?.toolCallId ?? '',
-    toolName: 'execute_command',
+    toolName: MC_TOOLS.EXECUTE_COMMAND,
     label: (sameProcess ? existing.label : undefined) ?? event.command,
     resourceId: (sameProcess ? existing.resourceId : event.resourceId) ?? '',
     threadId: (sameProcess ? existing.threadId : event.threadId) ?? '',
