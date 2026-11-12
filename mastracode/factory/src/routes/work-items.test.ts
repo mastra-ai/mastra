@@ -3276,13 +3276,29 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       expect(under(body, 'planning')).toEqual({ total: 2, ids: planning.slice(0, 1) });
     });
 
-    it('lists every phase that holds the asked card down to it', async () => {
+    it('answers for the asked card with its place and its body, and lists its phase no deeper', async () => {
       const { intake, planning } = await fileTwoPhases();
 
-      const body = await read(`limit=1&item=${intake[2]}`);
+      const body = await read(`limit=1&item=${intake[2]}&cards=true`);
 
-      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake });
+      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 1) });
       expect(under(body, 'planning')).toEqual({ total: 2, ids: planning.slice(0, 1) });
+      expect(body.item).toEqual({
+        id: intake[2],
+        version: expect.any(String),
+        places: [{ phase: 'intake', position: 2 }],
+      });
+      // The first card of each phase, then the asked one: three bodies, not the phase above it.
+      expect(body.workItems?.map(card => card.id)).toEqual([intake[0], planning[0], intake[2]]);
+      expect(body.workItems?.[2]?.version).toBe(body.item?.version);
+    });
+
+    it('answers no asked card for one the board does not hold', async () => {
+      await fileTwoPhases();
+
+      const body = await read(`limit=1&item=${crypto.randomUUID()}`);
+
+      expect(body).not.toHaveProperty('item');
     });
 
     it('ignores a window for a phase the board no longer has, so a reader that deepened it keeps its board', async () => {

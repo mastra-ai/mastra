@@ -606,7 +606,10 @@ export const boardPhasesQuerySchema = z.object({
       message: 'Send one window per phase',
     })
     .transform(windows => new Map(windows)),
-  /** A card to list in every phase that holds it, however deep it is there. */
+  /**
+   * A card to answer for wherever it lies: the answer names it with its place in each phase, and
+   * `cards=true` sends its body. No phase is listed deeper for it.
+   */
   item: uuidSchema.optional(),
   /** `true` also sends the body of every card the answer names. */
   cards: z.enum(['true']).optional(),
@@ -629,13 +632,23 @@ export const boardPhasesResponseSchema = z.object({
       cards: z.array(cardStampSchema),
     }),
   ),
-  /** Cards related to a listed card that no phase lists. */
+  /** With `item`: the asked card, when the board holds it. */
+  item: cardStampSchema
+    .extend({
+      /**
+       * Each phase the view lists the card under, and how many cards it lists before it there.
+       * Empty when the search or filters leave the card out.
+       */
+      places: z.array(z.object({ phase: z.string(), position: countSchema })),
+    })
+    .optional(),
+  /** Cards related to a listed card or to the asked one that no phase lists. */
   related: z.array(cardStampSchema),
   /** Cards of the board, whatever the search and filters. */
   boardTotal: countSchema,
   /** Cards of the board that match the view, each counted once: a card in two phases is one. */
   matchingTotal: countSchema,
-  /** With `cards=true`: the body of every card named in `phases` and `related`, each with its `version`. */
+  /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
   workItems: z.array(cardSchema).optional(),
   /** Among the named cards. */
   runningSessionIds: z.array(z.string()),

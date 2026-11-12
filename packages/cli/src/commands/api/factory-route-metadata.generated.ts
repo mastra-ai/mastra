@@ -2396,6 +2396,40 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ]
           }
         },
+        "item": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "version": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "places": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "phase": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                },
+                "required": [
+                  "phase",
+                  "position"
+                ]
+              }
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "places"
+          ]
+        },
         "related": {
           "type": "array",
           "items": {
@@ -2499,16 +2533,22 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "object",
           "properties": {
             "id": {
-              "type": "string"
+              "$ref": "#/$defs/__schema2"
             },
             "version": {
-              "type": "string"
+              "$ref": "#/$defs/__schema3"
             }
           },
           "required": [
             "id",
             "version"
           ]
+        },
+        "__schema2": {
+          "type": "string"
+        },
+        "__schema3": {
+          "type": "string"
         }
       }
     }

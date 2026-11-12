@@ -25,8 +25,8 @@ export type BoardPhasesView = Omit<BoardPhasesQuery, 'cards'>;
 
 export interface BoardPhases {
   /** The answer, without what only the route knows: session states and card bodies. */
-  body: Pick<BoardPhasesResponse, 'phases' | 'related' | 'boardTotal' | 'matchingTotal'>;
-  /** Every card `body` names, the listed ones first. */
+  body: Pick<BoardPhasesResponse, 'phases' | 'item' | 'related' | 'boardTotal' | 'matchingTotal'>;
+  /** Every card `body` names: the listed ones, the asked one, then the related ones. */
   named: Card[];
 }
 
@@ -163,26 +163,30 @@ export function boardPhases(
       ? [(entry: Placed) => entry.by === userId, (entry: Placed) => entry.by !== userId]
       : EVERY_CARD;
   const item = view.item === undefined ? undefined : index.cards.find(card => card.id === view.item);
-  const reached = item && (!matches || matches(item)) ? cardPhases(item, board.phases) : [];
+  const shown = item && (!matches || matches(item)) ? cardPhases(item, board.phases) : [];
+  const places: Array<{ phase: string; position: number }> = [];
 
   const listed = new Set<Card>();
   let matchingTotal = 0;
   const phases = index.phases.map(held => {
     const all = ordered(held, view.sort);
     const size = view.window.get(held.phase) ?? view.limit;
-    // The phase lists down to the asked card, however deep it is.
-    let awaited = reached.includes(held.phase) ? item : undefined;
+    // The asked card is found, not listed down to: the answer is no larger for a card that lies deep.
+    let sought = shown.includes(held.phase) ? item : undefined;
     const cards: Card[] = [];
     let total = 0;
     scan: for (const pass of passes) {
       for (const entry of all) {
         if (!pass(entry) || (matches && !matches(entry.card))) continue;
+        if (entry.card === sought) {
+          places.push({ phase: held.phase, position: total });
+          sought = undefined;
+        }
         total += 1;
-        if (cards.length < size || awaited) {
+        if (cards.length < size) {
           cards.push(entry.card);
           listed.add(entry.card);
-          if (entry.card === awaited) awaited = undefined;
-        } else if (!matches) {
+        } else if (!matches && !sought) {
           // Nothing is filtered out, so the rest need not be read to count them.
           break scan;
         }
@@ -195,6 +199,8 @@ export function boardPhases(
   for (const card of index.repeats) {
     if (!matches || matches(card)) matchingTotal -= 1;
   }
+  // Its body is the reader's to show whether or not a phase lists it.
+  if (item) listed.add(item);
 
   const relatedTo = relatedCardsIn(list);
   const related = new Set<Card>();
@@ -204,7 +210,13 @@ export function boardPhases(
     }
   }
   return {
-    body: { phases, related: [...related].map(stamp), boardTotal: index.cards.length, matchingTotal },
+    body: {
+      phases,
+      ...(item ? { item: { ...stamp(item), places } } : {}),
+      related: [...related].map(stamp),
+      boardTotal: index.cards.length,
+      matchingTotal,
+    },
     named: [...listed, ...related],
   };
 }

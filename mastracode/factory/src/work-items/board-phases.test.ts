@@ -75,17 +75,95 @@ describe('boardPhases', () => {
     expect(listedIds(list, { sort: 'created-oldest' }).intake).toEqual(['c', 'b', 'a']);
   });
 
-  it('does not deepen a phase for a card the view filters out', () => {
-    const list = [
-      testCard('old', { title: 'Rename the palette', stageHistory: [entered('intake', '2026-03-01T00:00:00.000Z')] }),
-      testCard('mid', { title: 'Fix the login', stageHistory: [entered('intake', '2026-03-02T00:00:00.000Z')] }),
-      testCard('new', { title: 'Fix the logout', stageHistory: [entered('intake', '2026-03-03T00:00:00.000Z')] }),
-    ];
-    const item = '00000000-0000-4000-8000-000000000001';
-    const withIds = list.map((card, nth) => (nth === 0 ? { ...card, id: item } : card));
+  describe('asked for a card (item)', () => {
+    const cardId = (nth: number) => `00000000-0000-4000-8000-${String(nth).padStart(12, '0')}`;
+    /** `count` cards of one phase; the lower the number, the longer ago it entered. */
+    const aged = (count: number, phase = 'intake') =>
+      Array.from({ length: count }, (_, nth) =>
+        testCard(cardId(nth), {
+          title: nth % 2 === 0 ? `Fix ${nth}` : `Rename ${nth}`,
+          stages: [phase],
+          createdAt: new Date(Date.UTC(2026, 0, 1) + nth * 1_000),
+          stageHistory: [entered(phase, new Date(Date.UTC(2026, 2, 1) + nth * 1_000).toISOString())],
+        }),
+      );
+    const ask = (list: readonly Card[], query: Record<string, string | string[]>) =>
+      boardPhases(list, BOARD, view(query), 'u1', version);
 
-    expect(listedIds(withIds, { limit: '1', item }).intake).toEqual(['new', 'mid', item]);
-    expect(listedIds(withIds, { limit: '1', item, q: 'fix' }).intake).toEqual(['new']);
+    it('names the card with its place in the phase, and lists the phase no deeper for it', () => {
+      const list = aged(4);
+
+      const { body, named } = ask(list, { limit: '1', item: cardId(0) });
+
+      expect(body.phases[0]?.cards.map(card => card.id)).toEqual([cardId(3)]);
+      expect(body.item).toEqual({
+        id: cardId(0),
+        version: `version of ${cardId(0)}`,
+        places: [{ phase: 'intake', position: 3 }],
+      });
+      expect(named.map(card => card.id)).toEqual([cardId(3), cardId(0)]);
+    });
+
+    it('counts the place in the view’s order and among the cards the view keeps', () => {
+      const list = aged(4);
+
+      expect(ask(list, { item: cardId(0), sort: 'created-oldest' }).body.item?.places).toEqual([
+        { phase: 'intake', position: 0 },
+      ]);
+      // Cards 2 and 0 match `fix`; card 2 entered later.
+      expect(ask(list, { item: cardId(0), q: 'fix' }).body.item?.places).toEqual([{ phase: 'intake', position: 1 }]);
+    });
+
+    it('gives a card the view filters out no place, and still names it for its body', () => {
+      const list = aged(4);
+
+      const { body, named } = ask(list, { limit: '1', item: cardId(0), q: 'rename' });
+
+      expect(body.item).toMatchObject({ id: cardId(0), places: [] });
+      expect(body.phases[0]).toMatchObject({ total: 2, cards: [{ id: cardId(3) }] });
+      expect(named.map(card => card.id)).toEqual([cardId(3), cardId(0)]);
+    });
+
+    it('gives a card in two phases a place in each', () => {
+      const list = [...aged(3), { ...aged(1, 'planning')[0]!, id: cardId(9), stages: ['intake', 'planning'] }];
+
+      expect(ask(list, { item: cardId(9) }).body.item?.places).toEqual([
+        { phase: 'intake', position: 3 },
+        { phase: 'planning', position: 0 },
+      ]);
+    });
+
+    it('answers nothing for a card the board does not hold', () => {
+      const list = [...aged(2), testCard(cardId(7), { board: 'other' })];
+
+      const { body, named } = ask(list, { item: cardId(7) });
+
+      expect(body).not.toHaveProperty('item');
+      expect(named.map(card => card.id)).toEqual([cardId(1), cardId(0)]);
+    });
+
+    it('names the cards related to the asked card', () => {
+      const [oldest, ...rest] = aged(3);
+      const parent = testCard('parent', { board: 'other' });
+      const list = [parent, { ...oldest!, parentWorkItemId: 'parent' }, ...rest];
+
+      const { body } = ask(list, { limit: '1', item: cardId(0) });
+
+      expect(body.related.map(card => card.id)).toEqual(['parent']);
+    });
+
+    // A link to an old card used to list its whole phase above it: 82% of a 10,000-card board.
+    it.each([2_000, 10_000])('names no more cards for the oldest of %i than for one on the first page', count => {
+      const list = aged(count, 'done');
+      const shallow = ask(list, { item: cardId(count - 1) });
+      const deep = ask(list, { item: cardId(0) });
+
+      expect(deep.body.item?.places).toEqual([{ phase: 'done', position: count - 1 }]);
+      expect(shallow.named).toHaveLength(50);
+      // The asked card is the one more.
+      expect(deep.named).toHaveLength(51);
+      expect(deep.body.phases).toEqual(shallow.body.phases);
+    });
   });
 
   it('deepens a phase whose id is as long as a board allows', () => {
