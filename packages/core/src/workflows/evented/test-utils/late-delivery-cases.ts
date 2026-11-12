@@ -377,27 +377,37 @@ export function describeLateDeliveryCases({
 
         // B handles its restart's start event, and A's step end is delivered in the middle of it:
         // after B read the run, before B writes the snapshot it carries.
-        const b = await startReplica(build('B'));
+        const fromB = heldQueue(() => true);
+        const b = await startReplica(build('B'), fromB.intercept);
         const store = (await b.mastra.getStorage()!.getStore('workflows'))!;
         const readOwnership = store.getRunOwnership.bind(store);
         let delivered = false;
-        vi.spyOn(store, 'getRunOwnership').mockImplementation(async args => {
+        const drained = deferred<void>();
+        const spy = vi.spyOn(store, 'getRunOwnership').mockImplementation(async args => {
           if (!delivered && args.runId === runEndedKey(run.runId)) {
             delivered = true;
             fromA.holdAll();
             await fromA.drain(a);
+            drained.resolve();
           }
 
           return readOwnership(args);
         });
-        (await b.workflow.createRun({ runId: run.runId }))
-          .restart()
-          .catch(error => console.error('The restart rejected', error));
-        await expect.poll(() => delivered).toBe(true);
-        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+        try {
+          (await b.workflow.createRun({ runId: run.runId }))
+            .restart()
+            .catch(error => console.error('The restart rejected', error));
+          // B handles its start event and everything it publishes from there.
+          await fromB.firstHeld;
+          await fromB.drain(b);
+          await drained.promise;
 
-        expect(executions).toEqual(['A:first', 'A:second']);
-        expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+          expect((await storedRun(run.runId))?.status).toBe('success');
+          expect(executions).toEqual(['A:first', 'A:second']);
+          expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+        } finally {
+          spy.mockRestore();
+        }
       },
       20_000,
     );

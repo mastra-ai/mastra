@@ -217,10 +217,14 @@ export function describeLateEndCases({
       expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
 
       const travelled = run.timeTravel({ step: 'second', inputData: { n: 2 } });
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const outcome = await Promise.race([
         travelled.then(result => result.status),
-        new Promise(resolve => setTimeout(() => resolve('still waiting'), 5_000)),
+        new Promise(resolve => {
+          timer = setTimeout(() => resolve('still waiting'), 5_000);
+        }),
       ]);
+      clearTimeout(timer);
       expect(outcome).toBe('success');
       expect(executions).toEqual(['first', 'second', 'second']);
     }, 20_000);
@@ -397,9 +401,13 @@ export function describeLateEndCases({
 
       // The first child's end reaches B while A still evaluates the condition, after a lease TTL.
       await new Promise(resolve => setTimeout(resolve, 3 * Number(process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS)));
+      const childEnd = childEnds(a.published, run.runId)[0]!;
+      const store = (await getStorage().getStore('workflows'))!;
+      const claim = await store.getRunOwnership({ runId: nestedHandOffKey(run.runId, [0], childEnd.runId) });
+      expect(claim?.live).toBe(true);
       const fromB = heldQueue(() => true);
       const b = await startReplica(build(), fromB.intercept);
-      expect(await redeliver(b, childEnds(a.published, run.runId)[0]!)).toEqual({ ok: true });
+      expect(await redeliver(b, childEnd)).toEqual({ ok: true });
       await fromB.drain(b);
 
       // A's condition returns and A goes on with the loop.
