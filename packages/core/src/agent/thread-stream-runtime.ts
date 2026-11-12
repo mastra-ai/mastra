@@ -4768,6 +4768,20 @@ export class AgentThreadStreamRuntime {
     const owner = record.leaseOwner ?? this.#threadLeaseOwner(resolvedPubSub, runId, record.generation);
     const lease = await this.#acquireThreadLease(resolvedPubSub, key, runId, owner);
     if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
+    // The run may have been aborted (and its record dropped) while the lease was being taken. Give back
+    // only this lease; a newer registration of the run owns and renews its own.
+    if (
+      state.threadRunsById.get(runId) !== record ||
+      record.lifecycle !== 'suspended' ||
+      state.activeThreadRunIds.get(key) !== runId
+    ) {
+      if (!state.threadRunsById.has(runId)) {
+        void this.#getLeaseProvider(resolvedPubSub)
+          .releaseLease(key, owner)
+          .catch(() => {});
+      }
+      return;
+    }
     this.#startLeaseRenewal(resolvedPubSub, key, runId, owner);
     record.leaseOwner = owner;
   }

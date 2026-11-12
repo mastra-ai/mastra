@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-A run waiting on a tool approval or suspension now keeps its saved snapshot when the thread lease backend (e.g. Redis) is unreachable for longer than the lease TTL, or loses the lease. Before, the lease-loss abort deleted the snapshot, so the pending approval could no longer be resumed. The parked run now resumes normally once the backend is back, holding the thread lease again while it runs. A resume is refused, and the run stays parked, if another run took the thread lease in the meantime.
+Fixed a run waiting on a tool approval losing its saved state when the thread lease expired. This happened when the lease backend (such as Redis) was down for too long. Before, the run's snapshot was deleted, so the approval could not be resumed. Now the run resumes normally once the backend is back. If another run took the thread first, the resume is refused and the run keeps waiting.

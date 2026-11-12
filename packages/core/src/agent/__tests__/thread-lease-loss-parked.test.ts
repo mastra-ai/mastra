@@ -328,6 +328,24 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     20_000,
   );
 
+  it('does not keep the lease of a parked run that is stopped while it takes the lease again', async () => {
+    const ctx = await parkAndLoseLease(`${engine}-stopped-mid-take`, async () => ({ archived: true }));
+    let letAcquire!: () => void;
+    const acquireGate = new Promise<void>(resolve => (letAcquire = resolve));
+    const acquire = ctx.pubsub.acquireLease.bind(ctx.pubsub);
+    ctx.pubsub.acquireLease = async (key, owner, ttlMs) => {
+      await acquireGate;
+      return acquire(key, owner, ttlMs);
+    };
+    const taking = agentThreadStreamRuntime.reacquireParkedRunLease(ctx.runId, ctx.agent.getPubSub());
+    expect(ctx.agent.abortThreadStream({ resourceId: RESOURCE, threadId: ctx.thread })).toBe(true);
+    letAcquire();
+    await taking;
+    // Past the TTL: a renewal started for the stopped run would still hold the thread.
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(heldLeaseOwners(ctx.pubsub)).toEqual([]);
+  }, 20_000);
+
   it('reports a user abort of a run resumed after a lapse as a plain abort, not a lost lease', async () => {
     let toolStarted!: () => void;
     const started = new Promise<void>(resolve => (toolStarted = resolve));
