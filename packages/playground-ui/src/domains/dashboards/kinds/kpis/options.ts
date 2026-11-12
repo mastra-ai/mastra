@@ -1,18 +1,23 @@
 import type { DashboardQuery } from '@mastra/client-js';
 import { z } from 'zod/v4';
-import type { AggregateValue } from '../../lib/answers';
-import { exprRefs, unknownQueryIssues, valueExprSchema } from '../../lib/values';
+import { measureOf, rowsOf, valueOf } from '../../lib/answers';
+import type { DashboardAnswer } from '../../lib/requests';
+import { evaluate, exprRefs, formatSchema, unknownQueryIssues, valueExprSchema } from '../../lib/values';
 import type { ValueExpr, ValueRef } from '../../lib/values';
 import type { ResolvedView } from '../../widget-kind';
 
 const kpiItemSchema = z
   .object({
     label: z.string().min(1),
-    icon: z.enum(['bot', 'coins', 'hash', 'threads']),
-    format: z.enum(['count', 'usd']),
-    /** A metrics or scores aggregate value, or the sum of several. Comparing needs `compare` on the queries. */
+    icon: z.enum(['bot', 'coins', 'hash', 'threads']).optional(),
+    format: formatSchema,
+    /**
+     * Aggregates combined with the value operations: metrics and scores aggregates, or ungrouped trace
+     * and span aggregates (whose measures include percentiles such as `duration.p95`). Comparing needs
+     * `compare` on the queries.
+     */
     value: valueExprSchema,
-    detail: z.string(),
+    detail: z.string().optional(),
     lowerIsBetter: z.boolean().optional(),
   })
   .strict();
@@ -23,73 +28,92 @@ export type KpisOptions = z.infer<typeof kpisOptionsSchema>;
 
 export type KpiFigures = { value?: number; previous?: number; change?: number };
 
-/** One aggregate's figures: its value (or price) now, before, and the change the API reports. */
-function refFigures(response: AggregateValue | undefined, ref: ValueRef): KpiFigures {
-  if (ref.field === 'estimatedCost') {
+/** One query's answers: the page's window, and the previous window when it's a request of its own. */
+export type KpiAnswers = { current?: DashboardAnswer; previous?: DashboardAnswer };
+
+const changeOf = (value: number | undefined, previous: number | undefined) =>
+  value !== undefined && previous !== undefined && previous !== 0
+    ? ((value - previous) / Math.abs(previous)) * 100
+    : undefined;
+
+/** An ungrouped trace or span aggregate's one row, read at `ref`'s measure. */
+const rowMeasure = (answer: DashboardAnswer | undefined, ref: ValueRef) => {
+  const row = rowsOf(answer)?.rows[0];
+  return row && ref.measure ? measureOf(row.measures, ref.measure) : undefined;
+};
+
+/**
+ * One ref's figures. A metrics or scores aggregate answers its previous value and change itself; a trace
+ * or span aggregate reads the previous window's own answer.
+ */
+function refFigures(ref: ValueRef, answers: KpiAnswers | undefined): KpiFigures {
+  const aggregate = valueOf(answers?.current);
+  if (aggregate && ref.field === 'estimatedCost') {
     return {
-      value: response?.estimatedCost ?? undefined,
-      previous: response?.previousEstimatedCost ?? undefined,
-      change: response?.costChangePercent ?? undefined,
+      value: aggregate.estimatedCost ?? undefined,
+      previous: aggregate.previousEstimatedCost ?? undefined,
+      change: aggregate.costChangePercent ?? undefined,
     };
   }
-  return {
-    value: response?.value ?? undefined,
-    previous: response?.previousValue ?? undefined,
-    change: response?.changePercent ?? undefined,
-  };
+  if (aggregate) {
+    return {
+      value: aggregate.value ?? undefined,
+      previous: aggregate.previousValue ?? undefined,
+      change: aggregate.changePercent ?? undefined,
+    };
+  }
+  const value = rowMeasure(answers?.current, ref);
+  const previous = rowMeasure(answers?.previous, ref);
+  return { value, previous, change: changeOf(value, previous) };
 }
 
 /**
- * A KPI's figures. A single aggregate keeps the API's own change; a sum adds the parts and works
- * out the change from the summed previous value, as the Tokens KPI does.
+ * A KPI's figures. A single ref keeps the API's own change; any other expression is evaluated over
+ * the page's window and over the previous one, and the change is worked out from the two.
  */
-export function kpiFigures(expr: ValueExpr, responses: ReadonlyMap<string, AggregateValue | undefined>): KpiFigures {
-  if (!('sum' in expr)) {
-    const [ref] = exprRefs(expr);
-    return ref ? refFigures(responses.get(ref.query), ref) : {};
-  }
-  const parts = expr.sum.map(e => kpiFigures(e, responses));
-  const hasCurrent = parts.some(p => p.value !== undefined);
-  const hasPrevious = parts.some(p => p.previous !== undefined);
-  const value = parts.reduce((a, p) => a + (p.value ?? 0), 0);
-  const previous = parts.reduce((a, p) => a + (p.previous ?? 0), 0);
-  return {
-    value: hasCurrent ? value : undefined,
-    previous: hasPrevious ? previous : undefined,
-    change: hasPrevious && previous > 0 ? ((value - previous) / previous) * 100 : undefined,
-  };
+export function kpiFigures(expr: ValueExpr, answers: ReadonlyMap<string, KpiAnswers | undefined>): KpiFigures {
+  if ('query' in expr) return refFigures(expr, answers.get(expr.query));
+  const value = evaluate(expr, ref => refFigures(ref, answers.get(ref.query)).value);
+  const previous = evaluate(expr, ref => refFigures(ref, answers.get(ref.query)).previous);
+  return { value, previous, change: changeOf(value, previous) };
 }
 
-const readsAggregates = (expr: ValueExpr): boolean =>
-  'query' in expr || ('sum' in expr && expr.sum.every(readsAggregates));
+const isTraceAggregate = (query: DashboardQuery) =>
+  query.source === 'traceAggregate' || query.source === 'spanAggregate';
 
-const isAggregate = (query: DashboardQuery | undefined) =>
-  (query?.source === 'metrics' || query?.source === 'scores') && query.request === 'aggregate';
+const isAggregate = (query: DashboardQuery) =>
+  isTraceAggregate(query) ||
+  ((query.source === 'metrics' || query.source === 'scores') && query.request === 'aggregate');
 
-/** What the schema can't say: query ids the view has, and only metrics or scores aggregates (scores naming a scorer), or sums of them. */
+/**
+ * What the schema can't say: query ids the view has, and only aggregates that answer one figure: metrics
+ * or scores aggregates (scores naming a scorer), or trace and span aggregates that neither group nor
+ * bucket, read at a measure they request.
+ */
 export const kpisIssues = (view: ResolvedView<KpisOptions>) => {
   const byId = new Map(view.queries.map(q => [q.id, q]));
+  const refIssues = (label: string, ref: ValueRef): string[] => {
+    const query = byId.get(ref.query);
+    if (!query) return [];
+    const reads = `KPI '${label}' reads query '${ref.query}'`;
+    if (!isAggregate(query)) return [`${reads}, which is not an aggregate`];
+    // A KPI shows one figure, so it can't discover scorers the way the scores widget does.
+    if (query.source === 'scores' && query.scorerId === undefined)
+      return [`KPI '${label}' reads scores query '${ref.query}', which must name a scorer`];
+    if (!isTraceAggregate(query)) return [];
+    if (query.groupBy?.length || query.interval !== undefined) {
+      return [`${reads}, which groups or buckets its rows; a KPI shows one figure`];
+    }
+    if (ref.measure === undefined || !(query.measures as readonly string[]).includes(ref.measure)) {
+      return [`${reads} without naming one of its measures`];
+    }
+    return [];
+  };
   return [
     ...unknownQueryIssues(
       view.options.items.flatMap(i => exprRefs(i.value).map(r => r.query)),
       view.queries,
     ),
-    ...view.options.items
-      .filter(i => !readsAggregates(i.value))
-      .map(i => `KPI '${i.label}' can only read an aggregate or sum several`),
-    ...view.options.items.flatMap(i =>
-      exprRefs(i.value)
-        .filter(r => byId.has(r.query) && !isAggregate(byId.get(r.query)))
-        .map(r => `KPI '${i.label}' reads query '${r.query}', which is not a metrics or scores aggregate`),
-    ),
-    // A KPI shows one figure, so it can't discover scorers the way the scores widget does.
-    ...view.options.items.flatMap(i =>
-      exprRefs(i.value)
-        .filter(r => {
-          const query = byId.get(r.query);
-          return query?.source === 'scores' && query.scorerId === undefined;
-        })
-        .map(r => `KPI '${i.label}' reads scores query '${r.query}', which must name a scorer`),
-    ),
+    ...view.options.items.flatMap(i => exprRefs(i.value).flatMap(r => refIssues(i.label, r))),
   ];
 };
