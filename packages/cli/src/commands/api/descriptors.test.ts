@@ -129,7 +129,7 @@ describe('api command descriptors', () => {
       factoryProjectEnvironmentVariablesSet: ['projectSandboxEnvSet', ['id', 'name'], true, true, false],
       factoryProjectEnvironmentVariablesUpdate: ['projectSandboxEnvUpdate', ['id', 'name'], true, true, false],
       factoryProjectEnvironmentVariablesDelete: ['projectSandboxEnvDelete', ['id', 'name'], false, false, false],
-      'factoryWork-itemList': ['workItemList', ['id'], false, false, false],
+      'factoryWork-itemList': ['workItemList', ['id'], true, false, false],
       'factoryWork-itemCreate': ['workItemCreate', ['id'], true, true, false],
       'factoryWork-itemUpdate': ['workItemUpdate', ['id'], true, true, false],
       'factoryWork-itemDelete': ['workItemDelete', ['id'], false, false, false],
