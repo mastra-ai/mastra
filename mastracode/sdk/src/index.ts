@@ -76,8 +76,10 @@ import { fastMode } from './agents/modes/explore.js';
 import { createPlanMode } from './agents/modes/plan.js';
 import {
   createGitRefReminderReader,
+  createGitRefReminderReaderAsync,
   instructionSourcePaths,
   loadSessionInstructions,
+  loadSessionInstructionsAsync,
   sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
 import { builtinSubagents } from './agents/subagents/index.js';
@@ -96,7 +98,12 @@ import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
+import {
+  resolveAgentStreamsOff,
+  resolveExperimentalAgent,
+  validateExperimentalAgent,
+  wrapExperimentalAgent,
+} from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -628,6 +635,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
   const experimentalAgent = resolveExperimentalAgent(globalSettings);
+  const agentStreamsOff = resolveAgentStreamsOff();
   const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
@@ -1247,7 +1255,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
         const projectPath = state?.projectPath ?? project.rootPath;
         const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
-        const reader = createGitRefReminderReader(primary!, state.baseRef);
+        const reader =
+          'supportsAsyncInstructionReaders' in AgentsMDInjector
+            ? createGitRefReminderReaderAsync(primary!, state.baseRef)
+            : createGitRefReminderReader(primary!, state.baseRef);
         if (primary === projectPath) return reader;
         // The base ref covers the session's own checkout only; the other
         // checkouts under the working directory are never read off disk.
@@ -1261,6 +1272,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ...reader,
           pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
           isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
+          readFile: filePath => {
+            if (outsidePrimary(filePath)) throw new Error(`Not found at ref ${state.baseRef}: ${filePath}`);
+            return reader.readFile(filePath);
+          },
         };
       },
       getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -1270,13 +1285,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // dedup stays consistent on untrusted checkouts and across roots.
         const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
         const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
-        const sources = loadSessionInstructions({
+        const options = {
           workingDir: projectPath,
           instructionRoots: state?.instructionRoots,
           untrustedCheckout: untrusted,
           baseRef: untrusted ? state?.baseRef : undefined,
-        });
-        return instructionSourcePaths(sources, roots);
+        };
+        if (!('supportsAsyncInstructionReaders' in AgentsMDInjector)) {
+          return instructionSourcePaths(loadSessionInstructions(options), roots);
+        }
+        return loadSessionInstructionsAsync(options).then(sources => instructionSourcePaths(sources, roots));
       },
     }),
   ];
@@ -1350,6 +1368,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    ...(agentStreamsOff ? { durable: false } : {}),
     // Workspace is wired per-request at the AgentController level (see
     // `config.workspace` below), so opt out of the factory's default local
     // workspace. An explicit `undefined` is required: the factory only builds a

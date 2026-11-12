@@ -2131,6 +2131,7 @@ export class MastraFactory {
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
                 ...(githubIntegration
                   ? {
@@ -2430,6 +2431,8 @@ export class MastraFactory {
               boardRegistry: this.#projectBoards ?? this.#boards,
               factoryReady,
               domains,
+              // The Platform GitHub lane only receives pushes through its polling worker.
+              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
@@ -2459,10 +2462,9 @@ export class MastraFactory {
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
     await this.#environmentBuilds?.probeSchedules();
-    await timedPhase(
-      'finalize.reconcileBoundThreads',
-      () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
-    );
+    // Results written while no process was watching are caught up by the
+    // dispatcher's first tick, in the background. Awaiting that walk here held
+    // boot for one sequential pass over every active binding.
     // A thread's messages move before its run binding does, so a reconcile that
     // overlapped the migration can miss them. Catch up once the bindings moved.
     void this.#sessionResourceMigration

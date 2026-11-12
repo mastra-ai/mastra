@@ -335,7 +335,7 @@ describe('QUERY_SPANS', () => {
 
     const unknownSort = strictValidationError({
       timeRange: TIME_RANGE,
-      orderBy: [{ field: 'durationMs', direction: 'desc' }],
+      orderBy: [{ field: 'runtimeDurationMs', direction: 'desc' }],
     });
     expect(getDeclaredErrorSchema(422).parse(unknownSort?.body)).toMatchObject({
       issues: [{ code: 'invalid_request', path: ['orderBy', 0, 'field'] }],
@@ -618,4 +618,19 @@ describe('QUERY_SPANS', () => {
       'TRACE_QUERY_EXECUTION_TIMEOUT',
     );
   });
+});
+
+it('rejects duration ordering before executing an older store', async () => {
+  const { mastra, observabilityStore } = createHarness();
+  const error = await captureHttpException(
+    QUERY_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        orderBy: [{ field: 'durationMs', direction: 'desc' }],
+      }),
+    ),
+  );
+  expect(error.status).toBe(501);
+  expect(await error.getResponse().json()).toMatchObject({ code: 'SPAN_QUERY_UNSUPPORTED' });
+  expect(observabilityStore.querySpans).not.toHaveBeenCalled();
 });

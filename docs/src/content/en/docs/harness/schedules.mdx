@@ -50,7 +50,7 @@ await mastra.schedules.create({
 })
 ```
 
-Mastra starts the scheduler the first time a schedule is created, then fires the agent on the cron you specify.
+Schedules fire only in a process where Mastra's background [workers](/docs/deployment/workers) are running. The server that `mastra dev` and `mastra build` generate starts them for you. With a [server adapter](/docs/server/server-adapters) or your own script, call `mastra.startWorkers()` yourself, otherwise schedules are saved but never fire. See [Start background workers](/docs/server/server-adapters#start-background-workers).
 
 ## Cadence
 

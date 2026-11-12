@@ -22,6 +22,7 @@ import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
+import { groupedRepositoryAccess } from './environment/repository-access.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -75,9 +76,9 @@ import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './wor
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 // GitHub installation tokens live 60 minutes and minted access is cached for
-// up to 5, so replace an installed token well before it can expire. An
+// up to 20, so replace an installed token well before it can expire. An
 // installed org PAT does not expire this way and is never age-refreshed.
-const GITHUB_TOKEN_REFRESH_AFTER_MS = 45 * 60_000;
+const GITHUB_TOKEN_REFRESH_AFTER_MS = 30 * 60_000;
 const isGithubTokenStale = (registration: { tokenIssuedAt: number; patInstalled: boolean }): boolean =>
   !registration.patInstalled && Date.now() - registration.tokenIssuedAt >= GITHUB_TOKEN_REFRESH_AFTER_MS;
 /** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
@@ -545,6 +546,17 @@ async function resolveSourceControlSession(
 }
 
 /** One environment repository as the sandbox context and the boot need it, in position order. */
+/** How many environment repositories one boot syncs at once. */
+const ENVIRONMENT_SYNC_CONCURRENCY = 4;
+
+async function forEachConcurrently<T>(items: T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await run(items[next++]!);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 export interface SessionEnvironmentRepo {
   projectRepositoryId: string;
   repositoryId: string;
@@ -817,6 +829,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const tokenRepositoryIds = environment
       ? [repository.id, ...environment.repos.map(repo => repo.repositoryId).filter(id => id !== repository.id)]
       : [repository.id];
+    // Every environment repository's access, minted in groups of ten.
+    const repositoryAccess = groupedRepositoryAccess(sourceControl.versionControl, session.orgId, tokenRepositoryIds);
     if (githubProvider) {
       registerGithubRefreshTarget(requestContext, {
         orgId: session.orgId,
@@ -1018,18 +1032,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 ...(environment
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
-                      getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                      getRepositoryAccess: args => repositoryAccess(args.repositoryId),
                     })
                   : {
                       // Stored nullable; the context speaks `undefined` for absent.
                       setupCommand: projectRepository.setupCommand ?? undefined,
                       // Deferred call, only dereferenced when a provider needs the repo
                       // outside the VM (template build time).
-                      getRepositoryAccess: () =>
-                        sourceControl.versionControl.getRepositoryAccess({
-                          orgId: session.orgId,
-                          repositoryId: repository.id,
-                        }),
+                      getRepositoryAccess: () => repositoryAccess(repository.id),
                     }),
               },
               sandboxSettings,
@@ -1227,11 +1237,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const loadedOverrideRevision = async () => (await skillOverrideStates.get(workspaceId))?.revision;
     const configDir = DEFAULT_CONFIG_DIR;
 
-    const getRepositoryAccess = () =>
-      sourceControl.versionControl.getRepositoryAccess({
-        orgId: session.orgId,
-        repositoryId: repository.id,
-      });
+    const getRepositoryAccess = () => repositoryAccess(repository.id);
     // Resolve the minted token `GH_TOKEN` carries. With several environment
     // repositories the provider may mint one credential for all of them; when
     // it cannot (no such capability, several installations, too many
@@ -1607,11 +1613,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // other than a setup failure: its outcome is unknown, never `configured`.
       let inFlight: string | undefined;
       try {
+        const secondaries: Array<{
+          repo: SessionEnvironmentRepo;
+          entry: (typeof gate.repos)[number];
+          state: SessionEnvironmentRepositoryState;
+          synced: boolean;
+        }> = [];
         for (const repo of repos) {
-          inFlight = repo.slug;
           const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
           if (!entry) continue;
-          const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
           const state: SessionEnvironmentRepositoryState = {
             slug: repo.slug,
             dir: entry.dir,
@@ -1620,28 +1630,35 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             setupStatus: repo.setupCommand ? 'ok' : 'skipped',
           };
           states.push(state);
-          if (isPrimary) {
-            try {
-              await runSessionSetup(target, primaryDir, entry.gate);
-              state.branch = session.branch;
-              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
-                state.setupStatus = 'failed';
-                repeated.add(repo.slug);
-              }
-            } catch (error) {
-              if (!(error instanceof SetupCommandError)) throw error;
-              state.branch = session.branch;
-              state.setupStatus = 'failed';
-              failures.set(repo.slug, error.message);
-              primaryError = error;
-            }
+          if (repo.projectRepositoryId !== session.projectRepositoryId) {
+            secondaries.push({ repo, entry, state, synced: false });
             continue;
           }
+          inFlight = repo.slug;
           try {
-            const access = await sourceControl.versionControl.getRepositoryAccess({
-              orgId: session.orgId,
-              repositoryId: repo.repositoryId,
-            });
+            await runSessionSetup(target, primaryDir, entry.gate);
+            state.branch = session.branch;
+            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
+              state.setupStatus = 'failed';
+              repeated.add(repo.slug);
+            }
+          } catch (error) {
+            if (!(error instanceof SetupCommandError)) throw error;
+            state.branch = session.branch;
+            state.setupStatus = 'failed';
+            failures.set(repo.slug, error.message);
+            primaryError = error;
+          }
+          inFlight = undefined;
+        }
+        // The other repositories sync side by side: each is a token mint, a
+        // clone or fetch and a branch sync in its own directory, so a boot
+        // costs the slowest repository rather than the sum. Setup commands
+        // still run one at a time below, so installs never compete.
+        await forEachConcurrently(secondaries, ENVIRONMENT_SYNC_CONCURRENCY, async secondary => {
+          const { repo, entry, state } = secondary;
+          try {
+            const access = await repositoryAccess(repo.repositoryId);
             const token = access.authorization?.token;
             if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
             await materializeRepo({
@@ -1669,6 +1686,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               }),
             );
             state.branch = synced.branch;
+            secondary.synced = true;
           } catch (error) {
             console.warn('[Mastra Factory] Environment repository could not be synced; continuing the boot', {
               orgId: session.orgId,
@@ -1679,14 +1697,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             // The checkout may be missing or stale and its setup never ran.
             state.setupStatus = 'failed';
             failures.set(repo.slug, error instanceof Error ? error.message : String(error));
-            continue;
           }
-          if (!repo.setupCommand || entry.gate.setupDone) continue;
+        });
+        for (const { repo, entry, state, synced } of secondaries) {
+          if (!synced || !repo.setupCommand || entry.gate.setupDone) continue;
           if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
             repeated.add(repo.slug);
             continue;
           }
+          inFlight = repo.slug;
           try {
             await timedPhase(`workspace.setup(${repo.slug})`, async () =>
               runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
@@ -1704,6 +1724,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               error: error.message.slice(-2000),
             });
           }
+          inFlight = undefined;
         }
         inFlight = undefined;
         const workspaceCommand = environment!.workspaceSetupCommand;

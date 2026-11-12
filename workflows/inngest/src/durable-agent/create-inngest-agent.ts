@@ -1952,7 +1952,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             // agent default; the first call parked its own delegation on the entry.
             delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
             hooks: resumeOptions.hooks ?? execOptions.hooks,
-            methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
+            // Build for the method that started the run, not from `closeOnSuspend` (#29436).
+            methodType: existingRegistryEntry.methodType ?? 'stream',
             backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
             backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
             model: existingRegistryEntry.model,

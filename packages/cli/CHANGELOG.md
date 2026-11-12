@@ -1,5 +1,55 @@
 # mastra
 
+## 1.39.0-alpha.10
+
+### Minor Changes
+
+- Add CLI commands for creating, reading, replacing, reviewing, and analyzing feedback, plus score analytics. Score and feedback creates preserve IDs and timestamps across bounded retries. ([#30089](https://github.com/mastra-ai/mastra/pull/30089))
+
+### Patch Changes
+
+- Improved Factory session pages on large boards. The tab title, the card breadcrumb with its related work, and the pull request links now load from the session's own cards instead of waiting for the whole board to download. ([#30080](https://github.com/mastra-ai/mastra/pull/30080))
+
+- Factory tabs no longer ask the server for running sessions every 5 seconds. Running markers now update from the board's live connection, like cards and decisions: once a minute as a safety net, and every 5 seconds only while the live connection is down. ([#30077](https://github.com/mastra-ai/mastra/pull/30077))
+
+- Improved the Factory sidebar on large boards. The session list now loads only the cards its sessions hold, so opening a session no longer downloads the whole board. ([#30087](https://github.com/mastra-ai/mastra/pull/30087))
+
+- Updated dependencies [[`1689ce3`](https://github.com/mastra-ai/mastra/commit/1689ce38e1d66df6f474acd5db65f46315a02c23), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`38327de`](https://github.com/mastra-ai/mastra/commit/38327de07a169a6d5ce8ab8fc2075caec112d6f3), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`2053c88`](https://github.com/mastra-ai/mastra/commit/2053c881ed7a13c43d3932e1938e2f94ef226b4f), [`4884ee0`](https://github.com/mastra-ai/mastra/commit/4884ee08a067dd82176c57ca54bdfec02eda97ea), [`49e7108`](https://github.com/mastra-ai/mastra/commit/49e71082bd2c36cd20d7f4ba62bb3666e108968b), [`4cfa256`](https://github.com/mastra-ai/mastra/commit/4cfa256801f6b7e909daa5ed5d14c77b9fb24197), [`7f0d2fd`](https://github.com/mastra-ai/mastra/commit/7f0d2fd4b6c304ad851232b5969d96fdb20aa06a), [`b0ef22e`](https://github.com/mastra-ai/mastra/commit/b0ef22e7bfeb309c456d5c54528d579c4ac9e863), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`eb683b4`](https://github.com/mastra-ai/mastra/commit/eb683b45fe2ad645ae81c419d405aa2327a053e3)]:
+  - @mastra/core@1.83.0-alpha.9
+  - @mastra/deployer@1.83.0-alpha.9
+
+## 1.39.0-alpha.9
+
+### Patch Changes
+
+- Add shared contracts for opt-in aggregated trace roots. OSS readers remain unsupported. ([#30054](https://github.com/mastra-ai/mastra/pull/30054))
+
+- Add `PUT /api/observability/feedback/:feedbackId` for complete feedback replacement. Preserve the original ID, trace ID, and timestamp, and include every field to retain. Delayed POST retries keep existing feedback. Unsupported storage versions return 501. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```json
+  {
+    "feedback": {
+      "feedbackId": "feedback-1",
+      "traceId": "trace-123",
+      "timestamp": "2026-11-11T12:00:00.123Z",
+      "feedbackType": "thumbs",
+      "value": -1
+    }
+  }
+  ```
+
+- Updated Studio's browser tab icon to a rounded tile, matching the rounded corners used across the rest of the UI. `mastra studio` now serves the icon file instead of the page HTML, so the tab shows it. ([#30040](https://github.com/mastra-ai/mastra/pull/30040))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/deployer@1.83.0-alpha.8
+
+## 1.39.0-alpha.8
+
+### Patch Changes
+
+- The toggle on pinned Knowledge listings in Studio chat now says how many pages the listing covers: "Show N pages ▾" when collapsed ("Show N+ pages ▾" when the total is unknown), "Hide pages ▴" when open. ([#29987](https://github.com/mastra-ai/mastra/pull/29987))
+
 ## 1.39.0-alpha.7
 
 ### Minor Changes

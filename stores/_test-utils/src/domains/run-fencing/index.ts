@@ -615,10 +615,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
           }),
         );
         await expectFenceConflict(memory.updateResource({ resourceId: thread.resourceId, workingMemory: 'stale' }));
+        await expectFenceConflict(memory.updateThreadMetadata({ id: thread.id, update: () => ({ stale: true }) }));
       });
       expect(scopeA.lookups.every(lookup => lookup.store === memory)).toBe(true);
-      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA]);
+      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA, fenceA]);
       expect((await memory.listMessages({ threadId: thread.id })).messages).toHaveLength(0);
+      expect((await memory.getThreadById({ threadId: thread.id }))?.metadata?.stale).toBeUndefined();
 
       // A scope that covers another store leaves this store's writes unfenced.
       const elsewhere = recordingScope(store => (store === memory ? undefined : fenceA));

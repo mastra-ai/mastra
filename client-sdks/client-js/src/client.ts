@@ -1406,7 +1406,8 @@ export class MastraClient extends BaseResource {
    * Deletes traces by ID, cascading to all associated spans and trace-linked
    * signal events (scores, feedback, metrics, logs). Signals without a trace ID
    * are untouched. On ClickHouse-backed stores, reads may briefly return
-   * deleted rows until the delete is fully applied.
+   * deleted rows until the delete is fully applied. A supporting Platform backend
+   * returns `{ accepted: true }` after queueing cleanup, before records disappear.
    */
   deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.observability.deleteTraces(params);
@@ -1445,7 +1446,10 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params, options);
   }
 
-  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  /**
+   * Deletes score records by scoreId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
     return this.observability.deleteScores(params);
   }
@@ -1494,7 +1498,10 @@ export class MastraClient extends BaseResource {
     return this.observability.replaceFeedback(params, options);
   }
 
-  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  /**
+   * Deletes feedback records by feedbackId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
     return this.observability.deleteFeedback(params);
   }
@@ -2603,6 +2610,7 @@ export class MastraClient extends BaseResource {
     if (options?.page !== undefined) searchParams.set('page', String(options.page));
     if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
     for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
+    if (options?.status) searchParams.set('status', options.status);
     if (options?.orderBy) {
       searchParams.set('orderBy[field]', options.orderBy.field);
       searchParams.set('orderBy[direction]', options.orderBy.direction);

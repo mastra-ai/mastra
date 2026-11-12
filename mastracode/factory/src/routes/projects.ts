@@ -41,6 +41,7 @@ const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
 const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+const applyDefaultModelRuns = new Map<string, Promise<void>>();
 
 async function readJson(context: Context): Promise<unknown | undefined> {
   try {
@@ -701,66 +702,80 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const { workItems, controller } = this.deps;
           if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
 
-          const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
-            binding => binding.status === 'active',
-          );
-          const boards =
-            (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
-            createBoardRegistry();
-          const seen = new Set<string>();
-          const applied: string[] = [];
-          const skipped: Array<{
-            threadId: string;
-            reason:
-              | 'not-running'
-              | 'work-item-missing'
-              | 'stage-inactive'
-              | 'thread-missing'
-              | 'mode-unknown'
-              | 'apply-failed';
-          }> = [];
+          // Do not hold the HTTP request open while visiting every running session: a slow
+          // session gateway can take longer than the proxy timeout.
+          // Serialize updates for a project so an older slow write cannot overwrite a newer request.
+          const runKey = `${tenant.orgId}:${project.id}`;
+          const priorRun = applyDefaultModelRuns.get(runKey);
+          const run = (priorRun ? priorRun.catch(() => {}) : Promise.resolve()).then(async () => {
+            const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
+              binding => binding.status === 'active',
+            );
+            const boards =
+              (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
+              createBoardRegistry();
+            const seen = new Set<string>();
+            let applied = 0;
+            let skipped = 0;
 
-          for (const binding of bindings) {
-            const key = `${binding.sessionId}:${binding.threadId}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
+            for (const binding of bindings) {
+              try {
+                // A default changed while this job was queued or running must not be written by this job.
+                if ((await this.#project(tenant.orgId, project.id))?.defaultModelId !== modelId) break;
+                const key = `${binding.sessionId}:${binding.threadId}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
 
-            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
-            if (!item || item.factoryProjectId !== project.id) {
-              skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
-              continue;
+                const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+                if (!item || item.factoryProjectId !== project.id) {
+                  skipped++;
+                  continue;
+                }
+                // A bound run can still act on its card anywhere short of a terminal phase.
+                const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
+                if (phaseKind === undefined || phaseKind === 'terminal') {
+                  skipped++;
+                  continue;
+                }
+                const session = await controller.getSession(binding.sessionId);
+                if (!session) {
+                  skipped++;
+                  continue;
+                }
+                const thread = await session.thread.getById({ threadId: binding.threadId });
+                if (!thread) {
+                  skipped++;
+                  continue;
+                }
+                // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
+                await session.thread.setSettingOn({
+                  threadId: binding.threadId,
+                  key: 'currentModelId',
+                  value: modelId,
+                });
+                applied++;
+              } catch (error) {
+                console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
+                skipped++;
+              }
             }
-            // A bound run can still act on its card anywhere short of a terminal phase.
-            const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
-            if (phaseKind === undefined || phaseKind === 'terminal') {
-              skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
-              continue;
-            }
-            const session = await controller.getSession(binding.sessionId);
-            if (!session) {
-              skipped.push({ threadId: binding.threadId, reason: 'not-running' });
-              continue;
-            }
-            const thread = await session.thread.getById({ threadId: binding.threadId });
-            if (!thread) {
-              skipped.push({ threadId: binding.threadId, reason: 'thread-missing' });
-              continue;
-            }
-            try {
-              // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
-              await session.thread.setSettingOn({
-                threadId: binding.threadId,
-                key: 'currentModelId',
-                value: modelId,
-              });
-              applied.push(binding.threadId);
-            } catch (error) {
-              console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
-              skipped.push({ threadId: binding.threadId, reason: 'apply-failed' });
-            }
-          }
+            console.info('[factory] apply-default-model completed', {
+              projectId: project.id,
+              modelId,
+              applied,
+              skipped,
+            });
+          });
+          applyDefaultModelRuns.set(runKey, run);
+          void run
+            .catch(error => {
+              console.error('[factory] apply-default-model failed', { projectId: project.id, modelId, error });
+            })
+            .finally(() => {
+              if (applyDefaultModelRuns.get(runKey) === run) applyDefaultModelRuns.delete(runKey);
+            });
 
-          return context.json({ modelId, applied, skipped });
+          return context.json({ modelId, status: 'started' }, 202);
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {
