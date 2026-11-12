@@ -92,6 +92,20 @@ async function readRunOwner(q: Queryable, runId: string): Promise<RunOwnershipRe
   return rows[0] ? toRunOwnershipRecord(runId, rows[0]) : null;
 }
 
+const SUMMARY_FIELDS_SQL = `'status', JSON_EXTRACT(snapshot, '$.status'), 'timestamp', JSON_EXTRACT(snapshot, '$.timestamp')`;
+
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status`, `timestamp`, and
+ * for a nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths are
+ * read, so `context` is never sent. The parent is a separate branch because JSON_OBJECT() keeps
+ * a SQL NULL as a JSON null.
+ */
+const SUMMARY_SNAPSHOT_SQL = `CASE WHEN JSON_TYPE(JSON_EXTRACT(snapshot, '$.parentWorkflow')) = 'OBJECT'
+    THEN JSON_OBJECT(${SUMMARY_FIELDS_SQL}, 'parentWorkflow', JSON_OBJECT(
+      'workflowId', JSON_EXTRACT(snapshot, '$.parentWorkflow.workflowId'),
+      'runId', JSON_EXTRACT(snapshot, '$.parentWorkflow.runId')))
+    ELSE JSON_OBJECT(${SUMMARY_FIELDS_SQL}) END`;
+
 function mapWorkflowRow(row: WorkflowRow): WorkflowRun {
   return {
     workflowName: row.workflow_name,
@@ -722,7 +736,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
   }
 
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
+    const { workflowName, fromDate, toDate, perPage, page, resourceId, status, summary } = args;
 
     const conditions: string[] = [];
     const params: any[] = [];
@@ -775,8 +789,9 @@ export class WorkflowsMySQL extends WorkflowsStorage {
         paginationClause = ` LIMIT ${Number(normalizedPerPage)} OFFSET ${Number(offset)}`;
       }
 
+      const snapshot = summary ? `${SUMMARY_SNAPSHOT_SQL} AS snapshot` : 'snapshot';
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt FROM ${tableName}${whereSql} ORDER BY ${quoteIdentifier('createdAt', 'column name')} DESC${paginationClause}`,
+        `SELECT workflow_name, run_id, resourceId, ${snapshot}, createdAt, updatedAt FROM ${tableName}${whereSql} ORDER BY ${quoteIdentifier('createdAt', 'column name')} DESC${paginationClause}`,
         params,
       );
 
