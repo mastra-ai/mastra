@@ -89,6 +89,7 @@ import { PlatformApiClient, platformApiClientConfigFromEnv } from './integration
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
@@ -582,6 +583,7 @@ export class MastraFactory {
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeLinkedRepositoryChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -899,6 +901,16 @@ export class MastraFactory {
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Event polling keeps its repository list in memory; the bus tells the
+    // polling replica about links made on another one.
+    this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage).catch(
+      error => {
+        console.warn(
+          `[factory] subscribing to linked repository changes failed; repositories linked on another replica are polled within the hour: ${error instanceof Error ? error.message : error}`,
+        );
+        return undefined;
+      },
+    );
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -2514,6 +2526,9 @@ export class MastraFactory {
       const unsubscribeSandboxEnvChanges = this.#unsubscribeSandboxEnvChanges;
       this.#unsubscribeSandboxEnvChanges = undefined;
       await unsubscribeSandboxEnvChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
+      const unsubscribeLinkedRepositoryChanges = this.#unsubscribeLinkedRepositoryChanges;
+      this.#unsubscribeLinkedRepositoryChanges = undefined;
+      await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

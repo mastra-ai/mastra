@@ -26,6 +26,9 @@ import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
+// Changes to the linked repositories are announced, so this only bounds how
+// long a lost announcement can keep a repository out of the poll.
+const REPOSITORY_RECHECK_MS = 60 * 60_000;
 // Event polling is the primary sync; the sweeps only catch drift (missed
 // events, cards ingested before polling was linked), so they run hourly.
 const DEFAULT_RECONCILE_INTERVAL_MS = 60 * 60_000;
@@ -92,6 +95,13 @@ export interface PlatformGithubEventWorkerConfig {
    * GitHub org.
    */
   sourceControl: GithubReconcileRepositorySource;
+  /**
+   * Subscribes to changes of the linked repository set and returns the
+   * unsubscribe. With it the worker reads the set from storage once, and again
+   * only after a change or an hour, so a poll that finds no events costs no
+   * storage reads. Without it every poll re-reads the set.
+   */
+  onRepositoriesChanged?: (listener: () => void) => () => void;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
@@ -128,6 +138,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
   readonly #sourceControl: GithubReconcileRepositorySource;
+  readonly #onRepositoriesChanged: ((listener: () => void) => () => void) | undefined;
   readonly #leaseOwner = globalThis.crypto.randomUUID();
 
   #running = false;
@@ -143,6 +154,10 @@ export class PlatformGithubEventWorker extends MastraWorker {
   #lastIssueReconcileAt = Number.NEGATIVE_INFINITY;
   #lastPullRequestDiscoveryAt = Number.NEGATIVE_INFINITY;
   #settings: PlatformGithubEventWorkerSettings = { version: 1, repositories: {} };
+  #unsubscribeRepositoryChanges: (() => void) | undefined;
+  #repositories: Repository[] | undefined;
+  #repositoriesReadAt = 0;
+  #repositoryChanges = 0;
 
   constructor(config: PlatformGithubEventWorkerConfig) {
     super();
@@ -186,6 +201,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#now = config.now ?? Date.now;
     this.#dispatch = config.dispatch ?? dispatchGithubWebhook;
     this.#sourceControl = config.sourceControl;
+    this.#onRepositoriesChanged = config.onRepositoriesChanged;
   }
 
   async init(deps: WorkerDeps): Promise<void> {
@@ -199,6 +215,10 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
+    this.#unsubscribeRepositoryChanges = this.#onRepositoriesChanged?.(() => {
+      this.#repositoryChanges += 1;
+      this.#repositories = undefined;
+    });
     this.#running = true;
     this.deps.logger.info('Platform GitHub event polling started', {
       intervalMs: this.#intervalMs,
@@ -213,6 +233,9 @@ export class PlatformGithubEventWorker extends MastraWorker {
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = undefined;
     this.#stopLeaseRenewal();
+    this.#unsubscribeRepositoryChanges?.();
+    this.#unsubscribeRepositoryChanges = undefined;
+    this.#repositories = undefined;
     await this.#inFlight;
     if (this.#hasLease) {
       await this.#leaseProvider.releaseLease(this.#leaseKey(), this.#leaseOwner).catch(() => undefined);
@@ -292,7 +315,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   }
 
   async #poll(): Promise<number> {
-    const repositories = await this.#discoverRepositories();
+    const repositories = await this.#linkedRepositories();
     let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileCadence();
 
     if (this.#pollEventsEnabled) {
@@ -336,8 +359,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
       this.#reconcileIssuesFactoryState && now - this.#lastIssueReconcileAt >= this.#issueReconcileIntervalMs,
     );
     const discoverPullRequests = Boolean(
-      this.#discoverPullRequests &&
-        now - this.#lastPullRequestDiscoveryAt >= this.#pullRequestDiscoveryIntervalMs,
+      this.#discoverPullRequests && now - this.#lastPullRequestDiscoveryAt >= this.#pullRequestDiscoveryIntervalMs,
     );
     if (!reconcilePullRequests && !reconcileIssues && !discoverPullRequests) return;
     if (reconcilePullRequests) this.#lastPullRequestReconcileAt = now;
@@ -429,6 +451,20 @@ export class PlatformGithubEventWorker extends MastraWorker {
         });
       }
     }
+  }
+
+  async #linkedRepositories(): Promise<Repository[]> {
+    const now = this.#now();
+    if (this.#repositories && now - this.#repositoriesReadAt < REPOSITORY_RECHECK_MS) return this.#repositories;
+    const changes = this.#repositoryChanges;
+    const repositories = await this.#discoverRepositories();
+    // A change announced during the read may be missing from it, so that read
+    // is used for this poll only and the next poll reads again.
+    if (this.#unsubscribeRepositoryChanges && changes === this.#repositoryChanges) {
+      this.#repositories = repositories;
+      this.#repositoriesReadAt = now;
+    }
+    return repositories;
   }
 
   /**
