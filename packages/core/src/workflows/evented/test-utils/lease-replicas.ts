@@ -6,7 +6,7 @@
 import { expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import type { PubSub } from '../../../events/pubsub';
+import type { PubSub, PubSubDeliveryMode } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraRecoveryConfig } from '../../../mastra';
@@ -483,6 +483,13 @@ export async function storedSleeps(storage: Store, runId: string) {
   return sleepStatuses((await store.loadWorkflowSnapshot({ workflowName: 'leased', runId }))?.context ?? {});
 }
 
+/** An in-process pubsub that delivers only by push, as GCP Pub/Sub push subscriptions do. */
+export class PushOnlyPubSub extends EventEmitterPubSub {
+  override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
+    return ['push'];
+  }
+}
+
 /** Records each step a replica runs and when, and each `workflow.step.run` of `workflowId` at `[2]`. */
 export function observe(workflowId: string) {
   const executions: string[] = [];
@@ -494,8 +501,8 @@ export function observe(workflowId: string) {
       executions.push(`${replica}:${label}`);
       at[`${replica}:${label}`] = Date.now();
     };
-  const pubsub = (replica: string) =>
-    interceptWorkflowEvents(new EventEmitterPubSub(), event => {
+  const pubsub = (replica: string, inner: PubSub = new EventEmitterPubSub()) =>
+    interceptWorkflowEvents(inner, event => {
       if (isStepRunAt(event, [2]) && (event.data as { workflowId?: string }).workflowId === workflowId) {
         continuations.push(replica);
       }

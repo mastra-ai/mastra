@@ -8046,7 +8046,10 @@ export class Mastra<
       : !this.#workerFilter || this.#workerFilter.has('orchestration');
     if (handlesWorkflowEvents && this.#workerStops === stops) {
       this.#startWorkflowRecoveryLoop();
-      // The wakes of sleeps this instance started before its workers last stopped.
+    }
+    // The wakes of sleeps this instance started before its workers last stopped. A push-only pubsub
+    // delivers workflow events to a full start under any MASTRA_WORKERS filter.
+    if ((!name || name === 'orchestration') && this.#workerStops === stops) {
       this.#resumeSleepWakes();
     }
   }

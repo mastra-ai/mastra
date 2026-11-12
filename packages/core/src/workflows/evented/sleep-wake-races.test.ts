@@ -26,6 +26,7 @@ import {
   isSleepKeyOf,
   isStepRunAt,
   observe,
+  PushOnlyPubSub,
   runStatus,
   scanning,
   sleep,
@@ -608,32 +609,50 @@ describe('waking an evented sleep once (#30012)', () => {
     20_000,
   );
 
-  it('keeps a sleep set up after its workers stopped for when they start again', async () => {
-    const storage = new InMemoryStore();
-    const seen = observe('leased');
-    // The sleep's duration resolves only after the drain gave up on it.
-    const sleeps = gatedSleep();
-    const a = await startReplica(storage, sleeps.build(seen.reporter('A')), {
-      pubsub: seen.pubsub('A'),
-      recovery: { workflows: 'off' },
-    });
-    const run = await a.workflow.createRun();
-    startInBackground(run, { n: 1 });
-    await sleeps.resolving;
+  it.each([
+    { start: 'startWorkers()', name: undefined, workers: undefined },
+    { start: "startWorkers('orchestration')", name: 'orchestration', workers: undefined },
+    // A push-only pubsub hands workflow events to the instance whatever workers MASTRA_WORKERS selects.
+    {
+      start: 'startWorkers() under a MASTRA_WORKERS without the orchestration worker',
+      name: undefined,
+      workers: 'scheduler',
+    },
+  ])(
+    'keeps a sleep set up after its workers stopped for when $start starts them again',
+    async ({ name, workers }) => {
+      const storage = new InMemoryStore();
+      const seen = observe('leased');
+      // The sleep's duration resolves only after the drain gave up on it.
+      const sleeps = gatedSleep();
+      if (workers) {
+        vi.stubEnv('MASTRA_WORKERS', workers);
+      }
+      const a = await startReplica(storage, sleeps.build(seen.reporter('A')), {
+        pubsub: seen.pubsub('A', workers ? new PushOnlyPubSub() : undefined),
+        recovery: { workflows: 'off' },
+      });
+      // The instance read MASTRA_WORKERS when it was built.
+      vi.unstubAllEnvs();
+      const run = await a.workflow.createRun();
+      startInBackground(run, { n: 1 });
+      await sleeps.resolving;
 
-    await a.mastra.stopWorkers({ drainTimeout: 0 });
-    sleeps.resolve();
-    await vi.waitFor(async () => expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']));
-    // Past the sleep's wake time.
-    const wakeAt = await storedWakeTime(storage, 'leased', run.runId);
-    await sleep(Math.max(0, wakeAt + 200 - Date.now()));
-    expect(seen.continuations).toEqual([]);
-    expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']);
+      await a.mastra.stopWorkers({ drainTimeout: 0 });
+      sleeps.resolve();
+      await vi.waitFor(async () => expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']));
+      // Past the sleep's wake time.
+      const wakeAt = await storedWakeTime(storage, 'leased', run.runId);
+      await sleep(Math.max(0, wakeAt + 200 - Date.now()));
+      expect(seen.continuations).toEqual([]);
+      expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']);
 
-    await a.mastra.startWorkers();
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 5_000 });
-    expect(seen.executions).toEqual(['A:before', 'A:after']);
-  }, 20_000);
+      await a.mastra.startWorkers(name);
+      await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 5_000 });
+      expect(seen.executions).toEqual(['A:before', 'A:after']);
+    },
+    20_000,
+  );
 
   it('time travels to a sleep when the stored run still shows the run it travels from', async () => {
     const storage = new InMemoryStore();
