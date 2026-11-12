@@ -881,6 +881,21 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
   });
 
+  const factoryIntakeCandidate = factory
+    .command('intake-candidate')
+    .description("Read a Factory project's open issues and pull requests that have no card yet");
+  addAction(factoryIntakeCandidate, 'list', FACTORY_API_ROUTE_CATALOG.intakeCandidateList, {
+    description: "List a project's open issues and pull requests that have no card yet, newest first",
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'List the first ten GitHub issues waiting in Intake',
+        command: `mastra api factory intake-candidate list <project-id> '{"kind":"issue","source":"github","limit":10}'`,
+      },
+    ],
+  });
+
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
     input: 'optional',
