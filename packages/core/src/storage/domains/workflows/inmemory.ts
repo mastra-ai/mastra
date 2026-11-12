@@ -195,18 +195,31 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
   return out;
 }
 
-/** A run's snapshot reduced to what `listWorkflowRuns({ summary: true })` returns. */
-function summarizeRunSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
-  const { status, timestamp, parentWorkflow } = snapshot;
-  if (!parentWorkflow) {
-    return { status, timestamp } as WorkflowRunState;
+/**
+ * A snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status` and
+ * `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot reduces to `{}`.
+ */
+function summarySnapshot(snapshot: unknown): WorkflowRunState {
+  const source = (snapshot !== null && typeof snapshot === 'object' ? snapshot : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    summary.status = status;
   }
 
-  return {
-    status,
-    timestamp,
-    parentWorkflow: { workflowId: parentWorkflow.workflowId, runId: parentWorkflow.runId },
-  } as WorkflowRunState;
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
 }
 
 export class WorkflowsInMemory extends WorkflowsStorage {
@@ -403,6 +416,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return records;
   }
 
+  /**
+   * Merges one step's result into a v1 run's snapshot and returns the run's step results.
+   * Moves the run's `updatedAt`.
+   */
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -459,6 +476,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return cloneRunData(context);
   }
 
+  /**
+   * Patches a run's state, v1 or storage v2. With `opts.expectedStatus`, only when the stored
+   * status matches. Returns the updated snapshot, or undefined when nothing was written. A write
+   * moves the run's `updatedAt`.
+   */
   async updateWorkflowState({
     workflowName,
     runId,
@@ -610,6 +632,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return cloneRunData(steps as Record<string, StepResult<any, any, any, any>>);
   }
 
+  /**
+   * Patches a storage v2 run's header. With `opts.expectedStatus`, only when the stored status
+   * matches. Returns the updated header, or undefined when the run isn't stored or the status
+   * didn't match. A write moves the run's `updatedAt`.
+   */
   async updateWorkflowRunHeader({
     workflowName,
     runId,
@@ -974,7 +1001,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       // it. The reduction comes last because the status and thread filters read the full snapshot.
       let snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
       if (summary) {
-        snapshot = summarizeRunSnapshot(snapshot);
+        snapshot = summarySnapshot(snapshot);
       } else if (typeof run.snapshot !== 'string') {
         snapshot = cloneRunData(snapshot);
       }
