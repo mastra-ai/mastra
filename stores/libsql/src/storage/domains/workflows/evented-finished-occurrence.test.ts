@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, vi } from 'vitest';
 import { LibSQLStore } from '../..';
 import { describeFinishedOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/finished-occurrence-cases';
 import { describeLateDeliveryCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/late-delivery-cases';
+import { describeLateEndCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/late-end-cases';
 
 // A local database file shared by every replica, as pods share one database (#28712).
 describe('LibSQL evented finished step deliveries', () => {
@@ -34,4 +35,5 @@ describe('LibSQL evented finished step deliveries', () => {
   };
   describeFinishedOccurrenceCases({ getStorage: () => storage, connect });
   describeLateDeliveryCases({ getStorage: () => storage, connect });
+  describeLateEndCases({ getStorage: () => storage, connect });
 });

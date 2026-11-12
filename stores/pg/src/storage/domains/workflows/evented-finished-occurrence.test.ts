@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, vi } from 'vitest';
 import { PostgresStore } from '../..';
 import { describeFinishedOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/finished-occurrence-cases';
 import { describeLateDeliveryCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/late-delivery-cases';
+import { describeLateEndCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/late-end-cases';
 import { TEST_CONFIG } from '../../test-utils';
 
 // Postgres arbitrates some late deliveries through its workflow step guards (#28712).
@@ -30,4 +31,5 @@ describe('Postgres evented finished step deliveries', () => {
   };
   describeFinishedOccurrenceCases({ getStorage: () => storage, connect });
   describeLateDeliveryCases({ getStorage: () => storage, connect });
+  describeLateEndCases({ getStorage: () => storage, connect });
 });

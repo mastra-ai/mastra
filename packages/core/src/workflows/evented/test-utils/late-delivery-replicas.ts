@@ -13,6 +13,7 @@ import type { MastraStorage } from '../../../storage';
 import { getEntryWorkflow } from '../../step-entry';
 import type { StepFlowEntry } from '../../types';
 import type { Workflow } from '../../workflow';
+import { runLivenessKey } from '../leases';
 import { WorkflowEventProcessor } from '../workflow-event-processor';
 import { abandonLease } from './abandon-lease';
 
@@ -116,6 +117,54 @@ export const stepEventsOf = (published: Event[], runId: string) =>
     .map(event => `${event.type}@${JSON.stringify((event.data as { executionPath?: number[] }).executionPath)}`);
 
 /**
+ * The `workflows-finish` events the replicas published for `runId`: one per end of the run.
+ * The note that a deleted snapshot was cleaned up after the end is left out.
+ */
+export const finishesOf = (runId: string, ...replicas: { finished: Event[] }[]) =>
+  replicas
+    .flatMap(replica => replica.finished)
+    .filter(event => event.runId === runId && event.type !== 'workflow.finish-cleanup-complete');
+
+/**
+ * A broker queue the test drains by hand. Events `holds` picks are kept from
+ * the start; once `holdAll()` is called every `workflows` event is.
+ */
+export function heldQueue(holds: (event: Event) => boolean) {
+  const queue: Event[] = [];
+  const firstHeld = deferred<void>();
+  let all = false;
+  const intercept: Intercept = event => {
+    if (!all && !holds(event)) {
+      return undefined;
+    }
+
+    queue.push(copyEvent(event));
+    firstHeld.resolve();
+    return 'drop';
+  };
+
+  /**
+   * Hands the kept events to `replica` one at a time, including the events
+   * their handling publishes, so the test knows when the replica is done.
+   */
+  async function drain(replica: { mastra: { handleWorkflowEvent: (event: Event) => Promise<unknown> } }) {
+    while (queue.length > 0) {
+      expect(await replica.mastra.handleWorkflowEvent(queue.shift()!)).toEqual({ ok: true });
+    }
+  }
+
+  return {
+    intercept,
+    queue,
+    firstHeld: firstHeld.promise,
+    holdAll: () => {
+      all = true;
+    },
+    drain,
+  };
+}
+
+/**
  * Replica helpers for one `describe` block, which shuts its replicas down after
  * each test. `getStorage` is the store the test reads. `connect` opens the store
  * a replica uses, on the same database: a replica that shuts down closes its
@@ -186,5 +235,13 @@ export function useLateDeliveryReplicas({
   const redeliver = (replica: { mastra: Mastra }, event: Event) =>
     replica.mastra.handleWorkflowEvent({ ...copyEvent(event), deliveryAttempt: 2 });
 
-  return { startReplica, crash, storedRun, redeliver };
+  /** Waits until the run's liveness lapsed, so `restart()` takes it over. */
+  async function waitUntilOrphaned(runId: string) {
+    const store = (await getStorage().getStore('workflows'))!;
+    await expect
+      .poll(async () => (await store.getRunOwnership({ runId: runLivenessKey(runId) }))?.live, { timeout: 5_000 })
+      .toBe(false);
+  }
+
+  return { startReplica, crash, storedRun, redeliver, waitUntilOrphaned };
 }
