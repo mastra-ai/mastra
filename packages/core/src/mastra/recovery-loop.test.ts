@@ -255,6 +255,12 @@ describe('workflow recovery loop (#28712)', () => {
     await onA.shutdown({ drainTimeout: 0 });
     a.kill();
     const shutDownAt = Date.now();
+    // The shutdown leaves the key live for another millisecond. A new process boots far later than
+    // that; a pass that still saw the key live would come back only a scan interval later.
+    const store = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () =>
+      expect((await store.getRunOwnership({ runId: runLivenessKey(run.runId) }))?.live).toBe(false),
+    );
     const onB = new Mastra({
       logger: false,
       storage,
