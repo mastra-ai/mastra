@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import type { ToolBackgroundConfig } from '../background-tasks/types';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../channels/output-processor';
 import { getErrorFromUnknown } from '../error';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -74,6 +75,8 @@ export interface CreateSubagentToolOptions {
   resolveModel: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
   /** Resolved controller tools (already evaluated from DynamicArgument) */
   controllerTools?: ToolsInput;
+  /** Makes the tool eligible to run as a background task. Omit to always run subagents in the foreground. */
+  background?: ToolBackgroundConfig;
   /** Fallback model ID when subagent definition has no defaultModelId */
   fallbackModelId?: string;
   /** Returns the parent model ID for display when a subagent call is forked. */
@@ -118,7 +121,7 @@ export interface CreateSubagentToolOptions {
  * streams the response, and forwards events to the controller.
  */
 export function createSubagentTool(opts: CreateSubagentToolOptions) {
-  const { subagents, resolveModel, controllerTools, fallbackModelId, mastra } = opts;
+  const { subagents, resolveModel, controllerTools, fallbackModelId, mastra, background } = opts;
 
   if (subagents.length === 0) {
     throw new Error('createSubagentTool requires at least one subagent');
@@ -162,6 +165,7 @@ Use this tool when:
           "If true, fork the parent conversation: clone the parent thread and run with the parent agent's instructions/tools so prompt cache is preserved. Requires memory to be configured on the AgentController. Defaults to the subagent definition's `forked` setting.",
         ),
     }),
+    background,
     execute: async (input, context) => {
       const { agentType, modelId, forked } = input;
       let { task } = input;
@@ -176,7 +180,22 @@ Use this tool when:
 
       const controllerCtx = context?.requestContext?.get('controller') as AgentControllerRequestContext | undefined;
       const emitEvent = controllerCtx?.emitEvent;
-      const abortSignal = controllerCtx?.abortSignal;
+      // A deferred task outlives the parent run, so it stops on the task's own
+      // signal (cancel, timeout, shutdown) instead of the run's. An awaited task
+      // still blocks the parent run, so it stops on either.
+      const runsInBackground = context?.agent?.isBackgroundTask === true;
+      const awaited = runsInBackground && context?.background?.disposition === 'awaited';
+      const runSignal = controllerCtx?.abortSignal;
+      const taskSignal = context?.abortSignal;
+      let abortSignal: AbortSignal | undefined;
+      if (!runsInBackground) {
+        abortSignal = runSignal;
+      } else if (awaited) {
+        const signals = [taskSignal, runSignal].filter((signal): signal is AbortSignal => signal !== undefined);
+        abortSignal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
+      } else {
+        abortSignal = taskSignal;
+      }
       const toolCallId = context?.agent?.toolCallId ?? 'unknown';
       const workspace = context?.workspace;
 
@@ -357,6 +376,9 @@ Use this tool when:
           tools: mergedTools,
           workspace,
           mastra,
+          // The whole subagent call is already the background task. Nested tasks
+          // would finish after the subagent returned, with no thread to report to.
+          ...(runsInBackground && { backgroundTasks: { disabled: true } }),
         });
 
         // Only resolve workspace tool names when an allowlist is configured,
@@ -457,6 +479,8 @@ Use this tool when:
         }
 
         if (abortSignal?.aborted) {
+          // The catch below hands the abort to the background task runner.
+          if (runsInBackground) throw abortSignal.reason;
           const durationMs = Date.now() - startTime;
           const abortResult = partialText
             ? `[Aborted by user]\n\nPartial output:\n${partialText}`
@@ -475,17 +499,46 @@ Use this tool when:
         }
 
         const fullOutput = await response.getFullOutput();
-        const resultText = fullOutput.text || partialText;
+        let resultText = fullOutput.text || partialText;
+
+        // Ending on tool calls at the step limit means the run was cut short
+        // before a final answer. Any text so far is only narration from earlier
+        // steps, so label it as partial instead of passing it off as the answer.
+        if (
+          streamMaxSteps !== undefined &&
+          fullOutput.finishReason === 'tool-calls' &&
+          fullOutput.steps.length >= streamMaxSteps
+        ) {
+          const notice = `[Stopped at the ${streamMaxSteps}-step limit before a final answer]`;
+          resultText = resultText ? `${notice}\n\nPartial output:\n${resultText}` : notice;
+        }
 
         const durationMs = Date.now() - startTime;
         emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: resultText, isError: false, durationMs });
 
         return { content: resultText, isError: false };
       } catch (err) {
+        const durationMs = Date.now() - startTime;
+
+        // A background task must end cancelled or timed out, not completed with
+        // an abort message, so let the task runner see the abort.
+        if (runsInBackground && abortSignal?.aborted) {
+          // The task runner reports an abort it didn't cause as a timeout. When
+          // the parent run stopped an awaited subagent, cancel the task first so
+          // it ends cancelled.
+          const taskId = context?.background?.taskId;
+          if (awaited && taskId && runSignal?.aborted && !taskSignal?.aborted) {
+            await (mastra ?? context?.mastra)?.backgroundTaskManager?.cancel(taskId).catch(() => {});
+          }
+          const reason = abortSignal.reason ?? err;
+          const message = reason instanceof Error ? reason.message : String(reason);
+          emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: message, isError: true, durationMs });
+          throw reason;
+        }
+
         const isAbort =
           err instanceof Error &&
           (err.name === 'AbortError' || err.message?.includes('abort') || err.message?.includes('cancel'));
-        const durationMs = Date.now() - startTime;
 
         if (isAbort) {
           const abortResult = partialText
