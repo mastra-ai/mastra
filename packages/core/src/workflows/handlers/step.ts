@@ -16,6 +16,7 @@ import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../observability/erro
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
+import { resolveDynamicArgument } from '../../utils/dynamic-argument';
 import {
   HAND_BACK_STATE_SYMBOL,
   PARENT_STATE_SYMBOL,
@@ -784,9 +785,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
   let scorersToUse = scorers;
   if (typeof scorersToUse === 'function') {
     try {
-      scorersToUse = await scorersToUse({
-        requestContext: requestContext,
-      });
+      scorersToUse = await resolveDynamicArgument(scorersToUse, { requestContext });
     } catch (e) {
       const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
       const mastraError = new MastraError(
