@@ -220,9 +220,6 @@ function readForeachResult(
   return result;
 }
 
-/** Run statuses no step continues from: a run in one of them is not ended again. */
-const ENDED_RUN_STATUSES = new Set<string>(['success', 'failed', 'canceled', 'bailed', 'tripwire']);
-
 /** Broadcast topic carrying cancellation to every processor that may be executing the run's steps. */
 const WORKFLOW_CONTROL_TOPIC = 'workflow.control';
 const WORKFLOW_CONTROL_ABORT = 'workflow.control.abort';
@@ -295,14 +292,6 @@ export class WorkflowEventProcessor extends EventProcessor {
   // SQLITE_BUSY) eventually surfaces as a terminal workflow.fail rather than
   // silently hanging agent.generate().
   private deliveryAttempts: Map<string, number> = new Map();
-
-  /**
-   * Runs whose end or failure threw on this processor after it may have saved
-   * the final status. Their retry ends the run instead of reading that status
-   * as an end already done. A process that crashed in between leaves no entry:
-   * a redelivery there finds the status and the run's finish is not published.
-   */
-  #unfinishedEnds = new Set<string>();
   // Maximum number of times handle() will ask the transport to redeliver the
   // same event before declaring it terminally failed. The underlying storage
   // layer already retries lock errors internally (~5 attempts with backoff)
@@ -1457,16 +1446,15 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Whether top-level run `args.runId` already ended, read from its stored
-   * snapshot, or from the `::ended` claim an end takes when it is going to
-   * delete the snapshot. A
-   * late or duplicate continuation reaches the run's end after another one
-   * ended it, and ending again would publish a second finish. Time travel,
-   * restart and resume set the run back to running first. A nested run is
-   * never reported ended: its end hands its result to the parent, which a
-   * redelivery may still have to do, and the hand-off drops duplicates itself.
-   * Only for workflows that take step leases. The read and the end's write are
-   * separate calls, so an end landing between them still ends twice.
+   * Whether top-level run `args.runId` already ended: its end took the
+   * `::ended` claim after publishing it. A late or duplicate continuation
+   * reaches the run's end after another one ended it, and ending again would
+   * publish a second finish. Time travel, restart and resume clear the claim
+   * when they start. A nested run is never reported ended: its end hands its
+   * result to the parent, which a redelivery may still have to do, and the
+   * hand-off drops duplicates itself. Only for workflows that take step
+   * leases. An end that published and stopped before taking the claim is
+   * ended again by a redelivery, which publishes a second finish.
    */
   async #runAlreadyEnded(
     args: Pick<ProcessorArgs, 'workflowId' | 'runId' | 'parentWorkflow'> & { workflow?: Workflow },
@@ -1480,17 +1468,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       return false;
     }
 
-    // A run whose final snapshot `shouldPersistSnapshot` declined keeps its running status until
-    // its end deletes it, so the `::ended` claim its end took first tells it ended.
-    const stored = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
-    const ended =
-      (!!stored && ENDED_RUN_STATUSES.has(stored.status)) ||
-      !!(await store.getRunOwnership({ runId: runEndedKey(args.runId) }))?.live;
+    const ended = !!(await store.getRunOwnership({ runId: runEndedKey(args.runId) }))?.live;
     if (ended) {
       this.mastra.getLogger()?.debug('Skipping the end of a workflow run that already ended', {
         workflowId: args.workflowId,
         runId: args.runId,
-        status: stored?.status,
       });
     }
 
@@ -1501,7 +1483,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Ends a run, or pauses a per-step run: saves the final status and result
    * unless `shouldPersistSnapshot` declines them, reports the finish on the
    * run's watch topic and publishes `workflow.end`. A top-level run that
-   * already ended is left alone (see {@link #runAlreadyEnded}). A cancel always
+   * already ended is left alone (see {@link #runAlreadyEnded}), and one this
+   * call ended is marked ended once `workflow.end` is out. A cancel always
    * ends: it writes its status itself while its end is on the way.
    */
   protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
@@ -1509,79 +1492,86 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 
-    if (status !== 'canceled' && !this.#unfinishedEnds.has(runId) && (await this.#runAlreadyEnded(args))) {
+    if (status !== 'canceled' && (await this.#runAlreadyEnded(args))) {
       return;
     }
 
-    try {
-      // Check shouldPersistSnapshot option - default to true if not specified
-      const finalStatus = perStep && status === 'success' ? 'paused' : status;
-      const shouldPersist =
-        workflow?.options?.shouldPersistSnapshot?.({
-          stepResults: stepResults ?? {},
-          workflowStatus: finalStatus,
-        }) ?? true;
+    // Check shouldPersistSnapshot option - default to true if not specified
+    const finalStatus = perStep && status === 'success' ? 'paused' : status;
+    const shouldPersist =
+      workflow?.options?.shouldPersistSnapshot?.({
+        stepResults: stepResults ?? {},
+        workflowStatus: finalStatus,
+      }) ?? true;
 
-      if (shouldPersist) {
-        await workflowsStore?.updateWorkflowState({
-          workflowName: workflowId,
-          runId,
-          opts: {
-            status: finalStatus,
-            result: normalizedPrevResult,
-            activePaths: executionPath,
-            activeStepsPath: activeStepsPath,
-          },
-        });
-      } else if (finalStatus !== 'paused') {
-        // The stored status stays running until the end deletes the snapshot: a duplicate end in
-        // between reads this claim instead.
-        await this.#markRunEnded(workflowId, runId, workflow);
-      }
+    if (shouldPersist) {
+      await workflowsStore?.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: finalStatus,
+          result: normalizedPrevResult,
+          activePaths: executionPath,
+          activeStepsPath: activeStepsPath,
+        },
+      });
+    }
 
-      this.endRunSpans(args, finalStatus);
+    this.endRunSpans(args, finalStatus);
 
-      if (perStep) {
-        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-paused',
-            payload: {},
-          },
-        });
-      }
-
+    if (perStep) {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
         data: {
-          type: 'workflow-finish',
-          payload: {
-            runId,
-            workflowStatus: normalizedPrevResult.status,
-            ...(normalizedPrevResult.status === 'success' ? { finalWorkflowResult: normalizedPrevResult.output } : {}),
-          },
+          type: 'workflow-paused',
+          payload: {},
         },
       });
-
-      await this.mastra.pubsub.publish('workflows', {
-        type: 'workflow.end',
-        runId,
-        data: {
-          ...args,
-          prevResult: normalizedPrevResult,
-          workflow: undefined,
-          deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
-        },
-      });
-    } catch (error) {
-      // The status may already read ended: the retry of this end must not be taken for a duplicate.
-      this.#unfinishedEnds.add(runId);
-      throw error;
     }
 
-    this.#unfinishedEnds.delete(runId);
+    await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-finish',
+        payload: {
+          runId,
+          workflowStatus: normalizedPrevResult.status,
+          ...(normalizedPrevResult.status === 'success' ? { finalWorkflowResult: normalizedPrevResult.output } : {}),
+        },
+      },
+    });
+
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.end',
+      runId,
+      data: {
+        ...args,
+        prevResult: normalizedPrevResult,
+        workflow: undefined,
+        deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
+      },
+    });
+
+    // Marked only once the end is out: an end whose publish threw is retried as an end, by this
+    // processor or another one.
+    if (finalStatus !== 'paused' && !args.parentWorkflow) {
+      await this.#markRunEndedOrWarn(workflowId, runId, workflow);
+    }
+  }
+
+  /**
+   * {@link #markRunEnded} once a run's end or failure is published. A failed
+   * claim is only logged: the end already went out, and a retry of this
+   * delivery would publish it a second time.
+   */
+  async #markRunEndedOrWarn(workflowId: string, runId: string, workflow: Workflow | undefined): Promise<void> {
+    try {
+      await this.#markRunEnded(workflowId, runId, workflow);
+    } catch (error) {
+      this.mastra.getLogger()?.warn('Failed to mark a workflow run ended', { workflowId, runId, error });
+    }
   }
 
   private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
@@ -2127,19 +2117,11 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   protected async processWorkflowFail(args: ProcessorArgs) {
     const ownershipLost = args.workflow?.options?.isOwnershipLostError?.((args.prevResult as any)?.error);
-    if (!ownershipLost && !this.#unfinishedEnds.has(args.runId) && (await this.#runAlreadyEnded(args))) {
+    if (!ownershipLost && (await this.#runAlreadyEnded(args))) {
       return;
     }
 
-    try {
-      await this.#failRun(args, ownershipLost);
-    } catch (error) {
-      // The status may already read failed: the retry of this failure must not be taken for a duplicate.
-      this.#unfinishedEnds.add(args.runId);
-      throw error;
-    }
-
-    this.#unfinishedEnds.delete(args.runId);
+    await this.#failRun(args, ownershipLost);
   }
 
   /** The writes and publications of {@link processWorkflowFail}, once it decided to fail the run. */
@@ -2244,6 +2226,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState, finishPendingCleanup: !ownershipLost && !shouldPersist },
     });
+
+    // Marked only once the failure is out, so a failure whose publish threw is retried. A declined
+    // snapshot is marked right before its deletion below.
+    if (!ownershipLost && !parentWorkflow && shouldPersist) {
+      await this.#markRunEndedOrWarn(workflowId, runId, workflow);
+    }
 
     if (!ownershipLost && !shouldPersist) {
       // As with successful runs, cleanup must wait for every terminal publication.
@@ -2670,12 +2658,13 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Claims `<runId>::ended` right before an end deletes the run's snapshot,
-   * because `shouldPersistSnapshot` declined the final one. A late step
-   * delivery then finds no snapshot and reads this claim instead, so it doesn't
-   * run the step again (see {@link #finishedOccurrence}). Only for workflows
-   * that take step leases. A failed claim throws, and the caller then keeps the
-   * snapshot rather than lose both.
+   * Claims `<runId>::ended` once a top-level run's end is published, and right
+   * before an end deletes a run's snapshot because `shouldPersistSnapshot`
+   * declined the final one. A duplicate end then finds the run ended (see
+   * {@link #runAlreadyEnded}), and a late step delivery that finds no snapshot
+   * doesn't run the step again (see {@link #finishedOccurrence}). Only for
+   * workflows that take step leases. A failed claim throws; before a delete,
+   * the caller then keeps the snapshot rather than lose both.
    */
   async #markRunEnded(workflowId: string, runId: string, workflow: Workflow | undefined): Promise<void> {
     const store = await this.#leaseStore(workflow ?? this.#tryResolveWorkflow(workflowId));

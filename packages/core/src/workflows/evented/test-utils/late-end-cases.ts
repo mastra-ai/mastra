@@ -123,6 +123,45 @@ export function describeLateEndCases({
       expect(finishesOf(run.runId, a).map(event => event.type)).toEqual(['workflow.fail']);
     }, 20_000);
 
+    it('ends the run once when its end is retried on another replica after the publish threw', async () => {
+      const executions: string[] = [];
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+          .then(work('first', async id => void executions.push(id)))
+          .then(work('second', async id => void executions.push(id)))
+          .commit();
+      const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [1]));
+      let rejectEnd = true;
+      const a = await startReplica(build(), event => {
+        if (event.type === 'workflow.end' && rejectEnd) {
+          rejectEnd = false;
+          return 'throw';
+        }
+
+        return fromA.intercept(event);
+      });
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await fromA.firstHeld;
+      const stepEnd = fromA.queue.shift()!;
+
+      // A saves the run's end, and the broker rejects its `workflow.end`.
+      expect(await a.mastra.handleWorkflowEvent(stepEnd)).toMatchObject({ ok: false });
+
+      // The broker hands the step end to B, which ends the run. A copy of it reaches A afterwards.
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      expect(await redeliver(b, stepEnd)).toEqual({ ok: true });
+      await fromB.drain(b);
+      fromA.holdAll();
+      expect(await redeliver(a, stepEnd)).toEqual({ ok: true });
+      await fromA.drain(a);
+
+      expect(executions).toEqual(['first', 'second']);
+      expect((await storedRun(run.runId))?.status).toBe('success');
+      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+    }, 20_000);
+
     it('ends the run once when the last step end arrives twice', async () => {
       const { executions, fromA, a, run } = await holdLastStepEnd();
 

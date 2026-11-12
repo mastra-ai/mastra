@@ -52,10 +52,11 @@ export const samePath = (event: Event, path: number[]) =>
 
 /**
  * What happens to a `workflows` event a replica publishes: `'drop'` loses it,
- * as when the publishing process stops first, and a promise keeps it in the
- * broker's queue until it resolves, while the publisher goes on.
+ * as when the publishing process stops first, `'throw'` fails the publish, and
+ * a promise keeps it in the broker's queue until it resolves, while the
+ * publisher goes on.
  */
-export type Intercept = (event: Event) => 'drop' | Promise<void> | undefined;
+export type Intercept = (event: Event) => 'drop' | 'throw' | Promise<void> | undefined;
 
 /** Wraps a pubsub so the `workflows` events it publishes are recorded and pass through `intercept`. */
 function recordWorkflowEvents(inner: PubSub, intercept: Intercept = () => undefined) {
@@ -68,6 +69,10 @@ function recordWorkflowEvents(inner: PubSub, intercept: Intercept = () => undefi
             const picked = intercept(event);
             if (picked === 'drop') {
               return;
+            }
+
+            if (picked === 'throw') {
+              throw new Error(`The broker rejected ${event.type}`);
             }
 
             published.push(copyEvent(event));
