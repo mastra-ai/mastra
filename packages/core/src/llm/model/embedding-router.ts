@@ -7,6 +7,7 @@ import type { EmbeddingModelV3 } from '@internal/ai-v6';
 type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
 import { MASTRA_USER_AGENT } from './gateways/constants.js';
+import { interpolateUrlTemplate } from './gateways/url-template.js';
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
 
@@ -256,7 +257,7 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
         this.providerModel = createOpenAICompatible({
           name: normalizedConfig.providerId,
           apiKey,
-          baseURL: providerConfig.url,
+          baseURL: interpolateUrlTemplate(providerConfig.url),
         }).embeddingModel(normalizedConfig.modelId);
       }
     }

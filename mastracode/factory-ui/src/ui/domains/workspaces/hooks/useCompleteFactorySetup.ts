@@ -50,10 +50,10 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const modelScope = setup.modelScope;
       const plan = onboardingModelPlan(setup);
       const [providers, catalogs] = await Promise.all([
-        queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
+        queryClient.query({ ...providersQueryOptions(client), staleTime: 0 }),
         Promise.all(
           plan.checks.map(({ scope }) =>
-            queryClient.fetchQuery({
+            queryClient.query({
               ...availableModelsQueryOptions(baseUrl, { scope }),
               staleTime: 0,
             }),

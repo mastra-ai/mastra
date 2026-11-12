@@ -286,7 +286,7 @@ describe('GitLab UI routes', () => {
       listBindings: vi
         .fn()
         .mockResolvedValue([
-          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1', board: 'work' },
+          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' },
         ]),
       migrateSourceIds: vi.fn().mockResolvedValue({
         migrations: [{ from: legacyId, to: canonicalId }],
@@ -355,14 +355,14 @@ describe('GitLab UI routes', () => {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId, 'other'] } }),
       listBindings: vi.fn().mockResolvedValue([
-        { integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' },
-        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId, board: 'planning' },
+        { integrationId: 'gitlab', sourceId, factoryProjectId },
+        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId: 'another-factory' },
       ]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
 
     const ingest = vi.fn().mockResolvedValue({ status: 'committed' });
     const response = await buildApp(gitlab, orgUser(), intake, ingest).request(
-      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId + '&board=work',
+      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId,
     );
     const body = await response.json();
 
@@ -410,7 +410,7 @@ describe('GitLab UI routes', () => {
     const intake = {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId] } }),
-      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' }]),
+      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId }]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
 
     const response = await buildApp(gitlab, orgUser(), intake).request(

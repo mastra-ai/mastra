@@ -202,7 +202,7 @@ describe('issue #17218 (durable engine): tool-call step records the approval dec
           requestContext: new Map(),
           getInitData: () => makeInitData(),
           state: { messageListState },
-          getStepResult: () => undefined,
+          getStepResultAsync: async () => undefined,
           [PUBSUB_SYMBOL]: mockPubsub(),
         });
         expect(suspend).toHaveBeenCalledTimes(1);

@@ -224,6 +224,80 @@ export const { createWorkflow, createStep } = init({
 })
 ```
 
+## Compatibility
+
+`@mastra/temporal` is experimental. It supports a subset of the Mastra workflow API, and anything it can't compile fails when the worker builds, not at run time.
+
+### Run APIs
+
+| Method | Temporal support |
+| - | - |
+| `start()`, `startAsync()` | Starts a Temporal workflow execution |
+| `resume()`, `resumeAsync()` | Signals the Temporal execution to resume a suspended step. Pass `step`, or omit it when only one step is suspended. Resuming by `label` isn't supported |
+| `cancel()` | Cancels the Temporal execution |
+| `stream()`, `streamLegacy()`, `resumeStream()` | Throws. Use `start()` or `startAsync()` instead |
+| `restart()`, `timeTravel()`, `timeTravelStream()` | Throws. Time travel is tracked in [#24025](https://github.com/mastra-ai/mastra/issues/24025) |
+| `observeStream()`, `watch()` | Not connected to Temporal. Runs emit no Mastra events |
+
+Run state, step results, and events stay in Temporal and aren't written to Mastra storage, so Temporal runs don't appear in Studio's run history. Studio's workflow runner calls `stream()`, which throws for Temporal workflows. Use the [Temporal UI](https://docs.temporal.io/web-ui) to inspect runs. Projecting Temporal runs into Mastra APIs and Studio is tracked in [#24016](https://github.com/mastra-ai/mastra/issues/24016).
+
+### Workflow methods
+
+The worker build reads each workflow chain statically, so arguments must be resolvable at build time. A step can be an identifier or an inline `createStep()` call whose `id` is a string literal. Conditions for `.branch()`, `.dowhile()`, and `.dountil()` must be identifiers.
+
+| Method | Supported arguments |
+| - | - |
+| `.then()` | A step or workflow |
+| `.parallel()` | An array literal of steps or workflows |
+| `.branch()` | An array literal of `[condition, step]` pairs |
+| `.dowhile()`, `.dountil()` | A step and a condition |
+| `.foreach()` | A step and an optional options object |
+| `.sleep()` | A numeric literal or a function identifier |
+| `.sleepUntil()` | A `new Date(...)` expression, a string or number literal, or a function identifier |
+| `.map()` | An inline function or a top-level function identifier. Declarative object mappings aren't supported |
+| `.commit()` | No arguments |
+| Any other method | Not supported |
+
+Condition functions and `.sleep()` or `.sleepUntil()` function identifiers are called as activities named after the identifier, but the plugin only generates activities for steps and `.map()` callbacks. Register these functions yourself in `Worker.create({ activities })`, or the run fails when it reaches them. These functions receive `inputData`, `runId`, `workflowId`, `resourceId`, and `requestContext` as a plain object. They don't receive `getInitData()`.
+
+Nested workflows passed to `.then()` or `.parallel()` run as Temporal child workflows. Each one is registered as its own workflow type and appears as a separate execution in the Temporal UI. A suspended step inside a child workflow can't be resumed through the parent run.
+
+An unsupported construct stops the worker build with an error that names the workflow and file:
+
+```ts
+// Build error: .map() does not yet support declarative object mappings; use a callback mapping
+workflow.map({ city: { step: fetchWeather, path: 'city' } })
+```
+
+### Step execution context
+
+Each step runs as a Temporal activity. Its `execute` function receives:
+
+- `inputData` and, when resuming, `resumeData`
+- `runId`, `workflowId`, and `resourceId`
+- `requestContext`
+- `getInitData()`
+- `suspend()`, except in `.foreach()` steps
+- `mastra`, when the step's module can import the Mastra instance
+
+Other `execute` parameters, such as `state`, `setState()`, `getStepResult()`, `bail()`, `abort()`, `writer`, and `tracingContext`, aren't available. Steps in a nested workflow receive the parent's `runId`, `resourceId`, and request context, and the nested workflow's own `workflowId`.
+
+### Bundling and worker operation
+
+On startup, `MastraPlugin` bundles your Mastra entry file and writes the generated code to `node_modules/.mastra/`:
+
+- `workflow.mjs`: the workflow bundle, which runs in Temporal's deterministic workflow sandbox
+- `activities.mjs`: the step and mapping code, which runs as regular Node.js activities
+- `activity-bindings.json`: the map from step ids to activity exports
+
+Keep I/O, clients, agents, tools, storage, and MCP connections inside step `execute` functions. The workflow bundle can't import Node.js builtins such as `node:fs`. When it does, the build fails with `Temporal workflow bundle cannot depend on Node.js builtin`, and you need to move that dependency into a step. Check the generated files in `node_modules/.mastra/` when a build or activity lookup fails.
+
+A run started while no worker polls the task queue stays queued without an error. Before you send traffic, confirm that a worker is polling:
+
+```bash
+temporal task-queue describe --task-queue mastra
+```
+
 ## Constraints and notes
 
 - Workflow ids must be static string literals. The build-time transformer reads the literal value to derive Temporal workflow export names.
@@ -232,6 +306,7 @@ export const { createWorkflow, createStep } = init({
 - Set [`validateInputs`](/reference/workflows/workflow#constructor-parameters) to `false` in `createWorkflow()` to skip these checks. This also skips the workflow input checks in `run.start()`.
 - The build-time transformer reads `validateInputs` from the `createWorkflow()` call. When it can't, for example with `options: sharedOptions`, it prints a warning. Runs started with `run.start()` or `run.startAsync()` still use the workflow's setting, and runs started another way, such as from a Temporal Schedule, check step input.
 - Step input and request context pass through Temporal's [data converter](https://docs.temporal.io/dataconversion), which turns a `Date` into a string. Use `z.coerce.date()` instead of `z.date()` in a step's `inputSchema` and `requestContextSchema`.
+- [Lifecycle callbacks](/docs/workflows/error-handling#lifecycle-callbacks) (`onStart`, `onFinish`, `onError`) run in the process that calls `run.start()` or `run.startAsync()`, not in the worker. After `run.startAsync()`, that process must keep running until the workflow finishes for `onFinish` and `onError` to run. Runs started another way, such as from a Temporal Schedule, don't run them.
 - After a `.parallel()` that contains a nested workflow, the next step receives the nested workflow's output under its Temporal workflow type, for example `innerWorkflow` for id `inner`. The default workflow engine uses the id instead.
 
 ## Related

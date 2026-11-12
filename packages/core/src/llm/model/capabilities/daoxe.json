@@ -26,13 +26,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-sonnet-4-6": [
+    "grok-4.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -44,13 +38,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "grok-4.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-5.4": [
+    "kimi-k2.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -68,7 +56,19 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-k2.5": [
+    "claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

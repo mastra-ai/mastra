@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
@@ -16,6 +17,21 @@ export interface SkillSimpleFormProps {
   nameReadOnly?: boolean;
 }
 
+/** A value the user can't change: plain text, so it never looks like a field to fill in. */
+function LockedValue({ label, value }: { label: string; value: string }) {
+  const labelId = useId();
+  return (
+    <div role="group" aria-labelledby={labelId} className="grid min-w-0 gap-2">
+      <Txt as="span" id={labelId} variant="label" tone="muted">
+        {label}
+      </Txt>
+      <Txt as="p" variant="body" tone={value ? 'ink' : 'muted'} className="break-words">
+        {value || 'None'}
+      </Txt>
+    </div>
+  );
+}
+
 export function SkillSimpleForm({
   name,
   onNameChange,
@@ -28,19 +44,27 @@ export function SkillSimpleForm({
 }: SkillSimpleFormProps) {
   return (
     <div className="flex h-full flex-col gap-4">
-      <Field disabled={readOnly || nameReadOnly}>
-        <FieldLabel>Name</FieldLabel>
-        <Input value={name} onChange={e => onNameChange(e.target.value)} placeholder="Skill name" />
-      </Field>
+      {readOnly || nameReadOnly ? (
+        <LockedValue label="Name" value={name} />
+      ) : (
+        <Field>
+          <FieldLabel>Name</FieldLabel>
+          <Input value={name} onChange={e => onNameChange(e.target.value)} placeholder="Skill name" />
+        </Field>
+      )}
 
-      <Field disabled={readOnly}>
-        <FieldLabel>Description</FieldLabel>
-        <Input
-          value={description}
-          onChange={e => onDescriptionChange(e.target.value)}
-          placeholder="Brief description of the skill"
-        />
-      </Field>
+      {readOnly ? (
+        <LockedValue label="Description" value={description} />
+      ) : (
+        <Field>
+          <FieldLabel>Description</FieldLabel>
+          <Input
+            value={description}
+            onChange={e => onDescriptionChange(e.target.value)}
+            placeholder="Brief description of the skill"
+          />
+        </Field>
+      )}
 
       <Field className="flex min-h-0 flex-1 flex-col gap-1.5">
         <FieldLabel>Instructions</FieldLabel>
@@ -63,7 +87,7 @@ export function SkillSimpleForm({
               onChange={onInstructionsChange}
               language="markdown"
               editable
-              placeholder="You are a helpful assistant that…"
+              placeholder="You are a helpful assistant"
               showCopyButton={false}
               className="size-full"
             />

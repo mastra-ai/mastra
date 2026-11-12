@@ -11,19 +11,22 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { FactorySandbox, FactorySandboxContext } from '@mastra/core/workspace';
 import type { VersionControl } from '../capabilities/version-control.js';
+import { maskSandboxEnvValues, resolveSandboxEnv, sandboxBuildContext } from '../sandbox/sandbox-env.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { SandboxEnvStore } from '../storage/domains/sandbox-envs/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { environmentSandboxContext, resolveProjectEnvironment } from '../workspace.js';
 import type { SessionEnvironment } from '../workspace.js';
 import { headsChanged, recordedHeadResolver, resolveCurrentHeads } from './heads.js';
 import type { EnvironmentHeads } from './heads.js';
+import { groupedRepositoryAccess } from './repository-access.js';
 
 export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push'] as const;
 export type EnvironmentBuildTrigger = (typeof ENVIRONMENT_BUILD_TRIGGERS)[number];
 
 export interface EnvironmentBuildSourceControl {
   storage: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>;
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>;
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>;
 }
 
 export interface EnvironmentBuildDeps {
@@ -35,6 +38,8 @@ export interface EnvironmentBuildDeps {
   >;
   /** Absent when the factory has no source-control integration to resolve heads with. */
   sourceControl: EnvironmentBuildSourceControl | undefined;
+  /** The Factory's sandbox environment variables; Build ones reach the template build. */
+  sandboxEnvs?: Pick<SandboxEnvStore, 'resolve'>;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void };
   now?: () => Date;
   /** How often a run renews its build-start lease; a third of `BUILD_START_LEASE_MS` by default. */
@@ -81,17 +86,44 @@ export function environmentBuildContext(
   project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
   environment: SessionEnvironment,
   heads: EnvironmentHeads,
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
 ): FactorySandboxContext {
+  const repositoryAccess = groupedRepositoryAccess(
+    versionControl,
+    project.orgId,
+    environment.repos.map(repo => repo.repositoryId),
+  );
   return {
     sessionId: environmentBuildSessionId(project.id),
     factoryId: project.id,
     factoryName: project.name,
     ...environmentSandboxContext(environment, {
       orgId: project.orgId,
-      getRepositoryAccess: args => versionControl.getRepositoryAccess(args),
+      getRepositoryAccess: args => repositoryAccess(args.repositoryId),
       resolveHead: recordedHeadResolver(heads),
     }),
+  };
+}
+
+/**
+ * {@link environmentBuildContext} with the Factory's Build variables, plus the
+ * build revision for {@link environmentBuildInputs}. Every build path (start,
+ * status read, poll) goes through this so all of them name the same template.
+ */
+export async function environmentBuildContextWithEnv(
+  project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
+  environment: SessionEnvironment,
+  heads: EnvironmentHeads,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
+  sandboxEnvs: Pick<SandboxEnvStore, 'resolve'> | undefined,
+): Promise<{ ctx: FactorySandboxContext; buildEnvRevision: string | undefined }> {
+  const env = sandboxEnvs
+    ? await resolveSandboxEnv(sandboxEnvs, { orgId: project.orgId, projectId: project.id })
+    : undefined;
+  const build = sandboxBuildContext(env);
+  return {
+    ctx: { ...environmentBuildContext(project, environment, heads, versionControl), ...build },
+    buildEnvRevision: build.buildEnvRevision,
   };
 }
 
@@ -99,9 +131,10 @@ export function environmentBuildContext(
  * Fingerprint of everything a build bakes into the template besides the
  * repository heads: provider settings, the repositories and their order,
  * their setup commands, the workspace setup command and the working
- * directory. A schedule or push skips a ready build only while this matches.
+ * directory, and the Build variables' revision (a random id, never a value).
+ * A schedule or push skips a ready build only while this matches.
  */
-export function environmentBuildInputs(environment: SessionEnvironment): string {
+export function environmentBuildInputs(environment: SessionEnvironment, buildEnvRevision?: string): string {
   const inputs = {
     settings: environment.settings,
     workspaceSetupCommand: environment.workspaceSetupCommand ?? null,
@@ -111,6 +144,8 @@ export function environmentBuildInputs(environment: SessionEnvironment): string 
       templateBranch: repo.templateBranch,
       setupCommand: repo.setupCommand ?? null,
     })),
+    // Only when set, so fingerprints recorded before Build variables existed still match.
+    ...(buildEnvRevision ? { buildEnvRevision } : {}),
   };
   return createHash('sha256').update(JSON.stringify(inputs)).digest('hex');
 }
@@ -214,8 +249,8 @@ export async function runEnvironmentBuild(
   let resolved = false;
   const release = (changes: Parameters<EnvironmentBuildDeps['projects']['releaseBuildStart']>[0]['changes'] = {}) =>
     deps.projects.releaseBuildStart({ id: initial.id, token, changes, resolved, now: now() });
-  const failed = async (error: unknown, changes: Parameters<typeof release>[0]) => {
-    const reason = errorReason(error);
+  const failed = async (error: unknown, changes: Parameters<typeof release>[0], buildEnv?: Record<string, string>) => {
+    const reason = maskSandboxEnvValues(errorReason(error), buildEnv);
     await release(changes);
     deps.logger?.info('environment build failed', { factoryProjectId: initial.id, trigger: input.trigger, reason });
     return { outcome: 'failed', reason } satisfies EnvironmentBuildOutcome;
@@ -237,8 +272,15 @@ export async function runEnvironmentBuild(
         return { outcome: 'skipped', reason: 'no_environment' };
       }
       heads = await resolveEnvironmentHeads(sourceControl, project, environment);
-      ctx = environmentBuildContext(project, environment, heads, sourceControl.versionControl);
-      buildInputs = environmentBuildInputs(environment);
+      const built = await environmentBuildContextWithEnv(
+        project,
+        environment,
+        heads,
+        sourceControl.versionControl,
+        deps.sandboxEnvs,
+      );
+      ctx = built.ctx;
+      buildInputs = environmentBuildInputs(environment, built.buildEnvRevision);
 
       if (claim.uncertain) {
         // A run whose lease lapsed may have reached the provider before it
@@ -323,7 +365,11 @@ export async function runEnvironmentBuild(
     } catch (error) {
       // Only a failed start clears the last build: the previous one no longer
       // describes the template this project wants.
-      return await failed(error, { lastBuildId: null, lastBuildHeads: null, lastBuildInputs: null, ...attempted });
+      return await failed(
+        error,
+        { lastBuildId: null, lastBuildHeads: null, lastBuildInputs: null, ...attempted },
+        ctx.buildEnv,
+      );
     }
 
     // The provider has started the build: from here on, no error clears it.

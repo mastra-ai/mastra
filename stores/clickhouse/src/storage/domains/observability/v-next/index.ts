@@ -193,6 +193,7 @@ const spanQueryFeatures =
     ? ([
         'span-query',
         'span-query-context-fields',
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') ? (['span-query-duration-sort'] as const) : []),
         // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
         ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
       ] as const)
@@ -983,12 +984,15 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
+        ...traceQueryOps.contextFieldFeatures,
         ...traceQueryOps.timingFeatures,
         ...traceQueryOps.outcomeFeatures,
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
         'trace-aggregate',
+        ...traceAggregateOps.aggregateTimeToFirstFeatures,
         ...spanQueryFeatures,
         ...spanAggregateFeatures,
         ...threadQueryFeatures,
@@ -1011,12 +1015,15 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'feedback-replacement',
       'trace-query-context-ids',
+      ...traceQueryOps.contextFieldFeatures,
       ...traceQueryOps.timingFeatures,
       ...traceQueryOps.outcomeFeatures,
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
       'trace-aggregate',
+      ...traceAggregateOps.aggregateTimeToFirstFeatures,
       ...spanQueryFeatures,
       ...spanAggregateFeatures,
       ...threadQueryFeatures,
@@ -1500,6 +1507,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scoreId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    try {
+      return await feedbackOps.getFeedbackById(this.#client, feedbackId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_FEEDBACK_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId },
         },
         error,
       );

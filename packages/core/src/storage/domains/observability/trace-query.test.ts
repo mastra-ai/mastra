@@ -991,7 +991,17 @@ describe('planTraceQuery', () => {
   });
 
   it('keeps correlation fields queryable and does not infer authorization fields', () => {
-    for (const field of ['resourceId', 'threadId', 'runId', 'sessionId', 'userId', 'organizationId'] as const) {
+    for (const field of [
+      'resourceId',
+      'threadId',
+      'runId',
+      'sessionId',
+      'userId',
+      'organizationId',
+      'requestId',
+      'serviceName',
+      'experimentId',
+    ] as const) {
       expect(
         planTraceQuery(
           parsed({
@@ -1044,6 +1054,47 @@ describe('planTraceQuery', () => {
       ],
     });
     for (const field of ['runId', 'sessionId', 'userId', 'organizationId']) {
+      expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
+      expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
+    }
+  });
+
+  it('plans request, service and experiment predicates on traces and related spans', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'in', value: { path: 'requestId' }, set: ['request-1', 'request-2'] },
+            { op: 'ne', left: { path: 'experimentId' }, right: { literal: 'exp-1' } },
+            { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'checkout' } } } },
+            { spans: { none: { op: 'exists', path: 'experimentId' } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'membership', field: 'requestId', operator: 'in', values: ['request-1', 'request-2'] },
+        { type: 'comparison', field: 'experimentId', operator: 'ne', value: 'exp-1' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'comparison', field: 'serviceName', operator: 'eq', value: 'checkout' },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'none',
+          predicate: { type: 'presence', field: 'experimentId', operator: 'exists' },
+        },
+      ],
+    });
+    for (const field of ['requestId', 'serviceName', 'experimentId']) {
       expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
       expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
     }
@@ -2133,6 +2184,10 @@ describe('trace-query responses and storage capability', () => {
       status: 'success',
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    const aggregated = { ...trace, rootKind: 'external', runtimeDurationMs: 125, errorCount: null };
+    expect(traceQueryTraceResponseSchema.parse({ traces: [aggregated], page: { next: null } }).traces[0]).toEqual(
+      aggregated,
+    );
     expect(
       traceQueryTraceResponseSchema.safeParse({
         traces: [
@@ -2198,5 +2253,115 @@ describe('trace-query responses and storage capability', () => {
         planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...baseRequest, predicateScope: 'trace', path: 'status' })),
       ),
     ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED' });
+  });
+});
+
+describe('trace text search', () => {
+  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(257), null, 123])('rejects invalid search input: %j', textSearch => {
+    expect(() => parsed({ ...baseRequest, textSearch })).toThrow(TraceQueryValidationError);
+  });
+
+  it('carries normalized search through keyset, page, and grouped plans', () => {
+    for (const fields of [{}, { pagination: { page: 0, perPage: 20 } }, { group: { by: ['threadId'] } }]) {
+      expect(planTraceQuery(parsed({ ...baseRequest, ...fields, textSearch: '  ERROR  50%_  ' }))).toMatchObject({
+        textSearch: 'error  50%_',
+      });
+    }
+  });
+
+  it('binds trace and group cursors to search', () => {
+    for (const group of [undefined, { by: ['threadId'] }]) {
+      const plan = planTraceQuery(parsed({ ...baseRequest, group, textSearch: ' ERROR ' }));
+      if (plan.paginationMode !== 'keyset') throw new Error('Expected keyset plan');
+      const values =
+        plan.result === 'groups'
+          ? { result: 'groups' as const, threadId: 'thread-1' }
+          : { result: 'traces' as const, traceId: 'trace-1', sortValue: '2026-08-15T00:00:00.000Z' };
+      const after = encodeTraceQueryCursor(plan, values);
+      expect(planTraceQuery(parsed({ ...baseRequest, group, textSearch: 'error', page: { after } }))).toMatchObject({
+        binding: plan.binding,
+      });
+      for (const textSearch of ['timeout', undefined]) {
+        expect(() => planTraceQuery(parsed({ ...baseRequest, group, textSearch, page: { after } }))).toThrow(
+          TraceQueryCursorError,
+        );
+      }
+    }
+  });
+
+  it('rejects text search in delta mode because root updates cannot track matching child arrivals', () => {
+    expect(() => parsed({ ...baseRequest, textSearch: 'error', mode: 'delta' })).toThrow(TraceQueryValidationError);
+  });
+});
+
+describe('aggregated trace roots contract', () => {
+  const options = { allowAggregatedRoots: true };
+
+  it('requires an opted-in reader while keeping explicit legacy equivalent to the default', () => {
+    expect(() => planTraceQuery(parsed({ ...baseRequest, rootSource: 'aggregated' }))).toThrow(
+      TraceQueryValidationError,
+    );
+    expect(planTraceQuery(parsed({ ...baseRequest, rootSource: 'legacy' }))).toEqual(planTraceQuery(parsed()));
+  });
+
+  it('binds trace and grouped cursors to their root source', () => {
+    for (const group of [undefined, { by: ['threadId'] }]) {
+      for (const rootSource of ['legacy', 'aggregated'] as const) {
+        const plan = planTraceQuery(parsed({ ...baseRequest, group, rootSource }), options);
+        if (plan.paginationMode !== 'keyset') throw new Error('Expected keyset');
+        const after = encodeTraceQueryCursor(
+          plan,
+          plan.result === 'groups'
+            ? { result: 'groups', threadId: 'thread-1' }
+            : { result: 'traces', traceId: 'trace-1', sortValue: '2026-08-15T00:00:00.000Z' },
+        );
+        expect(planTraceQuery(parsed({ ...baseRequest, group, rootSource, page: { after } }), options).binding).toBe(
+          plan.binding,
+        );
+        expect(() =>
+          planTraceQuery(
+            parsed({
+              ...baseRequest,
+              group,
+              rootSource: rootSource === 'legacy' ? 'aggregated' : 'legacy',
+              page: { after },
+            }),
+            options,
+          ),
+        ).toThrow(TraceQueryCursorError);
+      }
+    }
+  });
+
+  it('keeps legacy delta cursors valid with an explicit legacy source', () => {
+    const plan = planTraceQuery(parsed({ ...baseRequest, pagination: {} }));
+    if (plan.paginationMode !== 'page') throw new Error('Expected page');
+    const after = encodeTraceQueryDeltaCursor(plan, 'adapter', '42');
+    const delta = planTraceQuery(parsed({ ...baseRequest, rootSource: 'legacy', mode: 'delta', after }));
+    if (delta.paginationMode !== 'delta') throw new Error('Expected delta');
+    expect(getTraceQueryDeltaWatermark(delta, 'adapter')).toBe('42');
+    expect(() => parsed({ ...baseRequest, rootSource: 'aggregated', mode: 'delta' })).toThrow(
+      TraceQueryValidationError,
+    );
+  });
+
+  it('rejects metadata predicates nested in boolean expressions only for aggregated roots', () => {
+    const where = { op: 'not', arg: { op: 'or', args: [{ op: 'exists', path: 'metadata.customer' }] } };
+    expect(() => planTraceQuery(parsed({ ...baseRequest, where }))).not.toThrow();
+    expect(() => planTraceQuery(parsed({ ...baseRequest, rootSource: 'aggregated', where }), options)).toThrow(
+      TraceQueryValidationError,
+    );
+  });
+
+  it.each(['runtimeDurationMs', 'errorCount'])('keeps %s response-only', field => {
+    expect(() =>
+      planTraceQuery(
+        parsed({ ...baseRequest, rootSource: 'aggregated', where: { op: 'exists', path: field } }),
+        options,
+      ),
+    ).toThrow(TraceQueryValidationError);
+    expect(() => parsed({ ...baseRequest, rootSource: 'aggregated', orderBy: [{ field, direction: 'desc' }] })).toThrow(
+      TraceQueryValidationError,
+    );
   });
 });

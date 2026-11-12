@@ -59,20 +59,6 @@ export function getSkillOrigin(metadata: Record<string, unknown> | undefined | n
 }
 
 /**
- * Build a human-readable label for an origin (e.g. `skills.sh · owner/repo`).
- */
-export function formatSkillOriginLabel(origin: SkillOrigin): string {
-  switch (origin.type) {
-    case 'skills-sh':
-      return `skills.sh · ${origin.owner}/${origin.repo}`;
-    case 'library-copy':
-      return `Copied from "${origin.sourceSkillName}"`;
-    default:
-      return 'imported';
-  }
-}
-
-/**
  * Build the upstream URL for an origin, when known.
  */
 export function getSkillOriginUrl(origin: SkillOrigin): string | null {

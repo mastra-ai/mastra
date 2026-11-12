@@ -43,7 +43,7 @@ export class DSQLStore extends MastraStorage {
         this.#ownsPool = true;
       }
 
-      this.#db = new PoolAdapter(this.#pool);
+      this.#db = new PoolAdapter(this.#pool, error => this.logger?.error?.('Transaction rollback failed', { error }));
 
       const domainConfig: DsqlDomainClientConfig = {
         client: this.#db,

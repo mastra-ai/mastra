@@ -39,6 +39,19 @@ export const knowledgeSearchQuerySchema = z.object({
   limit,
 });
 
+const pageIds = z
+  .union([z.string(), z.array(z.string())])
+  .transform(value => (Array.isArray(value) ? value : [value]))
+  .pipe(z.array(pageId).min(1).max(200));
+
+export const knowledgeLinkCountsQuerySchema = z.object({
+  pageId: pageIds.describe('Pages to count links for; repeat the param for each, at most 200'),
+});
+
+export const knowledgePageLinksQuerySchema = z.object({
+  direction: z.enum(['in', 'out', 'both']).optional().describe('Links into the page, out of it, or both (default)'),
+});
+
 export const knowledgeActivityQuerySchema = z.object({
   scopeId: pageId.optional(),
   pageId: pageId.optional(),
@@ -56,6 +69,16 @@ export const knowledgeTreeResponseSchema = payload;
 export const knowledgePageResponseSchema = payload;
 export const knowledgeGraphResponseSchema = payload;
 export const knowledgeSearchResponseSchema = z.object({ results: z.array(payload) });
+export const knowledgeLinkCountsResponseSchema = z.object({
+  counts: z.record(z.string(), z.object({ in: z.number(), out: z.number() })),
+});
+export const knowledgePageLinksResponseSchema = z.object({
+  edges: z.array(
+    z.object({ fromPageId: z.string(), toPageId: z.string(), kind: z.enum(['body', 'note']), count: z.number() }),
+  ),
+  pages: z.array(payload),
+  truncated: z.boolean(),
+});
 export const knowledgeActivityResponseSchema = payload;
 export const knowledgeEventsResponseSchema = z.object({
   kind: z.enum(['scope', 'page', 'note', 'pin']),

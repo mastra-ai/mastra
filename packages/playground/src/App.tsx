@@ -23,7 +23,6 @@ import {
   workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
-import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
@@ -102,6 +101,7 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+import { StudioKnowledgeLinks } from '@/domains/knowledge/studio-knowledge-links';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
@@ -135,18 +135,19 @@ declare global {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <KeyboardShortcutsProvider>
         <GlobalShortcuts />
-        <Layout>
-          <RoutePermissionGuard>
-            <Outlet />
-          </RoutePermissionGuard>
-        </Layout>
+        <StudioKnowledgeLinks>
+          <Layout>
+            <RoutePermissionGuard>
+              <Outlet />
+            </RoutePermissionGuard>
+          </Layout>
+        </StudioKnowledgeLinks>
       </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
@@ -154,8 +155,7 @@ const RootLayout = () => {
 
 const MinimalRootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>

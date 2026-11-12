@@ -1,5 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { BoardCandidate } from '../boardCandidates';
+import type { BoardInfo } from '../boardFlow';
 import type { BoardLayout } from '../boardLayout';
 import type { CardMove } from '../cardPrimaryAction';
 import { CandidateCard } from './CandidateCard';
@@ -11,6 +12,7 @@ export function BoardStageCandidates({
   layout,
   projectRepositoryId,
   factoryProjectId,
+  board,
   onRun,
 }: {
   candidates: BoardCandidate[];
@@ -19,6 +21,8 @@ export function BoardStageCandidates({
   /** The linked repository each candidate comes from. */
   projectRepositoryId: (candidate: BoardCandidate) => string;
   factoryProjectId: string;
+  /** Board the candidates are filed on, which decides the lane a pull request is reviewed in. */
+  board?: BoardInfo;
   onRun: (candidate: BoardCandidate, move: CardMove, prompt?: string) => void;
 }) {
   const showDivider = afterWorkItems && candidates.length > 0;
@@ -43,6 +47,7 @@ export function BoardStageCandidates({
             candidate={candidate}
             projectRepositoryId={projectRepositoryId(candidate)}
             factoryProjectId={factoryProjectId}
+            board={board}
             onRun={(move, prompt) => onRun(candidate, move, prompt)}
           />
         )}

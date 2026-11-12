@@ -13,7 +13,7 @@ export type DragPayload =
   | {
       kind: 'candidate';
       candidate: Pick<BoardCandidate, 'source' | 'sourceKey' | 'title' | 'url' | 'metadata'> & {
-        /** Typed guidance for this run; posted as the card's first comment. Dragging carries none. */
+        /** Typed guidance for this run; saved as the card description. Dragging carries none. */
         customPrompt?: string;
       };
     };
@@ -28,7 +28,7 @@ export function candidatePayload(candidate: BoardCandidate, guidance?: string): 
       title: candidate.title,
       url: candidate.url,
       metadata: candidate.metadata,
-      ...(guidance === undefined ? {} : { customPrompt: `Guidance for this run: ${guidance}` }),
+      ...(guidance === undefined ? {} : { customPrompt: guidance }),
     },
   };
 }

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
 import { largeBoard } from '../src/ui/__tests__/fixtures/largeBoard';
+import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
 const [base] = largeBoard(1);
@@ -47,12 +48,10 @@ const pullRequest = (number: number, parentWorkItemId: string) =>
 const workItems = [
   workItem('manual-1', {
     title: 'Move durable streams from DurableAgent into base Agent',
-    commentCount: 1,
     metadata: { selfReviewVerdict: 'approve' },
   }),
   workItem('manual-2', {
     title: 'Manage incident banners from the Platform admin panel',
-    commentCount: 1,
     metadata: { selfReviewVerdict: 'request changes', selfReviewRounds: 2 },
   }),
   githubIssue(
@@ -77,21 +76,13 @@ test.describe('Factory board list row layout', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     server.use(
       http.get('*/auth/me', () => HttpResponse.json({ authenticated: true, authEnabled: false })),
-      http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Factory' }] })),
-      http.get('*/web/factory/projects/fp-1/source-control-connections', () =>
+      http.get('*/web/factory/projects', () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '/repo',
-                  repository: { slug: 'acme/app', defaultBranch: 'main' },
-                },
-              ],
+              id: 'fp-1',
+              name: 'Factory',
+              repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
             },
           ],
         }),
@@ -114,10 +105,6 @@ test.describe('Factory board list row layout', () => {
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
         const request = route.request();
-        if (request.url().endsWith('/feed-events')) {
-          await route.fulfill({ contentType: 'text/event-stream', body: '' });
-          return;
-        }
         const response = await fetch(request.url(), { method: request.method() });
         await route.fulfill({
           status: response.status,

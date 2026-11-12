@@ -76,13 +76,10 @@ export function slimProgressChunk<T>(chunk: T, depth = 0): T {
 }
 
 /**
- * Strips model snapshots only from agent chunks nested inside
- * `tool-output` / `workflow-step-output` wrappers (e.g. chunks forwarded from
- * a delegated sub-agent); top-level chunks are returned unchanged. Returns the
- * same reference when nothing was removed.
+ * Like {@link slimProgressChunk}, but only for the agent chunks nested in a
+ * `tool-output` / `workflow-step-output` chunk; any other chunk is returned as-is.
  */
-export function stripNestedModelSnapshots<T>(chunk: T): T {
-  if (!chunk || typeof chunk !== 'object') return chunk;
-  const { type } = chunk as { type?: unknown };
+export function slimNestedAgentChunks<T>(chunk: T): T {
+  const type = chunk && typeof chunk === 'object' ? (chunk as { type?: unknown }).type : undefined;
   return typeof type === 'string' && PROGRESS_WRAPPER_TYPES.has(type) ? slimProgressChunk(chunk) : chunk;
 }

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
@@ -101,7 +102,14 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
           icon={<JiraIcon />}
           title={project.name}
           subtitle={
-            [project.key, project.site].filter(Boolean).join(' · ') || 'Its issues feed this Factory Work board'
+            project.key || project.site ? (
+              <Metadata singleLine>
+                {project.key && <Metadata.Item className="shrink-0">{project.key}</Metadata.Item>}
+                {project.site && <Metadata.Item>{project.site}</Metadata.Item>}
+              </Metadata>
+            ) : (
+              'Its issues feed this Factory Work board'
+            )
           }
           shortcut={<Kbd size="sm">↵</Kbd>}
           value={`jira-${project.id}`}

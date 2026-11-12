@@ -195,7 +195,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         integrationId: 'jira',
         sourceId: path.sourceId,
         factoryProjectId,
-        board: 'work',
         labels,
       });
     // Created a minute apart, so the oldest-wins rule has an unambiguous order.
@@ -222,7 +221,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       integrationId: 'jira',
       sourceId: path.sourceId,
       factoryProjectId: growth,
-      board: 'work',
       labels: null,
     });
     return growth;
@@ -240,7 +238,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => false,
       factoryProjectExists,
       ownerId: 'label-routing-test',
     }).runOnce(new Date(Date.now() + 1_000));
@@ -262,15 +259,14 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     }
   });
 
-  it('leaves labels with the all-issues factory until the label factory has a board, and keeps its cards there', async () => {
+  it('leaves labels with the all-issues factory until a label factory binds them, then both hold a card', async () => {
     const triage = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'triage' } })).id;
-    const bindTriage = (board: string | null) =>
+    const bindTriage = () =>
       seed.intake.setSharedBinding({
         orgId: 'org1',
         integrationId: 'jira',
         sourceId: path.sourceId,
         factoryProjectId: triage,
-        board,
         labels: ['bug'],
       });
     const open = (factoryProjectId: string, key: string) =>
@@ -278,17 +274,21 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         `/web/jira/issues/${key}?factoryProjectId=${factoryProjectId}&issueRef=${encodeURIComponent(path.issueRef(key))}`,
       );
 
-    nextMinute();
-    await bindTriage(null);
     expect(await poll(factories.platform)).toContain('OPS-2');
     await fileProposedCards();
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
 
-    await bindTriage('work');
+    nextMinute();
+    await bindTriage();
     expect(await poll(factories.platform)).not.toContain('OPS-2');
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
     expect(await poll(triage)).toEqual(['OPS-2']);
-    expect(await filed(triage)).toEqual([]);
+    expect(await filed(triage)).toEqual(['OPS-2']);
+    await fileProposedCards();
+    for (const factoryProjectId of [factories.platform, triage]) {
+      const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId });
+      expect(cards.filter(card => card.title.startsWith('OPS-2'))).toHaveLength(1);
+    }
   });
 
   it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {

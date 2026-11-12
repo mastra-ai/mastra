@@ -13,7 +13,7 @@ The `ChunkType` type defines the mastra format of stream chunks that can be emit
 
 ## Base properties
 
-All chunks include these base properties:
+All chunks except custom `data-*` chunks include these base properties:
 
 <PropertiesTable
   content={[
@@ -61,6 +61,11 @@ All chunks include these base properties:
             name: 'WORKFLOW',
             type: "'WORKFLOW'",
             description: 'Chunk from workflow execution',
+          },
+          {
+            name: 'NETWORK',
+            type: "'NETWORK'",
+            description: 'Chunk from agent network execution',
           },
         ],
       },
@@ -1133,6 +1138,7 @@ Stream has completed.
           {
             name: 'response',
             type: 'object',
+            isOptional: true,
             description: 'Response metadata and messages from the model provider',
           },
         ],

@@ -1,10 +1,20 @@
 /*
  * The plot box is a size container; the chart inside is drawn at `--chart-drawn-w/h` and scaled to
- * the box's live size, so between redraws it moves with its card. `tan(atan2(a, b))` is a / b as a
- * plain number, which `scale()` needs. At rest the drawn size is the box size and the scale is 1.
+ * the box's live size `--chart-box-w/h`, so between redraws it moves with its card. Both are plain
+ * numbers of CSS pixels: Safari resolves `100cqw / 539px` against different zoom levels, so a zoomed
+ * page stretched every chart by the zoom factor. At rest the two sizes match and the scale is 1.
  */
 .chart-plot-box {
   container-type: size;
+}
+
+/*
+ * Off screen, the browser skips the plot's layout, so the box's ResizeObserver doesn't fire and the
+ * chart isn't drawn or redrawn until it scrolls into view: a resize only redraws the visible charts.
+ * It sits on the box's parent: an element with it is still laid out, only its descendants are skipped.
+ */
+.chart-plot {
+  content-visibility: auto;
 }
 
 /*
@@ -24,7 +34,7 @@
 
 .chart-plot-stretch {
   transform-origin: 0 0;
-  transform: scale(tan(atan2(100cqw, var(--chart-drawn-w))), tan(atan2(100cqh, var(--chart-drawn-h))));
+  transform: scale(calc(var(--chart-box-w) / var(--chart-drawn-w)), calc(var(--chart-box-h) / var(--chart-drawn-h)));
 }
 
 /*
@@ -35,7 +45,7 @@
 .chart-plot-stretch .recharts-surface text:not([transform]) {
   transform-box: fill-box;
   transform-origin: center;
-  transform: scale(tan(atan2(var(--chart-drawn-w), 100cqw)), tan(atan2(var(--chart-drawn-h), 100cqh)));
+  transform: scale(calc(var(--chart-drawn-w) / var(--chart-box-w)), calc(var(--chart-drawn-h) / var(--chart-box-h)));
 }
 
 .chart-plot-stretch .recharts-surface text[text-anchor='start']:not([transform]) {

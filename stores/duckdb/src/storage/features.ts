@@ -8,6 +8,7 @@ export const spanQueryFeatures =
     ? ([
         'span-query',
         'span-query-context-fields',
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') ? (['span-query-duration-sort'] as const) : []),
         // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
         ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
       ] as const)
@@ -23,6 +24,13 @@ export const spanAggregateFeatures =
           : []),
       ] as const)
     : ([] as const);
+
+/** Core before the time-to-first measures rejects them, so they are only declared when core plans them. */
+export const aggregateTimeToFirstFeatures: readonly 'aggregate-time-to-first-measures'[] =
+  'timeToFirstToken.p50' in coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY ? ['aggregate-time-to-first-measures'] : [];
+/** Core before the fields rejects their trace and span predicates, so the feature is only declared when core plans them. */
+export const contextFieldFeatures: readonly 'trace-query-context-fields'[] =
+  'requestId' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {}) ? ['trace-query-context-fields'] : [];
 
 /** Core versions without the field reject it in trace query results, so it is only returned when core knows it. */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;

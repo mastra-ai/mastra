@@ -1,6 +1,6 @@
 {
   "name": "@mastra/sentry",
-  "version": "1.2.31-alpha.0",
+  "version": "1.2.32-alpha.6",
   "description": "Sentry AI observability exporter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/observability": "workspace:*",
     "@mastra/otel-exporter": "workspace:*",
-    "@sentry/node": "^10.76.2"
+    "@sentry/node": "^11.10.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

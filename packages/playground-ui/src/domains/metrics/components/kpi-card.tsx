@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 import { cn } from '@/lib/utils';
 
@@ -9,7 +10,7 @@ export type KpiCardProps = {
   /** Change from the previous period, in percent. Omitted when there is nothing to compare. */
   change?: number;
   lowerIsBetter?: boolean;
-  detail: string;
+  detail: ReactNode;
   /** The previous period's value, formatted. Shown only beside a `change`. */
   previous?: string;
   /** Names the window the change compares against, e.g. "vs previous 7d". */

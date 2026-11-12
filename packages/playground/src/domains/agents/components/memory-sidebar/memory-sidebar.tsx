@@ -312,7 +312,7 @@ export function MemorySidebarBody({
                       icon={Search}
                       tooltip={
                         semanticRecallOn
-                          ? 'Semantic recall is on - retrieves relevant past messages'
+                          ? 'Semantic recall is on and retrieves relevant past messages'
                           : 'Semantic recall is off'
                       }
                       enabled={semanticRecallOn}
@@ -321,7 +321,7 @@ export function MemorySidebarBody({
                       icon={NotebookPen}
                       tooltip={
                         workingMemoryOn
-                          ? 'Working memory is on - persists notes across the conversation'
+                          ? 'Working memory is on and persists notes across the conversation'
                           : 'Working memory is off'
                       }
                       enabled={workingMemoryOn}
@@ -330,7 +330,7 @@ export function MemorySidebarBody({
                       icon={Eye}
                       tooltip={
                         observationalOn
-                          ? 'Observational memory is on - learns from the conversation'
+                          ? 'Observational memory is on and learns from the conversation'
                           : 'Observational memory is off'
                       }
                       enabled={observationalOn}

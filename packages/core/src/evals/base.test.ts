@@ -3,9 +3,16 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, expectTypeOf, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
 import { SpanType } from '../observability';
 import { StreamErrorRetryProcessor } from '../processors';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '../request-context';
 import { createMockModel } from '../test-utils/llm-mock';
 import { createScorer, ScorerRunError } from './base';
 import type { ScorerJudgeExecutionFailure, ScorerJudgeExecutionSuccess } from './base';
@@ -1243,6 +1250,176 @@ describe('createScorer', () => {
       } finally {
         streamSpy.mockRestore();
       }
+    });
+  });
+
+  describe('Judge instructions and the run request context', () => {
+    const SCORE = '{"score":0.5}';
+    const CACHE = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
+    const reportInstructions = ({ requestContext }: { requestContext: RequestContext<any> }) => [
+      { role: 'system' as const, content: 'Score the report.' },
+      { role: 'system' as const, content: `REPORT: ${requestContext.get('report')}`, providerOptions: CACHE },
+    ];
+    const systemText = (prompt: unknown) =>
+      (prompt as { role: string; content: unknown }[])
+        .filter(message => message.role === 'system')
+        .map(message => message.content)
+        .join('\n');
+
+    it.each([
+      ['a plain object', { report: 'report-A' }],
+      ['a RequestContext', new RequestContext([['report', 'report-A']])],
+    ])('sends the report from the run as a cached system message when the run passes %s', async (_, context) => {
+      const { model, getPrompts } = createJudgeModel(['{"facts":1}', SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      })
+        .analyze({
+          description: 'Check facts',
+          judge: { model, instructions: reportInstructions },
+          outputSchema: z.object({ facts: z.number() }),
+          createPrompt: () => 'Check facts.',
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: context });
+
+      const cachedReport = expect.objectContaining({ content: 'REPORT: report-A', providerOptions: CACHE });
+      expect(getPrompts()).toEqual([expect.arrayContaining([cachedReport]), expect.arrayContaining([cachedReport])]);
+    });
+
+    it('lets run values override judge.requestContext and leaves the scorer context unchanged', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorerContext = new RequestContext<any>([
+        ['shared', 'from-scorer'],
+        ['scorerOnly', 'kept'],
+      ]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          requestContext: scorerContext,
+          instructions: ({ requestContext }) =>
+            ['shared', 'scorerOnly', 'runOnly'].map(key => `${key}=${requestContext.get(key)}`).join(' '),
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { shared: 'from-run', runOnly: 'added' } });
+
+      expect(systemText(getPrompts()[0])).toBe('shared=from-run scorerOnly=kept runOnly=added');
+      expect(scorerContext.get('shared')).toBe('from-scorer');
+      expect(scorerContext.has('runOnly')).toBe(false);
+    });
+
+    it('lets a dynamic judge model read values from the run', async () => {
+      const fast = createJudgeModel([SCORE]);
+      const fallback = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          // The public type has no function form, but the model resolver accepts one at runtime.
+          model: (({ requestContext }: { requestContext: RequestContext<any> }) =>
+            requestContext.get('judgeTier') === 'fast' ? fast.model : fallback.model) as any,
+          instructions: 'Score the report.',
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { judgeTier: 'fast' } });
+
+      expect(fast.getCallCount()).toBe(1);
+      expect(fallback.getCallCount()).toBe(0);
+    });
+
+    it('gives the judge a report that a preprocess step loads into the run context', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      })
+        .preprocess(({ run }) => {
+          (run.requestContext as RequestContext).set('report', 'loaded-report');
+          return {};
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: new RequestContext<any>([['report', 'stale-report']]),
+      });
+
+      expect(systemText(getPrompts()[0])).toContain('REPORT: loaded-report');
+    });
+
+    it.each<[string, [string, unknown][]]>([
+      [
+        'thread and resource keys',
+        [
+          [MASTRA_THREAD_ID_KEY, 'caller-thread'],
+          [MASTRA_RESOURCE_ID_KEY, 'caller-user'],
+        ],
+      ],
+      ['scopes', [[MASTRA_SCOPES_KEY, ['thread:caller-thread', 'resource:caller-user']]]],
+    ])(
+      'keeps a judge with memory on its own thread when the run names the caller thread by %s',
+      async (_, identity) => {
+        const memory = new MockMemory();
+        const { model } = createJudgeModel([SCORE]);
+        const scorer = createScorer({
+          id: 'report-judge',
+          description: 'Scores a report',
+          judge: {
+            model,
+            memory,
+            defaultMemoryOptions: { thread: 'judge-thread', resource: 'judge-user' },
+            instructions: reportInstructions,
+          },
+        }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+        await scorer.run({
+          input: 'q',
+          output: 'a',
+          requestContext: new RequestContext<any>([...identity, ['report', 'report-A']]),
+        });
+
+        const judgeThread = await memory.recall({ threadId: 'judge-thread', resourceId: 'judge-user' });
+        const callerThread = await memory.recall({ threadId: 'caller-thread', resourceId: 'caller-user' });
+        expect(judgeThread.messages.length).toBeGreaterThan(0);
+        expect(callerThread.messages).toEqual([]);
+      },
+    );
+
+    it("leaves the run's memory binding and reserved keys out of the judge", async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          instructions: ({ requestContext }) =>
+            ['MastraMemory', MASTRA_THREAD_ID_KEY, MASTRA_AUTH_TOKEN_KEY, 'report']
+              .map(key => `${requestContext.get(key)}`)
+              .join(' '),
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: {
+          MastraMemory: { thread: { id: 'caller-thread' } },
+          [MASTRA_THREAD_ID_KEY]: 'caller-thread',
+          [MASTRA_AUTH_TOKEN_KEY]: 'caller-token',
+          report: 'report-A',
+        },
+      });
+
+      expect(systemText(getPrompts()[0])).toBe('undefined undefined undefined report-A');
     });
   });
 

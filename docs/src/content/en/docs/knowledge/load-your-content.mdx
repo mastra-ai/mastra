@@ -1,0 +1,94 @@
+---
+title: "Load your content"
+description: "Load your own content, such as product docs or policies, into Knowledge so agents can search and read it."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# Load your content
+
+Agents write to Knowledge as they work, but you often want content in place before they start, such as your product docs or company policies. Seed it from your own server code with [`upsertPage()`](/reference/knowledge/knowledge-class#upsertpage) and [`addNote()`](/reference/knowledge/knowledge-class#addnote).
+
+Knowledge has no importers yet. Planned importers will keep it in sync with your other systems. Until then, seed content from server code as shown here.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+## Declare a scope for the content
+
+Give the seeded content its own scope type, and say who can read it:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'docs:$orgId': {
+      description: 'Product docs',
+      belongsTo: 'org:$orgId',
+      access: [{ principal: 'org:$orgId', role: 'viewer' }],
+    },
+  },
+  tools: true,
+})
+```
+
+`belongsTo` places the docs under the org in the scope tree. Agents in the org can read these pages but not change them.
+
+## Write the pages
+
+Write each document to a path in that scope. A path such as `guides/install` becomes the page `docs:acme#guides/install`, and missing pages along the path are created:
+
+```typescript title="src/seed-docs.ts"
+import { knowledge } from './mastra/knowledge'
+
+type Doc = { slug: string; title: string; markdown: string }
+
+export async function seedDocs(orgId: string, docs: Doc[]) {
+  for (const doc of docs) {
+    await knowledge.upsertPage({
+      scope: `docs:${orgId}`,
+      path: doc.slug,
+      name: doc.title,
+      body: doc.markdown,
+      author: 'seed:docs',
+    })
+  }
+}
+```
+
+Agents whose runs hold `org:acme` can now find these pages with search and read them. If you set `vector` and `embedder`, `upsertPage()` also embeds each page for [search by meaning](/docs/knowledge/search#add-search-by-meaning).
+
+To add a dated fact or a comment to a page, add a note. The `[[docs:acme#releases/2026-12]]` mention becomes a link once that page exists:
+
+```typescript title="src/seed-docs.ts"
+await knowledge.addNote({
+  scope: 'docs:acme',
+  path: 'guides/install',
+  text: 'Node 18 support ends on [[docs:acme#releases/2026-12]].',
+  when: new Date('2026-11-01'),
+  author: 'seed:docs',
+})
+```
+
+These methods are for trusted server code. They don't check run scopes or access rules, so don't call them from an agent tool or from a route without admin-level auth.
+
+## Keep content in sync
+
+Run the seed again when your source changes. `upsertPage()` updates changed pages and skips unchanged ones, so a re-run doesn't rewrite or re-embed them.
+
+`addNote()` adds a new note on every call. Running the seed twice leaves duplicate notes. Add notes once, or change an existing note with [`updateNote()`](/reference/knowledge/knowledge-class#updatenote).
+
+A document you delete from your source stays in Knowledge. Remove it with [`removePage()`](/reference/knowledge/knowledge-class#removepage). A page with child pages can't be removed until its children are.
+
+## Next steps
+
+Next, [open Knowledge in Studio](/docs/studio/knowledge) to check what you loaded. For every server-side write method, see [`upsertPage()`](/reference/knowledge/knowledge-class#upsertpage) and the methods after it.

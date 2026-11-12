@@ -138,8 +138,10 @@ describe('PostgresStoreVNext', () => {
           'delta-polling',
           'trace-query',
           'trace-aggregate',
+          'aggregate-time-to-first-measures',
           'span-query',
           'span-query-context-fields',
+          'span-query-duration-sort',
           'span-query-model-fields',
           'span-aggregate',
           'span-aggregate-model-dimensions',
@@ -149,7 +151,9 @@ describe('PostgresStoreVNext', () => {
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
+          'feedback-replacement',
           'trace-query-context-ids',
+          'trace-query-context-fields',
           'trace-query-time-to-first-chunk',
           'trace-query-time-to-first-chunk-sort',
           'trace-query-time-to-first-token',
@@ -172,8 +176,10 @@ describe('PostgresStoreVNext', () => {
           'metric-discovery',
           'trace-query',
           'trace-aggregate',
+          'aggregate-time-to-first-measures',
           'span-query',
           'span-query-context-fields',
+          'span-query-duration-sort',
           'span-query-model-fields',
           'span-aggregate',
           'span-aggregate-model-dimensions',
@@ -183,7 +189,9 @@ describe('PostgresStoreVNext', () => {
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
+          'feedback-replacement',
           'trace-query-context-ids',
+          'trace-query-context-fields',
           'trace-query-time-to-first-chunk',
           'trace-query-time-to-first-chunk-sort',
           'trace-query-time-to-first-token',
@@ -315,6 +323,71 @@ describe('PostgresStoreVNext / shared observability suite', () => {
     cleanup: async storage => {
       await storage.dangerouslyClearAll();
     },
+  });
+
+  it('reads accepted feedback identity from the primary while the read client has a stale snapshot', async () => {
+    if (!sharedClient || !sharedSchema || !sharedStorage) throw new Error('shared storage was not initialized');
+    await sharedStorage.dangerouslyClearAll();
+    const readPool = new Pool({ connectionString: TIMESCALE_URL, max: 1 });
+    const readClient = new PoolAdapter(readPool);
+    const splitStore = new ObservabilityStoragePostgresVNext({
+      client: sharedClient,
+      readClient,
+      schemaName: sharedSchema,
+    });
+    const feedback = {
+      feedbackId: 'replica-feedback',
+      traceId: 'replica-trace',
+      timestamp: new Date(),
+      feedbackType: 'thumbs',
+      feedbackSource: 'user',
+      value: 1,
+    };
+    try {
+      // A real repeatable-read snapshot models a replica that has not replayed the primary write.
+      await readClient.none('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await readClient.any(`SELECT * FROM "${sharedSchema}".mastra_feedback_events`);
+      await splitStore.createFeedback({ feedback, onConflict: 'ignore' });
+      await splitStore.createFeedback({
+        feedback: { ...feedback, timestamp: new Date(feedback.timestamp.getTime() + 1), value: -1 },
+        onConflict: 'ignore',
+      });
+      expect(await readClient.any(`SELECT * FROM "${sharedSchema}".mastra_feedback_events`)).toEqual([]);
+      expect(await splitStore.getFeedbackById(feedback.feedbackId)).toMatchObject(feedback);
+    } finally {
+      await readClient.none('ROLLBACK');
+      await readPool.end();
+      await sharedStorage.dangerouslyClearAll();
+    }
+  });
+
+  it('ignores duplicate feedback in overlapping batches with reversed ID order', async () => {
+    if (!sharedStorage) throw new Error('shared storage was not initialized');
+    await sharedStorage.dangerouslyClearAll();
+    const feedbacks = Array.from({ length: 1000 }, (_, i) => ({
+      feedbackId: `batch-feedback-${i}`,
+      traceId: 'batch-trace',
+      timestamp: new Date(),
+      feedbackType: 'thumbs',
+      feedbackSource: 'user',
+      value: 1,
+    }));
+    try {
+      await Promise.all([
+        sharedStorage.batchCreateFeedback({ feedbacks, onConflict: 'ignore' }),
+        sharedStorage.batchCreateFeedback({
+          feedbacks: [...feedbacks]
+            .reverse()
+            .map(feedback => ({ ...feedback, timestamp: new Date(feedback.timestamp.getTime() + 1) })),
+          onConflict: 'ignore',
+        }),
+      ]);
+      expect((await sharedStorage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'count' })).value).toBe(
+        1000,
+      );
+    } finally {
+      await sharedStorage.dangerouslyClearAll();
+    }
   });
 
   it('retains changed-timestamp feedback versions while querying only the latest accepted write', async () => {

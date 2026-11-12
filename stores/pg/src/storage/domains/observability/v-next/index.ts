@@ -165,6 +165,7 @@ const spanQueryFeatures =
     ? ([
         'span-query',
         'span-query-context-fields',
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') ? (['span-query-duration-sort'] as const) : []),
         // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
         ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
       ] as const)
@@ -424,6 +425,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        ...traceAggregateOps.aggregateTimeToFirstFeatures,
         ...spanQueryFeatures,
         ...spanAggregateFeatures,
         ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
@@ -432,7 +434,9 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
+        ...traceQueryOps.contextFieldFeatures,
         ...traceQueryOps.timingFeatures,
         ...traceQueryOps.outcomeFeatures,
         'trace-query-root-span-fields',
@@ -451,6 +455,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'delta-polling',
       'trace-query',
       'trace-aggregate',
+      ...traceAggregateOps.aggregateTimeToFirstFeatures,
       ...spanQueryFeatures,
       ...spanAggregateFeatures,
       ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
@@ -459,7 +464,9 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'feedback-replacement',
       'trace-query-context-ids',
+      ...traceQueryOps.contextFieldFeatures,
       ...traceQueryOps.timingFeatures,
       ...traceQueryOps.outcomeFeatures,
       'trace-query-root-span-fields',
@@ -650,6 +657,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    await this.#run('REPLACE_FEEDBACK', () =>
+      feedbackOps.replaceFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
+  }
+
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     await this.#run('CREATE_FEEDBACK', () =>
       feedbackOps.createFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
@@ -702,6 +715,17 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return this.#run('GET_SCORE_BY_ID', () => scoresOps.getScoreById(this.#readClient, this.#schema, scoreId), {
       scoreId,
     });
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.#run(
+      'GET_FEEDBACK_BY_ID',
+      // Single-feedback reads supply accepted identities after writes and must not lag behind them.
+      () => feedbackOps.getFeedbackById(this.#client, this.#schema, feedbackId),
+      {
+        feedbackId,
+      },
+    );
   }
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {

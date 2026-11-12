@@ -204,6 +204,36 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     await store.dangerouslyReset();
   });
 
+  it('keeps pins from before pin kinds as page pins and then takes a list pin on the same page', async () => {
+    const store = await makeStore();
+    const { scope } = await store.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'Acme',
+      provenance: who,
+    });
+    const page = await store.createPage({ parentId: scope.id, name: 'Policy', body: 'Be kind.', provenance: who });
+    await store.addPinAudience({ pageId: page.id, audience: ['org:acme'], createdBy: 'agent:alex' });
+    // The pins table as it shipped before kinds: one pin per page.
+    await pool.query(
+      'ALTER TABLE `mastra_knowledge_pins` DROP INDEX idx_kpins_page_kind, DROP COLUMN kind, DROP COLUMN depth, ADD UNIQUE KEY idx_kpins_page (pageId)',
+    );
+    await store.init();
+    await createStore().init();
+    const { pins } = await store.listPins({ audience: ['org:acme'], read: 'all' });
+    expect(pins).toMatchObject([{ pageId: page.id, kind: 'page', audience: ['org:acme'] }]);
+    await store.addPinAudience({ pageId: page.id, kind: 'list', depth: 2, audience: ['org:acme'], createdBy: 'a' });
+    const kinds = (await store.listPins({ audience: ['org:acme'], read: 'all' })).pins.map(pin => [
+      pin.kind,
+      pin.depth,
+    ]);
+    expect(kinds.sort()).toEqual([
+      ['list', 2],
+      ['page', undefined],
+    ]);
+    await store.dangerouslyReset();
+  });
+
   it('stores pin audiences up to 512 characters and finds them by lookup', async () => {
     const store = await makeStore();
     const { scope } = await store.materializeScope({

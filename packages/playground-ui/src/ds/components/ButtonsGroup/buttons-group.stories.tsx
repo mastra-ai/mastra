@@ -48,7 +48,7 @@ export const Sizes: Story = {
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>
-            <InputGroupInput aria-label={`Search (${size})`} placeholder="Search..." />
+            <InputGroupInput aria-label={`Search (${size})`} placeholder="Search" />
           </InputGroup>
           <Button icon={<CopyIcon />}>Copy</Button>
           <ButtonsGroupText>{size}</ButtonsGroupText>
@@ -198,7 +198,7 @@ export const SearchWithDropdown: Story = {
           <InputGroupInput
             type="search"
             aria-label="Search projects"
-            placeholder="Search projects..."
+            placeholder="Search projects"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />

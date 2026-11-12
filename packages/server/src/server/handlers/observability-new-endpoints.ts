@@ -30,6 +30,7 @@ import {
   feedbackRecordSchema,
   feedbackReviewStatusSchema,
   createFeedbackBodySchema,
+  replaceFeedbackBodySchema,
   createFeedbackResponseSchema,
   deleteFeedbackArgsSchema,
   deleteFeedbackResponseSchema,
@@ -79,19 +80,23 @@ import {
   isStudioClientTypeHeader,
 } from '../constants';
 import { HTTPException } from '../http-exception';
-import { listFeedbackResponseSchema } from '../schemas/feedback';
+import { feedbackResponseSchema, listFeedbackResponseSchema } from '../schemas/feedback';
 import { observabilityStorageCapabilitiesSchema } from '../schemas/system';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { prepareAuthorEnrichment } from './author-enrichment';
 import { getCallerPermissions } from './authorship';
 import { handleError } from './error';
+import { exportPersistedEvent, persistedFeedbackEvent, persistedScoreEvent } from './observability-export';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
+  assertObservabilitySpanDurationSortSupported,
   assertObservabilitySpanQueryFieldsSupported,
   assertObservabilitySpanAggregateModelDimensionsSupported,
+  assertObservabilityAggregateTimeToFirstMeasuresSupported,
+  filterObservabilityAggregateMeasureDescriptors,
   assertObservabilitySpanQueryModelFieldsSupported,
   assertObservabilitySpanQueryOutcomeFieldsSupported,
   assertObservabilityTraceQueryOutcomeFieldsSupported,
@@ -102,26 +107,26 @@ import {
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE,
   assertObservabilityTraceQueryDiscoverySupported,
-  assertObservabilityTraceQueryContextIdsSupported,
+  assertObservabilityTraceQueryContextFieldsSupported,
   assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSortSupported,
   assertObservabilityTraceQueryTimeToFirstTokenSupported,
   assertObservabilityTraceQueryTimeToFirstTokenSortSupported,
-  isTraceQueryContextIdField,
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
   supportsObservabilityTraceQueryRootSpanField,
   isObservabilityOutcomeField,
   supportsObservabilityTraceQueryOutcomeFields,
   assertObservabilityTraceQuerySupported,
+  assertObservabilityTextSearchSupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
   NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
-  supportsObservabilityTraceQueryContextIds,
+  supportsObservabilityTraceQueryContextField,
   supportsObservabilityTraceQueryRootDuration,
   supportsObservabilityTraceQueryTimeToFirstChunk,
   supportsObservabilityTraceQueryTimeToFirstToken,
@@ -133,6 +138,7 @@ import {
   withDiscoveryFallback,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
+import { resolveSignalContext } from './observability-signal-context';
 
 function createNewRoute<
   TPathSchema extends z.ZodTypeAny | undefined = undefined,
@@ -326,6 +332,8 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     requestContext,
     timeRange,
     where,
+    textSearch,
+    rootSource,
     group,
     orderBy,
     page,
@@ -334,6 +342,12 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     after,
     limit,
   }) => {
+    if (rootSource === 'aggregated') {
+      throwTraceQueryError(501, {
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Aggregated trace roots are not supported by this server',
+      });
+    }
     let plan;
     try {
       const user = requestContext.get(MASTRA_USER_KEY);
@@ -353,7 +367,19 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
             })
           : undefined;
       plan = coreStorage.planTraceQuery(
-        { timeRange, where, group, orderBy, page, pagination, mode, after, limit },
+        {
+          timeRange,
+          where,
+          ...(rootSource === undefined || rootSource === 'legacy' ? {} : { rootSource }),
+          ...(textSearch === undefined ? {} : { textSearch }),
+          group,
+          orderBy,
+          page,
+          pagination,
+          mode,
+          after,
+          limit,
+        },
         { authorizationBinding, scope: resolveTraceQueryScope(requestContext) },
       );
     } catch (error) {
@@ -373,8 +399,9 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
+      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'trace');
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
-      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
@@ -516,11 +543,12 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceAggregateSupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
-      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryOutcomeFieldsSupported(observabilityStore, plan);
+      assertObservabilityAggregateTimeToFirstMeasuresSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -652,6 +680,7 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanAggregateModelDimensionsSupported(observabilityStore, plan);
       assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);
+      assertObservabilityAggregateTimeToFirstMeasuresSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
@@ -737,12 +766,12 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       code: 'SPAN_QUERY_UNSUPPORTED',
       message: 'Span queries require a newer @mastra/core. Please upgrade.',
     }),
-  handler: async ({ mastra, requestContext, timeRange, where, orderBy, page }) => {
+  handler: async ({ mastra, requestContext, timeRange, where, textSearch, orderBy, page }) => {
     let plan;
     try {
       plan = coreStorage.planSpanQuery(
-        { timeRange, where, orderBy, page },
-        { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED') },
+        { timeRange, where, ...(textSearch === undefined ? {} : { textSearch }), orderBy, page },
+        { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED'), allowSpanDurationOrdering: true },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -761,6 +790,8 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
+      assertObservabilitySpanDurationSortSupported(observabilityStore, plan.orderBy);
+      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'span');
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);
@@ -869,10 +900,7 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
             field.path !== 'durationMs' ||
             supportsObservabilityTraceQueryRootDuration(observabilityStore),
         )
-        .filter(
-          field =>
-            !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
-        )
+        .filter(field => supportsObservabilityTraceQueryContextField(observabilityStore, field.path))
         .filter(
           field =>
             field.path !== 'timeToFirstChunkMs' || supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore),
@@ -909,7 +937,10 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
                   !isObservabilityOutcomeField(dimension.path) ||
                   supportsObservabilityTraceQueryOutcomeFields(observabilityStore),
               ),
-            measures: coreStorage.getTraceAggregateMeasureDescriptors(),
+            measures: filterObservabilityAggregateMeasureDescriptors(
+              observabilityStore,
+              coreStorage.getTraceAggregateMeasureDescriptors(),
+            ),
           },
         }),
       };
@@ -1057,11 +1088,11 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
         assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       } else {
         assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
-        assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
+        assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
-        assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+        assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan.traces);
@@ -1193,12 +1224,19 @@ export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
 export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   bodySchema: createScoreBodySchema,
   responseSchema: createScoreResponseSchema,
-  handler: async ({ mastra, score }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, score, contextMode }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    await observabilityStore.createScore({
-      score: { ...score, scoreId: score.scoreId ?? generateSignalId(), timestamp: new Date() },
-    });
-    return { success: true };
+    const context = await resolveSignalContext(observabilityStore, requestContext, score, contextMode);
+    const scoreId = score.scoreId ?? generateSignalId();
+    const timestamp = score.timestamp === undefined ? new Date() : new Date(score.timestamp);
+    const record = { ...score, ...context, scoreId, timestamp };
+    await observabilityStore.createScore({ score: record });
+    await exportPersistedEvent(mastra, persistedScoreEvent(record));
+    return {
+      success: true,
+      data: { scoreId, traceId: score.traceId, spanId: score.spanId ?? null, timestamp: timestamp.toISOString() },
+    };
   },
 });
 
@@ -1272,6 +1310,29 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 // Feedback Routes
 // ============================================================================
 
+export const GET_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK, {
+  pathParamSchema: z.object({ feedbackId: z.string() }),
+  responseSchema: z.object({ feedback: feedbackResponseSchema.nullable() }),
+  handler: async ({ mastra, requestContext, request, feedbackId }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    if (typeof observabilityStore.getFeedbackById !== 'function') {
+      throw new HTTPException(501, {
+        message: 'This storage provider does not support single-feedback reads; please upgrade @mastra/core.',
+      });
+    }
+    const feedback = await observabilityStore.getFeedbackById(feedbackId);
+    if (!feedback) return { feedback: null };
+    const authors = await prepareAuthorEnrichment(
+      mastra,
+      requestContext,
+      [feedback.feedbackUserId],
+      isStudioClientTypeHeader(request?.headers.get(MASTRA_CLIENT_TYPE_HEADER) ?? undefined),
+    );
+    const author = feedback.feedbackUserId ? authors?.get(feedback.feedbackUserId) : undefined;
+    return { feedback: author ? { ...feedback, author } : feedback };
+  },
+});
+
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
@@ -1310,22 +1371,136 @@ export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
 export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   bodySchema: createFeedbackBodySchema,
   responseSchema: createFeedbackResponseSchema,
-  handler: async ({ mastra, requestContext, feedback }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedback, contextMode }) => {
     const user = requestContext.get(MASTRA_USER_KEY);
     const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
     const observabilityStore = await getObservabilityStore(mastra);
-    await observabilityStore.createFeedback({
-      feedback: {
-        ...feedback,
-        ...(typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
-          ? { feedbackUserId: authenticatedId }
-          : {}),
-        feedbackId: feedback.feedbackId ?? generateSignalId(),
-        timestamp: new Date(),
-        reviewStatus: feedback.reviewStatus ?? 'needs-review',
+    const context = await resolveSignalContext(observabilityStore, requestContext, feedback, contextMode);
+    const feedbackId = feedback.feedbackId ?? generateSignalId();
+    const timestamp = feedback.timestamp === undefined ? new Date() : new Date(feedback.timestamp);
+    const record = {
+      ...feedback,
+      ...context,
+      feedbackUserId:
+        typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+          ? authenticatedId
+          : (feedback.feedbackUserId ?? null),
+      feedbackId,
+      timestamp,
+      reviewStatus: feedback.reviewStatus ?? 'needs-review',
+    };
+    await observabilityStore.createFeedback({ feedback: record, onConflict: 'ignore' });
+    // New adapters can ignore a duplicate POST. Older packages retain their existing create behavior.
+    const stored = getObservabilityStorageCapabilities(observabilityStore).feedbackReplacement
+      ? await observabilityStore.getFeedbackById(feedbackId)
+      : null;
+    if (
+      stored &&
+      ((stored.organizationId ?? null) !== (record.organizationId ?? null) ||
+        (stored.resourceId ?? null) !== (record.resourceId ?? null))
+    ) {
+      throw new HTTPException(404, { message: 'Feedback not found' });
+    }
+    if (stored && stored.traceId !== record.traceId) {
+      throw new HTTPException(409, { message: 'Feedback already exists for a different trace' });
+    }
+    const accepted = { ...(stored ?? record), feedbackId };
+    // Re-notify exporters on retries, using accepted values and identity rather than the discarded request.
+    await exportPersistedEvent(mastra, persistedFeedbackEvent(accepted));
+    return {
+      success: true,
+      data: {
+        feedbackId: accepted.feedbackId,
+        traceId: record.traceId,
+        spanId: accepted.spanId ?? null,
+        timestamp: accepted.timestamp.toISOString(),
       },
+    };
+  },
+});
+
+export const REPLACE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.REPLACE_FEEDBACK, {
+  pathParamSchema: z.object({ feedbackId: z.string() }),
+  bodySchema: replaceFeedbackBodySchema,
+  responseSchema: createFeedbackResponseSchema,
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedbackId: pathId, feedback, contextMode }) => {
+    if (pathId !== feedback.feedbackId) throw new HTTPException(400, { message: 'URL and body feedbackId must match' });
+    const user = requestContext.get(MASTRA_USER_KEY);
+    const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
+    const observabilityStore = await getObservabilityStore(mastra);
+    if (!getObservabilityStorageCapabilities(observabilityStore).feedbackReplacement) {
+      throw new HTTPException(501, {
+        message: 'Feedback replacement requires a supported storage adapter and @mastra/core version',
+      });
+    }
+    const context = await resolveSignalContext(observabilityStore, requestContext, feedback, contextMode);
+    const feedbackId = feedback.feedbackId;
+    const timestamp = new Date(feedback.timestamp);
+    const record = {
+      ...feedback,
+      ...context,
+      feedbackUserId:
+        typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+          ? authenticatedId
+          : (feedback.feedbackUserId ?? null),
+      feedbackId,
+      timestamp,
+      reviewStatus: feedback.reviewStatus ?? 'needs-review',
+    };
+    const existing = await observabilityStore.getFeedbackById(feedbackId);
+    if (existing) {
+      if (
+        (existing.organizationId ?? null) !== (record.organizationId ?? null) ||
+        (existing.resourceId ?? null) !== (record.resourceId ?? null)
+      ) {
+        throw new HTTPException(404, { message: 'Feedback not found' });
+      }
+      if (existing.traceId !== record.traceId || existing.timestamp.getTime() !== timestamp.getTime()) {
+        throw new HTTPException(409, {
+          message: 'Feedback replacement must preserve the original traceId and timestamp',
+        });
+      }
+    }
+    try {
+      await observabilityStore.replaceFeedback({ feedback: record });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'id' in error &&
+        error.id === 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT'
+      ) {
+        // Another writer can establish the identity after the pre-read. Preserve the same HTTP contract.
+        const current = await observabilityStore.getFeedbackById(feedbackId);
+        if (
+          current &&
+          ((current.organizationId ?? null) !== (record.organizationId ?? null) ||
+            (current.resourceId ?? null) !== (record.resourceId ?? null))
+        ) {
+          throw new HTTPException(404, { message: 'Feedback not found' });
+        }
+        throw new HTTPException(409, {
+          message: 'Feedback replacement must preserve the original traceId and timestamp',
+        });
+      }
+      throw error;
+    }
+    const event = persistedFeedbackEvent(record);
+    await exportPersistedEvent(mastra, {
+      type: 'feedback_replacement',
+      feedback: { ...event.feedback, traceId: record.traceId },
     });
-    return { success: true };
+    return {
+      success: true,
+      data: {
+        feedbackId,
+        traceId: feedback.traceId,
+        spanId: feedback.spanId ?? null,
+        timestamp: timestamp.toISOString(),
+      },
+    };
   },
 });
 
@@ -1349,9 +1524,30 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
   pathParamSchema: z.object({ feedbackId: z.string() }),
   bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
   responseSchema: feedbackRecordSchema,
-  handler: async ({ mastra, feedbackId, reviewStatus }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedbackId, reviewStatus }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    if (
+      typeof observabilityStore.getFeedbackById !== 'function' ||
+      typeof observabilityStore.updateFeedbackReviewStatus !== 'function'
+    ) {
+      throw new HTTPException(501, {
+        message: 'Feedback review updates require a supported storage adapter and @mastra/core version',
+      });
+    }
+    const existing = await observabilityStore.getFeedbackById(feedbackId);
+    // In OSS, organizationId is correlation metadata, not an authorization scope.
+    // Its presence in request context must not restrict this review update.
+    const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    if (!existing || (typeof resourceId === 'string' && resourceId && existing.resourceId !== resourceId)) {
+      throw new HTTPException(404, { message: 'Feedback not found' });
+    }
+    const updated = await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    await exportPersistedEvent(mastra, {
+      type: 'feedback_review_status',
+      feedback: { feedbackId, reviewStatus },
+    });
+    return updated;
   },
 });
 
@@ -1592,7 +1788,9 @@ export const NEW_ROUTES = {
   GET_SCORE_TIME_SERIES,
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
+  GET_FEEDBACK,
   CREATE_FEEDBACK,
+  REPLACE_FEEDBACK,
   DELETE_FEEDBACK,
   UPDATE_FEEDBACK_REVIEW_STATUS,
   GET_FEEDBACK_AGGREGATE,
