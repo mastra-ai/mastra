@@ -302,7 +302,7 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
       ...kpiDraft,
       kpis: { items: [{ label: 'Runs', icon: 'bot', format: 'count', detail: 'in range', value: runs }] },
     }),
-    'A value takes exactly one of `metricAggregate`, `sum`, not `metricTimeSeries`',
+    'A value takes exactly one of `metricAggregate`, `scoreAggregate`, `traceAggregate`, `spanAggregate`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `metricTimeSeries`',
   ],
   [
     'a kind no renderer draws',
@@ -483,7 +483,8 @@ it('offers the model only the kinds and defaults a service stores', async () => 
 
   expect(Object.keys(widget.properties)).toEqual(['id', 'span', 'title', 'description', 'kpis', 'timeseries', 'table']);
   expect(Object.keys(dashboard.properties.defaults.properties)).toEqual(['datePreset']);
-  expect(JSON.stringify(widget)).not.toContain('MastraScore');
+  // Score reads stay on offer to KPIs and charts without the `scores` kind, their filters defined once.
+  expect(JSON.stringify(widget).match(/"MastraScoreFilters":/g)).toHaveLength(1);
   expect(JSON.stringify(widget).match(/"MastraMetricFilters":/g)).toHaveLength(1);
 });
 

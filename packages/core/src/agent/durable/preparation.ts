@@ -1021,6 +1021,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     mastra,
     tools,
     requestTools: tools,
+    methodType,
     saveQueueManager,
     memory,
     memoryAuthorizationChecks,

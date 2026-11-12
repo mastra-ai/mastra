@@ -4953,6 +4953,15 @@ export class Session<TState = unknown> {
   // rule write, or the post-create pass) does not resume the same call again
   // while storage still lists its run as suspended.
   readonly #answeredParkedApprovals = new Set<string>();
+  // The host-built context of the request that opened this session. A stored
+  // run resumes from its snapshot, which carries no authenticated user, so
+  // releasing it with no context leaves host credential gates nothing to check.
+  #parkedApprovalsRequestContext: RequestContext | undefined;
+
+  /** Resume calls released by a policy re-check under the context of the request that opened this session. */
+  setParkedApprovalsRequestContext(requestContext: RequestContext | undefined): void {
+    this.#parkedApprovalsRequestContext = requestContext;
+  }
 
   applyToolPolicyToParkedApprovals(): Promise<void> {
     const check = this.#parkedApprovalsCheck.then(() => this.#applyToolPolicyToParkedApprovalsSafely());
@@ -5011,7 +5020,13 @@ export class Session<TState = unknown> {
         if (policy === 'ask') continue;
         handled.add(key);
         this.#answeredParkedApprovals.add(key);
-        const identity = { toolCallId, runId: run.runId, threadId, resourceId: this.identity.getResourceId() };
+        const identity = {
+          toolCallId,
+          runId: run.runId,
+          threadId,
+          resourceId: this.identity.getResourceId(),
+          requestContext: this.#parkedApprovalsRequestContext,
+        };
         if (policy === 'allow') await this.approveToolCall(identity);
         else await this.declineToolCall(identity);
       }
@@ -6097,6 +6112,52 @@ export class Session<TState = unknown> {
   /** Release a claim taken with {@link claimToolResponse}. */
   releaseToolResponse(toolCallId: string): void {
     this.#claimedToolResponses.delete(toolCallId);
+  }
+
+  /**
+   * Register a suspension that lives only in storage, so {@link claimToolSuspension}
+   * can find it. A run parked by a process that has since gone away stays
+   * suspended in storage, but this session never saw it park. Only an exact
+   * `toolCallId` on the active thread is looked up, and only when exactly one
+   * stored, non-approval suspension matches. The scan is bounded so an unknown
+   * id can't make a reply read every stored run on the thread.
+   */
+  async restoreStoredToolSuspension(toolCallId?: string, runId?: string): Promise<void> {
+    if (!toolCallId || this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const threadId = this.thread.getId();
+    if (!threadId) return;
+    const resourceId = this.identity.getResourceId();
+    const matches: Array<{ agent: Agent; runId: string; toolName: string }> = [];
+    const perPage = 100;
+    const maxPages = 10;
+    scan: for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
+      if (typeof agent.listSuspendedRuns !== 'function') continue;
+      for (let page = 0; page < maxPages; page++) {
+        let result: Awaited<ReturnType<typeof agent.listSuspendedRuns>>;
+        try {
+          result = await agent.listSuspendedRuns({ threadId, resourceId, page, perPage });
+        } catch (error) {
+          if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') break;
+          throw error;
+        }
+        for (const run of result.runs) {
+          if (runId !== undefined && run.runId !== runId) continue;
+          for (const call of run.toolCalls) {
+            if (call.toolCallId !== toolCallId || !call.toolName || call.requiresApproval) continue;
+            matches.push({ agent, runId: run.runId, toolName: call.toolName });
+            if (matches.length > 1) break scan;
+          }
+        }
+        if ((page + 1) * perPage >= result.total) break;
+      }
+    }
+    if (matches.length !== 1) return;
+    // Another request may have restored it while this one was reading storage.
+    if (this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const match = matches[0]!;
+    const address = { threadId, resourceId, runId: match.runId, toolCallId };
+    this.suspensions.register({ ...address, toolName: match.toolName });
+    this.#suspensionAgents.set(this.suspensions.get(address)!, match.agent);
   }
 
   /**

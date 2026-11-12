@@ -371,11 +371,9 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
   });
 }
 
-interface ThreadSwitchSession {
-  thread: {
-    requireId(): string;
-    switch(input: { threadId: string }): Promise<unknown>;
-  };
+interface SessionOwner {
+  userId: string;
+  orgId: string;
 }
 
 interface FactoryNotificationResult {
@@ -1420,7 +1418,7 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
           const requestContext = factoryRequestContext({
             session,
             binding,
@@ -1444,7 +1442,7 @@ export class FactoryDecisionDispatcher {
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
-          await this.#switchThread(session, binding);
+          await this.#switchThread(session, binding, { userId: startedBy, orgId: record.orgId });
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
@@ -1693,7 +1691,7 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
         const requestContext = factoryRequestContext({
           session,
           binding,
@@ -1739,7 +1737,7 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
         const requestContext = factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId });
         await awaitNotification(() =>
           session.sendNotificationSignal(
@@ -2349,7 +2347,11 @@ export class FactoryDecisionDispatcher {
     }
     if (!first.board.isTerminal(first.route.phase)) {
       const binding = await this.#findBinding(record);
-      const session = binding ? await this.#findSession(binding) : undefined;
+      // A binding with no recorded owner never started a run, so it has none in flight.
+      const startedBy = binding ? first.item.sessions[binding.role]?.startedBy : undefined;
+      if (startedBy) await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+      const session =
+        binding && startedBy ? await this.#findSession(binding, { userId: startedBy, orgId: record.orgId }) : undefined;
       // Checked again on the next claim: the card may have moved, or the routes changed, by then.
       if (binding && session && (await this.#hasRunInFlight(session, binding))) {
         throw new FactoryDecisionPostponed();
@@ -2453,7 +2455,7 @@ export class FactoryDecisionDispatcher {
     const startedBy = item?.sessions[binding.role]?.startedBy;
     if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
     await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-    const session = await this.#requireSession(binding);
+    const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
     const author = decision.author
       ? `@${decision.author}${decision.authorTrusted ? '' : ' (untrusted author)'}`
       : decision.authorTrusted
@@ -2567,10 +2569,13 @@ export class FactoryDecisionDispatcher {
     return this.#requireBinding(record, role);
   }
 
-  async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
+  async #findSession(
+    binding: FactoryRunBindingRecord,
+    owner: SessionOwner,
+  ): Promise<BoundDispatcherSession | undefined> {
     const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
-    await this.#switchThread(session, binding);
+    await this.#switchThread(session, binding, owner);
     return session;
   }
 
@@ -2644,15 +2649,22 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
-    const session = await this.#findSession(binding);
+  async #requireSession(binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<BoundDispatcherSession> {
+    const session = await this.#findSession(binding, owner);
     if (!session) throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
     return session;
   }
 
-  async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
+  // Switching subscribes to the thread, which resolves memory and model
+  // credentials, so it always runs as the session owner.
+  async #switchThread(
+    session: BoundDispatcherSession,
+    binding: FactoryRunBindingRecord,
+    owner: SessionOwner,
+  ): Promise<void> {
     if (session.thread.requireId() === binding.threadId) return;
-    await session.thread.switch({ threadId: binding.threadId });
+    const requestContext = factoryRequestContext({ session, binding, userId: owner.userId, orgId: owner.orgId });
+    await session.thread.switch({ threadId: binding.threadId, requestContext });
   }
 
   async #withBindingSkillRun(bindingId: string, effect: () => Promise<void>): Promise<void> {
@@ -2823,7 +2835,7 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
           const requestContext = factoryRequestContext({
             session,
             binding,

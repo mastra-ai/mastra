@@ -124,6 +124,7 @@ function joinCard(
       created_by: board.created_by,
       created_at: board.created_at,
       updated_at: board.updated_at,
+      changed_at: board.changed_at,
     },
     reviewInUse,
   );

@@ -332,3 +332,141 @@ describe('HookManager session worktree identity', () => {
     expect(stdin).not.toHaveProperty('main_repo_path');
   });
 });
+
+describe('HookManager session id changes', () => {
+  beforeEach(() => {
+    Object.values(mocks).forEach(mockFn => mockFn.mockReset());
+  });
+
+  function startedManager() {
+    mocks.loadHooksConfig.mockReturnValue({
+      SessionStart: [{ type: 'command', command: 'session.sh' }],
+      UserPromptSubmit: [{ type: 'command', command: 'prompt.sh' }],
+    });
+    mocks.runHooksForEvent.mockResolvedValue(createHookResult());
+    return new HookManager('/project', 'session-init');
+  }
+
+  const calls = () =>
+    mocks.runHooksForEvent.mock.calls.map(([, stdin]) => [stdin.hook_event_name, stdin.session_id, stdin.source]);
+
+  it('marks the boot SessionStart as startup', async () => {
+    const mgr = startedManager();
+    await mgr.runSessionStart();
+    expect(calls()).toEqual([['SessionStart', 'session-init', 'startup']]);
+  });
+
+  it('fires SessionStart again when a different thread is bound after startup', async () => {
+    const mgr = startedManager();
+    await mgr.runSessionStart();
+
+    mgr.setSessionId('thread-1');
+    await mgr.runUserPromptSubmit('hi');
+
+    expect(calls()).toEqual([
+      ['SessionStart', 'session-init', 'startup'],
+      ['SessionStart', 'thread-1', 'thread_change'],
+      ['UserPromptSubmit', 'thread-1', undefined],
+    ]);
+  });
+
+  it('does not fire for the same thread or before startup', async () => {
+    const mgr = startedManager();
+    mgr.setSessionId('thread-1');
+    await mgr.runSessionStart();
+    mgr.setSessionId('thread-1');
+    await mgr.runUserPromptSubmit('hi');
+
+    expect(calls()).toEqual([
+      ['SessionStart', 'thread-1', 'startup'],
+      ['UserPromptSubmit', 'thread-1', undefined],
+    ]);
+  });
+
+  it('holds later events until the thread-change SessionStart hooks finish', async () => {
+    const mgr = startedManager();
+    await mgr.runSessionStart();
+    let finishSessionStart!: () => void;
+    mocks.runHooksForEvent.mockImplementationOnce(
+      () => new Promise(resolve => (finishSessionStart = () => resolve(createHookResult()))),
+    );
+
+    mgr.setSessionId('thread-1');
+    const agentStart = mgr.runUserPromptSubmit('hi');
+    await Promise.resolve();
+    expect(calls().map(([event]) => event)).toEqual(['SessionStart', 'SessionStart']);
+
+    finishSessionStart();
+    await agentStart;
+    expect(calls().map(([event]) => event)).toEqual(['SessionStart', 'SessionStart', 'UserPromptSubmit']);
+  });
+
+  it('still dispatches later events when the thread-change SessionStart hooks fail', async () => {
+    const mgr = startedManager();
+    await mgr.runSessionStart();
+    mocks.runHooksForEvent.mockRejectedValueOnce(new Error('hook crashed'));
+
+    mgr.setSessionId('thread-1');
+    await mgr.runUserPromptSubmit('hi');
+
+    expect(calls().at(-1)).toEqual(['UserPromptSubmit', 'thread-1', undefined]);
+  });
+
+  it('runs a thread change after a still-running startup SessionStart, in order', async () => {
+    const mgr = startedManager();
+    let finishStartup!: () => void;
+    mocks.runHooksForEvent.mockImplementationOnce(
+      () => new Promise(resolve => (finishStartup = () => resolve(createHookResult()))),
+    );
+
+    const startup = mgr.runSessionStart();
+    mgr.setSessionId('thread-1');
+    const prompt = mgr.runUserPromptSubmit('hi');
+    await Promise.resolve();
+    expect(calls()).toEqual([['SessionStart', 'session-init', 'startup']]);
+
+    finishStartup();
+    await startup;
+    await prompt;
+    expect(calls()).toEqual([
+      ['SessionStart', 'session-init', 'startup'],
+      ['SessionStart', 'thread-1', 'thread_change'],
+      ['UserPromptSubmit', 'thread-1', undefined],
+    ]);
+  });
+
+  it('runs consecutive thread changes one after another, each with its own session id', async () => {
+    const mgr = startedManager();
+    await mgr.runSessionStart();
+    let finishFirst!: () => void;
+    mocks.runHooksForEvent.mockImplementationOnce(
+      () => new Promise(resolve => (finishFirst = () => resolve(createHookResult()))),
+    );
+
+    mgr.setSessionId('thread-1');
+    mgr.setSessionId('thread-2');
+    const prompt = mgr.runUserPromptSubmit('hi');
+    await Promise.resolve();
+    expect(calls()).toHaveLength(2);
+
+    finishFirst();
+    await prompt;
+    expect(calls()).toEqual([
+      ['SessionStart', 'session-init', 'startup'],
+      ['SessionStart', 'thread-1', 'thread_change'],
+      ['SessionStart', 'thread-2', 'thread_change'],
+      ['UserPromptSubmit', 'thread-2', undefined],
+    ]);
+  });
+
+  it('still rejects to the caller when the startup SessionStart hooks fail, without blocking later events', async () => {
+    const mgr = startedManager();
+    mocks.runHooksForEvent.mockRejectedValueOnce(new Error('hook crashed'));
+
+    await expect(mgr.runSessionStart()).rejects.toThrow('hook crashed');
+    mgr.setSessionId('thread-1');
+    await mgr.runUserPromptSubmit('hi');
+
+    expect(calls().at(-1)).toEqual(['UserPromptSubmit', 'thread-1', undefined]);
+  });
+});

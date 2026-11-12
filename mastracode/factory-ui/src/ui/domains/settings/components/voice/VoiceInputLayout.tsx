@@ -28,7 +28,7 @@ export function VoiceInputLayout({
   keys: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-8">
+    <>
       <SettingsSubsection
         ref={anchorRef}
         id={VOICE_INPUT_ANCHOR}
@@ -45,6 +45,6 @@ export function VoiceInputLayout({
       >
         {keys}
       </SettingsSubsection>
-    </div>
+    </>
   );
 }
