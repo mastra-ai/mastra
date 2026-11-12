@@ -42,16 +42,32 @@ function buildWorkflow(instance: string, executions: string[], hang: (step: stri
     .commit();
 }
 
+/** How the instances reach each other, and how the first one stops. */
+export interface RecoveryExitCase {
+  pubsub: 'in-process' | 'broker';
+  exit: 'crashes' | 'shuts down';
+}
+
+const ALL_EXIT_CASES: RecoveryExitCase[] = [
+  { pubsub: 'in-process', exit: 'crashes' },
+  { pubsub: 'in-process', exit: 'shuts down' },
+  { pubsub: 'broker', exit: 'crashes' },
+  { pubsub: 'broker', exit: 'shuts down' },
+];
+
 /**
  * `getStorage` is the store the test reads. `connect` opens the store an
- * instance uses, on the same database; it defaults to `getStorage`.
+ * instance uses, on the same database; it defaults to `getStorage`. `cases`
+ * picks the rows to run; it defaults to all of them.
  */
 export function describeRecoveryExitCases({
   getStorage,
   connect = getStorage,
+  cases = ALL_EXIT_CASES,
 }: {
   getStorage: () => MastraStorage;
   connect?: () => MastraStorage | Promise<MastraStorage>;
+  cases?: RecoveryExitCase[];
 }) {
   describe('recovery of an evented run whose instance stopped (#28712)', () => {
     const instances: { mastra: Mastra; revive: () => void }[] = [];
@@ -90,61 +106,57 @@ export function describeRecoveryExitCases({
       (await (await getStorage().getStore('workflows'))!.loadWorkflowSnapshot({ workflowName: 'exit-wf', runId }))
         ?.status;
 
-    describe.each([
-      ['an in-process pubsub per instance', () => () => new EventEmitterPubSub() as PubSub],
-      [
-        'a broker the instances share',
-        () => {
-          const broker = sharedBroker();
-          return () => broker.connect();
-        },
-      ],
-    ])('with %s', (_, pubsubs) => {
-      it.each(['crashes', 'shuts down'] as const)(
-        'restarts a run once, after the grace period, when its instance %s mid-step, and runs each step once after it',
-        async exit => {
-          const connectPubsub = pubsubs();
-          const executions: string[] = [];
-          const a = await startInstance('A', connectPubsub(), executions, step => step === 'first');
-          const run = await a.mastra.getWorkflow('exit-wf').createRun();
-          await run.startAsync({ inputData: {} });
-          await vi.waitFor(() => expect(executions).toEqual(['A:first']));
+    // Each call returns a factory for the pubsub one instance connects to.
+    const pubsubs: Record<RecoveryExitCase['pubsub'], () => () => PubSub> = {
+      'in-process': () => () => new EventEmitterPubSub(),
+      broker: () => {
+        const broker = sharedBroker();
+        return () => broker.connect();
+      },
+    };
 
-          if (exit === 'shuts down') {
-            await a.mastra.shutdown({ drainTimeout: 0 });
-          }
+    describe.each(cases.map(({ pubsub, exit }) => [pubsub, exit] as const))('with the %s pubsub', (pubsub, exit) => {
+      it(`restarts a run once, after the grace period, when its instance ${exit} mid-step, and runs each step once after it`, async () => {
+        const connectPubsub = pubsubs[pubsub]();
+        const executions: string[] = [];
+        const a = await startInstance('A', connectPubsub(), executions, step => step === 'first');
+        const run = await a.mastra.getWorkflow('exit-wf').createRun();
+        await run.startAsync({ inputData: {} });
+        await vi.waitFor(() => expect(executions).toEqual(['A:first']));
 
-          // The process is gone: nothing it held is renewed again. A crash leaves the run's liveness to
-          // lapse one TTL after its last renewal; a shutdown expired it just now.
-          a.kill();
-          const liveness = await (await getStorage().getStore('workflows'))!.getRunOwnership({
-            runId: runLivenessKey(run.runId),
-          });
-          const livenessExpiresAt = liveness?.leaseExpiresAt?.getTime();
-          expect(livenessExpiresAt).toBeDefined();
+        if (exit === 'shuts down') {
+          await a.mastra.shutdown({ drainTimeout: 0 });
+        }
 
-          const b = await startInstance('B', connectPubsub(), executions);
-          const restartedAt: number[] = [];
-          const restartInBackground = Run.prototype.restartInBackground;
-          vi.spyOn(Run.prototype, 'restartInBackground').mockImplementation(function (this: Run) {
-            restartedAt.push(Date.now());
-            return restartInBackground.call(this);
-          });
+        // The process is gone: nothing it held is renewed again. A crash leaves the run's liveness to
+        // lapse one TTL after its last renewal; a shutdown expired it just now.
+        a.kill();
+        const liveness = await (await getStorage().getStore('workflows'))!.getRunOwnership({
+          runId: runLivenessKey(run.runId),
+        });
+        const livenessExpiresAt = liveness?.leaseExpiresAt?.getTime();
+        expect(livenessExpiresAt).toBeDefined();
 
-          // B can start after the grace period on a slow store, so how early the restart came is checked below.
-          await vi.waitFor(
-            async () => {
-              await b.mastra.restartAllActiveWorkflowRuns();
-              expect(await status(run.runId)).toBe('success');
-            },
-            { timeout: 10_000, interval: 100 },
-          );
-          expect(restartedAt).toHaveLength(1);
-          expect(restartedAt[0]!).toBeGreaterThanOrEqual(livenessExpiresAt! + GRACE_MS);
-          expect(executions.filter(execution => execution.startsWith('B:'))).toEqual(['B:first', 'B:second']);
-        },
-        20_000,
-      );
+        const b = await startInstance('B', connectPubsub(), executions);
+        const restartedAt: number[] = [];
+        const restartInBackground = Run.prototype.restartInBackground;
+        vi.spyOn(Run.prototype, 'restartInBackground').mockImplementation(function (this: Run) {
+          restartedAt.push(Date.now());
+          return restartInBackground.call(this);
+        });
+
+        // B can start after the grace period on a slow store, so how early the restart came is checked below.
+        await vi.waitFor(
+          async () => {
+            await b.mastra.restartAllActiveWorkflowRuns();
+            expect(await status(run.runId)).toBe('success');
+          },
+          { timeout: 10_000, interval: 100 },
+        );
+        expect(restartedAt).toHaveLength(1);
+        expect(restartedAt[0]!).toBeGreaterThanOrEqual(livenessExpiresAt! + GRACE_MS);
+        expect(executions.filter(execution => execution.startsWith('B:'))).toEqual(['B:first', 'B:second']);
+      }, 20_000);
     });
   });
 }

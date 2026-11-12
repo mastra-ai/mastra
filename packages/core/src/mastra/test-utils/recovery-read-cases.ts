@@ -1,7 +1,7 @@
 /**
- * What one recovery pass reads from the store, shared by the in-memory,
- * LibSQL and Postgres suites (#28712): runs other processes keep live cost no
- * snapshot read, and a stopped run costs only its own.
+ * What one recovery pass reads from the store (#28712): runs other processes
+ * keep live cost no snapshot read, and a stopped run costs only its own. Run
+ * on the in-memory store: what each adapter returns is its conformance suite's.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -68,19 +68,8 @@ async function countReads(storage: MastraStorage) {
   return { snapshotReads, listings, ownershipReads };
 }
 
-/**
- * `getStorage` is the store the test writes, cleared before each case.
- * `connect` opens the store the recovering instance uses, on the same
- * database: an instance that shuts down closes its store. It defaults to
- * `getStorage`, for stores that close harmlessly.
- */
-export function describeRecoveryReadCases({
-  getStorage,
-  connect = getStorage,
-}: {
-  getStorage: () => MastraStorage;
-  connect?: () => MastraStorage | Promise<MastraStorage>;
-}) {
+/** `getStorage` is the store the test writes and the recovering instance reads, cleared before each case. */
+export function describeRecoveryReadCases({ getStorage }: { getStorage: () => MastraStorage }) {
   describe('what a workflow recovery pass reads (#28712)', () => {
     const instances: Mastra[] = [];
     afterEach(async () => {
@@ -121,7 +110,7 @@ export function describeRecoveryReadCases({
       const store = (await getStorage().getStore('workflows'))!;
       await store.dangerouslyClearAll();
       const executions: string[] = [];
-      const instanceStorage = await connect();
+      const instanceStorage = getStorage();
       const mastra = new Mastra({
         logger: false,
         storage: instanceStorage,

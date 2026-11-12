@@ -5,7 +5,6 @@ vi.hoisted(() => {
 import { afterAll, beforeAll, describe, vi } from 'vitest';
 import { PostgresStore } from '../..';
 import { describeRecoveryExitCases } from '../../../../../../packages/core/src/mastra/test-utils/recovery-exit-cases';
-import { describeRecoveryReadCases } from '../../../../../../packages/core/src/mastra/test-utils/recovery-read-cases';
 import { TEST_CONFIG } from '../../test-utils';
 
 // Instances on one schema, as pods share one database (#28712).
@@ -27,6 +26,6 @@ describe('Postgres workflow recovery passes', () => {
     await instance.init();
     return instance;
   };
-  describeRecoveryReadCases({ getStorage: () => storage, connect });
-  describeRecoveryExitCases({ getStorage: () => storage, connect });
+  // The in-memory suite runs every row; here one, a crashed pod on a shared broker.
+  describeRecoveryExitCases({ getStorage: () => storage, connect, cases: [{ pubsub: 'broker', exit: 'crashes' }] });
 });
