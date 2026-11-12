@@ -1451,9 +1451,10 @@ describe('Agent signals: drain and lease handoff', () => {
         const queued = runtime.queueMessage(agent, `queued ${outcome}`, { resourceId, threadId, queueOwnerId }, pubsub);
         finishActiveRun();
 
-        await waitForCondition(() => counts.at(-1) === 0);
-        expect(counts).toEqual([0, 1, 0]);
         if (outcome === 'forward') {
+          await waitForCondition(() =>
+            pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === ownerRunId),
+          );
           expect(stream).not.toHaveBeenCalled();
           expect(pubsub.publishedData).toContainEqual(
             expect.objectContaining({
@@ -1462,7 +1463,11 @@ describe('Agent signals: drain and lease handoff', () => {
               signal: expect.objectContaining({ id: queued.signal.id }),
             }),
           );
+          // The forwarded message still counts until the owner accepts it, which this owner never does.
+          expect(counts).toEqual([0, 1]);
         } else {
+          await waitForCondition(() => counts.at(-1) === 0);
+          expect(counts).toEqual([0, 1, 0]);
           expect(stream).toHaveBeenCalledTimes(1);
         }
       }
@@ -1505,7 +1510,11 @@ describe('Agent signals: drain and lease handoff', () => {
 
     await waitForCondition(() => counts.at(-1) === 0);
     expect(counts).toEqual([0, 1, 0]);
-    expect(stream).not.toHaveBeenCalled();
+    // The handoff fails, so the message is forwarded to the run that still holds the lease, which has already
+    // ended; it was never admitted there, so it runs once that run's lease is released instead of being lost.
+    await waitForCondition(() => stream.mock.calls.length > 0);
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(stream.mock.calls[0]![0]).toMatchObject({ contents: 'lease failure' });
   });
 
   it('does not forward a cancelled observed message after losing the lease', async () => {
