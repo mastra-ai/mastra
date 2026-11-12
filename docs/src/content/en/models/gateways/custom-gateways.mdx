@@ -27,7 +27,7 @@ Use a custom gateway when your models need more than a base URL and an API key:
 - You want [cost metrics](#model-pricing) for models that models.dev doesn't list
 - Studio should list only your own models, with [`AUTO_BLOCK_EXTERNAL_PROVIDERS`](#showing-only-custom-gateways-in-studio)
 
-To connect to a single OpenAI-compatible endpoint, such as a privately hosted model, set `url` in the model config instead. See [Use local models with Mastra](/models#use-local-models-with-mastra).
+To connect to a single OpenAI-compatible endpoint, such as a privately hosted model, set `url` in the model config instead. Mastra doesn't read an API key from environment variables for a `url` model, so also set `apiKey` when the endpoint needs one. See [Use local models with Mastra](/models#use-local-models-with-mastra).
 
 ## Creating a Custom Gateway
 
@@ -69,29 +69,31 @@ const myPrivateGateway: MastraModelGatewayInterface = {
   async getApiKey() {
     return process.env.MY_API_KEY ?? '';
   },
-  async resolveLanguageModel({ modelId, providerId, apiKey }) {
+  async resolveLanguageModel({ modelId, providerId, apiKey, headers }) {
     return createOpenAICompatible({
       name: providerId,
       apiKey,
+      headers,
       baseURL: 'https://api.myprovider.com/v1',
     }).chatModel(modelId);
   },
 };
 ```
 
-The following example extends `MastraModelGateway` and takes its base URL and API key as constructor options, so you can create one instance per endpoint:
+The following example extends `MastraModelGateway` and takes its ID, base URL, and API key as constructor options:
 
 ```typescript
 import { MastraModelGateway, type GatewayLanguageModel, type ProviderConfig } from '@mastra/core/llm';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 
 interface MyPrivateGatewayOptions {
+  id?: string;
   baseURL?: string;
   apiKey?: string;
 }
 
 class MyPrivateGateway extends MastraModelGateway {
-  readonly id = 'private';
+  readonly id: string;
   readonly name = 'My Private Gateway';
 
   private readonly baseURL: string;
@@ -99,6 +101,7 @@ class MyPrivateGateway extends MastraModelGateway {
 
   constructor(options: MyPrivateGatewayOptions = {}) {
     super();
+    this.id = options.id ?? 'private';
     this.baseURL = options.baseURL ?? 'https://api.myprovider.com/v1';
     this.apiKey = options.apiKey;
   }
@@ -131,19 +134,37 @@ class MyPrivateGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): GatewayLanguageModel {
     return createOpenAICompatible({
       name: providerId,
       apiKey,
+      headers,
       baseURL: this.baseURL,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
 }
+```
+
+To run one instance per endpoint, give each instance its own `id`. Mastra keeps only the first gateway registered with a given ID, and the ID is the model ID prefix:
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra({
+  gateways: {
+    privateEu: new MyPrivateGateway({ id: 'private-eu', baseURL: 'https://eu.api.myprovider.com/v1' }),
+    privateUs: new MyPrivateGateway({ id: 'private-us', baseURL: 'https://us.api.myprovider.com/v1' }),
+  },
+});
+
+// Models: 'private-eu/my-provider/__GATEWAY_OPENAI_MODEL__' and 'private-us/my-provider/__GATEWAY_OPENAI_MODEL__'
 ```
 
 ### Gateway-owned authentication
