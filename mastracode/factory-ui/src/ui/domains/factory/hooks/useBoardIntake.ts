@@ -133,7 +133,7 @@ export function useBoardIntake({
 
   const config = configQuery.data;
   const gitlabStatusQuery = useGitLabStatusQuery(true);
-  const githubEnabled = config?.github.enabled ?? true;
+  const githubEnabled = config?.github.enabled ?? false;
   // Every linked GitHub repository feeds intake, not just the first one. Pull requests come from
   // all of them; issues only from the repositories selected as issue sources.
   const reviewRepositoryIds = repositories
