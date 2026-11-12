@@ -641,13 +641,8 @@ export function describeFinishedOccurrenceCases({
       });
       const b = await startReplica(build('B'));
 
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const outcome = await Promise.race([
-        redeliver(b, first),
-        new Promise(resolve => (timer = setTimeout(() => resolve('still waiting'), 5_000))),
-      ]).finally(() => clearTimeout(timer));
-
-      expect(outcome).toEqual({ ok: true });
+      // The lease outlasts the test's timeout, so a redelivery that waits for it fails the test.
+      expect(await redeliver(b, first)).toEqual({ ok: true });
       expect(executions).toEqual(['A:first', 'A:second']);
       expect(stepEventsOf(b.published, run.runId)).toEqual([]);
     }, 20_000);
