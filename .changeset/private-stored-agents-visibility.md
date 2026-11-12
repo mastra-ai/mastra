@@ -8,6 +8,7 @@ Fixed private stored agents being visible to and usable by other users outside `
 
 - `GET /api/agents` only lists the stored agents you own, public ones, and older agents without an owner.
 - Every route that looks up an agent by id returns 404 for another user's private stored agent, the same as for a missing agent.
+- The `/api/memory/*` routes answer for another user's private stored agent exactly as for an agent that doesn't exist. Where a missing agent falls back to Mastra's storage (for example `GET /api/memory/config` returns `{ config: null }`), a hidden one does too, and never reaches the agent's own memory.
 - Agent version routes (`/api/stored/agents/:agentId/versions/*`) follow the same rules. Reading versions needs read access; creating, activating, restoring or deleting them needs edit access.
 - Changing or resetting a stored agent's model at runtime (`POST /api/agents/:agentId/model` and `/model/reset`) now needs edit access, because the change applies to everyone using the agent. Before, anyone who could run a public stored agent could swap its model.
 

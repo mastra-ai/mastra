@@ -220,8 +220,6 @@ describe('stored agent visibility on /api/agents', () => {
       ['GET /agents/:id/voice/speakers', () => http('bob', 'GET', `/agents/${PRIVATE}/voice/speakers`)],
       ['POST /v1/responses', () => http('bob', 'POST', '/v1/responses', { agent_id: PRIVATE, input: 'say hi' })],
       ['GET /.well-known/:id/agent-card.json', () => http('bob', 'GET', `/.well-known/${PRIVATE}/agent-card.json`)],
-      ['GET /memory/status?agentId=', () => http('bob', 'GET', `/memory/status?agentId=${PRIVATE}`)],
-      ['GET /memory/config?agentId=', () => http('bob', 'GET', `/memory/config?agentId=${PRIVATE}`)],
     ])('%s returns 404 and never reaches the model', async (_name, call) => {
       reply();
       const result = await call();
@@ -284,12 +282,62 @@ describe('stored agent visibility on /api/agents', () => {
       ['POST /agents/:id/generate', () => generate('bob', PRIVATE)],
       ['POST /agents/:id/stream', () => stream('bob', PRIVATE)],
       ['GET /agents/:id/voice/listener', () => http('bob', 'GET', `/agents/${PRIVATE}/voice/listener`)],
-      ['GET /memory/status?agentId=', () => http('bob', 'GET', `/memory/status?agentId=${PRIVATE}`)],
-      ['GET /memory/config?agentId=', () => http('bob', 'GET', `/memory/config?agentId=${PRIVATE}`)],
     ])('bob gets 404 on %s and never reaches the model', async (_name, call) => {
       reply();
       expect((await call()).status).toBe(404);
       expect(llm.getRequests()).toHaveLength(0);
+    });
+
+    // The memory routes fall back to Mastra's storage (or answer `config: null`) for an agent id they can't resolve,
+    // so a hidden agent has to get that same answer; a 404 there would tell bob the private id exists.
+    it('bob gets the same memory route responses for the private agent as for an agent that does not exist', async () => {
+      const missing = 'no-such-agent';
+      const probes: Array<[string, string, string, unknown?]> = [
+        ['GET', '/memory/status', 'resourceId=bob&threadId=bob-thread'],
+        ['GET', '/memory/config', ''],
+        ['GET', '/memory/observational-memory', 'resourceId=bob&threadId=bob-thread'],
+        ['POST', '/memory/observational-memory/buffer-status', '', { resourceId: 'bob', threadId: 'bob-thread' }],
+        ['GET', '/memory/threads', 'resourceId=bob'],
+        ['GET', '/memory/threads/bob-thread', ''],
+        ['GET', '/memory/threads/bob-thread/messages', ''],
+        ['GET', '/memory/threads/bob-thread/working-memory', 'resourceId=bob'],
+        ['POST', '/memory/save-messages', '', { messages: [] }],
+        ['POST', '/memory/threads', '', { resourceId: 'bob', threadId: 'bob-probe', title: 'probe' }],
+        ['PATCH', '/memory/threads/bob-thread', '', { title: 'probe' }],
+        ['POST', '/memory/threads/bob-thread/clone', '', {}],
+        ['POST', '/memory/threads/bob-thread/working-memory', '', { workingMemory: 'probe', resourceId: 'bob' }],
+        ['POST', '/memory/messages/delete', '', { messageIds: ['no-such-message'] }],
+        ['GET', '/memory/search', 'searchQuery=hi&resourceId=bob'],
+        ['DELETE', '/memory/threads/bob-thread', ''],
+      ];
+      const differences = [];
+      for (const [method, path, query, body] of probes) {
+        const call = (agentId: string) =>
+          http('bob', method, `${path}?agentId=${agentId}${query ? `&${query}` : ''}`, body);
+        const forMissing = await call(missing);
+        const forHidden = await call(PRIVATE);
+        const normalize = (r: { status: number; text: string }) => ({
+          status: r.status,
+          body: r.text.replaceAll(PRIVATE, '<id>').replaceAll(missing, '<id>'),
+        });
+        if (JSON.stringify(normalize(forHidden)) !== JSON.stringify(normalize(forMissing))) {
+          differences.push({
+            route: `${method} ${path}`,
+            hidden: normalize(forHidden),
+            missing: normalize(forMissing),
+          });
+        }
+      }
+      expect(differences).toEqual([]);
+      // The owner still resolves her agent instead of getting the missing-agent answer.
+      const forOwner = await http('alice', 'GET', `/memory/search?agentId=${PRIVATE}&searchQuery=hi&resourceId=alice`);
+      const ownerMissing = await http(
+        'alice',
+        'GET',
+        `/memory/search?agentId=${missing}&searchQuery=hi&resourceId=alice`,
+      );
+      expect(ownerMissing.json).toEqual({ error: 'Agent not found' });
+      expect(forOwner.json).not.toEqual({ error: 'Agent not found' });
     });
 
     // A missing skill and a hidden agent are both 404; the body tells them apart ("Not found" = access denied, as on
