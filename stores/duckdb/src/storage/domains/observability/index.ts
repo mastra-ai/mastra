@@ -167,6 +167,10 @@ export interface ObservabilityDuckDBConfig {
  * Uses an append-only event-sourced model with SQL-based reconstruction for spans.
  */
 export class ObservabilityStorageDuckDB extends ObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   static override readonly retentionTables: RetentionTablesDescriptor = {
     spans: { table: 'span_events', column: 'timestamp', indexed: false },
     metrics: { table: 'metric_events', column: 'timestamp', indexed: false },
@@ -285,6 +289,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
         ...contextFieldFeatures,
         ...timingFeatures,
@@ -315,6 +320,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'feedback-replacement',
       'trace-query-context-ids',
       ...contextFieldFeatures,
       ...timingFeatures,
@@ -467,6 +473,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoreOps.getScoreById(this.db, scoreId);
   }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return feedbackOps.getFeedbackById(this.db, feedbackId);
+  }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);
   }
@@ -481,6 +491,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
 
   // Feedback
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    return feedbackOps.createFeedback(this.db, { feedback: args.feedback, onConflict: 'replace' }, true);
+  }
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     return feedbackOps.createFeedback(this.db, args);
   }

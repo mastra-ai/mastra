@@ -17,11 +17,9 @@ import { settingsRowLayout } from './common/settings-row-layout';
  */
 export function DisconnectedLinearWorkspaces({
   workspaces,
-  pending,
   onRemove,
 }: {
   workspaces: DisconnectedLinearWorkspace[];
-  pending: boolean;
   onRemove: (sourceIds: string[]) => void;
 }) {
   const { baseUrl } = useApiConfig();
@@ -46,8 +44,8 @@ export function DisconnectedLinearWorkspaces({
                   </Badge>
                 </span>
                 <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                  {count === 1 ? '1 project or team' : `${count} projects and teams`} paused · reconnect to resume
-                  intake
+                  {count === 1 ? '1 project or team' : `${count} projects and teams`} paused. Reconnect to resume
+                  intake.
                 </Txt>
               </div>
             </div>
@@ -60,7 +58,6 @@ export function DisconnectedLinearWorkspaces({
                 variant="ghost"
                 icon={<Trash2 />}
                 aria-label={`Remove ${name}`}
-                disabled={pending}
                 onClick={() => onRemove(workspace.sourceIds)}
               >
                 Remove

@@ -1,4 +1,5 @@
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallExit } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
@@ -18,7 +19,7 @@ export interface ToolCall {
   output: string;
   // Epoch milliseconds.
   createdAt?: number;
-  exitCode?: number;
+  exit?: ToolCallExit;
 }
 
 export function toolCallStatus(status: ToolCall['status']): ActivityStatus {
@@ -312,15 +313,19 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'command_exit':
       return knownToolIndex(state.entries, event.toolCallId) === -1
         ? state
-        : withTool(state, event.toolCallId, t => ({ ...t, exitCode: event.exitCode }));
+        : withTool(state, event.toolCallId, t => ({ ...t, exit: commandExit(event) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
-    case 'tool_end':
-      return withTool(state, event.toolCallId, t => ({
+    case 'tool_end': {
+      // A prompt answered in another window never gets a local resolvePrompt;
+      // the call finishing is the only signal this window receives.
+      const settled = withTool(state, event.toolCallId, t => ({
         ...t,
         status: event.isError ? 'error' : 'done',
         result: event.result,
       }));
+      return { ...settled, entries: settled.entries.filter(e => !isPromptFor(e, new Set([event.toolCallId]))) };
+    }
 
     case 'tool_approval_required':
       return pushPrompt(state, {
@@ -457,18 +462,54 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
+  const settled = terminalToolCallIds(messages);
+  return messages.flatMap(message => [
+    toMessageEntry(message, { streaming: false }),
+    ...persistedPrompts(message).filter(prompt => !settled.has(prompt.toolCallId)),
+  ]);
 }
 
-const sandboxExitSchema = z.object({ toolCallId: z.string(), exitCode: z.number() });
+function terminalToolCallIds(messages: MastraDBMessage[]): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.content.parts) {
+      if (part.type === 'tool-invocation' && isTerminalInvocationState(part.toolInvocation.state)) {
+        ids.add(part.toolInvocation.toolCallId);
+      }
+    }
+  }
+  return ids;
+}
+
+function isPromptFor(entry: TimelineEntry, toolCallIds: { has(id: string): boolean }): boolean {
+  return (entry.kind === 'approval' || entry.kind === 'suspension') && toolCallIds.has(entry.toolCallId);
+}
+
+const sandboxExitSchema = z.object({
+  toolCallId: z.string(),
+  exitCode: z.number(),
+  // These only describe the exit, so a malformed one is dropped rather than the whole exit and its ✕.
+  killed: z.boolean().optional().catch(undefined),
+  timedOut: z.boolean().optional().catch(undefined),
+  error: z.string().optional().catch(undefined),
+});
+
+/** One shape for an exit, whether it streamed as `command_exit` or was saved as `data-sandbox-exit`. */
+function commandExit({ exitCode, killed = false, timedOut = false, error }: ToolCallExit): ToolCallExit {
+  return { exitCode, killed, timedOut, error };
+}
+
+function sameExit(a: ToolCallExit, b: ToolCallExit | undefined): boolean {
+  return a.exitCode === b?.exitCode && a.killed === b.killed && a.timedOut === b.timedOut && a.error === b.error;
+}
 
 /** The exit shares its call's message, unless a sealed message pushed it into a later one. */
-function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, number> {
-  const exits = new Map<string, number>();
+function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, ToolCallExit> {
+  const exits = new Map<string, ToolCallExit>();
   for (const part of messages.flatMap(message => message.content.parts)) {
     if (part.type !== 'data-sandbox-exit' || !('data' in part)) continue;
     const exit = sandboxExitSchema.safeParse(part.data);
-    if (exit.success) exits.set(exit.data.toolCallId, exit.data.exitCode);
+    if (exit.success) exits.set(exit.data.toolCallId, commandExit(exit.data));
   }
   return exits;
 }
@@ -490,14 +531,17 @@ function settleCommandExits(state: TranscriptState, messages: MastraDBMessage[])
   return changed ? { ...state, entries } : state;
 }
 
-function exitedTools(entry: MessageEntry, exits: ReadonlyMap<string, number>): Array<readonly [string, ToolCall]> {
+function exitedTools(
+  entry: MessageEntry,
+  exits: ReadonlyMap<string, ToolCallExit>,
+): Array<readonly [string, ToolCall]> {
   return entry.message.content.parts.flatMap(part => {
     const persisted = toolCallFromPart(part);
     if (!persisted) return [];
     const tool = entry.runtimeTools?.[persisted.toolCallId] ?? persisted;
-    const exitCode = exits.get(tool.toolCallId);
-    if (exitCode === undefined || exitCode === tool.exitCode) return [];
-    return [[tool.toolCallId, { ...tool, exitCode }] as const];
+    const exit = exits.get(tool.toolCallId);
+    if (exit === undefined || sameExit(exit, tool.exit)) return [];
+    return [[tool.toolCallId, { ...tool, exit }] as const];
   });
 }
 
@@ -571,9 +615,9 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
+  const anchored = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
-  if (messages.every(message => onScreenIndex.has(message))) return reconciled;
+  if (messages.every(message => onScreenIndex.has(message))) return reconcileToolResults(anchored, messages);
 
   const entries: TimelineEntry[] = [];
   let cursor = 0;
@@ -587,13 +631,13 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
     }
 
     if (anchorIndex < cursor) continue;
-    entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    entries.push(...anchored.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
     missing = [];
     cursor = anchorIndex;
   }
-  entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
+  entries.push(...anchored.entries.slice(cursor), ...messagesToEntries(missing));
 
-  return { ...reconciled, entries };
+  return reconcileToolResults({ ...anchored, entries }, messages);
 }
 
 function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
@@ -822,25 +866,29 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
   }
   if (serverTerminalParts.size === 0) return state;
 
-  let changed = false;
-  const entries = state.entries.map(entry => {
-    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
-    let entryChanged = false;
-    const parts = entry.message.content.parts.map(part => {
-      if (part.type !== 'tool-invocation') return part;
-      const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
-      if (!serverPart) return part;
-      const settled =
-        isTerminalInvocationState(part.toolInvocation.state) &&
-        part.toolInvocation.toolName === serverPart.toolInvocation.toolName;
-      if (settled) return part;
-      entryChanged = true;
-      return serverPart;
+  // A prompt answered elsewhere whose tool_end this window missed (SSE gap).
+  const answered = state.entries.filter(entry => isPromptFor(entry, serverTerminalParts));
+  let changed = answered.length > 0;
+  const entries = state.entries
+    .filter(entry => !answered.includes(entry))
+    .map(entry => {
+      if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+      let entryChanged = false;
+      const parts = entry.message.content.parts.map(part => {
+        if (part.type !== 'tool-invocation') return part;
+        const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
+        if (!serverPart) return part;
+        const settled =
+          isTerminalInvocationState(part.toolInvocation.state) &&
+          part.toolInvocation.toolName === serverPart.toolInvocation.toolName;
+        if (settled) return part;
+        entryChanged = true;
+        return serverPart;
+      });
+      if (!entryChanged) return entry;
+      changed = true;
+      return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
     });
-    if (!entryChanged) return entry;
-    changed = true;
-    return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
-  });
 
   return changed ? { ...state, entries } : state;
 }

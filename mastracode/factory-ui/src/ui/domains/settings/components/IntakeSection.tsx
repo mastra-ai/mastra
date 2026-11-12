@@ -1,26 +1,22 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { RotateCcw } from 'lucide-react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
-import {
-  useIntakeBindingsQuery,
-  useIntakeConfigQuery,
-  useSaveIntakeConfigMutation,
-} from '../../../../hooks/useIntakeConfig';
+import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { IntakeConfig } from '../../factory/services/intake';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
 import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { JiraIntakeSection } from './JiraIntakeSection';
+import { AddLinearWorkspaceRow } from './LinearConnectionControls';
 import { LinearIntakeSection } from './LinearIntakeSection';
+import { AddPlatformAccountRow } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
@@ -33,7 +29,6 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
 
 export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
-  const saveMutation = useSaveIntakeConfigMutation();
   useIntakeBindingsQuery();
   const github = useGithubStatusQuery();
   const gitlab = useGitLabStatusQuery();
@@ -43,7 +38,7 @@ export function IntakeSection() {
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
 
   if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
-  if (configQuery.isError || !configQuery.data) {
+  if (!configQuery.data) {
     return (
       <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
         <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
@@ -64,15 +59,7 @@ export function IntakeSection() {
     return <SkeletonRows label="Loading intake sources" rows={4} />;
   }
 
-  const update = async (next: IntakeConfig) => {
-    try {
-      await saveMutation.mutateAsync(next);
-      toast.success('Intake sources updated');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save intake sources');
-    }
-  };
-  const props = { config: configQuery.data, busy: saveMutation.isPending, update };
+  const props = { config: configQuery.data };
   const incidentioDirect = isIncidentioDirectConfigured(incidentio.data);
   const incidentioPlatformUnavailable =
     incidentioConnections.isError && isPlatformConnectUnavailableError(incidentioConnections.error);
@@ -84,7 +71,13 @@ export function IntakeSection() {
     Boolean(gitlab.data?.configured || gitlab.data?.connections?.length),
     gitlab.isError || gitlab.data?.reason === 'unavailable',
   );
-  const linearListing = sourceListing(Boolean(linear.data?.connected), linear.isError);
+  const linearListing = sourceListing(
+    Boolean(
+      linear.data?.enabled &&
+      (linear.data.connected || linear.data.workspaces?.length || props.config.linear.sourceIds?.length),
+    ),
+    linear.isError || linear.data?.reason === 'unavailable',
+  );
   const jiraListing = sourceListing(Boolean(jira.data?.configured || jira.data?.connections?.length), jira.isError);
   // 403/404: Platform connections aren't offered here.
   const incidentioListing =
@@ -133,6 +126,18 @@ export function IntakeSection() {
   const connectedSources = sourcesListed('connected');
   const unavailableSources = sourcesListed('unavailable');
   const availableSources = sourcesListed('available');
+  const anotherAccountRows = [
+    gitlab.data?.mode === 'platform' && gitlab.data.connections?.length ? (
+      <AddPlatformAccountRow key="gitlab" provider="gitlab" />
+    ) : null,
+    linear.data?.mode === 'platform' && linear.data.workspaces?.some(workspace => workspace.connected) ? (
+      <AddLinearWorkspaceRow key="linear" />
+    ) : null,
+    jira.data?.connections?.length ? <AddPlatformAccountRow key="jira" provider="jira" /> : null,
+    !incidentioDirect && incidentioConnections.data?.length ? (
+      <AddPlatformAccountRow key="incident-io" provider="incident-io" />
+    ) : null,
+  ].filter(row => row !== null);
 
   return (
     <div className="flex flex-col gap-8">
@@ -158,12 +163,13 @@ export function IntakeSection() {
           </div>
         </SettingsSubsection>
       )}
-      {availableSources.length > 0 && (
+      {(availableSources.length > 0 || anotherAccountRows.length > 0) && (
         <SettingsSubsection title="Add a source">
           <SettingsContainer>
             {availableSources.map(source => (
               <div key={source.id}>{source.content}</div>
             ))}
+            {anotherAccountRows}
           </SettingsContainer>
         </SettingsSubsection>
       )}

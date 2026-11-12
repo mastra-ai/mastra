@@ -5,10 +5,11 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
 import { DurableAgent } from '../durable/durable-agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
-describe.each([false, true])('generate signal visibility (durable: %s)', durable => {
+describe.each([false, true])('generate signal visibility (durable execution: %s)', durable => {
   beforeEach(() => agentThreadStreamRuntime.resetForTests());
 
   it.each([false, true])('leaves generated results unchanged (resumed: %s)', async resumed => {
@@ -56,7 +57,6 @@ describe.each([false, true])('generate signal visibility (durable: %s)', durable
         id: `generate-visibility-${hideSignals ? 'hidden' : 'default'}`,
         name: 'Generate visibility',
         instructions: 'Test',
-        durable,
         model,
         tools: {
           approval: createTool({
@@ -81,7 +81,11 @@ describe.each([false, true])('generate signal visibility (durable: %s)', durable
           },
         ],
       });
-      const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+      const mastra = new Mastra({
+        agents: { agent: durable ? createDurableAgent({ agent }) : agent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
       await mastra.startEventEngine();
       onTestFinished(() => mastra.stopEventEngine());
       const registered = mastra.getAgent('agent');

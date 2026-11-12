@@ -323,6 +323,37 @@ describe('DatasetsManager', () => {
     expect(result).toBeNull();
   });
 
+  describe('compareExperiments tenancy scoping', () => {
+    const createExp = (organizationId: string) =>
+      experimentsStorage.createExperiment({
+        name: `exp-${organizationId}`,
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        organizationId,
+      });
+
+    it('rejects experiments from another tenant as not found', async () => {
+      const own = await createExp('org_a');
+      const foreign = await createExp('org_b');
+
+      await expect(
+        mgr.compareExperiments({ experimentIds: [own.id, foreign.id], organizationId: 'org_a' }),
+      ).rejects.toMatchObject({ id: 'EXPERIMENT_NOT_FOUND' });
+    });
+
+    it('compares experiments in the same tenant', async () => {
+      const a = await createExp('org_a');
+      const b = await createExp('org_a');
+
+      await expect(
+        mgr.compareExperiments({ experimentIds: [a.id, b.id], organizationId: 'org_a' }),
+      ).resolves.toBeDefined();
+    });
+  });
+
   describe('getExperiment tenancy scoping', () => {
     it('forwards organizationId + projectId to storage', async () => {
       const exp = await experimentsStorage.createExperiment({

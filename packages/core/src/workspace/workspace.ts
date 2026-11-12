@@ -886,8 +886,15 @@ export class Workspace<
     if (!this._filesystemResolver) return this._fs;
     let pending = this._filesystemRequestCache.get(requestContext);
     if (!pending) {
-      pending = Promise.resolve(this._filesystemResolver({ requestContext }));
+      pending = Promise.resolve().then(() => this._filesystemResolver!({ requestContext }));
       this._filesystemRequestCache.set(requestContext, pending);
+      // Don't keep a failure around: a transient resolver error would otherwise
+      // disable filesystem and skill tools for the rest of the request.
+      pending.catch(() => {
+        if (this._filesystemRequestCache.get(requestContext) === pending) {
+          this._filesystemRequestCache.delete(requestContext);
+        }
+      });
     }
     return pending;
   }

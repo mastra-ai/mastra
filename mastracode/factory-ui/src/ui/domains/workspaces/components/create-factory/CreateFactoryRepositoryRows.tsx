@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -162,7 +163,12 @@ function GithubRepositoryResults({
           key={repo.id}
           icon={<GithubIcon />}
           title={repo.fullName}
-          subtitle={`${repo.private ? 'Private' : 'Public'} · ${repo.defaultBranch}`}
+          subtitle={
+            <Metadata singleLine>
+              <Metadata.Item className="shrink-0">{repo.private ? 'Private' : 'Public'}</Metadata.Item>
+              <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+            </Metadata>
+          }
           value={`repo-${repo.id}`}
           onSelect={() => onSelectRepository(repo)}
         />
@@ -200,7 +206,12 @@ function GitLabRepositoryResults({
             key={repo.id}
             icon={<GitLabIcon />}
             title={repo.fullName}
-            subtitle={`GitLab · ${repo.defaultBranch}`}
+            subtitle={
+              <Metadata singleLine>
+                <Metadata.Item className="shrink-0">GitLab</Metadata.Item>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+              </Metadata>
+            }
             value={`gitlab-repo-${repo.id}`}
             onSelect={() => onSelectRepository(repo)}
           />

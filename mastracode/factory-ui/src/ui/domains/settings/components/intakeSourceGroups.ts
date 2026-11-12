@@ -10,7 +10,7 @@ export function groupJiraProjectsBySite(projects: JiraProject[]): SourcePickerGr
     const site = project.site ?? 'Jira';
     const key = project.connectionId ?? site;
     const group = byConnection.get(key) ?? { id: key, label: site, items: [] };
-    group.items.push({ id: project.id, label: `${project.key} · ${project.name}` });
+    group.items.push({ id: project.id, label: project.name, detail: project.key });
     byConnection.set(key, group);
   }
   const groups = [...byConnection.values()].toSorted((left, right) =>
@@ -43,7 +43,7 @@ function distinguishConnections(groups: SourcePickerGroup[]) {
     if ((labelCounts.get(label) ?? 0) > 1) {
       const ordinal = (seen.get(label) ?? 0) + 1;
       seen.set(label, ordinal);
-      group.label = `${label} · connection ${ordinal}`;
+      group.label = `${label} (connection ${ordinal})`;
     }
   }
 }

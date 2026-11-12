@@ -7,6 +7,7 @@ import type { McpTaskStatus, McpTaskView } from './use-mcp-task-progress';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeIndicator, BadgeVariant } from '@/ds/components/Badge';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { Txt } from '@/ds/components/Txt';
 
 const STATUS: Record<McpTaskStatus, { label: string; variant: BadgeVariant; indicator?: BadgeIndicator }> = {
   working: { label: 'working', variant: 'info', indicator: 'pulse' },
@@ -34,14 +35,14 @@ const formatElapsed = (ms: number) => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 };
 
-/** `task · working · 0:42` for a tool call that continued as an MCP task, with its task id to copy. */
+/** A `task working` badge and `0:42` elapsed for a tool call that continued as an MCP task, with its task id to copy. */
 export function McpTaskChip({ task }: { task: McpTaskView }) {
   const { label, variant, indicator } = STATUS[task.status];
   const terminal = isTerminalMcpTaskStatus(task.status);
   const elapsed = useClock(terminal ? task.endedAt : undefined) - Date.parse(task.createdAt);
 
   return (
-    <span className="inline-flex items-center gap-1" data-testid="mcp-task-chip">
+    <span className="inline-flex flex-wrap items-center gap-2" data-testid="mcp-task-chip">
       <Badge
         size="sm"
         variant={variant}
@@ -49,8 +50,11 @@ export function McpTaskChip({ task }: { task: McpTaskView }) {
         indicator={indicator}
         title={`MCP task ${task.taskId} on ${task.serverName}`}
       >
-        task · {label} · <span className="font-mono tabular-nums">{formatElapsed(elapsed)}</span>
+        <span>task {label}</span>
       </Badge>
+      <Txt as="span" variant="meta" font="mono" tone="muted" className="tabular-nums">
+        {formatElapsed(elapsed)}
+      </Txt>
       <CopyButton content={task.taskId} tooltip="Copy MCP task id" copyMessage="Copied MCP task id" />
     </span>
   );

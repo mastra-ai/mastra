@@ -1,7 +1,11 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
-import { useDeleteIntakeBindingMutation, useSaveIntakeBindingMutation } from '../../../../../hooks/useIntakeConfig';
+import {
+  useAddIntakeBindingMutation,
+  useDeleteIntakeBindingMutation,
+  useSaveIntakeBindingMutation,
+} from '../../../../../hooks/useIntakeConfig';
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
 import { AddJiraFactory } from './AddJiraFactory';
 import { JiraBindingRow } from './JiraBindingRow';
@@ -20,50 +24,31 @@ export function JiraSourceRoutes({
   bindings: IntakeSourceBinding[];
   factories: Factory[];
 }) {
-  const save = useSaveIntakeBindingMutation();
-  const remove = useDeleteIntakeBindingMutation();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const saving = save.isPending || remove.isPending;
   const unbound = factories.filter(factory => !bindings.some(binding => binding.factoryProjectId === factory.id));
-  const labelledWithBoard = bindings.filter(binding => binding.board !== null && !takesAllIssues(binding));
+  const labelled = bindings.filter(binding => !takesAllIssues(binding));
 
-  const settle = (factoryProjectId: string, error?: unknown) =>
+  const settle = (factoryProjectId: string | null, error?: unknown) =>
     setErrors(current => {
+      if (factoryProjectId === null) return current;
       const { [factoryProjectId]: _, ...rest } = current;
       if (error === undefined) return rest;
       return { ...rest, [factoryProjectId]: routingErrorMessage(error, factories) };
     });
-
-  const route = (
-    factoryProjectId: string,
-    change: { board?: string | null; labels?: string[] | null },
-    onSaved?: () => void,
-  ) => {
-    const current = bindings.find(binding => binding.factoryProjectId === factoryProjectId);
-    save.mutate(
-      { integrationId: 'jira', sourceId, factoryProjectId, board: current?.board ?? null, ...change },
-      {
-        onSuccess: () => {
-          settle(factoryProjectId);
-          toast.success('Jira routing updated');
-          onSaved?.();
-        },
-        onError: error => settle(factoryProjectId, error),
-      },
-    );
+  const onSaved = ({ factoryProjectId }: { factoryProjectId: string | null }) => {
+    settle(factoryProjectId);
+    toast.success('Jira routing updated', { id: 'jira-routing-saved' });
   };
+  const onFailed = (error: Error, { factoryProjectId }: { factoryProjectId: string | null }) =>
+    settle(factoryProjectId, error);
+  const save = useSaveIntakeBindingMutation({ onSaved, onFailed });
+  const remove = useDeleteIntakeBindingMutation({ onSaved, onFailed });
+  const add = useAddIntakeBindingMutation({ onSaved, onFailed });
 
-  const unroute = (factoryProjectId: string) =>
-    remove.mutate(
-      { integrationId: 'jira', sourceId, factoryProjectId },
-      {
-        onSuccess: () => {
-          settle(factoryProjectId);
-          toast.success('Jira routing updated');
-        },
-        onError: error => settle(factoryProjectId, error),
-      },
-    );
+  const route = (factoryProjectId: string, labels: string[] | null) =>
+    save.mutate({ integrationId: 'jira', sourceId, factoryProjectId, labels });
+
+  const unroute = (factoryProjectId: string) => remove.mutate({ integrationId: 'jira', sourceId, factoryProjectId });
 
   return (
     <ul aria-label={`Factories for ${project}`} className="border-border mt-1 flex flex-col gap-2 border-l pl-3">
@@ -73,12 +58,10 @@ export function JiraSourceRoutes({
           project={project}
           factory={factoryName(factories, binding.factoryProjectId)}
           binding={binding}
-          othersTakeLabels={labelledWithBoard.some(other => other.factoryProjectId !== binding.factoryProjectId)}
+          othersTakeLabels={labelled.some(other => other.factoryProjectId !== binding.factoryProjectId)}
           error={errors[binding.factoryProjectId]}
-          saving={saving}
-          onBoardChange={board => route(binding.factoryProjectId, { board })}
-          onLabelsChange={labels => route(binding.factoryProjectId, { labels })}
-          onTakeAllIssues={() => route(binding.factoryProjectId, { labels: null })}
+          onLabelsChange={labels => route(binding.factoryProjectId, labels)}
+          onTakeAllIssues={() => route(binding.factoryProjectId, null)}
           onRemove={() => unroute(binding.factoryProjectId)}
         />
       ))}
@@ -88,9 +71,12 @@ export function JiraSourceRoutes({
           unbound={unbound}
           anotherTakesAll={bindings.some(takesAllIssues)}
           errors={errors}
-          saving={saving}
-          onAdd={({ factoryProjectId, board, labels }, onAdded) =>
-            route(factoryProjectId, { board, labels: labels.length > 0 ? labels : null }, onAdded)
+          adding={add.isPending}
+          onAdd={({ factoryProjectId, labels }, onAdded) =>
+            add.mutate(
+              { integrationId: 'jira', sourceId, factoryProjectId, labels: labels.length > 0 ? labels : null },
+              { onSuccess: onAdded },
+            )
           }
         />
       )}

@@ -96,7 +96,7 @@ function afterCursor(plan: TrustedSpanQueryPlan, parameters: Parameters): string
   // only empty values remain.
   if (cursor.sortValue === null) equal.push(`isNull(${field})`);
   else {
-    const numeric = plan.orderBy.field === 'timeToFirstChunkMs' || plan.orderBy.field === 'timeToFirstTokenMs';
+    const numeric = typeof cursor.sortValue === 'number';
     const value = parameters.add(cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
     terms.push(`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${value}`);
     if (numeric) terms.push(`isNull(${field})`);
@@ -363,6 +363,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
     SpanQueryIdentity & {
       startedAt: string;
       endedAt: string;
+      durationMs?: number | string;
       timeToFirstChunkMs?: number | null;
       timeToFirstTokenMs?: number | null;
     }
@@ -371,6 +372,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
     ...row,
     startedAt: iso(row.startedAt),
     endedAt: iso(row.endedAt),
+    ...(row.durationMs === undefined ? {} : { durationMs: Number(row.durationMs) }),
   }));
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { spans: [], page: { next: null } };

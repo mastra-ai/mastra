@@ -115,7 +115,7 @@ describe.each(
     await new Promise(resolve => setTimeout(resolve, 5));
     const classifiedByItsRun = await triaged(classifying, 'docs');
     const rerun = await startRun(await triaged(await file('work', false), 'feature request'));
-    const review = await triaged(await file('review', false), 'feature request');
+    const custom = await triaged(await file('release', false), 'feature request');
     expect(held).toMatchObject({ triageType: 'feature request', acceptedAt: null, stages: ['triage'] });
     expect(held.autonomyArmedAt).not.toBeNull();
     expect(accepted.acceptedAt).not.toBeNull();
@@ -128,7 +128,7 @@ describe.each(
     expect(after!.stageHistory.at(-1)).toMatchObject({ stage: 'intake', by: HELD_CARD_SWEEP_ACTOR });
     expect(await stageOf(legacy)).toEqual(['intake']);
     expect(await stageOf(classifiedByItsRun)).toEqual(['intake']);
-    for (const untouched of [bug, accepted, rerun, review]) {
+    for (const untouched of [bug, accepted, rerun, custom]) {
       expect(await stageOf(untouched)).toEqual(['triage']);
     }
 

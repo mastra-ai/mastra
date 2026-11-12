@@ -4,6 +4,7 @@ import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
+import { LegacySSEFixture } from './legacy-sse-fixture';
 import { NativeMCPFixture } from './native-mcp-fixture';
 
 /**
@@ -419,6 +420,121 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           expect(errorData.message).toContain('Tool execution failed intentionally');
           expect(errorData.code).toBe('TOOL_EXECUTION_FAILED');
         });
+      });
+    });
+
+    describe('HTTP Transport with server auth', () => {
+      // Reports what an MCP tool can see of the caller, so the test can check it
+      // matches what Mastra server auth resolved for the HTTP request.
+      const whoamiTool = createTool({
+        id: 'whoami',
+        description: 'Reports the caller identity the tool sees',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          const requestContext = context?.requestContext;
+          const user = requestContext?.get('user') as { id?: string } | undefined;
+          return {
+            userId: user?.id ?? null,
+            permissions: requestContext?.get('mastra__userPermissions') ?? null,
+          };
+        },
+      });
+
+      let authedHttpServer: { close: () => void };
+      let authedPort: number;
+      let authedMcpServer: MCPServer;
+      let authedClient: MCPClient;
+      const legacySseServer = new LegacySSEFixture();
+      const users: Record<string, { id: string }> = {
+        'reader-token': { id: 'user-reader' },
+        'blocked-token': { id: 'user-blocked' },
+      };
+
+      beforeAll(async () => {
+        authedMcpServer = new MCPServer({ name: 'authed', version: '1.0.0', tools: { whoami: whoamiTool } });
+        const authedMastra = new Mastra({
+          mcpServers: { authed: authedMcpServer, legacySse: legacySseServer },
+          server: {
+            auth: {
+              authenticateToken: async (token: string) => users[token] ?? null,
+              // Server auth's own authorization decides before any MCP transport starts.
+              authorize: async (_path: string, _method: string, user: { id: string }) => user.id !== 'user-blocked',
+            },
+            rbac: {
+              getPermissions: async () => ['observability:read'],
+              getRoles: async () => ['reader'],
+            } as any,
+          },
+        });
+        const setup = await createServer(authedMastra);
+        authedHttpServer = setup.server;
+        authedPort = setup.port;
+        authedClient = new MCPClient({
+          servers: {
+            authed: {
+              url: new URL(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`),
+              requestInit: { headers: { Authorization: 'Bearer reader-token' } },
+            },
+          },
+        });
+      }, 30000);
+
+      afterAll(async () => {
+        await authedClient?.disconnect();
+        authedHttpServer?.close();
+        await authedMcpServer?.close();
+      }, 30000);
+
+      it('gives MCP tools the user and permissions server auth resolved', async () => {
+        const tools = await authedClient.listTools();
+        const whoami = tools['authed_whoami'];
+        if (!whoami?.execute) throw new Error('Expected authed_whoami tool');
+
+        const result = await whoami.execute({}, {} as any);
+
+        expectTextToolResult(result, { userId: 'user-reader', permissions: ['observability:read'] });
+      });
+
+      it('rejects MCP requests without credentials', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        });
+        expect(response.status).toBe(401);
+      });
+
+      it('refuses MCP requests server auth does not authorize', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+            Authorization: 'Bearer blocked-token',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        });
+        expect(response.status).toBe(403);
+      });
+
+      it('hands the SSE transport the user and permissions server auth resolved', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${legacySseServer.id}/sse`, {
+          headers: { Authorization: 'Bearer reader-token' },
+        });
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          clientId: 'user-reader',
+          userId: 'user-reader',
+          permissions: ['observability:read'],
+        });
+      });
+
+      it('refuses SSE requests server auth does not authorize', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${legacySseServer.id}/sse`, {
+          headers: { Authorization: 'Bearer blocked-token' },
+        });
+        expect(response.status).toBe(403);
       });
     });
 

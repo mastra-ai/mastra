@@ -574,7 +574,7 @@ The object form can return any combination of these properties:
 
 When multiple processors implement `processInputStep`, they run in order and changes chain through:
 
-```
+```text
 Processor 1: receives { model: 'gpt-5.4' } → returns { model: 'gpt-5.4-mini' }
 Processor 2: receives { model: 'gpt-5.4-mini' } → returns { toolChoice: 'none' }
 Final: model = 'gpt-5.4-mini', toolChoice = 'none'
@@ -1158,6 +1158,29 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
 
 Dropping a chunk only affects that single chunk. The stream continues and the next chunk is still processed. To stop the stream entirely, call `abort()`.
 
+#### Emitting a second chunk
+
+`processOutputStream` returns one chunk, but a processor sometimes needs to emit two for one input, such as text it held back followed by the chunk that released it. Return the first chunk and set the second on `state` under `REPROCESS_PART_KEY`. Mastra emits the stashed chunk right after the returned one.
+
+The stashed chunk goes through the output processors again, including the one that stashed it, so that processor must pass it through unchanged on the second pass:
+
+```typescript title="src/mastra/processors/sign-off.ts"
+import { REPROCESS_PART_KEY } from '@mastra/core/processors'
+import type { ChunkType } from '@mastra/core/stream'
+import type { ProcessOutputStreamArgs, Processor } from '@mastra/core/processors'
+
+export class SignOff implements Processor<'sign-off'> {
+  readonly id = 'sign-off'
+
+  async processOutputStream({ part, state }: ProcessOutputStreamArgs): Promise<ChunkType> {
+    if (part.type !== 'text-end' || state.signed) return part
+    state.signed = true
+    state[REPROCESS_PART_KEY] = part
+    return { ...part, type: 'text-delta', payload: { id: part.payload.id, text: '\n\nCheers!' } }
+  }
+}
+```
+
 ---
 
 ### `processOutputResult`
@@ -1195,7 +1218,7 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     name: 'result',
     type: 'OutputResult',
     description:
-      "Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.), an optional `observedUsage` (the sum of the token counts that were reported), and an optional `inputAccepted`. `inputAccepted` is set only when `finishReason` is `'error'`, and is `true` when the run accepted the turn's input before it failed. A history processor can use it to keep the input of a failed turn that produced no output. `agent.generate()` and `agent.stream()` set `observedUsage`. Other paths, such as `withMastra` and `generateLegacy`, can leave it unset. Read it when `usage` has unknown counts, for example after a retry recovers a failed call. Its `incomplete` is `true` when `usage` has an unknown input, output, or total count. Durable, evented, and Inngest agents hide a failed attempt, so `incomplete` is `false` after a retry on those agents.",
+      "Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.), and an optional `observedUsage` (the sum of the token counts that were reported). `agent.generate()` and `agent.stream()` set `observedUsage`. Other paths, such as `withMastra` and `generateLegacy`, can leave it unset. Read it when `usage` has unknown counts, for example after a retry recovers a failed call. Its `incomplete` is `true` when `usage` has an unknown input, output, or total count. Durable, evented, and Inngest agents hide a failed attempt, so `incomplete` is `false` after a retry on those agents. `inputAccepted` is deprecated and no longer set; check `finishReason === 'error'` to detect failed runs.",
     isOptional: false,
   },
   {

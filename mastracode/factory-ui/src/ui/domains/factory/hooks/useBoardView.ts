@@ -45,11 +45,14 @@ export interface BoardView {
 export function useBoardView({
   factoryProjectId,
   kind,
+  reviewsPullRequests,
   currentUserId,
   personId,
 }: {
   factoryProjectId: string;
   kind: BoardKind;
+  /** Whether the board reviews pull requests, so offers the requested-reviewer filter. */
+  reviewsPullRequests: boolean;
   currentUserId?: string;
   personId: PersonIdentity;
 }): BoardView {
@@ -80,8 +83,8 @@ export function useBoardView({
     layout: boardLayoutFromParams(searchParams),
   };
   const storedFilters = applied
-    ? boardFilterStateFromItems(applied.filters, kind)
-    : boardFiltersFromParams(searchParams, kind);
+    ? boardFilterStateFromItems(applied.filters, reviewsPullRequests)
+    : boardFiltersFromParams(searchParams, reviewsPullRequests);
   const filters = withPeopleFolded(storedFilters, personId);
   const settings = applied?.settings ?? pageSettings;
   const sort = settings.sort === 'recent-mine' && !currentUserId ? DEFAULT_BOARD_SORT : settings.sort;
@@ -113,7 +116,7 @@ export function useBoardView({
     clearFilters: () => {
       const params = applied
         ? new URLSearchParams(searchParams)
-        : boardFilterParams(searchParams, boardFilterStateFromItems([], kind));
+        : boardFilterParams(searchParams, boardFilterStateFromItems([], reviewsPullRequests));
       params.delete(BOARD_SEARCH_QUERY);
       clearOpenCard(params);
       if (applied) savedViews.change({ filters: [] });
@@ -133,7 +136,7 @@ export function useBoardView({
         return;
       }
       const params = boardSortParams(
-        boardFilterParams(searchParams, boardFilterStateFromItems([], kind)),
+        boardFilterParams(searchParams, boardFilterStateFromItems([], reviewsPullRequests)),
         DEFAULT_BOARD_SORT,
       );
       clearOpenCard(params);

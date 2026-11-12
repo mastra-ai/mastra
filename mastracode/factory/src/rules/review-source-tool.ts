@@ -2,10 +2,14 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { reviewedPullRequest, sourceExternalId } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
+import { phaseGrantsTool } from './phase-tools.js';
 
 export interface ReviewSourceOutput {
   /**
@@ -84,7 +88,7 @@ export function resolveReviewSourceUiOrigin(raw: string | undefined): string | n
  *
  * The tool is intentionally omitted (returns `{}`) whenever it cannot produce
  * a complete, correct provenance shape: no resolvable session address, no
- * active binding, a non-review-role binding, no bound work item, or no
+ * active binding, a card whose phase does not grant the tool to this session, no bound work item, or no
  * configured browser-facing UI origin. Skills treat tool-absent identically to
  * tool-failed: stop-don't-publish.
  */
@@ -106,6 +110,7 @@ export async function createReviewSourceTool(options: {
    * skill's tool-not-available branch stops publication.
    */
   uiOrigin: string | null;
+  boards?: BoardRegistry | ProjectBoardSource;
 }): Promise<IntegrationTools> {
   if (options.uiOrigin === null) return {};
   const resolution = await resolveFactorySessionAddress({
@@ -115,13 +120,12 @@ export async function createReviewSourceTool(options: {
   });
   if (!resolution) return {};
   const binding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
-  // The tool exists only for review-role sessions. Work/plan/triage runs never
-  // publish reviews on GitHub, so exposing them the tool would just clutter
-  // their prompt.
-  if (!binding || binding.role !== 'review') return {};
+  if (!binding) return {};
 
   const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
   if (!item) return {};
+  // Only the session reviewing the card in a phase that grants the tool publishes reviews.
+  if (!(await phaseGrantsTool(options.boards, binding, item, 'factory_review_source'))) return {};
 
   const sessionUrl = buildSessionUrl({
     uiOrigin: options.uiOrigin,
@@ -159,7 +163,25 @@ function buildSessionUrl(input: {
   return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
 }
 
+/**
+ * The pull request a review pass on an issue card looks at, when one is attached. The tool only
+ * exists in a phase that grants it, so the card is in its board's pull request review.
+ */
+function attachedReviewedPullRequest(item: Card) {
+  if (item.externalSource?.type === 'pull-request') return null;
+  return reviewedPullRequest(item);
+}
+
 function readReviewTarget(item: Card): ReviewSourceOutput['reviewTarget'] {
+  const attached = attachedReviewedPullRequest(item);
+  if (attached) {
+    return {
+      integrationId: attached.integrationId,
+      type: attached.sourceType,
+      externalId: sourceExternalId(attached),
+      url: attached.url || null,
+    };
+  }
   const source = item.externalSource;
   if (!source) return null;
   return {
@@ -190,7 +212,9 @@ function readBoundRepository(item: Card): ReviewSourceOutput['boundRepository'] 
 }
 
 function readPullRequestAuthor(item: Card): string | null {
-  const author = item.workItem.author;
+  // An attached pull request's author is its own; the card's issue author never stands in for it.
+  const attached = attachedReviewedPullRequest(item);
+  const author = attached ? attached.author : item.workItem.author;
   if (typeof author === 'string' && author.trim()) return author.trim();
   return null;
 }

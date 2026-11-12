@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
@@ -228,7 +229,7 @@ describe('KnowledgePageGraph', () => {
         selectedPageId: 'org',
       });
       const node = document.querySelector('[data-testid="knowledge-page-node"][data-page-id="long"]') as HTMLElement;
-      expect(node.title).toBe('Internationalisation-and-localisation');
+      expect(node.getAttribute('aria-label')).toBe('Internationalisation-and-localisation');
       const name = within(node).getByTestId('knowledge-circle-name');
       expect(name.textContent).toContain('\u2026');
       expect(name.className).toContain('[overflow-wrap:normal]');
@@ -296,6 +297,20 @@ describe('KnowledgePageGraph', () => {
           .getAllByRole('listitem')
           .map(item => item.textContent),
       ).toEqual(['Scope', 'Scope, above its pages', 'Page', 'Parent → child', 'Pinned']);
+    });
+
+    it('shows again when the window narrows after it was collapsed', () => {
+      const graph = (collapsibleLegend: boolean) => (
+        <div style={{ width: 800, height: 600 }}>
+          <KnowledgePageGraph pages={pages} edges={[]} onSelect={() => {}} collapsibleLegend={collapsibleLegend} />
+        </div>
+      );
+      const { rerender } = renderWithProviders(graph(true));
+      expect(screen.getByRole('button', { name: 'Legend' }).getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('list', { name: 'Legend' })).toBeNull();
+      rerender(graph(false));
+      expect(screen.queryByRole('button', { name: 'Legend' })).toBeNull();
+      expect(screen.getByRole('list', { name: 'Legend' })).toBeTruthy();
     });
   });
 
@@ -419,7 +434,7 @@ describe('KnowledgePageGraph', () => {
       const dot = document.querySelector<HTMLElement>(`[data-testid="knowledge-page-dot"][data-page-id="${id}"]`);
       if (!dot) throw new Error(`no ${id} dot`);
       fireEvent.pointerEnter(dot);
-      return within(dot).getByRole('tooltip').textContent;
+      return within(dot).getByRole('tooltip');
     };
 
     it('draws its tooltip on a solid background with a tail pointing down at the dot', () => {
@@ -445,11 +460,12 @@ describe('KnowledgePageGraph', () => {
       expect(badge.className).toContain('bg-card');
     });
 
-    it('says in the legend which circle each dot colour hangs under', () => {
+    it('says in the legend which circle each dot colour hangs under', async () => {
       renderGraph({ pages: deep });
       const rows = within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('knowledge-legend-branch');
       expect(rows.map(row => row.textContent)).toEqual(['Under parent scope']);
-      expect(within(rows[0]).getByText('Under parent scope').getAttribute('title')).toBe('Support');
+      await userEvent.hover(within(rows[0]).getByText('Under parent scope'));
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Support');
     });
 
     it('says "Under parent page" when the dots hang under a page, not a scope', () => {
@@ -499,12 +515,16 @@ describe('KnowledgePageGraph', () => {
 
     it('names a farther page, its path and how many children it has on hover', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('ticket')).toBe('TicketPageAcme › Support4 children');
+      expect(hoverDot('ticket').textContent).toBe('TicketPageAcme › Support4 children');
     });
 
     it('tells how to open a collapsed group of scopes rather than counting it twice', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('group:support:thread')).toBe('3 thread scopesAcme › Support · Click to show them');
+      const tooltip = within(hoverDot('group:support:thread'));
+      expect(tooltip.getByText('3 thread scopes')).toBeTruthy();
+      expect(tooltip.getByText('Acme › Support')).toBeTruthy();
+      expect(tooltip.getByText('Click to show them')).toBeTruthy();
+      expect(tooltip.queryByText('3 children')).toBeNull();
     });
 
     describe('when a dot has links', () => {
@@ -526,7 +546,12 @@ describe('KnowledgePageGraph', () => {
 
       it('shows its kind, address and how many links go in and out', () => {
         renderGraph({ pages: linked, knownLinks: known });
-        expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in, 1 link out');
+        const tooltip = within(hoverDot('ticket'));
+        expect(tooltip.getByText('Ticket')).toBeTruthy();
+        expect(tooltip.getByText('Page')).toBeTruthy();
+        expect(tooltip.getByText('team:support#ticket')).toBeTruthy();
+        expect(tooltip.getByText('org:acme › team:support')).toBeTruthy();
+        expect(tooltip.getByText('1 link in, 1 link out')).toBeTruthy();
       });
 
       it('uses the store counts over the loaded ones, and says how many links lead to pages not drawn', () => {

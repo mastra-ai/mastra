@@ -6,9 +6,10 @@ import {
   commitToolResult,
   computeModelOutputProviderMetadata,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
+import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
-import type { SpanType, ExportedSpan } from '../../../../observability';
+import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
@@ -60,6 +61,8 @@ const durableLLMMappingOutputSchema = z.object({
   }),
   state: z.any(),
   delegationBailed: z.boolean().optional(),
+  tracingDelegationFailure: z.custom<SpanTermination>().optional(),
+  tracingTermination: z.custom<SpanTermination>().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   releasedToolResultIds: z.array(z.string()).optional(),
@@ -110,13 +113,61 @@ export function createDurableLLMMappingStep() {
       // MastraModelOutput, which reads it for scoringData — keep seeing state
       // updates. A fresh instance here would orphan those references.
       const registryEntry = getRunRegistryEntry(_runId, mastra as Mastra | undefined);
+      const terminalBackgroundParts = new Map<string, { restore: (list: MessageList) => void; taskId: string }>();
+      const captureTerminalBackgroundParts = () => {
+        for (const message of registryEntry?.messageList?.get.all.db() ?? []) {
+          for (const part of message.content.parts) {
+            if (part.type !== 'tool-invocation') continue;
+            const backgroundTask = part.providerMetadata?.mastra?.backgroundTask;
+            if (
+              backgroundTask &&
+              typeof backgroundTask === 'object' &&
+              'taskId' in backgroundTask &&
+              (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') &&
+              toolResults.some(
+                result =>
+                  result.toolCallId === part.toolInvocation.toolCallId &&
+                  (
+                    result.providerMetadata as
+                      | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
+                      | undefined
+                  )?.mastra?.backgroundTask?.taskId === backgroundTask.taskId &&
+                  (result.providerMetadata as { mastra?: { backgroundTask?: { status?: string } } } | undefined)?.mastra
+                    ?.backgroundTask?.status === 'running',
+              )
+            ) {
+              const toolCallId = part.toolInvocation.toolCallId;
+              const backgroundTaskEntry = (
+                message.content.metadata?.backgroundTasks as Record<string, unknown> | undefined
+              )?.[toolCallId];
+              terminalBackgroundParts.set(toolCallId, {
+                restore: list => {
+                  list.updateToolInvocation(part, {
+                    mode: 'stream',
+                    ...(backgroundTaskEntry ? { backgroundTasks: { [toolCallId]: backgroundTaskEntry } } : {}),
+                  });
+                },
+                taskId: backgroundTask.taskId as string,
+              });
+            }
+          }
+        }
+      };
+      captureTerminalBackgroundParts();
+      const snapshot = await readMessageListState(params, llmOutput);
+      // Hydration may yield while a background task completes. Capture the live
+      // terminal part again before deserializing the older workflow snapshot.
+      captureTerminalBackgroundParts();
       const messageList = (
         registryEntry?.messageList ??
         new MessageList({
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(await readMessageListState(params, llmOutput));
+      ).deserialize(snapshot);
+      for (const { restore } of terminalBackgroundParts.values()) {
+        restore(messageList);
+      }
 
       if (llmOutput.stepResult.signalPreempted) {
         return {
@@ -181,6 +232,17 @@ export function createDurableLLMMappingStep() {
 
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          const backgroundTask = (
+            toolResult.providerMetadata as
+              | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
+              | undefined
+          )?.mastra?.backgroundTask;
+          captureTerminalBackgroundParts();
+          const terminalPart = terminalBackgroundParts.get(toolResult.toolCallId);
+          if (backgroundTask?.status === 'running' && terminalPart && terminalPart.taskId === backgroundTask.taskId) {
+            terminalPart.restore(messageList);
+            continue;
+          }
           if (toolResult.mappingError) {
             const mappingError = new Error(toolResult.mappingError.message);
             mappingError.name = toolResult.mappingError.name;
@@ -280,6 +342,14 @@ export function createDurableLLMMappingStep() {
             ) as Record<string, unknown> | undefined;
           }
 
+          // A mapper may have yielded while a background result settled.
+          captureTerminalBackgroundParts();
+          const settledPart = terminalBackgroundParts.get(toolResult.toolCallId);
+          if (backgroundTask?.status === 'running' && settledPart && settledPart.taskId === backgroundTask.taskId) {
+            settledPart.restore(messageList);
+            continue;
+          }
+
           // A tool error must be recorded as `output-error` with the message in
           // `errorText` so the transcript/adapters read it as a failure rather than
           // a normal result. Successful results keep `state: 'result'` + `result`.
@@ -332,21 +402,21 @@ export function createDurableLLMMappingStep() {
       // self-correct. This matches the regular agent's behaviour where both
       // ToolNotFoundError and generic tool execution errors are recoverable.
       //
-      // Deliberate divergence from the main loop: this override
-      // can trump a terminal finish reason — a step that finished with
-      // `stop`/`length`/`content-filter` whose tool result errored still
-      // continues. Main avoids the case structurally: its #17893
-      // `hasPendingToolCalls` gate stops the loop before tools ever run on a
-      // terminal reason. Durable runs tools first (the tool-call foreach is
-      // unconditional), so this override IS its tool-error recovery path —
-      // do not "fix" it to match main's gating without a pinning test for
-      // tool-error recovery.
-      const hasToolErrors = toolResults.some(r => r.error !== undefined);
+      // Durable runs tools first (the tool-call foreach is unconditional), so
+      // this override IS its tool-error recovery path: a step that finished
+      // with `stop` (which durable otherwise treats as terminal) whose tool
+      // result errored still continues. It does not trump `error`, `length`
+      // or `content-filter`, matching the main loop: asking again repeats the
+      // failure, truncation, or refusal (#29518). Both sides are pinned by
+      // malformed-tool-args-terminal-finish.scenario.test.ts.
+      const recoverFromToolErrors =
+        toolResults.some(r => r.error !== undefined) &&
+        !TOOL_CALL_TERMINAL_FINISH_REASONS.has(llmOutput.stepResult.reason);
       // A pending client call ends the turn so the client can answer it. Without this the
       // loop re-invoked the model on a result nobody produced.
       const hasPendingHITL = toolResults.some(isPendingClientCall);
       const tripwire = toolResults.find(r => r.tripwire)?.tripwire;
-      const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      const isContinued = hasPendingHITL ? false : recoverFromToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The primary channel
       // is the tool-call step's serializable output: the hook writes the flag
@@ -361,6 +431,8 @@ export function createDurableLLMMappingStep() {
         delegationBailed = true;
         requestContext.set('__mastra_delegationBailed', false);
       }
+      // Keep the first failure, so a later bail with no failure can't hide it.
+      const tracingDelegationFailure = toolResults.find(r => r?.tracingDelegationFailure)?.tracingDelegationFailure;
 
       // 4. Carry the deferred step-finish after tool-result chunks have been
       // emitted. The loop predicate adds step content and emits it after resolving
@@ -380,8 +452,17 @@ export function createDurableLLMMappingStep() {
         : undefined;
 
       // 5. Build the output
+      const serializedMessageList = messageList.serialize();
+      // This step and its tool results are complete; a total deadline from here on saves up to this point.
+      // A copy, since the serialized state shares parts with the live list the next step appends to.
+      // JSON rather than structuredClone: message metadata can hold callbacks, which have no place in memory.
+      // Only runs with a total deadline read it, so others skip the copy.
+      if (registryEntry?.timeoutTotalMs) {
+        registryEntry.completedStepsState = JSON.parse(JSON.stringify(serializedMessageList));
+        registryEntry.settledToolResults = undefined;
+      }
       const output: DurableAgenticExecutionOutput = {
-        ...(await storeMessageListState(params, messageList.serialize())),
+        ...(await storeMessageListState(params, serializedMessageList)),
         messageId,
         stepResult: {
           ...llmOutput.stepResult,
@@ -415,6 +496,8 @@ export function createDurableLLMMappingStep() {
         processorRetryFeedback: llmOutput.processorRetryFeedback,
         releasedToolResultIds: llmOutput.releasedToolResultIds,
         delegationBailed,
+        tracingDelegationFailure,
+        tracingTermination: llmOutput.tracingTermination,
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,

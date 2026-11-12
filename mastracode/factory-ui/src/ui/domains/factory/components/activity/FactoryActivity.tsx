@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
@@ -9,7 +10,7 @@ import { traySurface } from '../../../../ui/tray';
 import { usePromptButton } from '../../../chat/hooks/usePromptButton';
 import { SESSION_STATUS_LABELS } from '../../../workspaces/services/sessionRows';
 import { useFactoryActivity } from '../../hooks/useFactoryActivity';
-import { ACTIVITY_PERIOD_LABELS, PERIOD_DAYS } from '../../periodActivity';
+import { ACTIVITY_PERIOD_LABELS, DEFAULT_ACTIVITY_PERIOD, PERIOD_DAYS } from '../../periodActivity';
 import type { ActivityPeriod } from '../../periodActivity';
 import { countsLabel } from './activityFormat';
 import { ActivityChart } from './ActivityChart';
@@ -52,18 +53,19 @@ function LiveSessions({ working, waiting }: { working: number; waiting: number }
   if (parts.length === 0) return null;
   return (
     <Txt as="p" variant="caption" tone="muted" className="m-0 tabular-nums">
-      {parts.map(({ count, label }, index) => (
-        <span key={label}>
-          {index > 0 && ' · '}
-          <span className="text-foreground">{count.toLocaleString()}</span> {label.toLowerCase()}
-        </span>
-      ))}
+      <Metadata>
+        {parts.map(({ count, label }) => (
+          <Metadata.Item key={label}>
+            <span className="text-foreground">{count.toLocaleString()}</span> {label.toLowerCase()}
+          </Metadata.Item>
+        ))}
+      </Metadata>
     </Txt>
   );
 }
 
 export function FactoryActivity({ factoryId }: { factoryId: string }) {
-  const [period, setPeriod] = useState<ActivityPeriod>('week');
+  const [period, setPeriod] = useState(DEFAULT_ACTIVITY_PERIOD);
   const [open, setOpen] = useState(false);
   const headingId = useId();
   const chartId = useId();

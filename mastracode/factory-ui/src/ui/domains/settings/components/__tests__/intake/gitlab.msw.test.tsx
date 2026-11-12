@@ -5,7 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
-import { baseConfig, gitlabReadyStatus, useGitLabHandlers, renderIntakeSection, openSourcePicker } from './fixtures';
+import {
+  baseConfig,
+  gitlabReadyStatus,
+  useGitLabHandlers,
+  renderIntakeSection,
+  openSourcePicker,
+  closeSourcePicker,
+} from './fixtures';
 
 describe('IntakeSection gitlab', () => {
   describe('given GitLab is configured', () => {
@@ -38,11 +45,11 @@ describe('IntakeSection gitlab', () => {
 
       const githubSection = await screen.findByRole('region', { name: 'GitHub' });
       expect(await within(githubSection).findByText('No linked repositories yet')).toBeInTheDocument();
-      expect(within(githubSection).queryByRole('checkbox', { name: 'acme/app' })).not.toBeInTheDocument();
+      expect(within(githubSection).queryByRole('button', { name: 'Add acme/app' })).not.toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
       await openSourcePicker('GitLab projects');
       const gitlabProjects = await screen.findByRole('group', { name: 'GitLab projects' });
-      expect(within(gitlabProjects).getByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
+      expect(within(gitlabProjects).getByRole('button', { name: 'Add acme/app' })).toBeInTheDocument();
     });
 
     it('selects a project and routes it to a Factory board', async () => {
@@ -58,16 +65,16 @@ describe('IntakeSection gitlab', () => {
       ).toBeInTheDocument();
       await openSourcePicker('GitLab projects');
       const projects = await screen.findByRole('group', { name: 'GitLab projects' });
-      await userEvent.click(within(projects).getByRole('checkbox', { name: 'acme/app' }));
+      await userEvent.click(within(projects).getByRole('button', { name: 'Add acme/app' }));
 
-      await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0].gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
-      expect(await screen.findByText(/Not routed — this source's issues won't be picked up/)).toBeInTheDocument();
+      await waitFor(() =>
+        expect(saved).toEqual([{ gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] } }]),
+      );
+      await closeSourcePicker();
+      expect(await screen.findByText(/Not routed. This source's issues won't be picked up/)).toBeInTheDocument();
 
       await userEvent.click(await screen.findByLabelText('Factory for acme/app'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
-      await userEvent.click(await screen.findByLabelText('Board for acme/app'));
-      await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
 
       await waitFor(() =>
         expect(savedBindings).toEqual([
@@ -75,7 +82,6 @@ describe('IntakeSection gitlab', () => {
             integrationId: 'gitlab',
             sourceId: 'gitlab-project:encoded',
             factoryProjectId: 'fp-1',
-            board: 'work',
           },
         ]),
       );
@@ -97,11 +103,9 @@ describe('IntakeSection gitlab', () => {
 
       renderIntakeSection();
 
-      expect(
-        await screen.findByText('A GitLab account needs to be reconnected in Mastra Platform.'),
-      ).toBeInTheDocument();
+      expect(await screen.findByText('A GitLab account needs to be reconnected.')).toBeInTheDocument();
       await openSourcePicker('GitLab projects');
-      expect(await screen.findByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Add acme/app' })).toBeInTheDocument();
     });
 
     it('keeps two connections with the same account label apart', async () => {
@@ -134,9 +138,9 @@ describe('IntakeSection gitlab', () => {
       renderIntakeSection();
 
       await openSourcePicker('GitLab projects');
-      expect(await screen.findByText('acme · connection 1')).toBeInTheDocument();
-      expect(screen.getByText('acme · connection 2')).toBeInTheDocument();
-      expect(screen.getAllByRole('checkbox', { name: 'acme/app' })).toHaveLength(2);
+      expect(await screen.findByText('acme (connection 1)')).toBeInTheDocument();
+      expect(screen.getByText('acme (connection 2)')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Add acme/app' })).toHaveLength(2);
     });
   });
 });
