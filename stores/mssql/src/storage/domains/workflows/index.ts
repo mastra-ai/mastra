@@ -51,6 +51,18 @@ const RUN_OWNER_COLUMNS = `[generation], [ownerId], [leaseExpiresAt], ${DB_NOW_M
 /** Run ids per query in `getRunOwnerships`, well under SQL Server's 2,100 parameters per request. */
 const RUN_OWNERSHIP_BATCH_SIZE = 500;
 
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status`, `timestamp`, and
+ * for a nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths are
+ * read, so `context` is never sent. FOR JSON PATH leaves out NULL values, and with them
+ * `parentWorkflow` when the run isn't nested.
+ */
+const SUMMARY_SNAPSHOT_SQL = `(SELECT JSON_VALUE([snapshot], '$.status') AS [status],
+    TRY_CAST(JSON_VALUE([snapshot], '$.timestamp') AS BIGINT) AS [timestamp],
+    JSON_VALUE([snapshot], '$.parentWorkflow.workflowId') AS [parentWorkflow.workflowId],
+    JSON_VALUE([snapshot], '$.parentWorkflow.runId') AS [parentWorkflow.runId]
+  FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)`;
+
 function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunOwnershipRecord {
   // The driver returns BIGINT columns as strings.
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
@@ -807,6 +819,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     perPage,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -861,7 +874,16 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
-      let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
+      let columns = '*';
+      if (summary) {
+        // Legacy snapshot tables may lack resourceId.
+        const resourceIdColumn = (await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId'))
+          ? '[resourceId]'
+          : 'NULL AS [resourceId]';
+        columns = `[workflow_name], [run_id], ${resourceIdColumn}, ${SUMMARY_SNAPSHOT_SQL} AS [snapshot], [createdAt], [updatedAt]`;
+      }
+
+      let query = `SELECT ${columns} FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
       if (usePagination) {
         const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
         const offset = page! * normalizedPerPage;
