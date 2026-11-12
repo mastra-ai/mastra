@@ -1,5 +1,35 @@
 # @mastra/rag
 
+## 2.7.3-alpha.2
+
+### Patch Changes
+
+- `GraphRAG.query()` now rejects `topK` and `randomWalkSteps` values that are not positive integers, and `restartProb` values that are not finite numbers strictly between 0 and 1. This prevents silent empty or truncated results and rejects infinite step counts that could cause unbounded walks. Replace fractional counts with positive integers; for example, a fractional `topK` was previously truncated: ([#29967](https://github.com/mastra-ai/mastra/pull/29967))
+
+  ```ts
+  // Before
+  graph.query({ query: embedding, topK: 1.5 });
+  // After
+  graph.query({ query: embedding, topK: 1 });
+  ```
+
+- Fixed GraphRAG storing newly added self-links twice. Edge lists, serialized graphs, and random-walk neighbor weights now count new self-links once. Snapshots saved before this fix are restored as-is; rebuild the graph to remove existing duplicates. Fixes #29365. ([#29968](https://github.com/mastra-ai/mastra/pull/29968))
+
+- GraphRAG now rejects non-finite or sparse node and query embeddings instead of producing `NaN` similarity scores. It also copies node embeddings on insertion and access so caller mutations cannot invalidate a graph after validation. ([#29959](https://github.com/mastra-ai/mastra/pull/29959))
+
+- Rebuilding a `GraphRAG` instance with `createGraph` now replaces its previous nodes and edges instead of retaining stale graph content. If a rebuild fails, the existing graph remains intact. ([#29962](https://github.com/mastra-ai/mastra/pull/29962))
+
+- Reject duplicate node IDs when restoring a GraphRAG snapshot instead of silently replacing the first node. Calling `addNode` directly can still update a node. ([#29958](https://github.com/mastra-ai/mastra/pull/29958))
+
+- GraphRAG now rejects nonfinite edge weights when adding an edge or restoring a serialized graph, including `null` produced when JSON serialization converts `NaN`. Finite weights such as zero and negative numbers remain valid. ([#29956](https://github.com/mastra-ai/mastra/pull/29956))
+
+  Previously, `addEdge` accepted `NaN` or infinite weights and `GraphRAG.deserialize` accepted snapshots containing them; both now throw. Compute a finite weight before calling `addEdge` (for example, `graph.addEdge({ source: 'a', target: 'b', weight: 0, type: 'semantic' })` when zero is the intended weight). For affected snapshots, recompute invalid edge weights from the original data before calling `GraphRAG.deserialize`; do not replace missing weights with zero unless that reflects the intended graph.
+
+- `rerank` and `rerankWithScorer` now reject component weights that are not finite numbers between 0 and 1, instead of silently inverting or amplifying rankings. ([#29957](https://github.com/mastra-ai/mastra/pull/29957))
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+
 ## 2.7.3-alpha.1
 
 ### Patch Changes

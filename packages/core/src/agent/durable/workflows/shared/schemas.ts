@@ -211,9 +211,23 @@ export const baseIterationStateSchema = z.object({
   backgroundTaskPending: z.boolean().optional(),
   // Set when a delegation hook calls ctx.bail() — signals the loop to stop
   delegationBailed: z.boolean().optional(),
+  // Set when the total deadline aborted a tool call — the loop stops and the run ends as the deadline
+  deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  // Set when abort() stopped a tool call — the loop stops and the run ends as aborted
+  runAborted: z.boolean().optional(),
   // Set when onIterationComplete returns { continue: false, feedback } — allows
   // one more LLM turn with the feedback, then stops on the next predicate eval.
   pendingFeedbackStop: z.boolean().optional(),
+  // The response messages the run's step-finish events have sent (see agent/streams/response-messages.ts)
+  responseMessagesCursor: z
+    .object({
+      producer: z.string(),
+      seq: z.number(),
+      fingerprints: z.array(z.string()),
+      wholeListSize: z.number().optional(),
+      sentSinceWholeList: z.number().optional(),
+    })
+    .optional(),
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),

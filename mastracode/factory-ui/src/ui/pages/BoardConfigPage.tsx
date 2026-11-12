@@ -2,7 +2,7 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
@@ -17,7 +17,6 @@ import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfig
 import { boardPath } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadErrorState } from '../ui/LoadErrorState';
-import { SettingsRowsSkeleton } from '../ui/SettingsRowsSkeleton';
 
 /** Settings read best in a short line, so the page keeps to a centered column narrower than the layout's. */
 const COLUMN = 'mx-auto w-full max-w-2xl';
@@ -82,7 +81,7 @@ export function BoardConfigPage() {
       <div className={COLUMN}>
         {query.isPending ? (
           <SettingsContainer>
-            <SettingsRowsSkeleton label="Loading board" rows={3} />
+            <SettingsSkeleton label="Loading board" rows={3} />
           </SettingsContainer>
         ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
           <EmptyState

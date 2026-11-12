@@ -56,6 +56,7 @@ import {
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { assertStoredAgentAccess } from './agent-access';
 
 import { handleError } from './error';
 import {
@@ -79,7 +80,7 @@ interface MemoryContext extends Context {
   agentId?: string;
   resourceId?: string;
   threadId?: string;
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
 }
 
 /**
@@ -249,6 +250,7 @@ async function getMemoryFromContext({
 }): Promise<MastraMemory | null | undefined> {
   const logger = mastra.getLogger();
   let agent;
+  let fromStore = false;
   if (agentId) {
     try {
       agent = mastra.getAgentById(agentId);
@@ -262,6 +264,7 @@ async function getMemoryFromContext({
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -285,18 +288,24 @@ async function getMemoryFromContext({
         }
       }
     }
+  }
 
-    if (!agent) {
-      if (allowMissingAgent) {
-        logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
-        return null;
-      }
-      throw new HTTPException(404, { message: 'Agent not found' });
+  // Sub-agents (`SubAgent`) have no raw config and are never stored agents; everything else is checked. A hidden
+  // agent takes the missing-agent path, so the response can't reveal that the id exists.
+  if (agent && 'toRawConfig' in agent && !canReadAgent(agent, agentId!, requestContext, fromStore)) {
+    agent = undefined;
+  }
+
+  if (agentId && !agent) {
+    if (allowMissingAgent) {
+      logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
+      return null;
     }
+    throw new HTTPException(404, { message: 'Agent not found' });
   }
 
   if (agent) {
-    return await agent?.getMemory({
+    return await agent.getMemory({
       requestContext,
     });
   }
@@ -353,12 +362,14 @@ async function getAgentFromContext({
   }
 
   // Then try stored agents
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
     try {
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -385,7 +396,27 @@ async function getAgentFromContext({
     }
   }
 
+  // A hidden agent is reported as missing, so the response can't reveal that the id exists.
+  if (agent && !canReadAgent(agent, agentId, requestContext, fromStore)) {
+    return null;
+  }
   return agent;
+}
+
+/** Whether the caller may read the agent; a denied stored agent is handled exactly like a missing one. */
+function canReadAgent(
+  agent: Pick<Agent, 'source' | 'toRawConfig'>,
+  agentId: string,
+  requestContext: RequestContext,
+  fromStore: boolean,
+): boolean {
+  try {
+    assertStoredAgentAccess({ agent, agentId, requestContext, access: 'read', fromStore });
+    return true;
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 404) return false;
+    throw error;
+  }
 }
 
 /**
@@ -1510,6 +1541,21 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
   },
 });
 
+/**
+ * Tool-approval rules are saved on thread metadata by the agent controller.
+ * Clients writing thread metadata must not be able to set them, or a metadata
+ * write could turn an approval gate off. Drops the key from client input and
+ * carries over the stored value, if any.
+ */
+function withServerOwnedThreadMetadata(
+  metadata: Record<string, unknown> | undefined,
+  stored?: Record<string, unknown> | null,
+): Record<string, unknown> | undefined {
+  if (metadata === undefined) return undefined;
+  const { permissionRules: _ignored, ...rest } = metadata;
+  return stored && 'permissionRules' in stored ? { ...rest, permissionRules: stored.permissionRules } : rest;
+}
+
 export const CREATE_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/threads',
@@ -1546,7 +1592,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
             id: effectiveThreadId,
             resourceId: effectiveResourceId!,
             title,
-            metadata,
+            metadata: withServerOwnedThreadMetadata(metadata, existing?.thread.metadata),
           });
           return toLocalThread(result.thread);
         }
@@ -1572,7 +1618,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
       const result = await memory.createThread({
         resourceId: effectiveResourceId!,
         title,
-        metadata,
+        metadata: withServerOwnedThreadMetadata(metadata, existing?.metadata),
         threadId: effectiveThreadId,
       });
       return result;
@@ -1617,7 +1663,10 @@ export const UPDATE_THREAD_ROUTE = createRoute({
               permission: MastraFGAPermissions.MEMORY_WRITE,
             });
           }
-          const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
+          const result = await gwClient.updateThread(effectiveThreadId!, {
+            title,
+            metadata: withServerOwnedThreadMetadata(metadata, existing?.thread.metadata),
+          });
           if (!result) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
@@ -1649,7 +1698,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       const updatedThread = {
         ...thread,
         title: title !== undefined ? title : thread.title,
-        metadata: metadata !== undefined ? metadata : thread.metadata,
+        metadata: metadata !== undefined ? withServerOwnedThreadMetadata(metadata, thread.metadata) : thread.metadata,
         // Don't allow changing resourceId if effectiveResourceId is set (prevents reassigning threads)
         resourceId: effectiveResourceId || resourceId || thread.resourceId,
         createdAt: thread.createdAt,
@@ -1784,7 +1833,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
         newThreadId: effectiveNewThreadId,
         resourceId: cloneResourceId,
         title,
-        metadata,
+        metadata: withServerOwnedThreadMetadata(metadata),
         options,
       });
 

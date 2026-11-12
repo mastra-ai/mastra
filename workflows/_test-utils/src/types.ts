@@ -434,6 +434,9 @@ export type SkippableTest =
   | 'schemaNestedValidation'
   // ZodError cause preservation when validation fails
   | 'schemaZodErrorCause'
+  // Known failure, pinned with it.fails instead of skipped: getInitData() returns the
+  // validated input after inputSchema defaults apply (#29424)
+  | 'schemaInitDataDefaultFails'
   // waitForEvent removed error
   | 'schemaWaitForEvent'
   // Abort returning 'canceled' status

@@ -1,13 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
+import { useWorkspacePullRequestStatuses } from '../../../../hooks/useWorkspacePullRequestStatuses';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
@@ -53,8 +53,10 @@ export function SessionsSection() {
     changeGroupOrder,
     resetView,
   } = useSessionListView();
+  const sidebarState = useMaybeSidebarState()?.state;
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId, {
-    revealChildSessions: view.revealChildSessions,
+    // Collapsed to icons, nested rows are hidden, so the card folds back and carries the open session.
+    revealChildSessions: view.revealChildSessions && sidebarState !== 'collapsed',
   });
   const catalog = useBoardCatalog(factoryId);
   const viewerUserId = useFactoryAuth().data?.user?.userId;
@@ -68,7 +70,7 @@ export function SessionsSection() {
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
-  const mergedBySessionId = useWorkspacePullRequestMerges({
+  const liveStatusBySessionId = useWorkspacePullRequestStatuses({
     baseUrl,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
@@ -177,7 +179,10 @@ export function SessionsSection() {
                   level={level}
                   compact={view.compact}
                   disabled={deletion.deleting}
-                  merged={mergedBySessionId[entry.session.sessionId] ?? entry.pullRequest?.knownMerged}
+                  liveStatus={
+                    liveStatusBySessionId[entry.session.sessionId] ??
+                    (entry.pullRequest?.knownMerged ? 'merged' : undefined)
+                  }
                   onDelete={deletion.requestDeletion}
                   subItems={subItems}
                 />

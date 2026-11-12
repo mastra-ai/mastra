@@ -220,6 +220,85 @@ export type StoredResourcesConfig = {
   scope?: StoredResourceScopeConfig;
 };
 
+/** Groups of tools served by the built-in MCP server. */
+export type MastraMCPToolset = 'agents' | 'workflows' | 'tools';
+
+/** Primitive ids (as registered on Mastra) selected per primitive type. */
+export type ServerMCPPrimitiveFilter = {
+  agents?: string[];
+  workflows?: string[];
+  tools?: string[];
+};
+
+export type ServerMCPConfig = {
+  /**
+   * `'dev'` serves the endpoint under `mastra dev`, and in production only when `server.auth` is configured.
+   * `true` always serves it (logs a warning when no auth is configured). `false` never serves it.
+   * @default 'dev'
+   */
+  enabled?: boolean | 'dev';
+  /**
+   * Path of the endpoint, mounted under the API prefix.
+   * @default '/mcp'
+   */
+  path?: string;
+  /**
+   * Toolsets to serve. Clients can narrow this per request with `?toolsets=` or `X-MCP-Toolsets`.
+   * @default ['agents', 'workflows', 'tools']
+   */
+  toolsets?: MastraMCPToolset[];
+  /**
+   * Up to this many visible agents/workflows are listed as an enum on the operation tools' id argument,
+   * and up to this many registered tools are exposed as individual `tool_<id>` tools.
+   * @default 25
+   */
+  enumLimit?: number;
+  /** Agents and workflows that also get a dedicated `agent_<id>` / `workflow_<id>` tool. */
+  featured?: { agents?: string[]; workflows?: string[] };
+  /**
+   * Only serve tools whose backing route is a read operation.
+   * @default false
+   */
+  readOnly?: boolean;
+  /** When set for a primitive type, only these ids are exposed. */
+  include?: ServerMCPPrimitiveFilter;
+  /** Ids that are never exposed. Takes precedence over `include`. */
+  exclude?: ServerMCPPrimitiveFilter;
+  /** Server identity reported to MCP clients. */
+  serverInfo?: { name?: string; version?: string; title?: string; instructions?: string };
+  /**
+   * OAuth 2.0 Protected Resource Metadata (RFC 9728) for MCP clients. Served at
+   * `/.well-known/oauth-protected-resource` when `server.auth` is configured.
+   */
+  oauth?: ServerMCPOAuthConfig;
+};
+
+export type ServerMCPOAuthConfig = {
+  /** Authorization servers that issue tokens for this endpoint. Defaults to the auth provider's `getOAuthMetadata()`. */
+  authorizationServers?: string[];
+  /** OAuth scopes advertised to clients. Defaults to the auth provider's `getOAuthMetadata()`. */
+  scopesSupported?: string[];
+} & (
+  | {
+      /**
+       * Canonical URL of the MCP endpoint, e.g. `https://api.example.com/api/mcp`. Defaults to the endpoint URL
+       * derived from the incoming request; set it when the server runs behind a proxy.
+       *
+       * When set, tokens whose audience (`aud`) does not include this value are rejected on the MCP endpoint,
+       * for auth providers that implement `verifyAudience`.
+       */
+      resource: string;
+      /**
+       * Reject MCP requests authenticated by a provider that can't check the token audience (it has no
+       * `verifyAudience`, including such providers inside `CompositeAuth`). By default those requests are
+       * accepted and a warning is logged. Requires `resource`.
+       * @default false
+       */
+      requireAudience?: boolean;
+    }
+  | { resource?: undefined; requireAudience?: false }
+);
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -379,6 +458,13 @@ export type ServerConfig = {
      */
     setRequestAuth?: (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
   };
+
+  /**
+   * Built-in Mastra MCP server, served at `{apiPrefix}{path}` (default `/api/mcp`).
+   * It exposes your agents, workflows, and tools as MCP tools. Every call runs through the same
+   * authentication, permission, and ownership checks as the equivalent HTTP route.
+   */
+  mcp?: ServerMCPConfig;
 
   /**
    * A2A-specific server configuration.

@@ -38,7 +38,7 @@ function workItem(sessionId: string): Card {
     acceptedAt: null,
     autonomyArmedAt: null,
     plansPreapprovedAt: null,
-    commentCount: 0,
+    description: null,
     workItem: {
       id: 'work-item-1',
       orgId: 'org-1',
@@ -181,6 +181,9 @@ function fakeFactorySandbox(calls: string[], { failDestroy = false } = {}) {
       if (failDestroy) throw new Error('kill failed');
       calls.push(`destroy:${ctx.sessionId}:${ctx.sandboxId}`);
     }),
+    stop: vi.fn(async () => {
+      calls.push(`stop:${ctx.sessionId}:${ctx.sandboxId}`);
+    }),
   }));
   return { provider: 'stub', create } as never as FactorySandbox & { create: typeof create };
 }
@@ -228,20 +231,20 @@ describe('SessionRetirementCoordinator detached sandboxes', () => {
     expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
   });
 
-  it('does not construct a sandbox when the session is only retired', async () => {
+  it('stops, without starting or destroying, the sandbox of a session that is only retired', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
     const session = await materializedSession(storage);
-    const sandbox = fakeFactorySandbox([]);
+    const calls: string[] = [];
 
-    await new SessionRetirementCoordinator({ sandbox }).retireSession({
+    await new SessionRetirementCoordinator({ sandbox: fakeFactorySandbox(calls) }).retireSession({
       sourceControl: storage,
       orgId: 'org-1',
       sessionId: session.sessionId,
       deleteSession: false,
     });
 
-    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(calls).toEqual([`stop:${session.id}:vm-1`]);
     expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
   });
 

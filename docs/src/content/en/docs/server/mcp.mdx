@@ -1,0 +1,256 @@
+---
+title: 'Built-in MCP server | Server'
+description: 'Let MCP clients such as Claude Code, Cursor, and the MCP Inspector call your agents, workflows, and tools through the built-in /api/mcp endpoint, with the same auth, RBAC, and FGA as the HTTP API.'
+packages:
+  - '@mastra/core'
+  - '@mastra/server'
+  - '@mastra/mcp'
+  - '@mastra/auth'
+---
+
+# Built-in MCP server
+
+The Mastra server exposes your agents, workflows, and tools to [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) clients at `/api/mcp`. You don't define an `MCPServer` for it: every agent, workflow, and tool registered on the `Mastra` instance is available, and agents you add later appear automatically.
+
+Each MCP tool is a thin wrapper around an existing HTTP route. A call runs through the same validation, authentication, RBAC, FGA, and ownership checks as the HTTP request, with the same `RequestContext`. An MCP client can never do more than the same user can do over the HTTP API.
+
+Use the built-in server to let coding assistants and other MCP clients drive the Mastra app you already run. To publish a hand-picked set of primitives with your own prompts and resources, create an [`MCPServer`](/docs/connections/mcp#expose-a-mastra-mcp-server) instead.
+
+## Installation
+
+The endpoint uses `@mastra/mcp`, which `@mastra/server` declares as an optional peer dependency. Install it in your project to enable the built-in server:
+
+```bash npm2yarn
+npm install @mastra/mcp@latest
+```
+
+Without it, the rest of the server keeps working, and `/api/mcp` answers with HTTP 501 and a JSON-RPC error that says to install the package. `mastra build` only adds `@mastra/mcp` to the build output when your project installs it.
+
+## When it's served
+
+| Environment | Served at `/api/mcp` |
+| - | - |
+| `mastra dev` | Yes, also without auth. Requests with a foreign `Origin` or `Host` header are rejected to block DNS rebinding. This also blocks tunnels and LAN IP addresses. To reach the endpoint from another machine, set `server.host` to the hostname or IP address clients connect to. Binding to `0.0.0.0` doesn't allow other hosts. |
+| Production build with `server.auth` | Yes. Every request needs a bearer token. |
+| Production build without `server.auth` | No, the endpoint returns 404. |
+
+Set `server.mcp.enabled` to override the default. `false` turns the endpoint off everywhere. `true` serves it even without `server.auth` and logs a warning, because anyone who can reach the server can then call your agents, workflows, and tools.
+
+## Connect a client
+
+Start the dev server, then point a client at the endpoint. With Claude Code:
+
+```bash
+claude mcp add --transport http mastra http://localhost:4111/api/mcp
+```
+
+With auth configured, pass a bearer token:
+
+```bash
+claude mcp add --transport http mastra https://my-app.example.com/api/mcp \
+  --header "Authorization: Bearer $MASTRA_TOKEN"
+```
+
+To inspect the tools from the command line, use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+
+```bash
+npx @modelcontextprotocol/inspector --cli http://localhost:4111/api/mcp \
+  --transport http --header "Authorization: Bearer $MASTRA_TOKEN" --method tools/list
+```
+
+The endpoint uses stateless Streamable HTTP and speaks both MCP `2026-07-28` and the 2025 revisions that current clients use, so no session is kept between requests.
+
+## Tools
+
+The server groups tools into three toolsets. Agents and workflows are reached through operation tools that take the id as an argument. The tool list stays the same size however many agents you add.
+
+| Toolset | Tools | Backing HTTP route |
+| - | - | - |
+| `agents` | `list_agents`, `get_agent`, `call_agent` | `GET /agents`, `GET /agents/:agentId`, `POST /agents/:agentId/generate` |
+| `workflows` | `list_workflows`, `get_workflow`, `start_workflow`, `get_workflow_run`, `resume_workflow_run`, `cancel_workflow_run` | `GET /workflows`, `GET /workflows/:workflowId`, `POST /workflows/:workflowId/start-async`, `GET /workflows/:workflowId/runs/:runId`, `POST /workflows/:workflowId/resume-async`, `POST /workflows/:workflowId/runs/:runId/cancel` |
+| `tools` | `tool_<id>` for each registered tool | `POST /tools/:toolId/execute` |
+
+- When a caller can see up to `enumLimit` agents or workflows (25 by default), the `agentId` and `workflowId` arguments list the allowed ids. Above that they're plain strings, and the client calls `list_agents` or `list_workflows` to find ids.
+- When a caller can see more than `enumLimit` tools, the `tool_<id>` tools are replaced by `list_tools`, `get_tool`, and `call_tool`.
+- `call_agent` returns the reply text and a `threadId`. Pass the `threadId` back to continue the conversation in the agent's memory. A call without a `threadId` starts a new thread, so a client that never passes one stores a thread for each call.
+- `start_workflow` waits for the run to finish or suspend. A suspended run returns its `runId` and suspend payload. Continue it with `resume_workflow_run`.
+- Agents without a `description` get a generic one and a warning in the logs. Add descriptions so clients can pick the right agent.
+
+### Featured agents and workflows
+
+List agents and workflows under `featured` to give them a dedicated tool. A featured workflow's tool takes the workflow's input schema directly:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  // ...agents, workflows, tools
+  server: {
+    mcp: {
+      featured: { agents: ['support-agent'], workflows: ['refund'] },
+    },
+  },
+})
+```
+
+This adds `agent_support-agent` and `workflow_refund` next to the operation tools.
+
+## Choose what to expose
+
+Use `include` and `exclude` to select primitives by id. Each entry matches both a primitive's own `id` and the key it's registered under in `new Mastra({ ... })`, so `deleteAccountTool` and `delete-account` select the same tool. `exclude` wins over `include`. Excluded primitives are hidden from the tool list, and calling one by either name fails as not found. The selection only affects MCP. The HTTP routes are unchanged.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcp: {
+      toolsets: ['agents', 'tools'],
+      include: { agents: ['support-agent', 'billing-agent'] },
+      exclude: { tools: ['delete-account'] },
+    },
+  },
+})
+```
+
+Set `readOnly: true` to serve only tools whose backing route needs a `read` permission, such as `list_agents` and `get_workflow_run`.
+
+Clients can narrow the configuration per connection with `?toolsets=agents,tools` or the `X-MCP-Toolsets` header, and `?readonly=1` or the `X-MCP-Readonly` header. These can only remove tools, never add tools the configuration doesn't serve.
+
+## Authentication and permissions
+
+The endpoint accepts credentials only from the `Authorization: Bearer` header, verified by `server.auth`. Session cookies, the `apiKey` query parameter, and Studio's auth configuration don't apply to it, so a browser session can't be used to reach it from another site. Other routes keep their existing auth behavior.
+
+With [RBAC](/docs/auth/overview) configured, MCP access needs two permissions on top of the route permissions:
+
+- `mcp:read` to connect and list tools.
+- `mcp:execute` to see and call any tool. A caller without it gets an empty tool list, even when it may run the same operations over HTTP.
+
+Each call also needs the backing route's permission, for example `agents:execute` for `call_agent` and `workflows:execute` for `start_workflow`. The default `viewer` role has `mcp:read` but not `mcp:execute`; `member`, `admin`, and `owner` have both. These are the same permissions that guard the routes of `MCPServer` instances you register, so a role granted them for your own MCP servers can also use the built-in one.
+
+The tool list is filtered per caller. Agents and workflows appear when the caller would see them in `GET /agents` or `GET /workflows`, including [FGA](/docs/auth/fga) read checks. Tools the caller would get a 403 for are hidden. Every call is checked again when it runs, so a stale list can't be used to bypass a permission.
+
+Thread and run ownership work like the HTTP API: a user can't continue another user's thread or resume another user's workflow run.
+
+The inbound bearer token isn't passed to tools as an argument and isn't forwarded to other servers. Tools receive the same `RequestContext` as the equivalent HTTP request.
+
+## OAuth discovery
+
+When `server.auth` is configured, the endpoint tells MCP clients how to get a token, following the [MCP authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization). A request without a valid token gets a `401` whose `WWW-Authenticate` header points at the endpoint's protected-resource metadata ([RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)):
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer resource_metadata="https://my-app.example.com/.well-known/oauth-protected-resource/api/mcp"
+```
+
+When the request carried a token that failed verification, for example because it expired, the header also includes `error="invalid_token"`. Other routes return their `401` without this header.
+
+The metadata is public and served at `/.well-known/oauth-protected-resource/api/mcp` and `/.well-known/oauth-protected-resource`, outside the API prefix:
+
+```json
+{
+  "resource": "https://my-app.example.com/api/mcp",
+  "authorization_servers": ["https://my-tenant.us.auth0.com/"],
+  "bearer_methods_supported": ["header"]
+}
+```
+
+A client reads `authorization_servers`, runs the OAuth flow against your identity provider, and retries with the access token. Mastra doesn't act as an authorization server. Whether a client can sign in without a pre-registered OAuth app depends on your identity provider supporting dynamic client registration or client ID metadata documents.
+
+Mastra fills the metadata from `server.mcp.oauth` and from your auth provider:
+
+- `resource` defaults to the endpoint URL derived from the request. Behind a proxy or load balancer, the request may carry an internal host, so set `server.mcp.oauth.resource` to the public URL. It must be an absolute `https` URL (`http` is allowed for `localhost`) without a fragment. An invalid value logs an error and turns OAuth discovery off, but the token audience is still checked against it, so MCP requests are rejected until you fix the value.
+- The metadata URL in the challenge uses the origin of `resource` with the endpoint's path on the server, for example `/.well-known/oauth-protected-resource/api/mcp`. If your proxy serves the endpoint under a different public path, it must also forward that well-known URL to Mastra.
+- `authorization_servers` comes from the provider when it knows its issuer (see the table below). Otherwise set `server.mcp.oauth.authorizationServers`. Without either, the field is left out and clients need a token configured by hand.
+- `scopes_supported` is only included when you set `server.mcp.oauth.scopesSupported`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthWorkos(),
+    mcp: {
+      oauth: {
+        resource: 'https://my-app.example.com/api/mcp',
+        authorizationServers: ['https://my-app.authkit.app'],
+      },
+    },
+  },
+})
+```
+
+### Token audience
+
+Setting `server.mcp.oauth.resource` also makes the endpoint check that a token was issued for it: the token's `aud` claim must include the `resource` value. A token for another API gets a `401` with `error="invalid_token"`, so a token leaked from a different service can't be replayed against your MCP endpoint. Without `resource`, any token your auth provider accepts works, as it did before. The check only applies to `/api/mcp`: other routes still accept a token issued for a different API. The comparison is exact, so `https://my-app.example.com/api/mcp/` with a trailing slash doesn't match `https://my-app.example.com/api/mcp`.
+
+Configure your identity provider to issue tokens with that audience, for example by registering the `resource` URL as an API identifier in Auth0. Auth0 also verifies its own `audience` option (`AUTH0_AUDIENCE`), so either set that option to the `resource` URL or issue tokens whose `aud` includes both values.
+
+| Provider | Authorization server advertised | Audience checked against `resource` |
+| - | - | - |
+| [`MastraJwtAuth`](/reference/auth/jwt) | `issuer` option | Yes |
+| [Auth0](/reference/auth/auth0) | `https://<domain>/` | Yes |
+| [Okta](/reference/auth/okta) | `issuer` option | No. Okta checks the token against its own `audience` option, so set that to the `resource` URL. |
+| [Clerk](/reference/auth/clerk) | Frontend API URL from the publishable key. Your OAuth application must issue JWT access tokens (the default for applications created since January 2026). Opaque tokens are rejected. | No |
+| [Supabase](/reference/auth/supabase) | `<url>/auth/v1`. Clients can only sign in there if the OAuth 2.1 server is turned on for your Supabase project. | No |
+| [`CompositeAuth`](/docs/auth/composite-auth) | All inner providers' servers | Delegated to the provider that authenticated the token |
+| WorkOS, Google, Neon, Firebase, Better Auth, custom providers | Set `authorizationServers` | No |
+
+When `resource` is set and a provider can't check the audience, Mastra logs a warning at startup and accepts that provider's tokens for any audience. This keeps API keys and other opaque tokens working. To reject them on `/api/mcp` instead, set `requireAudience: true`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { CompositeAuth, SimpleAuth } from '@mastra/core/server'
+import { MastraJwtAuth } from '@mastra/auth'
+
+const jwtAuth = new MastraJwtAuth({
+  jwksUri: 'https://auth.example.com/.well-known/jwks.json',
+  issuer: 'https://auth.example.com/',
+})
+const apiKeyAuth = new SimpleAuth({ tokens: { [process.env.API_KEY!]: { id: 'ci' } } })
+
+export const mastra = new Mastra({
+  server: {
+    auth: new CompositeAuth([jwtAuth, apiKeyAuth]),
+    mcp: {
+      oauth: { resource: 'https://my-app.example.com/api/mcp', requireAudience: true },
+    },
+  },
+})
+```
+
+With `requireAudience`, a request authenticated by a provider without an audience check, such as `SimpleAuth`, gets a `401` with `error="invalid_token"` on `/api/mcp`. Inside `CompositeAuth`, only requests accepted by those providers are rejected. Other routes still accept them. `requireAudience` needs `resource`, and without `resource` nothing is checked.
+
+Custom providers opt in by implementing `verifyAudience()` and `getOAuthMetadata()`, see [custom auth providers](/docs/auth/custom-auth-provider).
+
+### Connect an OAuth client
+
+With an identity provider that supports dynamic client registration, add the server without a token and the client runs the sign-in flow on first use:
+
+```bash
+claude mcp add --transport http mastra https://my-app.example.com/api/mcp
+```
+
+Otherwise, get an access token for the `resource` audience from your identity provider and pass it as a header:
+
+```bash
+claude mcp add --transport http mastra https://my-app.example.com/api/mcp \
+  --header "Authorization: Bearer $MASTRA_TOKEN"
+```
+
+The endpoint doesn't return `403` with `error="insufficient_scope"` yet. A caller without `mcp:read` gets a plain `403`, because Mastra permissions aren't OAuth scopes a client could request.
+
+## Limitations
+
+- Workflows run synchronously within the MCP request. Long-running workflows are bounded by your server's request timeout.
+- There's no per-primitive opt-out on the `Agent`, `Workflow`, or tool constructors yet. Use `server.mcp.include` and `server.mcp.exclude`.
+- Memory, observability, and stored-agent management tools aren't part of the built-in server yet.
+
+## Related
+
+- [`server.mcp` configuration reference](/reference/configuration#servermcp)
+- [MCP connections](/docs/connections/mcp)
+- [Authentication overview](/docs/auth/overview)
+- [`server.mcp.oauth` configuration reference](/reference/configuration#servermcpoauth)
+- [Fine-grained authorization](/docs/auth/fga)

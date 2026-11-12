@@ -161,6 +161,7 @@ export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 export const createFeedbackArgsSchema = z
   .object({
     feedback: z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema),
+    onConflict: z.enum(['ignore', 'replace']).optional(),
   })
   .describe('Arguments for creating feedback');
 
@@ -183,6 +184,15 @@ export const createFeedbackBodySchema = z
     }),
   })
   .describe('Arguments for creating feedback');
+
+/** Full replacement retains the original feedback identity and creation timestamp. */
+export const replaceFeedbackBodySchema = createFeedbackBodySchema.extend({
+  feedback: createFeedbackBodySchema.shape.feedback.extend({
+    feedbackId: z.string().regex(/\S/, 'feedbackId must not be empty'),
+    timestamp: z.iso.datetime({ offset: true }),
+  }),
+});
+export type ReplaceFeedbackBody = z.infer<typeof replaceFeedbackBodySchema>;
 
 /** Body for creating feedback in client/server */
 export type CreateFeedbackBody = z.infer<typeof createFeedbackBodySchema>;
@@ -209,6 +219,7 @@ export type CreateFeedbackResponse = z.infer<typeof createFeedbackResponseSchema
 export const batchCreateFeedbackArgsSchema = z
   .object({
     feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema)),
+    onConflict: z.enum(['ignore', 'replace']).optional(),
   })
   .describe('Arguments for batch recording feedback');
 

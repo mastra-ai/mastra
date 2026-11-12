@@ -28,11 +28,9 @@ import type {
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
-import {
-  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
-  TRACE_QUERY_DISCOVERY_TIME_RANGE,
-  TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
-} from './trace-query-discovery';
+import { createOutcomeFieldTests } from './outcome-fields';
+import { TIMING_FIELDS, timingValue } from './timing-fields';
+import type { TraceAggregateFixtureData } from './trace-aggregate';
 import {
   collectTraceQueryPages,
   normalizeTraceQueryResponse,
@@ -45,10 +43,12 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
-import type { TraceAggregateFixtureData } from './trace-aggregate';
 import type { ThreadQueryConformanceCase, TraceQueryConformanceCase, TraceQueryFixtureData } from './trace-query';
-import { createOutcomeFieldTests } from './outcome-fields';
-import { TIMING_FIELDS, timingValue } from './timing-fields';
+import {
+  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
+  TRACE_QUERY_DISCOVERY_TIME_RANGE,
+  TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
+} from './trace-query-discovery';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -76,6 +76,8 @@ export interface ObservabilityVNextCapabilities {
   traceQuerySpanWriteModel?: 'event-sourced' | 'completion-only';
   /** Whether feedback value predicates distinguish numbers from numeric-looking strings. Defaults to true. */
   traceQueryStrictFeedbackValueTypes?: boolean;
+  /** Whether concurrent replacements atomically preserve feedback identity. Defaults to true. */
+  concurrentFeedbackIdentity?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -4754,6 +4756,117 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           const filtered = await storage.listScores({ filters: { metadata: { env: 'prod' } } });
           expect(filtered.scores.map(s => s.scoreId)).not.toContain('score-meta-none');
         });
+      });
+    });
+
+    describe('feedback (explicit replacement)', () => {
+      const original = {
+        feedbackId: 'replacement-feedback',
+        traceId: 'replacement-trace',
+        timestamp: new Date('2026-11-11T12:00:00.123Z'),
+        feedbackType: 'thumbs',
+        feedbackSource: 'user',
+        value: 1,
+        comment: 'old',
+        feedbackUserId: 'author',
+        organizationId: 'org',
+        resourceId: 'resource',
+      };
+
+      it('keeps a replacement after delayed individual and batched creates', async () => {
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        await storage.replaceFeedback({
+          feedback: { ...original, value: -1, comment: null, reviewStatus: 'reviewed' },
+        });
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        await storage.batchCreateFeedback({ feedbacks: [original, original], onConflict: 'ignore' });
+        const assertCurrent = async () => {
+          expect(await storage.getFeedbackById(original.feedbackId)).toMatchObject({
+            ...original,
+            value: -1,
+            comment: null,
+            reviewStatus: 'reviewed',
+          });
+          const listed = await storage.listFeedback({});
+          expect(listed.feedback).toHaveLength(1);
+          expect(listed.pagination?.total).toBe(1);
+          expect((await storage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'count' })).value).toBe(1);
+          expect((await storage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'sum' })).value).toBe(-1);
+        };
+        await assertCurrent();
+        if (flushPendingMerges) {
+          await flushPendingMerges(storage);
+          await assertCurrent();
+        }
+        // Legacy direct storage upserts remain available.
+        await storage.createFeedback({ feedback: { ...original, value: 3 } });
+        expect((await storage.getFeedbackById(original.feedbackId))?.value).toBe(3);
+      });
+
+      it('ignores duplicate IDs with different timestamps in individual and batch creates', async () => {
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        const retry = { ...original, timestamp: new Date('2026-11-12T12:00:00.123Z'), value: -1 };
+        await storage.createFeedback({ feedback: retry, onConflict: 'ignore' });
+        await storage.batchCreateFeedback({ feedbacks: [retry], onConflict: 'ignore' });
+        expect((await storage.listFeedback({})).feedback).toEqual([expect.objectContaining(original)]);
+        expect((await storage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'count' })).value).toBe(1);
+      });
+
+      if (capabilities.concurrentFeedbackIdentity !== false) {
+        it.each([
+          { traceId: 'other-trace' },
+          { timestamp: new Date('2026-11-12T12:00:00.123Z') },
+          { organizationId: 'other-org' },
+          { resourceId: 'other-resource' },
+        ])('only accepts one identity for concurrent replacements of a missing record: %j', async change => {
+          const attempts = await Promise.all(
+            Array.from({ length: 20 }, async (_, attempt) => {
+              const first = { ...original, feedbackId: `${original.feedbackId}-${attempt}` };
+              const records = [first, { ...first, ...change, value: -1 }];
+              const results = await Promise.allSettled(records.map(feedback => storage.replaceFeedback({ feedback })));
+              return { records, results };
+            }),
+          );
+          for (const { records, results } of attempts) {
+            expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+            const winner = records[results.findIndex(result => result.status === 'fulfilled')];
+            expect(await storage.getFeedbackById(records[0]!.feedbackId)).toMatchObject(winner!);
+          }
+          expect((await storage.listFeedback({ pagination: { perPage: 100 } })).feedback).toHaveLength(20);
+        });
+      }
+
+      it('clears an omitted replacement author without using the trace user or metadata', async () => {
+        await storage.createFeedback({ feedback: original });
+        await storage.replaceFeedback({
+          feedback: {
+            ...original,
+            feedbackUserId: undefined,
+            userId: 'trace-user',
+            metadata: { userId: 'metadata-user' },
+          },
+        });
+        expect(await storage.getFeedbackById(original.feedbackId)).toMatchObject({
+          feedbackUserId: null,
+          userId: 'trace-user',
+        });
+      });
+
+      it('accepts a full replacement before the create arrives', async () => {
+        await storage.replaceFeedback({ feedback: { ...original, value: -1 } });
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        expect((await storage.getFeedbackById(original.feedbackId))?.value).toBe(-1);
+      });
+
+      it.each([
+        { traceId: 'different-trace' },
+        { timestamp: new Date('2026-11-12T12:00:00.123Z') },
+        { organizationId: 'other-org' },
+        { resourceId: 'other-resource' },
+      ])('rejects a replacement that changes identity: %j', async change => {
+        await storage.createFeedback({ feedback: original });
+        await expect(storage.replaceFeedback({ feedback: { ...original, ...change } })).rejects.toThrow();
+        expect((await storage.getFeedbackById(original.feedbackId))?.value).toBe(1);
       });
     });
 

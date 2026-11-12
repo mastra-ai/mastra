@@ -1,12 +1,13 @@
-import type { ISessionProvider } from '@mastra/core/auth';
+import type { ISessionProvider, MastraUser } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import { CompositeAuth } from '@mastra/core/server';
+import { CompositeAuth, normalizeMastraUser } from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, MastraAuthConfig, MastraAuthRequest } from '@mastra/core/server';
 
 import {
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_USER_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
@@ -19,7 +20,12 @@ import { parse } from './path-pattern';
 
 // Re-export request-context key constants so custom middleware can read namespaced
 // auth state without importing internal paths.
-export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
+export {
+  MASTRA_USER_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+} from '../constants';
 
 type CustomRouteAuthDecision = 'protected' | 'public' | 'none';
 
@@ -381,44 +387,52 @@ export function supportsSessionRefresh(
 }
 
 /**
- * Single auth middleware: authenticate → authorize.
- * Skip checks (dev playground, unprotected path, public path) are evaluated once.
+ * Whether auth is bypassed for this path/method: the dev playground (only when no auth
+ * provider is configured), paths that are not protected, and public paths (unless the
+ * route forces auth with `requiresAuth: true`).
  */
-export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
-  const {
-    path,
-    method,
-    getHeader,
-    mastra,
-    authConfig,
-    customRouteAuthConfig,
-    requestContext,
-    rawRequest,
-    token,
-    requiresAuth,
-  } = ctx;
-
-  // ── Skip checks (evaluated once) ──
-
+export const isAuthBypassed = ({
+  path,
+  method,
+  getHeader,
+  authConfig,
+  customRouteAuthConfig,
+  requiresAuth,
+}: Pick<
+  AuthMiddlewareContext,
+  'path' | 'method' | 'getHeader' | 'authConfig' | 'customRouteAuthConfig' | 'requiresAuth'
+>): boolean => {
   // Only bypass auth for dev playground when no real auth provider is configured.
   // When auth IS configured (has authenticateToken), we need the full auth flow
   // so user/roles/permissions are set in requestContext.
   const hasAuthProvider = typeof authConfig.authenticateToken === 'function';
   if (!hasAuthProvider && isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
-    return pass;
+    return true;
   }
 
   if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
-    return pass;
+    return true;
   }
 
   // When a route explicitly requires auth (requiresAuth: true), skip the
   // public-path bypass so the user is still authenticated and permissions
   // are injected into the request context.
-  if (
+  return (
     !requiresAuth &&
     (canAccessPublicly(path, method, authConfig) || isCustomRoutePublic(path, method, customRouteAuthConfig))
-  ) {
+  );
+};
+
+/**
+ * Single auth middleware: authenticate → authorize.
+ * Skip checks (dev playground, unprotected path, public path) are evaluated once.
+ */
+export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
+  const { path, method, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
+
+  // ── Skip checks (evaluated once) ──
+
+  if (isAuthBypassed(ctx)) {
     return pass;
   }
 
@@ -519,6 +533,29 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // `MASTRA_USER_KEY` to avoid collisions with caller-supplied keys.
     requestContext.set('user', user);
 
+    // Normalize the authenticated user to the stable MastraUser shape consumed
+    // by DynamicArgument callbacks. Must run before mapUserToResourceId:
+    // CompositeAuth's resource-id mapping consumes its authenticated-provider
+    // bookkeeping while toMastraUser only peeks at it. Best-effort — a user
+    // shape the default normalization can't handle leaves the key unset
+    // (callbacks see `user: undefined`) instead of failing the request.
+    try {
+      const toMastraUser =
+        'toMastraUser' in authConfig && typeof authConfig.toMastraUser === 'function'
+          ? (authConfig.toMastraUser as (user: unknown) => MastraUser)
+          : normalizeMastraUser;
+      const normalizedUser = toMastraUser.call(authConfig, user);
+      if (normalizedUser && typeof normalizedUser.id === 'string' && normalizedUser.id.trim()) {
+        requestContext.set(MASTRA_NORMALIZED_USER_KEY, normalizedUser);
+      }
+    } catch (normalizeError) {
+      mastra
+        .getLogger()
+        ?.warn('Failed to normalize authenticated user to MastraUser; callbacks will see user: undefined', {
+          error: normalizeError instanceof Error ? { message: normalizeError.message } : normalizeError,
+        });
+    }
+
     // Store the raw auth token so downstream code (e.g., editor MCP client
     // resolution) can forward it when connecting to auth-protected MCP servers.
     // The token may arrive via Authorization header, apiKey query param, or
@@ -583,6 +620,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           requestContext.set(MASTRA_USER_ROLES_KEY, roles);
           // Backward-compat alias for callers reading the legacy key.
           requestContext.set('userRoles', roles);
+
+          // Populate the normalized user's role from RBAC when the auth
+          // provider's user carried none: primary role = first RBAC role.
+          const normalizedUser = requestContext.get(MASTRA_NORMALIZED_USER_KEY) as MastraUser | undefined;
+          if (normalizedUser && !normalizedUser.role && Array.isArray(roles) && typeof roles[0] === 'string') {
+            requestContext.set(MASTRA_NORMALIZED_USER_KEY, { ...normalizedUser, role: roles[0] });
+          }
         }
       }
     } catch (rbacError) {
@@ -718,19 +762,16 @@ export const checkRules = async (
       continue;
     }
 
-    // Rule matches, check conditions
+    // Rule matches, so it decides. A failed condition denies instead of
+    // falling through to a broader rule further down the list.
     const condition = rule.condition;
     if (typeof condition === 'function') {
-      const allowed = await Promise.resolve()
+      return await Promise.resolve()
         .then(() => condition(user))
+        .then(result => !!result)
         .catch(() => false);
-
-      if (allowed) {
-        return true;
-      }
-    } else if (rule.allow) {
-      return true;
     }
+    return !!rule.allow;
   }
 
   // No matching rules, deny by default

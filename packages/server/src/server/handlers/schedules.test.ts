@@ -7,6 +7,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   CREATE_SCHEDULE_ROUTE,
@@ -319,6 +320,46 @@ describe('Schedules handlers', () => {
       const created = await schedulesStore.getSchedule(result.id);
       expect(created).toBeDefined();
       expect(created!.target.type).toBe('workflow');
+    });
+
+    it('creates a one-off workflow schedule from runAt', async () => {
+      const runAt = Date.now() + 60_000;
+      const result = await CREATE_SCHEDULE_ROUTE.handler({
+        mastra,
+        workflowId: 'test',
+        runAt,
+        ...baseCtx(),
+      } as any);
+
+      expect((result as any).runAt).toBe(runAt);
+      expect((result as any).cron).toBeUndefined();
+      expect(result.nextFireAt).toBe(runAt);
+    });
+
+    it('creates a bounded cron agent schedule with endAt', async () => {
+      const endAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      const result = await CREATE_SCHEDULE_ROUTE.handler({
+        mastra,
+        agentId: 'agent-1',
+        cron: '0 * * * *',
+        endAt,
+        prompt: 'Hello',
+        threadId: 'thread-3',
+        resourceId: 'resource-3',
+        ...baseCtx(),
+      } as any);
+
+      expect((result as any).endAt).toBe(endAt);
+      expect(result.status).toBe('active');
+    });
+
+    it('body schema requires exactly one of cron or runAt', () => {
+      const schema = CREATE_SCHEDULE_ROUTE.bodySchema!;
+      expect(schema.safeParse({ workflowId: 'test' }).success).toBe(false);
+      expect(schema.safeParse({ workflowId: 'test', cron: '* * * * *', runAt: 1 }).success).toBe(false);
+      expect(schema.safeParse({ workflowId: 'test', runAt: 1, endAt: 2 }).success).toBe(false);
+      expect(schema.safeParse({ workflowId: 'test', runAt: 1 }).success).toBe(true);
+      expect(schema.safeParse({ workflowId: 'test', cron: '* * * * *', endAt: 2 }).success).toBe(true);
     });
 
     it('persists resourceId on a workflow schedule for run attribution', async () => {
@@ -956,6 +997,49 @@ describe('Schedules handlers', () => {
           ...baseCtx(),
         } as any),
       ).rejects.toThrow(HTTPException);
+    });
+  });
+
+  describe('schedules of a deleted agent', () => {
+    const caller = (id: string, permissions: string[]) => {
+      const ctx = new RequestContext();
+      ctx.set(MASTRA_USER_KEY, { id });
+      ctx.set(MASTRA_RESOURCE_ID_KEY, id);
+      ctx.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+      return ctx;
+    };
+    const visibleTo = async (requestContext: RequestContext) => {
+      const { schedules } = await LIST_SCHEDULES_ROUTE.handler({ mastra, requestContext } as any);
+      return schedules.map(s => s.id);
+    };
+
+    it('are hidden from signed-in users, but not from admins or setups without auth', async () => {
+      // The agent is neither registered nor stored any more, e.g. a stored agent that was deleted.
+      const id = `${AGENT_SCHEDULE_PREFIX}gone_thread-1`;
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(
+        makeAgentSchedule({
+          id,
+          ownerId: 'gone',
+          target: { ...makeAgentSchedule().target, agentId: 'gone', prompt: 'secret prompt' } as Schedule['target'],
+        }),
+      );
+
+      const bob = caller('bob', ['schedules:read', 'schedules:write', 'schedules:execute']);
+      expect(await visibleTo(bob)).toEqual([]);
+      await expect(
+        GET_SCHEDULE_ROUTE.handler({ mastra, requestContext: bob, scheduleId: id } as any),
+      ).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(
+        RUN_SCHEDULE_ROUTE.handler({ mastra, requestContext: bob, scheduleId: id } as any),
+      ).rejects.toMatchObject({
+        status: 404,
+      });
+
+      expect(await visibleTo(caller('admin', ['*']))).toEqual([id]);
+      expect(await visibleTo(new RequestContext())).toEqual([id]);
     });
   });
 });

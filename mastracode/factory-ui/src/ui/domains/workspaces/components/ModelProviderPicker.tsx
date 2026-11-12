@@ -168,7 +168,8 @@ export function ModelProviderPicker({
           </div>
         </TabContent>
         <TabContent value="custom">
-          <div className="pt-2">
+          {/* The form has no frame of its own: in settings it is a row of the providers card. */}
+          <div className="border-border mt-2 rounded-lg border p-3">
             <CustomProviderForm
               requireModels
               onSaved={provider => {

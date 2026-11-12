@@ -220,9 +220,10 @@ export function shortScheduleId(id: string): string {
 
 /** One-line human summary of what a schedule sends: `run ./check.sh + "extra"`, `read notes.md`, `"prompt"`. */
 export function describeScheduleSource(schedule: Pick<ThreadSchedule, 'prompt' | 'file' | 'extraPrompt'>): string {
-  if (!schedule.file) return `"${schedule.prompt ?? ''}"`;
+  const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
+  if (!schedule.file) return `"${oneLine(schedule.prompt ?? '')}"`;
   const verb = schedule.file.mode === 'script' ? 'run' : 'read';
-  const extra = schedule.extraPrompt ? ` + "${schedule.extraPrompt}"` : '';
+  const extra = schedule.extraPrompt ? ` + "${oneLine(schedule.extraPrompt)}"` : '';
   return `${verb} ${schedule.file.displayPath}${extra}`;
 }
 

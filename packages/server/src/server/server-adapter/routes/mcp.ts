@@ -18,6 +18,7 @@ import {
   MCP_SSE_TRANSPORT_ROUTE,
   MCP_SSE_MESSAGES_ROUTE,
 } from '../../handlers/mcp';
+import { BUILTIN_MCP_HTTP_ROUTE } from '../../mcp/route';
 
 /**
  * MCP Routes
@@ -26,6 +27,9 @@ import {
  * Transport routes handle the MCP protocol communication (HTTP and SSE).
  */
 export const MCP_ROUTES = [
+  // Built-in Mastra MCP server (path configurable via server.mcp.path)
+  BUILTIN_MCP_HTTP_ROUTE,
+
   // ============================================================================
   // MCP Server Registry Routes
   // ============================================================================
