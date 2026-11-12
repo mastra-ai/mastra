@@ -113,7 +113,8 @@ export const mastra = new Mastra({
     type: 'number',
     isOptional: true,
     defaultValue: '300000',
-    description: 'Default per-task timeout in milliseconds. Can be overridden per-tool or per-call.',
+    description:
+      'Default per-task timeout in milliseconds. `0` means no timeout. Can be overridden per-tool or per-call.',
   },
   {
     name: 'defaultRetries',
@@ -240,7 +241,7 @@ export const mastra = new Mastra({
     type: '(task: BackgroundTask) => void | Promise<void>',
     isOptional: true,
     description:
-      'Global callback invoked when any background task fails. Fires in addition to per-tool and per-agent callbacks.',
+      'Global callback invoked when any background task fails. Fires in addition to per-tool and per-agent callbacks, and also when recovery fails a task whose worker stopped before it finished.',
   },
 ]}
 />

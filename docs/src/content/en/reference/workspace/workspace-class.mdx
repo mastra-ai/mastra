@@ -815,19 +815,21 @@ The `execute_command` tool accepts these options:
           {
             name: 'onStdout',
             type: '(data: string, meta: BackgroundProcessMeta) => void',
-            description: 'Callback for stdout chunks from background processes.',
+            description:
+              'Callback for stdout chunks from background processes. Meta includes pid, toolCallId, agentId, threadId, resourceId, and runId of the call that started the process.',
             isOptional: true,
           },
           {
             name: 'onStderr',
             type: '(data: string, meta: BackgroundProcessMeta) => void',
-            description: 'Callback for stderr chunks from background processes.',
+            description: 'Callback for stderr chunks from background processes. Meta matches onStdout.',
             isOptional: true,
           },
           {
             name: 'onExit',
             type: '(meta: BackgroundProcessExitMeta) => void',
-            description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
+            description:
+              'Callback when a background process exits. Meta includes the onStdout fields plus exitCode, stdout, stderr, and killedByAbort (true when the abort signal killed the process, false for a normal exit or kill_process).',
             isOptional: true,
           },
           {
