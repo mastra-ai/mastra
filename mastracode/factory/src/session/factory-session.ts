@@ -57,8 +57,8 @@ export interface SourceControlSessionLookup {
   listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
   rename(args: { sessionId: string; title: string }): Promise<void>;
   setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
-  markFirstMessage(args: { sessionId: string }): Promise<void>;
-  markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+  markFirstMessage(args: { sessionId: string }): Promise<Date | undefined>;
+  markFirstMeaningfulExec(args: { sessionId: string }): Promise<Date | undefined>;
 }
 
 /**

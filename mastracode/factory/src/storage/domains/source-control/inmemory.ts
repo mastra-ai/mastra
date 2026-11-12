@@ -597,13 +597,15 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
-      if (row && row.firstMessageAt === null) Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
+      if (!row || row.firstMessageAt !== null) return undefined;
+      Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
+      return row.createdAt;
     },
     markFirstMeaningfulExec: async ({ sessionId }: { sessionId: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
-      if (row && row.firstMeaningfulExecAt === null) {
-        Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
-      }
+      if (!row || row.firstMeaningfulExecAt !== null) return undefined;
+      Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
+      return row.createdAt;
     },
     delete: async (id: string) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);

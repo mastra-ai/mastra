@@ -1,6 +1,7 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/core/workspace';
 
+import { factoryMetrics } from '../metrics/metrics.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 
 export interface FirstExecCaptureSession {
@@ -118,6 +119,15 @@ export function observeSessionFirstExec(
         unsubscribe();
         void sourceControl.sessions
           .markFirstMeaningfulExec({ sessionId: session.identity.getId() })
+          .then(createdAt => {
+            if (createdAt) {
+              factoryMetrics().observe(
+                'sessions',
+                'mastra_factory_session_first_exec_ms',
+                Date.now() - createdAt.getTime(),
+              );
+            }
+          })
           .catch(error => console.warn('[Factory first-exec capture] Unable to persist first exec time.', error));
         break;
       }

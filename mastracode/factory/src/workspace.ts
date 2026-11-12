@@ -41,6 +41,7 @@ import {
   registerGithubTokenInjector,
   registerGithubTokenInjectorResolver,
 } from './integrations/github/token-refresh.js';
+import { instrumentSandboxStart, recordSandboxAcquired } from './metrics/sandbox.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
@@ -1047,6 +1048,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          instrumentSandboxStart(sandbox, factorySandbox.provider);
           // Before Factory's own GH_TOKEN, so a host env key is remembered before Factory writes it.
           if (envScope && sandboxEnv) {
             attachSandboxEnvRefresh(sandbox, {
@@ -1086,6 +1088,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // stack a wrapper per call. Factory's setup runs first: a hook the
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
+            recordSandboxAcquired(args.sandbox, args.outcome);
             try {
               await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
                 await setupHook(args);

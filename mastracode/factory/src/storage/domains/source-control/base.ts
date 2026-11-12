@@ -584,15 +584,17 @@ export interface SourceControlStorageHandle {
      * NULL, so retries and process restarts are no-ops. Keyed by the
      * controller-facing `sessionId` (not the row id) because the caller —
      * the session observer — only knows the controller resourceId.
+     * Resolves to the session's creation time when this call set the stamp,
+     * `undefined` when it was already set or there is no row.
      */
-    markFirstMessage(args: { sessionId: string }): Promise<void>;
+    markFirstMessage(args: { sessionId: string }): Promise<Date | undefined>;
     /**
      * Record when the session's agent completed its first successful sandbox
      * exec (TTFME anchor). Same write-once contract as `markFirstMessage`:
      * guarded on the column being NULL, keyed by the controller-facing
      * `sessionId`.
      */
-    markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+    markFirstMeaningfulExec(args: { sessionId: string }): Promise<Date | undefined>;
     /** Removes the session and its repository rows. */
     delete(id: string): Promise<void>;
   };
@@ -1758,20 +1760,24 @@ export class SourceControlStorage extends FactoryStorageDomain {
           // this an atomic one-shot: concurrent callers and later messages
           // match zero rows. Sessions without a source-control row (chat-only
           // channels) are a zero-row no-op too.
-          await db().updateMany(
+          const stamped = await db().updateMany(
             SESSIONS,
             { session_id: sessionId, first_message_at: null },
             { first_message_at: new Date(), updated_at: new Date() },
           );
+          if (stamped === 0) return undefined;
+          return (await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId }))?.created_at;
         },
         markFirstMeaningfulExec: async ({ sessionId }) => {
           // Same atomic one-shot shape as markFirstMessage: the NULL filter
           // makes concurrent callers and later execs zero-row no-ops.
-          await db().updateMany(
+          const stamped = await db().updateMany(
             SESSIONS,
             { session_id: sessionId, first_meaningful_exec_at: null },
             { first_meaningful_exec_at: new Date(), updated_at: new Date() },
           );
+          if (stamped === 0) return undefined;
+          return (await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId }))?.created_at;
         },
         delete: async id => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { id });
