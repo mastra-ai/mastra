@@ -2354,7 +2354,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       const authorizedBots = this.#options.authorizedBots ?? DEFAULT_AUTHORIZED_BOTS;
       if (authorizedBots.some(bot => bot.toLowerCase() === normalizedUser)) return true;
 
-      const appOwner = await this.#appOwnerResolver.getOwner(user, isCurrentGeneration);
+      const appOwner = await this.#appOwnerResolver.getOwner(user, isCurrentGeneration, onLookupFailure);
       if (!appOwner || (isCurrentGeneration && !isCurrentGeneration())) return false;
       if (appOwner.type === 'Organization') return appOwner.login.toLowerCase() === owner.toLowerCase();
       if (appOwner.type !== 'User') return false;

@@ -7,12 +7,14 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { GithubAppOwnerResolver } from './github-app-owner.js';
 import { GithubSignals } from './index.js';
 import type { GithubSubscriptionMode } from './index.js';
 
 const folders: string[] = [];
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 
@@ -216,6 +218,30 @@ describe.each(['working', 'review'] as const)('%s subscriber receives every find
     await f.poll();
     expect(f.delivered.map(n => n.summary).join('\n')).toContain('Large finding 59.');
   }, 120_000);
+
+  it('retries a bot finding whose app owner could not be looked up', async () => {
+    const f = fixture(mode);
+    await f.poll();
+    f.delivered.length = 0;
+    let ownerLookupFails = true;
+    vi.spyOn(GithubAppOwnerResolver.prototype, 'getOwner').mockImplementation(
+      async (_bot, _isCurrent, onLookupFailure?: () => void) => {
+        if (ownerLookupFails) {
+          onLookupFailure?.();
+          return undefined;
+        }
+        return { login: 'mastra-ai', type: 'Organization' };
+      },
+    );
+    f.comment('org-bot', 'Finding from an organization app.', undefined, 'org-review-app[bot]');
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity')).toHaveLength(0);
+    ownerLookupFails = false;
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity').map(n => n.summary)).toEqual([
+      expect.stringContaining('Finding from an organization app.'),
+    ]);
+  }, 30_000);
 
   it('retries comments whose author permission could not be looked up', async () => {
     const f = fixture(mode);
