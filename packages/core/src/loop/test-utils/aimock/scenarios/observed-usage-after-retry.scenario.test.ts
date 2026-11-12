@@ -297,4 +297,48 @@ describeForAllEngines('Reading token usage after a retry recovers a call', engin
     await vi.waitFor(() => expect(onFinish).toHaveBeenCalled());
     expect(onFinish.mock.calls[0]![0].observedUsage).toMatchObject(expected);
   });
+
+  it('a run that hits its total time limit after a retry still gives final-answer processors the reported counts', async () => {
+    const llm = getMock();
+    const seenByProcessor: unknown[] = [];
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 0 },
+      { error: { message: 'overloaded', type: 'server_error' }, status: 503 },
+    );
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 1 },
+      {
+        toolCalls: [{ id: 'call-lookup', name: 'lookupOrder', arguments: JSON.stringify({ orderId: '4821' }) }],
+        usage: FINAL_STEP,
+      },
+    );
+    llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: FULL_REPLY }, { latency: 2000 });
+
+    const { agent } = await createSharedAgent(llm, {
+      engine,
+      tools: { lookupOrder },
+      memory: new MockMemory(),
+      errorProcessors: retryWithoutBackoff(),
+    });
+    const run = await agent.stream('Where is my order #4821?', {
+      modelSettings: { timeout: { totalMs: 800 } },
+      memory: { thread: `deadline-${engine}`, resource: 'customer-1' },
+      outputProcessors: [
+        {
+          id: 'usage-audit',
+          processOutputResult: ({ messages, result }) => {
+            seenByProcessor.push(result.observedUsage);
+            return messages;
+          },
+        },
+      ],
+    });
+    // A durable run returns { output, fullStream }, so drain the one stream both shapes have.
+    for await (const _chunk of run.fullStream) {
+    }
+
+    // The durable family runs its deadline pass with no usage and no steps, so it has no counts to give.
+    const reported = hidesFailedAttempt ? {} : { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
+    expect(seenByProcessor).toEqual([expect.objectContaining({ ...reported, incomplete: true })]);
+  });
 });

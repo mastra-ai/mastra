@@ -716,6 +716,7 @@ export async function runDurableDeadlineOutputPass({
         {
           text: resolveOutputText(messageList),
           usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+          observedUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined, incomplete: true },
           finishReason: 'error',
           steps: [],
         },
