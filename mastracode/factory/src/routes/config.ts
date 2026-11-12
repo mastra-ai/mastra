@@ -72,7 +72,15 @@ import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
  * the server process's own credentials (e.g. Amazon Bedrock's AWS chain).
  */
 export type ProviderCredentialSource =
-  'deployment' | 'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'oauth-org' | 'stored-user' | 'stored-org';
+  | 'deployment'
+  | 'oauth'
+  | 'stored'
+  | 'env'
+  | 'none'
+  | 'oauth-user'
+  | 'oauth-org'
+  | 'stored-user'
+  | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
