@@ -615,7 +615,7 @@ export const researchAgent = new Agent({
 
 The resolved tool ID comes from the provider: `openai.web_search`, `anthropic.web_search_20250305`, `google.google_search`, or `xai.web_search`.
 
-Models served through the Mastra gateway, such as `mastra/openai/gpt-5.6-sol`, use the gateway's own web search (`openrouter.web_search`) instead. Because the gateway doesn't run other provider-native tools, passing one makes the agent run fail with a `MastraError`.
+Models served through the Mastra gateway, such as `mastra/openai/gpt-5.6-sol`, use the gateway's own web search (`openrouter.web_search`) instead. Results from gateway web search arrive in the model's text response, without separate tool-call or source chunks. Other provider-native tools aren't available through the gateway, so passing one makes the agent run fail with a `MastraError`.
 
 The `search` key is only the agent-local tool name. Use any key. The `webSearchTool` value tells Mastra to use provider web search.
 
