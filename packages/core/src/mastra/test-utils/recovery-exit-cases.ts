@@ -10,6 +10,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
+import { runLivenessKey } from '../../workflows/evented/leases';
 import { Run } from '../../workflows/workflow';
 import { Mastra } from '../index';
 import { killableProcess } from './killable-process';
@@ -113,9 +114,14 @@ export function describeRecoveryExitCases({
             await a.mastra.shutdown({ drainTimeout: 0 });
           }
 
-          // The process is gone: nothing it held is renewed again.
+          // The process is gone: nothing it held is renewed again. A crash leaves the run's liveness to
+          // lapse one TTL after its last renewal; a shutdown expired it just now.
           a.kill();
-          const exitedAt = Date.now();
+          const liveness = await (await getStorage().getStore('workflows'))!.getRunOwnership({
+            runId: runLivenessKey(run.runId),
+          });
+          const livenessExpiresAt = liveness?.leaseExpiresAt?.getTime();
+          expect(livenessExpiresAt).toBeDefined();
 
           const b = await startInstance('B', connectPubsub(), executions);
           const restartedAt: number[] = [];
@@ -137,7 +143,7 @@ export function describeRecoveryExitCases({
             { timeout: 10_000, interval: 100 },
           );
           expect(restartedAt).toHaveLength(1);
-          expect(restartedAt[0]! - exitedAt).toBeGreaterThanOrEqual(GRACE_MS);
+          expect(restartedAt[0]!).toBeGreaterThanOrEqual(livenessExpiresAt! + GRACE_MS);
           expect(executions.filter(execution => execution.startsWith('B:'))).toEqual(['B:first', 'B:second']);
         },
         20_000,
