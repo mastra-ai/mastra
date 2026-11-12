@@ -3020,6 +3020,48 @@ describe('GET /web/factory/projects/:id/work-items/activity', () => {
     });
   });
 
+  describe('asked again by a tab that kept the answer', () => {
+    const since = '2026-06-12T00:00:00.000Z';
+    const createAt = async (instant: string) => {
+      vi.setSystemTime(new Date(instant));
+      await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    };
+
+    it('answers 304 without a body while no card of the period changed', async () => {
+      vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
+      await createAt('2026-06-15T12:00:00.000Z');
+      const app = buildApp(orgUser);
+
+      const first = await app.request(activityPath(since));
+      const etag = first.headers.get('etag');
+      expect(first.status).toBe(200);
+      expect(etag).toBeTruthy();
+
+      const again = await app.request(activityPath(since), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe('');
+    });
+
+    it('sends the instants again once a card is created inside the period', async () => {
+      vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
+      await createAt('2026-06-15T12:00:00.000Z');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(activityPath(since))).headers.get('etag');
+      expect(etag).toBeTruthy();
+
+      await createAt('2026-06-16T09:00:00.000Z');
+
+      const after = await app.request(activityPath(since), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      expect(after.headers.get('etag')).not.toBe(etag);
+      const body = await after.json();
+      expect(body.total).toBe(2);
+      // The instants follow the board's order, which this case does not pin.
+      expect(body.createdAt.toSorted()).toEqual(['2026-06-15T12:00:00.000Z', '2026-06-16T09:00:00.000Z']);
+      expect(body.doneAt).toEqual([]);
+    });
+  });
+
   it.each([
     ['no instant', ''],
     ['a date without a time', '?since=2026-06-12'],

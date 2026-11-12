@@ -53,7 +53,7 @@ import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/deci
 import { relatedCardIndex } from '../work-items/related-cards.js';
 import type { PullRequestFacts } from '../work-items/related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { boardSnapshot, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
+import { boardSnapshot, hashedBody, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
 import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
@@ -576,9 +576,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           return c.json(
             workItemStarters({
               board: boards.get(DEFAULT_BOARD_ID),
-              // Counted on the cards as clients receive them: the rules read `metadata`, which on the
-              // wire is the work item's facts with the card's own on top. Copying them here keeps one merge rule.
-              cards: cards.map(toWireWorkItem),
+              cards,
               failedCardIds: cardsWithFailedRun(decisions),
               now: Date.now(),
             }),
@@ -601,7 +599,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
           await workItems.ensureReady();
           const [cards, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
-          return c.json(workItemActivity(cards, boards, query.data.since));
+          const answer = hashedBody(workItemActivity(cards, boards, query.data.since));
+          // A draft tab asks again on each feed frame; most frames change no card of the period.
+          const headers = { ETag: answer.etag, 'Cache-Control': 'private, no-cache' };
+          if (matchesEtag(c.req.header('if-none-match'), answer.etag)) return c.body(null, 304, headers);
+          return c.body(answer.json, 200, { ...headers, 'Content-Type': 'application/json; charset=UTF-8' });
         },
       }),
 

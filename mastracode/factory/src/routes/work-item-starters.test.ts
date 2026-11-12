@@ -30,15 +30,23 @@ function triaged(id: string, overrides: Partial<Card> = {}): Card {
   return card(id, { sessions: { triage: TRIAGE_RUN }, ...overrides });
 }
 
-/** A pull request's own card as the list route sends it: its facts on the work item and merged into its metadata. */
-function pullRequest(number: number, stages: string[], facts: Record<string, unknown> = {}): Card {
+/**
+ * A pull request's own card as storage holds it: what GitHub reports (`source`) on its work item,
+ * Factory's review verdict on the card.
+ */
+function pullRequest(
+  number: number,
+  stages: string[],
+  source: { state?: string | null; draft?: boolean; merged?: boolean; sourceCreatedAt?: string } = {},
+  verdict: Record<string, unknown> = {},
+): Card {
   const base = card(`pr-${number}`, {
     stages,
     externalSource: { integrationId: 'github', type: 'pull-request', externalId: String(number) },
-    metadata: facts,
+    metadata: verdict,
   });
-  const state = typeof facts.state === 'string' ? facts.state : 'open';
-  return { ...base, workItem: { ...base.workItem, provider: 'github', state, metadata: facts } };
+  const { state = 'open', ...reported } = source;
+  return { ...base, workItem: { ...base.workItem, provider: 'github', state, metadata: reported } };
 }
 
 function count(cards: Card[], failedCardIds: string[] = []) {
@@ -150,7 +158,7 @@ describe('workItemStarters', () => {
   it('counts pull request cards as pull requests, not as untriaged intake', () => {
     const starters = count([
       pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(3) }),
-      pullRequest(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+      pullRequest(2, ['pr-review'], {}, { factoryAuthored: true, reviewVerdict: 'request changes' }),
     ]);
 
     expect(starters).toMatchObject({ review: { count: 1 }, changesRequested: 1, untriaged: 0, undecided: 0 });
@@ -219,22 +227,22 @@ describe('workItemStarters', () => {
 
   it('counts review feedback only on open Factory pull requests whose verdict is still current', () => {
     const starters = count([
-      pullRequest(1, ['pr-review'], {
-        factoryAuthored: true,
-        reviewVerdict: 'request changes',
-        reviewedHeadSha: 'abc',
-        pullRequestHeadSha: 'ABC',
-      }),
-      pullRequest(2, ['pr-review'], { reviewVerdict: 'request changes' }),
-      pullRequest(3, ['pr-review'], {
-        factoryAuthored: true,
-        reviewVerdict: 'request changes',
-        reviewedHeadSha: 'abc',
-        pullRequestHeadSha: 'def',
-      }),
-      pullRequest(4, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'approve' }),
-      pullRequest(5, ['done'], { factoryAuthored: true, reviewVerdict: 'request changes', merged: true }),
-      pullRequest(6, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes', draft: true }),
+      pullRequest(
+        1,
+        ['pr-review'],
+        {},
+        { factoryAuthored: true, reviewVerdict: 'request changes', reviewedHeadSha: 'abc', pullRequestHeadSha: 'ABC' },
+      ),
+      pullRequest(2, ['pr-review'], {}, { reviewVerdict: 'request changes' }),
+      pullRequest(
+        3,
+        ['pr-review'],
+        {},
+        { factoryAuthored: true, reviewVerdict: 'request changes', reviewedHeadSha: 'abc', pullRequestHeadSha: 'def' },
+      ),
+      pullRequest(4, ['pr-review'], {}, { factoryAuthored: true, reviewVerdict: 'approve' }),
+      pullRequest(5, ['done'], { merged: true }, { factoryAuthored: true, reviewVerdict: 'request changes' }),
+      pullRequest(6, ['pr-review'], { draft: true }, { factoryAuthored: true, reviewVerdict: 'request changes' }),
     ]);
 
     expect(starters.changesRequested).toBe(1);

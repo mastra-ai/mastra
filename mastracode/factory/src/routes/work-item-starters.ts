@@ -8,6 +8,7 @@ import type { z } from 'zod';
 
 import type { InstalledBoard } from '../boards/index.js';
 import { boardFlow, boardForWorkItem, isPullRequestCard } from '../boards/index.js';
+import type { FactoryRuleBoardFlow } from '../rules/types.js';
 import type { Card, FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 import { workItemBranchSource } from '../work-item-branch.js';
 import type { workItemStartersResponseSchema } from './contracts.js';
@@ -53,15 +54,17 @@ export function cardsWithFailedRun(
   return failed;
 }
 
-/** What the card's source says about it: a Factory card keeps it in its metadata, a synced one on its work item. */
+/**
+ * What the card's source says about it. A Factory card has no source: its facts are its work
+ * item's with the card's own on top, as clients read them. A synced one keeps them on its work item.
+ */
 function sourceFacts(card: Card): Record<string, unknown> {
   const { workItem } = card;
-  if (workItem.provider === 'factory') return card.metadata ?? {};
+  if (workItem.provider === 'factory') return { ...workItem.metadata, ...card.metadata };
   return { ...workItem.metadata, labels: workItem.labels, state: workItem.state };
 }
 
-function labelsOf(card: Card): string[] {
-  const { labels } = sourceFacts(card);
+function labelsOf({ labels }: Record<string, unknown>): string[] {
   return Array.isArray(labels) ? labels.filter((label): label is string => typeof label === 'string') : [];
 }
 
@@ -70,15 +73,13 @@ function isPullRequest(card: Card): boolean {
 }
 
 /** An open pull request that is not a draft. A source that reports no state is read off the card: `finished` says it sits in a terminal phase. */
-function isOpenPullRequest(card: Card, finished: boolean): boolean {
-  const facts = sourceFacts(card);
+function isOpenPullRequest(facts: Record<string, unknown>, finished: boolean): boolean {
   if (facts.state === 'merged' || facts.merged === true || facts.state === 'closed') return false;
   if (facts.state !== 'open' && finished) return false;
   return facts.draft !== true;
 }
 
-function openedAt(card: Card): number {
-  const { sourceCreatedAt } = sourceFacts(card);
+function openedAt(card: Card, { sourceCreatedAt }: Record<string, unknown>): number {
   const opened = typeof sourceCreatedAt === 'string' ? Date.parse(sourceCreatedAt) : Number.NaN;
   return Number.isNaN(opened) ? card.createdAt.getTime() : opened;
 }
@@ -104,8 +105,7 @@ interface StarterSeats {
   working: string[];
 }
 
-function starterSeats(board: InstalledBoard): StarterSeats {
-  const flow = boardFlow(board);
+function starterSeats(board: InstalledBoard, flow: FactoryRuleBoardFlow): StarterSeats {
   const working = Object.keys(board.phases).filter(phase => board.phaseKind(phase) === 'working');
   const triageContext = flow.triage === undefined ? undefined : board.roleForPhase(flow.triage);
   const build = flow.build;
@@ -140,8 +140,8 @@ function awaitsTriageDecision(board: InstalledBoard, seats: StarterSeats, card: 
 }
 
 /**
- * Count the cards behind each starter. `cards` are the project's cards as the list route sends
- * them, `failedCardIds` the cards whose run failed ({@link cardsWithFailedRun}).
+ * Count the cards behind each starter. `cards` are the project's cards as storage holds them,
+ * `failedCardIds` the cards whose run failed ({@link cardsWithFailedRun}).
  */
 export function workItemStarters({
   board,
@@ -165,9 +165,10 @@ export function workItemStarters({
   };
   if (!board) return starters;
 
-  const seats = starterSeats(board);
+  const flow = boardFlow(board);
+  const seats = starterSeats(board, flow);
   const firstPhase = Object.keys(board.phases)[0];
-  const triagePhase = boardFlow(board).triage;
+  const triagePhase = flow.triage;
   const horizon = now - REVIEW_HORIZON_MS;
   const areas = new Map<string, number>();
   let oldestOpenedAt = Number.POSITIVE_INFINITY;
@@ -184,8 +185,10 @@ export function workItemStarters({
       (board.initialPhase === firstPhase && !card.stages.some(stage => Object.hasOwn(board.phases, stage)));
 
     if (isPullRequest(card)) {
-      if (!isOpenPullRequest(card, finished)) continue;
-      const verdict = card.metadata ?? {};
+      const facts = sourceFacts(card);
+      if (!isOpenPullRequest(facts, finished)) continue;
+      // Factory's verdict sits on the card, over what the source reports.
+      const verdict = { ...card.workItem.metadata, ...card.metadata };
       if (
         verdict.factoryAuthored === true &&
         verdict.reviewVerdict === 'request changes' &&
@@ -194,7 +197,7 @@ export function workItemStarters({
         starters.changesRequested += 1;
       }
       if (!resting) continue;
-      const opened = openedAt(card);
+      const opened = openedAt(card, facts);
       if (opened < horizon) {
         starters.stale += 1;
       } else {
@@ -211,7 +214,7 @@ export function workItemStarters({
 
     const notStarted = resting || (triagePhase !== undefined && card.stages.includes(triagePhase));
     if (!notStarted) continue;
-    const labels = labelsOf(card);
+    const labels = labelsOf(sourceFacts(card));
     if (
       seats.planner !== undefined &&
       labels.some(label => label.toLowerCase() === 'bug') &&
