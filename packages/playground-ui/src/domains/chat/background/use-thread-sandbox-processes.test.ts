@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { devServer, processList } from '../tools/__tests__/fixtures/background-task';
-import { BACKGROUND_POLL_MS, processListPollInterval } from './use-thread-sandbox-processes';
+import { BACKGROUND_POLL_MS } from './background-polling';
+import { processListPollInterval } from './use-thread-sandbox-processes';
 
 describe('processListPollInterval', () => {
   it('keeps reading while one process still runs', () => {

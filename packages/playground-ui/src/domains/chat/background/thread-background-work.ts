@@ -26,9 +26,7 @@ export interface ThreadBackgroundWork {
   hasDeferredCalls: boolean;
 }
 
-export const EMPTY_BACKGROUND_WORK: ThreadBackgroundWork = { commands: [], exits: [], hasDeferredCalls: false };
-
-/** Live a notice is a `data-signal` part; read back from memory it is its own signal message. */
+/** In a live chat a notice is a `data-signal` part; read back from memory, it is its own signal message. */
 function messageSignals(message: MastraDBMessage): SignalData[] {
   if (message.role === 'signal') {
     if (isUserSignalType(getSignalType(message))) return [];
@@ -101,4 +99,29 @@ export function exitFor(work: ThreadBackgroundWork, command: CommandRef): Proces
 /** The command an exit notice reports on, so its row can name the command the call ran. */
 export function commandFor(work: ThreadBackgroundWork, exit: ProcessExitNotice): BackgroundCommand | undefined {
   return work.commands.findLast(command => reportsExitOf(work, exit, command));
+}
+
+function sameEntries<T>(a: readonly T[], b: readonly T[], same: (x: T, y: T) => boolean): boolean {
+  return (
+    a.length === b.length &&
+    a.every((entry, index) => {
+      const other = b[index];
+      return other !== undefined && same(entry, other);
+    })
+  );
+}
+
+const sameCommand = (a: BackgroundCommand, b: BackgroundCommand) =>
+  a.toolCallId === b.toolCallId && a.pid === b.pid && a.command === b.command && a.workspaceId === b.workspaceId;
+
+const sameExit = (a: ProcessExitNotice, b: ProcessExitNotice) =>
+  a.pid === b.pid && a.exitCode === b.exitCode && a.toolCallId === b.toolCallId && a.command === b.command;
+
+/** Whether two scans found the same work, so a chat that streamed only text keeps the earlier value. */
+export function sameBackgroundWork(a: ThreadBackgroundWork, b: ThreadBackgroundWork): boolean {
+  return (
+    a.hasDeferredCalls === b.hasDeferredCalls &&
+    sameEntries(a.commands, b.commands, sameCommand) &&
+    sameEntries(a.exits, b.exits, sameExit)
+  );
 }

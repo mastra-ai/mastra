@@ -43,7 +43,8 @@ beforeEach(() => {
   server.use(http.get(`${API}/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })));
 });
 
-const ChatProviders = ({ messages, children }: { messages: MastraDBMessage[]; children: ReactNode }) => (
+/** What any transcript renders in: a router, tooltips and approvals, with no chat around it. */
+const TranscriptProviders = ({ children }: { children: ReactNode }) => (
   <MemoryRouter>
     <TooltipProvider>
       <ToolCallProvider
@@ -57,14 +58,29 @@ const ChatProviders = ({ messages, children }: { messages: MastraDBMessage[]; ch
         toolCallApprovals={{}}
         networkToolCallApprovals={{}}
       >
-        <ChatAgentContext.Provider value={{ agentId: 'tasks-agent', threadId: THREAD_ID }}>
-          <ChatMessagesContext.Provider value={{ messages }}>
-            <BackgroundWorkProvider messages={messages}>{children}</BackgroundWorkProvider>
-          </ChatMessagesContext.Provider>
-        </ChatAgentContext.Provider>
+        {children}
       </ToolCallProvider>
     </TooltipProvider>
   </MemoryRouter>
+);
+
+/** The agent chat: a thread whose background work is tracked. */
+const ChatProviders = ({
+  messages,
+  threadId = THREAD_ID,
+  children,
+}: {
+  messages: MastraDBMessage[];
+  threadId?: string;
+  children: ReactNode;
+}) => (
+  <TranscriptProviders>
+    <ChatAgentContext.Provider value={{ agentId: 'tasks-agent', threadId }}>
+      <ChatMessagesContext.Provider value={{ messages }}>
+        <BackgroundWorkProvider messages={messages}>{children}</BackgroundWorkProvider>
+      </ChatMessagesContext.Provider>
+    </ChatAgentContext.Provider>
+  </TranscriptProviders>
 );
 
 /** The transcript and the dock above the composer, as the agent chat lays them out. */
@@ -176,6 +192,33 @@ describe('a background command in the chat', () => {
     });
   });
 
+  describe('when it renders outside a chat that tracks its thread', () => {
+    const NoThread = ({ children }: { children: ReactNode }) => (
+      <TranscriptProviders>
+        <ChatAgentContext.Provider value={{ agentId: 'tasks-agent' }}>
+          <BackgroundWorkProvider messages={[devServerTurn]}>{children}</BackgroundWorkProvider>
+        </ChatAgentContext.Provider>
+      </TranscriptProviders>
+    );
+
+    it.each([
+      ['a read-only transcript', TranscriptProviders],
+      ['a chat with no thread yet', NoThread],
+    ])('draws as the command call it was in %s', async (_, Wrapper) => {
+      const requests = serveSandbox();
+      const { queryClient } = renderWithProviders(
+        <Wrapper>
+          <MessageRow message={devServerTurn} />
+        </Wrapper>,
+      );
+
+      expect(await screen.findByTestId('sandbox-execution-badge')).not.toBeNull();
+      expect(screen.queryByTestId('background-command-badge')).toBeNull();
+      await waitForMutationsIdle(queryClient);
+      expect(requests).toEqual([]);
+    });
+  });
+
   describe('when a later turn reuses the call id of a command that exited', () => {
     it('keeps the later command running and in the dock', async () => {
       const later = backgroundCommandTurn({ messageId: 'assistant-later', pid: '5151', command: 'npm run watch' });
@@ -218,6 +261,28 @@ describe('a deferred call in the chat', () => {
       await confirm('Cancel task');
 
       await waitFor(() => expect(cancelled).toEqual([BACKGROUND_TASK_ID]));
+    });
+  });
+
+  describe('when the reader cancels its task from the dock after the turn ended', () => {
+    it('marks the call cancelled, without waiting for the thread to be read again', async () => {
+      server.use(
+        http.get(
+          `${API}/background-tasks/stream`,
+          () => new HttpResponse(eventStream(reportTaskStream), { headers: { 'Content-Type': 'text/event-stream' } }),
+        ),
+        http.get(`${API}/background-tasks/:taskId`, () => HttpResponse.json(backgroundTask('running'))),
+        http.post(`${API}/background-tasks/:taskId/cancel`, () => HttpResponse.json(backgroundTask('cancelled'))),
+      );
+      renderChat([deferredReportTurn]);
+      const card = await screen.findByTestId('tool-badge');
+      expect(within(card).getByText('Background')).not.toBeNull();
+
+      await screen.findByRole('group', { name: 'Reports slow report' });
+      await confirm('Cancel task');
+
+      expect(await within(card).findByText('cancelled')).not.toBeNull();
+      expect(within(card).queryByText('Background')).toBeNull();
     });
   });
 

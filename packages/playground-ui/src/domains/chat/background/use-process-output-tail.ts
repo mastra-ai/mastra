@@ -1,5 +1,5 @@
 import { useSandboxProcess } from '@mastra/react/hooks/workspace';
-import { BACKGROUND_POLL_MS } from './use-thread-sandbox-processes';
+import { pollWhileRunning } from './background-polling';
 
 /** Lines of output a process row shows, the window `kill_process` returns. */
 export const PROCESS_OUTPUT_TAIL = 50;
@@ -19,8 +19,6 @@ export function useProcessOutputTail({
     threadId,
     pid,
     tail: PROCESS_OUTPUT_TAIL,
-    queryOptions: {
-      refetchInterval: ({ state }) => (state.status !== 'error' && state.data?.running ? BACKGROUND_POLL_MS : false),
-    },
+    queryOptions: { refetchInterval: ({ state }) => pollWhileRunning(state.status, state.data?.running ?? false) },
   });
 }

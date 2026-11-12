@@ -1,24 +1,23 @@
 import type { SandboxProcess } from '@mastra/client-js';
+import type { QueryStatus } from '@tanstack/react-query';
 import { workspaceMetadata } from '../tools/badges/workspace-data-parts';
 import type { DataMessagePart } from '../tools/tool-card';
 import { BackgroundCommandCard } from './background-command-card';
 import type { BackgroundCommandCardProps, BackgroundCommandState } from './background-command-card';
 import { exitFor } from './thread-background-work';
-import { useThreadBackgroundWork } from './use-thread-background-work';
+import type { ThreadBackgroundWork } from './thread-background-work';
 import { useThreadSandboxProcesses } from './use-thread-sandbox-processes';
-import { useChatThreadId } from '@/domains/chat/context/chat-context';
 
 type CardProps = Omit<BackgroundCommandCardProps, 'state'>;
 
 export interface BackgroundCommandBadgeProps extends CardProps {
   pid: string;
   dataParts?: ReadonlyArray<DataMessagePart>;
+  work: ThreadBackgroundWork;
+  threadId: string;
 }
 
-function processState(
-  process: SandboxProcess | undefined,
-  status: 'pending' | 'error' | 'success',
-): BackgroundCommandState {
+function processState(process: SandboxProcess | undefined, status: QueryStatus): BackgroundCommandState {
   if (status === 'pending') return { phase: 'pending' };
   if (status === 'error') return { phase: 'unavailable' };
   if (process?.running) return { phase: 'running', startedAt: process.metadata?.startedAt };
@@ -42,17 +41,15 @@ function ListedBackgroundCommand({
 }
 
 /**
- * A background `execute_command` call. Its exit notice ends it; until one arrives the sandbox's
- * process list says whether it still runs.
+ * A background `execute_command` call in a chat that tracks its thread's background work. Its exit
+ * notice ends it; until one arrives the sandbox's process list says whether it still runs.
  */
-export function BackgroundCommandBadge({ pid, dataParts, ...card }: BackgroundCommandBadgeProps) {
-  const work = useThreadBackgroundWork();
-  const threadId = useChatThreadId();
+export function BackgroundCommandBadge({ pid, dataParts, work, threadId, ...card }: BackgroundCommandBadgeProps) {
   const exit = exitFor(work, { toolCallId: card.toolCallId, pid });
   const workspaceId = workspaceMetadata(dataParts, card.toolCallId)?.id;
 
   if (exit) return <BackgroundCommandCard {...card} state={{ phase: 'exited', exitCode: exit.exitCode }} />;
-  if (workspaceId && threadId) {
+  if (workspaceId) {
     return <ListedBackgroundCommand {...card} workspaceId={workspaceId} threadId={threadId} pid={pid} />;
   }
   return <BackgroundCommandCard {...card} state={{ phase: 'unavailable' }} />;

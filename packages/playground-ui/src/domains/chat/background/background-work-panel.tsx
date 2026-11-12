@@ -1,7 +1,7 @@
 import { BackgroundProcessRows } from './background-process-rows';
 import { BackgroundTaskRows } from './background-task-rows';
 import { exitFor } from './thread-background-work';
-import { useThreadBackgroundWork } from './use-thread-background-work';
+import { useChatBackgroundWork } from './use-chat-background-work';
 import { useChatThreadId } from '@/domains/chat/context/chat-context';
 import { TaskListContainer } from '@/ds/components/ai/task-list';
 
@@ -11,9 +11,9 @@ import { TaskListContainer } from '@/ds/components/ai/task-list';
  * work, and the panel stays hidden while nothing runs.
  */
 export function BackgroundWorkPanel() {
-  const work = useThreadBackgroundWork();
+  const work = useChatBackgroundWork();
   const threadId = useChatThreadId();
-  if (!threadId) return null;
+  if (!work || !threadId) return null;
 
   const workspaceIds = new Set(
     work.commands.flatMap(command => (command.workspaceId && !exitFor(work, command) ? [command.workspaceId] : [])),

@@ -1,13 +1,13 @@
 import { parseToolArgs } from '../tools/badges/workspace-data-parts';
 import { BackgroundTag } from './background-tag';
 import { ExitCode } from './exit-code';
+import { MutedMeta } from './muted-meta';
 import { RunningFor } from './running-for';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { presentTool, ToolCallBody, toolCallHasBody } from '@/ds/components/ai/tool-call';
 import type { ToolCallView } from '@/ds/components/ai/tool-call';
-import { Txt } from '@/ds/components/Txt';
 
 /** Where a background process stands, as far as the chat can tell. */
 export type BackgroundCommandState =
@@ -32,17 +32,8 @@ const cardStatus = (state: BackgroundCommandState): ActivityStatus => {
   return 'idle';
 };
 
-function StateTag({ state }: { state: BackgroundCommandState }) {
-  if (state.phase === 'running') return <BackgroundTag />;
-  if (state.phase === 'pending') return <BackgroundTag live={false} />;
-  return null;
-}
-
-const MutedMeta = ({ children }: { children: string }) => (
-  <Txt as="span" variant="meta" tone="muted" className="px-1">
-    {children}
-  </Txt>
-);
+// The tag pulses while the process runs and holds still while the first read is on its way.
+const TAG_LIVE: Partial<Record<BackgroundCommandState['phase'], boolean>> = { running: true, pending: false };
 
 function BackgroundCommandOutcome({ state }: { state: BackgroundCommandState }) {
   if (state.phase === 'running') {
@@ -53,8 +44,6 @@ function BackgroundCommandOutcome({ state }: { state: BackgroundCommandState }) 
   if (state.phase === 'unavailable') return <MutedMeta>status unavailable</MutedMeta>;
   return null;
 }
-
-const hasTag = (state: BackgroundCommandState) => state.phase === 'running' || state.phase === 'pending';
 
 /** An `execute_command` call that started a background process: drawn by how the process stands, not by the call. */
 export function BackgroundCommandCard({
@@ -71,6 +60,7 @@ export function BackgroundCommandCard({
   const { icon: ToolIcon, label, detail, description, command } = presentTool(toolName, parsedArgs);
   const status = cardStatus(state);
   const view: ToolCallView = { toolName, args: parsedArgs, status, command, result };
+  const tagLive = TAG_LIVE[state.phase];
 
   return (
     <ToolApprovalBadge
@@ -81,7 +71,7 @@ export function BackgroundCommandCard({
       detail={detail}
       description={description}
       status={status}
-      badges={hasTag(state) ? <StateTag state={state} /> : undefined}
+      badges={tagLive === undefined ? undefined : <BackgroundTag live={tagLive} />}
       extraInfo={<BackgroundCommandOutcome state={state} />}
     >
       {toolCallHasBody(view) && <ToolCallBody {...view} />}

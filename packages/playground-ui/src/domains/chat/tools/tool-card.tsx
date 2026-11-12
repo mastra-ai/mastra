@@ -2,12 +2,14 @@ import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext, useMemo } from 'react';
 import { BackgroundCommandBadge } from '../background/background-command-badge';
 import { backgroundProcessPid } from '../background/background-process';
+import { useChatBackgroundWork } from '../background/use-chat-background-work';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge';
 import { DeferredMcpInputRequest, ForegroundMcpInputRequest } from './badges/mcp-input-request-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
+import { useBackgroundTaskStatus } from './badges/use-background-task-status';
 import { useDeferredInputRequest } from './badges/use-deferred-input-request';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { suspendedMcpInputRequest } from './mcp-input-request';
@@ -19,6 +21,7 @@ import {
   useChatModelContext,
   useChatRunning,
   useChatSend,
+  useChatThreadId,
 } from '@/domains/chat/context/chat-context';
 import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
@@ -29,6 +32,7 @@ import {
   codeModeCall,
   isAgentCall,
   isDeferredCall,
+  isStoppedBackgroundCall,
   isSettledState,
   isWorkflowCall,
   toolCardKind,
@@ -83,7 +87,7 @@ export const ToolCardInner = ({
   output,
   modelOutput,
   backgroundTaskId,
-  backgroundTaskStatus,
+  backgroundTaskStatus: partBackgroundTaskStatus,
   toolCallId,
   state,
   errorText,
@@ -92,6 +96,9 @@ export const ToolCardInner = ({
   readOnly = false,
 }: ToolCardProps) => {
   const { data: mcpAppTools } = useMcpAppTools();
+  const backgroundTaskStatus = useBackgroundTaskStatus(backgroundTaskId, partBackgroundTaskStatus);
+  const backgroundWork = useChatBackgroundWork();
+  const threadId = useChatThreadId();
   const send = useChatSend();
   const chatAgent = useContext(ChatAgentContext);
   const { isRunning } = useChatRunning();
@@ -117,6 +124,10 @@ export const ToolCardInner = ({
     toolName,
     toolCallId,
   );
+  // A stopped call's task can't be resumed, though its suspension may outlive it in the metadata.
+  const suspendPayload = isStoppedBackgroundCall(backgroundTaskId, backgroundTaskStatus)
+    ? undefined
+    : suspendedToolMetadata?.suspendPayload;
   const status = badgeStatus({ toolName, toolCallId, state }, dataParts, isRunning);
   // Any deferred call, whatever its output looks like: live it holds the MCP task's progress records,
   // after a reload the "Background task started" placeholder.
@@ -221,7 +232,7 @@ export const ToolCardInner = ({
               metadata={metadata}
               toolCallId={toolCallId}
               toolApprovalMetadata={toolApprovalMetadata}
-              suspendPayload={suspendedToolMetadata?.suspendPayload}
+              suspendPayload={suspendPayload}
               isNetwork={isNetwork}
               toolCalled={toolCalled}
               withoutArgs={isAgent || isWorkflow}
@@ -280,6 +291,28 @@ export const ToolCardInner = ({
             status={status}
           />
         );
+      case 'background_command': {
+        const pid = backgroundProcessPid(toolName, output);
+        if (pid && backgroundWork && threadId) {
+          return (
+            <BackgroundCommandBadge
+              toolName={toolName}
+              toolCallId={toolCallId}
+              args={input}
+              result={output}
+              pid={pid}
+              dataParts={dataParts}
+              work={backgroundWork}
+              threadId={threadId}
+              toolApprovalMetadata={toolApprovalMetadata}
+              isNetwork={isNetwork}
+              isGenerateMode={metadata?.mode === 'generate'}
+            />
+          );
+        }
+        // Outside a chat that tracks its background work (Agent Builder, traces), it draws as the call it was.
+        // falls through
+      }
       case 'sandbox':
         return (
           <SandboxExecutionBadge
@@ -295,23 +328,6 @@ export const ToolCardInner = ({
             status={status}
           />
         );
-      case 'background_command': {
-        const pid = backgroundProcessPid(toolName, output);
-        if (!pid) break;
-        return (
-          <BackgroundCommandBadge
-            toolName={toolName}
-            toolCallId={toolCallId}
-            args={input}
-            result={output}
-            pid={pid}
-            dataParts={dataParts}
-            toolApprovalMetadata={toolApprovalMetadata}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
-        );
-      }
       case 'code_mode': {
         const call = codeModeCall(input, output);
         if (call) {
@@ -365,7 +381,7 @@ export const ToolCardInner = ({
           metadata={metadata}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
-          suspendPayload={suspendedToolMetadata?.suspendPayload}
+          suspendPayload={suspendPayload}
           isNetwork={isNetwork}
           toolCalled={toolCalled}
           status={status}

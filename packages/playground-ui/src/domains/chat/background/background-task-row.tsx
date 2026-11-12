@@ -1,5 +1,7 @@
 import type { BackgroundTaskEvent } from '@mastra/react/hooks/agents';
 import { useCancelBackgroundTask } from '@mastra/react/hooks/agents';
+import { memoryThreadMessagesQueryKey } from '@mastra/react/hooks/memory';
+import { useQueryClient } from '@tanstack/react-query';
 import { backgroundTaskOutputText } from './background-task-output';
 import { BackgroundWorkRow } from './background-work-row';
 import { StopBackgroundWorkButton } from './stop-background-work-button';
@@ -15,9 +17,16 @@ const startedAtOf = (task: BackgroundTaskEvent): number | undefined => {
   return Number.isNaN(time) ? undefined : time;
 };
 
-export function BackgroundTaskRow({ task }: { task: BackgroundTaskEvent }) {
+export function BackgroundTaskRow({ task, threadId }: { task: BackgroundTaskEvent; threadId: string }) {
   const { icon: Icon, label, detail, description } = presentTool(task.toolName, task.args);
+  const queryClient = useQueryClient();
   const cancel = useCancelBackgroundTask();
+  // A cancel starts no run, so nothing refreshes the chat; read the thread again so its call comes back cancelled.
+  const refreshThread = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['memory', 'messages', threadId] }),
+      queryClient.invalidateQueries({ queryKey: memoryThreadMessagesQueryKey(threadId) }),
+    ]);
   const output = backgroundTaskOutputText(task.output);
 
   return (
@@ -34,6 +43,7 @@ export function BackgroundTaskRow({ task }: { task: BackgroundTaskEvent }) {
           pending={cancel.isPending}
           onConfirm={() =>
             cancel.mutate(task.taskId, {
+              onSuccess: () => void refreshThread(),
               onError: error => toast.error(`Couldn't cancel the task: ${error.message}`),
             })
           }

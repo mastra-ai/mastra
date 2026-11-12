@@ -5,7 +5,7 @@ import { WORKSPACE_TOOLS } from '../tools/workspace-tool-constants';
 import { processExitNotice, taskNotice } from './background-notices';
 import { ExitCode } from './exit-code';
 import { commandFor } from './thread-background-work';
-import { useThreadBackgroundWork } from './use-thread-background-work';
+import { useChatBackgroundWork } from './use-chat-background-work';
 import {
   Activity,
   ActivityContent,
@@ -63,10 +63,10 @@ function FinishedRow({ toolName, label, detail, status, outcome, message, defaul
 
 /**
  * The row a background process's exit notice or a background task's notice draws: the work ended, apart
- * from the call that started it. Undefined for any other signal.
+ * from the call that started it. Renders nothing for any other signal.
  */
 export function BackgroundFinishedNotice({ signal, defaultOpen }: { signal: SignalData; defaultOpen?: boolean }) {
-  const work = useThreadBackgroundWork();
+  const work = useChatBackgroundWork();
   const message = signalContentsToText(signal.contents);
   const exit = processExitNotice(signal);
   if (exit) {
@@ -74,7 +74,7 @@ export function BackgroundFinishedNotice({ signal, defaultOpen }: { signal: Sign
       <FinishedRow
         toolName={WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND}
         label="Command finished"
-        detail={commandFor(work, exit)?.command ?? exit.command ?? `PID ${exit.pid}`}
+        detail={(work && commandFor(work, exit)?.command) ?? exit.command ?? `PID ${exit.pid}`}
         status={exit.exitCode === 0 ? 'idle' : 'error'}
         outcome={<ExitCode exitCode={exit.exitCode} />}
         message={message}
