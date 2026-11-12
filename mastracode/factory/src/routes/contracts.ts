@@ -465,7 +465,7 @@ const boundedLimitSchema = (defaultValue: number, max: number) =>
       const parsed = value ? Number.parseInt(value, 10) : defaultValue;
       return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
     });
-/** Without `sessionId`, `scope`, `started` or `source`, the list is the whole board. */
+/** Without `sessionId`, `scope`, `started`, `source` or `workItemId`, the list is the whole board. */
 const workItemListQuerySchema = z
   .object({
     /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
@@ -480,6 +480,8 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
+    /** Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing. */
+    workItemId: z.array(uuidSchema).min(1).max(100).optional(),
     /**
      * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
      * this server did not issue reads as none, and the board answers whole.
@@ -506,9 +508,15 @@ const workItemListQuerySchema = z
     path: ['source'],
     message: 'Send source without started, scope or sessionId',
   })
+  .refine(query => !(query.workItemId && (query.source || query.started || query.scope || query.sessionId)), {
+    path: ['workItemId'],
+    message: 'Send workItemId without source, started, scope or sessionId',
+  })
   // A narrowed list is not the board a cursor names, so it answers as it does without one.
   .transform(query =>
-    query.sessionId || query.scope || query.started || query.source ? { ...query, since: undefined } : query,
+    query.sessionId || query.scope || query.started || query.source || query.workItemId
+      ? { ...query, since: undefined }
+      : query,
   );
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
