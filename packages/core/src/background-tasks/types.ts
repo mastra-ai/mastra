@@ -137,6 +137,7 @@ export interface TaskPayload {
   agentId: string;
   threadId?: string;
   resourceId?: string;
+  /** Task timeout in ms. Defaults to the manager's `defaultTimeoutMs`. `0` means no timeout. */
   timeoutMs?: number;
   maxRetries?: number;
   /** See `BackgroundTask.expiresAt`. */
@@ -300,7 +301,7 @@ export interface BackgroundTaskManagerConfig {
    * - 'fallback-sync': returns a signal to run the tool synchronously in the agentic loop
    */
   backpressure?: 'queue' | 'reject' | 'fallback-sync';
-  /** Default timeout for tasks in ms. Default: 300_000 (5 minutes) */
+  /** Default timeout for tasks in ms. `0` means no timeout. Default: 300_000 (5 minutes) */
   defaultTimeoutMs?: number;
   /** Default retry configuration */
   defaultRetries?: RetryConfig;
@@ -364,7 +365,10 @@ export interface BackgroundTaskManagerConfig {
   wokenRunsEndAfterTurn?: boolean;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
-  /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
+  /**
+   * Optional callback invoked when a task fails (in addition to stream + message list injection).
+   * Also fires when recovery marks a task failed because its worker stopped before it finished.
+   */
   onTaskFailed?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task is cancelled */
   onTaskCancelled?: (task: BackgroundTask) => void | Promise<void>;
@@ -406,7 +410,7 @@ export interface ToolBackgroundConfig {
    *   opts in via `_background` — eligibility only grants the *option*.
    */
   defaultDisposition?: 'foreground' | 'deferred';
-  /** Override the manager's default timeout for this tool */
+  /** Override the manager's default timeout for this tool, in ms. `0` means no timeout. */
   timeoutMs?: number;
   /** Override retry config for this tool */
   maxRetries?: number;

@@ -139,9 +139,13 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       } else {
         workflowAbortSignal.addEventListener('abort', onWorkflowAbort, { once: true });
       }
-      const timeoutHandle = setTimeout(() => {
-        abortController.abort(new Error(`Task timed out after ${task.timeoutMs}ms`));
-      }, task.timeoutMs);
+      // `timeoutMs: 0` means no timeout.
+      const timeoutHandle =
+        task.timeoutMs === 0
+          ? undefined
+          : setTimeout(() => {
+              abortController.abort(new Error(`Task timed out after ${task.timeoutMs}ms`));
+            }, task.timeoutMs);
 
       // Wrap the workflow runtime's `suspend` so we persist
       // `status: 'suspended'` + `suspendPayload`, fire the per-task

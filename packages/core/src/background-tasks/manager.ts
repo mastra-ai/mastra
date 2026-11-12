@@ -23,6 +23,7 @@ const WORKER_GROUP = 'background-task-workers';
 const SHUTDOWN_GRACE_PERIOD_MS = 5_000;
 const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
 const TASK_OWNERSHIP_LOST_MESSAGE = 'Background task execution ownership was taken over by another worker';
+const WORKER_TERMINATED_MESSAGE = 'Worker process terminated before task completed';
 
 function workflowRunError(result: { status: string; error?: unknown; tripwire?: { reason?: string } }): unknown {
   if (result.error !== undefined) return result.error;
@@ -299,13 +300,6 @@ export class BackgroundTaskManager {
         ]);
         return;
       }
-
-      if (this.config.recoverStaleTasksOnStart) {
-        // Recover stale tasks from a previous process — only workers should
-        // attempt recovery since they own execution.
-        await this.recoverStaleTasks();
-        this.#startPinSweep();
-      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
@@ -320,6 +314,15 @@ export class BackgroundTaskManager {
       lateSubscriptions.push([TOPIC_RESULT, this.resultCallback]);
       await this.#releaseLateInitSubscriptions(lateSubscriptions);
       return;
+    }
+
+    if (!isProducerOnly && this.config.recoverStaleTasksOnStart) {
+      // Recover stale tasks from a previous process. Only workers attempt
+      // recovery because they own execution. This runs after the result
+      // subscription so this process receives the `task.failed` events that
+      // recovery publishes and fires `onTaskFailed` for them.
+      await this.recoverStaleTasks();
+      this.#startPinSweep();
     }
 
     // Start periodic cleanup if configured
@@ -2289,17 +2292,18 @@ export class BackgroundTaskManager {
             fence,
           );
         } else {
-          await storage.updateTask(
+          const failed = await storage.updateTask(
             task.id,
             {
               status: 'failed',
-              error: { message: 'Worker process terminated before task completed' },
+              error: { message: WORKER_TERMINATED_MESSAGE },
               completedAt: new Date(),
               ownerId: undefined,
               leaseExpiresAt: undefined,
             },
             fence,
           );
+          if (failed) await this.#announceRecoveredFailure(storage, task.id);
         }
       }
 
@@ -2361,7 +2365,7 @@ export class BackgroundTaskManager {
           task.id,
           {
             status: 'failed',
-            error: { message: 'Worker process terminated before task completed' },
+            error: { message: WORKER_TERMINATED_MESSAGE },
             completedAt: new Date(),
             ownerId: undefined,
             leaseExpiresAt: undefined,
@@ -2378,8 +2382,29 @@ export class BackgroundTaskManager {
             retry ? 'Retrying it on another worker.' : 'Marking it failed.'
           }`,
         );
+      if (!retry) await this.#announceRecoveredFailure(storage, task.id);
     }
     return retry && recovered;
+  }
+
+  /**
+   * Recovery fails tasks with a direct storage write, so run the same hooks
+   * and publish the same `task.failed` event a failed attempt would. Per-task
+   * hooks only exist when the task was dispatched from this process; after a
+   * restart only the global `onTaskFailed` fires (from `handleResult`).
+   */
+  async #announceRecoveredFailure(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    taskId: string,
+  ): Promise<void> {
+    try {
+      const failedTask = await storage.getTask(taskId);
+      if (!failedTask) return;
+      await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error });
+      await this.publishLifecycleEvent('task.failed', failedTask);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn(`background-task recovery failure event failed for ${taskId}:`, error as any);
+    }
   }
 
   /**
