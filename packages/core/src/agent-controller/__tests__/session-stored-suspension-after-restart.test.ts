@@ -166,4 +166,40 @@ describe('a suspension stored by a process that is gone', () => {
     await reopened.restoreStoredToolSuspension('call-unknown');
     expect(list).toHaveBeenCalledTimes(10);
   });
+
+  it.each([
+    { total: 1_000, duplicatePage: 9, accepted: false },
+    { total: 1_001, duplicatePage: 10, accepted: false },
+    { total: 1_000, duplicatePage: undefined, accepted: true },
+  ])('restores only an unambiguous call after a complete scan ($total runs, duplicate page $duplicatePage)', async ({
+    total,
+    duplicatePage,
+    accepted,
+  }) => {
+    const { makeController } = await setup();
+    const first = await makeController('code');
+    const parked = await first.createSession({ id: 'session-1', ownerId: 'owner-1' });
+    await parked.thread.create();
+    const threadId = parked.thread.getId()!;
+    await parked.sendMessage({ content: 'Read /x' });
+
+    const second = await makeController('code');
+    const reopened = await second.createSession({ id: 'session-1', ownerId: 'owner-1', threadId } as never);
+    const agent = reopened.machinery.getAgent();
+    const stored = await agent.listSuspendedRuns({ threadId, resourceId: reopened.identity.getResourceId() });
+    const run = stored.runs[0]!;
+    const list = vi.spyOn(agent, 'listSuspendedRuns').mockImplementation(async ({ page = 0 }) => ({
+      total,
+      runs:
+        page === 0
+          ? [run]
+          : page === duplicatePage
+            ? [{ ...run, runId: 'duplicate-run' }]
+            : [],
+    }));
+
+    await reopened.restoreStoredToolSuspension('call-1');
+    expect(list).toHaveBeenCalledTimes(10);
+    expect(reopened.claimToolSuspension('call-1').accepted).toBe(accepted);
+  });
 });

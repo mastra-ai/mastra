@@ -615,9 +615,9 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
+  const anchored = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
-  if (messages.every(message => onScreenIndex.has(message))) return reconciled;
+  if (messages.every(message => onScreenIndex.has(message))) return reconcileToolResults(anchored, messages);
 
   const entries: TimelineEntry[] = [];
   let cursor = 0;
@@ -631,13 +631,13 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
     }
 
     if (anchorIndex < cursor) continue;
-    entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    entries.push(...anchored.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
     missing = [];
     cursor = anchorIndex;
   }
-  entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
+  entries.push(...anchored.entries.slice(cursor), ...messagesToEntries(missing));
 
-  return { ...reconciled, entries };
+  return reconcileToolResults({ ...anchored, entries }, messages);
 }
 
 function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
