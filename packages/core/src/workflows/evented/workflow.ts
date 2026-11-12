@@ -2669,13 +2669,20 @@ export class EventedRun<
     if (workflowSpan) this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     // A worker in another process that suspends this segment has no live span to save, so
     // save the resumed root's context now; its next resume then continues this segment.
+    // A failed save only costs that next resume its link, so it never fails this one.
     const resumeTracingContext = getWorkflowResumeTracingContext(workflowSpan);
     if (resumeTracingContext) {
-      await workflowsStore.updateWorkflowState({
-        workflowName: this.workflowId,
-        runId: this.runId,
-        opts: { status: 'running', expectedStatus: 'running', tracingContext: resumeTracingContext },
-      });
+      await workflowsStore
+        .updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: 'running', expectedStatus: 'running', tracingContext: resumeTracingContext },
+        })
+        .catch(error => {
+          this.mastra
+            ?.getLogger()
+            ?.warn(`[Workflow ${this.workflowId}] Failed to save resume tracing context for run ${this.runId}`, error);
+        });
     }
 
     const releaseClaimIfUnused = async () => {
