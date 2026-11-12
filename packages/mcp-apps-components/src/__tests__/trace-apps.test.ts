@@ -1,15 +1,16 @@
 // The built package, as consumers (and `@mastra/server`) install it.
-import { traceListApp } from '@mastra/mcp-apps-components/trace-list';
+import { observabilityExplorerApp } from '@mastra/mcp-apps-components/observability-explorer';
 import { traceViewerApp } from '@mastra/mcp-apps-components/trace-viewer';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { serveAndConnect } from './greeting-server';
-import { TRACE_LIST_URI } from './trace-list-server';
+import { EXPLORER_URI } from './observability-explorer-server';
 import { TRACE_VIEWER_URI, traceServer } from './trace-server';
 
 let host: Awaited<ReturnType<typeof serveAndConnect>>;
 beforeAll(async () => {
   host = await serveAndConnect(
-    traceServer({ appResources: { [TRACE_VIEWER_URI]: traceViewerApp, [TRACE_LIST_URI]: traceListApp } }).server,
+    traceServer({ appResources: { [TRACE_VIEWER_URI]: traceViewerApp, [EXPLORER_URI]: observabilityExplorerApp } })
+      .server,
   );
 });
 afterAll(() => host.close());
@@ -17,7 +18,7 @@ afterAll(() => host.close());
 // Hosts load an app's HTML into a sandboxed iframe that can't fetch sibling files.
 describe.each([
   ['trace viewer', TRACE_VIEWER_URI],
-  ['trace list', TRACE_LIST_URI],
+  ['observability explorer', EXPLORER_URI],
 ])('the %s', (_name, uri) => {
   it('is served, styles included, as one self-contained page', async () => {
     const { contents } = await host.client.readResource({ uri });

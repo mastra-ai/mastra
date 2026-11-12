@@ -18,7 +18,7 @@ import { MastraServer } from '../index';
 
 const UI = 'io.modelcontextprotocol/ui';
 const TRACE_VIEWER = 'ui://mastra/trace-viewer';
-const TRACE_LIST = 'ui://mastra/trace-list';
+const EXPLORER = 'ui://mastra/observability-explorer';
 
 /** Bearer token = role. `tracer` may read traces; `runner` may use the MCP server but not read traces. */
 const PERMISSIONS: Record<string, string[]> = {
@@ -133,17 +133,17 @@ describe('built-in MCP server apps', () => {
     expect(span.span.spanId).toBe(spanId);
   });
 
-  it('opens trace queries in the trace list, with its app-only capabilities tool', async () => {
+  it('opens trace queries in the observability explorer, with its app-only capabilities tool', async () => {
     const client = await server.connect('tracer', { rendersApps: true });
 
     const { tools } = await client.listTools();
-    expect(tools.find(tool => tool.name === 'query_traces')?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST } });
+    expect(tools.find(tool => tool.name === 'query_traces')?._meta).toMatchObject({ ui: { resourceUri: EXPLORER } });
     // Hosts keep app-only tools from the model but list them; the list asks which views the store supports.
     const capabilitiesTool = tools.find(tool => tool.name === 'get_observability_capabilities');
-    expect(capabilitiesTool?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST, visibility: ['app'] } });
+    expect(capabilitiesTool?._meta).toMatchObject({ ui: { resourceUri: EXPLORER, visibility: ['app'] } });
 
-    const page = await client.readResource({ uri: TRACE_LIST });
-    expect(page.contents[0]).toMatchObject({ uri: TRACE_LIST, mimeType: 'text/html;profile=mcp-app' });
+    const page = await client.readResource({ uri: EXPLORER });
+    expect(page.contents[0]).toMatchObject({ uri: EXPLORER, mimeType: 'text/html;profile=mcp-app' });
 
     // The list's own reads, as this caller: which views the store supports, then the traces.
     const { capabilities } = json(await client.callTool({ name: 'get_observability_capabilities', arguments: {} }));
@@ -238,19 +238,19 @@ it('serves no apps with `server.mcp.apps: false`', async () => {
   const { tools } = await client.listTools();
   expect(tools.find(tool => tool.name === 'get_trace')?._meta?.ui).toBeUndefined();
   await expect(client.readResource({ uri: TRACE_VIEWER })).rejects.toThrow();
-  await expect(client.readResource({ uri: TRACE_LIST })).rejects.toThrow();
+  await expect(client.readResource({ uri: EXPLORER })).rejects.toThrow();
   expect(tools.map(tool => tool.name)).not.toContain('get_observability_capabilities');
 });
 
-it('opens logs and metrics in the trace list, telling it which of those views the caller can use', async () => {
+it('opens logs and metrics in the observability explorer, telling it which of those views the caller can use', async () => {
   const { connect } = await start({ toolsets: ['observability', 'observability_analytics'] });
   const client = await connect('tracer', { rendersApps: true });
 
   const { tools } = await client.listTools();
   for (const name of ['list_logs', 'analyze_metrics'])
-    expect(tools.find(tool => tool.name === name)?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST } });
+    expect(tools.find(tool => tool.name === name)?._meta).toMatchObject({ ui: { resourceUri: EXPLORER } });
   const values = tools.find(tool => tool.name === 'list_observability_values');
-  expect(values?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST, visibility: ['app'] } });
+  expect(values?._meta).toMatchObject({ ui: { resourceUri: EXPLORER, visibility: ['app'] } });
 
   const { tools: served } = json(await client.callTool({ name: 'get_observability_capabilities', arguments: {} }));
   expect(served).toEqual({ logs: true, metrics: true });
@@ -261,7 +261,7 @@ it('opens logs and metrics in the trace list, telling it which of those views th
   expect(names).toContain('helper');
 });
 
-it("tells the trace list metrics aren't served without the analytics toolset", async () => {
+it("tells the observability explorer metrics aren't served without the analytics toolset", async () => {
   const { connect } = await start({ toolsets: ['observability'] });
   const client = await connect('tracer', { rendersApps: true });
 
@@ -271,13 +271,13 @@ it("tells the trace list metrics aren't served without the analytics toolset", a
   expect(served).toEqual({ logs: true, metrics: false });
 });
 
-it('opens list_traces in the trace list on a store without trace queries', async () => {
+it('opens list_traces in the observability explorer on a store without trace queries', async () => {
   const { connect, traceId } = await start({}, { traceQuery: false });
   const client = await connect('tracer', { rendersApps: true });
 
   const { tools } = await client.listTools();
   expect(tools.map(tool => tool.name)).not.toContain('query_traces');
-  expect(tools.find(tool => tool.name === 'list_traces')?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST } });
+  expect(tools.find(tool => tool.name === 'list_traces')?._meta).toMatchObject({ ui: { resourceUri: EXPLORER } });
   // The list still learns what the store supports, and falls back to listing.
   const { capabilities } = json(await client.callTool({ name: 'get_observability_capabilities', arguments: {} }));
   expect(capabilities.traceQuery).toBe(false);

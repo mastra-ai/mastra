@@ -9,7 +9,7 @@ import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
 import { traceSpans } from './trace-server';
 
-export const TRACE_LIST_URI = 'ui://mastra/trace-list';
+export const EXPLORER_URI = 'ui://mastra/observability-explorer';
 
 const at = (seconds: number) => new Date(Date.now() - 60_000 + seconds * 1000).toISOString();
 
@@ -125,12 +125,12 @@ function capabilities(traceQuery: boolean, logs: boolean) {
 }
 
 /**
- * The observability tools the trace list calls, answering as the built-in server does for a store that runs
+ * The observability tools the observability explorer calls, answering as the built-in server does for a store that runs
  * trace queries (`traceQuery`) or one that only lists traces. Requests are validated as the real tools validate
  * them: `query_traces` with core's request schema, `list_traces` with integer paging. With `logs`, the store
  * also keeps logs and the caller can read them through `list_logs`, filtered by `level`.
  */
-export function traceListServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
+export function observabilityExplorerServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
   const calls: { tool: string; args: Record<string, any> }[] = [];
   const record = (tool: string, args: Record<string, any>) => calls.push({ tool, args });
 

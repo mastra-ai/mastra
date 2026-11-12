@@ -101,7 +101,7 @@ export interface BuiltinMCPContext {
   apps?: BuiltinMCPApps;
 }
 
-export type BuiltinMCPApps = { traceViewer?: string; traceList?: string };
+export type BuiltinMCPApps = { traceViewer?: string; observabilityExplorer?: string };
 
 /** A backing route's permission is a read when every permission it accepts has the `read` action. */
 function isReadRoute(route: ServerRoute): boolean {

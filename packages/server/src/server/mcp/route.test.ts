@@ -146,7 +146,7 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
   };
 
   const VIEWER = '@mastra/mcp-apps-components/trace-viewer';
-  const LIST = '@mastra/mcp-apps-components/trace-list';
+  const LIST = '@mastra/mcp-apps-components/observability-explorer';
   afterEach(() => {
     vi.doUnmock(VIEWER);
     vi.doUnmock(LIST);
@@ -175,16 +175,16 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
       () => vi.importActual(VIEWER),
       () => vi.importActual(LIST),
     );
-    expect(apps.sort()).toEqual(['ui://mastra/trace-list', 'ui://mastra/trace-viewer']);
+    expect(apps.sort()).toEqual(['ui://mastra/observability-explorer', 'ui://mastra/trace-viewer']);
   });
 
-  it('serves the trace viewer from an older version without the trace list', async () => {
+  it('serves the trace viewer from an older version without the observability explorer', async () => {
     const apps = await serveWithAppsImport(
       () => vi.importActual(VIEWER),
       () => {
         throw Object.assign(
           new Error(
-            'Package subpath \'./trace-list\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
+            'Package subpath \'./observability-explorer\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
           ),
           { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
         );

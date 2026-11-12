@@ -6,9 +6,9 @@ import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { TraceList } from '../apps/trace-list/trace-list';
+import { ObservabilityExplorer } from '../apps/observability-explorer/observability-explorer';
 import { serveAndConnect } from './greeting-server';
-import { traceListServer } from './trace-list-server';
+import { observabilityExplorerServer } from './observability-explorer-server';
 
 // jsdom doesn't lay out, so Studio's virtualized lists would measure a zero-height viewport and draw no rows.
 const restoreViewport: Array<() => void> = [];
@@ -34,7 +34,7 @@ afterEach(async () => {
  * `AppBridge` hands it the call's arguments and result and forwards its tool calls back to the server.
  */
 async function openList(
-  mcp: ReturnType<typeof traceListServer>,
+  mcp: ReturnType<typeof observabilityExplorerServer>,
   tool: string,
   args: Record<string, unknown>,
   { capabilities = {}, meta }: { capabilities?: McpUiHostCapabilities; meta?: Record<string, unknown> } = {},
@@ -70,7 +70,7 @@ async function openList(
   };
   await bridge.connect(hostTransport);
 
-  render(<TraceList />);
+  render(<ObservabilityExplorer />);
   return bridge;
 }
 
@@ -83,7 +83,7 @@ const lastHour = () => ({
 });
 
 it("shows the model's trace filters as chips and keeps the rest applied until the user clears it", async () => {
-  const mcp = traceListServer({ traceQuery: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true });
   const where = { op: 'eq', left: { path: 'entityName' }, right: { literal: 'support-agent' } };
   await openList(mcp, 'query_traces', { timeRange: lastHour(), where, textSearch: 'refund' });
 
@@ -108,7 +108,7 @@ it("shows the model's trace filters as chips and keeps the rest applied until th
 });
 
 it('opens a picked trace on the timeline through get_trace', async () => {
-  const mcp = traceListServer({ traceQuery: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true });
   await openList(mcp, 'query_traces', { timeRange: lastHour() });
 
   fireEvent.click(await screen.findByText('weather-agent'));
@@ -120,7 +120,7 @@ it('opens a picked trace on the timeline through get_trace', async () => {
 
 // Studio sends list paging as query-string text; the tool only takes integers.
 it('lists traces from a store without trace queries', async () => {
-  const mcp = traceListServer({ traceQuery: false });
+  const mcp = observabilityExplorerServer({ traceQuery: false });
   await openList(mcp, 'list_traces', {});
 
   expect(await screen.findByText('weather-agent')).toBeTruthy();
@@ -131,7 +131,7 @@ it('lists traces from a store without trace queries', async () => {
 });
 
 it("opens the model's log query on the Logs tab and keeps its level until cleared", async () => {
-  const mcp = traceListServer({ traceQuery: true, logs: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
   await openList(mcp, 'list_logs', { level: 'error' });
 
   expect(await screen.findByText('Carrier lookup failed for order 42')).toBeTruthy();
@@ -147,7 +147,7 @@ it("opens the model's log query on the Logs tab and keeps its level until cleare
 });
 
 it('tells the model the tab, filters, and opened trace on screen, and links each to Studio', async () => {
-  const mcp = traceListServer({ traceQuery: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true });
   const where = { op: 'eq', left: { path: 'entityName' }, right: { literal: 'support-agent' } };
   const contexts: string[] = [];
   const links: string[] = [];
@@ -171,7 +171,7 @@ it('tells the model the tab, filters, and opened trace on screen, and links each
 
   await waitFor(() => expect(contexts.at(-1)).toContain("They're on its Traces tab."), { timeout: 3000 });
   const context = contexts.at(-1)!;
-  expect(context).toMatch(/^The user has Mastra's trace explorer open\./);
+  expect(context).toMatch(/^The user has Mastra's observability explorer open\./);
   expect(context).toContain("The trace list's filters, as Studio URL params: datePreset=custom&dateFrom=");
   // The model's predicate became a chip, so it travels in the URL params rather than as a leftover query.
   expect(context).toMatch(/Studio URL params: [^\n]*support-agent/);
@@ -190,7 +190,7 @@ it('tells the model the tab, filters, and opened trace on screen, and links each
 });
 
 it('asks the model about the log open in the side panel', async () => {
-  const mcp = traceListServer({ traceQuery: true, logs: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
   const messages: string[] = [];
   const contexts: string[] = [];
   const bridge = await openList(

@@ -30,7 +30,7 @@ export type {
 } from './observability-dashboard';
 
 export type { McpAppResource } from './app-resource';
-export { traceListApp } from './trace-list';
+export { observabilityExplorerApp } from './observability-explorer';
 export { traceViewerApp } from './trace-viewer';
 
 /**

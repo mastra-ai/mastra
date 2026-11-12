@@ -168,8 +168,9 @@ export function addObservabilityTools(kit: CatalogueKit) {
   };
   // Hosts with MCP Apps open traces, logs, and metrics in Studio's observability explorer; others read the
   // JSON as before. The explorer learns what it can show through the observability toolset's app-only tools.
-  const explorer = kit.apps.traceList && offered(GET_CAPABILITIES) ? kit.apps.traceList : undefined;
-  const traceListLink = explorer ? { meta: { ui: { resourceUri: explorer } } } : undefined;
+  const explorer =
+    kit.apps.observabilityExplorer && offered(GET_CAPABILITIES) ? kit.apps.observabilityExplorer : undefined;
+  const explorerLink = explorer ? { meta: { ui: { resourceUri: explorer } } } : undefined;
   // An app renders the full rows, so the model reads one line per row (see observability-summary.ts).
   const opensIn = (app: string | undefined, summary: ModelSummary) =>
     app ? { meta: { ui: { resourceUri: app } }, summary } : undefined;
@@ -329,7 +330,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
         },
         options,
       );
-    analyze(metricRoutes, traceListLink);
+    analyze(metricRoutes, explorerLink);
     analyze({
       aggregate: GET_SCORE_AGGREGATE,
       breakdown: GET_SCORE_BREAKDOWN,

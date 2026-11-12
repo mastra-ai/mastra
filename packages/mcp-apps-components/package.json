@@ -35,14 +35,14 @@
         "default": "./dist/dashboards.cjs"
       }
     },
-    "./trace-list": {
+    "./observability-explorer": {
       "import": {
-        "types": "./dist/trace-list.d.ts",
-        "default": "./dist/trace-list.js"
+        "types": "./dist/observability-explorer.d.ts",
+        "default": "./dist/observability-explorer.js"
       },
       "require": {
-        "types": "./dist/trace-list.d.ts",
-        "default": "./dist/trace-list.cjs"
+        "types": "./dist/observability-explorer.d.ts",
+        "default": "./dist/observability-explorer.cjs"
       }
     },
     "./trace-viewer": {

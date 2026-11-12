@@ -330,7 +330,7 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
     <QueryClientProvider client={queryClient}>
       <MastraReactProvider baseUrl="https://mcp-app.mastra.invalid" customFetch={customFetch}>
         <TooltipProvider>
-          <AppHost app={app} name="trace explorer" studioUrl={studioUrl}>
+          <AppHost app={app} name="observability explorer" studioUrl={studioUrl}>
             <AppFrame>
               <Views app={app} opened={opened} onClearQuery={clearQuery} />
             </AppFrame>
@@ -342,16 +342,16 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
 }
 
 /**
- * Studio's observability pages: the trace explorer (filters, field and value discovery, histogram, sort and
+ * Studio's observability pages: the observability explorer (filters, field and value discovery, histogram, sort and
  * paging), its span and thread lists, the logs list, and the metrics dashboard, served by the built-in MCP
  * server's observability tools. It opens on the tab of the tool that opened it. Opening a row draws the trace
  * with the trace viewer's timeline.
  */
-export function TraceList() {
+export function ObservabilityExplorer() {
   const [opened, setOpened] = useState<Opened>();
   const [studioUrl, setStudioUrl] = useState<string>();
   const { app, error } = useApp({
-    appInfo: { name: 'Mastra trace list', version: __PACKAGE_VERSION__ },
+    appInfo: { name: 'Mastra observability explorer', version: __PACKAGE_VERSION__ },
     capabilities: {},
     onAppCreated: app => {
       const tool = () => app.getHostContext()?.toolInfo?.tool.name;

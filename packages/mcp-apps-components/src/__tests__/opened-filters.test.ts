@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { logArgsToParams, whereToTraceFilters } from '../apps/trace-list/opened-filters';
+import { logArgsToParams, whereToTraceFilters } from '../apps/observability-explorer/opened-filters';
 
 const eq = (path: string, literal: string | number) => ({ op: 'eq', left: { path }, right: { literal } });
 

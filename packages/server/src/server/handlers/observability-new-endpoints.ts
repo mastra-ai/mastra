@@ -1954,7 +1954,7 @@ const getObservabilityCapabilitiesResponseSchema = z.object({
 // even on an @mastra/core too old for the newer observability endpoints.
 export const GET_CAPABILITIES = createRoute({
   ...NEW_ROUTE_DEFS.GET_CAPABILITIES,
-  // Only the trace list MCP App calls it (as an app-only tool), to learn which views the store supports.
+  // Only the observability explorer MCP App calls it (as an app-only tool), to learn which views the store supports.
   mcp: {
     toolset: 'observability',
     name: 'get_observability_capabilities',

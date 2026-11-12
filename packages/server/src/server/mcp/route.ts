@@ -75,7 +75,7 @@ async function loadBuiltinMCP(mastra: Mastra) {
 }
 
 const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
-const TRACE_LIST_URI = 'ui://mastra/trace-list';
+const EXPLORER_URI = 'ui://mastra/observability-explorer';
 const APPS_PACKAGE = '@mastra/mcp-apps-components';
 
 type AppResource = { name: string; description?: string; html: string };
@@ -95,28 +95,29 @@ function loadBuiltinApps(): Promise<BuiltinApps | undefined> {
     try {
       // Keep each import directly inside its own `try`, like `@mastra/mcp` above (wrangler's esbuild only
       // accepts an unresolvable dynamic import there). Separate subpaths let an older package without the
-      // trace list still serve the trace viewer.
+      // observability explorer still serve the trace viewer.
       let traceViewer: AppResource | undefined;
-      let traceList: AppResource | undefined;
+      let observabilityExplorer: AppResource | undefined;
       try {
         traceViewer = (await import('@mastra/mcp-apps-components/trace-viewer')).traceViewerApp;
       } catch (error) {
         if (!isMissingAppsPackage(error)) throw error;
       }
       try {
-        traceList = (await import('@mastra/mcp-apps-components/trace-list')).traceListApp;
+        observabilityExplorer = (await import('@mastra/mcp-apps-components/observability-explorer'))
+          .observabilityExplorerApp;
       } catch (error) {
         if (!isMissingAppsPackage(error)) throw error;
       }
-      if (!traceViewer && !traceList) return undefined;
+      if (!traceViewer && !observabilityExplorer) return undefined;
       const result: BuiltinApps = { appResources: {}, apps: {} };
       if (traceViewer) {
         result.appResources[TRACE_VIEWER_URI] = traceViewer;
         result.apps.traceViewer = TRACE_VIEWER_URI;
       }
-      if (traceList) {
-        result.appResources[TRACE_LIST_URI] = traceList;
-        result.apps.traceList = TRACE_LIST_URI;
+      if (observabilityExplorer) {
+        result.appResources[EXPLORER_URI] = observabilityExplorer;
+        result.apps.observabilityExplorer = EXPLORER_URI;
       }
       return result;
     } catch (error) {

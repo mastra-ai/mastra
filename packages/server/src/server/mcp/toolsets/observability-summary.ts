@@ -62,7 +62,7 @@ export function summarizeTraces(key: 'traces' | 'spans') {
   return (output: Row) => {
     const rows = rowsOf(output, key);
     return summary(
-      `${rows.length} traces, shown to the user in the trace explorer (traceId | entity | status | started | duration):`,
+      `${rows.length} traces, shown to the user in the observability explorer (traceId | entity | status | started | duration):`,
       rows.map(
         row =>
           `- ${cells(row.traceId, entity(row), status(row), row.startedAt, duration(row), errorOf(row), text(row.inputPreview, 80) && `input: ${text(row.inputPreview, 80)}`)}`,
@@ -85,7 +85,7 @@ function dataOf(row: Row): string | undefined {
 export function summarizeLogs(output: Row): string {
   const rows = rowsOf(output, 'logs');
   return summary(
-    `${rows.length} logs, shown to the user in the trace explorer (time | level | entity | message | data | trace and span):`,
+    `${rows.length} logs, shown to the user in the observability explorer (time | level | entity | message | data | trace and span):`,
     rows.map(row => {
       const where =
         typeof row.traceId === 'string'
