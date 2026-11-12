@@ -314,7 +314,8 @@ export type BoardRead = BoardSnapshot & Pick<WorkItemListResponse, 'removedIds' 
  * List the org's work items for a Factory project: the whole board, or with `only` a part of it.
  * `sessionId` and `scope: 'sessions'` ask for the cards holding that session or any session, with
  * the cards related to them; `started: 'false'` for the most recently updated cards holding no
- * session whose text has every word of `q`; `source` for the cards filed from those source ids or URLs.
+ * session whose text has every word of `q`; `source` for the cards filed from those source ids or
+ * URLs; `workItemId` for the cards with those ids.
  * With `since`, the cursor of a board already held, a server that can sends only what moved.
  */
 export async function listWorkItems(
@@ -326,9 +327,18 @@ export async function listWorkItems(
     | { scope: 'sessions' }
     | { started: 'false'; q: string }
     | { source: string[] }
+    | { workItemId: string[] }
     | { since: string },
 ): Promise<BoardRead> {
-  const params = only && new URLSearchParams('source' in only ? only.source.map(source => ['source', source]) : only);
+  const params =
+    only &&
+    new URLSearchParams(
+      'source' in only
+        ? only.source.map(source => ['source', source])
+        : 'workItemId' in only
+          ? only.workItemId.map(id => ['workItemId', id])
+          : only,
+    );
   const { workItems, runningSessionIds, parkedSessionIds, ...rest } = await requestJson<
     Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
   >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${params ? `?${params}` : ''}`, {

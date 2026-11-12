@@ -1,5 +1,23 @@
 # @mastra/react
 
+## 1.15.0-alpha.10
+
+### Minor Changes
+
+- Fixed the Studio Review Queue showing only results flagged for review from the first 10 results of each experiment. The Review Queue and the Completed view now load every matching result of each experiment, page by page as you scroll. ([#29291](https://github.com/mastra-ai/mastra/pull/29291))
+
+  Added `useInfiniteReviewItems` and `useInfiniteCompletedItems`, which load review items page by page:
+
+  ```tsx
+  const { data, hasNextPage, setEndOfListElement } = useInfiniteReviewItems({ experimentId });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83), [`7c40bc8`](https://github.com/mastra-ai/mastra/commit/7c40bc84b6f1092b752cc8bff4751df1770a7022)]:
+  - @mastra/core@1.83.0-alpha.10
+  - @mastra/client-js@1.60.0-alpha.10
+
 ## 1.15.0-alpha.9
 
 ### Patch Changes

@@ -59,7 +59,7 @@ import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
 import { workItemActivity } from './work-item-activity.js';
-import { cardsFiledFrom, unstartedCards } from './work-item-selection.js';
+import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
 import {
   CARD_DECISION_PAGE_SIZE,
   CARD_DECISION_STATUSES,
@@ -165,6 +165,8 @@ function listQueryError(field: PropertyKey | undefined): string {
       return 'invalid_search';
     case 'source':
       return 'invalid_source';
+    case 'workItemId':
+      return 'invalid_work_item_id';
     default:
       return 'invalid_session_id';
   }
@@ -471,12 +473,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             q: context.req.query('q'),
             limit: context.req.query('limit'),
             source: context.req.queries('source'),
+            workItemId: context.req.queries('workItemId'),
             since: context.req.query('since'),
           });
           // A filter that fails to parse must not widen to the whole board.
           if (!query.success) return c.json({ error: listQueryError(query.error.issues[0]?.path[0]) }, 400);
           await workItems.ensureReady();
-          const { sessionId: sessionIds, scope, started, q, limit, source, since } = query.data;
+          const { sessionId: sessionIds, scope, started, q, limit, source, workItemId: ids, since } = query.data;
           const list = await workItems.listSharedSince({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
@@ -490,7 +493,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               ? allSessionCards(board)
               : sessionIds
                 ? sessionCards(board, sessionIds)
-                : source && cardsFiledFrom(board, source));
+                : source
+                  ? cardsFiledFrom(board, source)
+                  : ids && cardsWithIds(board, ids));
           const items = part ?? board;
           const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
           const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);

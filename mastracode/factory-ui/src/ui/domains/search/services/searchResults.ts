@@ -156,6 +156,17 @@ export function createSessionSearchGroups(input: {
   };
 }
 
+/**
+ * The card's number as the server's search reads it (`workItemNumber` in `@mastra/factory`): the
+ * source's own, else the one given to a card filed by hand.
+ */
+function searchedNumber(item: WorkItem): string | undefined {
+  const facts = item.workItem?.metadata;
+  const number =
+    facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? item.metadata.cardNumber;
+  return typeof number === 'number' ? `#${number}` : undefined;
+}
+
 function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
@@ -166,11 +177,37 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
     title: item.title,
     context: [sourceLabel, stage, 'not started'],
     identifier,
-    value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
+    // Everything the server's search reads is in it, so a row the server matched passes the palette's filter too.
+    value: joinValue([
+      item.title,
+      'work item',
+      sourceLabel,
+      stage,
+      identifier,
+      // Not always in the identifier, which leaves out the key of a card filed in Factory itself.
+      item.workItem?.key,
+      searchedNumber(item),
+      item.sourceKey,
+    ]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
     target: { kind: 'work-item', item },
   };
+}
+
+/**
+ * The text a candidate's row is filtered on. The search ranks candidates on it too before looking
+ * up the best ones, so it never cuts a candidate the palette would list.
+ */
+export function candidateSearchValue(candidate: BoardCandidate): string {
+  return joinValue([
+    candidate.title,
+    'work item',
+    SOURCE_LABELS[candidate.source],
+    stageLabel(candidate.column),
+    workItemIdentifier(candidate),
+    candidate.sourceKey,
+  ]);
 }
 
 function createCandidateResult(factoryId: string, candidate: BoardCandidate, updatedAt: string): WorkItemSearchResult {
@@ -183,7 +220,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
     title: candidate.title,
     context: [sourceLabel, stage, 'not filed'],
     identifier,
-    value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
+    value: candidateSearchValue(candidate),
     path: relationshipPath(candidate, factoryId),
     updatedAt,
     target: { kind: 'candidate', candidate },

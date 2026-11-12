@@ -2503,6 +2503,16 @@ describe('run activity on the work-item listing', () => {
       expect(answer.headers.get('etag')).toBe((await buildApp(orgUser).request(narrowed)).headers.get('etag'));
       expect(await answer.json()).not.toHaveProperty('removedIds');
     });
+
+    it('lists the card named by its id, not what moved since the cursor', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+
+      const answer = await buildApp(orgUser).request(`${boardPath()}?workItemId=${cards[0]!.id}&since=${board.cursor}`);
+
+      expect(await listedIds(answer)).toEqual([cards[0]!.id]);
+    });
   });
 
   describe('one session’s cards (?sessionId=)', () => {
@@ -2825,6 +2835,39 @@ describe('run activity on the work-item listing', () => {
     });
   });
 
+  describe('the cards named by their ids (?workItemId=)', () => {
+    const idPath = (...ids: string[]) => `${boardPath()}?${ids.map(id => `workItemId=${id}`).join('&')}`;
+
+    it('lists only the named cards, in board order, whatever sessions they hold and without their relatives', async () => {
+      const parent = await createCard('github:7:issue:12');
+      const child = await createCard('github:7:issue:13', { parentWorkItemId: parent.id });
+      const started = await createCard('github:7:pull-request:14');
+      await json('PATCH', `/web/factory/work-items/${started.id}`, {
+        sessions: { review: { sessionId: 'session-review', branch: 'factory/pr-14', threadId: 'thread-review' } },
+      });
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+
+      const res = await buildApp(orgUser).request(idPath(started.id, child.id));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
+        board.filter(id => id === started.id || id === child.id),
+      );
+      expect(body).not.toHaveProperty('total');
+    });
+
+    it('lists nothing, without an error, when no card has the id', async () => {
+      await createCard('github:7:issue:12');
+
+      const res = await buildApp(orgUser).request(idPath('11111111-2222-4333-8444-555555555555'));
+
+      expect(res.status).toBe(200);
+      expect(await listedIds(res)).toEqual([]);
+    });
+  });
+
   it.each([
     ['a wish for the started cards', '?started=true', 'invalid_started'],
     ['unstarted cards combined with a scope', '?started=false&scope=sessions', 'invalid_started'],
@@ -2838,6 +2881,16 @@ describe('run activity on the work-item listing', () => {
     ['sources combined with a scope', '?source=github-issue:1&scope=sessions', 'invalid_source'],
     ['sources combined with unstarted cards', '?source=github-issue:1&started=false', 'invalid_source'],
     ['sources combined with session ids', '?source=github-issue:1&sessionId=session-mine', 'invalid_source'],
+    ['an id that is not a card id', '?workItemId=backlog-1', 'invalid_work_item_id'],
+    [
+      'more than 100 ids',
+      `?${Array.from({ length: 101 }, () => `workItemId=${PROJECT_ID}`).join('&')}`,
+      'invalid_work_item_id',
+    ],
+    ['ids combined with sources', `?workItemId=${PROJECT_ID}&source=github-issue:1`, 'invalid_work_item_id'],
+    ['ids combined with a scope', `?workItemId=${PROJECT_ID}&scope=sessions`, 'invalid_work_item_id'],
+    ['ids combined with unstarted cards', `?workItemId=${PROJECT_ID}&started=false`, 'invalid_work_item_id'],
+    ['ids combined with session ids', `?workItemId=${PROJECT_ID}&sessionId=session-mine`, 'invalid_work_item_id'],
   ])('refuses %s rather than sending the whole board', async (_case, query, error) => {
     await createCard('github-issue:1');
 

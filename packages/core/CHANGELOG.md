@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.83.0-alpha.10
+
+### Patch Changes
+
+- Fixed sub-agents that stopped streaming after a durable agent run was resumed with a `requestContext`. A run started with `stream()` now keeps streaming its sub-agents' progress after `resume()`, `resumeStream()` or `approveToolCall()`, also when `closeOnSuspend` is set. ([#29616](https://github.com/mastra-ai/mastra/pull/29616))
+
+  Tool calls that a delegated sub-agent makes on durable and evented runs report their result again (`subagent_tool_end`), so the agent controller shows whether each one succeeded or failed instead of leaving it without a status. Fixes [#29436](https://github.com/mastra-ai/mastra/issues/29436).
+
+- Fixed sub-agent delegation failing on Anthropic models with extended thinking when the supervisor delegates after calling another tool in the same run. Anthropic rejected these requests with "`thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified". Delegation already leaves the supervisor's tool calls out of the context it passes to the sub-agent; it now leaves out the supervisor's thinking too, so the request is accepted. The supervisor's text replies are still passed along. Fixes [#29276](https://github.com/mastra-ai/mastra/issues/29276). ([#29620](https://github.com/mastra-ai/mastra/pull/29620))
+
+- Fixed the conversation context a supervisor forwards when it delegates to a sub-agent: a provider-executed tool result no longer survives without its tool call. A provider-executed tool call and its result are two parts of the same assistant message, so stripping only the call left an orphaned result that OpenAI rejected with "No tool call found for tool search output with call_id ...", which made every later delegation on that thread fail. Supervisor text replies are still passed through. Fixes [#30092](https://github.com/mastra-ai/mastra/issues/30092). ([#30134](https://github.com/mastra-ai/mastra/pull/30134))
+
+- Fixed replies to stored tool questions after a server restart. Approving a plan or answering another tool question now picks the run up from storage instead of rejecting the reply as having nothing waiting on it. ([#30132](https://github.com/mastra-ai/mastra/pull/30132))
+
+- Fixed durable, evented, and Inngest agents rejecting strict-mode (OpenAI / Azure OpenAI) structured output when the model answers optional fields with `null`. The same null-to-undefined handling the regular agent applies is now applied on these engines. ([#30136](https://github.com/mastra-ai/mastra/pull/30136))
+
 ## 1.83.0-alpha.9
 
 ### Minor Changes

@@ -2,7 +2,7 @@ import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
 import { isLeaseProvider, PubSub } from './pubsub';
 import type { LeaseProvider } from './pubsub';
-import { cachedLogTtlMs } from './topics';
+import { cachedLogTtlMs, toCachedLogFrame } from './topics';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -282,7 +282,7 @@ export class CachingPubSub extends PubSub {
       index = await this.cache.listPushIndexed(
         this.getCacheKey(topic),
         this.getCounterKey(topic),
-        fullEvent,
+        toCachedLogFrame(topic, fullEvent),
         cachedLogTtlMs(topic),
       );
     } catch (error) {
