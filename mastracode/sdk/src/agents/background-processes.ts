@@ -174,7 +174,8 @@ export function createBackgroundProcessNotices(options: {
       if (shuttingDown) sandboxes.delete(meta.pid);
       else if (launch?.sandbox) sandboxes.set(meta.pid, launch.sandbox);
       const killedOnPurpose = killed.delete(meta.pid);
-      const wasKilled = killedOnPurpose || meta.killedByAbort === true || shuttingDown;
+      // `killedOnRequest` covers kills that bypass this dispatcher, such as a host's HTTP kill route.
+      const wasKilled = killedOnPurpose || meta.killedByAbort === true || meta.killedOnRequest === true || shuttingDown;
       const ownTarget =
         meta.threadId && meta.resourceId ? { resourceId: meta.resourceId, threadId: meta.threadId } : undefined;
       const target = launch?.route.kind === 'parent' ? launch.route.target : ownTarget;

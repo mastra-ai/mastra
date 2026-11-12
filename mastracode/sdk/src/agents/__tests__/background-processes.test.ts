@@ -133,6 +133,17 @@ describe('Mastra Code background shell exit notices', () => {
     expect(delivered).toEqual([]);
   });
 
+  it('posts no notice for a process a host kills through the sandbox directly', async () => {
+    const { delivered, exits, start } = await setup();
+
+    const { pid, exit } = await start(node('setInterval(() => {}, 1000)'));
+    expect(await workspace!.sandbox!.processes!.kill(pid)).toBe(true);
+    await exit;
+
+    expect(exits).toContainEqual(expect.objectContaining({ pid, killed: true }));
+    expect(delivered).toEqual([]);
+  });
+
   it('keeps a background process running when the run that started it is aborted', async () => {
     const { start } = await setup();
     const run = new AbortController();
