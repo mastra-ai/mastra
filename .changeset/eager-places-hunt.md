@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added background process exit notices for agents, process owner metadata, and cancelled background calls in stored messages.
+Added background process exit notices for agents, process owner metadata, and a way to read a cached sandbox without creating one.
 
 **Exit notices**
 
@@ -30,11 +30,14 @@ const [proc] = await sandbox.processes.list();
 console.log(proc.metadata?.threadId, proc.metadata?.startedAt);
 ```
 
+**Cached sandbox lookup**
+
 `workspace.getCachedSandbox({ requestContext })` returns the sandbox already cached under the request's `sandboxCacheKey` without running the resolver, so hosts can read sandbox state without creating a sandbox.
 
-**Cancelled background calls**
-
-A cancelled deferred tool call is now stored as cancelled (`providerMetadata.mastra.backgroundTask.status: 'cancelled'`), keeping its placeholder result. Before, a reloaded thread still showed the call as running. Cancelling doesn't notify the agent.
+```ts
+const sandbox = await workspace.getCachedSandbox({ requestContext });
+if (sandbox?.status === 'running') console.log(await sandbox.processes?.list());
+```
 
 **Suspended tasks on reconnect**
 

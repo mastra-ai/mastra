@@ -504,7 +504,7 @@ export const sandboxProcessQuerySchema = z.object({
     .string()
     .optional()
     .describe(
-      'Only processes started on this memory thread. Also picks the sandbox when the workspace resolves one per thread.',
+      'Only processes started on this memory thread. Also finds the sandbox an agent run cached for this thread.',
     ),
   resourceId: z
     .string()

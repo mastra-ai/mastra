@@ -15083,7 +15083,7 @@ export interface PostWorkspacesWorkspaceIdSkillsShUpdate_RouteContract {
 export type GetWorkspacesWorkspaceIdSandboxProcesses_PathParams = GetWorkspacesWorkspaceId_PathParams;
 
 export type GetWorkspacesWorkspaceIdSandboxProcesses_QueryParams = {
-  /** Only processes started on this memory thread. Also picks the sandbox when the workspace resolves one per thread. */
+  /** Only processes started on this memory thread. Also finds the sandbox an agent run cached for this thread. */
   threadId?: string | undefined;
   /** Only processes started for this resource. Resource-scoped callers are always limited to their own resource. */
   resourceId?: string | undefined;
@@ -15131,7 +15131,7 @@ export type GetWorkspacesWorkspaceIdSandboxProcessesPid_PathParams = {
 };
 
 export type GetWorkspacesWorkspaceIdSandboxProcessesPid_QueryParams = {
-  /** Only processes started on this memory thread. Also picks the sandbox when the workspace resolves one per thread. */
+  /** Only processes started on this memory thread. Also finds the sandbox an agent run cached for this thread. */
   threadId?: string | undefined;
   /** Only processes started for this resource. Resource-scoped callers are always limited to their own resource. */
   resourceId?: string | undefined;
