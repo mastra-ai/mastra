@@ -114,13 +114,13 @@ export async function processWorkflowLoop(
     /**
      * Called once the condition decided, before the event that runs the next
      * iteration (`again`) or ends the loop step is published, with the step
-     * results and state that event carries.
+     * results and state that event carries. Returning `false` publishes nothing.
      */
     beforePublish?: (decision: {
       again: boolean;
       stepResults: Record<string, StepResult<any, any, any, any>>;
       state: Record<string, any>;
-    }) => Promise<void>;
+    }) => Promise<boolean | void>;
   },
 ) {
   // Get current state from stepResult, stepResults or passed state
@@ -202,11 +202,14 @@ export async function processWorkflowLoop(
 
   // dountil runs again while its condition is false, dowhile while it is true.
   const again = step.loopType === 'dountil' ? !loopCondition : !!loopCondition;
-  await beforePublish?.({
+  const proceed = await beforePublish?.({
     again,
     stepResults: (again ? loopAgainData : loopEndData).stepResults as Record<string, StepResult<any, any, any, any>>,
     state: currentState,
   });
+  if (proceed === false) {
+    return;
+  }
 
   if (again) {
     await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });

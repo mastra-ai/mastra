@@ -1734,6 +1734,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           actor,
           timeTravel,
           perStep,
+          superseded: handOff?.superseded,
         });
       } catch (error) {
         // The parent did not continue: a redelivery of this end must be able to hand off again.
@@ -1823,7 +1824,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    * shows it unhandled. It takes a free or expired claim, so the child's
    * original end, still queued, then finds it held, and takes over a claim
    * kept after a published hand-off. It leaves a claim whose hand-off is in
-   * progress to its holder. Time travel, per-step runs and
+   * progress to its holder. `superseded` tells a holder that stalled past the
+   * claim's TTL that another worker took it over. Time travel, per-step runs and
    * resumes hand the same child's result off again on purpose and are not
    * checked, nor are parents whose workflow takes no step leases. The record
    * check and the claim are separate calls, so two ends racing past the check
@@ -1832,7 +1834,9 @@ export class WorkflowEventProcessor extends EventProcessor {
   async #claimNestedHandOff(
     args: Pick<ProcessorArgs, 'runId' | 'timeTravel' | 'perStep' | 'resumeSteps' | 'restart'>,
     parentWorkflow: ParentWorkflow,
-  ): Promise<'done' | { keep: () => Promise<void>; release: () => Promise<void> } | undefined> {
+  ): Promise<
+    'done' | { keep: () => Promise<void>; release: () => Promise<void>; superseded: () => Promise<boolean> } | undefined
+  > {
     if (args.timeTravel || args.perStep || parentWorkflow.timeTravel || args.resumeSteps?.length) {
       return undefined;
     }
@@ -1913,10 +1917,26 @@ export class WorkflowEventProcessor extends EventProcessor {
         stopRenewing();
         await store.releaseRunOwnership(fence);
       },
+      // Read before publishing: renewal notices a takeover only on its next tick, and a holder
+      // that stalled past the claim's TTL may not have renewed since.
+      superseded: async () => {
+        const current = await store.getRunOwnership({ runId: fence.runId });
+        const taken =
+          current !== null && (current.ownerId !== fence.ownerId || current.generation !== fence.generation);
+        if (taken) {
+          this.mastra.getLogger()?.info('Dropping a nested workflow hand-off another worker took over', fence);
+        }
+
+        return taken;
+      },
     };
   }
 
-  /** Hands a nested run's successful result to the parent step that runs it. */
+  /**
+   * Hands a nested run's successful result to the parent step that runs it.
+   * `superseded` is the hand-off claim's check: once another worker took the
+   * claim over, it continues the parent, and this hand-off publishes nothing.
+   */
   async #handNestedSuccessToParent({
     parentWorkflow,
     nestedRunId,
@@ -1930,6 +1950,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     timeTravel,
     perStep,
     outputOptions,
+    superseded,
   }: Pick<
     ProcessorArgs,
     | 'prevResult'
@@ -1945,6 +1966,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow: ParentWorkflow;
     nestedRunId: string;
     state: Record<string, any>;
+    superseded?: () => Promise<boolean>;
   }) {
     // get the step from the parent workflow and process it if it's a loop.
     // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
@@ -2006,10 +2028,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         !parentWorkflow.timeTravel && !parentWorkflow.resumeSteps?.length
           ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy
           : undefined,
-        { saveProgress },
+        { saveProgress, superseded },
       );
       return;
     }
+
+    if (await superseded?.()) {
+      return;
+    }
+
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.end',
       runId: parentWorkflow.runId, // Use parent's runId for event routing
@@ -3104,16 +3131,17 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Evaluates the loop condition after an iteration, then starts the next one or leaves the loop.
    * With `saveProgress`, set by the delivery that ran the body under its step lease, the loop's
    * progress is saved before the next event is published (see {@link #saveLoopProgress}).
+   * `superseded`, set by a nested hand-off, stops it before that save when its claim was taken over.
    */
   async #processLoop(
     args: ProcessorArgs,
     step: Extract<StepFlowEntry, { type: 'loop' }>,
     result: StepResult<any, any, any, any>,
     startedBy?: string,
-    { saveProgress = false }: { saveProgress?: boolean } = {},
+    { saveProgress = false, superseded }: { saveProgress?: boolean; superseded?: () => Promise<boolean> } = {},
   ) {
     try {
-      return await this.#advanceLoop(args, step, result, startedBy, saveProgress);
+      return await this.#advanceLoop(args, step, result, startedBy, saveProgress, superseded);
     } catch (error) {
       if (!isNonRedeliverable(error)) throw error;
       // The condition threw, now or on an earlier delivery. End the loop step as failed in the
@@ -3200,7 +3228,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   /**
    * Evaluates the loop condition, under the occurrence's completion guard on a
    * store with step guards, and publishes the next iteration or the loop's end.
-   * `saveProgress` saves the loop's progress first on the unguarded path.
+   * `saveProgress` saves the loop's progress first on the unguarded path. Nothing is saved or
+   * published once `superseded` resolves true.
    */
   async #advanceLoop(
     args: ProcessorArgs,
@@ -3208,6 +3237,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     result: StepResult<any, any, any, any>,
     startedBy?: string,
     saveProgress = false,
+    superseded?: () => Promise<boolean>,
   ) {
     const leafId = getEntryId(step.step);
     const store = await this.mastra.getStorage()?.getStore('workflows');
@@ -3277,8 +3307,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         step,
         stepResult,
         savedCondition: guarded ? stepResult.metadata?.loopCondition : undefined,
-        beforePublish:
-          saveProgress && !guarded ? decision => this.#saveLoopProgress(args, leafId, stepResult, decision) : undefined,
+        beforePublish: async decision => {
+          if (await superseded?.()) {
+            return false;
+          }
+
+          if (saveProgress && !guarded) {
+            await this.#saveLoopProgress(args, leafId, stepResult, decision);
+          }
+        },
       },
     );
   }
@@ -4121,6 +4158,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 timeTravel,
                 perStep,
                 outputOptions,
+                superseded: handOff?.superseded,
               });
             } catch (error) {
               await handOff?.release();
