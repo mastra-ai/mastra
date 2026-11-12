@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added a workflow recovery loop (#28712). An instance that calls `startWorkers()` with the orchestration worker, such as a server or a `mastra worker` process, now keeps restarting workflow runs whose instance stopped while the instance runs, with the same rule as the boot-time restart. Before, a run that started after the other instances booted stayed `running` until the next boot if its instance crashed.
+Added a workflow recovery loop (#28712). An instance that calls `startWorkers()` with the orchestration worker, such as a server or a `mastra worker` process, now keeps restarting, while it runs, the workflow runs whose instance stopped, with the same rule as the boot-time restart. Before, a run that started after the other instances booted stayed `running` until the next boot if its instance crashed.
 
 - A run whose instance crashed can be restarted once `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus `recovery.workflowGraceMs` passed since that instance last worked on it.
 - A run whose instance called `shutdown()` can be restarted once `recovery.workflowGraceMs` passed since the shutdown. The grace period is 2 seconds with the default in-process pubsub and 60 seconds with another pubsub.
@@ -17,4 +17,4 @@ export const mastra = new Mastra({
 });
 ```
 
-The loop stops on `stopWorkers()` and `shutdown()`, needs a storage adapter with run-ownership support, and is off with `recovery.workflows: 'off'`, like the boot-time restart. A run that `restartAllActiveWorkflowRuns()` leaves alone because it is still running or within its grace period is now picked up by the loop instead of a timer of its own, so an instance that never calls `startWorkers()` doesn't look at it again.
+The loop stops on `stopWorkers()` and `shutdown()`, and is off with `recovery.workflows: 'off'`, like the boot-time restart. It needs a storage adapter with run-ownership support: without it, the loop restarts no runs, and only the boot-time call restarts every active run once. A run that `restartAllActiveWorkflowRuns()` leaves alone because it is still running or within its grace period is now picked up by the loop instead of a timer of its own, so an instance that never calls `startWorkers()` doesn't look at it again.
