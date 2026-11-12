@@ -126,8 +126,8 @@ type QueuedExecution = {
  * the owner of result ordering and history.
  *
  * The permit limit is read through `getConcurrency` rather than copied, because
- * `map-tool-calls` recomputes the effective limit per step (an approval- or
- * suspend-capable tool entering the step forces the foreach down to 1). Reading it
+ * `map-tool-calls` recomputes the effective limit per step (a suspend-capable
+ * tool entering the step forces the foreach down to 1). Reading it
  * late keeps one source of truth for the limit.
  */
 export class EagerToolExecutionCoordinator {

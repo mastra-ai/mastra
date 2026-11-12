@@ -277,7 +277,6 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       // called tool set is not known yet, and map-tool-calls narrows it before the
       // foreach actually consumes this value.
       concurrency: resolveToolCallConcurrency({
-        requireToolApproval: rest.requireToolApproval,
         tools: rest.tools,
         activeTools: rest.activeTools as string[] | undefined,
         configuredConcurrency: configuredToolCallConcurrency,
@@ -356,14 +355,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           const toolCalls = typedInputData.output.toolCalls || [];
           // Recompute concurrency now that the model has emitted its tool calls.
           //
-          // Function approval policies (run-wide `requireToolApproval` or a tool's
-          // `needsApprovalFn`, e.g. MCP tools) are evaluated with each emitted call's args,
-          // so a policy returning false does not serialize. Called tools that need approval
-          // or can suspend still serialize.
-          //
-          // Default ('available') strategy: a static approval flag or suspend schema on any
-          // active tool still forces sequential execution, even if the model did not call it.
-          // Opt-in ('called') strategy: only the tools the model actually called count.
+          // Approval does not serialize: gated calls park side by side and each is resumed by
+          // its toolCallId (#30152). Every call's approval verdict (static flag, run-wide
+          // `requireToolApproval` or a tool's `needsApprovalFn`) is still evaluated here with
+          // the emitted args. Only suspend-capable tools serialize: under the default
+          // ('available') strategy any active one does, under 'called' only called ones.
           //
           // Read step tools through the run scope like toolCallStep does: on resume, `_internal`
           // is rebuilt without them while the scope still holds the suspended step's values.
@@ -409,7 +405,6 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
           const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
           return resolveToolCallConcurrency({
-            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
             activeTools:
               readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') ??

@@ -1,3 +1,4 @@
+import type { LLMock } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
@@ -7,103 +8,128 @@ import { describeForAllEngines, runApprovalScenario, useLoopScenarioAimock } fro
 /**
  * Regression class: concurrent approval requests.
  *
- * When a single turn produces multiple tool calls that each require approval
- * (either via tool-level `requireApproval` or a conditional `requireToolApproval`),
- * the loop must suspend on ALL of them, not just the first. This scenario proves
- * that:
- * 1. All tool calls requiring approval are surfaced as separate approval chunks.
- * 2. Approving all of them allows the loop to complete.
- * 3. Declining one while approving another still lets the non-declined tool execute.
+ * When a single turn produces several tool calls that each require approval
+ * (tool-level `requireApproval`, or a run-wide `requireToolApproval`), the step
+ * raises every approval request at once, before any of them is answered (#30152).
+ * Calls that need no approval run straight away, and each approved call runs on
+ * its own resume while the others stay parked.
  */
 describeForAllEngines('AIMock loop scenario: concurrent approval requests', engine => {
   const getMock = useLoopScenarioAimock();
 
-  // Two destructive tools that both require approval.
-  const makeDeleteTool = () =>
-    createTool({
+  const makeTools = (requireApproval: boolean, executed: string[]) => ({
+    delete_file: createTool({
       id: 'delete_file',
       description: 'Delete a file.',
       inputSchema: z.object({ path: z.string() }),
       outputSchema: z.object({ deleted: z.boolean() }),
-      requireApproval: true,
-      execute: async () => ({ deleted: true }),
-    });
-
-  const makeRenameTool = () =>
-    createTool({
+      requireApproval,
+      execute: async () => {
+        executed.push('delete_file');
+        return { deleted: true };
+      },
+    }),
+    rename_file: createTool({
       id: 'rename_file',
       description: 'Rename a file.',
       inputSchema: z.object({ from: z.string(), to: z.string() }),
       outputSchema: z.object({ renamed: z.boolean() }),
-      requireApproval: true,
-      execute: async () => ({ renamed: true }),
-    });
-
-  const makeReadTool = () =>
-    createTool({
+      requireApproval,
+      execute: async () => {
+        executed.push('rename_file');
+        return { renamed: true };
+      },
+    }),
+    read_file: createTool({
       id: 'read_file',
       description: 'Read a file.',
       inputSchema: z.object({ path: z.string() }),
       outputSchema: z.object({ content: z.string() }),
-      execute: async ({ path }) => ({ content: `FILE_CONTENT:${path}` }),
-    });
+      execute: async ({ path }) => {
+        executed.push('read_file');
+        return { content: `FILE_CONTENT:${path}` };
+      },
+    }),
+  });
 
-  it('all concurrent tool calls requiring approval are surfaced and approved individually', async () => {
-    const { output, approvals, requests } = await runApprovalScenario({
+  const deleteAndRename = (llm: LLMock) => {
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      {
+        toolCalls: [
+          { id: 'call_delete_1', name: 'delete_file', arguments: { path: 'old.txt' } },
+          { id: 'call_rename_1', name: 'rename_file', arguments: { from: 'new.txt', to: 'final.txt' } },
+        ],
+      },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'I deleted old.txt and renamed new.txt.' });
+  };
+
+  it('surfaces every approval in the step before any is answered (#30152)', async () => {
+    const executed: string[] = [];
+    const executedAtDecision: string[][] = [];
+    const { output, approvals, approvalBatches, requests } = await runApprovalScenario({
       llm: getMock(),
       engine,
       prompt: 'Delete old.txt and rename new.txt to final.txt.',
-      tools: { delete_file: makeDeleteTool(), rename_file: makeRenameTool() },
+      tools: makeTools(true, executed),
       stopWhen: stepCountIs(5),
-      decision: () => true, // approve all
-      requireToolApproval: false, // Only tool-level requireApproval
-      fixtures: llm => {
-        // Turn 1: model calls both destructive tools in parallel.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          {
-            toolCalls: [
-              { id: 'call_delete_1', name: 'delete_file', arguments: { path: 'old.txt' } },
-              { id: 'call_rename_1', name: 'rename_file', arguments: { from: 'new.txt', to: 'final.txt' } },
-            ],
-          },
-        );
-        // Turn 2: after both approved + executed, model produces final text.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'I deleted old.txt and renamed new.txt to final.txt.' },
-        );
+      decision: () => {
+        executedAtDecision.push([...executed]);
+        return true;
       },
+      requireToolApproval: false,
+      fixtures: deleteAndRename,
     });
 
-    expect(approvals).toHaveLength(2);
-    expect(approvals).toContain('approve:call_delete_1');
-    expect(approvals).toContain('approve:call_rename_1');
-
-    // Model invoked at least twice (initial + post-approval).
+    expect(approvalBatches[0]).toEqual(['call_delete_1', 'call_rename_1']);
+    expect(approvals).toEqual(['approve:call_delete_1', 'approve:call_rename_1']);
+    // Nothing ran before the first answer; the first approved call ran before the second answer.
+    expect(executedAtDecision).toEqual([[], ['delete_file']]);
+    expect(executed).toEqual(['delete_file', 'rename_file']);
     expect(requests.length).toBeGreaterThanOrEqual(2);
-    const text = await output.text;
-    expect(text).toBeTruthy();
+    expect(await output.text).toBeTruthy();
   });
 
-  it('mixing approved and declined concurrent requests lets approved tools execute', async () => {
-    const { output, approvals } = await runApprovalScenario({
+  for (const [label, requireToolApproval] of [
+    ['true', true],
+    ['a function', ({ toolName }: { toolName: string }) => toolName !== 'read_file'],
+  ] as const) {
+    it(`surfaces every approval at once under run-wide requireToolApproval: ${label} (#30152)`, async () => {
+      const executed: string[] = [];
+      const { output, approvals, approvalBatches } = await runApprovalScenario({
+        llm: getMock(),
+        engine,
+        prompt: 'Delete old.txt and rename new.txt to final.txt.',
+        tools: makeTools(false, executed),
+        stopWhen: stepCountIs(5),
+        decision: () => true,
+        requireToolApproval,
+        fixtures: deleteAndRename,
+      });
+
+      expect(approvalBatches[0]).toEqual(['call_delete_1', 'call_rename_1']);
+      expect(approvals).toEqual(['approve:call_delete_1', 'approve:call_rename_1']);
+      expect(executed).toEqual(['delete_file', 'rename_file']);
+      expect(await output.text).toBeTruthy();
+    });
+  }
+
+  it('runs ungated calls right away and only the approved gated calls after answers', async () => {
+    const executed: string[] = [];
+    const executedAtDecision: string[][] = [];
+    const { output, approvals, approvalBatches } = await runApprovalScenario({
       llm: getMock(),
       engine,
       prompt: 'Read config.yaml, delete old.txt, and rename new.txt.',
-      tools: {
-        read_file: makeReadTool(),
-        delete_file: makeDeleteTool(),
-        rename_file: makeRenameTool(),
-      },
+      tools: makeTools(true, executed),
       stopWhen: stepCountIs(5),
-      decision: ({ toolCallId }: { toolCallId: string }) => {
-        // Approve rename, decline delete.
+      decision: ({ toolCallId }) => {
+        executedAtDecision.push([...executed]);
         return toolCallId.includes('rename');
       },
       requireToolApproval: false,
       fixtures: llm => {
-        // Turn 1: model calls read (no approval), delete (approval), rename (approval).
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
@@ -114,7 +140,6 @@ describeForAllEngines('AIMock loop scenario: concurrent approval requests', engi
             ],
           },
         );
-        // Turn 2: after approvals resolved, model produces final text.
         llm.on(
           { endpoint: 'chat', hasToolResult: true },
           { content: 'Read config.yaml, renamed new.txt but could not delete old.txt.' },
@@ -122,43 +147,37 @@ describeForAllEngines('AIMock loop scenario: concurrent approval requests', engi
       },
     });
 
-    expect(approvals).toHaveLength(2);
-
-    const approvedApprovals = approvals.filter(a => a.startsWith('approve:'));
-    const declinedApprovals = approvals.filter(a => a.startsWith('decline:'));
-    expect(approvedApprovals).toHaveLength(1);
-    expect(approvedApprovals[0]).toContain('call_rename');
-    expect(declinedApprovals).toHaveLength(1);
-    expect(declinedApprovals[0]).toContain('call_delete');
-
-    expect(approvals).not.toContain(expect.stringContaining('call_read'));
-
-    const text = await output.text;
-    expect(text).toBeTruthy();
+    expect(approvalBatches[0]).toEqual(['call_delete_1', 'call_rename_1']);
+    expect(approvals).toEqual(['decline:call_delete_1', 'approve:call_rename_1']);
+    expect(executedAtDecision[0]).toEqual(['read_file']);
+    expect(executed).toEqual(['read_file', 'rename_file']);
+    expect(await output.text).toBeTruthy();
   });
 
-  it('three concurrent approval-gated tool calls all surface individually', async () => {
-    const makeArchiveTool = () =>
-      createTool({
+  it('three concurrent approval-gated tool calls all surface at once', async () => {
+    const executed: string[] = [];
+    const tools = {
+      ...makeTools(true, executed),
+      archive_file: createTool({
         id: 'archive_file',
         description: 'Archive a file.',
         inputSchema: z.object({ path: z.string() }),
         outputSchema: z.object({ archived: z.boolean() }),
         requireApproval: true,
-        execute: async () => ({ archived: true }),
-      });
+        execute: async () => {
+          executed.push('archive_file');
+          return { archived: true };
+        },
+      }),
+    };
 
-    const { output, approvals } = await runApprovalScenario({
+    const { output, approvals, approvalBatches } = await runApprovalScenario({
       llm: getMock(),
       engine,
       prompt: 'Delete old.txt, rename new.txt, and archive data.csv.',
-      tools: {
-        delete_file: makeDeleteTool(),
-        rename_file: makeRenameTool(),
-        archive_file: makeArchiveTool(),
-      },
+      tools,
       stopWhen: stepCountIs(6),
-      decision: () => true, // approve all
+      decision: () => true,
       requireToolApproval: false,
       fixtures: llm => {
         llm.on(
@@ -175,12 +194,9 @@ describeForAllEngines('AIMock loop scenario: concurrent approval requests', engi
       },
     });
 
-    expect(approvals).toHaveLength(3);
-    expect(approvals).toContain('approve:call_delete');
-    expect(approvals).toContain('approve:call_rename');
-    expect(approvals).toContain('approve:call_archive');
-
-    const text = await output.text;
-    expect(text).toBeTruthy();
+    expect(approvalBatches[0]).toEqual(['call_delete', 'call_rename', 'call_archive']);
+    expect(approvals).toEqual(['approve:call_delete', 'approve:call_rename', 'approve:call_archive']);
+    expect(executed).toEqual(['delete_file', 'rename_file', 'archive_file']);
+    expect(await output.text).toBeTruthy();
   });
 });

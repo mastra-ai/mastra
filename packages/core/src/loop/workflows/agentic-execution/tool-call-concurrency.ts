@@ -3,7 +3,6 @@ import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
 import type { RequireToolApproval } from '../../../tools';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { ToolApprovalContext } from '../../../tools/types';
 import type { ToolCallConcurrency, ToolCallConcurrencyStrategy } from '../../types';
 import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
@@ -39,34 +38,27 @@ export function resolveConfiguredToolCallConcurrency(toolCallConcurrency: ToolCa
   return normalizeToolCallConcurrency(toolCallConcurrency).limit;
 }
 
+/**
+ * Whether a step's tool calls must run one at a time.
+ *
+ * Only suspend-capable tools force sequential execution. Approval never does: an approval-gated
+ * call parks before it executes, so every gated call in a step can reach its gate at once and be
+ * resumed by its `toolCallId` while the others stay parked (#30152).
+ */
 export function effectiveToolSetRequiresSequentialExecution({
-  requireToolApproval,
   tools,
   activeTools,
   strategy = 'available',
   calledToolNames,
-  dynamicApprovalEvaluated = false,
 }: {
-  // A function-valued global approval policy is evaluated per call at execution time;
-  // before args are known we conservatively treat it like `true` and force sequential
-  // execution so approval suspensions never race with concurrent tool calls.
-  requireToolApproval?: RequireToolApproval;
   tools?: ToolSet;
   activeTools?: readonly string[];
   strategy?: ToolCallConcurrencyStrategy;
   // The tool names the model actually called this step. Only consulted under the
   // `'called'` strategy; when omitted there, nothing forces sequential (a batch
-  // that called no suspend/approval tool cannot suspend this step).
+  // that called no suspend-capable tool cannot suspend this step).
   calledToolNames?: readonly string[];
-  // Set when the caller evaluates function approval policies per emitted call itself.
-  // Function-valued policies (run-wide or a tool's `needsApprovalFn`) are then skipped here;
-  // static approval flags and suspend schemas still apply.
-  dynamicApprovalEvaluated?: boolean;
 }): boolean {
-  if (requireToolApproval === true || (requireToolApproval && !dynamicApprovalEvaluated)) {
-    return true;
-  }
-
   if (!tools) {
     return false;
   }
@@ -88,28 +80,16 @@ export function effectiveToolSetRequiresSequentialExecution({
             return tool ? ([[toolName, tool]] as const) : [];
           });
 
-  return consideredToolEntries.some(([, tool]) => {
-    const maybeTool = tool as { hasSuspendSchema?: unknown; requireApproval?: unknown };
-    if (maybeTool.hasSuspendSchema) {
-      return true;
-    }
-    // An unevaluated `needsApprovalFn` may require approval, so stay sequential.
-    if (getNeedsApprovalFn(tool)) {
-      return !dynamicApprovalEvaluated;
-    }
-    return Boolean(maybeTool.requireApproval);
-  });
+  return consideredToolEntries.some(([, tool]) => Boolean((tool as { hasSuspendSchema?: unknown }).hasSuspendSchema));
 }
 
 export function resolveToolCallConcurrency({
-  requireToolApproval,
   tools,
   activeTools,
   configuredConcurrency,
   strategy,
   calledToolNames,
 }: {
-  requireToolApproval?: RequireToolApproval;
   tools?: ToolSet;
   activeTools?: readonly string[];
   configuredConcurrency: number;
@@ -117,7 +97,6 @@ export function resolveToolCallConcurrency({
   calledToolNames?: readonly string[];
 }): number {
   return effectiveToolSetRequiresSequentialExecution({
-    requireToolApproval,
     tools,
     activeTools,
     strategy,
@@ -137,15 +116,16 @@ export function updateToolCallForeachConcurrency(
 /**
  * Resolves concurrency for a step once the model's tool calls are known.
  *
- * Each called tool's approval policy is evaluated with the call's actual arguments (the same rule
- * the tool-call step applies), so a function policy that returns `false` does not force sequential
- * execution. Called tools with a suspend schema, or whose policy requires approval for this call,
- * still force sequential execution. Under `'available'`, any active tool with a static approval
- * flag or suspend schema also forces sequential execution, as before.
+ * Each called tool's approval verdict is evaluated with the call's actual arguments (the same rule
+ * the tool-call step applies) and cached in `approvalVerdicts`, so a stateful policy runs once per
+ * call. Verdicts do not affect concurrency: gated calls park side by side (#30152). A called tool
+ * that cannot be resolved or has a suspend schema forces sequential execution, and under
+ * `'available'` so does any active suspend-capable tool.
  */
 export async function resolveEmittedToolCallConcurrency({
   toolCalls,
   approvalVerdicts,
+  requireToolApproval,
   requestContext,
   workspace,
   logger,
@@ -153,20 +133,12 @@ export async function resolveEmittedToolCallConcurrency({
 }: Parameters<typeof resolveToolCallConcurrency>[0] & {
   toolCalls: readonly { toolCallId?: string; toolName: string; args?: unknown }[];
   approvalVerdicts?: Map<string, boolean>;
+  requireToolApproval?: RequireToolApproval;
   requestContext?: RequestContext;
   workspace?: ToolApprovalContext['workspace'];
   logger?: IMastraLogger;
 }): Promise<number> {
-  // Under 'available', static approval flags and suspend schemas on any active tool still
-  // force sequential execution; only function policies are resolved per emitted call below.
-  if (
-    args.strategy !== 'called' &&
-    effectiveToolSetRequiresSequentialExecution({ ...args, dynamicApprovalEvaluated: true })
-  ) {
-    return 1;
-  }
-
-  const verdicts = await Promise.all(
+  const forcesSequential = await Promise.all(
     toolCalls.map(async toolCall => {
       // Mirror the tool-call step's lookup (key, provider name, then tool id).
       const tool =
@@ -185,7 +157,7 @@ export async function resolveEmittedToolCallConcurrency({
           : (toolCall.args as ToolApprovalContext['args']);
       const verdict = await resolveToolApprovalVerdict({
         tool,
-        requireToolApproval: args.requireToolApproval,
+        requireToolApproval,
         context: buildToolApprovalContext({
           toolName: toolCall.toolName,
           args: toolArgs,
@@ -197,9 +169,14 @@ export async function resolveEmittedToolCallConcurrency({
       if (toolCall.toolCallId) {
         approvalVerdicts?.set(toolCall.toolCallId, verdict);
       }
-      return verdict;
+      return false;
     }),
   );
 
-  return verdicts.some(Boolean) ? 1 : args.configuredConcurrency;
+  if (forcesSequential.some(Boolean)) {
+    return 1;
+  }
+  return args.strategy !== 'called' && effectiveToolSetRequiresSequentialExecution(args)
+    ? 1
+    : args.configuredConcurrency;
 }

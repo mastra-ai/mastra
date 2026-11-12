@@ -701,7 +701,9 @@ export async function runApprovalScenario({
   tracingOptions,
   afterStream,
   agentOutputProcessors,
-}: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
+}: RunApprovalScenarioOptions): Promise<
+  LoopScenarioResult & { chunks: ChunkType[]; approvals: string[]; approvalBatches: string[][] }
+> {
   fixtures(llm);
 
   const { agent } = await buildScenarioAgent({
@@ -716,6 +718,9 @@ export async function runApprovalScenario({
 
   const chunks: ChunkType[] = [];
   const approvals: string[] = [];
+  // Approval requests raised by each stream, in order. The first entry holds every
+  // request the initial step raised before any of them was answered.
+  const approvalBatches: string[][] = [];
 
   // DurableAgent.stream()/approveToolCall() return { output, fullStream, runId };
   // the plain Agent returns MastraModelOutput, which carries fullStream itself.
@@ -728,28 +733,37 @@ export async function runApprovalScenario({
     ...(stopWhen ? { stopWhen } : {}),
     // Durable needs maxSteps as a fallback when stopWhen is the only bound.
     ...(stopWhen && isDurable ? { maxSteps: 10 } : {}),
+    // Durable streams otherwise stay open while suspended; close once the run parks
+    // so every approval the step raised has been read.
+    ...(isDurable ? { closeOnSuspend: true } : {}),
   })) as unknown as RunHandle;
   const runId = run.runId;
 
   // Resume loop: drain the stream, collect any approval requests, resolve them,
   // and resume. Continue until a run completes without suspending.
   // The bound guards against an accidental infinite approval loop in a test.
+  // Unanswered requests carry across resumes: a step raises all of its approvals at
+  // once, and resuming one call does not raise the others again.
+  const pendingApprovals: string[] = [];
+  const seenApprovals = new Set<string>();
   for (let iterations = 0; iterations < 50; iterations++) {
-    const pendingApprovals: string[] = [];
+    const batch: string[] = [];
     for await (const chunk of run.fullStream) {
       chunks.push(chunk);
       if (chunk.type === 'tool-call-approval') {
-        pendingApprovals.push((chunk.payload as { toolCallId: string }).toolCallId);
-        // Durable streams stay open while suspended; stop at the approval.
-        if (isDurable) break;
+        const { toolCallId } = chunk.payload as { toolCallId: string };
+        batch.push(toolCallId);
+        if (!seenApprovals.has(toolCallId)) {
+          seenApprovals.add(toolCallId);
+          pendingApprovals.push(toolCallId);
+        }
       }
     }
+    approvalBatches.push(batch);
 
-    if (pendingApprovals.length === 0) break;
-
-    // Resolve the first pending approval; subsequent ones (if any) surface on
-    // the next resume iteration.
-    const toolCallId = pendingApprovals[0]!;
+    // Answer one request per resume, oldest first.
+    const toolCallId = pendingApprovals.shift();
+    if (!toolCallId) break;
     const approve = decision({ toolCallId, approvalIndex: approvals.length });
     approvals.push(`${approve ? 'approve' : 'decline'}:${toolCallId}`);
 
@@ -764,6 +778,7 @@ export async function runApprovalScenario({
     output: outputOf(run),
     chunks,
     approvals,
+    approvalBatches,
     llm,
     requests: llm.getRequests(),
   };

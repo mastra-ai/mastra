@@ -1968,7 +1968,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         if (toolCallForeachOptions) {
           updateToolCallForeachConcurrency(toolCallForeachOptions, {
-            requireToolApproval,
             tools: currentStep.tools,
             activeTools: currentStep.activeTools as string[] | undefined,
             configuredConcurrency: configuredToolCallConcurrency,
