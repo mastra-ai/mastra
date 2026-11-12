@@ -4985,7 +4985,8 @@ export class Mastra<
 
   /**
    * Starts the recovery loop unless it runs, recovery is off, or this instance
-   * runs no orchestration worker. Its first pass runs now and is the boot
+   * has no storage or workers; the caller checks that this instance handles
+   * workflow events. Its first pass runs now and is the boot
    * pass: a `restartAllActiveWorkflowRuns()` call made meanwhile, such as the
    * server's at boot, joins it. Each later pass runs a scan interval after the
    * previous one handed out its restarts, or sooner when a run that pass found
@@ -4997,8 +4998,7 @@ export class Mastra<
       this.#shuttingDown ||
       this.#recoveryConfig.workflows === 'off' ||
       !this.#storage ||
-      this.#workersDisabled ||
-      (this.#workerFilter && !this.#workerFilter.has('orchestration'))
+      this.#workersDisabled
     ) {
       return;
     }
@@ -7999,8 +7999,13 @@ export class Mastra<
     }
 
     // Only here: workers a restart, a durable agent or a background task starts on their own leave
-    // the runs in storage alone, so a script that never calls startWorkers() never restarts them.
-    if (!name && this.#workerStops === stops) {
+    // the runs in storage alone, so a script that never calls startWorkers() never restarts them. The
+    // loop runs wherever workflow events are handled: with the orchestration worker, whether started
+    // alone or with the workers MASTRA_WORKERS selects.
+    const handlesWorkflowEvents = name
+      ? name === 'orchestration'
+      : !this.#workerFilter || this.#workerFilter.has('orchestration');
+    if (handlesWorkflowEvents && this.#workerStops === stops) {
       this.#startWorkflowRecoveryLoop();
     }
   }

@@ -15,6 +15,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { InMemoryStore } from '../storage/mock';
 import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
+import { MastraWorker } from '../worker';
 import { createStep, createWorkflow } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { runLivenessKey } from '../workflows/evented/leases';
@@ -367,6 +368,38 @@ describe('workflow recovery loop (#28712)', () => {
       await drained();
     }
     expect(restarted).toHaveBeenCalledTimes(restarts);
+  });
+
+  it('runs the loop on an instance that starts only its orchestration worker', async () => {
+    /** Stands in for the orchestration worker of a pull-mode pubsub, which the in-process one has none of. */
+    class OrchestrationWorker extends MastraWorker {
+      readonly name = 'orchestration';
+      #running = false;
+      async start() {
+        this.#running = true;
+      }
+      async stop() {
+        this.#running = false;
+      }
+      get isRunning() {
+        return this.#running;
+      }
+    }
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      recovery: scanning,
+      workers: [new OrchestrationWorker()],
+      workflows: { 'recovered-wf': oneStep('default', 'B', []) },
+    });
+    replicas.push({ mastra });
+    const listings = vi.spyOn(store, 'listWorkflowRuns');
+
+    await mastra.startWorkers('orchestration');
+
+    await vi.waitFor(() => expect(listingsOf(listings)).toBeGreaterThan(0));
   });
 
   it('starts no loop from a startWorkers() call that stopWorkers() overtook', async () => {
