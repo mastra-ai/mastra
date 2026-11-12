@@ -62,24 +62,40 @@ function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipReco
 }
 
 /**
- * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status` and `timestamp`
- * when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty
- * strings. Only these paths are read, so `context` is never sent.
- *
- * The snapshot is stored as TEXT. `OFFSET 0` keeps the planner from inlining the cast at each
- * use, so each row's snapshot is parsed once, and `jsonb_to_record` reads the fields in one pass.
- * A snapshot that isn't an object (`jsonb_to_record` throws on one) lists as `{}`.
+ * The snapshot fields a `listWorkflowRuns({ summary: true })` row carries instead of the
+ * snapshot, so `context` is never sent. The snapshot is stored as TEXT. These columns use only the
+ * `::jsonb` cast and `->>` that the status filter already runs on Aurora DSQL, plus `->`, and
+ * `summarySnapshot` builds the summary from them in the app.
  */
-const SUMMARY_SNAPSHOT_SQL = `(SELECT jsonb_strip_nulls(jsonb_build_object(
-    'status', r.status,
-    'timestamp', r."timestamp",
-    'parentWorkflow', CASE WHEN jsonb_typeof(r."parentWorkflow" -> 'workflowId') = 'string'
-        AND jsonb_typeof(r."parentWorkflow" -> 'runId') = 'string'
-        AND r."parentWorkflow" ->> 'workflowId' <> '' AND r."parentWorkflow" ->> 'runId' <> ''
-      THEN jsonb_build_object('workflowId', r."parentWorkflow" -> 'workflowId', 'runId', r."parentWorkflow" -> 'runId') END))
-  FROM (SELECT snapshot::jsonb AS state OFFSET 0) AS summary_source,
-    jsonb_to_record(CASE WHEN jsonb_typeof(summary_source.state) = 'object' THEN summary_source.state END)
-      AS r(status jsonb, "timestamp" jsonb, "parentWorkflow" jsonb))`;
+const SUMMARY_COLUMNS_SQL = [
+  `snapshot::jsonb ->> 'status' AS "summaryStatus"`,
+  `snapshot::jsonb ->> 'timestamp' AS "summaryTimestamp"`,
+  `snapshot::jsonb -> 'parentWorkflow' ->> 'workflowId' AS "summaryParentWorkflowId"`,
+  `snapshot::jsonb -> 'parentWorkflow' ->> 'runId' AS "summaryParentRunId"`,
+].join(', ');
+
+/**
+ * The reduced snapshot of a summary row: `status` and `timestamp` when set, and `parentWorkflow`
+ * only when both of its IDs are non-empty strings.
+ */
+function summarySnapshot(row: Record<string, any>): WorkflowRunState {
+  const snapshot: Record<string, unknown> = {};
+
+  if (row.summaryStatus !== null && row.summaryStatus !== undefined) {
+    snapshot.status = row.summaryStatus;
+  }
+
+  if (row.summaryTimestamp !== null && row.summaryTimestamp !== undefined) {
+    snapshot.timestamp = Number(row.summaryTimestamp);
+  }
+
+  const { summaryParentWorkflowId: workflowId, summaryParentRunId: runId } = row;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    snapshot.parentWorkflow = { workflowId, runId };
+  }
+
+  return snapshot as unknown as WorkflowRunState;
+}
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
@@ -796,7 +812,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
 
       // On older tables createTable adds the Z columns and init() adds resourceId, so they can be named here.
       const columns = summary
-        ? `workflow_name, run_id, "resourceId", ${SUMMARY_SNAPSHOT_SQL} AS snapshot, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"`
+        ? `workflow_name, run_id, "resourceId", ${SUMMARY_COLUMNS_SQL}, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"`
         : '*';
       const query = `
           SELECT ${columns} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
@@ -810,7 +826,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
-        return parseWorkflowRun(row);
+        return summary ? { ...parseWorkflowRun(row), snapshot: summarySnapshot(row) } : parseWorkflowRun(row);
       });
 
       return { runs, total: total || runs.length };
