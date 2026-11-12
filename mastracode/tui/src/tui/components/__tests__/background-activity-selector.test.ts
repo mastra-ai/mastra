@@ -105,6 +105,28 @@ describe('BackgroundActivitySelectorComponent', () => {
     expect(onAbort).not.toHaveBeenCalled();
   });
 
+  it('leaves a shell alone when a new call reuses the PID of the row shown', () => {
+    const onAbort = vi.fn();
+    const onOpen = vi.fn();
+    const shown = activity({ taskId: 'process:42', kind: 'process', pid: '42', toolCallId: 'call-old' });
+    const reused = activity({ taskId: 'process:42', kind: 'process', pid: '42', toolCallId: 'call-new' });
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [shown],
+      getActivity: () => reused,
+      onCancel: vi.fn(),
+      onAbort,
+      onOpen,
+    });
+    component.focused = true;
+
+    component.handleInput('d');
+    component.handleInput('\r');
+
+    expect(onAbort).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('renders current activity details when selection changes after completion', () => {
     const activities = [activity(), activity({ taskId: 'task-2', toolName: 'search_content' })];
     const currentActivity = activity({ taskId: 'task-2', toolName: 'search_content', status: 'completed' });

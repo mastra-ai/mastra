@@ -33,3 +33,5 @@ backgroundProcesses: {
 ```
 
 `truncateOutput` and `DEFAULT_TAIL_LINES` are now exported from `@mastra/core/workspace`.
+
+`buildBasePrompt` accepts `backgroundSubagents: true` to leave out the rule to use subagents only for parallel work.

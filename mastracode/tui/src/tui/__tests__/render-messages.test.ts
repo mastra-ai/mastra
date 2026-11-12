@@ -1794,6 +1794,17 @@ describe('renderExistingMessages subagents', () => {
       expect(rendered()).toContain(`Background execution interrupted by a ${reason}.`);
       expect(rendered()).toContain(`↳ view interrupted by a ${reason}`);
     });
+
+    it('replays an awaited one a restart cut off before it returned as failed', async () => {
+      const awaitedCall = assistantToolMessage('assistant-awaited-view', [
+        { id: 'view-call', name: 'view', args: { path: 'package.json' } },
+      ]);
+
+      const { state, rendered } = await replay([awaitedCall, interruption('view-call', 'view', 'task-view-1')]);
+
+      expect(state.pendingTools.has('view-call')).toBe(false);
+      expect(rendered()).toContain('Background execution interrupted by a restart.');
+    });
   });
 
   describe('background subagent calls', () => {
@@ -1905,6 +1916,49 @@ describe('renderExistingMessages subagents', () => {
       expect(rendered()).not.toContain('✓');
       expect(state.pendingSubagents.has('sub-call')).toBe(false);
     });
+
+    it('replays a failed one as failed, still reachable from Ctrl+G', async () => {
+      const failure = createSignal({
+        id: 'background-task:task-sub-1:failed',
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'Background Explore subagent failed. The error is in the original subagent call (sub-call).',
+        attributes: { source: 'background-work', status: 'failed' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:task-sub-1:failed',
+            taskId: 'task-sub-1',
+            originRunId: 'run-1',
+            originToolCallId: 'sub-call',
+            toolName: 'subagent',
+            status: 'failed',
+          },
+        },
+      }).toDBMessage();
+
+      const { state, box, rendered } = await replay([subagentCall, failure]);
+
+      expect(rendered()).toContain('✗ background');
+      expect(state.backgroundSubagentCalls.get('sub-call')).toEqual({ taskId: 'task-sub-1', component: box });
+    });
+
+    it.each(interruptions)(
+      'replays an awaited one a %s cut off before it returned as failed (%s)',
+      async (reason, status) => {
+        const awaitedCall = assistantToolMessage('assistant-awaited-subagent', [
+          { id: 'sub-call', name: 'subagent', args: { agentType: 'explore', task: 'Find the auth middleware' } },
+        ]);
+
+        const { state, rendered } = await replay([
+          awaitedCall,
+          interruption('sub-call', 'subagent', 'task-sub-1', reason, status),
+        ]);
+
+        expect(rendered()).not.toContain('◌');
+        expect(rendered()).toContain('✗ background');
+        expect(state.pendingSubagents.has('sub-call')).toBe(false);
+      },
+    );
   });
 
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {

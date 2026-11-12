@@ -999,12 +999,15 @@ function restoreReplayedSubagent(
     result?: string;
   },
 ): void {
-  if (replay.taskId) component.setBackgroundTaskId(replay.taskId);
+  if (replay.taskId) {
+    component.setBackgroundTaskId(replay.taskId);
+    // Ctrl+G opens the box of any background call, finished or not.
+    state.backgroundSubagentCalls?.set(toolCallId, { taskId: replay.taskId, component });
+  }
   if (replay.cancelled) {
     component.cancel();
   } else if (replay.running) {
     state.pendingSubagents.set(toolCallId, component);
-    if (replay.taskId) state.backgroundSubagentCalls?.set(toolCallId, { taskId: replay.taskId, component });
   } else {
     component.finish(replay.isError, replay.durationMs, replay.result);
   }
@@ -1041,6 +1044,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   const interruptedTasksByToolCallId = new Map<string, string>();
   const backgroundProcessExits = new Map<string, number>();
   const cancelledBackgroundToolCalls = new Set<string>();
+  // The notice says how a task ended even when the stored call still reads as a success.
+  const failedBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
     if (message.role !== 'signal') continue;
     const completion = getBackgroundCompletionView(message);
@@ -1051,6 +1056,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
     } else if (completion?.taskId) {
       backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
       if (completion.status === 'cancelled') cancelledBackgroundToolCalls.add(completion.originToolCallId);
+      if (completion.status === 'failed') failedBackgroundToolCalls.add(completion.originToolCallId);
     }
   }
 
@@ -1103,6 +1109,11 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             backgroundTasksByToolCallId.get(part.toolCallId) ??
             interruptedTasksByToolCallId.get(part.toolCallId);
           const isCancelledBackground = cancelledBackgroundToolCalls.has(part.toolCallId);
+          const isFailedBackground = failedBackgroundToolCalls.has(part.toolCallId);
+          // An awaited call a restart or shutdown cut off has no result; it also waits for its notice.
+          const awaitsInterruptedNotice =
+            !!state.options?.backgroundToolsEnabled && !hasResult && interruptedTasksByToolCallId.has(part.toolCallId);
+          const replaysRunning = isBackgroundPlaceholder || awaitsInterruptedNotice;
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -1146,8 +1157,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             restoreReplayedSubagent(state, part.toolCallId, subComponent, {
               taskId: state.options?.backgroundToolsEnabled ? backgroundTaskId : undefined,
               cancelled: isCancelledBackground,
-              running: isBackgroundPlaceholder,
-              isError: isErr ?? false,
+              running: replaysRunning,
+              isError: (isErr ?? false) || isFailedBackground,
               durationMs,
               result: resultText,
             });
@@ -1199,8 +1210,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             restoreReplayedSubagent(state, part.toolCallId, subComponent, {
               taskId: backgroundTaskId,
               cancelled: isCancelledBackground,
-              running: isBackgroundPlaceholder,
-              isError: isErr ?? false,
+              running: replaysRunning,
+              isError: (isErr ?? false) || isFailedBackground,
               durationMs: 0,
               result: rawResult,
             });
@@ -1233,7 +1244,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                     text: isBackgroundPlaceholder ? 'Running in background…' : formatToolResult(resultValue),
                   },
                 ],
-                isError: resultIsError,
+                isError: resultIsError || isFailedBackground,
               },
               isBackgroundPlaceholder,
             );
@@ -1260,7 +1271,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               true,
             );
             toolComponent.cancelBackground();
-          } else if (isBackgroundPlaceholder) {
+          } else if (replaysRunning) {
             state.pendingTools.set(part.toolCallId, toolComponent);
           }
 

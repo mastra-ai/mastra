@@ -27,6 +27,8 @@ export class BackgroundActivitySelectorComponent extends Box {
   private readonly getActivity: (taskId: string) => BackgroundActivity | undefined;
   private readonly onAbort: (activity: BackgroundActivity) => void;
   private readonly canControlProcesses: boolean;
+  /** The activities as the rows show them, by key. */
+  private readonly rows: Map<string, BackgroundActivity>;
 
   constructor(options: BackgroundActivitySelectorOptions) {
     super(4, 2, text => theme.bg('overlayBg', text));
@@ -75,8 +77,9 @@ export class BackgroundActivitySelectorComponent extends Box {
       options.tui.requestRender();
     };
 
+    this.rows = byId;
     this.list.onSelect = item => {
-      const activity = this.getActivity(item.value) ?? byId.get(item.value);
+      const activity = this.liveActivity(item.value);
       if (activity && canOpen(activity)) options.onOpen?.(activity);
     };
     this.list.onSelectionChange = item => {
@@ -94,6 +97,15 @@ export class BackgroundActivitySelectorComponent extends Box {
     if (first) updateDetail(first);
   }
 
+  /**
+   * The row's activity as it is now. A shell row is keyed by PID, so once a new
+   * call reuses the PID the row no longer names that call and acts on nothing.
+   */
+  private liveActivity(taskId: string): BackgroundActivity | undefined {
+    const live = this.getActivity(taskId);
+    return live && live.toolCallId === this.rows.get(taskId)?.toolCallId ? live : undefined;
+  }
+
   private canAbort(activity: BackgroundActivity): boolean {
     return activity.status === 'accepted' && (activity.kind !== 'process' || this.canControlProcesses);
   }
@@ -102,7 +114,7 @@ export class BackgroundActivitySelectorComponent extends Box {
     if (!this.focused) return;
     if (data.toLowerCase() === 'd') {
       const item = this.list.getSelectedItem();
-      const activity = item ? this.getActivity(item.value) : undefined;
+      const activity = item ? this.liveActivity(item.value) : undefined;
       if (activity && this.canAbort(activity)) this.onAbort(activity);
       return;
     }

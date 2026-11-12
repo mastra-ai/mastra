@@ -1,7 +1,8 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 
-import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
+import { BackgroundProcessOutputComponent } from '../components/background-process-output.js';
+import { sanitizeAnsiForRendering, sanitizeProcessOutputForRendering } from '../sanitize-ansi.js';
 
 describe('sanitizeAnsiForRendering', () => {
   it('returns plain text unchanged', () => {
@@ -111,6 +112,40 @@ describe('sanitizeAnsiForRendering', () => {
 
   it('removes an incomplete-looking CSI sequence at its first valid final byte', () => {
     expect(sanitizeAnsiForRendering('before\x1b[31broken')).toBe('beforeroken');
+  });
+});
+
+describe('sanitizeProcessOutputForRendering', () => {
+  it.each([
+    ['an OSC 52 clipboard write ended by BEL', 'a\x1b]52;c;aGVsbG8=\x07b', 'ab'],
+    ['an OSC 52 clipboard write ended by ST', 'a\x1b]52;c;aGVsbG8=\x1b\\b', 'ab'],
+    ['a window title', '\x1b]0;pwned\x07done', 'done'],
+    ['a DCS sequence', 'a\x1bPq#0;2;0;0;0\x1b\\b', 'ab'],
+    ['an APC sequence', 'a\x1b_payload\x1b\\b', 'ab'],
+    ['an unterminated OSC, up to the line end', 'a\x1b]52;c;aGVsbG8=\nnext', 'a\nnext'],
+    ['a lone ESC', 'a\x1bcb', 'acb'],
+    ['an 8-bit CSI', 'a\u009b2Jb', 'a2Jb'],
+  ])('removes %s', (_case, input, expected) => {
+    expect(sanitizeProcessOutputForRendering(input)).toBe(expected);
+  });
+
+  it('keeps colours and the text of a hyperlink', () => {
+    const input = '\x1b[31mred\x1b[0m \x1b]8;;https://example.com\x07link\x1b]8;;\x07\x1b[2K';
+    expect(sanitizeProcessOutputForRendering(input)).toBe('\x1b[31mred\x1b[0m link');
+  });
+
+  it('shows no terminal commands in the background shell output overlay', () => {
+    const overlay = new BackgroundProcessOutputComponent({
+      pid: '42',
+      stdout: 'SERVER_READY\x1b]52;c;aGVsbG8=\x07\n\x1b]0;title\x07listening',
+      stderr: '',
+      onClose: () => {},
+    });
+
+    const rendered = overlay.render(100).join('\n');
+    expect(rendered).not.toMatch(/\x1b[\]P_^X]/);
+    expect(rendered).toContain('SERVER_READY');
+    expect(rendered).toContain('listening');
   });
 });
 

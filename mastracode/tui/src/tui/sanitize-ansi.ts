@@ -57,6 +57,24 @@ export function sanitizeAnsiForRendering(text: string): string {
   });
 }
 
+// OSC, DCS, SOS, PM and APC: an introducer, a payload, then BEL or ESC \.
+// An unterminated one ends at the line.
+const STRING_SEQUENCE_RE = /\x1b[\]PX^_][^\x07\x1b\n]*(?:\x07|\x1b\\)?/g;
+const NON_SGR_ESC_RE = /\x1b(?!\[[\x20-\x3f]*m)/g;
+const C1_CONTROL_RE = /[\u0080-\u009f]/g;
+
+/**
+ * Keep only SGR styling in output from a process. Unlike
+ * {@link sanitizeAnsiForRendering}, which lets hyperlinks and other string
+ * sequences through for our own content, this removes every other sequence
+ * whole: shell output can carry OSC 52, which writes the clipboard, or other
+ * terminal commands.
+ */
+export function sanitizeProcessOutputForRendering(text: string): string {
+  const withoutStrings = text.replace(STRING_SEQUENCE_RE, '');
+  return sanitizeAnsiForRendering(withoutStrings).replace(NON_SGR_ESC_RE, '').replace(C1_CONTROL_RE, '');
+}
+
 /**
  * Replace every control character (including ESC, so all escape sequences are
  * neutralised) with a space. Use for untrusted one-line text such as goal

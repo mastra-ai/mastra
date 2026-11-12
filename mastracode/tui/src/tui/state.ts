@@ -189,6 +189,9 @@ export interface MastraTUIBaseOptions {
   /** Whether native background work and its TUI controls are enabled. */
   backgroundToolsEnabled?: boolean;
 
+  /** Whether the controller was started with subagents, which the prompt's subagent guidance follows. */
+  subagentsEnabled?: boolean;
+
   /** Process-local background completion events used for cross-thread discovery. */
   backgroundCompletionEvents?: BackgroundCompletionEvents;
 

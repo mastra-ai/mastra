@@ -1,6 +1,6 @@
 import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable } from '@earendil-works/pi-tui';
-import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
+import { sanitizeProcessOutputForRendering } from '../sanitize-ansi.js';
 import { theme } from '../theme.js';
 
 const MAX_OUTPUT_LINES = 40;
@@ -32,7 +32,7 @@ export class BackgroundProcessOutputComponent extends Box implements Focusable {
     const output = [options.stdout.trimEnd(), options.stderr.trimEnd() ? `stderr:\n${options.stderr.trimEnd()}` : '']
       .filter(Boolean)
       .join('\n\n');
-    const lines = output ? sanitizeAnsiForRendering(output).split('\n') : [];
+    const lines = output ? sanitizeProcessOutputForRendering(output).split('\n') : [];
     const hidden = Math.max(0, lines.length - MAX_OUTPUT_LINES);
     if (hidden > 0) this.addChild(new Text(theme.fg('muted', `… ${hidden} earlier lines`), 0, 0));
     this.addChild(
