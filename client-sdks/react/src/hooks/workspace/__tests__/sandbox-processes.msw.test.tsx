@@ -40,11 +40,13 @@ describe('useKillSandboxProcess', () => {
 
       const { result } = renderHookWithProviders(() => ({
         list: useSandboxProcesses({ workspaceId: WORKSPACE_ID, threadId: 'thread-1' }),
-        kill: useKillSandboxProcess({ workspaceId: WORKSPACE_ID }),
+        kill: useKillSandboxProcess(),
       }));
       await waitFor(() => expect(result.current.list.data?.processes).toEqual([devServer]));
 
-      await act(() => result.current.kill.mutateAsync({ pid: 'exec/1', threadId: 'thread-1' }));
+      await act(() =>
+        result.current.kill.mutateAsync({ workspaceId: WORKSPACE_ID, pid: 'exec/1', threadId: 'thread-1' }),
+      );
 
       expect(killed).toEqual([{ pid: 'exec/1', threadId: 'thread-1' }]);
       await waitFor(() => expect(result.current.list.data?.processes).toEqual([]));

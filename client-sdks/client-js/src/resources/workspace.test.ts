@@ -630,13 +630,13 @@ describe('Workspace Resource', () => {
       mockFetchResponse({ pid: 'exec/1', killed: true });
 
       await workspace.listSandboxProcesses({ threadId: 'thread-1' });
-      await workspace.getSandboxProcess('exec/1', { threadId: 'thread-1' });
+      await workspace.getSandboxProcess('exec/1', { threadId: 'thread-1', tail: 50 });
       const killed = await workspace.killSandboxProcess('exec/1', { threadId: 'thread-1' });
 
       const calls = (global.fetch as any).mock.calls.map(([url, init]: [string, RequestInit]) => [url, init.method]);
       expect(calls).toEqual([
         [`${base}?threadId=thread-1`, undefined],
-        [`${base}/exec%2F1?threadId=thread-1`, undefined],
+        [`${base}/exec%2F1?threadId=thread-1&tail=50`, undefined],
         [`${base}/exec%2F1/kill?threadId=thread-1`, 'POST'],
       ]);
       expect(killed).toEqual({ pid: 'exec/1', killed: true });

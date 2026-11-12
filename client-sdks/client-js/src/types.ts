@@ -1573,6 +1573,7 @@ export type SkillsShUpdateResponse = GeneratedResponse<'POST /workspaces/:worksp
 export type SandboxProcessesParams = QueryParams<'GET /workspaces/:workspaceId/sandbox/processes'>;
 export type ListSandboxProcessesResponse = GeneratedResponse<'GET /workspaces/:workspaceId/sandbox/processes'>;
 export type SandboxProcess = ListSandboxProcessesResponse['processes'][number];
+export type SandboxProcessOutputParams = QueryParams<'GET /workspaces/:workspaceId/sandbox/processes/:pid'>;
 export type SandboxProcessOutputResponse = GeneratedResponse<'GET /workspaces/:workspaceId/sandbox/processes/:pid'>;
 export type KillSandboxProcessResponse = GeneratedResponse<'POST /workspaces/:workspaceId/sandbox/processes/:pid/kill'>;
 

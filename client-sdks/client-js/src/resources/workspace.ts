@@ -30,6 +30,7 @@ import type {
   SkillsShUpdateParams,
   SkillsShUpdateResponse,
   SandboxProcessesParams,
+  SandboxProcessOutputParams,
   ListSandboxProcessesResponse,
   SandboxProcessOutputResponse,
   KillSandboxProcessResponse,
@@ -371,10 +372,11 @@ export class Workspace extends BaseResource {
   // Sandbox Process Operations
   // ==========================================================================
 
-  private processQuery(params: SandboxProcessesParams): string {
+  private processQuery(params: SandboxProcessOutputParams): string {
     const searchParams = new URLSearchParams();
     if (params.threadId) searchParams.set('threadId', params.threadId);
     if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.tail !== undefined) searchParams.set('tail', String(params.tail));
     const query = searchParams.toString();
     return query ? `?${query}` : '';
   }
@@ -393,10 +395,11 @@ export class Workspace extends BaseResource {
    * Gets a background process with its retained output. Does not release an exited process,
    * so the agent can still read it.
    * @param pid - Process ID
-   * @param params - Optional thread and resource that started the process
+   * @param params - Optional thread and resource that started the process, and `tail` to return
+   *   only the last N lines of output (0 or omitted returns all)
    * @returns Promise containing the process status and output
    */
-  getSandboxProcess(pid: string, params: SandboxProcessesParams = {}): Promise<SandboxProcessOutputResponse> {
+  getSandboxProcess(pid: string, params: SandboxProcessOutputParams = {}): Promise<SandboxProcessOutputResponse> {
     return this.request(`${this.basePath}/sandbox/processes/${encodeURIComponent(pid)}${this.processQuery(params)}`);
   }
 

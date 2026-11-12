@@ -30,15 +30,14 @@ export interface BackgroundTaskEvent {
   output?: BackgroundTaskOutputChunk[];
 }
 
-/** Default number of output chunks kept per task. */
-export const DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS = 200;
+const DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS = 200;
 
 export interface UseBackgroundTaskStreamOptions extends StreamBackgroundTasksParams {
   /** Whether the stream is active. Default: true */
   enabled?: boolean;
   /**
    * How many of a task's latest output chunks to keep on its `output`. Older chunks are dropped.
-   * Set to 0 to keep none. Default: {@link DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS}.
+   * Set to 0 to keep none. Default: 200.
    */
   maxOutputChunks?: number;
 }
