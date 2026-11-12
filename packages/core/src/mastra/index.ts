@@ -694,7 +694,8 @@ export interface Config<
    * {@link Mastra.restartAllActiveWorkflowRuns} on boot. Set it to `'off'` to
    * skip the workflow sweep entirely (no storage queries), for example when
    * several replicas share one database and you recover runs another way.
-   * `workflowConcurrency` caps how many runs that sweep restarts at once.
+   * `workflowConcurrency` caps how many runs that sweep restarts at once, and
+   * `workflowGraceMs` sets how long a run must have stopped before it does.
    *
    * `durableAgents` controls whether the deployer will automatically call
    * {@link Mastra.recoverAllDurableAgents} for every registered `DurableAgent`
@@ -902,7 +903,7 @@ function recoveryRunKey(workflowName: string, runId: string): string {
  *
  * A released or missing key carries no expiry, so the run's own last write
  * anchors the grace then: a run between two long steps is not restarted while
- * its next event is on its way to another instance.
+ * its next event waits in the pubsub for another instance.
  */
 function recoveryVerdict({
   records,
@@ -4459,8 +4460,8 @@ export class Mastra<
   }
 
   /**
-   * Every RUNNING/WAITING run of the workflows boot-time recovery restarts, read in one call per
-   * workflow and status. `restartAllActiveWorkflowRuns()` handles them in batches instead.
+   * Every RUNNING/WAITING run of the workflows boot-time recovery restarts, with full snapshots,
+   * read in one call per workflow and status. `restartAllActiveWorkflowRuns()` lists summaries instead.
    */
   public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
     const storage = this.#storage;
@@ -4776,10 +4777,7 @@ export class Mastra<
     }
   }
 
-  /**
-   * Restarts one run of a recovery pass, and logs a restart that fails. See
-   * {@link Mastra.#restartWorkflowRun}.
-   */
+  /** Restarts one run of a recovery pass (see `#restartWorkflowRun`), and logs a restart that fails. */
   async #restartStoppedRun(workflow: AnyWorkflow, runId: string): Promise<void> {
     try {
       await this.#restartWorkflowRun(workflow, runId);
