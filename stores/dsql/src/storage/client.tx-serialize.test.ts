@@ -112,4 +112,76 @@ describe('TransactionClient COMMIT/ROLLBACK drain (dsql)', () => {
 
     expect(statements).toEqual(['BEGIN', 'FAIL1', 'ROLLBACK']);
   });
+
+  it('preserves the original failure and destroys the pooled client if rollback fails', async () => {
+    const { client, query } = createStrictClient();
+    const primary = new Error('operation failed');
+    const rollbackError = new Error('rollback failed');
+    query.mockImplementationOnce(async () => ({ rows: [] }) as QueryResult);
+    query.mockImplementationOnce(async () => {
+      throw rollbackError;
+    });
+    const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
+    const onRollbackError = vi.fn();
+    const adapter = new PoolAdapter(pool, onRollbackError);
+
+    await expect(
+      adapter.tx(async () => {
+        throw primary;
+      }),
+    ).rejects.toBe(primary);
+    expect(onRollbackError).toHaveBeenCalledWith(rollbackError);
+    expect(client.release).toHaveBeenCalledWith(true);
+  });
+
+  it('destroys the client if BEGIN rejects without running the callback', async () => {
+    const { client, query } = createStrictClient();
+    const beginError = new Error('BEGIN timed out after reaching PostgreSQL');
+    query.mockRejectedValueOnce(beginError);
+    const callback = vi.fn(async () => undefined);
+    const adapter = new PoolAdapter({ connect: vi.fn(async () => client) } as unknown as Pool);
+    await expect(adapter.tx(callback)).rejects.toBe(beginError);
+    expect(callback).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(client.release).toHaveBeenCalledWith(true);
+  });
+
+  it('preserves the original error when the diagnostic callback throws', async () => {
+    const { client, query } = createStrictClient();
+    const primary = new Error('operation failed');
+    query.mockResolvedValueOnce({ rows: [] } as QueryResult);
+    query.mockRejectedValueOnce(new Error('rollback failed'));
+    const reporter = vi.fn(() => {
+      throw new Error('logger failed');
+    });
+    const adapter = new PoolAdapter({ connect: vi.fn(async () => client) } as unknown as Pool, reporter);
+    await expect(
+      adapter.tx(async () => {
+        throw primary;
+      }),
+    ).rejects.toBe(primary);
+    expect(reporter).toHaveBeenCalledOnce();
+    expect(client.release).toHaveBeenCalledWith(true);
+  });
+
+  it('logs rollback failure without a diagnostic callback', async () => {
+    const { client, query } = createStrictClient();
+    const primary = new Error('operation failed');
+    const rollbackError = new Error('rollback failed');
+    query.mockResolvedValueOnce({ rows: [] } as QueryResult);
+    query.mockRejectedValueOnce(rollbackError);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const adapter = new PoolAdapter({ connect: vi.fn(async () => client) } as unknown as Pool);
+      await expect(
+        adapter.tx(async () => {
+          throw primary;
+        }),
+      ).rejects.toBe(primary);
+      expect(consoleError).toHaveBeenCalledWith('Failed to rollback transaction:', rollbackError);
+      expect(client.release).toHaveBeenCalledWith(true);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
