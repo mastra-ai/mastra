@@ -513,6 +513,77 @@ describe('Model provider onboarding', () => {
     });
   });
 
+  describe('when the server already has a Mastra Gateway key', () => {
+    function registerServerGateway() {
+      registerAuthHandler();
+      const connect = vi.fn();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: true,
+            providers: [
+              { provider: 'mastra', envVar: 'MASTRA_GATEWAY_API_KEY', source: 'deployment', serverKey: true },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [
+              {
+                id: 'mastra/anthropic/claude-opus-5.5',
+                provider: 'mastra',
+                modelName: 'anthropic/claude-opus-5.5',
+                hasApiKey: true,
+              },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, () => {
+          connect();
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      return connect;
+    }
+
+    it('shows the gateway as a connected provider for the company account, with no connect button', async () => {
+      const connect = registerServerGateway();
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+
+      const gateway = await screen.findByRole('button', { name: 'Mastra Gateway' });
+      expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+      await user.click(gateway);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
+      expect(connect).not.toHaveBeenCalled();
+    });
+
+    it('lets a person pick the gateway for their own sessions without connecting anything', async () => {
+      const connect = registerServerGateway();
+      const onContinue = vi.fn<() => void>();
+      const user = userEvent.setup();
+
+      renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
+
+      const gateway = await screen.findByRole('button', { name: 'Mastra Gateway' });
+      expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+      await user.click(gateway);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await user.click(await screen.findByRole('button', { name: 'Review setup' }));
+      expect(onContinue).toHaveBeenCalledWith({
+        providerId: 'mastra',
+        modelId: 'mastra/anthropic/claude-opus-5.5',
+        method: 'api_key',
+      });
+      expect(connect).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when the user is not an organization admin', () => {
     it('keeps shared providers selectable and disables new organization connections', async () => {
       registerAuthHandler();

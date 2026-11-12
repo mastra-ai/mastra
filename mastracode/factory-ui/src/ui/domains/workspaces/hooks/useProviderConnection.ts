@@ -57,14 +57,24 @@ export interface ProviderConnection {
   completeOAuth: () => void;
 }
 
+/**
+ * The Mastra Gateway on a server that has its own key, such as the one the Mastra platform
+ * adds to a deploy. Unlike other server-held credentials, that key serves every scope that
+ * has no stored credential, personal sessions included.
+ */
+function hasServerGatewayKey(provider: ProviderInfo): boolean {
+  return provider.serverKey === true;
+}
+
 export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
   if (provider.custom) return 'api_key';
-  if (scope === 'user') return credentialAt(provider, 'user');
+  const serverKey = hasServerGatewayKey(provider) ? ('api_key' as const) : undefined;
+  if (scope === 'user') return credentialAt(provider, 'user') ?? serverKey;
   if (provider.source === 'deployment') return 'api_key';
-  if (scope === 'org') return credentialAt(provider, 'org');
+  if (scope === 'org') return credentialAt(provider, 'org') ?? serverKey;
   if (provider.source === 'none') return undefined;
   return provider.source.startsWith('oauth') ? 'oauth' : 'api_key';
 }
@@ -184,7 +194,9 @@ export function useProviderConnection({
     orgKeyAdmin,
     signInProviders: providerChoices.filter(candidate => candidate.oauth?.supported === true),
     keyProviders: providerChoices.filter(
-      candidate => !(hidesDeploymentKeys && candidate.source === 'deployment') && offersApiKey(candidate),
+      candidate =>
+        !(hidesDeploymentKeys && candidate.source === 'deployment' && !hasServerGatewayKey(candidate)) &&
+        offersApiKey(candidate),
     ),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,
