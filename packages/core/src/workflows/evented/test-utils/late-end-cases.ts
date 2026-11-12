@@ -5,6 +5,7 @@
  * storage.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import type { Event } from '../../../events/types';
 import type { MastraStorage } from '../../../storage';
 import { nestedHandOffKey, restartLeaseKey, runEndedKey, runLivenessKey, stepOccurrenceKey } from '../leases';
@@ -21,6 +22,27 @@ import {
 } from './late-delivery-replicas';
 import { Num, work } from './lease-replicas';
 import { createStep, createWorkflow } from '..';
+
+const Seen = z.object({ last: z.string().optional() });
+
+/** A step that notes its id in `executions` and in the run's state, and suspends when `suspends` is set. */
+function noting(id: string, executions: string[], suspends = false) {
+  return createStep({
+    id,
+    inputSchema: Num,
+    outputSchema: Num,
+    stateSchema: Seen,
+    execute: async ({ inputData, setState, suspend }) => {
+      executions.push(id);
+      await setState({ last: id });
+      if (suspends) {
+        return suspend({});
+      }
+
+      return inputData;
+    },
+  });
+}
 
 /** The `workflow.end` events of the nested runs `published` holds, in the order they ended. */
 const childEnds = (published: Event[], parentRunId: string) =>
@@ -205,9 +227,9 @@ export function describeLateEndCases({
       async ({ method, key }) => {
         const executions: string[] = [];
         const build = () =>
-          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
-            .then(work('first', async id => void executions.push(id)))
-            .then(work('second', async id => void executions.push(id)))
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, stateSchema: Seen })
+            .then(noting('first', executions))
+            .then(noting('second', executions))
             .commit();
         // The last step's end sits in A's broker queue past a lease TTL, so the run looks stopped.
         const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [1]));
@@ -232,10 +254,10 @@ export function describeLateEndCases({
           return original(args);
         }) as never);
         try {
-          expect(await (await b.workflow.createRun({ runId: run.runId })).restart()).toMatchObject({
-            status: 'success',
-            result: { n: 1 },
+          const restart = (await b.workflow.createRun({ runId: run.runId })).restart({
+            outputOptions: { includeState: true },
           });
+          expect(await restart).toMatchObject({ status: 'success', result: { n: 1 }, state: { last: 'second' } });
         } finally {
           spy.mockRestore();
         }

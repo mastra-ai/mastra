@@ -124,7 +124,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         result: {
           prevResult: snapshot.status === 'success' ? snapshot.result : { status: 'failed', error: snapshot.error },
           stepResults: hydrateSerializedStepErrors(snapshot.context),
-          state: snapshot.value,
+          state: snapshot.context?.__state ?? snapshot.value,
         },
       };
     }
