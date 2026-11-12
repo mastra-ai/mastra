@@ -4,6 +4,7 @@ import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
+import { mergeProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
@@ -843,8 +844,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const nullToUndefined =
     Boolean(execOptions?.structuredOutput?.schema) &&
     !(execOptions?.structuredOutput as any)?.model &&
-    [model, ...(modelList ?? []).map((entry: AgentModelManagerConfig) => entry.model)].some(candidate =>
-      needsNullToUndefined(candidate as any, execOptions?.providerOptions),
+    [
+      { model, providerOptions: undefined },
+      ...(modelList ?? []).map((entry: AgentModelManagerConfig) => ({
+        model: entry.model,
+        providerOptions: entry.providerOptions,
+      })),
+    ].some(candidate =>
+      needsNullToUndefined(
+        candidate.model as any,
+        mergeProviderOptions(execOptions?.providerOptions, candidate.providerOptions),
+      ),
     );
   const structuredOutputSchema = execOptions?.structuredOutput?.schema
     ? toLiveStructuredOutputSchema<{}>(execOptions.structuredOutput.schema, nullToUndefined)

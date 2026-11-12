@@ -170,6 +170,16 @@ describeForAllEngines('AIMock loop scenario: Azure OpenAI structured output', en
     });
   }
 
+  it('strict mode set in a model entry providerOptions drops null optional keys', async () => {
+    const entryModel = createAzureV5({ resourceName: RESOURCE, apiKey: 'test-key' }).responses('gpt-5.4');
+    const object = await run(
+      (() => [{ model: entryModel, providerOptions: { openai: { strictJsonSchema: true } } }]) as any,
+      undefined,
+    );
+
+    expect(object).toEqual({ reply: 'hi', items: [{ name: 'apple' }] });
+  });
+
   it('AI SDK 5 Azure Responses model keeps its non-strict default request', async () => {
     const object = await run(
       () => createAzureV5({ resourceName: RESOURCE, apiKey: 'test-key' }).responses('gpt-5.4'),
