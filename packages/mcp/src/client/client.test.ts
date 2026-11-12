@@ -594,6 +594,46 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it('enforces JSON Schema format keywords on tool input schemas', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'events_since',
+          description: 'Lists events since a timestamp',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { since: { type: 'string' as const, format: 'date-time' } },
+            required: ['since'],
+          },
+        },
+      ],
+    });
+    const callTool = vi.spyOn(sdkClient, 'callTool');
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const tool = (await client.tools()).events_since;
+
+      const rejected = await tool.execute?.({ since: 'not-a-date' });
+
+      expect(rejected).toMatchObject({ error: true, message: expect.stringMatching(/input validation failed/i) });
+      expect(callTool).not.toHaveBeenCalled();
+      // The reported symptom: Ajv logging `unknown format "date-time" ignored ...` on every compile.
+      expect(consoleWarn.mock.calls.flat().join(' ')).not.toContain('unknown format');
+
+      const callToolResult = { content: [{ type: 'text', text: 'ok' }], isError: false };
+      callTool.mockResolvedValue(callToolResult);
+
+      const accepted = await tool.execute?.({ since: '2026-11-05T10:00:00Z' });
+
+      expect(accepted).toEqual(callToolResult);
+      expect(callTool).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
   it('skips tools whose input schema is nested too deeply to validate', async () => {
     const sdkClient = (client as any).client as Client;
     let nestedSchema: Record<string, unknown> = { type: 'string' };

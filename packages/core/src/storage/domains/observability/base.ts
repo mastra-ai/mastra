@@ -118,6 +118,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
+ * - `span-query-duration-sort`: ordering completed spans by `durationMs`
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
  * - `span-query-text-search`: literal substring search in `querySpans`
  * - `trace-query-text-search`: literal substring search across any span in `queryTraces`
@@ -146,6 +147,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
  * - `feedback`: the feedback CRUD, review-status and analytics methods
+ * - `feedback-replacement`: full replacement and create-with-ignore-conflicts support
  */
 export type ObservabilityStorageFeature =
   | 'delta-polling'
@@ -158,6 +160,7 @@ export type ObservabilityStorageFeature =
   | 'tag-discovery'
   | 'metric-discovery'
   | 'span-query'
+  | 'span-query-duration-sort'
   | 'span-query-context-fields'
   | 'span-query-text-search'
   | 'trace-query-text-search'
@@ -172,6 +175,7 @@ export type ObservabilityStorageFeature =
   | 'thread-query-rows'
   | 'trace-query-tenant-scope'
   | 'feedback'
+  | 'feedback-replacement'
   | 'trace-query-context-ids'
   | 'trace-query-context-fields'
   | 'trace-query-time-to-first-chunk'
@@ -903,9 +907,48 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
-  /**
-   * Creates multiple feedback observations in a single batch.
-   */
+  /** Replace a complete feedback record, preserving its identity. Missing records are created. */
+  async replaceFeedback(args: CreateFeedbackArgs): Promise<void> {
+    if (!this.getFeatures()?.includes('feedback-replacement')) {
+      throw new Error('This storage provider does not support feedback replacement');
+    }
+    const { feedback } = args;
+    if (!feedback.feedbackId?.trim() || !feedback.traceId?.trim() || !Number.isFinite(feedback.timestamp?.getTime())) {
+      throw new Error('Feedback replacement requires feedbackId, traceId, and the original timestamp');
+    }
+    await this.writeFeedbackReplacement({
+      ...args,
+      feedback: { ...feedback, feedbackUserId: feedback.feedbackUserId ?? null },
+    });
+  }
+
+  /** Adapters with atomic writes override this fallback; ClickHouse retains sequential protection. */
+  protected async writeFeedbackReplacement({ feedback }: CreateFeedbackArgs): Promise<void> {
+    this.assertFeedbackReplacementIdentity(feedback, await this.getFeedbackById(feedback.feedbackId!));
+    await this.createFeedback({ feedback, onConflict: 'replace' });
+  }
+
+  protected assertFeedbackReplacementIdentity(
+    feedback: CreateFeedbackArgs['feedback'],
+    existing: FeedbackRecord | null | undefined,
+  ): void {
+    if (
+      existing &&
+      (existing.traceId !== feedback.traceId ||
+        existing.timestamp.getTime() !== feedback.timestamp.getTime() ||
+        (existing.organizationId ?? null) !== (feedback.organizationId ?? null) ||
+        (existing.resourceId ?? null) !== (feedback.resourceId ?? null))
+    ) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback replacement must preserve its trace, timestamp, and tenant',
+      });
+    }
+  }
+
+  /** Creates multiple feedback observations in a single batch. */
   async batchCreateFeedback(_args: BatchCreateFeedbackArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_FEEDBACK_NOT_IMPLEMENTED',

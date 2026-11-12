@@ -10,7 +10,14 @@ import {
   getScopeStreamSlot,
   untilIdleHandlesBackgroundTask,
 } from '../../loop/shared/stream-until-idle-helpers';
-import { createTimeoutAbortSignal, isMastraTimeoutError } from '../../loop/timeout';
+import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../../loop/shared/tool-abort-grace';
+import {
+  createTimeoutAbortSignal,
+  DEADLINE_SAVE_CLAIM_HOLD_MS,
+  DEADLINE_SAVE_WAIT_MS,
+  isMastraTimeoutError,
+  settledOrElapsed,
+} from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
@@ -25,7 +32,6 @@ import {
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
-import { toStandardSchema } from '../../schema';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
@@ -46,12 +52,16 @@ import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
+import { whenRunStepsSettle } from '../run-lease-fence';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput } from '../signals';
 import { AgentStreamBus } from '../streams/bus';
+import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
+import type { ResponseMessagesReplay } from '../streams/response-messages';
 import type { AgentStreamsConfig } from '../streams/types';
+import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -81,6 +91,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
+import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
@@ -109,8 +120,10 @@ import type {
   DurableAgentStreamOptions as DurableStreamAdapterOptions,
   DurableAgentStreamResult as DurableStreamAdapterResult,
 } from './stream-adapter';
+import { toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type {
   AgentAbortEventData,
+  AgentChunkEventData,
   AgentStreamEvent,
   AgentStepFinishEventData,
   DurableAgentStepFinishResult,
@@ -125,6 +138,7 @@ import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
+import { deadlineMessageListState, runDurableDeadlineOutputPass } from './workflows/finalize-run';
 import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
@@ -835,6 +849,16 @@ export class DurableAgent<
   #timedOutExecutions = new WeakSet<ExecutionFence>();
   /** Canceled parked runs whose abort terminal this process already published. */
   #canceledRunTerminals = new Set<string>();
+  /**
+   * Accepted input of stream()/generate() executions. A total deadline that
+   * settles the execution saves the turn from it as a terminal write.
+   */
+  #runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
+  /**
+   * Registry entries of recovered executions whose memory is fenced but which are not registered yet,
+   * so a total deadline in that window still saves the turn.
+   */
+  #recoveredEntries = new WeakMap<ExecutionFence, RunRegistryEntry>();
 
   /**
    * User-supplied snapshot-persistence policy
@@ -1767,7 +1791,10 @@ export class DurableAgent<
       structuredOutput: workflowInput.options?.structuredOutput?.schema
         ? {
             ...workflowInput.options.structuredOutput,
-            schema: toStandardSchema(workflowInput.options.structuredOutput.schema),
+            schema: toLiveStructuredOutputSchema(
+              workflowInput.options.structuredOutput.schema,
+              workflowInput.options.structuredOutput.nullToUndefined,
+            ),
           }
         : undefined,
       backgroundTaskManager,
@@ -1785,6 +1812,13 @@ export class DurableAgent<
       cleanup: () => {},
     };
     this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController, executionFence);
+    // The recovered run's deadline saves the turn as of the crash, until its first step snapshots it.
+    this.#runInputs.set(executionFence, {
+      ...workflowInput,
+      messageListState:
+        (latestMessageListState as DurableAgenticWorkflowInput['messageListState'] | undefined) ??
+        workflowInput.messageListState,
+    });
 
     return {
       requestContext,
@@ -2728,13 +2762,48 @@ export class DurableAgent<
     // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
     // find them.
     const finished = totalTimeout || (status !== undefined && status !== 'suspended');
+    const runInput = totalTimeout && fence ? this.#runInputs.get(fence) : undefined;
+    // Captured before the error below lets the caller clean the run up.
+    const runInputEntry =
+      runInput && (getRunRegistryEntry(runId, this.#mastra) ?? (fence && this.#recoveredEntries.get(fence)));
     let wrote = false;
+    let deadlineSave: Promise<void> | undefined;
     const writeTerminalState = async () => {
       wrote = true;
       if (totalTimeout && fence) fence.deadlineError = error;
+      if (runInput && runInputEntry && !runInputEntry.tripwire) {
+        // The run never reaches its finish step, so the output processors get their pass here, over the
+        // steps that completed in time (or just the accepted request). Saves made under the claim the
+        // deadline replaced are rejected; this one writes under the replacement. Saves upsert by ID.
+        // Like the finish step, memory is saved before the caller sees the run end.
+        this.#runInputs.delete(fence!);
+        deadlineSave = (async () => {
+          // A tool the deadline aborted still gets its grace window to return; wait (bounded) so its step can be saved.
+          await settledOrElapsed(
+            new Promise<void>(resolve => whenRunStepsSettle(runInputEntry, resolve)),
+            TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_MS,
+          );
+          const deadlineSpan = runInputEntry.resumeAgentSpan ?? runInputEntry.agentSpan;
+          await runDurableDeadlineOutputPass({
+            runId,
+            initData: runInput,
+            ...deadlineMessageListState(runInputEntry, runInput.messageListState),
+            entry: runInputEntry,
+            mastra: this.#mastra,
+            tracingContext: deadlineSpan ? { currentSpan: deadlineSpan } : undefined,
+            logger: this.logger,
+          });
+        })().catch(saveError => {
+          this.logger.warn(`Failed to save run ${runId} at its total deadline`, { runId, error: saveError });
+        });
+        // Saved before the caller sees the run end, unless the store hangs: the deadline must still surface.
+        await settledOrElapsed(deadlineSave, DEADLINE_SAVE_WAIT_MS);
+      }
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
+      // The claim is held until the save lands (bounded), so it is not rejected as a stale write.
+      if (deadlineSave) await settledOrElapsed(deadlineSave, DEADLINE_SAVE_CLAIM_HOLD_MS);
     };
 
     if (!fence) return writeTerminalState();
@@ -3239,6 +3308,7 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
+    this.#runInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -3575,7 +3645,13 @@ export class DurableAgent<
         workflowName: DurableStepIds.AGENTIC_LOOP,
       });
       if (!persisted) {
-        throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
+        throw new MastraError({
+          id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `No registry entry found for run ${runId}. Cannot resume.`,
+          details: { agentName: this.name, runId },
+        });
       }
 
       let snapshot =
@@ -3852,7 +3928,9 @@ export class DurableAgent<
             ? resolvedOptions.delegation
             : (entry.delegation ?? resolvedOptions.delegation),
           hooks: resolvedOptions.hooks,
-          methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
+          // Build for the method that started the run. `closeOnSuspend` is also a
+          // stream() option and resumeStream() always sets it, so it cannot tell (#29436).
+          methodType: entry.methodType ?? 'stream',
           backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
           model: entry.model,
@@ -3888,6 +3966,7 @@ export class DurableAgent<
     let initialToolCalls: ToolCallChunk[];
     let resumedText: { priorText: string; stepText: string } | undefined;
     let resumeOffset: number | 'latest';
+    let persistedInput: DurableAgenticWorkflowInput | undefined;
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
@@ -3927,6 +4006,7 @@ export class DurableAgent<
       // chunk that paused it). Without this, a resume that closes on suspend
       // (resumeGenerate) would immediately close on the replayed SUSPENDED.
       resumeOffset = await this.#getPubsubOffset(runId);
+      persistedInput = current?.context?.input as DurableAgenticWorkflowInput | undefined;
     } catch (error) {
       // The segment never started: release the run so it can be resumed again.
       await executionFence.settle(async () => {});
@@ -3958,6 +4038,8 @@ export class DurableAgent<
     if (resumeTotalMs !== undefined) {
       entry.timeoutTotalMs = resumeTotalMs;
     }
+    // The resumed segment's deadline saves the turn from the run's persisted input, as a first segment does.
+    if (persistedInput) this.#runInputs.set(executionFence, persistedInput);
     this.#installAbortWithTotalTimeout(entry, abortController, executionFence);
     const globalEntryForAbort = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForAbort) {
@@ -4458,6 +4540,7 @@ export class DurableAgent<
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
       await this.#coverMemory(executionFence, recoveryState.requestContext, true);
+      this.#recoveredEntries.set(executionFence, recoveryState.registryEntry as unknown as RunRegistryEntry);
       this.#assertRecoveryActive();
     } catch (error) {
       const settlement = await executionFence?.settle(async () => {});
@@ -4824,6 +4907,7 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
+    this.#runInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -5498,9 +5582,38 @@ export class DurableAgent<
     let subscribed = true;
     let activityVersion = 0;
 
+    // Step-finish events carry only the response messages that changed; rebuild the full list so
+    // the frames match what the run's own stream reports. A reader starting at an offset first
+    // rebuilds it from the events it skips.
+    let responseMessages: ResponseMessagesReplay = { messages: [] };
+    const offset = options.offset;
+    if (offset !== undefined && offset > 0 && this.pubsub.supportsOffsets) {
+      try {
+        const skipped = (await this.pubsub.getHistory(topic, 0)).filter(
+          event => typeof event.index === 'number' && event.index < offset,
+        );
+        responseMessages = replayResponseMessages(skipped);
+      } catch (error) {
+        this.logger.warn(`[DurableAgent] Couldn't read run ${runId}'s history before offset ${offset}`, { error });
+      }
+    }
+
     const deliver = (event: AgentStreamEvent) => {
       activityVersion++;
       if (!subscribed || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
+      const chunk = event.type === AgentStreamEventTypes.CHUNK ? (event.data as AgentChunkEventData) : undefined;
+      if (chunk?.type === 'step-finish' && chunk.payload) {
+        event = {
+          ...event,
+          data: {
+            ...chunk,
+            payload: withRebuiltResponseMessages(
+              responseMessages,
+              chunk.payload as unknown as AgentStreamStepFinishPayload,
+            ),
+          },
+        };
+      }
       // Keep `index`: the observe route forwards it on each frame so clients can resume at index + 1.
       onEvent(event);
     };
@@ -5689,7 +5802,10 @@ export class DurableAgent<
       const persistedStructuredOutput = workflowInput.options?.structuredOutput;
       if (persistedStructuredOutput?.schema) {
         const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
-        const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
+        const schema = toLiveStructuredOutputSchema<{}>(
+          persistedStructuredOutput.schema,
+          persistedStructuredOutput.nullToUndefined,
+        );
         // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
         structuredOutput =
           errorStrategy === 'fallback'
@@ -5861,6 +5977,7 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       offset: options?.offset,
+      replayResponseMessagesBeforeOffset: true,
       ...replayFloor,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
@@ -5904,36 +6021,7 @@ export class DurableAgent<
     // the observer. MastraModelOutput fans out to several readers and only drops
     // the cancelled reader's listeners, so the cancel never reaches the pubsub
     // subscription — pass it through here.
-    const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      get(this: typeof output) {
-        // `this` is the real instance (the destructurable proxy reads getters
-        // with its target as receiver); the proxy itself can't reach private fields.
-        const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
-        return new ReadableStream<ChunkType<TOutput>>({
-          async pull(controller) {
-            let result: ReadableStreamReadResult<ChunkType<TOutput>>;
-            try {
-              result = await reader.read();
-            } catch (error) {
-              detach();
-              throw error;
-            }
-            if (result.done) {
-              detach();
-              controller.close();
-            } else {
-              controller.enqueue(result.value);
-            }
-          },
-          cancel(reason) {
-            detach();
-            return reader.cancel(reason);
-          },
-        });
-      },
-    });
+    detachFullStreamOnEnd(output, detach);
 
     // Wait for subscription to be ready
     try {

@@ -10,7 +10,7 @@ interface ActiveRunResourcesOptions {
   resourceIds: string[];
 }
 
-/** `/active-runs` is the controller's whole registry, so every caller shares one poll. */
+/** `/active-runs` is the controller's whole registry, so every caller shares one read. The feed re-reads it: nothing here polls. */
 export function activeRunsQueryOptions(agentControllerId: string, baseUrl: string) {
   return queryOptions({
     queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl),
@@ -18,8 +18,6 @@ export function activeRunsQueryOptions(agentControllerId: string, baseUrl: strin
       const { controller } = createAgentControllerClient({ agentControllerId, baseUrl });
       return requireAgentController(controller).listActiveRuns();
     },
-    // A feed frame only makes this sooner: a session that moves to another thread mid-run leaves the registry without one.
-    refetchInterval: 5_000,
     retry: false,
   });
 }

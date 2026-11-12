@@ -24,7 +24,9 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
+import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
 import type { Workspace } from '../workspace/workspace';
 
@@ -162,6 +164,7 @@ export function buildFableFallbackProviderOptions(
 
 /** How much of the tail a rename reads: enough to say where the thread went, bounded so a long thread costs no more than a short one. */
 const TITLE_WINDOW_MESSAGES = 20;
+const THREAD_PAGE_FLOOR = 50;
 
 /**
  * The AgentController orchestrates multiple agent modes, shared state, memory, and storage.
@@ -436,6 +439,7 @@ export class AgentController<TState = {}> {
     session.permissions.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
       setState: updates => session.state.set(updates as Partial<TState>),
+      onChange: () => session.applyToolPolicyToParkedApprovals(),
     });
     session.subagents.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
@@ -814,11 +818,21 @@ export class AgentController<TState = {}> {
       // this session's scope — including one carrying no scope at all — belongs
       // to nobody here and must not be auto-resumed.
       const scopeEntries = Object.entries(session.getThreadScope());
+      let metadata: Record<string, unknown> | undefined;
+      try {
+        if (scopeEntries.length > 0) metadata = validateStorageMetadataFilter(Object.fromEntries(scopeEntries));
+      } catch {
+        // Unsupported scope keys can still be matched exactly after loading threads.
+      }
 
-      const threads = await session.thread.list();
-      const candidates = threads.filter(t => {
-        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-        return scopeEntries.every(([key, value]) => metadata[key] === value);
+      const candidates = await this.queryThreads({
+        resourceId: session.identity.getResourceId(),
+        metadata,
+        limit: scopeEntries.length > 0 && metadata === undefined ? undefined : 1,
+        matchesScope: thread => {
+          const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+          return scopeEntries.every(([key, value]) => values[key] === value);
+        },
       });
 
       if (candidates.length === 0 && overrides?.createInitialThread !== false) {
@@ -833,6 +847,9 @@ export class AgentController<TState = {}> {
     }
 
     await this.#notifySessionCreated(session);
+    // A run may have parked on approval before this process (or a session-created
+    // hook) installed the rule that allows or denies it.
+    await session.applyToolPolicyToParkedApprovals();
     return session;
   }
 
@@ -854,12 +871,23 @@ export class AgentController<TState = {}> {
     const tagScope = Object.entries(tags ?? {}).filter(([key]) => !isReservedThreadMetadataKey(key));
     const { projectPath } = (initialState ?? {}) as { projectPath?: string };
     const scopeEntries = tagScope.length > 0 ? tagScope : projectPath ? [['projectPath', projectPath] as const] : [];
-    const threads = await this.queryThreads({ resourceId });
-    const recoverable = threads.some(thread => {
-      const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
-      return scopeEntries.every(([key, value]) => metadata[key] === value);
+    let metadata: Record<string, unknown> | undefined;
+    let filterable = true;
+    try {
+      if (scopeEntries.length > 0) metadata = validateStorageMetadataFilter(Object.fromEntries(scopeEntries));
+    } catch {
+      filterable = false;
+    }
+    const threads = await this.queryThreads({
+      resourceId,
+      metadata: filterable ? metadata : undefined,
+      limit: filterable ? 1 : undefined,
+      matchesScope: thread => {
+        const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+        return scopeEntries.every(([key, value]) => values[key] === value);
+      },
     });
-    if (!recoverable) throw new SessionNotStartedError(resourceId);
+    if (threads.length === 0) throw new SessionNotStartedError(resourceId);
   }
 
   /**
@@ -1443,10 +1471,15 @@ export class AgentController<TState = {}> {
     resourceId,
     includeForkedSubagents,
     metadata,
+    limit,
+    matchesScope,
   }: {
     resourceId?: string;
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
+    /** Return only the newest `limit` threads by `updatedAt`, read page by page instead of all at once. */
+    limit?: number;
+    matchesScope?: (thread: StorageThreadType) => boolean;
   }): Promise<AgentControllerThread[]> {
     await this.initStorage();
     if (!this.#resolveStorage()) {
@@ -1462,14 +1495,45 @@ export class AgentController<TState = {}> {
             ...(metadata === undefined ? {} : { metadata }),
           };
 
-    const result = await memoryStorage.listThreads({ filter, perPage: false });
+    const keep = (thread: StorageThreadType) =>
+      (includeForkedSubagents || (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent !== true) &&
+      (!matchesScope || matchesScope(thread));
 
-    const threads = includeForkedSubagents
-      ? result.threads
-      : result.threads.filter(thread => {
-          const metadata = thread.metadata as Record<string, unknown> | undefined;
-          return metadata?.forkedSubagent !== true;
+    const boundedLimit = limit === undefined ? undefined : Math.max(0, Math.floor(limit));
+    if (boundedLimit === 0) return [];
+
+    let threads: StorageThreadType[];
+    if (
+      boundedLimit === undefined ||
+      memoryStorage instanceof InMemoryMemory ||
+      memoryStorage.listThreadsPaginatesInMemory
+    ) {
+      // These adapters scan and sort all matching threads before slicing each page.
+      threads = (
+        await memoryStorage.listThreads({ filter, perPage: false, orderBy: { field: 'updatedAt', direction: 'DESC' } })
+      ).threads
+        .filter(keep)
+        .slice(0, boundedLimit);
+    } else {
+      // Re-read an expanding prefix: offset pagination can skip a thread that
+      // moves into a previously read page when its updatedAt changes mid-scan.
+      const pageSize = Math.max(boundedLimit, THREAD_PAGE_FLOOR);
+      let size = pageSize;
+      while (true) {
+        const result = await memoryStorage.listThreads({
+          filter,
+          perPage: size,
+          page: 0,
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
+        const candidates = result.threads.filter(keep);
+        if (candidates.length >= boundedLimit || !result.hasMore) {
+          threads = candidates.slice(0, boundedLimit);
+          break;
+        }
+        size *= 2;
+      }
+    }
 
     return threads.map((thread: StorageThreadType) => ({
       id: thread.id,
@@ -1654,7 +1718,9 @@ export class AgentController<TState = {}> {
       if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
         agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
       }
-      mastra.addAgent(agent);
+      if (!mastra.listAgents()[agent.id]) {
+        mastra.addAgent(agent);
+      }
     }
 
     if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {

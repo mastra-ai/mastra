@@ -1,6 +1,7 @@
 {
   "__structure__": [
     "agent_run: \"agent run: 'workflow-agent'\"",
+    "├── generic: \"agent:prepare-tools\"",
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    ├── model_step: \"step: 0\"",
     "    │   ├── processor_run: \"llm request processor: provider-history-compat\"",
@@ -53,6 +54,29 @@
         {
           "span": {
             "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "agent:prepare-tools",
+            "type": "generic",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "workflow-agent",
+            "metadata": {
+              "runId": "<runId-1>",
+              "id1": 123,
+              "id2": "tacos",
+              "environment": "test"
+            },
+            "output": {
+              "toolCount": 1
+            }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-3>",
             "traceId": "<trace-1>",
             "name": "llm: 'mock-model-id'",
             "type": "model_generation",
@@ -176,14 +200,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-3>",
+                "id": "<span-4>",
                 "traceId": "<trace-1>",
                 "name": "step: 0",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-2>",
+                "parentId": "<span-3>",
                 "entityType": "agent",
                 "entityId": "workflow-agent",
                 "attributes": {
@@ -246,14 +270,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-4>",
+                    "id": "<span-5>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
@@ -293,14 +317,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-5>",
+                    "id": "<span-6>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: unsupported-file-handler",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "input_processor",
                     "entityId": "unsupported-file-handler",
                     "attributes": {
@@ -340,14 +364,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-6>",
+                    "id": "<span-7>",
                     "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "agent",
                     "entityId": "workflow-agent",
                     "attributes": {
@@ -419,7 +443,8 @@
                       },
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -456,14 +481,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-7>",
+                    "id": "<span-8>",
                     "traceId": "<trace-1>",
                     "name": "chunk: 'tool-call'",
                     "type": "model_chunk",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "agent",
                     "entityId": "workflow-agent",
                     "attributes": {
@@ -490,14 +515,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-8>",
+                    "id": "<span-9>",
                     "traceId": "<trace-1>",
                     "name": "tool: 'workflowExecutor'",
                     "type": "tool_call",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "tool",
                     "entityId": "workflowExecutor",
                     "attributes": {
@@ -527,14 +552,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-9>",
+                        "id": "<span-10>",
                         "traceId": "<trace-1>",
                         "name": "workflow run: 'simple-workflow'",
                         "type": "workflow_run",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-8>",
+                        "parentId": "<span-9>",
                         "entityType": "workflow_run",
                         "entityId": "simple-workflow",
                         "attributes": {
@@ -556,14 +581,14 @@
                       "children": [
                         {
                           "span": {
-                            "id": "<span-10>",
+                            "id": "<span-11>",
                             "traceId": "<trace-1>",
                             "name": "workflow step: 'simple-step'",
                             "type": "workflow_step",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-9>",
+                            "parentId": "<span-10>",
                             "entityType": "workflow_step",
                             "entityId": "simple-step",
                             "attributes": {
@@ -589,14 +614,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-11>",
+                    "id": "<span-12>",
                     "traceId": "<trace-1>",
                     "name": "chunk: 'tool-result'",
                     "type": "model_chunk",
                     "completed": true,
                     "isEvent": true,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "agent",
                     "entityId": "workflow-agent",
                     "attributes": {
@@ -617,14 +642,14 @@
             },
             {
               "span": {
-                "id": "<span-12>",
+                "id": "<span-13>",
                 "traceId": "<trace-1>",
                 "name": "step: 1",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-2>",
+                "parentId": "<span-3>",
                 "entityType": "agent",
                 "entityId": "workflow-agent",
                 "attributes": {
@@ -684,107 +709,20 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-13>",
+                    "id": "<span-14>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-12>",
+                    "parentId": "<span-13>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
                       "processorPhase": "llmRequest",
                       "processorExecutor": "legacy",
                       "processorIndex": 0
-                    },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "id1": 123,
-                      "id2": "tacos",
-                      "environment": "test"
-                    },
-                    "input": {
-                      "prompt": [
-                        {
-                          "role": "system",
-                          "content": "You can execute workflows using the workflow executor tool"
-                        },
-                        {
-                          "role": "user",
-                          "content": [
-                            {
-                              "type": "text",
-                              "text": "Execute the simpleWorkflow with test input"
-                            }
-                          ]
-                        },
-                        {
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "tool-call",
-                              "toolCallId": "call-workflow-1",
-                              "toolName": "workflowExecutor",
-                              "input": {
-                                "input": {
-                                  "input": "test input"
-                                },
-                                "workflowId": "simpleWorkflow"
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": [
-                            {
-                              "type": "tool-result",
-                              "toolCallId": "call-workflow-1",
-                              "toolName": "workflowExecutor",
-                              "output": {
-                                "type": "json",
-                                "value": {
-                                  "result": {
-                                    "output": "test input processed"
-                                  }
-                                }
-                              },
-                              "input": {
-                                "workflowId": "simpleWorkflow",
-                                "input": {
-                                  "input": "test input"
-                                }
-                              }
-                            }
-                          ]
-                        }
-                      ],
-                      "stepNumber": 1,
-                      "retryCount": 0
-                    },
-                    "output": {
-                      "shortCircuited": false
-                    }
-                  }
-                },
-                {
-                  "span": {
-                    "id": "<span-14>",
-                    "traceId": "<trace-1>",
-                    "name": "llm request processor: unsupported-file-handler",
-                    "type": "processor_run",
-                    "completed": true,
-                    "isEvent": false,
-                    "isRootSpan": false,
-                    "parentId": "<span-12>",
-                    "entityType": "input_processor",
-                    "entityId": "unsupported-file-handler",
-                    "attributes": {
-                      "processorPhase": "llmRequest",
-                      "processorExecutor": "legacy",
-                      "processorIndex": 2
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -860,12 +798,99 @@
                   "span": {
                     "id": "<span-15>",
                     "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-13>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "id1": 123,
+                      "id2": "tacos",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You can execute workflows using the workflow executor tool"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Execute the simpleWorkflow with test input"
+                            }
+                          ]
+                        },
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-workflow-1",
+                              "toolName": "workflowExecutor",
+                              "input": {
+                                "input": {
+                                  "input": "test input"
+                                },
+                                "workflowId": "simpleWorkflow"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": [
+                            {
+                              "type": "tool-result",
+                              "toolCallId": "call-workflow-1",
+                              "toolName": "workflowExecutor",
+                              "output": {
+                                "type": "json",
+                                "value": {
+                                  "result": {
+                                    "output": "test input processed"
+                                  }
+                                }
+                              },
+                              "input": {
+                                "workflowId": "simpleWorkflow",
+                                "input": {
+                                  "input": "test input"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 1,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-16>",
+                    "traceId": "<trace-1>",
                     "name": "inference: 1",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-12>",
+                    "parentId": "<span-13>",
                     "entityType": "agent",
                     "entityId": "workflow-agent",
                     "attributes": {
@@ -937,7 +962,8 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstTokenMs": "<ms>"
+                      "timeToFirstTokenMs": "<ms>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -971,14 +997,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-16>",
+                    "id": "<span-17>",
                     "traceId": "<trace-1>",
                     "name": "chunk: 'text'",
                     "type": "model_chunk",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-12>",
+                    "parentId": "<span-13>",
                     "entityType": "agent",
                     "entityId": "workflow-agent",
                     "attributes": {

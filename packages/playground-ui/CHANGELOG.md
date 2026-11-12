@@ -1,5 +1,183 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`2d42846`](https://github.com/mastra-ai/mastra/commit/2d4284603a4b3dad68d3621c5ce6990ea20d8d7e), [`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`7c40bc8`](https://github.com/mastra-ai/mastra/commit/7c40bc84b6f1092b752cc8bff4751df1770a7022), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83), [`7c40bc8`](https://github.com/mastra-ai/mastra/commit/7c40bc84b6f1092b752cc8bff4751df1770a7022)]:
+  - @mastra/ai-sdk@1.12.0-alpha.1
+  - @mastra/core@1.83.0-alpha.10
+  - @mastra/react@1.15.0-alpha.10
+  - @mastra/client-js@1.60.0-alpha.10
+
+## 69.0.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`1689ce3`](https://github.com/mastra-ai/mastra/commit/1689ce38e1d66df6f474acd5db65f46315a02c23), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`38327de`](https://github.com/mastra-ai/mastra/commit/38327de07a169a6d5ce8ab8fc2075caec112d6f3), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`2053c88`](https://github.com/mastra-ai/mastra/commit/2053c881ed7a13c43d3932e1938e2f94ef226b4f), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`4884ee0`](https://github.com/mastra-ai/mastra/commit/4884ee08a067dd82176c57ca54bdfec02eda97ea), [`49e7108`](https://github.com/mastra-ai/mastra/commit/49e71082bd2c36cd20d7f4ba62bb3666e108968b), [`4cfa256`](https://github.com/mastra-ai/mastra/commit/4cfa256801f6b7e909daa5ed5d14c77b9fb24197), [`7f0d2fd`](https://github.com/mastra-ai/mastra/commit/7f0d2fd4b6c304ad851232b5969d96fdb20aa06a), [`b0ef22e`](https://github.com/mastra-ai/mastra/commit/b0ef22e7bfeb309c456d5c54528d579c4ac9e863), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`eb683b4`](https://github.com/mastra-ai/mastra/commit/eb683b45fe2ad645ae81c419d405aa2327a053e3)]:
+  - @mastra/core@1.83.0-alpha.9
+  - @mastra/client-js@1.60.0-alpha.9
+  - @mastra/react@1.15.0-alpha.9
+  - @mastra/ai-sdk@1.12.0-alpha.0
+  - @mastra/memory@1.41.1-alpha.4
+
+## 69.0.0-alpha.10
+
+### Minor Changes
+
+- Replaced the `onPin` and `isPinned` props on `DashboardRenderer`, and the `pin` prop on `StatelessWidget`, with a host `actions` slot. `DashboardRenderer` takes a `widgetActions` callback that returns each widget's buttons, and `StatelessWidget` takes them as `actions`. This lets a host add any buttons to widget cards, not just a pin button, without changing the renderer. Host buttons sit after the card's own drilldown and alert buttons. ([#30043](https://github.com/mastra-ai/mastra/pull/30043))
+
+  Compose the buttons with the new `MetricsCard.Action`. The card is a `group/metrics-card`, so each button sets its own visibility with classes. The exported `onCardHover` class makes a button wait for the card's hover, keyboard focus or open menu: until then it takes no room but stays in the tab order, so keyboard users can still reach it. Touch screens can't hover, so there it always shows. Without it, the button stays in view, e.g. for a pinned card's unpin. `PinAction` and the `WidgetPin` type are removed: a pin button is a `MetricsCard.Action` like any other.
+
+  `ChartCard` now has a single `actions` slot: `persistentActions` is removed, and `MetricsCard.Actions` no longer takes `reveal`. Set `className={onCardHover}` on each `MetricsCard.Action` that should wait for hover instead.
+
+  **Before**
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    isPinned={id => pinnedIds.includes(id)}
+    onPin={(widget, isPinned) => savePin(widget, isPinned)}
+  />
+  ```
+
+  **After**
+
+  ```tsx
+  import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
+  import { DashboardRenderer } from '@mastra/playground-ui/domains/dashboards';
+  import { PinIcon, PinOffIcon } from 'lucide-react';
+
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    widgetActions={widget => {
+      const isPinned = pinnedIds.includes(widget.id);
+      return (
+        <MetricsCard.Action
+          label={`${isPinned ? 'Unpin' : 'Pin'} ${widget.title ?? 'widget'}`}
+          onClick={() => savePin(widget, !isPinned)}
+          className={isPinned ? undefined : onCardHover}
+        >
+          {isPinned ? <PinOffIcon /> : <PinIcon />}
+        </MetricsCard.Action>
+      );
+    }}
+  />;
+  ```
+
+- Added a host-controlled root source option to the trace explorer. ([#30060](https://github.com/mastra-ai/mastra/pull/30060))
+
+### Patch Changes
+
+- Improved how DataList looks while scrolling: ([#30055](https://github.com/mastra-ai/mastra/pull/30055))
+
+  - Rows now fade into the dark row background at every scrolled edge, including the top, where they fade just below the header instead of being cut off. The header itself no longer fades.
+  - Scrollbars sit beside the rows, below the header, instead of along the card's edge where its rounded corners clipped them.
+  - Scrolling no longer bounces the whole list, header included.
+  - A pinned first column shows a divider once cells scroll under it, and its header cell no longer lets other column titles show through.
+  - Fixed the header row cutting into the card's border at the top corners.
+
+- Dashboard cards that expand now open their fuller view from an expand button in the card's actions, instead of turning the title into a link. The title stays plain, so it can be renamed with `onTitleChange`. The button shows on hover or focus and is labelled "Expand <title>". ([#30064](https://github.com/mastra-ai/mastra/pull/30064))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae), [`8ab6015`](https://github.com/mastra-ai/mastra/commit/8ab6015fb4f3f02803a7c2696920ceff2d2911e6), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f)]:
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/client-js@1.60.0-alpha.8
+  - @mastra/react@1.15.0-alpha.8
+
+## 69.0.0-alpha.9
+
+### Patch Changes
+
+- The toggle on pinned Knowledge listings in Studio chat now says how many pages the listing covers: "Show N pages ▾" when collapsed ("Show N+ pages ▾" when the total is unknown), "Hide pages ▴" when open. ([#29987](https://github.com/mastra-ai/mastra/pull/29987))
+
+## 69.0.0-alpha.8
+
+### Minor Changes
+
+- Added RuleCard and RuleLines, composable parts for rules that read as sentences (Where … and … → Move to …). ([#29978](https://github.com/mastra-ai/mastra/pull/29978))
+
+  ```tsx
+  <RuleCard>
+    <RuleCardHeader>
+      <RuleCardStep>If</RuleCardStep>
+      <RuleCardTitle>Closed issues go to Done</RuleCardTitle>
+    </RuleCardHeader>
+    <RuleCardBody>
+      <RuleLines role="group" aria-label="Conditions">
+        <RuleLine>
+          <RuleLineKeyword>Where</RuleLineKeyword>
+          <RuleLineContent>…</RuleLineContent>
+        </RuleLine>
+      </RuleLines>
+    </RuleCardBody>
+    <RuleCardOutcome label="Move to">…</RuleCardOutcome>
+  </RuleCard>
+  ```
+
+- Added an `inline` variant to `CodeEditor` for editing prose in place: no border, background or gutter, and text lines up with the label above it. ([#29978](https://github.com/mastra-ai/mastra/pull/29978))
+
+  ```tsx
+  <CodeEditor variant="inline" language="markdown" value={text} onChange={setText} />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/client-js@1.60.0-alpha.7
+  - @mastra/react@1.15.0-alpha.7
+
+## 69.0.0-alpha.7
+
+### Minor Changes
+
+- Added two-line sidebar rows and a `Sidebar.NavAction` button for row actions. ([#29937](https://github.com/mastra-ai/mastra/pull/29937))
+
+  Pass `description` to `Sidebar.NavLabel` to show a smaller second line under the label, such as a timestamp or a count. The row grows to fit it, its icon lines up with the first line, and its actions move to the top-right corner. When the sidebar collapses to icons, the description is hidden and the row keeps its normal height.
+
+  Use `Sidebar.NavAction` for buttons in a row's `action` slot. It is a 24px ghost icon button whose corners follow the row's rounded edge, so it sits the same distance from the row's top and right edges. Hover-only actions can reveal with `group-hover/nav-row:`.
+
+  ```tsx
+  <Sidebar.NavLink
+    render={
+      <a href="/sessions/1">
+        <Sidebar.NavLabel description={<time dateTime="2026-11-10T10:00:00Z">3h</time>}>
+          Fix flaky login
+        </Sidebar.NavLabel>
+      </a>
+    }
+    action={
+      <Sidebar.NavAction aria-label="Session actions">
+        <MoreHorizontal />
+      </Sidebar.NavAction>
+    }
+  />
+  ```
+
+### Patch Changes
+
+- Removed comments from Factory work items. Cards no longer have a comment feed, mentions, or comment counts, and the mention and activity items are gone from the attention inbox. Slack `aside` messages are still ignored by the agent but are no longer copied onto the card, and Factory no longer mirrors card comments to Slack. ([#29062](https://github.com/mastra-ai/mastra/pull/29062))
+
+  Each card now has a single `description` instead. Set it with `description` on `POST /web/factory/projects/:id/work-items` and `PATCH /web/factory/work-items/:id` (a blank string clears it), or edit it from the card panel. Runs started on the card receive it in a `<work-item-description>` block after the skill instructions, in place of the old `<work-item-feed>` block.
+
+  Breaking changes for API and agent-tool callers:
+
+  - `factory_create_work_item` takes `description` instead of `brief`. `factory_update_work_item` also accepts `description`, and `factory_inspect_work_item` returns it in place of recent comments.
+  - The `/web/factory/work-items/:id/comments` and `/web/factory/projects/:id/mention-roster` routes are removed. `/web/factory/projects/:id/feed-events` stays and still refreshes open boards, but its frames no longer carry a `workItemId`.
+  - The `mention` and `activity` attention kinds are removed.
+  - Work items no longer include `commentCount` or `feedActivityAt`.
+  - Integrations can no longer declare a `feedPublisher`, and `IntegrationContext` no longer has `feed`.
+  - `factoryWorkItemUrl()` no longer accepts `commentId`.
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`08e677f`](https://github.com/mastra-ai/mastra/commit/08e677fdbe36c10118c54c0494c8412019d61955), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/memory@1.41.1-alpha.3
+  - @mastra/client-js@1.60.0-alpha.6
+  - @mastra/ai-sdk@1.12.0-alpha.0
+  - @mastra/react@1.15.0-alpha.6
+
 ## 69.0.0-alpha.6
 
 ### Minor Changes

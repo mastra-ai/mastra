@@ -24,6 +24,7 @@ import { SessionSharingPopover } from './SessionSharingPopover';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { PullRequestStatus } from '../../factory/boardItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
+import type { LivePullRequestStatus } from '../../../../hooks/useWorkspacePullRequestStatuses';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -47,7 +48,7 @@ export function SessionNavRow({
   disabled,
   loading,
   status,
-  merged,
+  liveStatus,
   changeRequestProvider = 'github',
   preview: previewDetails,
   pinned = false,
@@ -79,8 +80,8 @@ export function SessionNavRow({
   disabled: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
-  /** Merged change request for this session's branch — shown only when the row is otherwise idle. */
-  merged?: boolean;
+  /** The change request's state from the live check; merged shows a badge when the row is otherwise idle. */
+  liveStatus?: LivePullRequestStatus;
   /** Names the merged badge: GitHub pull requests or GitLab merge requests. */
   changeRequestProvider?: 'github' | 'gitlab';
   status?: SessionRowStatus;
@@ -116,13 +117,10 @@ export function SessionNavRow({
   const sidebar = useMaybeSidebar();
   // Touch has no hover: the card would only open behind the tap that already navigated away.
   const preview = sidebar?.isMobile ? undefined : previewDetails;
-  // The live merge check lands before the work item catches up, so it wins over the item's state
-  // either way; when it says not merged, the item's stale merged state is dropped rather than guessed.
-  const pullRequestStatus = merged
-    ? 'merged'
-    : merged === false && pullRequest?.status === 'merged'
-      ? undefined
-      : pullRequest?.status;
+  // The live check lands before the work item catches up, so it wins; it can't tell a draft from open.
+  const merged = liveStatus === 'merged';
+  const pullRequestStatus =
+    liveStatus === 'open' && pullRequest?.status === 'draft' ? 'draft' : (liveStatus ?? pullRequest?.status);
   const statusAt = pullRequestPlacement({ source, pullRequest, pullRequestStatus, compact, merged, loading, status });
   const statusLabel =
     (statusAt === 'icon' || statusAt === 'line') && pullRequestStatus

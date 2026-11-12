@@ -37,6 +37,15 @@ export const OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY = 'mastra.ai/observability-
 /** `structuredContent` key of the model context update the app sends when the user (un)pins. */
 export const OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY = 'mastra.ai/observability-widget-pin';
 
+/**
+ * Host context key the host sets to `true` when it can configure a widget. The settings button only
+ * shows when the host sends it and supports `updateModelContext.structuredContent`.
+ */
+export const OBSERVABILITY_WIDGET_CONFIGURABLE_CONTEXT_KEY = 'mastra.ai/observability-widget-configurable';
+
+/** `structuredContent` key of the model context update the app sends when the user opens a widget's settings. */
+export const OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY = 'mastra.ai/observability-widget-configure';
+
 /** Host context key holding what the host's page draws the widgets over (`ObservabilityWidgetView`). */
 export const OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY = 'mastra.ai/observability-widget-view';
 
@@ -69,3 +78,6 @@ export type ObservabilityWidgetPin = {
   /** The filters the widget was drawn under (the host's, else the dashboard's `defaults.filters`), when any. */
   filters?: unknown[];
 };
+
+/** What the app sends under `OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY`: the widget as the user sees it. */
+export type ObservabilityWidgetConfigure = Omit<ObservabilityWidgetPin, 'pinned'>;

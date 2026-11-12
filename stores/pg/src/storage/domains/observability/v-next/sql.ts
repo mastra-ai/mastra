@@ -124,8 +124,22 @@ export async function insertRows(
 ): Promise<void> {
   const insert = buildInsert(schema, table, records, onConflict);
   if (!insert) return;
+  await withPartitionRetry(client, schema, table, records, partitioning, () =>
+    client.query(insert.text, insert.values),
+  );
+}
+
+/** Retry a complete write after creating a missing native partition, outside any failed transaction. */
+export async function withPartitionRetry<T>(
+  client: DbClient,
+  schema: string,
+  table: SignalTable,
+  records: Record<string, unknown>[],
+  partitioning: PartitioningOptions,
+  write: () => Promise<T>,
+): Promise<T> {
   try {
-    await client.query(insert.text, insert.values);
+    return await write();
   } catch (error) {
     if (!isMissingPartitionError(error) || (await resolveMode(client, partitioning)) !== 'native') throw error;
     const days = withinPartitionWindow(recordDays(records, SIGNAL_TIME_COLUMN[table]), partitioning);
@@ -138,7 +152,7 @@ export async function insertRows(
         throw new Error(partitionCreateFailure({ table, day, cause }), { cause });
       });
     }
-    await client.query(insert.text, insert.values);
+    return await write();
   }
 }
 

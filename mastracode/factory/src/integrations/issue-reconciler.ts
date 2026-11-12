@@ -109,7 +109,7 @@ function withoutMissingMarker(record: Record<string, unknown> | null): Record<st
   return metadata;
 }
 
-function issueItems(project: FactoryProject, items: Card[], integrationId: string): Card[] {
+function issueItems(project: FactoryProject, items: readonly Card[], integrationId: string): Card[] {
   return items.filter(
     item =>
       item.factoryProjectId === project.id &&
@@ -137,7 +137,7 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
 
     const projects = await options.projects.listAll();
     for (const project of projects) {
-      const all = await options.storage.list({ orgId: project.orgId, factoryProjectId: project.id });
+      const all = await options.storage.listShared({ orgId: project.orgId, factoryProjectId: project.id });
       const candidates = issueItems(project, all, options.integrationId);
       const items = scope
         ? candidates.filter(item => scope.scopes.some(target => scope.matches(item, target)))

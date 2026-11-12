@@ -9,6 +9,7 @@
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
+import type { WorkItemListResponse } from '../../../../api/types';
 import { requestJson } from './request';
 
 export type WorkItemSource =
@@ -120,6 +121,8 @@ export interface WorkItem {
   sourceKey: string | null;
   parentWorkItemId: string | null;
   title: string;
+  /** What the card is about, handed to its runs at kickoff. */
+  description: string | null;
   url: string | null;
   stages: string[];
   stageHistory: WorkItemStageEntry[];
@@ -129,10 +132,11 @@ export interface WorkItem {
   triageType: FactoryTriageType | null;
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
-  commentCount: number;
   revision: number;
   createdAt: string;
   updatedAt: string;
+  /** When the card last changed in any way, which `boardCheck` reads. */
+  changedAt?: string | null;
 }
 
 /** Session ref as sent by the client — `startedBy` is stamped server-side. */
@@ -148,6 +152,7 @@ export interface CreateWorkItemInput {
   sourceKey: string | null;
   parentWorkItemId?: string | null;
   title: string;
+  description?: string | null;
   url?: string | null;
   stages?: string[];
   sessions?: Record<string, WorkItemSessionInput>;
@@ -164,12 +169,12 @@ interface ExternalWorkItemSource {
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'commentCount' | 'triageType' | 'acceptedAt'
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'description' | 'triageType' | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
-  commentCount?: number;
+  description?: string | null;
   triageType?: WorkItem['triageType'];
   acceptedAt?: string | null;
 }
@@ -246,7 +251,7 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, commentCount, triageType, acceptedAt, ...rest } = item;
+  const { factoryProjectId, externalSource, metadata, description, triageType, acceptedAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
@@ -258,7 +263,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
         ? externalSourceUrl(externalSource)
         : (item.workItem?.url ?? externalSourceUrl(externalSource)),
     metadata: metadata ?? {},
-    commentCount: commentCount ?? 0,
+    description: description ?? null,
     triageType: triageType ?? null,
     acceptedAt: acceptedAt ?? null,
   };
@@ -280,6 +285,8 @@ export type FactoryTransitionResult =
 export interface UpdateWorkItemInput {
   parentWorkItemId?: string | null;
   title?: string;
+  /** Blank clears it. */
+  description?: string | null;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }
@@ -294,23 +301,54 @@ export interface BoardSnapshot {
   runningSessionIds: string[];
   /** Sessions parked on a tool until someone answers, read live with the cards. */
   parkedSessionIds: string[];
+  /** How many cards matched a `started: 'false'` read, of which `workItems` holds the first. */
+  total?: number;
+  /** Names this read of the whole board to the server. Kept with the cards it was read with. */
+  cursor?: string;
 }
 
-/** List the org's work items for a Factory project. */
+/** A board read as the server answers it. With `removedIds` it holds only what moved since the cursor sent. */
+export type BoardRead = BoardSnapshot & Pick<WorkItemListResponse, 'removedIds' | 'check'>;
+
+/**
+ * List the org's work items for a Factory project: the whole board, or with `only` a part of it.
+ * `sessionId` and `scope: 'sessions'` ask for the cards holding that session or any session, with
+ * the cards related to them; `started: 'false'` for the most recently updated cards holding no
+ * session whose text has every word of `q`; `source` for the cards filed from those source ids or
+ * URLs; `workItemId` for the cards with those ids.
+ * With `since`, the cursor of a board already held, a server that can sends only what moved.
+ */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-): Promise<BoardSnapshot> {
-  const data = await requestJson<{
-    workItems: WireWorkItem[];
-    runningSessionIds?: string[];
-    parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
+  only?:
+    | { sessionId: string }
+    | { scope: 'sessions' }
+    | { started: 'false'; q: string }
+    | { source: string[] }
+    | { workItemId: string[] }
+    | { since: string },
+): Promise<BoardRead> {
+  const params =
+    only &&
+    new URLSearchParams(
+      'source' in only
+        ? only.source.map(source => ['source', source])
+        : 'workItemId' in only
+          ? only.workItemId.map(id => ['workItemId', id])
+          : only,
+    );
+  const { workItems, runningSessionIds, parkedSessionIds, ...rest } = await requestJson<
+    Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
+  >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${params ? `?${params}` : ''}`, {
+    signal,
+  });
   return {
-    workItems: data.workItems.map(fromWireWorkItem),
-    runningSessionIds: data.runningSessionIds ?? [],
-    parkedSessionIds: data.parkedSessionIds ?? [],
+    ...rest,
+    workItems: workItems.map(fromWireWorkItem),
+    runningSessionIds: runningSessionIds ?? [],
+    parkedSessionIds: parkedSessionIds ?? [],
   };
 }
 
@@ -355,7 +393,7 @@ export async function transitionWorkItem(
   throw new Error(body.error ?? `Request failed (${res.status})`);
 }
 
-/** Patch a work item's non-stage metadata, session refs, or title. */
+/** Patch a work item's non-stage metadata, session refs, title, or description. */
 export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateWorkItemInput): Promise<WorkItem> {
   const data = await requestJson<{ workItem: WireWorkItem }>(
     `${baseUrl}/web/factory/work-items/${encodeURIComponent(id)}`,

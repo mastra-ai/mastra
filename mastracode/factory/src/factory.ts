@@ -97,8 +97,10 @@ import {
   primeCustomProvidersForRequestContext,
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
+import { buildFeedEventsRoutes } from './routes/feed-events.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
+import { SandboxEnvRoutes } from './routes/sandbox-envs.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -122,6 +124,7 @@ import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './ru
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
+import { CachedSandboxEnvs } from './sandbox/sandbox-env-cache.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { peekSessionSandbox } from './sandbox/session-sandbox.js';
@@ -160,10 +163,6 @@ import { AuditDomain } from './storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from './storage/domains/boards/base.js';
 import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope } from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
-import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
-import { CommentsDomain } from './storage/domains/comments/domain.js';
-import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
-import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
@@ -173,6 +172,7 @@ import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
+import { SandboxEnvsStorage } from './storage/domains/sandbox-envs/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
@@ -576,6 +576,7 @@ export class MastraFactory {
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -753,8 +754,8 @@ export class MastraFactory {
     const storage = instrumentAsyncMethods(this.#config.storage, 'storage');
     const vector = this.#config.vector;
     const pubsub = this.#config.pubsub;
-    // One bus for feed/attention events: a second fallback instance would leave
-    // SSE subscribers and producers on different emitters in single-process runs.
+    // One bus for board events: a second fallback instance would leave SSE
+    // subscribers and producers on different emitters in single-process runs.
     const eventBus = pubsub ?? new EventEmitterPubSub();
     // Default auth: honor an explicitly-passed provider (including `null` to
     // disable auth) as-is; otherwise fall back to `MastraAuthStudio`
@@ -764,7 +765,9 @@ export class MastraFactory {
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
       configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth());
-    if (auth && !this.#config.secretEncryption) {
+    // Secrets would be stored as plaintext for a multi-user deploy; sandbox env writes are refused then.
+    const secretsUnencrypted = Boolean(auth) && !this.#config.secretEncryption;
+    if (secretsUnencrypted) {
       console.warn(
         "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
           'custom-provider API keys, and integration secrets will be stored as plaintext. Provide ' +
@@ -870,6 +873,17 @@ export class MastraFactory {
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
+    // Reads come from memory until a variable changes; writes are announced to other replicas.
+    const sandboxEnvsStorage = new CachedSandboxEnvs(storage.registerDomain(new SandboxEnvsStorage(secretEncryption)), {
+      pubsub: eventBus,
+      crossProcess: Boolean(pubsub),
+    });
+    this.#unsubscribeSandboxEnvChanges = sandboxEnvsStorage.subscribe().catch(error => {
+      console.warn(
+        `[factory] subscribing to sandbox environment variable changes failed; other replicas' edits show up within a minute: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    });
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -880,7 +894,6 @@ export class MastraFactory {
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
-    const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
     // Every app-table domain handle the route builders and integrations need,
@@ -891,12 +904,12 @@ export class MastraFactory {
       modelDefaults: modelDefaultsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      sandboxEnvs: sandboxEnvsStorage,
       filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
-      comments: workItemCommentsStorage,
       skillOverrides: skillOverridesStorage,
       voiceSettings: voiceSettingsStorage,
     };
@@ -911,19 +924,6 @@ export class MastraFactory {
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
-    // Held by reference: the channel attach below pushes into it, long after this.
-    const feedPublishers: WorkItemFeedPublisher[] = [];
-    const commentsDomain = new CommentsDomain({
-      auth: routeAuth,
-      comments: workItemCommentsStorage,
-      workItems: workItemsStorage,
-      projects: factoryProjectsStorage,
-      channelIdentity: channelIdentityStorage,
-      audit: auditDomain,
-      publishers: feedPublishers,
-      pubsub: eventBus,
-    });
-
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
     if (sandboxOption === undefined) {
@@ -1365,8 +1365,6 @@ export class MastraFactory {
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
     const factoryToolDeps: FactoryToolDependencies = {
       workItems: workItemsStorage,
-      comments: workItemCommentsStorage,
-      feed: commentsDomain,
       audit: auditStorage,
       boards: boards,
       ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
@@ -1399,6 +1397,7 @@ export class MastraFactory {
           {
             sandbox: this.#sandbox,
             projects: factoryProjectsStorage,
+            sandboxEnvs: sandboxEnvsStorage,
             sourceControl: githubIntegration?.versionControl
               ? {
                   storage: sourceControlStorage.forIntegration(githubIntegration.id),
@@ -1692,6 +1691,7 @@ export class MastraFactory {
               : [],
           ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
+          sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
         }),
@@ -1763,6 +1763,8 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        // Factory plan approval is a plain approval; goals are only started by the local TUI.
+        planApprovalStartsGoal: false,
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
@@ -2100,7 +2102,6 @@ export class MastraFactory {
             integrationStorage,
             sourceControlStorage,
             domains,
-            feed: commentsDomain,
             integrations: integrationRegistrations,
             intakeReady,
             factoryReady,
@@ -2130,8 +2131,8 @@ export class MastraFactory {
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
-                feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 ...(githubIntegration
                   ? {
                       dismissStaleReviews: async decision => {
@@ -2179,8 +2180,15 @@ export class MastraFactory {
             },
           }),
           ...projectRoutes.routes(),
+          ...new SandboxEnvRoutes({
+            auth: routeAuth,
+            projects: factoryProjectsStorage,
+            sandboxEnvs: sandboxEnvsStorage,
+            writable: !secretsUnencrypted,
+            audit: auditDomain,
+          }).routes(),
+          ...buildFeedEventsRoutes({ auth: routeAuth, projects: factoryProjectsStorage, pubsub: eventBus }),
           ...auditDomain.routes(),
-          ...commentsDomain.routes(),
           // Connect/reconnect session minting for Platform-managed providers.
           // Server-side because only the deploy holds Platform machine
           // credentials; the SPA runs the OAuth popup with the minted token.
@@ -2385,7 +2393,6 @@ export class MastraFactory {
           boardRegistry: this.#projectBoards ?? this.#boards,
           factoryReady,
           domains,
-          feed: commentsDomain,
           ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
         },
         integration.id,
@@ -2397,38 +2404,6 @@ export class MastraFactory {
         const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
         if (disconnect) this.#channelShutdowns.push(() => disconnect.call(adapter));
       }
-    }
-
-    // Feed publishers mirror web-feed comments outward (a chat bridge, a
-    // webhook, an issue tracker). Independent of channels(): an integration may
-    // publish without owning a chat channel. READY integrations only — the
-    // array is held by reference by CommentsDomain (see `feedPublishers` above),
-    // so pushing here wires the publisher into comment dispatch.
-    for (const { integration } of integrationRegistrations.filter(
-      ({ integration, ready }) => ready && integration.feedPublisher,
-    )) {
-      const context = buildIntegrationContext(
-        {
-          controller: prepared.base.controller,
-          publicOrigin,
-          auth: routeAuth,
-          stateSigner,
-          sandbox: sandboxConfig,
-          factoryStorage: storage,
-          integrationStorage,
-          sourceControlStorage,
-          integrations: integrationRegistrations,
-          configVersion,
-          boardRegistry: this.#projectBoards ?? this.#boards,
-          factoryReady,
-          domains,
-          feed: commentsDomain,
-          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-        },
-        integration.id,
-      );
-      const publisher = integration.feedPublisher!(context);
-      if (publisher) feedPublishers.push(publisher);
     }
 
     // Integration lifecycle workers (e.g. polling an upstream without
@@ -2456,7 +2431,8 @@ export class MastraFactory {
               boardRegistry: this.#projectBoards ?? this.#boards,
               factoryReady,
               domains,
-              feed: commentsDomain,
+              // The Platform GitHub lane only receives pushes through its polling worker.
+              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
@@ -2486,10 +2462,9 @@ export class MastraFactory {
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
     await this.#environmentBuilds?.probeSchedules();
-    await timedPhase(
-      'finalize.reconcileBoundThreads',
-      () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
-    );
+    // Results written while no process was watching are caught up by the
+    // dispatcher's first tick, in the background. Awaiting that walk here held
+    // boot for one sequential pass over every active binding.
     // A thread's messages move before its run binding does, so a reconcile that
     // overlapped the migration can miss them. Catch up once the bindings moved.
     void this.#sessionResourceMigration
@@ -2514,6 +2489,9 @@ export class MastraFactory {
     const shutdownPromise = (async () => {
       const unsubscribeDispatchWakes = this.#unsubscribeDispatchWakes;
       this.#unsubscribeDispatchWakes = undefined;
+      const unsubscribeSandboxEnvChanges = this.#unsubscribeSandboxEnvChanges;
+      this.#unsubscribeSandboxEnvChanges = undefined;
+      await unsubscribeSandboxEnvChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

@@ -10,10 +10,14 @@ import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '..
 import { queryKeys } from '../../../../../api/keys';
 import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResources';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
-import { useTransitionWorkItemMutation, useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import {
+  useSessionWorkItemsQuery,
+  useTransitionWorkItemMutation,
+  useWorkItemsQuery,
+} from '../../../../../hooks/useWorkItems';
 import { createQueryClient } from '../../../../../query-client';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
-import { FeedEventsProvider, useFeedEventsConnected } from '../FeedEventsProvider';
+import { FeedEventsProvider } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
@@ -26,6 +30,7 @@ const PAST_ONE_FALLBACK_POLL_MS = 7_000;
 const PAST_ONE_STREAM_RETRY_MS = 3_100;
 const BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS = 8_000;
 const SERVER_PING_EVERY_MS = 25_000;
+const FIVE_MINUTES_OF_SERVER_PINGS = 12;
 const PAST_THE_SILENCE_A_LIVE_STREAM_ALLOWS_MS = 61_000;
 
 function card(title: string, stage = 'intake') {
@@ -54,7 +59,6 @@ function inner({ children }: { children: React.ReactNode }) {
 
 function watchBoard() {
   return {
-    connected: useFeedEventsConnected(),
     cards: useWorkItemsQuery(PROJECT_ID),
     decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
     running: useActiveRunResourceIds(AGENT_CONTROLLER_ID),
@@ -68,13 +72,12 @@ interface BoardRequests {
   runs: number;
 }
 
-/** Runs keep a poll of their own, so only cards and decisions count the board's refreshes. */
-function refreshes({ cards, decisions }: BoardRequests) {
-  return { cards, decisions };
+function moreRefreshes(requests: BoardRequests, count: number) {
+  return { cards: requests.cards + count, decisions: requests.decisions + count, runs: requests.runs + count };
 }
 
 function oneMoreRefresh(requests: BoardRequests) {
-  return { cards: requests.cards + 1, decisions: requests.decisions + 1 };
+  return moreRefreshes(requests, 1);
 }
 
 /** A card move the server holds until the test settles it; the board only reads `review` once it has. */
@@ -129,15 +132,17 @@ async function advance(client: QueryClient, ms: number) {
   await waitFor(() => expect(client.isFetching()).toBe(0));
 }
 
-async function renderConnectedBoard(client?: QueryClient) {
+type FeedStream = ReturnType<typeof pushableFeedStream>;
+
+async function renderConnectedBoard(stream: FeedStream, client?: QueryClient) {
   const rendered = renderHookWithProviders(watchBoard, { inner, client });
-  await waitFor(() => expect(rendered.result.current.connected).toBe(true));
+  await waitFor(() => expect(stream.open).toBe(true));
   await waitFor(() => expect(rendered.result.current.cards.isSuccess).toBe(true));
   return rendered;
 }
 
-async function renderQuietBoard() {
-  const rendered = await renderConnectedBoard();
+async function renderQuietBoard(stream: FeedStream) {
+  const rendered = await renderConnectedBoard(stream);
   await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
   await waitForMutationsIdle(rendered.client);
   return rendered;
@@ -156,14 +161,13 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     const before = { ...requests };
 
     stream.push();
     await advance(rendered.client, WITHIN_A_SECOND_MS);
 
-    await waitFor(() => expect(refreshes(requests)).toEqual(oneMoreRefresh(before)));
-    expect(requests.runs).toBeGreaterThan(before.runs);
+    await waitFor(() => expect(requests).toEqual(oneMoreRefresh(before)));
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -171,15 +175,15 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     const before = { ...requests };
 
     for (let frame = 0; frame < 5; frame += 1) stream.push();
     await advance(rendered.client, WITHIN_A_SECOND_MS);
 
-    await waitFor(() => expect(refreshes(requests)).toEqual(oneMoreRefresh(before)));
+    await waitFor(() => expect(requests).toEqual(oneMoreRefresh(before)));
     await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
-    expect(refreshes(requests)).toEqual(oneMoreRefresh(before));
+    expect(requests).toEqual(oneMoreRefresh(before));
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -187,7 +191,7 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     const before = { ...requests };
 
     for (let frame = 0; frame < 32; frame += 1) {
@@ -196,7 +200,7 @@ describe('FeedEventsProvider, on the board', () => {
     }
     await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
 
-    expect(refreshes(requests)).toEqual({ cards: before.cards + 3, decisions: before.decisions + 3 });
+    expect(requests).toEqual(moreRefreshes(before, 3));
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -204,7 +208,7 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { board } = boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     board.title = 'Fix logout';
     board.readMs = BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS;
 
@@ -219,21 +223,25 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
-  it('polls only runs while the stream is up, then cards and decisions too once it drops', async () => {
+  it('reads nothing but the safety re-read on a board idle for minutes, then polls once the stream drops', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     const connected = { ...requests };
 
-    await advance(rendered.client, PAST_ONE_FALLBACK_POLL_MS);
-    expect(refreshes(requests)).toEqual(refreshes(connected));
-    // A run can leave the registry without a frame, so its marker never waits on one.
-    expect(requests.runs).toBeGreaterThan(connected.runs);
+    for (let ping = 0; ping < FIVE_MINUTES_OF_SERVER_PINGS; ping += 1) {
+      stream.ping();
+      await advance(rendered.client, SERVER_PING_EVERY_MS);
+    }
+    // Runs have no timer of their own: they are read with the board, at most once a minute.
+    const safetyRereads = requests.runs - connected.runs;
+    expect(safetyRereads).toBeLessThanOrEqual(5);
+    expect(requests).toEqual(moreRefreshes(connected, safetyRereads));
 
     server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 503 })));
     stream.close();
-    await waitFor(() => expect(rendered.result.current.connected).toBe(false));
+    await waitFor(() => expect(stream.open).toBe(false));
     const dropped = { ...requests };
 
     await advance(rendered.client, PAST_ONE_FALLBACK_POLL_MS);
@@ -248,13 +256,13 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { board } = boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
 
     stream.close();
-    await waitFor(() => expect(rendered.result.current.connected).toBe(false));
+    await waitFor(() => expect(stream.open).toBe(false));
     board.title = 'Fix logout';
     await advance(rendered.client, PAST_ONE_STREAM_RETRY_MS);
-    await waitFor(() => expect(rendered.result.current.connected).toBe(true));
+    await waitFor(() => expect(stream.open).toBe(true));
     await advance(rendered.client, WITHIN_A_SECOND_MS);
 
     await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.title).toBe('Fix logout'));
@@ -269,7 +277,7 @@ describe('FeedEventsProvider, on the board', () => {
     client.setQueryData(queryKeys.workItems(PROJECT_ID), boardSnapshot('Fix login'));
     board.title = 'Fix logout';
 
-    const rendered = await renderConnectedBoard(client);
+    const rendered = await renderConnectedBoard(stream, client);
     await advance(rendered.client, WITHIN_A_SECOND_MS);
 
     await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.title).toBe('Fix logout'));
@@ -282,7 +290,7 @@ describe('FeedEventsProvider, on the board', () => {
     server.use(stream.handler);
     const { requests, board } = boardEndpoints();
     const settleMove = heldCardMove(board);
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
     const [item] = rendered.result.current.cards.data ?? [];
     if (!item) throw new Error('the board never loaded its card');
@@ -329,7 +337,7 @@ describe('FeedEventsProvider, on the board', () => {
     server.use(stream.handler);
     const { requests, board } = boardEndpoints();
     const settleMove = heldCardMove(board);
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
     const [item] = rendered.result.current.cards.data ?? [];
     if (!item) throw new Error('the board never loaded its card');
@@ -342,7 +350,7 @@ describe('FeedEventsProvider, on the board', () => {
       await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
     }
 
-    expect(refreshes(requests)).toEqual({ cards: moving.cards, decisions: moving.decisions + 3 });
+    expect(requests).toEqual({ ...moreRefreshes(moving, 3), cards: moving.cards });
     expect(shownStages()).toEqual(['review']);
     settleMove();
     await waitForMutationsIdle(rendered.client);
@@ -352,7 +360,7 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
     let releaseCards = () => {};
     const cardsHeld = new Promise<void>(resolve => {
       releaseCards = resolve;
@@ -383,13 +391,13 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
 
     await advance(rendered.client, PAST_THE_SILENCE_A_LIVE_STREAM_ALLOWS_MS);
     await advance(rendered.client, PAST_ONE_STREAM_RETRY_MS);
 
     await waitFor(() => expect(stream.opens).toBe(2));
-    await waitFor(() => expect(rendered.result.current.connected).toBe(true));
+    await waitFor(() => expect(stream.open).toBe(true));
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -397,7 +405,7 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     boardEndpoints();
-    const rendered = await renderQuietBoard();
+    const rendered = await renderQuietBoard(stream);
 
     for (let ping = 0; ping < 4; ping += 1) {
       stream.ping();
@@ -405,7 +413,53 @@ describe('FeedEventsProvider, on the board', () => {
     }
 
     expect(stream.opens).toBe(1);
-    expect(rendered.result.current.connected).toBe(true);
+    expect(stream.open).toBe(true);
+    await waitForMutationsIdle(rendered.client);
+  });
+});
+
+describe('FeedEventsProvider, on a session page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps a session’s card current, change after change, while the board read hangs', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const shown = { title: 'Fix login' };
+    let releaseBoard = () => {};
+    const boardHeld = new Promise<void>(resolve => {
+      releaseBoard = resolve;
+    });
+    server.use(
+      stream.handler,
+      http.get(BOARD_URL, async ({ request }) => {
+        const snapshot = boardSnapshot(shown.title);
+        if (!new URL(request.url).searchParams.has('sessionId')) await boardHeld;
+        return HttpResponse.json(snapshot);
+      }),
+    );
+    // The sidebar reads the whole board on a session page; the header reads the session's cards.
+    const rendered = renderHookWithProviders(
+      () => ({ board: useWorkItemsQuery(PROJECT_ID), session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1') }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    const sessionCardTitle = () => rendered.result.current.session.data?.[0]?.title;
+    await waitFor(() => expect(sessionCardTitle()).toBe('Fix login'));
+
+    for (const title of ['Fix logout', 'Fix signup']) {
+      shown.title = title;
+      stream.push();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+      await waitFor(() => expect(sessionCardTitle()).toBe(title));
+    }
+
+    releaseBoard();
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
     await waitForMutationsIdle(rendered.client);
   });
 });

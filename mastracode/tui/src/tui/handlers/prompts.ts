@@ -284,7 +284,8 @@ export async function handleSandboxAccessRequest(
 
 /**
  * Handle a suspended submit_plan tool call.
- * Shows the plan inline with Approve/Use as Goal/Request Changes options.
+ * Shows the plan inline with Approve/Request Changes options. Approving starts
+ * the plan as the thread goal.
  *
  * On each submission the plan is saved to a `.md` file and the previous plan
  * content is snapshotted so that resubmissions can show a diff.
@@ -445,24 +446,9 @@ export async function handlePlanApproval(
       plan,
       planFilename,
       previousPlan,
+      // Goals are local-only, so Factory approvals are plain approvals.
+      startsGoal: Boolean(state.local),
       onApprove: async () => {
-        releaseApprovalFocus();
-        try {
-          await switchModeWithPack(ctx, 'build');
-        } catch (error) {
-          restoreApprovalAfterError(error);
-          return;
-        }
-        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
-        firePermissionResult('approved');
-        const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
-        // The controller emits the resumed tool's terminal events while this
-        // handler owns its serialized event queue. Let those events reach their
-        // render boundaries immediately instead of waiting for the resume promise.
-        resolve();
-        await resumed;
-      },
-      onGoal: async () => {
         releaseApprovalFocus();
         try {
           await switchModeWithPack(ctx, 'build');
@@ -479,13 +465,16 @@ export async function handlePlanApproval(
         // one that produced this plan) would otherwise judge the implementation
         // and only hand over to the plan once the work was already done.
         // A failure to set the goal must not block approval: fall back to a
-        // plain approval so the suspended plan still resumes.
-        const goal = await ctx
-          .setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.')
-          .catch((error: unknown) => {
-            ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
-            return null;
-          });
+        // plain approval so the suspended plan still resumes. Goals are
+        // local-only, so Factory mode always takes the plain approval path.
+        const goal = !state.local
+          ? null
+          : await ctx
+              .setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.')
+              .catch((error: unknown) => {
+                ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
+                return null;
+              });
         const approvalRecorded = goal ? waitForToolEnd(state.session, toolCallId) : undefined;
 
         const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
