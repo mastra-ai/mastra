@@ -936,11 +936,13 @@ interface RecoveryCandidate {
 interface RecoveryPass {
   /** The earliest time a run the pass left in its grace period becomes due. */
   earliestDueAt?: number;
-  /**
-   * Whether the store had run fencing; without it the pass restarted every active run. `undefined` when
-   * the probe failed: the pass then did as without fencing, or nothing when called with `whenUnprobed: 'skip'`.
-   */
+  /** Whether the store had run fencing; `undefined` when the probe failed. */
   runFencing: boolean | undefined;
+  /**
+   * Whether the pass, a recovery loop's, left every run alone because the store had no run fencing or the
+   * probe failed. Any other pass restarts every active run then.
+   */
+  skipped: boolean;
   /** Whether a shutdown or a `stopWorkers()` call stopped the pass before it handed out every restart. */
   stopped: boolean;
   /** Settles once every restart the pass handed out settled; never rejects. */
@@ -4583,7 +4585,7 @@ export class Mastra<
    * changed. A run this call leaves alone is checked again by the recovery
    * loop of every instance that called `startWorkers()`; this call doesn't
    * look at it again. Without run fencing in the store, every active run is
-   * restarted.
+   * restarted; the recovery loop restarts none there, so only this call does.
    *
    * Resolves once every default-engine restart its pass queued finished and
    * every evented restart was published to the workers. Runs an earlier pass
@@ -4592,17 +4594,23 @@ export class Mastra<
    * reject. Once `shutdown()` starts, no further runs are restarted.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
-    const pass = await this.#recoverStoppedRuns();
+    let pass = await this.#recoverStoppedRuns();
+    // A recovery loop's pass leaves every run alone on a store without run fencing. This call restarts
+    // them in a pass of its own; a loop's next pass can't have started yet.
+    if (pass.skipped) {
+      pass = await this.#recoverStoppedRuns();
+    }
+
     await pass.settled;
   }
 
   /**
    * The recovery pass still handing out restarts, which overlapping calls share, or a new one.
-   * `whenUnprobed` applies to a new pass; see `#runRecoveryPass`.
+   * `fencedOnly` applies to a new pass; see `#runRecoveryPass`.
    */
-  #recoverStoppedRuns({ whenUnprobed = 'restart' }: { whenUnprobed?: 'restart' | 'skip' } = {}): Promise<RecoveryPass> {
+  #recoverStoppedRuns({ fencedOnly = false }: { fencedOnly?: boolean } = {}): Promise<RecoveryPass> {
     if (!this.#recoveryPass) {
-      const pass = this.#runRecoveryPass(whenUnprobed);
+      const pass = this.#runRecoveryPass(fencedOnly);
       this.#recoveryPass = pass;
       // `#runRecoveryPass` never rejects. A pass that already ended must not clear a newer one.
       void pass.finally(() => {
@@ -4617,10 +4625,10 @@ export class Mastra<
 
   /**
    * One recovery pass over run summaries and liveness keys (see {@link recoveryVerdict}); never rejects.
-   * When the run fencing probe fails, the pass restarts every active run as without fencing, or with
-   * `whenUnprobed: 'skip'` leaves every run alone.
+   * When the store has no run fencing, or the probe fails, the pass restarts every active run, or with
+   * `fencedOnly` leaves every run alone: nothing tells a live run from a stopped one there.
    */
-  async #runRecoveryPass(whenUnprobed: 'restart' | 'skip'): Promise<RecoveryPass> {
+  async #runRecoveryPass(fencedOnly: boolean): Promise<RecoveryPass> {
     const restarts: Promise<void>[] = [];
     let earliestDueAt: number | undefined;
     let runFencing: boolean | undefined = false;
@@ -4632,12 +4640,12 @@ export class Mastra<
       const workflowsStore = await this.#storage?.getStore('workflows');
       if (!workflowsStore) {
         this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
-        return { runFencing, stopped: stopped(), settled: Promise.resolve() };
+        return { runFencing, skipped: false, stopped: stopped(), settled: Promise.resolve() };
       }
 
       runFencing = await this.#supportsRunFencing(workflowsStore);
-      if (runFencing === undefined && whenUnprobed === 'skip') {
-        return { runFencing, stopped: stopped(), settled: Promise.resolve() };
+      if (runFencing !== true && fencedOnly) {
+        return { runFencing, skipped: true, stopped: stopped(), settled: Promise.resolve() };
       }
 
       const listed = await this.#listActiveRunSummaries(workflowsStore);
@@ -4726,7 +4734,13 @@ export class Mastra<
     }
 
     // Each restart logs its own failure and never rejects.
-    return { earliestDueAt, runFencing, stopped: stopped(), settled: Promise.all(restarts).then(() => {}) };
+    return {
+      earliestDueAt,
+      runFencing,
+      skipped: false,
+      stopped: stopped(),
+      settled: Promise.all(restarts).then(() => {}),
+    };
   }
 
   /**
@@ -5007,28 +5021,25 @@ export class Mastra<
     this.#stopWorkflowRecoveryLoop = stop;
 
     let dueAt: number | undefined;
-    let bootPass = true;
     const loopStops = this.#workerStops;
     // Never rejects, as `repeatAfterSettled` requires: the pass reports its own failures. Tracked so
     // shutdown() waits for a pass in flight and for the restarts it handed out, but the tick only waits
     // for the handing out: a long default-engine restart never holds up the next pass.
     const tick = async () => {
-      // The boot pass restarts every active run when the fencing probe fails, as the server's boot call
-      // does. A later pass leaves the runs alone then: doing that every pass would restart runs other
-      // instances still run.
-      const whenUnprobed = bootPass ? 'restart' : 'skip';
-      bootPass = false;
-      let pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ whenUnprobed }));
+      // Fenced only: without run fencing nothing tells a live run from a stopped one, and every instance
+      // that starts workers would restart the runs the others still run. An explicit
+      // restartAllActiveWorkflowRuns() call, such as the server's at boot, restarts them there instead.
+      let pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ fencedOnly: true }));
       // A pass that started before the last stopWorkers() call, and that this loop joined, stopped
       // without doing its work; this loop's workers run, so it does that work in a pass of its own.
       if (pass.stopped && this.#workerStops === loopStops && !this.#shuttingDown) {
-        pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ whenUnprobed }));
+        pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ fencedOnly: true }));
       }
 
       // `settled` never rejects.
       void this.#trackDurableRecovery(pass.settled);
-      // No lease tells a stopped run from a running one without run fencing, so the loop stops;
-      // the server's boot call still restarts every active run there once. A failed probe stops nothing.
+      // A store without run fencing won't get it while this instance runs, so the loop stops. A failed
+      // probe stops nothing: some stores (MongoDB) fail it until one succeeds.
       if (pass.runFencing === false) {
         stop();
         return;

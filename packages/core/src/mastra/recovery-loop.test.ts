@@ -537,7 +537,7 @@ describe('workflow recovery loop (#28712)', () => {
     );
   });
 
-  it('leaves a live run alone on a later pass that failed to probe the store for run fencing', async () => {
+  it('leaves a live run alone on the passes that failed to probe the store for run fencing', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const mastra = replica(storage, 'default', 'B', [], { recovery: { workflowGraceMs: 0, ...scanning } });
@@ -548,7 +548,8 @@ describe('workflow recovery loop (#28712)', () => {
     let probes = 0;
     vi.spyOn(store, 'supportsRunFencing').mockImplementation(async () => {
       probes++;
-      if (probes === 2) {
+      // The boot pass and a later one.
+      if (probes === 1 || probes === 3) {
         throw new Error('connection reset');
       }
 
@@ -556,29 +557,55 @@ describe('workflow recovery loop (#28712)', () => {
     });
 
     await mastra.startWorkers();
-    await vi.waitFor(() => expect(probes).toBeGreaterThan(3));
+    await vi.waitFor(() => expect(probes).toBeGreaterThan(4));
 
     expect(restarted).not.toHaveBeenCalled();
   });
 
-  it('restarts every active run once at boot and checks no more when the store has no run fencing', async () => {
+  it('lists no runs from the loop when the store has no run fencing', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
-    const fencing = vi.spyOn(store, 'supportsRunFencing').mockResolvedValue(false);
+    const probed = Promise.withResolvers<void>();
+    vi.spyOn(store, 'supportsRunFencing').mockImplementation(async () => {
+      probed.resolve();
+      return false;
+    });
     const listings = vi.spyOn(store, 'listWorkflowRuns');
     const mastra = replica(storage, 'default', 'B', executions, { recovery: { workflowGraceMs: 0, ...scanning } });
     await persistActiveRun(storage, 'stopped');
 
     await mastra.startWorkers();
-    await sleep(scanning.workflowScanIntervalMs * 5);
+    await probed.promise;
+    // A pass lists right after the probe answers, within the same macrotask.
+    await new Promise(resolve => setImmediate(resolve));
 
-    // The boot pass restarts every active run, as the server's boot call does on such a store, and
-    // no lease tells a stopped run from a running one after that.
-    expect(fencing).toHaveBeenCalled();
-    // One pass lists the running and the waiting runs.
-    const recoveredListings = listings.mock.calls.filter(([args]) => args?.workflowName === 'recovered-wf');
-    expect(recoveredListings).toHaveLength(2);
+    // Nothing tells the run from one another instance still drives, so the loop leaves it alone.
+    expect(listings.mock.calls.filter(([args]) => args?.workflowName === 'recovered-wf')).toEqual([]);
+    expect(executions).toEqual([]);
+  });
+
+  it('restarts every active run from a restartAllActiveWorkflowRuns() call that joins the loop pass on a store without run fencing', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const executions: string[] = [];
+    const probing = Promise.withResolvers<void>();
+    const answer = Promise.withResolvers<void>();
+    vi.spyOn(store, 'supportsRunFencing').mockImplementation(async () => {
+      probing.resolve();
+      await answer.promise;
+      return false;
+    });
+    const mastra = replica(storage, 'default', 'B', executions, { recovery: { workflowGraceMs: 0, ...scanning } });
+    await persistActiveRun(storage, 'stopped');
+    await mastra.startWorkers();
+    await probing.promise;
+
+    // Joins the loop's pass, which leaves the run alone; the call restarts it in a pass of its own.
+    const call = mastra.restartAllActiveWorkflowRuns();
+    answer.resolve();
+    await call;
+
     expect(executions).toEqual(['B:work']);
   });
 
