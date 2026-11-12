@@ -6595,7 +6595,11 @@ export class Session<TState = unknown> {
     const promise = (async () => {
       try {
         for await (const chunk of subscription.stream) {
-          if (subscription.__getCurrentRunRequestContext?.()?.get(markerKey) !== attempt) continue;
+          const marker = subscription.__getCurrentRunRequestContext?.()?.get(markerKey);
+          // Durable runs deliver their last chunks after the run's request context is released.
+          // Once this attempt's run has streamed, its remaining chunks still belong to it.
+          const releasedRunChunk = dispatched && marker === undefined && chunk.runId === address.runId;
+          if (marker !== attempt && !releasedRunChunk) continue;
           if (chunk.runId && chunk.runId !== address.runId) continue;
           dispatched = true;
           if (chunk.type === 'tool-call-approval') {

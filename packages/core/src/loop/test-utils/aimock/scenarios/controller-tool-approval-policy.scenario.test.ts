@@ -1,10 +1,16 @@
+import { randomUUID } from 'node:crypto';
+import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTestSession } from '../../../../agent-controller/test-utils';
 import type { AgentControllerConfig, AgentControllerEvent } from '../../../../agent-controller/types';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+import { requestText } from '../network-fixtures';
 import { isDurableEngineVariant } from '../types';
+
+type ToolCallFixture = { id: string; name: string; arguments: Record<string, unknown> };
+type StepResponse = { toolCalls: ToolCallFixture[] } | { content: string };
 
 /**
  * An AgentController decides tool approval from the session's permission rules (#30131).
@@ -38,16 +44,41 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     session.subscribe(event => {
       events.push(event);
     });
+
+    // A run from an earlier test can still reach the shared mock after its controller is
+    // destroyed, so fixtures match this test's prompt. Each step answers once the calls of
+    // the steps before it are in the history and its own calls are not.
+    const marker = `[${randomUUID()}]`;
+    const ownRequest = (req: ChatCompletionRequest | null) => requestText(req).includes(marker);
+    const callIds = (response: StepResponse) =>
+      'toolCalls' in response ? response.toolCalls.map(call => call.id) : [];
+    const script = (responses: StepResponse[]) =>
+      responses.forEach((response, index) => {
+        const earlier = responses.slice(0, index).flatMap(callIds);
+        const own = callIds(response);
+        llm.on(
+          {
+            endpoint: 'chat',
+            predicate: req => {
+              const history = JSON.stringify(req.messages);
+              return (
+                ownRequest(req) && earlier.every(id => history.includes(id)) && !own.some(id => history.includes(id))
+              );
+            },
+          },
+          response,
+        );
+      });
+    const send = (content: string) => session.sendMessage({ content: `${content} ${marker}` });
+    const requests = () => llm.getRequests().filter(entry => ownRequest(entry.body));
+
     // Each approval the controller sends back to the agent is one paused-and-resumed call.
     const approvalRoundTrips = vi.spyOn(agent, 'sendToolApproval');
     const approvalCards = () =>
       events.flatMap(event => (event.type === 'tool_approval_required' ? [event.toolCallId] : []));
-    const waitForEnd = (count = 1) =>
-      vi.waitFor(
-        () => expect(events.filter(event => event.type === 'agent_end').length).toBeGreaterThanOrEqual(count),
-        { timeout: 15_000 },
-      );
-    return { llm, controller, session, events, approvalRoundTrips, approvalCards, waitForEnd };
+    const waitForEnd = () =>
+      vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true), { timeout: 15_000 });
+    return { controller, session, events, script, send, requests, approvalRoundTrips, approvalCards, waitForEnd };
   }
 
   function recordingTool(id: string, calls: string[], run?: (name: string) => Promise<void>) {
@@ -77,19 +108,18 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
       ]);
     });
     const env = await setup({ tools: { read_value: readTool } });
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 0 },
+    env.script([
       {
         toolCalls: [
           { id: 'call-a', name: 'read_value', arguments: { name: 'a' } },
           { id: 'call-b', name: 'read_value', arguments: { name: 'b' } },
         ],
       },
-    );
-    env.llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'done' });
+      { content: 'done' },
+    ]);
 
     try {
-      await env.session.sendMessage({ content: 'Read a and b.' });
+      await env.send('Read a and b.');
       await env.waitForEnd();
 
       expect(calls.sort()).toEqual(['read_value:a', 'read_value:b']);
@@ -111,23 +141,19 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
         queueMicrotask(() => env.session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId }));
       }
     });
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 0 },
+    env.script([
       {
         toolCalls: [
           { id: 'call-read', name: 'read_value', arguments: { name: 'a' } },
           { id: 'call-write', name: 'write_value', arguments: { name: 'a' } },
         ],
       },
-    );
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 1 },
       { toolCalls: [{ id: 'call-read-again', name: 'read_value', arguments: { name: 'b' } }] },
-    );
-    env.llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'done' });
+      { content: 'done' },
+    ]);
 
     try {
-      await env.session.sendMessage({ content: 'Read and write a, then read b.' });
+      await env.send('Read and write a, then read b.');
       await vi.waitFor(() => expect(calls).toContain('read_value:b'), { timeout: 15_000 });
 
       expect(env.approvalCards()).toEqual(['call-write']);
@@ -144,14 +170,13 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     const calls: string[] = [];
     const env = await setup({ tools: { write_value: recordingTool('write_value', calls) } });
     await env.session.permissions.setForCategory({ category: 'edit', policy: 'deny' });
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 0 },
+    env.script([
       { toolCalls: [{ id: 'call-write', name: 'write_value', arguments: { name: 'a' } }] },
-    );
-    env.llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'done' });
+      { content: 'done' },
+    ]);
 
     try {
-      await env.session.sendMessage({ content: 'Write a.' });
+      await env.send('Write a.');
       await vi.waitFor(
         () => expect(env.events).toContainEqual(expect.objectContaining({ type: 'tool_end', denied: true })),
         { timeout: 15_000 },
@@ -175,18 +200,14 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
         queueMicrotask(() => env.session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId }));
       }
     });
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 0 },
+    env.script([
       { toolCalls: [{ id: 'call-ask', name: 'ask_user', arguments: { question: 'Which one?' } }] },
-    );
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 1 },
       { toolCalls: [{ id: 'call-write', name: 'write_value', arguments: { name: 'blue' } }] },
-    );
-    env.llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'done' });
+      { content: 'done' },
+    ]);
 
     try {
-      await env.session.sendMessage({ content: 'Ask me, then write my answer.' });
+      await env.send('Ask me, then write my answer.');
       await vi.waitFor(
         () =>
           expect(env.events).toContainEqual(expect.objectContaining({ type: 'tool_end', toolCallId: 'call-write' })),
@@ -196,7 +217,7 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
       // ask_user has no category, so it asks the user without an approval card first.
       expect(env.approvalCards()).toEqual(['call-write']);
       expect(calls).toEqual([]);
-      expect(JSON.stringify(env.llm.getRequests()[1]?.body)).toContain('the blue one');
+      expect(JSON.stringify(env.requests()[1]?.body)).toContain('the blue one');
     } finally {
       await env.controller.destroy();
     }
@@ -214,18 +235,15 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
       });
       const write = { id: 'call-write', name: 'write_value', arguments: { name: 'a' } };
       const read = { id: 'call-read', name: 'read_value', arguments: { name: 'a' } };
-      if (sameStep) {
-        env.llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { toolCalls: [write, read] });
-        env.llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'done' });
-      } else {
-        env.llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { toolCalls: [write] });
-        env.llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { toolCalls: [read] });
-        env.llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'done' });
-      }
+      env.script(
+        sameStep
+          ? [{ toolCalls: [write, read] }, { content: 'done' }]
+          : [{ toolCalls: [write] }, { toolCalls: [read] }, { content: 'done' }],
+      );
 
       try {
         // The turn stays open while a call waits for approval.
-        const sent = env.session.sendMessage({ content: 'Write a, then read a.' });
+        const sent = env.send('Write a, then read a.');
         void sent.catch(() => {});
         await vi.waitFor(() => expect(env.approvalCards()).toEqual(['call-write']), { timeout: 15_000 });
         await env.session.permissions.setForTool({ toolName: 'read_value', policy: 'ask' });
@@ -272,19 +290,15 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     });
     await env.session.permissions.setForCategory({ category: 'edit', policy: runThreadEdits });
     const runThreadId = env.session.thread.requireId();
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 0 },
+    env.script([
       { toolCalls: [{ id: 'call-confirm', name: 'confirm', arguments: { question: 'Go?' } }] },
-    );
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 1 },
       writeNext
         ? { toolCalls: [{ id: 'call-write', name: 'write_value', arguments: { name: 'a' } }] }
         : { content: 'done' },
-    );
-    env.llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'done' });
+      { content: 'done' },
+    ]);
 
-    void env.session.sendMessage({ content: 'Confirm, then write a.' }).catch(() => {});
+    void env.send('Confirm, then write a.').catch(() => {});
     await vi.waitFor(
       () => expect(env.events).toContainEqual(expect.objectContaining({ type: 'tool_suspended', toolName: 'confirm' })),
       { timeout: 15_000 },
@@ -328,8 +342,8 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     });
     void answered.catch(() => {});
     try {
-      await vi.waitFor(() => expect(env.llm.getRequests()).toHaveLength(3), { timeout: 15_000 });
-      expect(JSON.stringify(env.llm.getRequests()[2]?.body)).toContain('call-write');
+      await vi.waitFor(() => expect(env.requests()).toHaveLength(3), { timeout: 15_000 });
+      expect(JSON.stringify(env.requests()[2]?.body)).toContain('call-write');
       expect(calls).toEqual([]);
       expect(env.approvalCards()).toEqual([]);
     } finally {
@@ -337,22 +351,19 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     }
   });
 
-  // Durable engines finish the resumed run, but the answer never returns (#30150).
-  // Reproduced on main before this change; not yet investigated.
-  (isDurableEngineVariant(engine) ? it.fails : it)(
-    'returns the answer from another thread once the resumed run ends',
-    async () => {
-      const { env, answered } = await answerFromAnotherThread({ writeNext: false });
-      try {
-        await Promise.race([
-          answered,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('The answer did not return')), 5_000)),
-        ]);
-      } finally {
-        await env.controller.destroy();
-      }
-    },
-  );
+  // Durable engines deliver the resumed run's last chunks after its request context is
+  // released, so the answer used to wait for a `finish` it never recognised (#30150).
+  it('returns the answer from another thread once the resumed run ends', async () => {
+    const { env, answered } = await answerFromAnotherThread({ writeNext: false });
+    try {
+      await Promise.race([
+        answered,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('The answer did not return')), 5_000)),
+      ]);
+    } finally {
+      await env.controller.destroy();
+    }
+  });
 
   it.each([
     { label: 'runs a tool the category resolver maps to null', resolver: () => null, cards: [] },
@@ -374,14 +385,10 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
         queueMicrotask(() => env.session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId }));
       }
     });
-    env.llm.on(
-      { endpoint: 'chat', sequenceIndex: 0 },
-      { toolCalls: [{ id: 'call-note', name: 'note', arguments: { name: 'a' } }] },
-    );
-    env.llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'done' });
+    env.script([{ toolCalls: [{ id: 'call-note', name: 'note', arguments: { name: 'a' } }] }, { content: 'done' }]);
 
     try {
-      await env.session.sendMessage({ content: 'Take a note.' });
+      await env.send('Take a note.');
       await vi.waitFor(() => expect(calls).toEqual(['note:a']), { timeout: 15_000 });
 
       expect(env.approvalCards()).toEqual(cards);
