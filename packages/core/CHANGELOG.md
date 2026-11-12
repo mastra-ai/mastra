@@ -1,5 +1,68 @@
 # @mastra/core
 
+## 1.83.0-alpha.13
+
+### Minor Changes
+
+- Added `server.mcp.oauth` (`resource`, `requireAudience`, `authorizationServers`, `scopesSupported`) to configure OAuth discovery and token audience checks for the built-in MCP server. Auth providers can implement the new optional `getOAuthMetadata()` and `verifyAudience()` methods to advertise their authorization server and check the token audience. `CompositeAuth` combines the authorization servers of its providers and checks the audience with the provider that accepted the token. The new `CompositeAuth.getAuthenticatedProvider(user)` returns that provider. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+- Added the `server.mcp` option for configuring the built-in MCP server at `/api/mcp`: turn it on or off, change its path, choose toolsets, feature agents and workflows, serve only read-only tools, and include or exclude agents, workflows, and tools by id. ([#29929](https://github.com/mastra-ai/mastra/pull/29929))
+
+- Added `memory`, `observability`, `observability_analytics`, and `stored_agents` to the toolsets accepted by `server.mcp.toolsets`. ([#29931](https://github.com/mastra-ai/mastra/pull/29931))
+
+- Added an optional `user` argument to dynamic configuration callbacks. When server authentication is configured, callbacks for `instructions`, `model`, `tools`, `memory`, and other dynamic options receive the authenticated end user normalized to a stable `MastraUser` shape (`id`, `name?`, `email?`, `avatarUrl?`, `role?`), so you can personalize agents without reading auth keys from `requestContext` yourself. ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+  ```ts
+  export const supportAgent = new Agent({
+    id: 'support-agent',
+    name: 'Support Agent',
+    model: 'openai/gpt-5-mini',
+    instructions: ({ user }) => (user ? `You are helping ${user.name ?? user.id}.` : 'You are a helpful assistant.'),
+  });
+  ```
+
+  `user` is `undefined` for unauthenticated requests. Auth providers can override the new `toMastraUser()` method to control how their user objects are normalized.
+
+  Workflow resume, restart and time travel, and durable agent `resume()`, no longer restore the authenticated user, roles and permissions saved with the run. They come from the request doing the resuming, including in durable agent goal and `isTaskComplete` scorers and output processors, so a resume without a signed-in user can't act as the user who started the run. Integrations that build their own resume context can use the new `withoutLiveRequestKeys()` helper from `@mastra/core/request-context` to drop the same keys.
+
+### Patch Changes
+
+- Honor an Agent's pubsub for DurableAgent thread coordination so replicas sharing that bus can discover active runs, receive thread updates, and coordinate thread leases and Stop requests. Preserve injected coordination buses when agents are forked. ([#30215](https://github.com/mastra-ai/mastra/pull/30215))
+
+- Fixed a deleted stored agent's workspace showing up again. ([#29927](https://github.com/mastra-ai/mastra/pull/29927))
+
+  An async workspace factory can finish after its stored agent is deleted. The late workspace used to look like a code agent's, so servers showed it. Servers can now keep it hidden.
+
+  Agent workspace entries in `mastra.listWorkspaces()` have a new `agentSource` field. It records the source of the agent that registered the workspace: `'code'`, `'stored'` or `'fs'`.
+
+  ```ts
+  const entry = mastra.listWorkspaces()[workspaceId];
+  if (entry.source === 'agent' && entry.agentSource === 'stored') {
+    // registered by a stored agent
+  }
+  ```
+
+- Fixed a queued message being lost when the run it was handed to, on this or another process, ended at the same moment. The message is now kept until that run accepts it and queued again if the run ends first. Cancelling queued messages also cancels a message that is waiting to be accepted, and the queue count includes it. ([#29142](https://github.com/mastra-ai/mastra/pull/29142))
+
+- Durable agents now deliver `abort()` requests to a tool's `abortSignal` even when the tool runs on another worker. ([#29002](https://github.com/mastra-ai/mastra/pull/29002))
+
+  Each worker also enforces the run's `modelSettings.timeout.totalMs` deadline through that signal. After the abort grace window, the run stops waiting for the tool and ends with a `MastraTimeoutError`. A tool that ignores its signal can keep running; its step is saved with the aborted-tool notice.
+
+  Tool steps queued after the run stops do not invoke the tool. Cancellation while waiting for an awaited background task preserves the run's timeout or abort outcome. A sibling tool's mapping failure does not mask that outcome.
+
+  The stream reports the same deadline error only once, even if it arrives from multiple processes.
+
+- Fixed processor listings showing agents that were removed. `getProcessorConfigurations()` and `listProcessorConfigurations()` kept listing an agent after `Mastra.removeAgent()`, for example a stored agent that was edited or deleted, or one used only as a sub-agent. `removeAgent()` now drops the agent's processor configurations, and registering it again adds them back. Each configuration also records the `source` of the agent that added it, so a stored agent's configurations can be told apart from a code agent's. ([#29927](https://github.com/mastra-ai/mastra/pull/29927))
+
+- Fixed cached stream events on Redis Cluster falling back to non-atomic index allocation and list writes. `CachingPubSub` now places each topic's replay list and index counter in the same Redis hash slot, so `RedisServerCache` can append and allocate indexes atomically with its Lua script. PubSub topic names are unchanged. ([#30174](https://github.com/mastra-ai/mastra/pull/30174))
+
+  This changes replay cache key names. During a rolling deployment, workers running the new version cannot read replay logs written under the old key names; those logs remain inaccessible until they expire according to their configured TTL.
+
+- Reduced memory use and garbage-collection pauses for thread subscribers on storage adapters that can read a run's status on its own, such as Postgres. Checking whether a run is still parked now asks storage only for the run status instead of loading the whole run snapshot, which could be many megabytes per check. Adapters without a status-only read still load the snapshot. ([#30175](https://github.com/mastra-ai/mastra/pull/30175))
+
+- Updated dependencies [[`e1a2036`](https://github.com/mastra-ai/mastra/commit/e1a20364af31f433d0f91cb3f5ce8e49eb45b615)]:
+  - @mastra/schema-compat@1.4.0-alpha.2
+
 ## 1.83.0-alpha.12
 
 ### Minor Changes
