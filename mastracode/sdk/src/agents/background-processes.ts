@@ -112,6 +112,15 @@ export function createBackgroundProcessNotices(options: {
   // PIDs killed on purpose. `onExit` fires before `kill()` resolves, so they
   // must be marked before the kill starts.
   const killed = new Set<string>();
+  // Nothing reports a sandbox's teardown here, so torn-down entries are dropped
+  // when next touched, and all of them whenever a new shell starts.
+  const isTornDown = (sandbox: WorkspaceSandbox | undefined) => SANDBOX_TEARDOWN_STATUSES.has(String(sandbox?.status));
+  const liveSandbox = (pid: string) => {
+    const sandbox = sandboxes.get(pid);
+    if (!isTornDown(sandbox)) return sandbox;
+    sandboxes.delete(pid);
+    return undefined;
+  };
 
   return {
     async beforeToolCall({ workspaceToolName, input, context }) {
@@ -125,6 +134,7 @@ export function createBackgroundProcessNotices(options: {
       const toolContext = context as ToolContextLike | undefined;
       const toolCallId = toolContext?.agent?.toolCallId;
       if (!toolCallId) return;
+      for (const [pid, sandbox] of sandboxes) if (isTornDown(sandbox)) sandboxes.delete(pid);
       launches.set(toolCallId, {
         command: stringInput(input, 'command'),
         description: stringInput(input, 'description'),
@@ -158,10 +168,11 @@ export function createBackgroundProcessNotices(options: {
     async onExit(meta) {
       const launch = meta.toolCallId ? launches.get(meta.toolCallId) : undefined;
       if (meta.toolCallId) launches.delete(meta.toolCallId);
-      // Kept after the exit: the output stays readable until it is released.
-      if (launch?.sandbox) sandboxes.set(meta.pid, launch.sandbox);
+      const shuttingDown = isTornDown(launch?.sandbox);
+      // Kept after the exit, so the output stays readable until it is released.
+      if (shuttingDown) sandboxes.delete(meta.pid);
+      else if (launch?.sandbox) sandboxes.set(meta.pid, launch.sandbox);
       const killedOnPurpose = killed.delete(meta.pid);
-      const shuttingDown = SANDBOX_TEARDOWN_STATUSES.has(String(launch?.sandbox?.status));
       const wasKilled = killedOnPurpose || meta.killedByAbort === true || shuttingDown;
       const ownTarget =
         meta.threadId && meta.resourceId ? { resourceId: meta.resourceId, threadId: meta.threadId } : undefined;
@@ -225,14 +236,14 @@ export function createBackgroundProcessNotices(options: {
     },
 
     async read(pid) {
-      const handle = await sandboxes.get(pid)?.processes?.get(pid, { release: false });
+      const handle = await liveSandbox(pid)?.processes?.get(pid, { release: false });
       // Gone once released (read with `get_process_output` after it exited, or killed).
       if (!handle) sandboxes.delete(pid);
       return handle;
     },
 
     async kill(pid) {
-      const sandbox = sandboxes.get(pid);
+      const sandbox = liveSandbox(pid);
       if (!sandbox?.processes) return false;
       killed.add(pid);
       let result: boolean;

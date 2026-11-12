@@ -38,7 +38,7 @@ With the setting on, a command the agent starts with `execute_command` and `back
 - a kill when the run that started the command is aborted
 - the sandbox shutting down
 
-The `subagent` tool can run as a background task. It runs until it finishes, without a timeout or retries. When it ends, the agent gets a notification, and the result is in the original tool call. Completions of other background tasks wake an idle agent on the current thread the same way. Notifications for tasks the user cancelled, and for tasks a crash or a shutdown interrupted, are saved to the thread without starting a turn.
+The `subagent` tool can run as a background task. It runs until it finishes, without a timeout or retries. When it ends, the agent gets a notification, and the result is in the original tool call. Like a shell exit, the notification for a finished or failed background task wakes an idle agent on the current thread. Notifications for tasks the user cancelled, and for tasks a crash or a shutdown interrupted, are saved to the thread without starting a turn.
 
 `createMastraCode()` returns `backgroundProcesses` so a host can show and stop background shells. `read` keeps working after the shell exits, until its output is released: by a kill, or when the agent reads it with `get_process_output`. Killing a shell through it posts no exit notification:
 

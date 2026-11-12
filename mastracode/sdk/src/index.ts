@@ -1809,6 +1809,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         getSession: sessionId => controller.getSession(sessionId),
       })
     : undefined;
+  // Hosts get only the controls; the workspace hooks stay internal.
+  const backgroundProcessControls: BackgroundProcessControls | undefined = backgroundProcesses;
   const backgroundTaskCallbacks = backgroundNotices
     ? createBackgroundCompletionCallbacks(backgroundNotices, backgroundCompletionEvents, {
         subagents,
@@ -2022,7 +2024,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     backgroundToolsEnabled,
     backgroundCompletionEvents,
     /** Reads and kills background shells for the user; a kill posts no exit notice. */
-    backgroundProcesses: backgroundProcesses as BackgroundProcessControls | undefined,
+    backgroundProcesses: backgroundProcessControls,
     /**
      * Background task completion callbacks, shared by the controller and a server-owned Mastra.
      * @internal

@@ -152,6 +152,22 @@ describe('Mastra Code background shell exit notices', () => {
     expect(delivered).toEqual([]);
   });
 
+  it('stops reaching shells once their sandbox is torn down', async () => {
+    const { notices, start } = await setup();
+
+    const { pid, exit } = await start(node('process.exit(0)'));
+    await exit;
+    const processes = workspace!.sandbox!.processes!;
+    await workspace!.destroy();
+    const get = vi.spyOn(processes, 'get');
+    const kill = vi.spyOn(processes, 'kill');
+
+    expect(await notices.read(pid)).toBeUndefined();
+    expect(await notices.kill(pid)).toBe(false);
+    expect(get).not.toHaveBeenCalled();
+    expect(kill).not.toHaveBeenCalled();
+  });
+
   it('keeps an exited shell readable until its output is released', async () => {
     const { notices, start, tools } = await setup();
 
