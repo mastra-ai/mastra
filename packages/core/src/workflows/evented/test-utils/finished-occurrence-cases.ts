@@ -9,7 +9,7 @@
  * one store the way pods share one database. The test file sets a short lease
  * TTL before core loads.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
@@ -515,15 +515,34 @@ export function describeFinishedOccurrenceCases({
       const { record } = await store.claimRunOwnership({
         runId: key,
         ownerId: 'stopped-worker',
-        leaseMs: 300,
+        leaseMs: 1_500,
         force: true,
       });
-      expect((await store.getRunOwnership({ runId: key }))?.live).toBe(true);
 
-      expect(await redeliver(b, original)).toEqual({ ok: true });
+      // B's claims on the key, and whether the stopped worker's lease was live when B was refused,
+      // so the case shows B waited for the lease instead of finding it lapsed.
+      const bStore = (await b.mastra.getStorage()!.getStore('workflows'))!;
+      const claim = bStore.claimRunOwnership.bind(bStore);
+      const claims: { acquired: boolean; leaseLive?: boolean }[] = [];
+      const spy = vi.spyOn(bStore, 'claimRunOwnership').mockImplementation(async args => {
+        const result = await claim(args);
+        if (args.runId === key) {
+          const leaseLive = result.acquired ? undefined : !!(await bStore.getRunOwnership({ runId: key }))?.live;
+          claims.push({ acquired: result.acquired, leaseLive });
+        }
+
+        return result;
+      });
+      try {
+        expect(await redeliver(b, original)).toEqual({ ok: true });
+      } finally {
+        spy.mockRestore();
+      }
 
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
       expect(executions).toEqual(['A:first', 'B:second']);
+      expect(claims[0]).toEqual({ acquired: false, leaseLive: true });
+      expect(claims.at(-1)).toEqual({ acquired: true });
       // B continued the run under the step's lease, which it took over from the stopped worker.
       const lease = await store.getRunOwnership({ runId: key });
       expect(lease?.ownerId).not.toBe('stopped-worker');
