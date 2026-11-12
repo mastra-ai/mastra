@@ -111,13 +111,19 @@ export interface RunningBackgroundTask extends BackgroundTaskRef {
 
 /** Calls in the transcript whose background task has not ended. */
 export function runningBackgroundTasks(entries: readonly TimelineEntry[]): RunningBackgroundTask[] {
+  // A part keeps `running` when the task's end couldn't be written back to it; its end notice still says so.
+  const ended = new Set<string>();
+  for (const entry of entries) {
+    const notice = entry.kind === 'message' ? backgroundFinishedNotice(entry) : undefined;
+    if (notice?.kind === 'task' && ENDED_TASK_STATUSES.has(notice.status)) ended.add(notice.taskId);
+  }
   const tasks: RunningBackgroundTask[] = [];
   for (const entry of entries) {
     if (entry.kind !== 'message') continue;
     for (const part of entry.message.content.parts ?? []) {
       if (part.type !== 'tool-invocation') continue;
       const task = backgroundTaskOf(part);
-      if (!isDeferredTask(task)) continue;
+      if (!isDeferredTask(task) || ended.has(task.taskId)) continue;
       const { toolCallId, toolName } = part.toolInvocation;
       const args = 'args' in part.toolInvocation ? part.toolInvocation.args : undefined;
       tasks.push({ ...task, toolCallId, toolName, args });

@@ -138,7 +138,15 @@ function ProcessOutput({ work, pid }: { work: BackgroundWorkApi; pid: string }) 
   );
 }
 
-function ProcessRow({ work, process }: { work: BackgroundWorkApi; process: BackgroundProcess }) {
+function ProcessRow({
+  work,
+  process,
+  toolCallId,
+}: {
+  work: BackgroundWorkApi;
+  process: BackgroundProcess;
+  toolCallId: string;
+}) {
   const [open, setOpen] = useState(false);
   const kill = useKillBackgroundProcess(work);
   const { icon: Icon, label, detail } = presentTool('execute_command', { command: process.command });
@@ -158,7 +166,10 @@ function ProcessRow({ work, process }: { work: BackgroundWorkApi; process: Backg
           description={`${name} stops now. The agent isn't told it exited.`}
           pending={kill.isPending}
           onConfirm={() =>
-            kill.mutate(process.pid, { onError: error => toast.error(`Couldn't stop the command: ${error.message}`) })
+            kill.mutate(
+              { pid: process.pid, toolCallId },
+              { onError: error => toast.error(`Couldn't stop the command: ${error.message}`) },
+            )
           }
         />
       }
@@ -211,9 +222,11 @@ export function BackgroundWorkPanel() {
   // A cancelled call's part says so only once the thread reloads; hide it at once.
   const [cancelled, setCancelled] = useState<ReadonlySet<string>>(new Set());
   if (!work) return null;
-  const processes = (work.processes ?? []).filter(
-    process => process.running && !(process.metadata?.toolCallId && work.exits.has(process.metadata.toolCallId)),
-  );
+  // Every listed command names the call that started it; that call, not the PID alone, is what a stop targets.
+  const processes = (work.processes ?? []).flatMap(process => {
+    const toolCallId = process.metadata?.toolCallId;
+    return process.running && toolCallId && !work.exits.has(toolCallId) ? [{ process, toolCallId }] : [];
+  });
   const tasks = work.tasks.filter(task => !cancelled.has(task.taskId));
   if (processes.length === 0 && tasks.length === 0) return null;
 
@@ -228,8 +241,8 @@ export function BackgroundWorkPanel() {
             onCancelled={taskId => setCancelled(current => new Set([...current, taskId]))}
           />
         ))}
-        {processes.map(process => (
-          <ProcessRow key={process.pid} work={work} process={process} />
+        {processes.map(({ process, toolCallId }) => (
+          <ProcessRow key={toolCallId} work={work} process={process} toolCallId={toolCallId} />
         ))}
       </ul>
     </TaskListContainer>

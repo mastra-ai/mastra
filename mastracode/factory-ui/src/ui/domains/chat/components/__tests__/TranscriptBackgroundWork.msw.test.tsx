@@ -126,8 +126,8 @@ describe('Transcript background commands', () => {
           stderrTruncated: false,
         }),
       ),
-      http.post(`${PROCESSES_URL}/:pid/kill`, ({ params }) => {
-        killed.push(String(params.pid));
+      http.post(`${PROCESSES_URL}/:pid/kill`, ({ params, request }) => {
+        killed.push(`${String(params.pid)} from ${new URL(request.url).searchParams.get('toolCallId')}`);
         processes = [];
         return HttpResponse.json({ pid: params.pid, killed: true });
       }),
@@ -146,17 +146,26 @@ describe('Transcript background commands', () => {
 
     await userEvent.click(within(row).getByRole('button', { name: 'Stop command' }));
     await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Stop command' }));
-    await waitFor(() => expect(killed).toEqual(['4242']));
+    await waitFor(() => expect(killed).toEqual(['4242 from dev']));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Background work' })).not.toBeInTheDocument());
   });
 
-  it('reads the sandbox only once a call started a background command, and stops polling once nothing runs', async () => {
+  it('lists a command that still runs after its launch left the loaded history', async () => {
+    server.use(http.get(PROCESSES_URL, () => HttpResponse.json({ processes: [running('4242', 'older-call')] })));
+    const entries = createInitialTranscript({ messages: [assistant('turn', [lint])] }).entries;
+    renderChat(entries, <BackgroundWorkPanel />);
+
+    const panel = await screen.findByRole('region', { name: 'Background work' });
+    expect(within(panel).getByRole('group', { name: 'Run: pnpm dev' })).toBeVisible();
+  });
+
+  it('reads the sandbox again when a call starts a command, and stops polling once nothing runs', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     onTestFinished(() => {
       vi.useRealTimers();
     });
     let reads = 0;
-    let processes = [running('4242', 'dev')];
+    let processes: SandboxProcess[] = [];
     server.use(
       http.get(PROCESSES_URL, () => {
         reads += 1;
@@ -165,9 +174,13 @@ describe('Transcript background commands', () => {
     );
     const foreground = createInitialTranscript({ messages: [assistant('turn', [lint])] }).entries;
     const { client, rerender } = renderChat(foreground);
+    // One read when the chat opens; nothing runs, so no polling.
+    await vi.waitFor(() => expect(reads).toBe(1));
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
     await waitForMutationsIdle(client);
-    expect(reads).toBe(0);
+    expect(reads).toBe(1);
 
+    processes = [running('4242', 'dev')];
     const launched = createInitialTranscript({ messages: [assistant('turn', [lint, devServer])] }).entries;
     rerender(
       <MemoryRouter>
@@ -176,16 +189,28 @@ describe('Transcript background commands', () => {
         </BackgroundWorkProvider>
       </MemoryRouter>,
     );
-    await vi.waitFor(() => expect(reads).toBe(1));
-    await act(async () => vi.advanceTimersByTimeAsync(3_000));
     await vi.waitFor(() => expect(reads).toBe(2));
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    await vi.waitFor(() => expect(reads).toBe(3));
 
     // Stopped outside the chat: the next read finds nothing running, and the reads stop.
     processes = [];
     await act(async () => vi.advanceTimersByTimeAsync(3_000));
-    await vi.waitFor(() => expect(reads).toBe(3));
+    await vi.waitFor(() => expect(reads).toBe(4));
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
     await waitForMutationsIdle(client);
-    expect(reads).toBe(3);
+    expect(reads).toBe(4);
+  });
+
+  // A request can land on a replica that doesn't hold the session's sandbox, which lists nothing.
+  it("doesn't call a command ended just because the sandbox didn't list it", async () => {
+    server.use(http.get(PROCESSES_URL, () => HttpResponse.json({ processes: [] })));
+    const entries = createInitialTranscript({ messages: [assistant('turn', [devServer])] }).entries;
+    const { client } = renderChat(entries);
+    await waitForMutationsIdle(client);
+
+    const command = screen.getByRole('group', { name: 'Background command: Start the dev server' });
+    expect(command).toHaveTextContent('Start the dev server');
+    expect(within(command).queryByText(/ended|Background/)).not.toBeInTheDocument();
   });
 });

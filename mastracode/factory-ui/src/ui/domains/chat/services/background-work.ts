@@ -48,12 +48,15 @@ export async function getBackgroundProcessOutput(
   return readJsonOrThrow<BackgroundProcessOutput>(res, 'Failed to read the command output');
 }
 
+/** Stops the command `toolCallId` started; a PID alone could name a later command that reused it. */
 export async function killBackgroundProcess(
   baseUrl: string,
   sessionId: string,
   pid: string,
+  toolCallId: string,
 ): Promise<KillSandboxProcessResponse> {
-  const res = await fetch(backgroundUrl(baseUrl, sessionId, `processes/${encodeURIComponent(pid)}/kill`), {
+  const path = `processes/${encodeURIComponent(pid)}/kill?toolCallId=${encodeURIComponent(toolCallId)}`;
+  const res = await fetch(backgroundUrl(baseUrl, sessionId, path), {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'application/json' },

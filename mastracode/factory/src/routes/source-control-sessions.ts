@@ -565,9 +565,13 @@ function backgroundWorkRoutes(options: SourceControlSessionRoutesOptions): ApiRo
     return readable ?? { response: c.json({ error: 'Session not found' }, 404) };
   };
   // Only a process one of the session's agents started; any other pid answers as missing.
-  const sessionProcess = async (session: SourceControlSession, pid: string) => {
+  // With `toolCallId`, only the command that call started: a PID can come back for a later command.
+  const sessionProcess = async (session: SourceControlSession, pid: string, toolCallId?: string) => {
     const found = await sessionBackgroundProcesses(session);
-    if (!found?.listed.some(info => info.pid === pid)) return undefined;
+    const listed = found?.listed.some(
+      info => info.pid === pid && (toolCallId === undefined || info.metadata?.toolCallId === toolCallId),
+    );
+    if (!found || !listed) return undefined;
     const handle = await found.processes.get(pid, { release: false });
     return handle && { processes: found.processes, handle };
   };
@@ -629,8 +633,10 @@ function backgroundWorkRoutes(options: SourceControlSessionRoutesOptions): ApiRo
         const access = await readableSession(loose(c));
         if ('response' in access) return access.response;
         const pid = c.req.param('pid');
+        const toolCallId = c.req.query('toolCallId');
+        if (!toolCallId) return c.json({ error: 'toolCallId is required' }, 400);
         try {
-          const found = await sessionProcess(access.session, pid);
+          const found = await sessionProcess(access.session, pid, toolCallId);
           if (!found) return c.json({ error: 'Process not found' }, 404);
           // The process manager marks this kill as requested, so the agent gets no exit notice for it.
           return c.json({ pid, killed: await found.processes.kill(pid) });

@@ -58,23 +58,26 @@ function ExitCode({ exitCode }: { exitCode: number }) {
 type CommandState =
   | { phase: 'running'; startedAt?: number }
   | { phase: 'exited'; exitCode: number }
-  /** Gone from the sandbox with no exit on record: its output was read, or the sandbox restarted. */
-  | { phase: 'ended' }
   /** Nothing to ask yet, or the sandbox couldn't be read. */
+  | { phase: 'pending' }
+  /**
+   * Not listed, with no exit on record. Its output may have been read or its sandbox restarted, but it may also
+   * run on a replica this request didn't reach, so it isn't called ended.
+   */
   | { phase: 'unknown' };
 
 function useCommandState(tool: ToolCall, pid: string): CommandState {
   const work = useBackgroundWork();
   const exitCode = work?.exits.get(tool.toolCallId);
   if (exitCode !== undefined) return { phase: 'exited', exitCode };
-  if (!work?.processes) return { phase: 'unknown' };
+  if (!work?.processes) return { phase: 'pending' };
   // PIDs come back after a sandbox restart, so the listed process must also be this call's.
   const listed = work.processes.find(
     process => process.pid === pid && (process.metadata?.toolCallId ?? tool.toolCallId) === tool.toolCallId,
   );
   if (listed?.running) return { phase: 'running', startedAt: listed.metadata?.startedAt };
   if (listed?.exitCode !== undefined) return { phase: 'exited', exitCode: listed.exitCode };
-  return { phase: 'ended' };
+  return { phase: 'unknown' };
 }
 
 function rowStatus(state: CommandState): ActivityStatus {
@@ -86,7 +89,6 @@ function CommandOutcome({ state }: { state: CommandState }) {
   if (state.phase === 'running')
     return state.startedAt === undefined ? null : <RunningFor startedAt={state.startedAt} />;
   if (state.phase === 'exited') return <ExitCode exitCode={state.exitCode} />;
-  if (state.phase === 'ended') return <MutedMeta>ended</MutedMeta>;
   return null;
 }
 
@@ -94,7 +96,7 @@ function LaunchedCommandRow({ tool, pid }: { tool: ToolCall; pid: string }) {
   const state = useCommandState(tool, pid);
   const { icon: ToolIcon, label, detail, description, command } = presentTool(tool.toolName, tool.args);
   const foldable = toolHasBody(tool, command);
-  const showsTag = state.phase === 'running' || state.phase === 'unknown';
+  const showsTag = state.phase === 'running' || state.phase === 'pending';
   return (
     <Activity
       appearance="inline"

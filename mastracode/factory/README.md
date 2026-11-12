@@ -1246,12 +1246,12 @@ The setting also lets the agent run read-only workspace tools (reading, listing 
 
 The Factory UI lists a thread's running background commands above the composer, with their output, and can stop them. Anyone who can read the session, and so send it messages, can stop its background work. A command stopped this way posts no exit notice.
 
-| Method | Path                                                            | Result                                                                                        |
-| ------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `GET`  | `/web/user-sessions/:sessionId/background/processes?threadId=`  | `{ processes }`: the commands an agent started in the session's sandbox, running or unread.   |
-| `GET`  | `/web/user-sessions/:sessionId/background/processes/:pid?tail=` | The command's status and output; `tail` keeps the last lines. Reading it doesn't release it.  |
-| `POST` | `/web/user-sessions/:sessionId/background/processes/:pid/kill`  | `{ pid, killed }`.                                                                            |
-| `POST` | `/web/user-sessions/:sessionId/background/tasks/:taskId/cancel` | The cancelled background task. Needs a background task manager on the host's Mastra instance. |
+| Method | Path                                                                       | Result                                                                                                             |
+| ------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/web/user-sessions/:sessionId/background/processes?threadId=`             | `{ processes }`: the commands an agent started in the session's sandbox, running or unread.                        |
+| `GET`  | `/web/user-sessions/:sessionId/background/processes/:pid?tail=`            | The command's status and output; `tail` keeps the last lines. Reading it doesn't release it.                       |
+| `POST` | `/web/user-sessions/:sessionId/background/processes/:pid/kill?toolCallId=` | `{ pid, killed }`. `toolCallId` names the call that started the command, so a reused PID isn't stopped by mistake. |
+| `POST` | `/web/user-sessions/:sessionId/background/tasks/:taskId/cancel`            | The cancelled background task. Needs a background task manager on the host's Mastra instance.                      |
 
 With authentication on, Mastra's routes for listing, reading and stopping sandbox processes (`/api/workspaces/:workspaceId/sandbox/processes`, `/:pid` and `/:pid/kill`) and `POST /api/background-tasks/:id/cancel` answer `403`: they don't check which session a caller can read. Until they do, Studio's background work dock can't list or stop processes on a Factory server. Mastra's older background task routes (`GET /api/background-tasks`, `GET /api/background-tasks/:id`, `GET /api/background-tasks/stream` and `POST /api/background-tasks/:id/resume`) don't check sessions either, and remain open to any signed-in caller.
 

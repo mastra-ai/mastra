@@ -46,8 +46,10 @@ function openLaunches(entries: readonly TimelineEntry[], exits: ReadonlyMap<stri
       : (entry.message.content.parts ?? []).flatMap(part => {
           if (part.type !== 'tool-invocation') return [];
           const { toolName, toolCallId } = part.toolInvocation;
-          const args = 'args' in part.toolInvocation ? part.toolInvocation.args : undefined;
-          const result = 'result' in part.toolInvocation ? part.toolInvocation.result : undefined;
+          // A streamed call has its args and result on the live overlay before its part catches up.
+          const runtime = entry.runtimeTools?.[toolCallId];
+          const args = 'args' in part.toolInvocation ? part.toolInvocation.args : runtime?.args;
+          const result = 'result' in part.toolInvocation ? part.toolInvocation.result : runtime?.result;
           const open = isBackgroundLaunch(toolName, args) && !exits.has(toolCallId) && backgroundLaunchPid(result);
           return open ? [toolCallId] : [];
         }),
@@ -72,12 +74,12 @@ export function BackgroundWorkProvider({
   const exits = useMemo(() => backgroundExits(entries), [entries]);
   const tasks = useMemo(() => runningBackgroundTasks(entries), [entries]);
   const launches = useMemo(() => openLaunches(entries, exits).join(' '), [entries, exits]);
-  // Nothing is read until a call started a background process. A new launch gets a fresh read through
-  // its key; after that the list is polled only while something in it still runs.
+  // Read once when the chat opens, since a command may still run after its launch left the loaded history.
+  // A new launch gets a fresh read through its key; after that the list is polled only while something runs.
   const processes = useQuery({
     queryKey: [...processesKey(sessionId, threadId), launches] as const,
     queryFn: () => listBackgroundProcesses(baseUrl, sessionId, threadId),
-    enabled: enabled && launches.length > 0,
+    enabled,
     placeholderData: keepPreviousData,
     refetchInterval: query => (query.state.data?.some(process => process.running) ? POLL_MS : false),
   });
@@ -88,19 +90,23 @@ export function BackgroundWorkProvider({
   return <BackgroundWorkContext.Provider value={value}>{children}</BackgroundWorkContext.Provider>;
 }
 
-/** The newest output of a background command, polled while it is on screen and still running. */
+/**
+ * The newest output of a background command, polled while it is on screen until it is known to have ended. A
+ * failed read is retried on the next poll: the command may still run.
+ */
 export function useBackgroundProcessOutput(work: BackgroundWorkApi, pid: string) {
   return useQuery({
     queryKey: ['background-process-output', work.sessionId, pid] as const,
     queryFn: () => getBackgroundProcessOutput(work.baseUrl, work.sessionId, pid, OUTPUT_TAIL_LINES),
-    refetchInterval: query => (query.state.status === 'error' || query.state.data?.running === false ? false : POLL_MS),
+    refetchInterval: query => (query.state.data?.running === false ? false : POLL_MS),
   });
 }
 
 export function useKillBackgroundProcess(work: BackgroundWorkApi) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (pid: string) => killBackgroundProcess(work.baseUrl, work.sessionId, pid),
+    mutationFn: ({ pid, toolCallId }: { pid: string; toolCallId: string }) =>
+      killBackgroundProcess(work.baseUrl, work.sessionId, pid, toolCallId),
     onSettled: () => queryClient.invalidateQueries({ queryKey: processesKey(work.sessionId, work.threadId) }),
   });
 }

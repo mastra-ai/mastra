@@ -1812,7 +1812,7 @@ describe('session background work', () => {
       });
 
     expect((await as('outsider', '')).status).toBe(404);
-    expect((await as('outsider', `/${server.pid}/kill`, { method: 'POST' })).status).toBe(404);
+    expect((await as('outsider', `/${server.pid}/kill?toolCallId=call-1`, { method: 'POST' })).status).toBe(404);
 
     const listed = await as('teammate', '');
     expect(listed.status).toBe(200);
@@ -1823,9 +1823,12 @@ describe('session background work', () => {
       const output = (await (await as('teammate', `/${server.pid}?tail=5`)).json()) as { stdout: string };
       expect(output.stdout).toContain('listening');
     });
-    expect((await as('teammate', `/${own.pid}/kill`, { method: 'POST' })).status).toBe(404);
+    expect((await as('teammate', `/${own.pid}/kill?toolCallId=call-1`, { method: 'POST' })).status).toBe(404);
+    // A stop names the call that started the command, so a PID a later command reused isn't stopped by mistake.
+    expect((await as('teammate', `/${server.pid}/kill?toolCallId=call-0`, { method: 'POST' })).status).toBe(404);
+    expect(server.exitCode).toBeUndefined();
 
-    const killed = await as('teammate', `/${server.pid}/kill`, { method: 'POST' });
+    const killed = await as('teammate', `/${server.pid}/kill?toolCallId=call-1`, { method: 'POST' });
     await expect(killed.json()).resolves.toEqual({ pid: server.pid, killed: true });
     expect(server.exitCode).toBeDefined();
     expect(own.exitCode).toBeUndefined();
@@ -1867,7 +1870,7 @@ describe('session background work', () => {
       });
 
     expect((await as('teammate', '')).status).toBe(404);
-    expect((await as('teammate', `/${server.pid}/kill`, { method: 'POST' })).status).toBe(404);
+    expect((await as('teammate', `/${server.pid}/kill?toolCallId=call-1`, { method: 'POST' })).status).toBe(404);
     expect(server.exitCode).toBeUndefined();
     const listed = (await (await as('owner', '')).json()) as { processes: Array<{ pid: string }> };
     expect(listed.processes.map(p => p.pid)).toEqual([server.pid]);
