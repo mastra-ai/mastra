@@ -457,6 +457,10 @@ describe('factory-environment-build workflow', () => {
       headLookup();
       await expect(scheduled).resolves.toEqual({ outcome: 'skipped', reason: 'unchanged' });
       await vi.waitFor(() => expect(sandbox.starts).toEqual([undefined, 'pnpm i']));
+      sandbox.finish('build-2');
+      await vi.waitFor(async () => {
+        expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBe('tpl-2');
+      });
     });
 
     it('is built once a run the runner started is over', async () => {
