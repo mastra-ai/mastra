@@ -224,7 +224,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             name: 'shouldPersistSnapshot',
             type: '(params: { stepResults: Record<string, StepResult<any, any, any, any>>; workflowStatus: WorkflowRunStatus }) => boolean',
             description:
-              'Optional flag to determine whether to persist the workflow snapshot. On the evented engine, returning false for a running run lets a step event that arrives late run the steps after that step a second time.',
+              "Optional flag to determine whether to persist the workflow snapshot. On the evented engine, returning false for a running run lets a step event that arrives late run the steps after that step a second time, and lets a recovery restart while the run's next event is still queued run steps that already finished again.",
             isOptional: true,
             defaultValue: '() => true',
           },
