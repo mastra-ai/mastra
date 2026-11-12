@@ -165,15 +165,6 @@ function latestStageWorker(item: WorkItem): { actorId: string; occurredAt: strin
   }, undefined);
 }
 
-export function workItemHumanActorIds(item: WorkItem): string[] {
-  const actorIds = [
-    item.createdBy,
-    ...item.stageHistory.flatMap(entry => [entry.by, entry.exitedBy]),
-    ...Object.values(item.sessions).map(session => session.startedBy),
-  ].filter(isHumanActorId);
-  return [...new Set(actorIds)];
-}
-
 export function workItemActivity(item: WorkItem, page: AuditEventPage | undefined): WorkItemActivity {
   const actors = page?.actors ?? {};
   const auditEvents = page?.events.filter(event => targetsWorkItem(event, item.id)) ?? [];

@@ -10,7 +10,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { groupSessionsByBoard } from './fixtures/sessionProperties';
+import { groupSessionsByBoard, pickSessionProperty } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -66,7 +66,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
     expect(within(group).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
@@ -84,7 +84,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     const links = () => within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ });
     expect(links()).toHaveLength(5);
 
@@ -109,6 +109,24 @@ describe('Sessions sidebar show more', () => {
     expect(links()).toHaveLength(5);
   });
 
+  it('filters every session, not only the ones shown so far', async () => {
+    // The oldest session lists last: three "Show more" clicks away from the five shown.
+    const [oldest, ...newer] = Array.from({ length: 68 }, (_, index) => reviewSession(index + 1));
+    stubSessions([{ ...oldest, userId: 'user-grace', owner: { id: 'user-grace', name: 'Grace Hopper' } }, ...newer]);
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
+    expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
+    expect(within(group).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
+
+    await pickSessionProperty(user, 'Owner', 'Grace Hopper');
+
+    expect(await screen.findByRole('link', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(1);
+  });
+
   it.each([1, 30])(
     'keeps open session %i visible across batches and after collapsing without duplicating it',
     async index => {
@@ -117,7 +135,7 @@ describe('Sessions sidebar show more', () => {
 
       renderSection(`sess-${index}`);
 
-      const group = await screen.findByRole('region', { name: 'Review sessions' });
+      const group = await screen.findByRole('region', { name: 'Work sessions' });
       const links = () => within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ });
       expect(links()).toHaveLength(6);
       const activeName = `factory/pr-${20000 + index}`;
@@ -142,7 +160,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     const showMore = within(group).getByRole('button', { name: 'Show 20 more' });
     expect(showMore).not.toHaveAttribute('aria-expanded');
     showMore.focus();
@@ -165,7 +183,7 @@ describe('Sessions sidebar show more', () => {
 
     const rendered = renderSection();
     await waitForMutationsIdle(rendered.client);
-    const group = screen.getByRole('region', { name: 'Review sessions' });
+    const group = screen.getByRole('region', { name: 'Work sessions' });
     await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Pin session' }));
@@ -178,7 +196,7 @@ describe('Sessions sidebar show more', () => {
 
     rendered.unmount();
     renderSection();
-    const remountedGroup = await screen.findByRole('region', { name: 'Review sessions' });
+    const remountedGroup = await screen.findByRole('region', { name: 'Work sessions' });
     expect(within(remountedGroup).getByRole('link', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(remountedGroup).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
 
@@ -192,7 +210,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
   });

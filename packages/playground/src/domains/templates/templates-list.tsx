@@ -55,7 +55,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
           <article
             className={cn(
               raisedSurfaceStyle,
-              'state-layer grid w-full grid-cols-[1fr_auto] overflow-hidden rounded-lg',
+              'grid w-full grid-cols-[1fr_auto] overflow-hidden rounded-lg state-layer',
             )}
             key={template.slug}
           >

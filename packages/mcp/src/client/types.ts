@@ -92,8 +92,11 @@ export type MCPClientProtocolVersion = typeof MCP_CLIENT_PROTOCOL_VERSION | 'leg
  * This allows custom fetch implementations to access request-scoped data (e.g., authentication
  * cookies, bearer tokens) from the incoming request and forward them to the MCP server.
  *
- * The `requestContext` parameter is `null` when no context is available (e.g., during
- * initial connection or when a tool is called without a request context).
+ * The `requestContext` parameter is `null` when no context is available (e.g., during a
+ * connection handshake that no tool call started, such as the one `listTools()` opens, or when a
+ * tool is called without a request context). When a tool call opens the connection (a tool rebuilt
+ * from a cached definition on its first execution, or a reconnect during a call), the handshake
+ * receives that call's `requestContext`, and streams the connection keeps open afterwards keep it.
  *
  * @example
  * ```typescript

@@ -36,11 +36,6 @@ export function sourceMetadata(item: Pick<WorkItem, 'metadata' | 'workItem'>): R
   };
 }
 
-export function metadataLabels(metadata: Record<string, unknown>): string[] {
-  if (!Array.isArray(metadata.labels)) return [];
-  return metadata.labels.filter((label): label is string => typeof label === 'string');
-}
-
 export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
   if (!metadata.labelColors || typeof metadata.labelColors !== 'object' || Array.isArray(metadata.labelColors))
     return {};
@@ -148,6 +143,18 @@ export function pullRequestStatusForItem(item: Pick<WorkItem, 'workItem' | 'meta
   return metadata.draft === true ? 'draft' : 'open';
 }
 
+/** Status of a pull request attached to an issue card, read from that source alone. */
+export function pullRequestStatusForSource(source: {
+  state: string | null;
+  metadata: Record<string, unknown> | null;
+}): PullRequestStatus {
+  const metadata = source.metadata ?? {};
+  const state = source.state ?? metadata.state;
+  if (state === 'merged' || metadata.merged === true) return 'merged';
+  if (state === 'closed') return 'closed';
+  return metadata.draft === true ? 'draft' : 'open';
+}
+
 /**
  * Source key for a GitHub issue or pull request. Numbers repeat across a
  * project's repositories, so the key is repository-scoped whenever the
@@ -190,17 +197,13 @@ export function sourceCreatedAt(metadata: Record<string, unknown>): string | und
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
 }
 
-export function doneAt(item: Pick<WorkItem, 'stages' | 'stageHistory'>): number | undefined {
-  if (!item.stages.includes('done')) return undefined;
-  const entry = item.stageHistory.findLast(candidate => candidate.stage === 'done');
-  return entry && Date.parse(entry.enteredAt);
-}
-
 /** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
 export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   if (item.workItem?.provider !== 'factory' && item.workItem?.key) return item.workItem.key;
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}`;
+  const cardNumber = item.source === 'manual' ? sourceMetadata(item).cardNumber : undefined;
+  if (typeof cardNumber === 'number' && Number.isInteger(cardNumber) && cardNumber > 0) return `#${cardNumber}`;
   return (
     gitlabIdentifierForItem(item) ??
     linearIdentifierForItem(item) ??
@@ -218,16 +221,6 @@ export function workItemMeta(item: WorkItem): readonly string[] {
   if (key === undefined) return [SOURCE_LABELS[item.source], age];
   const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
   return [key, ...(owner ? [owner] : []), age];
-}
-
-/** Free-text card match over what names it on the board: its title and its issue key. */
-export function cardMatchesSearch(
-  card: Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'title'>,
-  query: string,
-): boolean {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return true;
-  return [card.title, workItemKey(card) ?? ''].some(text => text.toLowerCase().includes(needle));
 }
 
 /**
@@ -349,8 +342,8 @@ export function cardThreadSession(
   phases: readonly ContextPhase[] | undefined,
   columnStage: string,
 ): WorkItemSessionRef | undefined {
-  const context = phases && visitedContexts(item, phases, columnStage)[0];
-  return context === undefined ? itemThreadSession(item.sessions) : contextSession(item, phases, context);
+  const context = phases ? visitedContexts(item, phases, columnStage)[0] : undefined;
+  return phases && context !== undefined ? contextSession(item, phases, context) : itemThreadSession(item.sessions);
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */

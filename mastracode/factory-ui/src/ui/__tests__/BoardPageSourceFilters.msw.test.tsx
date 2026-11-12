@@ -73,7 +73,7 @@ function renderBoard(search = '') {
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
-function stubHostedSources(issues = hostedIssues) {
+function stubHostedSources() {
   stubSources();
   const config: Partial<IntakeConfig> = {
     github: { enabled: false, sourceIds: [] },
@@ -89,7 +89,7 @@ function stubHostedSources(issues = hostedIssues) {
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
     http.get(`${TEST_BASE_URL}/web/linear/projects`, () => HttpResponse.json({ projects: hostedProjects })),
-    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues, nextCursor: null })),
+    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: hostedIssues, nextCursor: null })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: hostedCards }),
     ),
@@ -140,14 +140,15 @@ describe('Board source and Linear project filters', () => {
     stubSources();
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual']);
+    // Pull requests are offered while a code host is connected: they replace the retired Review board.
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual', 'Pull requests']);
   });
 
   it('keeps a saved filter on a disconnected source labelled and selectable', async () => {
     stubSources();
     const view = renderBoard('?source=gitlab');
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual', 'Pull requests']);
     expect(screen.getByRole('menuitemcheckbox', { name: 'GitLab' })).toHaveAttribute('aria-checked', 'true');
   });
 
@@ -183,7 +184,7 @@ describe('Board source and Linear project filters', () => {
       const expectDocsWatch = async () => {
         expect(await screen.findByText('DocsWatch: new documentation request')).toBeInTheDocument();
         expect(
-          within(screen.getByTestId('board-column-planning')).getByText('DocsWatch: legacy planning card'),
+          within(screen.getByTestId('board-column-planning')).getByText('Portal: workspace settings'),
         ).toBeInTheDocument();
         expect(
           within(screen.getByTestId('board-column-execute')).getByText('Portal: member permissions'),
@@ -200,16 +201,6 @@ describe('Board source and Linear project filters', () => {
       const second = renderBoard(`?view=${viewId}`);
       await waitForMutationsIdle(second.client);
       await expectDocsWatch();
-    });
-  });
-
-  describe('when a hosted issue leaves its project', () => {
-    it('excludes the stale stored project membership while retaining other matching cards', async () => {
-      stubHostedSources([...hostedIssues, { ...linearIssue('ENG-104', null), sourceId: hostedTeamId }]);
-      const view = renderBoard(`?linearProject=${encodeURIComponent(docsWatchId)}`);
-      await waitForMutationsIdle(view.client);
-      expect(await screen.findByText('DocsWatch: new documentation request')).toBeInTheDocument();
-      expect(screen.queryByText('Portal: member permissions')).not.toBeInTheDocument();
     });
   });
 

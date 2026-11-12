@@ -148,7 +148,7 @@ describe('IntakeSection linear', () => {
       server.use(
         http.get(BINDINGS_URL, () =>
           HttpResponse.json({
-            bindings: [{ integrationId: 'linear', sourceId: 'lproj-1', factoryProjectId: 'fp-1', board: 'work' }],
+            bindings: [{ integrationId: 'linear', sourceId: 'lproj-1', factoryProjectId: 'fp-1' }],
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
@@ -197,9 +197,7 @@ describe('IntakeSection linear', () => {
       server.use(
         http.get(BINDINGS_URL, () =>
           HttpResponse.json({
-            bindings: [
-              { integrationId: 'linear', sourceId: engTeam.sourceId, factoryProjectId: 'fp-1', board: 'work' },
-            ],
+            bindings: [{ integrationId: 'linear', sourceId: engTeam.sourceId, factoryProjectId: 'fp-1' }],
           }),
         ),
       );
@@ -226,7 +224,7 @@ describe('IntakeSection linear', () => {
       server.use(
         http.get(BINDINGS_URL, () =>
           HttpResponse.json({
-            bindings: [{ integrationId: 'linear', sourceId: 'lproj-1', factoryProjectId: 'fp-1', board: 'work' }],
+            bindings: [{ integrationId: 'linear', sourceId: 'lproj-1', factoryProjectId: 'fp-1' }],
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
@@ -251,9 +249,7 @@ describe('IntakeSection linear', () => {
       server.use(
         http.get(BINDINGS_URL, () =>
           HttpResponse.json({
-            bindings: [
-              { integrationId: 'linear', sourceId: engTeam.sourceId, factoryProjectId: 'fp-1', board: 'work' },
-            ],
+            bindings: [{ integrationId: 'linear', sourceId: engTeam.sourceId, factoryProjectId: 'fp-1' }],
           }),
         ),
       );

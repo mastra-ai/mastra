@@ -56,6 +56,7 @@ import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
+import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -431,7 +432,9 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("duplicate board id 'work'");
+    ).toThrow(
+      "MastraFactory: board id 'work' is Factory's Work board, which every project has. To run your own, store it under 'work' with factory.upsertBoard(board, { projects: 'all' }).",
+    );
   });
 
   describe('app skills', () => {
@@ -487,16 +490,18 @@ describe('MastraFactory constructor', () => {
     });
   });
 
-  it('allows replacing a built-in board when default boards are disabled', () => {
-    expect(
-      () =>
-        new MastraFactory({
-          secretEncryption,
-          storage: fakeStorage(),
-          includeDefaultBoards: false,
-          boards: [createTestBoard({ id: 'work' })],
-        }),
-    ).not.toThrow();
+  it('accepts and ignores the retired includeDefaultBoards, warning once per process', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const retired = (message: unknown) => String(message).includes('MastraFactory({ includeDefaultBoards })');
+    for (const includeDefaultBoards of [false, true, false]) {
+      expect(() => new MastraFactory({ secretEncryption, storage: fakeStorage(), includeDefaultBoards })).not.toThrow();
+    }
+    expect(warn.mock.calls.filter(([message]) => retired(message))).toEqual([
+      [
+        "[Mastra Factory] MastraFactory({ includeDefaultBoards }) is deprecated and ignored: every project gets Factory's Work board when it has no boards yet, and one that has any keeps what it has. To run your own Work board, store it under the 'work' key with factory.upsertBoard(board, { projects: 'all' }).",
+      ],
+    ]);
+    warn.mockRestore();
   });
 });
 
@@ -543,9 +548,11 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(3);
+    expect(first).toHaveLength(4);
     expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(first[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first[2]).toBeInstanceOf(FactoryPhaseStateProcessor);
+    expect(first[3]).toBeInstanceOf(FactoryWorkItemStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -900,6 +907,13 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it('hands the context-left sandbox stop to the transition service when a sandbox is configured', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), sandbox: () => ({ id: 'sb' }) as never });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    expect(transitionServiceOptions).toHaveLength(1);
+    expect(transitionServiceOptions[0]!.onContextLeft).toBeTypeOf('function');
+  });
+
   it('threads the default config version when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
@@ -946,13 +960,13 @@ describe('MastraFactory.prepare', () => {
       'memory-settings',
       'boards',
       'custom-providers',
+      'sandbox-envs',
       'queue-health',
       'integrations',
       'projects',
       'filesystem',
       'source-control',
       'channel-identity',
-      'work-item-comments',
       'skill-overrides',
       'voice-settings',
     ]);
@@ -1056,6 +1070,7 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.initialState).toMatchObject({ skipGlobalInstructions: true, factoryOrgUnresolved: true });
     expect(config.disableSettingsOmSeed).toBe(true);
+    expect(config.planApprovalStartsGoal).toBe(false);
   });
 
   it('heals a cold pull request review binding before the SDK reads repository instructions', async () => {
@@ -1638,7 +1653,12 @@ describe('MastraFactory.prepare', () => {
       return requestContext;
     }
 
-    const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+    const READ_TOOLS = [
+      'factory_list_work_items',
+      'factory_inspect_work_item',
+      'factory_list_attention',
+      'factory_list_audit_events',
+    ];
     const MANAGEMENT_TOOLS = [
       'factory_create_work_item',
       'factory_update_work_item',
@@ -3204,60 +3224,6 @@ describe('MastraFactory.prepare integrations', () => {
 
       await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
     });
-
-    it("collects a ready integration's feedPublisher even when it provides no channels", async () => {
-      const setChannels = withController();
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      // Decoupled from channels(): the publisher is wired even though nothing
-      // attached channels.
-      expect(setChannels).not.toHaveBeenCalled();
-      expect(feedPublisher).toHaveBeenCalledOnce();
-      // Same context shape as routes()/workers().
-      const ctx = feedPublisher.mock.calls[0]![0];
-      expect(ctx.feed).toBeDefined();
-      expect(ctx.auth).toBeDefined();
-    });
-
-    it('collects a channel integration feedPublisher exactly once', async () => {
-      withController();
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'chat-platform', channels, feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      // Guards against a double-push: collection happens only in the feed pass,
-      // not also in the channels loop.
-      expect(feedPublisher).toHaveBeenCalledOnce();
-    });
-
-    it('does not collect a feedPublisher from an integration that is not ready', async () => {
-      withController();
-      const storage = fakeStorage();
-      vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage,
-        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      expect(feedPublisher).not.toHaveBeenCalled();
-    });
   });
 });
 
@@ -3314,11 +3280,11 @@ describe('MastraFactory.finalize', () => {
       // Both used to wait for the migration, so the server never listened until it finished.
       await factory.prepare();
       await factory.finalize();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
 
-      // Its messages moved before its run binding did, so the boot reconcile may have missed them.
+      // Its messages moved before its run binding did, so an earlier reconcile may have missed them.
       finish(1);
-      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledOnce());
     } finally {
       sessionMigrationOverride.current = undefined;
       reconcile.mockRestore();
@@ -3335,7 +3301,21 @@ describe('MastraFactory.finalize', () => {
       // The real migration over an empty store; give its background job time to settle.
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(finalizeSettled).toHaveBeenCalledOnce();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
+    } finally {
+      reconcile.mockRestore();
+    }
+  });
+
+  it('finishes booting without waiting for a bound-thread reconcile', async () => {
+    // A walk over hundreds of active bindings took ~75s and pushed boot past the health check.
+    const reconcile = vi
+      .spyOn(FactoryPhaseStateProcessor.prototype, 'reconcileAllBoundThreads')
+      .mockImplementation(() => new Promise(() => {}));
+    try {
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await factory.prepare();
+      await expect(factory.finalize()).resolves.toBeUndefined();
     } finally {
       reconcile.mockRestore();
     }

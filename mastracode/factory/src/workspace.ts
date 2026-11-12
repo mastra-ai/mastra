@@ -19,8 +19,10 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
+import { groupRepositoryIds, groupedRepositoryAccess } from './environment/repository-access.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -42,6 +44,12 @@ import {
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
+  attachSandboxEnvRefresh,
+  resolveSandboxEnv,
+  resolveSandboxEnvOrEmpty,
+  sandboxBuildContext,
+} from './sandbox/sandbox-env.js';
+import {
   createEnvironmentSetupHook,
   createSessionSetupHook,
   evictSessionSandbox,
@@ -59,6 +67,7 @@ import {
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SandboxEnvStore } from './storage/domains/sandbox-envs/base.js';
 import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -66,6 +75,12 @@ import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
+// GitHub installation tokens live 60 minutes and minted access is cached for
+// up to 20, so replace an installed token well before it can expire. An
+// installed org PAT does not expire this way and is never age-refreshed.
+const GITHUB_TOKEN_REFRESH_AFTER_MS = 30 * 60_000;
+const isGithubTokenStale = (registration: { tokenIssuedAt: number; patInstalled: boolean }): boolean =>
+  !registration.patInstalled && Date.now() - registration.tokenIssuedAt >= GITHUB_TOKEN_REFRESH_AFTER_MS;
 /** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
 export const FACTORY_PLANS_DIR = '.artifacts/plans';
 const FACTORY_WORKSPACE_TOOLS = createMastraCodeWorkspaceTools(false, FACTORY_PLANS_DIR);
@@ -106,7 +121,7 @@ export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): stri
 export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
-  'factory-complete-issue',
+  'factory-build',
   'factory-gitlab-rereview',
   'factory-gitlab-review',
   'factory-plan',
@@ -423,7 +438,7 @@ function isActiveReviewBinding(
   runBinding: { role: string; status: string; orgId: string } | null | undefined,
   orgId: string | undefined,
 ): boolean {
-  return runBinding?.role === 'review' && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+  return runBinding?.role === REVIEW_CONTEXT && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
 }
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
@@ -461,6 +476,8 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /** The Factory's sandbox environment variables, applied to each session sandbox. */
+  sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
   /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
@@ -529,6 +546,17 @@ async function resolveSourceControlSession(
 }
 
 /** One environment repository as the sandbox context and the boot need it, in position order. */
+/** How many environment repositories one boot syncs at once. */
+const ENVIRONMENT_SYNC_CONCURRENCY = 4;
+
+async function forEachConcurrently<T>(items: T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await run(items[next++]!);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 export interface SessionEnvironmentRepo {
   projectRepositoryId: string;
   repositoryId: string;
@@ -671,7 +699,7 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides, sandboxEnvs } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -680,9 +708,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
-    inject: (token: string) => void;
+    inject: (token: string, pat?: boolean) => void;
     patKind: GithubPatKind;
     ghToken: string;
+    // Whether `ghToken` is an org PAT rather than a minted installation token.
+    patInstalled: boolean;
+    // When `ghToken` was installed. Minted installation tokens expire after
+    // an hour, so reconcile and reconnect re-mint once it is stale.
+    tokenIssuedAt: number;
     generation: number;
     tokenReplacementPending: boolean;
   };
@@ -692,6 +725,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // path checks for it and reports its absence.
   type SessionSandbox = ExecutableSandbox & { setEnv?: WorkspaceSandbox['setEnv'] };
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
+  // Per workspace: the minted group tokens beyond `GH_TOKEN` and the note
+  // naming which variable covers which repositories. Kept here, not per
+  // resolution, so an injector registered by an earlier resolution installs
+  // the tokens a later resolution minted.
+  const githubGroupTokens = new Map<string, { env: Record<string, string>; note: string | null }>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
   // Workspace identity cache: concurrent resolutions of the same session must
   // observe the same Workspace object even when no Mastra registry is wired
@@ -772,6 +810,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // a factory session, list form or single repository.
     const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
     const sandboxSettings = resolvedEnvironment?.settings ?? {};
+    // The Factory's variables, read before construction (which is synchronous).
+    const envScope =
+      sandboxEnvs && session.factoryProjectId
+        ? { orgId: session.orgId, projectId: session.factoryProjectId }
+        : undefined;
+    const sandboxEnv = envScope ? await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope) : undefined;
+    // Re-read when setup actually runs, which can be long after this request.
+    // Runtime values ride along only so a failed setup can mask them.
+    const setupEnv = async (): Promise<[Record<string, string>?, Record<string, string>?]> => {
+      if (!envScope) return [];
+      const env = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
+      return [env.build, env.runtime];
+    };
     // The session's own link must be part of the environment: it is the
     // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
     // whose link left the environment keeps its single-repository sandbox.
@@ -783,6 +834,41 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const tokenRepositoryIds = environment
       ? [repository.id, ...environment.repos.map(repo => repo.repositoryId).filter(id => id !== repository.id)]
       : [repository.id];
+    // Every environment repository's access, minted in groups of ten.
+    const repositoryAccess = groupedRepositoryAccess(sourceControl.versionControl, session.orgId, tokenRepositoryIds);
+    // One sandbox token per group of ten: `GH_TOKEN` covers the first group
+    // (the session repository's), `GH_TOKEN_2`, `GH_TOKEN_3`... the rest.
+    const tokenGroups = groupRepositoryIds(tokenRepositoryIds);
+    const groupTokenEnvName = (index: number) => (index === 0 ? 'GH_TOKEN' : `GH_TOKEN_${index + 1}`);
+    const tokenEnvNameFor = (repositoryId: string) =>
+      groupTokenEnvName(
+        Math.max(
+          0,
+          tokenGroups.findIndex(group => group.includes(repositoryId)),
+        ),
+      );
+    const repositorySlug = (repositoryId: string) =>
+      repositoryId === repository.id
+        ? repoFullName
+        : (environment?.repos.find(repo => repo.repositoryId === repositoryId)?.slug ?? repositoryId);
+    // An org PAT reaches every repository through `GH_TOKEN`, so it drops the
+    // group tokens and each checkout's credential helper falls back to it.
+    const withGithubTokens = <T extends Record<string, string | undefined>>(env: T, token: string, pat: boolean) => ({
+      ...Object.fromEntries(Object.entries(env).filter(([name]) => !/^GH_TOKEN_\d+$/.test(name))),
+      GH_TOKEN: token,
+      ...(pat ? {} : (githubGroupTokens.get(workspaceId)?.env ?? {})),
+    });
+    // Install the credentials and the note that matches them: a PAT needs no
+    // note, and recording the environment drops the note, so every install
+    // (including a reconnect that reuses a fresh token) restores it.
+    const installGithubTokens = (target: SessionSandbox, token: string, pat: boolean, required: boolean) => {
+      if (!target.setEnv) {
+        if (required) throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+        return;
+      }
+      target.setEnv(env => withGithubTokens(env, token, pat));
+      setSessionEnvironmentNote(session.sessionId, pat ? null : (githubGroupTokens.get(workspaceId)?.note ?? null));
+    };
     if (githubProvider) {
       registerGithubRefreshTarget(requestContext, {
         orgId: session.orgId,
@@ -815,6 +901,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
         })
       : createSessionSetupHook(runSetupOn, session.id, repoFullName, projectRepository.setupCommand ?? undefined);
+    // Replaces the installed minted token once it is stale, so `gh` and the
+    // `gh auth git-credential` helper never run with an expired GH_TOKEN. An
+    // installed org PAT is never stale. Returns whether a fresh token was injected.
+    const refreshStaleGithubToken = async (): Promise<boolean> => {
+      const registration = githubTokenInjectors.get(workspaceId);
+      if (!githubProvider || !registration || !isGithubTokenStale(registration)) return false;
+      // Let an in-flight reconcile settle the role before choosing a credential.
+      await githubTokenReconciliations.get(workspaceId)?.catch(() => {});
+      if (githubTokenInjectors.get(workspaceId) !== registration || !isGithubTokenStale(registration)) return false;
+      const { ghToken, generation } = registration;
+      const token = await getRepositoryToken();
+      // A reconcile during the mint may have switched role or installed a PAT.
+      if (
+        githubTokenInjectors.get(workspaceId) !== registration ||
+        registration.generation !== generation ||
+        registration.ghToken !== ghToken
+      ) {
+        return false;
+      }
+      registration.inject(token);
+      return true;
+    };
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -885,17 +993,25 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // reconcileGithubToken owns role/generation and the active context's
         // injector, so replacing them here would reauthorize the stale
         // constructing context and reject the current one.
-        existingRegistration.inject = freshToken => {
-          if (!target.setEnv) {
-            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-          }
-          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
+        existingRegistration.inject = (freshToken, pat = false) => {
+          installGithubTokens(target, freshToken, pat, true);
           existingRegistration.ghToken = freshToken;
+          existingRegistration.patInstalled = pat;
+          existingRegistration.tokenIssuedAt = Date.now();
         };
+        // A minted token may have expired while the VM was away; re-mint it
+        // instead of reinstalling it over the fresh one setup just used.
         // Install through inject (not optional-chained setEnv) so a provider
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
-        existingRegistration.inject(existingRegistration.ghToken);
+        // A failed mint keeps the reconnect usable with the current token.
+        const refreshed = await refreshStaleGithubToken().catch(() => false);
+        if (!refreshed) {
+          // Reinstalling the same credential must not reset its age.
+          const { tokenIssuedAt } = existingRegistration;
+          existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
+          existingRegistration.tokenIssuedAt = tokenIssuedAt;
+        }
         await finishStart();
         return;
       }
@@ -905,20 +1021,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind();
-      const ghCliToken =
-        (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)) ??
-        (await getRepositoryToken());
-      target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
+      const ghCliPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+      const ghCliToken = ghCliPat ?? (await getRepositoryToken());
+      installGithubTokens(target, ghCliToken, ghCliPat !== null, false);
       const tokenRegistration: GithubTokenRegistration = {
-        inject: freshToken => {
-          if (!target.setEnv) {
-            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-          }
-          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
+        inject: (freshToken, pat = false) => {
+          installGithubTokens(target, freshToken, pat, true);
           tokenRegistration.ghToken = freshToken;
+          tokenRegistration.patInstalled = pat;
+          tokenRegistration.tokenIssuedAt = Date.now();
         },
         patKind,
         ghToken: ghCliToken,
+        patInstalled: ghCliPat !== null,
+        tokenIssuedAt: Date.now(),
         generation: 0,
         tokenReplacementPending: false,
       };
@@ -944,21 +1060,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 // original VM instead of provisioning a replacement.
                 sandboxId: session.sandboxId ?? undefined,
                 repoFullName,
+                ...sandboxBuildContext(sandboxEnv),
                 ...(environment
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
-                      getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                      getRepositoryAccess: args => repositoryAccess(args.repositoryId),
                     })
                   : {
                       // Stored nullable; the context speaks `undefined` for absent.
                       setupCommand: projectRepository.setupCommand ?? undefined,
                       // Deferred call, only dereferenced when a provider needs the repo
                       // outside the VM (template build time).
-                      getRepositoryAccess: () =>
-                        sourceControl.versionControl.getRepositoryAccess({
-                          orgId: session.orgId,
-                          repositoryId: repository.id,
-                        }),
+                      getRepositoryAccess: () => repositoryAccess(repository.id),
                     }),
               },
               sandboxSettings,
@@ -966,6 +1079,40 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          // Before Factory's own GH_TOKEN, so a host env key is remembered before Factory writes it.
+          if (envScope && sandboxEnv) {
+            attachSandboxEnvRefresh(sandbox, {
+              initial: sandboxEnv,
+              revision: async () => (await sandboxEnvs!.revisions(envScope.orgId, envScope.projectId))?.revision ?? '',
+              load: () => resolveSandboxEnv(sandboxEnvs!, envScope),
+            });
+          }
+          // A turn can outlive the token installed when the workspace was
+          // resolved, so check its age before every command and background
+          // spawn. Best-effort: a failed re-mint leaves the current token in
+          // place. Concurrent callers share one refresh.
+          let commandRefresh: Promise<unknown> | undefined;
+          const refreshBeforeCommand = () =>
+            (commandRefresh ??= refreshStaleGithubToken()
+              .catch(() => {})
+              .finally(() => {
+                commandRefresh = undefined;
+              }));
+          const executeCommand = sandbox.executeCommand?.bind(sandbox);
+          if (executeCommand) {
+            sandbox.executeCommand = async (...args) => {
+              await refreshBeforeCommand();
+              return executeCommand(...args);
+            };
+          }
+          const processes = sandbox.processes;
+          if (processes) {
+            const spawn = processes.spawn.bind(processes);
+            processes.spawn = async (...args) => {
+              await refreshBeforeCommand();
+              return spawn(...args);
+            };
+          }
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
           // stack a wrapper per call. Factory's setup runs first: a hook the
@@ -1122,56 +1269,91 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const loadedOverrideRevision = async () => (await skillOverrideStates.get(workspaceId))?.revision;
     const configDir = DEFAULT_CONFIG_DIR;
 
-    const getRepositoryAccess = () =>
-      sourceControl.versionControl.getRepositoryAccess({
-        orgId: session.orgId,
-        repositoryId: repository.id,
-      });
-    // Resolve the minted token `GH_TOKEN` carries. With several environment
-    // repositories the provider may mint one credential for all of them; when
-    // it cannot (no such capability, several installations, too many
-    // repositories) the session repository's token is used and the agent is
-    // told through the environment signal, so it reaches the other
-    // repositories through the source_control_* tools instead of raw `gh`.
+    const getRepositoryAccess = () => repositoryAccess(repository.id);
+    // Mint one token per group of up to ten environment repositories: the
+    // first group's (the session repository's) is returned for `GH_TOKEN`,
+    // the others are kept for the workspace in `githubGroupTokens`. A group the provider cannot mint one
+    // credential for falls back to its first repository's own token, and the
+    // agent is told through the environment signal which repositories each
+    // variable reaches, so it uses the source_control_* tools for the rest.
     let tokenScopeWarned = false;
-    const getRepositoryToken = async (): Promise<string> => {
-      if (tokenRepositoryIds.length > 1) {
-        let reason = 'provider mints per-repository tokens only';
-        let wide: RepositoryAccess | undefined;
-        if (sourceControl.versionControl.getRepositoriesAccess) {
-          try {
-            wide = await sourceControl.versionControl.getRepositoriesAccess({
-              orgId: session.orgId,
-              repositoryIds: tokenRepositoryIds,
-            });
-            reason = 'provider cannot mint one token for this repository set';
-          } catch (error) {
-            // A sibling repository the provider cannot grant must not stop the
-            // session: its own token still boots it. The provider logs the
-            // failure itself; only the error name travels here.
-            reason = `provider failed to mint one token for this repository set (${error instanceof Error ? error.name : 'error'})`;
-          }
-        }
-        if (wide?.authorization?.token) {
-          setSessionEnvironmentNote(session.sessionId, null);
-          return wide.authorization.token;
-        }
-        if (!tokenScopeWarned) {
-          tokenScopeWarned = true;
-          console.warn('[Mastra Factory] GH_TOKEN covers the session repository only', {
-            sessionId: session.sessionId,
-            repositories: environment?.repos.map(repo => repo.slug) ?? [repoFullName],
-            reason,
+    const mintGroupToken = async (group: string[]): Promise<{ token?: string; covered: string[]; reason?: string }> => {
+      let reason = 'provider mints per-repository tokens only';
+      if (group.length > 1 && sourceControl.versionControl.getRepositoriesAccess) {
+        try {
+          const wide = await sourceControl.versionControl.getRepositoriesAccess({
+            orgId: session.orgId,
+            repositoryIds: group,
           });
+          if (wide?.authorization?.token) return { token: wide.authorization.token, covered: group };
+          reason = 'provider cannot mint one token for this repository set';
+        } catch (error) {
+          // A sibling repository the provider cannot grant must not stop the
+          // session: its own token still boots it. The provider logs the
+          // failure itself; only the error name travels here.
+          reason = `provider failed to mint one token for this repository set (${error instanceof Error ? error.name : 'error'})`;
         }
-        setSessionEnvironmentNote(
-          session.sessionId,
-          `GH_TOKEN covers ${repoFullName} only; use the source_control_* tools for other repositories.`,
+      }
+      const token = (
+        await sourceControl.versionControl.getRepositoryAccess({ orgId: session.orgId, repositoryId: group[0]! })
+      ).authorization?.token;
+      return { token, covered: token ? [group[0]!] : [], ...(group.length > 1 ? { reason } : {}) };
+    };
+    const getRepositoryToken = async (): Promise<string> => {
+      const minted = await Promise.all(
+        tokenGroups.map(async (group, index) => {
+          try {
+            return await mintGroupToken(group);
+          } catch (error) {
+            // The session repository's group must mint; another group failing leaves it to the tools.
+            if (index === 0) throw error;
+            return { covered: [], reason: `mint failed (${error instanceof Error ? error.name : 'error'})` };
+          }
+        }),
+      );
+      const primary = minted[0]?.token;
+      if (!primary) throw new Error('Repository access did not include a bearer token for the Factory session');
+      const groupEnv = Object.fromEntries(
+        minted.slice(1).flatMap((group, index) => (group.token ? [[groupTokenEnvName(index + 1), group.token]] : [])),
+      );
+      const covered = new Set(minted.flatMap(group => group.covered));
+      const uncovered = tokenRepositoryIds.filter(id => !covered.has(id));
+      if (uncovered.length && !tokenScopeWarned) {
+        tokenScopeWarned = true;
+        console.warn('[Mastra Factory] Sandbox GitHub tokens do not cover every environment repository', {
+          sessionId: session.sessionId,
+          uncovered: uncovered.map(repositorySlug),
+          reason: minted.flatMap(group => (group.reason ? [group.reason] : [])).join('; '),
+        });
+      }
+      githubGroupTokens.set(workspaceId, { env: groupEnv, note: githubTokenNote(minted, uncovered) });
+      return primary;
+    };
+    // Which variable reaches which repositories, when it is not simply
+    // `GH_TOKEN` for all of them.
+    const githubTokenNote = (minted: { token?: string; covered: string[] }[], uncovered: string[]): string | null => {
+      if (minted.length === 1) {
+        return uncovered.length
+          ? `GH_TOKEN covers ${repoFullName} only; use the source_control_* tools for other repositories.`
+          : null;
+      }
+      const lines = minted.flatMap((group, index) => {
+        if (!group.token || !group.covered.length) return [];
+        const name = groupTokenEnvName(index);
+        const slugs = group.covered.map(repositorySlug).join(', ');
+        return [
+          index === 0
+            ? `GH_TOKEN covers ${slugs}.`
+            : `${name} covers ${slugs}; run gh for these as \`GH_TOKEN=$${name} gh ...\`.`,
+        ];
+      });
+      lines.push('git in each checkout already authenticates with the token that covers it.');
+      if (uncovered.length) {
+        lines.push(
+          `No sandbox token covers ${uncovered.map(repositorySlug).join(', ')}; use the source_control_* tools for them.`,
         );
       }
-      const token = (await getRepositoryAccess()).authorization?.token;
-      if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
-      return token;
+      return lines.join(' ');
     };
     const resolveGithubPatKind = async (): Promise<GithubPatKind> => {
       if (!workItems) return 'default';
@@ -1182,12 +1364,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return 'default';
       }
     };
-    const githubTokenInjector = (registered: GithubTokenRegistration, generation: number) => (token: string) => {
-      if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
-        throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-      }
-      registered.inject(token);
-    };
+    const githubTokenInjector =
+      (registered: GithubTokenRegistration, generation: number) => (token: string, pat?: boolean) => {
+        if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
+        registered.inject(token, pat);
+      };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       registerGithubTokenInjector(requestContext, githubTokenInjector(registered, registered.generation));
       registerGithubPatKind(requestContext, registered.patKind);
@@ -1234,13 +1417,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.tokenReplacementPending = true;
           }
 
-          let token = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
-          if (!token && registered.tokenReplacementPending) token = await getRepositoryToken();
+          const pat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+          let token = pat;
+          if (!token && (registered.tokenReplacementPending || isGithubTokenStale(registered))) {
+            token = await getRepositoryToken();
+          }
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (token && token !== registered.ghToken) {
             try {
-              registered.inject(token);
+              registered.inject(token, token === pat);
             } catch (error) {
               if (registered.tokenReplacementPending) throw error;
               // Same-role rotations and reviewer upgrades remain best-effort.
@@ -1281,6 +1467,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
+            githubGroupTokens.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
             skillCacheState.delete(workspaceId);
           }
@@ -1386,9 +1573,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // source-control providers.
       if (githubProvider) {
         const setupPatKind = await resolveGithubPatKind();
-        const setupGhToken =
-          (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind)) ?? token;
-        target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));
+        const setupPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind);
+        // Setup commands in any environment repository may fetch through its
+        // credential helper, so mint every group's token before they run.
+        const setupGhToken = setupPat ?? (tokenGroups.length > 1 ? await getRepositoryToken() : token);
+        installGithubTokens(target, setupGhToken, setupPat !== null, false);
       }
       await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
@@ -1429,7 +1618,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          await timedPhase('workspace.setup', async () =>
+            runSetupCommand(target, workdir, projectRepository.setupCommand!, ...(await setupEnv())),
+          );
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
@@ -1496,11 +1687,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // other than a setup failure: its outcome is unknown, never `configured`.
       let inFlight: string | undefined;
       try {
+        const secondaries: Array<{
+          repo: SessionEnvironmentRepo;
+          entry: (typeof gate.repos)[number];
+          state: SessionEnvironmentRepositoryState;
+          synced: boolean;
+        }> = [];
         for (const repo of repos) {
-          inFlight = repo.slug;
           const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
           if (!entry) continue;
-          const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
           const state: SessionEnvironmentRepositoryState = {
             slug: repo.slug,
             dir: entry.dir,
@@ -1509,28 +1704,35 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             setupStatus: repo.setupCommand ? 'ok' : 'skipped',
           };
           states.push(state);
-          if (isPrimary) {
-            try {
-              await runSessionSetup(target, primaryDir, entry.gate);
-              state.branch = session.branch;
-              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
-                state.setupStatus = 'failed';
-                repeated.add(repo.slug);
-              }
-            } catch (error) {
-              if (!(error instanceof SetupCommandError)) throw error;
-              state.branch = session.branch;
-              state.setupStatus = 'failed';
-              failures.set(repo.slug, error.message);
-              primaryError = error;
-            }
+          if (repo.projectRepositoryId !== session.projectRepositoryId) {
+            secondaries.push({ repo, entry, state, synced: false });
             continue;
           }
+          inFlight = repo.slug;
           try {
-            const access = await sourceControl.versionControl.getRepositoryAccess({
-              orgId: session.orgId,
-              repositoryId: repo.repositoryId,
-            });
+            await runSessionSetup(target, primaryDir, entry.gate);
+            state.branch = session.branch;
+            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
+              state.setupStatus = 'failed';
+              repeated.add(repo.slug);
+            }
+          } catch (error) {
+            if (!(error instanceof SetupCommandError)) throw error;
+            state.branch = session.branch;
+            state.setupStatus = 'failed';
+            failures.set(repo.slug, error.message);
+            primaryError = error;
+          }
+          inFlight = undefined;
+        }
+        // The other repositories sync side by side: each is a token mint, a
+        // clone or fetch and a branch sync in its own directory, so a boot
+        // costs the slowest repository rather than the sum. Setup commands
+        // still run one at a time below, so installs never compete.
+        await forEachConcurrently(secondaries, ENVIRONMENT_SYNC_CONCURRENCY, async secondary => {
+          const { repo, entry, state } = secondary;
+          try {
+            const access = await repositoryAccess(repo.repositoryId);
             const token = access.authorization?.token;
             if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
             await materializeRepo({
@@ -1555,9 +1757,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 repoFullName: repo.slug,
                 cloneUrl: access.cloneUrl,
                 authUsername: access.authorization?.username,
+                tokenEnvName: tokenEnvNameFor(repo.repositoryId),
               }),
             );
             state.branch = synced.branch;
+            secondary.synced = true;
           } catch (error) {
             console.warn('[Mastra Factory] Environment repository could not be synced; continuing the boot', {
               orgId: session.orgId,
@@ -1568,17 +1772,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             // The checkout may be missing or stale and its setup never ran.
             state.setupStatus = 'failed';
             failures.set(repo.slug, error instanceof Error ? error.message : String(error));
-            continue;
           }
-          if (!repo.setupCommand || entry.gate.setupDone) continue;
+        });
+        for (const { repo, entry, state, synced } of secondaries) {
+          if (!synced || !repo.setupCommand || entry.gate.setupDone) continue;
           if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
             repeated.add(repo.slug);
             continue;
           }
+          inFlight = repo.slug;
           try {
-            await timedPhase(`workspace.setup(${repo.slug})`, () =>
-              runSetupCommand(target, entry.dir, repo.setupCommand!),
+            await timedPhase(`workspace.setup(${repo.slug})`, async () =>
+              runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
             );
             await entry.gate.markSetupDone();
           } catch (error) {
@@ -1593,6 +1799,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               error: error.message.slice(-2000),
             });
           }
+          inFlight = undefined;
         }
         inFlight = undefined;
         const workspaceCommand = environment!.workspaceSetupCommand;
@@ -1607,8 +1814,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
           } else {
             try {
-              await timedPhase('workspace.setup(workspace)', () =>
-                runSetupCommand(target, gate.root, workspaceCommand),
+              await timedPhase('workspace.setup(workspace)', async () =>
+                runSetupCommand(target, gate.root, workspaceCommand, ...(await setupEnv())),
               );
               await gate.workspace.markSetupDone();
             } catch (error) {
@@ -1730,6 +1937,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       workspaceGeneration,
       async () => {
         githubTokenInjectors.delete(workspaceId);
+        githubGroupTokens.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
         skillCacheState.delete(workspaceId);
         skillReviewChecks.delete(workspaceId);

@@ -18,6 +18,9 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryAggregatedRoots: false,
+  traceQueryTextSearch: false,
+  spanQueryTextSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
   traceQueryContextFields: false,
@@ -34,6 +37,8 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanQueryDurationSort: false,
+  spanQueryModelProviderSort: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
   spanQueryOutcomeFields: false,
@@ -41,6 +46,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   spanAggregateModelDimensions: false,
   aggregateTimeToFirstMeasures: false,
   feedback: false,
+  feedbackReplacement: false,
 };
 
 type MockStorage = {
@@ -661,6 +667,32 @@ describe('System Handlers', () => {
           threadQuery: true,
           spanQuery: true,
         });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-duration-sort'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-duration-sort'], supported: false },
+      ] as const)('reports span duration ordering for $features as $supported', async ({ features, supported }) => {
+        class DurationStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+        expect(await capabilitiesFor(new DurationStore())).toMatchObject({ spanQueryDurationSort: supported });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-model-provider-sort'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-model-provider-sort'], supported: false },
+      ] as const)('reports model/provider ordering for $features as $supported', async ({ features, supported }) => {
+        class ModelSortStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+        expect(await capabilitiesFor(new ModelSortStore())).toMatchObject({ spanQueryModelProviderSort: supported });
       });
 
       it.each([

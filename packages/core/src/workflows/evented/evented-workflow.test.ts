@@ -67,6 +67,7 @@ createWorkflowTestSuite({
     createStep,
     createTool,
     Agent,
+    Mastra,
   }),
 
   skip: {
@@ -133,6 +134,10 @@ createWorkflowTestSuite({
     //persistWorkflowSnapshot error-handling tests are skipped because it's not used in evented-engine
     errorPersistWithoutStack: true,
     errorPersistMastraError: true,
+    // Evented streamLegacy emits a different event sequence for agent steps: no stepCallId
+    // on step-start/step-finish, step-result carries payload/startedAt, and agent chunks
+    // arrive as step-output events instead of tool-call-streaming-* events.
+    streamingAgentDetailedEventsLegacy: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {

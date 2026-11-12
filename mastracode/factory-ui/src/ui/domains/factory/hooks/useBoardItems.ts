@@ -1,19 +1,16 @@
-import { useMemo, useRef, useState } from 'react';
+import { boardLoop, boardOf } from '../boardFlow';
+import { useRef, useState } from 'react';
 
-import { useApiConfig } from '../../../../api/config';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-  useWorkItemsQuery,
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
-import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard, itemBoard, pullRequestMayEnter } from '../boardStages';
+import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
-import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -24,21 +21,25 @@ interface MoveOptions {
   repositorySlug?: string;
 }
 
-/** The board's persisted cards: the query behind them and the moves that rewrite them. */
+/** The moves that rewrite a board's persisted cards, for a caller that holds the cards it acts on. */
 export function useBoardItems({
   factoryProjectId,
   kind,
   currentUserId,
   onFailure,
+  items: all,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
+  /**
+   * The cards to act on: the ones the caller shows, and the ones holding a session, which a
+   * dropped pull request finds its issue among.
+   */
+  items: readonly WorkItem[];
   currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
-  const { baseUrl } = useApiConfig();
-  const items = useWorkItemsQuery(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -47,12 +48,6 @@ export function useBoardItems({
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const [dropError, setDropError] = useState<Error>();
   const movingRef = useRef<Set<string>>(new Set());
-
-  const all = useMemo(() => items.data ?? [], [items.data]);
-  const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
-  // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
-  const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
@@ -87,10 +82,10 @@ export function useBoardItems({
     // Held in a ref, not in mutation state: two clicks can land in the same render
     // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
-    const boardId = itemBoard(item);
-    if (!pullRequestMayEnter(boardId, item.source, toStage)) return;
-    if (boardId !== 'work' && boardId !== 'review') {
-      const definition = catalog.data?.find(board => board.id === boardId);
+    const definition = boardOf(catalog.data, item);
+    if (!pullRequestMayEnter(definition, item, toStage)) return;
+    // Only a board without a pull request loop is held to its declared moves here; the server judges the rest.
+    if (boardLoop(definition) === undefined) {
       const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
       if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;
     }
@@ -120,7 +115,7 @@ export function useBoardItems({
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
     if (payload.kind === 'work-item') {
       const item = all.find(candidate => candidate.id === payload.id);
-      if (!item || !belongsToBoard(item, kind) || payload.fromStage === toStage) return;
+      if (!item || itemBoard(item) !== kind || payload.fromStage === toStage) return;
       move(payload.id, toStage, { cause });
       return;
     }
@@ -142,12 +137,10 @@ export function useBoardItems({
         url,
         ...(initialPhase ? { stages: [initialPhase] } : {}),
         metadata,
+        // Kickoffs carry the card description, so typed guidance reaches the run through it.
+        ...(customPrompt ? { description: customPrompt } : {}),
       });
-      // The kickoff reads the card's feed, so typed guidance reaches the run as a comment on it.
-      if (customPrompt) {
-        await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
-      }
-      if (!item.stages.includes(toStage) && pullRequestMayEnter(kind, source, toStage)) {
+      if (!item.stages.includes(toStage) && pullRequestMayEnter(boardOf(catalog.data, item), item, toStage)) {
         requestTransition(item, toStage, { cause });
       }
     })().catch(error => {
@@ -158,16 +151,9 @@ export function useBoardItems({
   };
 
   return {
-    all,
-    visible,
-    knownSourceKeys,
-    elsewhereSourceKeys,
-    isPending: items.isPending,
-    error: items.isError ? items.error : undefined,
     mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
-    refetch: items.refetch,
     move,
     remove: (id: string) => remove.mutate(id),
     handleDrop,

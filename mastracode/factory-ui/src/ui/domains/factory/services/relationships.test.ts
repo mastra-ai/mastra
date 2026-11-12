@@ -29,7 +29,7 @@ function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>
     acceptedAt: null,
     createdAt: '2026-07-17T00:00:00.000Z',
     updatedAt: '2026-07-17T00:00:00.000Z',
-    commentCount: 0,
+    description: null,
     ...rest,
     revision: rest.revision ?? 1,
   };
@@ -223,12 +223,10 @@ describe('related work item index', () => {
 });
 
 describe('relationshipPath', () => {
-  it('opens the board holding a pull request card, and Work for one not filed yet', () => {
+  it('opens Work for a pull request card, whether filed there, stored before boards, or not filed yet', () => {
     const pullRequest = workItem({ id: 'pr', source: 'github-pr' });
     expect(relationshipPath({ ...pullRequest, board: 'work' }, 'f1')).toBe('/factories/f1/work');
-    expect(relationshipPath({ ...pullRequest, board: 'review' }, 'f1')).toBe('/factories/f1/review');
-    // Filed before pull requests moved to Work, so it still lives on Review.
-    expect(relationshipPath({ ...pullRequest, board: null }, 'f1')).toBe('/factories/f1/review');
+    expect(relationshipPath({ ...pullRequest, board: null }, 'f1')).toBe('/factories/f1/work');
     expect(relationshipPath({ source: 'gitlab-pr' }, 'f1')).toBe('/factories/f1/work');
     expect(relationshipPath(workItem({ id: 'issue', source: 'github-issue' }), 'f1')).toBe('/factories/f1/work');
   });

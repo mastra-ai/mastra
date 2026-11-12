@@ -1,6 +1,6 @@
 {
   "name": "@mastra/docker",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Docker container sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,6 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
+    "@docker/sandboxes": "0.53.0",
     "@grpc/grpc-js": "^1.14.5",
     "dockerode": "^4.0.12",
     "tar-stream": "^3.2.2"

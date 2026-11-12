@@ -1,7 +1,9 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
 
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
@@ -20,14 +22,14 @@ export function GlobalSearchNavigationResults({
         title="Work"
         subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, DEFAULT_BOARD_ID), false)}
       />
       <CommandPaletteItem
         icon={<GitPullRequest />}
-        title="Review"
+        title="Pull requests"
         subtitle="Factory navigation"
-        value={`Review Factory navigation /factories/${factoryId}/review`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
+        value={`Pull requests Review Factory navigation /factories/${factoryId}/work`}
+        onSelect={() => onSelect(`/factories/${factoryId}/work?source=${PULL_REQUEST_SOURCE_FILTER}`, false)}
       />
       <CommandPaletteItem
         icon={<ListChecks />}
@@ -75,7 +77,7 @@ export function GlobalSearchNavigationResults({
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.intake}
         subtitle="Settings"
-        value={`Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`}
+        value={`Work Intake Settings intake routes new cards ${settingsSectionPath(factoryId, 'intake')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem

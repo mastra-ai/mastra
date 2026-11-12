@@ -117,6 +117,17 @@ export abstract class PubSub {
   }
 
   /**
+   * Whether a subscriber that attaches after events were published on `topic`
+   * can still read them (`getHistory`, a replaying subscribe). A publisher that
+   * sends changes against its earlier events resends the whole state when it
+   * can't. Defaults to {@link supportsOffsets}.
+   * @internal
+   */
+  __replaysTopic(_topic: string): boolean {
+    return this.supportsOffsets;
+  }
+
+  /**
    * Surface attempts to use an unsupported non-zero offset.
    * Implementations may override this hook to use their configured logger.
    */

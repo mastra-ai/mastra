@@ -37,6 +37,7 @@
 import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
+import type { DefinitionSource } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
@@ -473,6 +474,8 @@ export interface RegisteredWorkspace {
   source: 'mastra' | 'agent';
   agentId?: string;
   agentName?: string;
+  /** Where the registering agent is defined, for agent workspaces. */
+  agentSource?: DefinitionSource;
 }
 
 // =============================================================================
@@ -886,8 +889,15 @@ export class Workspace<
     if (!this._filesystemResolver) return this._fs;
     let pending = this._filesystemRequestCache.get(requestContext);
     if (!pending) {
-      pending = Promise.resolve(this._filesystemResolver({ requestContext }));
+      pending = Promise.resolve().then(() => this._filesystemResolver!({ requestContext }));
       this._filesystemRequestCache.set(requestContext, pending);
+      // Don't keep a failure around: a transient resolver error would otherwise
+      // disable filesystem and skill tools for the rest of the request.
+      pending.catch(() => {
+        if (this._filesystemRequestCache.get(requestContext) === pending) {
+          this._filesystemRequestCache.delete(requestContext);
+        }
+      });
     }
     return pending;
   }
