@@ -39,12 +39,28 @@ export function describeLateEndCases({
   describe('ends of evented runs whose events arrive late or twice (#28712)', () => {
     const { startReplica, storedRun, redeliver } = useLateDeliveryReplicas({ getStorage, connect });
 
-    /** A two-step run on replica A whose last step end A's broker holds back. */
-    async function holdLastStepEnd() {
+    /**
+     * A two-step run on replica A whose last step end A's broker holds back.
+     * With `fails`, the last step throws and the run has no retries left. With
+     * `keepsSnapshot: false`, the run's end deletes its snapshot.
+     */
+    async function holdLastStepEnd({ fails = false, keepsSnapshot = true } = {}) {
       const executions: string[] = [];
-      const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+      const workflow = createWorkflow({
+        id: 'finished',
+        inputSchema: Num,
+        outputSchema: Num,
+        ...(keepsSnapshot ? {} : { options: { shouldPersistSnapshot: () => false } }),
+      })
         .then(work('first', async id => void executions.push(id)))
-        .then(work('second', async id => void executions.push(id)))
+        .then(
+          work('second', async id => {
+            executions.push(id);
+            if (fails) {
+              throw new Error('the last step fails');
+            }
+          }),
+        )
         .commit();
       const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [1]));
       const a = await startReplica(workflow, fromA.intercept);
@@ -74,6 +90,35 @@ export function describeLateEndCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
+    it('fails the run once when a redelivery of its failed last step fails it before the step end arrives', async () => {
+      const { executions, fromA, a, run, lastStep } = await holdLastStepEnd({ fails: true });
+
+      // As above, with the last step's final failure saved instead of a success.
+      await abandonLease(getStorage(), stepOccurrenceKey(run.runId, [1]));
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(a.workflow, fromB.intercept);
+      expect(await redeliver(b, lastStep)).toEqual({ ok: true });
+      await fromB.drain(b);
+      fromA.holdAll();
+      await fromA.drain(a);
+
+      expect(executions).toEqual(['first', 'second']);
+      expect((await storedRun(run.runId))?.status).toBe('failed');
+      expect(finishesOf(run.runId, a, b).map(event => event.type)).toEqual(['workflow.fail']);
+    }, 20_000);
+
+    it('fails the run once when the step end of its failed last step arrives twice', async () => {
+      const { executions, fromA, a, run } = await holdLastStepEnd({ fails: true });
+
+      fromA.holdAll();
+      fromA.queue.push(copyEvent(fromA.queue[0]!));
+      await fromA.drain(a);
+
+      expect(executions).toEqual(['first', 'second']);
+      expect((await storedRun(run.runId))?.status).toBe('failed');
+      expect(finishesOf(run.runId, a).map(event => event.type)).toEqual(['workflow.fail']);
+    }, 20_000);
+
     it('ends the run once when the last step end arrives twice', async () => {
       const { executions, fromA, a, run } = await holdLastStepEnd();
 
@@ -83,6 +128,18 @@ export function describeLateEndCases({
 
       expect(executions).toEqual(['first', 'second']);
       expect((await storedRun(run.runId))?.status).toBe('success');
+      expect(finishesOf(run.runId, a)).toHaveLength(1);
+    }, 20_000);
+
+    it('ends the run once when the last step end arrives twice and the end deleted the snapshot', async () => {
+      const { executions, fromA, a, run } = await holdLastStepEnd({ keepsSnapshot: false });
+
+      fromA.holdAll();
+      fromA.queue.push(copyEvent(fromA.queue[0]!));
+      await fromA.drain(a);
+
+      expect(executions).toEqual(['first', 'second']);
+      expect(await storedRun(run.runId)).toBeNull();
       expect(finishesOf(run.runId, a)).toHaveLength(1);
     }, 20_000);
 
