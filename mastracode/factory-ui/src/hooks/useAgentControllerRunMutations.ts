@@ -89,14 +89,25 @@ export function useRespondAgentControllerSuspensionMutation(args: AgentControlle
   });
 }
 
+export class RejectedReplyError extends Error {
+  constructor(readonly reason: string | undefined) {
+    super(
+      reason === 'no_pending_suspension'
+        ? 'This request is no longer waiting for a reply. Its run has ended.'
+        : 'Your reply was not delivered. Someone may have already answered it.',
+    );
+  }
+}
+
+/** True when nothing will ever answer the prompt, so its card should go. */
+export function isEndedPrompt(error: unknown): boolean {
+  return error instanceof RejectedReplyError && error.reason === 'no_pending_suspension';
+}
+
 /** The server answers a reply it can't deliver with 200 and `ok: false`. */
 function requireAccepted(ack: AgentControllerCommandAck): AgentControllerCommandAck {
   if (ack.ok) return ack;
-  throw new Error(
-    ack.reason === 'no_pending_suspension'
-      ? 'This request is no longer waiting for a reply. Its run has ended.'
-      : 'Your reply was not delivered. Someone may have already answered it.',
-  );
+  throw new RejectedReplyError(ack.reason);
 }
 
 function reportRejectedReply(error: Error) {

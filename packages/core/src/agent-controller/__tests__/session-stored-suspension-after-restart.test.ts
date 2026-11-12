@@ -147,4 +147,23 @@ describe('a suspension stored by a process that is gone', () => {
     await reopened.restoreStoredToolSuspension('call-1', 'other-run');
     expect(reopened.claimToolSuspension('call-1', 'other-run')).toMatchObject({ accepted: false });
   });
+
+  it('reads at most ten pages of stored runs for an id it cannot find', async () => {
+    const { makeController } = await setup();
+    const first = await makeController('code');
+    const parked = await first.createSession({ id: 'session-1', ownerId: 'owner-1' });
+    await parked.thread.create();
+    const threadId = parked.thread.getId()!;
+    await parked.sendMessage({ content: 'Read /x' });
+
+    const second = await makeController('code');
+    const reopened = await second.createSession({ id: 'session-1', ownerId: 'owner-1', threadId } as never);
+    const agent = reopened.machinery.getAgent();
+    const list = vi
+      .spyOn(agent, 'listSuspendedRuns')
+      .mockResolvedValue({ runs: [], total: 1_000_000 } as Awaited<ReturnType<typeof agent.listSuspendedRuns>>);
+
+    await reopened.restoreStoredToolSuspension('call-unknown');
+    expect(list).toHaveBeenCalledTimes(10);
+  });
 });

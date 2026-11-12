@@ -6104,7 +6104,8 @@ export class Session<TState = unknown> {
    * can find it. A run parked by a process that has since gone away stays
    * suspended in storage, but this session never saw it park. Only an exact
    * `toolCallId` on the active thread is looked up, and only when exactly one
-   * stored, non-approval suspension matches.
+   * stored, non-approval suspension matches. The scan is bounded so an unknown
+   * id can't make a reply read every stored run on the thread.
    */
   async restoreStoredToolSuspension(toolCallId?: string, runId?: string): Promise<void> {
     if (!toolCallId || this.suspensions.resolveAddress({ toolCallId, runId })) return;
@@ -6112,10 +6113,11 @@ export class Session<TState = unknown> {
     if (!threadId) return;
     const resourceId = this.identity.getResourceId();
     const matches: Array<{ agent: Agent; runId: string; toolName: string }> = [];
-    for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
+    const perPage = 100;
+    const maxPages = 10;
+    scan: for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
       if (typeof agent.listSuspendedRuns !== 'function') continue;
-      const perPage = 100;
-      for (let page = 0; ; page++) {
+      for (let page = 0; page < maxPages; page++) {
         let result: Awaited<ReturnType<typeof agent.listSuspendedRuns>>;
         try {
           result = await agent.listSuspendedRuns({ threadId, resourceId, page, perPage });
@@ -6128,6 +6130,7 @@ export class Session<TState = unknown> {
           for (const call of run.toolCalls) {
             if (call.toolCallId !== toolCallId || !call.toolName || call.requiresApproval) continue;
             matches.push({ agent, runId: run.runId, toolName: call.toolName });
+            if (matches.length > 1) break scan;
           }
         }
         if ((page + 1) * perPage >= result.total) break;

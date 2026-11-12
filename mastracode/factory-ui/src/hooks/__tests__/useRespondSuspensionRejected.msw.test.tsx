@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { useRespondAgentControllerSuspensionMutation } from '../useAgentControllerRunMutations';
+import {
+  isEndedPrompt,
+  RejectedReplyError,
+  useRespondAgentControllerSuspensionMutation,
+} from '../useAgentControllerRunMutations';
 
 const controllerId = 'code';
 const sessionId = 'session-test';
@@ -30,5 +34,12 @@ describe('useRespondAgentControllerSuspensionMutation', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toMatch(/no longer waiting/);
+    expect(isEndedPrompt(result.current.error)).toBe(true);
+  });
+
+  it('only treats a reply with nothing waiting as an ended prompt', () => {
+    expect(isEndedPrompt(new RejectedReplyError('no_pending_suspension'))).toBe(true);
+    expect(isEndedPrompt(new RejectedReplyError('not_pending'))).toBe(false);
+    expect(isEndedPrompt(new Error('network'))).toBe(false);
   });
 });

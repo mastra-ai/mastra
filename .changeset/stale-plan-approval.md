@@ -3,4 +3,4 @@
 '@mastra/server': patch
 ---
 
-Answering a tool question (such as approving a plan) now works after the server that parked the run has restarted. The run is picked up from storage instead of the reply being rejected as having nothing waiting on it.
+Fixed replies to stored tool questions after a server restart. Approving a plan or answering another tool question now picks the run up from storage instead of rejecting the reply as having nothing waiting on it.
