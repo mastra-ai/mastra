@@ -15,11 +15,10 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { NoOpObservability, SpanType } from '../observability';
 import { InMemoryStore } from '../storage/mock';
-import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createStep, createWorkflow } from '../workflows';
-import type { WorkflowRunStatus } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { Run } from '../workflows/workflow';
+import { interceptStarts, persistActiveRun, sleep } from './test-utils/active-runs';
 import { killableProcess } from './test-utils/killable-process';
 import { Mastra } from './index';
 import type { MastraRecoveryConfig } from './index';
@@ -38,7 +37,6 @@ afterEach(async () => {
 });
 
 const schema = z.object({});
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /** A step `id` on `engine` that records `<replica>:<id>` and then runs `then`. */
 function reportingStep(
@@ -76,49 +74,6 @@ function startReplica(
   const mastra = new Mastra({ logger: false, storage, pubsub, workflows: { 'recovered-wf': workflow }, recovery });
   replicas.push({ mastra });
   return mastra;
-}
-
-/** Stores a run of `workflowName` its process left `status` mid-run, as a crash leaves it. */
-async function persistActiveRun(
-  storage: InMemoryStore,
-  runId: string,
-  { status = 'running', workflowName = 'recovered-wf' }: { status?: WorkflowRunStatus; workflowName?: string } = {},
-) {
-  const store = (await storage.getStore('workflows'))!;
-  await store.persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    snapshot: { ...createEmptyWorkflowSnapshot(runId), status, activePaths: [], context: { input: {} } as any },
-  });
-}
-
-/**
- * `inner`, recording the run ID of each restart start event it publishes in `restarts`. With `drop`,
- * it never delivers a start event, as a broker that holds them or a worker that crashed with them.
- */
-function interceptStarts(inner: PubSub, { restarts, drop = false }: { restarts?: string[]; drop?: boolean }): PubSub {
-  return new Proxy(inner, {
-    get(target, prop) {
-      if (prop === 'publish') {
-        return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
-          if (topic !== 'workflows' || event.type !== 'workflow.start') {
-            return target.publish(topic, event, options);
-          }
-
-          if (event.data?.restart) {
-            restarts?.push(event.runId);
-          }
-
-          if (!drop) {
-            return target.publish(topic, event, options);
-          }
-        };
-      }
-
-      const value = Reflect.get(target, prop, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
 }
 
 /**
@@ -183,7 +138,8 @@ describe('workflow recovery rule (#28712)', () => {
       await mastra.restartAllActiveWorkflowRuns();
       expect(restarts).not.toHaveBeenCalled();
 
-      await sleep(GRACE_MS);
+      // The same run once its last write is a grace period old.
+      await persistActiveRun(storage, 'stopped', { updatedAt: new Date(Date.now() - GRACE_MS) });
       await mastra.restartAllActiveWorkflowRuns();
       await vi.waitFor(() => expect(executions).toEqual(['B:work']));
     },
@@ -194,8 +150,7 @@ describe('workflow recovery rule (#28712)', () => {
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
     const mastra = startReplica(storage, 'default', 'B', executions);
-    await persistActiveRun(storage, 'stopped');
-    await sleep(GRACE_MS);
+    await persistActiveRun(storage, 'stopped', { updatedAt: new Date(Date.now() - GRACE_MS) });
     // The run's last write is past the grace period, but its process renewed its lease until just now.
     await store.claimRunOwnership({ runId: 'stopped', ownerId: 'other-process', leaseMs: 1, force: true });
     await sleep(5);
@@ -248,9 +203,8 @@ describe('workflow recovery rule (#28712)', () => {
     // Long enough that the queued run's re-read lands inside the lapsed lease's grace on a loaded machine too.
     const graceMs = 1_500;
     const b = startBlockingReplica(storage, ['run-1', 'run-2'], { workflowGraceMs: graceMs, workflowConcurrency: 1 });
-    await persistActiveRun(storage, 'run-1');
-    await persistActiveRun(storage, 'run-2');
-    await sleep(graceMs);
+    await persistActiveRun(storage, 'run-1', { updatedAt: new Date(Date.now() - graceMs) });
+    await persistActiveRun(storage, 'run-2', { updatedAt: new Date(Date.now() - graceMs) });
 
     // One run takes the only slot and the other waits for it. Meanwhile another instance restarts the waiting
     // run, and the lease it took lapses at once, as one whose workers lag behind would: the run is in its grace
@@ -362,8 +316,7 @@ describe('workflow recovery rule (#28712)', () => {
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
     const b = startReplica(storage, 'default', 'B', executions);
-    await persistActiveRun(storage, 'stopped');
-    await sleep(GRACE_MS);
+    await persistActiveRun(storage, 'stopped', { updatedAt: new Date(Date.now() - GRACE_MS) });
     // No recheck jitter, so the recheck comes one grace period after the failed read.
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const read = store.getRunOwnerships.bind(store);
