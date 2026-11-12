@@ -54,6 +54,7 @@ describe('detachFullStreamOnEnd', () => {
 
     const reader = output.fullStream.getReader();
     await expect(reader.read()).resolves.toEqual({ done: false, value: first });
+    expect(detach).not.toHaveBeenCalled();
     await expect(reader.read()).resolves.toEqual({ done: false, value: second });
     await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
 
