@@ -3,7 +3,7 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
@@ -167,10 +167,7 @@ export default function AgentBuilderFavoritePage() {
                 )}
                 <div className="max-w-120 flex-1">
                   <SearchInput
-                    size="sm"
-                    debounceMs={300}
-                    shortcut
-                    className="max-w-120"
+                    {...listSearchProps}
                     onValueChange={setSearch}
                     label="Search favorites"
                     placeholder="Search by name or description"

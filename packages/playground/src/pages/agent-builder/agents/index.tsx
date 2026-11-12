@@ -4,7 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
@@ -128,10 +128,7 @@ export default function AgentBuilderAgentsPage() {
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
                 <SearchInput
-                  size="sm"
-                  debounceMs={300}
-                  shortcut
-                  className="max-w-120"
+                  {...listSearchProps}
                   onValueChange={setSearch}
                   label="Search agents"
                   placeholder="Search by name or description"

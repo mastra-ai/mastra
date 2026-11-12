@@ -2,7 +2,7 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { NoWorkflowsInfo } from '@mastra/playground-ui/domains/workflows/components/workflows-list/no-workflows-info';
@@ -67,10 +67,7 @@ function Workflows() {
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
               <SearchInput
-                size="sm"
-                debounceMs={300}
-                shortcut
-                className="max-w-120"
+                {...listSearchProps}
                 onValueChange={setSearch}
                 label="Search workflows"
                 placeholder="Search by name or description"

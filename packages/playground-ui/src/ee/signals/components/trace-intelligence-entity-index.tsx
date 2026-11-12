@@ -17,7 +17,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { SearchInput } from '@/ds/components/SearchInput';
+import { SearchInput, listSearchProps } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
@@ -76,10 +76,7 @@ function EntityIndexControls({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="max-w-120 flex-1">
         <SearchInput
-          size="sm"
-          debounceMs={300}
-          shortcut
-          className="max-w-120"
+          {...listSearchProps}
           value={search}
           onValueChange={onSearchChange}
           label="Search agents"

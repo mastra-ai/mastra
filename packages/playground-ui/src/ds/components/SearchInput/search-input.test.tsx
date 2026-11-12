@@ -198,6 +198,32 @@ describe('SearchInput controlled and debounced', () => {
     vi.useRealTimers();
   });
 
+  it('drops a pending search when the parent resets the value', () => {
+    vi.useFakeTimers();
+    function Resettable() {
+      const [value, setValue] = useState('foo');
+      return (
+        <>
+          <SearchInput label="Search agents" value={value} onValueChange={setValue} debounceMs={300} />
+          <button type="button" onClick={() => setValue('')}>
+            Reset
+          </button>
+          <output>{value}</output>
+        </>
+      );
+    }
+    render(<Resettable />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
+
+    fireEvent.change(input, { target: { value: 'foob' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    act(() => vi.advanceTimersByTime(300));
+
+    expect(input.value).toBe('');
+    expect(screen.getByRole('status').textContent).toBe('');
+    vi.useRealTimers();
+  });
+
   it('follows a change the parent makes, such as a URL change', () => {
     render(<UrlSearch initial="chef" />);
     const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });

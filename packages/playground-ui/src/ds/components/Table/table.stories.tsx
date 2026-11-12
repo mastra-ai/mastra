@@ -21,7 +21,7 @@ import { Input } from '@/ds/components/Input/input';
 import { PropertyFilterApplied } from '@/ds/components/PropertyFilter/property-filter-applied';
 import { PropertyFilterCreator } from '@/ds/components/PropertyFilter/property-filter-creator';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
-import { SearchInput } from '@/ds/components/SearchInput';
+import { SearchInput, listSearchProps } from '@/ds/components/SearchInput';
 import { SkeletonText } from '@/ds/components/Skeleton/skeleton-text';
 import { Switch } from '@/ds/components/Switch/switch';
 import { Txt } from '@/ds/components/Txt/Txt';
@@ -443,9 +443,7 @@ type CreditSearchProps = {
 function CreditSearch({ search, onSearch }: CreditSearchProps) {
   return (
     <SearchInput
-      size="sm"
-      debounceMs={300}
-      shortcut
+      {...listSearchProps}
       className="max-w-120"
       label="Search credits"
       placeholder="Search credits"
@@ -873,9 +871,7 @@ export const InsetPagination: Story = {
         <ActionRow>
           <ActionRow.Start>
             <SearchInput
-              size="sm"
-              debounceMs={300}
-              shortcut
+              {...listSearchProps}
               className="max-w-120"
               label="Search credits"
               placeholder="Search credits"

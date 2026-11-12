@@ -13,7 +13,7 @@
 <ListSearch onSearch={setSearch} label="Search agents" placeholder="Search by name" />
 
 // After
-<SearchInput size="sm" debounceMs={300} shortcut onValueChange={setSearch} label="Search agents" placeholder="Search by name" />
+<SearchInput {...listSearchProps} onValueChange={setSearch} label="Search agents" placeholder="Search by name" />
 ```
 
 - `ListSearch`'s `onSearch` → `onValueChange`, `value` → `defaultValue`, `shortcutDisabled` → leave out `shortcut`. It defaulted to `size="sm"` and a 300ms debounce; pass them. To reset a field that keeps its own text, remount it with a `key`.

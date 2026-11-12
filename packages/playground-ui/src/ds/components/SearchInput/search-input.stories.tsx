@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import { listSearchProps } from './list-search-props';
 import { SearchInput } from './search-input';
 import type { SearchInputProps } from './search-input';
 import { Button } from '@/ds/components/Button';
@@ -70,7 +71,7 @@ function ListPageSearch(props: Pick<SearchInputProps, 'label' | 'placeholder'>) 
 
   return (
     <div className="grid w-80 gap-2">
-      <SearchInput {...props} size="sm" debounceMs={300} shortcut onValueChange={setSearch} />
+      <SearchInput {...listSearchProps} {...props} onValueChange={setSearch} />
       <p className="text-caption text-muted-foreground">Searching for: {search || '(nothing)'}</p>
     </div>
   );

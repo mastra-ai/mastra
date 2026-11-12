@@ -83,6 +83,12 @@ export function SearchInput({
 
   useEffect(() => () => debouncedChange.cancel(), [debouncedChange]);
 
+  // When the parent's value moves (it took the text, or a Reset or URL change replaced it), a
+  // search still waiting on the debounce is stale: drop it so it can't overwrite the new value.
+  useEffect(() => {
+    debouncedChange.cancel();
+  }, [value, debouncedChange]);
+
   const change = (next: string) => {
     setOwnText(next);
     if (next && debounceMs > 0) {

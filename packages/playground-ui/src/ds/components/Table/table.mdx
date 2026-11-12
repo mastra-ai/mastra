@@ -354,7 +354,7 @@ Controls go in an `ActionRow` above the table: search and filters in `ActionRow.
 ```tsx
 <ActionRow>
   <ActionRow.Start>
-    <SearchInput size="sm" debounceMs={300} shortcut className="max-w-120" label="Search credits" placeholder="Search credits" defaultValue={search} onValueChange={setSearch} />
+    <SearchInput {...listSearchProps} className="max-w-120" label="Search credits" placeholder="Search credits" defaultValue={search} onValueChange={setSearch} />
   </ActionRow.Start>
   <ActionRow.End>
     <Combobox

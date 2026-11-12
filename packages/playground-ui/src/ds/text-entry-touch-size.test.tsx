@@ -21,7 +21,7 @@ import { Input } from '@/ds/components/Input';
 import { InputGroup, InputGroupInput, InputGroupTextarea } from '@/ds/components/InputGroup';
 import { InputNumber, InputNumberGroup, InputNumberInput } from '@/ds/components/InputNumber';
 import { SavedViewNameInput } from '@/ds/components/SavedViews/saved-view-name-input';
-import { SearchInput } from '@/ds/components/SearchInput';
+import { SearchInput, listSearchProps } from '@/ds/components/SearchInput';
 import { Select, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Textarea } from '@/ds/components/Textarea';
 import { TreeInput } from '@/ds/components/Tree/tree-input';
@@ -51,9 +51,7 @@ const textEntryFields = {
   SearchInput: <SearchInput label="Search" value="" onValueChange={ignore} />,
   'SearchInput, debounced': (
     <SearchInput
-      size="sm"
-      debounceMs={300}
-      shortcut
+      {...listSearchProps}
       className="max-w-120"
       label="Search agents"
       placeholder="Search agents"

@@ -1,6 +1,6 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ClearFiltersButton } from '@mastra/playground-ui/components/ClearFiltersButton';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { useState } from 'react';
 import { SCORER_SOURCE_OPTIONS } from './constants';
@@ -36,10 +36,7 @@ export function ScorersToolbar({
       <ActionRow.Start>
         <div className="max-w-120 flex-1">
           <SearchInput
-            size="sm"
-            debounceMs={300}
-            shortcut
-            className="max-w-120"
+            {...listSearchProps}
             key={searchKey}
             label="Search scorers"
             placeholder="Search by scorer name"
