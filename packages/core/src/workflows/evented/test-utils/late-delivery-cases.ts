@@ -112,8 +112,8 @@ export function describeLateDeliveryCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
-    // An outcome check: the finished-step check and the end check also drop the second join's
-    // events, so it passes without the `joinsBranches` flag too.
+    // An outcome check: both step ends join the parallel, and the finished-step check and the end
+    // check drop the second join's events.
     it('runs the step after a parallel once when both branches finish before either step end is handled', async () => {
       const executions: string[] = [];
       const report: Report = async id => void executions.push(id);

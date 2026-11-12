@@ -127,12 +127,6 @@ export type ProcessorArgs = {
    */
   stepLeaseHandoff?: StepLeaseHandoff;
   /**
-   * Set only on the `workflow.step.end` of a parallel or conditional branch
-   * that saved its result before publishing it: whether that save left every
-   * branch of the entry settled. Only that step end joins the entry.
-   */
-  joinsBranches?: boolean;
-  /**
    * Set only on the `workflow.start` of a restart: the run's `updatedAt`
    * (epoch ms) when the restart read the run. The start is dropped if the run
    * was written since. Not forwarded to later events.
@@ -2958,8 +2952,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    *
    * `guardEventId` is the delivery that started the step on a store with step
    * guards: the save then commits under that occurrence's completion guard, and
-   * the step end adopts it. Returns the stored step results after the write, or
-   * `undefined` when nothing was saved.
+   * the step end adopts it.
    */
   async #saveFinishedStep({
     args,
@@ -2975,11 +2968,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     result: StepResult<any, any, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     guardEventId?: string;
-  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
+  }): Promise<void> {
     const { workflow, workflowId, runId, executionPath, activeStepsPath } = args;
     const store = await this.mastra.getStorage()?.getStore('workflows');
     if (!store) {
-      return undefined;
+      return;
     }
 
     // The same record the step end builds: state goes with the run, a branch keeps its delta for
@@ -3008,7 +3001,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
 
     try {
-      const context = await store.updateWorkflowResults({
+      await store.updateWorkflowResults({
         workflowName: workflowId,
         runId,
         stepId,
@@ -3019,9 +3012,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         ...(isParallelBranch ? {} : { state }),
         ...(guardEventId ? { completionGuard: { eventId: guardEventId } } : {}),
       });
-
-      // Stores return no results when the run has no stored row: nothing was saved.
-      return context && Object.keys(context).length > 0 ? context : undefined;
     } catch (error) {
       if (!isWorkflowStepConflictError(error)) {
         throw error;
@@ -3034,7 +3024,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepId,
         reason: error.reason,
       });
-      return undefined;
     }
   }
 
@@ -4717,7 +4706,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       const updatedState = (stepResult as any).__state ?? currentState;
 
       // A suspended step is not finished: its step end records the suspension.
-      const saved = savesFinishedResult && stepResult.status === 'success' ? await saveFinished(stepResult) : undefined;
+      if (savesFinishedResult && stepResult.status === 'success') {
+        await saveFinished(stepResult);
+      }
 
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
@@ -4743,38 +4734,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           state: updatedState,
           outputOptions,
           forEachIndex,
-          ...(saved ? { joinsBranches: this.#branchesJoined(workflow, executionPath, saved) } : {}),
         },
       });
     }
-  }
-
-  /**
-   * For a branch of a parallel or conditional entry, whether the step results
-   * stored after its save show every branch of the entry finished or
-   * suspended, the way {@link aggregateBranchResults} counts them. Each branch
-   * saves before its step end is handled, so every step end could see the
-   * whole set: only the branch whose save completed it joins the entry.
-   * `undefined` for a step that is not a branch.
-   */
-  #branchesJoined(
-    workflow: Workflow,
-    executionPath: number[],
-    stored: Record<string, StepResult<any, any, any, any>>,
-  ): boolean | undefined {
-    const entry = workflow.stepGraph[executionPath[0]!];
-    if ((entry?.type !== 'parallel' && entry?.type !== 'conditional') || executionPath.length < 2) {
-      return undefined;
-    }
-
-    return entry.steps.every(branch => {
-      if (!isSingleStepEntry(branch)) {
-        return false;
-      }
-
-      const status = stored[getSingleStepEntryId(branch)]?.status;
-      return status === 'success' || status === 'skipped' || status === 'suspended';
-    });
   }
 
   /**
@@ -5025,7 +4987,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     outputOptions,
     forEachIndex,
     nestedRunId,
-    joinsBranches,
   }: ProcessorArgs) {
     // Extract state from prevResult if it was updated by the step
     // For nested workflow completion (parentContext present), prefer the passed state
@@ -5824,12 +5785,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       }
     } else if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
-      // The branch saved its result before this step end, and a sibling's save completed the set
-      // after it: that sibling's step end joins the entry, so this one must not join it as well.
-      if (joinsBranches === false) {
-        return;
-      }
-
       await this.aggregateBranchResults({
         workflow,
         workflowId,
