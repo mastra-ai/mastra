@@ -343,6 +343,14 @@ export interface TUIState {
   pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
   /** Inline tool approval prompt currently waiting for y / a / Y / n. */
   activeInlineApproval?: { handleInput(data: string): void; handlesExpand?(): boolean };
+  /** Approvals raised while another approval prompt is open; shown one at a time, oldest first. */
+  queuedInlineApprovals: Array<{
+    toolCallId: string;
+    category: string | null;
+    show(): void;
+    dismiss(declineContext?: { reason?: string; message?: string }): void;
+    autoApprove(): void;
+  }>;
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
@@ -526,6 +534,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingSlashCommandMessageIds: [],
     pendingQueueSubmissions: 0,
     pendingApprovalDismiss: null,
+    queuedInlineApprovals: [],
 
     // Status line
     projectInfo: detectProject(process.cwd()),

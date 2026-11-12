@@ -48,6 +48,7 @@ function createToolHandlerContext(): EventHandlerContext {
     pendingSubagents: new Map(),
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
+    queuedInlineApprovals: [],
     allToolComponents: [],
     toolOutputExpanded: false,
     hideThinkingBlock: false,
@@ -497,5 +498,86 @@ describe('inline tool approval', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(output).toContain('Allow mcp_search?');
     expect(output).toContain('query: release notes');
+  });
+});
+
+describe('several approvals raised by one step (#30152)', () => {
+  function raiseThree() {
+    const ctx = createToolHandlerContext();
+    const respondToToolApproval = vi.fn();
+    const setState = vi.fn();
+    (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
+    (ctx.state.session as any).state = { set: setState };
+    (ctx.state as any).pendingApprovalDismiss = null;
+
+    handleToolApprovalRequired(ctx, 'call-a', 'execute_command', { command: 'pnpm build' });
+    handleToolApprovalRequired(ctx, 'call-b', 'write_file', { path: 'src/a.ts' });
+    handleToolApprovalRequired(ctx, 'call-c', 'execute_command', { command: 'pnpm test' });
+    const rendered = () => stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    return { ctx, respondToToolApproval, setState, rendered };
+  }
+
+  it('shows one prompt at a time and answers each call in turn', () => {
+    const { ctx, respondToToolApproval, rendered } = raiseThree();
+
+    expect(rendered()).toContain('pnpm build');
+    expect(rendered()).not.toContain('src/a.ts');
+    expect(ctx.state.queuedInlineApprovals.map(q => q.toolCallId)).toEqual(['call-b', 'call-c']);
+
+    ctx.state.activeInlineApproval!.handleInput('y');
+    expect(rendered()).toContain('src/a.ts');
+    ctx.state.activeInlineApproval!.handleInput('n');
+    expect(rendered()).toContain('pnpm test');
+    ctx.state.activeInlineApproval!.handleInput('y');
+
+    expect(respondToToolApproval.mock.calls.map(([arg]) => arg)).toEqual([
+      { decision: 'approve', toolCallId: 'call-a' },
+      { decision: 'decline', toolCallId: 'call-b' },
+      { decision: 'approve', toolCallId: 'call-c' },
+    ]);
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(ctx.state.pendingApprovalDismiss).toBeNull();
+    expect(rendered()).not.toContain('Allow');
+  });
+
+  it('declines every waiting approval when dismissed', () => {
+    const { ctx, respondToToolApproval, rendered } = raiseThree();
+    const declineContext = { reason: 'interrupted', message: 'stop' };
+
+    ctx.state.pendingApprovalDismiss?.(declineContext);
+
+    expect(respondToToolApproval.mock.calls.map(([arg]) => arg)).toEqual(
+      ['call-a', 'call-b', 'call-c'].map(toolCallId => ({ decision: 'decline', toolCallId, declineContext })),
+    );
+    expect(ctx.state.queuedInlineApprovals).toEqual([]);
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(ctx.state.pendingApprovalDismiss).toBeNull();
+    expect(rendered()).not.toContain('Allow');
+  });
+
+  it('approves queued calls in the same category when the category is always allowed', () => {
+    const { ctx, respondToToolApproval, rendered } = raiseThree();
+
+    ctx.state.activeInlineApproval!.handleInput('a');
+
+    expect(respondToToolApproval.mock.calls.map(([arg]) => arg)).toEqual([
+      { decision: 'always_allow_category', toolCallId: 'call-a' },
+      { decision: 'approve', toolCallId: 'call-c' },
+    ]);
+    expect(rendered()).toContain('src/a.ts');
+    expect(ctx.state.queuedInlineApprovals).toEqual([]);
+  });
+
+  it('approves every queued call when YOLO is turned on', () => {
+    const { ctx, respondToToolApproval, setState } = raiseThree();
+
+    ctx.state.activeInlineApproval!.handleInput('Y');
+
+    expect(setState).toHaveBeenCalledWith({ yolo: true });
+    expect(respondToToolApproval.mock.calls.map(([arg]) => arg)).toEqual(
+      ['call-a', 'call-b', 'call-c'].map(toolCallId => ({ decision: 'approve', toolCallId })),
+    );
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(ctx.state.pendingApprovalDismiss).toBeNull();
   });
 });

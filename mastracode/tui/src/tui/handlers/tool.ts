@@ -24,6 +24,7 @@ import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enh
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
 import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
+import type { TUIState } from '../state.js';
 import { getMarkdownTheme } from '../theme.js';
 import { appendBoundedOutput } from '../utils/bounded-output.js';
 
@@ -354,6 +355,22 @@ export function formatToolResult(result: unknown): string {
   return sanitizeAnsiForRendering(String(result));
 }
 
+function showNextApproval(state: TUIState): void {
+  state.queuedInlineApprovals.shift()?.show();
+}
+
+/** Decline the open approval and every queued one (Ctrl+C, or a message sent while approvals wait). */
+function dismissAllApprovals(
+  state: TUIState,
+  dismissActive: (declineContext?: { reason?: string; message?: string }) => void,
+  declineContext?: { reason?: string; message?: string },
+): void {
+  const queued = state.queuedInlineApprovals.splice(0);
+  state.pendingApprovalDismiss = null;
+  dismissActive(declineContext);
+  for (const approval of queued) approval.dismiss(declineContext);
+}
+
 export function handleToolApprovalRequired(
   ctx: EventHandlerContext,
   toolCallId: string,
@@ -393,14 +410,20 @@ export function handleToolApprovalRequired(
       } else if (action.type === 'always_allow_category') {
         firePermissionResult('approved');
         state.session.respondToToolApproval({ decision: 'always_allow_category', toolCallId });
+        // Queued calls in the same category are now allowed too.
+        const sameCategory = state.queuedInlineApprovals.filter(q => category && q.category === category);
+        state.queuedInlineApprovals = state.queuedInlineApprovals.filter(q => !sameCategory.includes(q));
+        for (const approval of sameCategory) approval.autoApprove();
       } else if (action.type === 'yolo') {
         firePermissionResult('auto_approved');
         void state.session.state.set({ yolo: true } as any);
         state.session.respondToToolApproval({ decision: 'approve', toolCallId });
+        for (const approval of state.queuedInlineApprovals.splice(0)) approval.autoApprove();
       } else {
         firePermissionResult('declined');
         state.session.respondToToolApproval({ decision: 'decline', toolCallId });
       }
+      showNextApproval(state);
     },
   });
 
@@ -411,19 +434,33 @@ export function handleToolApprovalRequired(
     state.ui.requestRender();
   };
 
-  // Set up dismissal to decline
-  state.pendingApprovalDismiss = declineContext => {
+  const dismiss = (declineContext?: { reason?: string; message?: string }) => {
     removeApproval();
-    state.pendingApprovalDismiss = null;
     firePermissionResult('dismissed');
     state.session.respondToToolApproval({ decision: 'decline', toolCallId, declineContext });
   };
 
-  // Show the prompt inline, right under the pending tool call
-  ctx.addChildBeforeFollowUps(dialog);
-  state.activeInlineApproval = dialog;
-  dialog.focused = true;
-  flushRender(state);
+  const autoApprove = () => {
+    firePermissionResult('auto_approved');
+    state.session.respondToToolApproval({ decision: 'approve', toolCallId });
+  };
+
+  const show = () => {
+    // Dismissal declines this prompt and every approval queued behind it.
+    state.pendingApprovalDismiss = declineContext => dismissAllApprovals(state, dismiss, declineContext);
+    // Show the prompt inline, right under the pending tool call
+    ctx.addChildBeforeFollowUps(dialog);
+    state.activeInlineApproval = dialog;
+    dialog.focused = true;
+    flushRender(state);
+  };
+
+  // A step can raise several approvals at once; answer them one prompt at a time.
+  if (state.activeInlineApproval) {
+    state.queuedInlineApprovals.push({ toolCallId, category, show, dismiss, autoApprove });
+    return;
+  }
+  show();
 }
 
 export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, toolName: string, args: unknown): void {
