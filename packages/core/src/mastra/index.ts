@@ -4648,7 +4648,8 @@ export class Mastra<
 
   /**
    * Restarts a run the recovery rule picked once `#recoveryRestarts` has a free slot, and rejects when the
-   * restart fails. The run counts as queued meanwhile, so recovery leaves it to this restart.
+   * restart fails. The run counts as queued meanwhile, so recovery leaves it to this restart, and a run
+   * that is already queued resolves at once without a second restart.
    *
    * The verdict is from keys read before the run was queued. While it waited for a slot, another instance
    * can have restarted the run, whose lease and liveness then lapsed in a worker backlog; `restart()` alone
@@ -4701,7 +4702,13 @@ export class Mastra<
       await this.#restartWorkflowRun(workflow, run.runId);
     };
 
+    // Checked here, right before the add: a pass checks before its ownership read, and a recheck can queue
+    // the run during that read.
     const key = recoveryRunKey(run.workflowName, run.runId);
+    if (this.#queuedRecoveryRestarts.has(key)) {
+      return Promise.resolve();
+    }
+
     this.#queuedRecoveryRestarts.add(key);
     return this.#recoveryRestarts
       .run(() => this.#trackDurableRecovery(restartIfStopped()))
