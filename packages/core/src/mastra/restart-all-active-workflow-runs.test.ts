@@ -292,9 +292,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     expect(
       new Mastra({ logger: false, recovery: { workflows: 'off', workflowConcurrency: 0 } }).recoveryConfig,
     ).toMatchObject({ workflows: 'off', workflowConcurrency: 1 });
-  });
-
-  it('defaults the recovery grace period to a minute when events go through a broker', () => {
+    // A minute when events go through a broker, unless set.
     const broker = sharedBroker();
     expect(new Mastra({ logger: false, pubsub: broker.connect() }).recoveryConfig.workflowGraceMs).toBe(60_000);
     expect(
