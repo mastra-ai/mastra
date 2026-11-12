@@ -395,6 +395,7 @@ Use `hooks` to run custom logic before and after every tool call an agent makes.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
+import { db } from '../db' // your application database client
 
 export const supportAgent = new Agent({
   id: 'support-agent',
@@ -406,13 +407,20 @@ export const supportAgent = new Agent({
     beforeToolCall: ({ toolName, input }) => {
       console.log(`Running ${toolName}`, input)
     },
-    afterToolCall: ({ toolName, output, error }) => {
-      console.log(`Finished ${toolName}`, { output, error })
+    afterToolCall: async ({ toolName, input, output, error }) => {
+      await db.auditLog.insert({
+        toolName,
+        input,
+        output,
+        error: error ? String(error) : undefined,
+      })
     },
   },
   // highlight-end
 })
 ```
+
+`afterToolCall` must return `void` (or `Promise<void>`). Await your storage call, but don't return its result. If the storage call throws, the tool call fails with that error, so catch it inside the hook if audit logging should be best-effort. `afterToolCall` doesn't run for calls skipped by `beforeToolCall` or for declined [pre-execution approvals](/docs/agents/human-in-the-loop#pre-execution-approval), so record those decisions where you handle them.
 
 `beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely, the agent receives `output` as the tool result:
 
@@ -719,6 +727,7 @@ The [AgentController](/docs/harness/agent-controller) automatically includes all
 - [`createTool` reference](/reference/tools/create-tool)
 - [`Agent.generate()` reference](/reference/agents/generate): Runtime options for tool selection, steps, and callbacks
 - [Background tasks](/docs/harness/background-tasks): Run long-running tools without blocking the agent loop
+- [Make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat): Keep side effects from running twice in durable agents
 - [MCP overview](/docs/connections/mcp)
 - [Connect tools](/docs/mastra-platform/connect#add-tools-to-an-agent): Ready-made tools for providers connected to a Mastra platform project
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries

@@ -188,6 +188,7 @@ import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
+  PublicAgentExecutionOptions,
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
@@ -423,6 +424,13 @@ type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchem
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type SubAgentPendingToolCall = NonNullable<SubAgentToolOutput['subAgentPendingToolCalls']>[number];
+
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
 
 const RESOLVED_TOOL_INVOCATION_STATES = new Set<string>(['result', 'output-error', 'output-denied']);
 
@@ -806,6 +814,9 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
   return { ...options, hooks: definedToolHooks(options.hooks) };
 }
 
+/** Tool sources slower than this are named on the `agent:prepare-tools` span. */
+const SLOW_TOOL_SOURCE_MS = 100;
+
 /**
  * Creates an AI agent that generates and streams responses, with optional tools,
  * memory, and voice capabilities.
@@ -905,7 +916,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  #defaultOptions: DynamicArgument<PublicAgentExecutionOptions<TOutput>, TRequestContext>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
@@ -1063,7 +1074,7 @@ export class Agent<
 
     this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
-    this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
+    this.#defaultOptions = config.defaultOptions || ({} as PublicAgentExecutionOptions<TOutput>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config.transform ?? (config as any).toolPayloadProjection,
@@ -1743,9 +1754,20 @@ export class Agent<
     return this.#ownStreamBus();
   }
 
+  /**
+   * Whether runs this class executes publish through the plain Agent stream
+   * publisher. DurableAgent returns false: it publishes on its own bus, so the
+   * plain bus (and its abort requests and run records) must not exist for it.
+   * @internal
+   */
+  protected __ownsPlainStreamPublisher(): boolean {
+    return true;
+  }
+
   // Not overridable: DurableAgent exposes its own bus through __getStreamBus,
   // but runs it executes never go through this class's publisher.
   #ownStreamBus(): AgentStreamBus | undefined {
+    if (!this.__ownsPlainStreamPublisher()) return undefined;
     if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
       const config = agentStreamsConfig(this.#durable);
@@ -3739,8 +3761,8 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    | PublicAgentExecutionOptions<TOutput>
+    | Promise<PublicAgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -5769,16 +5791,27 @@ export class Agent<
     let toolsForRequest: Record<string, CoreTool> = {};
 
     const memory = await this.getMemory({ requestContext });
-    const toolsFromToolsets = Object.values(toolsets || {});
+    const toolsetEntries = Object.entries(toolsets || {});
 
-    if (toolsFromToolsets.length > 0) {
+    if (toolsetEntries.length > 0) {
       this.logger.debug('Adding tools from toolsets', {
         agent: this.name,
-        toolsets: Object.keys(toolsets || {}),
+        toolsets: toolsetEntries.map(([toolsetName]) => toolsetName),
         runId,
       });
-      for (const toolset of toolsFromToolsets) {
+      // Toolsets are flattened by tool name, so a later toolset replaces an earlier
+      // toolset's tool with the same name. Keep that behavior, but say so.
+      const toolsetByToolName = new Map<string, string>();
+      for (const [toolsetName, toolset] of toolsetEntries) {
         for (const [toolName, tool] of Object.entries(toolset)) {
+          const earlierToolsetName = toolsetByToolName.get(toolName);
+          if (earlierToolsetName !== undefined) {
+            this.logger.warn(
+              `Tool "${toolName}" from toolset "${toolsetName}" replaces the tool with the same name from toolset "${earlierToolsetName}", so the "${earlierToolsetName}" tool is not used. Give the tools distinct names to keep both.`,
+              { agent: this.name, tool: toolName, toolsets: [earlierToolsetName, toolsetName], runId },
+            );
+          }
+          toolsetByToolName.set(toolName, toolsetName);
           const toolObj = tool;
           const options: ToolOptions = {
             name: toolName,
@@ -5904,6 +5937,13 @@ export class Agent<
    * so sending references to them causes model providers to reject or
    * mishandle the request.
    *
+   * Provider-executed tool results are stripped too. When a provider runs a tool
+   * itself (OpenAI hosted tool search, Anthropic server tools) AI SDK v5 places the
+   * tool_result part in the *same assistant message* as its tool_call, so removing only
+   * the call leaves an orphaned result that providers reject — "No tool call found for
+   * tool search output with call_id ...". Client-executed results live in `role: 'tool'`
+   * messages instead and are already dropped below.
+   *
    * This function removes those parts while preserving all other
    * conversation context (user messages, assistant text, etc.).
    *
@@ -5929,7 +5969,9 @@ export class Agent<
         }
 
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter(part => part.type !== 'tool-call' && part.type !== 'reasoning');
+          const filtered = message.content.filter(
+            part => part.type !== 'tool-call' && part.type !== 'tool-result' && part.type !== 'reasoning',
+          );
           if (filtered.length === 0) return null;
           return { ...message, content: filtered };
         }
@@ -6726,8 +6768,10 @@ export class Agent<
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -6876,8 +6920,10 @@ export class Agent<
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -7574,192 +7620,253 @@ export class Agent<
     let modelSnapshot: Promise<MastraLanguageModel | MastraLegacyLanguageModel> | undefined;
     const getResolvedModel = () => (modelSnapshot ??= Promise.resolve(model ?? this.getModel({ requestContext })));
 
-    const assignedTools = await this.listAssignedTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      model,
-      getModel: getResolvedModel,
+    // Tool sources resolve before the first model call; name the slow ones so a trace shows what held the run up.
+    const prepareSpan = observabilityContext.tracingContext?.currentSpan?.createChildSpan({
+      type: SpanType.GENERIC,
+      name: 'agent:prepare-tools',
     });
-
-    const memoryTools = await this.listMemoryTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      memoryConfig,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const toolsetTools = await this.listToolsets({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      toolsets: toolsets!,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const clientSideTools = await this.listClientTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      clientTools: clientTools!,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      model,
-      getModel: getResolvedModel,
-    });
-
-    // Preserve `onOutput` and `toModelOutput` from server-declared execute-less
-    // tools when the serialized client copy overwrites them below. Normal
-    // server-executed tools never hand hooks to client-controlled input. Copy
-    // instead of mutating so a future cache inside listClientTools cannot leak
-    // hooks across requests.
-    const serverDeclaredTools = { ...assignedTools, ...toolsetTools };
-    for (const [name, clientSideTool] of Object.entries(clientSideTools)) {
-      const serverTool = serverDeclaredTools[name];
-      if (!serverTool || serverTool.execute) continue;
-      const preserveOnOutput = !clientSideTool.onOutput && typeof serverTool.onOutput === 'function';
-      const preserveToModelOutput = !clientSideTool.toModelOutput && typeof serverTool.toModelOutput === 'function';
-      if (preserveOnOutput || preserveToModelOutput) {
-        clientSideTools[name] = {
-          ...clientSideTool,
-          ...(preserveOnOutput ? { onOutput: serverTool.onOutput } : {}),
-          ...(preserveToModelOutput ? { toModelOutput: serverTool.toModelOutput } : {}),
-        };
+    const slowSourcesMs: Record<string, number> = {};
+    let failedSource: string | undefined;
+    const traced = async <T extends object>(source: string, list: () => Promise<T>): Promise<T> => {
+      const startedAt = Date.now();
+      try {
+        return await list();
+      } catch (error) {
+        failedSource = source;
+        throw error;
+      } finally {
+        const elapsed = Date.now() - startedAt;
+        if (elapsed >= SLOW_TOOL_SOURCE_MS) slowSourcesMs[source] = elapsed;
       }
+    };
+
+    let allTools: Record<string, CoreTool>;
+    try {
+      const assignedTools = await traced('assigned', () =>
+        this.listAssignedTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          outputWriter,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          model,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const memoryTools = await traced('memory', () =>
+        this.listMemoryTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          memoryConfig,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const toolsetTools = await traced('toolsets', () =>
+        this.listToolsets({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          toolsets: toolsets!,
+          outputWriter,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const clientSideTools = await traced('client', () =>
+        this.listClientTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          clientTools: clientTools!,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          model,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      // Preserve `onOutput` and `toModelOutput` from server-declared execute-less
+      // tools when the serialized client copy overwrites them below. Normal
+      // server-executed tools never hand hooks to client-controlled input. Copy
+      // instead of mutating so a future cache inside listClientTools cannot leak
+      // hooks across requests.
+      const serverDeclaredTools = { ...assignedTools, ...toolsetTools };
+      for (const [name, clientSideTool] of Object.entries(clientSideTools)) {
+        const serverTool = serverDeclaredTools[name];
+        if (!serverTool || serverTool.execute) continue;
+        const preserveOnOutput = !clientSideTool.onOutput && typeof serverTool.onOutput === 'function';
+        const preserveToModelOutput = !clientSideTool.toModelOutput && typeof serverTool.toModelOutput === 'function';
+        if (preserveOnOutput || preserveToModelOutput) {
+          clientSideTools[name] = {
+            ...clientSideTool,
+            ...(preserveOnOutput ? { onOutput: serverTool.onOutput } : {}),
+            ...(preserveToModelOutput ? { toModelOutput: serverTool.toModelOutput } : {}),
+          };
+        }
+      }
+
+      const agentTools = await traced('agents', () =>
+        this.listAgentTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          methodType,
+          ...observabilityContext,
+          autoResumeSuspendedTools,
+          delegation,
+          backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const workflowTools = await traced('workflows', () =>
+        this.listWorkflowTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          methodType,
+          ...observabilityContext,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const workspaceTools = await traced('workspace', () =>
+        this.listWorkspaceTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const knowledgeTools = await traced('knowledge', () =>
+        this.listKnowledgeTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const configuredInputProcessors =
+        inputProcessors ??
+        (await traced('input-processor-config', () => this.listConfiguredInputProcessors(requestContext)));
+      const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
+      const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
+
+      const skillTools = await traced('skills', () =>
+        this.listSkillTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const browserTools = await traced('browser', () =>
+        this.listBrowserTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const requestResolvedTools = {
+        ...assignedTools,
+        ...memoryTools,
+        ...toolsetTools,
+        ...clientSideTools,
+        ...agentTools,
+        ...workflowTools,
+        ...workspaceTools,
+        ...knowledgeTools,
+        ...skillTools,
+        ...browserTools,
+      };
+
+      const inputProcessorLoadedTools = await traced('input-processors', () =>
+        this.listInputProcessorLoadedTools({
+          processors: configuredInputProcessors,
+          tools: requestResolvedTools,
+          memoryConfig,
+          runMessages,
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          outputWriter,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      allTools = {
+        ...requestResolvedTools,
+        ...inputProcessorLoadedTools,
+      };
+      prepareSpan?.end({
+        output: {
+          toolCount: Object.keys(allTools).length,
+          ...(Object.keys(slowSourcesMs).length > 0 ? { slowSourcesMs } : {}),
+        },
+      });
+    } catch (error) {
+      // Covers every tool source and the skill detection between them, so the span never stays open.
+      prepareSpan?.error({
+        error: error instanceof Error ? error : new Error(String(error)),
+        endSpan: true,
+        metadata: { ...(failedSource ? { failedSource } : {}), slowSourcesMs },
+      });
+      throw error;
     }
-
-    const agentTools = await this.listAgentTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      methodType,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      delegation,
-      backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const workflowTools = await this.listWorkflowTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      methodType,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const workspaceTools = await this.listWorkspaceTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const knowledgeTools = await this.listKnowledgeTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
-    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
-    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
-
-    const skillTools = await this.listSkillTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
-      getModel: getResolvedModel,
-    });
-
-    const browserTools = await this.listBrowserTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const requestResolvedTools = {
-      ...assignedTools,
-      ...memoryTools,
-      ...toolsetTools,
-      ...clientSideTools,
-      ...agentTools,
-      ...workflowTools,
-      ...workspaceTools,
-      ...knowledgeTools,
-      ...skillTools,
-      ...browserTools,
-    };
-
-    const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
-      processors: configuredInputProcessors,
-      tools: requestResolvedTools,
-      memoryConfig,
-      runMessages,
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const allTools = {
-      ...requestResolvedTools,
-      ...inputProcessorLoadedTools,
-    };
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
@@ -8323,7 +8430,9 @@ export class Agent<
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
 
-    const throwNotSuspended = (): never => {
+    // `timedOut` marks a run that may still suspend on the target once its snapshot is durable,
+    // so callers can retry it instead of treating the tool call as answered.
+    const throwNotSuspended = (timedOut = false): never => {
       throw new MastraError({
         id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
         domain: ErrorDomain.AGENT,
@@ -8334,6 +8443,7 @@ export class Agent<
           method,
           runId,
           toolCallId,
+          ...(timedOut ? { timedOut } : {}),
         },
       });
     };
@@ -8379,7 +8489,7 @@ export class Agent<
       throwNotSuspended();
     }
 
-    return throwNotSuspended();
+    return throwNotSuspended(true);
   }
 
   /**
@@ -12339,7 +12449,8 @@ export class Agent<
     options?: {
       /**
        * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
-       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
+       * after a dropped connection, pass the `index + 1` of the last chunk that has an index. Omit it to replay all available cached events. Transports
        * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
        * and may make structured output fail to parse; beyond retained history, an offset also skips
        * lower-index live events on numeric-offset transports. See
@@ -12380,6 +12491,7 @@ export class Agent<
       messageId: globalThis.crypto.randomUUID(),
       model: { modelId: undefined, provider: undefined, version: 'v3' },
       offset: options?.offset,
+      replayResponseMessagesBeforeOffset: true,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -12431,6 +12543,27 @@ export class Agent<
     } catch (error) {
       detach();
       throw error;
+    }
+
+    // Resuming past the run's last entry replays nothing; if that entry ended the
+    // run, nothing more will arrive, so close (matches the HTTP /observe route).
+    // Read only after subscribing so a terminal entry racing attachment is not lost.
+    // A failed read only means we can't close early.
+    // A client resuming at last index + 1 needs a one-entry read; only an offset
+    // further past the end falls back to the full log to find the true tail.
+    const offset = options?.offset;
+    if (offset !== undefined && offset > 0) {
+      const topic = AGENT_STREAM_TOPIC(runId);
+      const readTail = async () => {
+        const window = await bus.pubsub.getHistory(topic, offset - 1);
+        return window.length > 0 ? window.at(-1) : (await bus.pubsub.getHistory(topic, 0)).at(-1);
+      };
+      // Don't hold back the returned stream while the read waits on the cache.
+      void readTail()
+        .catch(() => undefined)
+        .then(last => {
+          if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) detach();
+        });
     }
 
     return {

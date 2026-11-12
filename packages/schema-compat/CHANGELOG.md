@@ -1,5 +1,47 @@
 # @mastra/schema-compat
 
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- JSON Schema `format` keywords are now enforced when validating a plain JSON Schema ([#30113](https://github.com/mastra-ai/mastra/pull/30113))
+
+  Previously a `format` (`email`, `uri`, `date-time`, ...) declared in a plain JSON Schema was ignored: the
+  value passed validation and Ajv logged `unknown format "..." ignored in schema at path "..."`. The formats
+  from `ajv-formats` are now registered on the Ajv instance used by `toStandardSchema()`, so invalid values
+  are rejected instead.
+
+  This affects every plain JSON Schema validated through `toStandardSchema()` — MCP tool inputs, core tool
+  schemas and structured output. Schemas written with Zod or another Standard Schema library are unaffected.
+
+  Two related changes come with it:
+
+  - `format` is now checked, so values that used to be accepted are rejected. For `date-time`, replace values
+    without a timezone (before: `2026-11-05T10:00:00`) with timezone-qualified values (after:
+    `2026-11-05T10:00:00Z` or `2026-11-05T10:00:00+00:00`).
+  - `formatMinimum` / `formatMaximum` on `date` / `date-time` now take effect.
+
+  For direct `@mastra/schema-compat` callers, validate a timezone-qualified value:
+
+  ```ts
+  import { toStandardSchema } from '@mastra/schema-compat/adapters/json-schema';
+
+  const schema = { type: 'string', format: 'date-time' } as const;
+  const result = toStandardSchema(schema)['~standard'].validate('2026-11-05T10:00:00Z');
+  ```
+
+  If direct callers need the previous behavior, use
+  `toStandardSchema(schema, { ajvOptions: { validateFormats: false } })`. MCP tool inputs, core tool schemas,
+  and structured output do not expose this opt-out; supply format-valid values for those paths instead.
+
+  Fixes [#29385](https://github.com/mastra-ai/mastra/issues/29385)
+
+## 1.3.18-alpha.0
+
+### Patch Changes
+
+- Fixed Gemini rejecting tools whose input schema has a numeric, boolean or empty-string literal, such as `z.literal(1)`, `z.literal(true)` or `z.union([z.string(), z.literal('')])`. Gemini only accepts non-empty string enums, so one such field made every request to the agent fail with HTTP 400. These fields are now sent as their plain type with the allowed values in the description. String enums from external JSON Schema that omit `type` now get `type: "string"`. Tool arguments are still validated against your original schema. Fixes #29167. ([#29416](https://github.com/mastra-ai/mastra/pull/29416))
+
 ## 1.3.17
 
 ### Patch Changes

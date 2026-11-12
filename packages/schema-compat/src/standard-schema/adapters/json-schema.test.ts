@@ -1,7 +1,8 @@
 import type { JSONSchema7 } from 'json-schema';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { isStandardSchemaWithJSON } from '../standard-schema';
 import { toStandardSchema } from './json-schema';
+import type { JsonSchemaAdapterOptions } from './json-schema';
 
 describe('json-schema standard-schema adapter', () => {
   describe('toStandardSchema', () => {
@@ -289,6 +290,86 @@ describe('json-schema standard-schema adapter', () => {
       if ('issues' in invalidResult && invalidResult.issues) {
         expect(invalidResult.issues.length).toBeGreaterThan(0);
       }
+    });
+  });
+
+  describe('format keywords', () => {
+    const validate = (schema: JSONSchema7, value: unknown, options?: JsonSchemaAdapterOptions) =>
+      toStandardSchema(schema, options)['~standard'].validate(value);
+
+    const datedSchema = (dialect?: string): JSONSchema7 => ({
+      ...(dialect ? { $schema: dialect } : {}),
+      type: 'object',
+      properties: {
+        email: { type: 'string', format: 'email' },
+        at: { type: 'string', format: 'date-time' },
+      },
+      required: ['email', 'at'],
+    });
+
+    const dialects: [string, string | undefined][] = [
+      ['draft-07', undefined],
+      ['draft 2020-12', 'https://json-schema.org/draft/2020-12/schema'],
+    ];
+
+    it.each(dialects)('enforces standard formats for %s schemas', async (_name, dialect) => {
+      const schema = datedSchema(dialect);
+
+      const valid = await validate(schema, { email: 'ada@example.com', at: '2026-11-05T10:00:00Z' });
+      expect(valid.issues).toBeUndefined();
+
+      const invalidEmail = await validate(schema, { email: 'not-an-email', at: '2026-11-05T10:00:00Z' });
+      expect(invalidEmail.issues?.[0]?.message).toContain('email');
+
+      // ajv-formats requires a timezone offset for date-time
+      const invalidDate = await validate(schema, { email: 'ada@example.com', at: 'tomorrow' });
+      expect(invalidDate.issues?.[0]?.message).toContain('date-time');
+    });
+
+    it('keeps format definitions passed through ajvOptions', async () => {
+      const schema: JSONSchema7 = {
+        type: 'object',
+        properties: {
+          email: { type: 'string', format: 'email' },
+          slug: { type: 'string', format: 'slug' },
+        },
+        required: ['email', 'slug'],
+      };
+      const options: JsonSchemaAdapterOptions = {
+        ajvOptions: { formats: { email: /@mastra\.ai$/, slug: /^[a-z-]+$/ } },
+      };
+
+      const valid = await validate(schema, { email: 'ada@mastra.ai', slug: 'launch-board' }, options);
+      expect(valid.issues).toBeUndefined();
+
+      const invalidEmail = await validate(schema, { email: 'ada@example.com', slug: 'launch-board' }, options);
+      expect(invalidEmail.issues?.[0]?.message).toContain('email');
+
+      const invalidSlug = await validate(schema, { email: 'ada@mastra.ai', slug: 'Launch Board' }, options);
+      expect(invalidSlug.issues?.[0]?.message).toContain('slug');
+    });
+
+    it('does not warn about registered formats', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const result = await validate(datedSchema(), { email: 'ada@example.com', at: '2026-11-05T10:00:00Z' });
+
+        expect(result.issues).toBeUndefined();
+        expect(warn.mock.calls.flat().join(' ')).not.toContain('unknown format');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('allows disabling format validation through ajvOptions', async () => {
+      const result = await validate(
+        datedSchema(),
+        { email: 'not-an-email', at: 'tomorrow' },
+        { ajvOptions: { validateFormats: false } },
+      );
+
+      expect(result.issues).toBeUndefined();
     });
   });
 

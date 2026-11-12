@@ -22,10 +22,6 @@ export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionG
   value => ({ value, label: SESSION_GROUP_BY_LABELS[value] }),
 );
 
-export function isSessionGroupBy(value: unknown): value is SessionGroupBy {
-  return SESSION_GROUP_BYS.some(groupBy => groupBy === value);
-}
-
 export type SessionGroupIcon = 'board' | 'review' | 'user' | 'slack' | 'status' | 'owner' | 'all';
 
 export interface SessionGroupHeading {
@@ -74,13 +70,13 @@ const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> 
       : row.board === undefined
         ? USER_GROUP.key
         : boardGroupKey(row.board),
-  status: row => statusGroupKey(row.status),
+  status: row => statusGroupKey(row.cardStatus ?? row.status),
   owner: row => ownerGroupKey(row.session.userId),
   none: () => ALL_GROUP.key,
 };
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: boardGroupKey(boardId), label, icon: boardId === 'review' ? 'review' : 'board' };
+  return { key: boardGroupKey(boardId), label, icon: 'board' };
 }
 
 function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {
@@ -158,9 +154,13 @@ export function groupSessionRows(
   });
 }
 
-export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
-  const visible = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
-  const open = rows.find(row => row.active);
-  if (open && !visible.includes(open)) visible.push(open);
+export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], additionalRowCount = 0): SessionListRow[] {
+  const collapsed = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
+  // A card whose open session is listed under it keeps the card in view.
+  const open = rows.find(row => row.active || row.childRows?.some(child => child.active));
+  const openOutsideFold = open !== undefined && !collapsed.includes(open);
+  const visible = rows.slice(0, collapsed.length + Number(openOutsideFold) + additionalRowCount);
+  // The open row already occupies a slot, including when a later batch reaches it.
+  if (open && !visible.includes(open)) visible[visible.length - 1] = open;
   return visible;
 }

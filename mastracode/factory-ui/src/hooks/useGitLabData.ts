@@ -30,17 +30,16 @@ export function useGitLabProjectsQuery(enabled: boolean) {
   });
 }
 
-export function useGitLabIssuesQuery(factoryProjectId: string | undefined, board: string | undefined) {
+export function useGitLabIssuesQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.gitlabIssues(baseUrl, factoryProjectId, board),
-    queryFn:
-      factoryProjectId && board
-        ? ({ pageParam }) => listGitLabIssues(baseUrl, factoryProjectId, board, pageParam || undefined)
-        : skipToken,
+    queryKey: queryKeys.gitlabIssues(baseUrl, factoryProjectId),
+    queryFn: factoryProjectId
+      ? ({ pageParam }) => listGitLabIssues(baseUrl, factoryProjectId, pageParam || undefined)
+      : skipToken,
     initialPageParam: '',
     getNextPageParam: lastPage => lastPage.nextCursor,
-    enabled: factoryProjectId !== undefined && board !== undefined,
+    enabled: factoryProjectId !== undefined,
     select: data => data.pages.flatMap(page => page.issues),
     refetchInterval: INTAKE_POLL_MS,
     refetchOnWindowFocus: true,

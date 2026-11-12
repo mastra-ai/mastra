@@ -276,7 +276,11 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
   get storage() {
     if (!this._storage) {
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.
+        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
+          this.#mastra
+            ? ''
+            : ' If this memory belongs to an agent that should inherit storage from Mastra, register the agent with that Mastra instance (for example, via mastra.addAgent(agent)). Standalone agents must configure storage directly on Memory.'
+        }
 
 https://mastra.ai/en/docs/memory/overview`,
       );
@@ -382,6 +386,17 @@ https://mastra.ai/en/docs/memory/overview`,
    */
   protected get isSelfEmbedding(): boolean {
     return !this.embedder && this.vector?.isSelfEmbedding === true;
+  }
+
+  /**
+   * `semanticRecall.maxChunkChars` from this instance's own options. Per-request memory options
+   * can't change it: they arrive from API callers, and a tiny value would cost one embedding and
+   * one vector row per character. Chunk boundaries also decide row ids, so they must stay fixed
+   * for an index.
+   */
+  protected get configuredMaxChunkChars(): number | undefined {
+    const semanticRecall = this.threadConfig.semanticRecall;
+    return typeof semanticRecall === 'object' ? semanticRecall.maxChunkChars : undefined;
   }
 
   protected getEmbeddingIndexName(dimensions?: number): string {
@@ -546,6 +561,15 @@ https://mastra.ai/en/docs/memory/overview`,
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     observabilityContext?: Partial<ObservabilityContext>;
+    /**
+     * The run's record of messages already written to the semantic recall index, from
+     * `MessageList.getEmbeddedMessages()`. Messages recorded with the same text are not embedded
+     * again, and newly embedded ones are added. Agent runs pass it through the save queue;
+     * direct callers omit it.
+     *
+     * @internal
+     */
+    embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -965,6 +989,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
@@ -1108,6 +1133,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticRecallConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }

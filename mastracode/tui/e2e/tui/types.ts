@@ -77,6 +77,7 @@ export type ScenarioName =
   | 'first-run-onboarding'
   | 'github-signals-command'
   | 'schedules-command'
+  | 'schedules-multiline-prompt'
   | 'github-signals-multi-subscribe'
   | 'github-signals-legacy-upgrade'
   | 'github-signals-tool-multi-subscribe'
@@ -150,6 +151,8 @@ export type ScenarioName =
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
   | 'model-search'
+  | 'mouse-modal-and-autocomplete'
+  | 'mouse-input-mode'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
   | 'mode-switch-applies-pack-model'
@@ -245,6 +248,18 @@ export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
+  /** Send an SGR left click at the first on-screen occurrence of `text`. */
+  clickText?: (text: string) => Promise<void>;
+  /** Press at `text` + `fromOffset` columns, drag and release at `text` + `toOffset` columns. */
+  dragText?: (text: string, fromOffset: number, toOffset: number) => Promise<void>;
+  /** Texts the app copied through OSC 52, oldest first. */
+  clipboardWrites?: () => string[];
+  /** Move the mouse (no button held) over the first on-screen occurrence of `text`. */
+  hoverText?: (text: string) => void;
+  /** Send SGR wheel events at the screen centre. */
+  wheel?: (direction: 'up' | 'down', count?: number) => void;
+  /** xterm's current mouse tracking mode ('none' when the terminal owns the mouse). */
+  mouseTracking?: () => string;
   resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
   serializeHistory?: () => { output: string };

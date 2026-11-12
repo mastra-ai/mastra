@@ -1,6 +1,8 @@
+import { boardOf } from '../../factory/boardFlow';
+import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../../factory/boardCandidates';
-import { isPersistedCandidate, persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
+import { SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
@@ -154,10 +156,10 @@ export function createSessionSearchGroups(input: {
   };
 }
 
-function createWorkItemResult(factoryId: string, item: WorkItem): WorkItemSearchResult {
+function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
-  const stage = currentItemStageLabel(item);
+  const stage = currentItemStageLabel(item, board);
 
   return {
     id: item.id,
@@ -191,16 +193,15 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
 /** Board entries with no session to open: unstarted cards, plus live candidates not yet filed as one. */
 export function createWorkItemSearchResults(input: {
   factoryId: string;
+  /** The cards holding no session. */
   workItems: WorkItem[];
+  /** The live candidates no card is filed from. */
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
+  /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
+  boards?: readonly BoardInfo[];
 }): WorkItemSearchResult[] {
-  const filed = persistedSourceKeys(input.workItems);
-  const candidates = input.candidates.filter(({ candidate }) => !isPersistedCandidate(filed, candidate));
-
   return [
-    ...input.workItems
-      .filter(item => Object.keys(item.sessions).length === 0)
-      .map(item => createWorkItemResult(input.factoryId, item)),
-    ...candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
+    ...input.workItems.map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item))),
+    ...input.candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
   ].sort(newestFirst);
 }

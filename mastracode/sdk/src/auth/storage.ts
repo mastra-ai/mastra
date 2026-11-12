@@ -25,6 +25,21 @@ import type {
 } from './types.js';
 
 /**
+ * API keys this process exported to environment variables, keyed by variable name.
+ * `previous` is the value the variable held before the first export, so removing the
+ * key can restore it. Module-level because `process.env` is shared by every instance.
+ */
+const exportedApiKeys = new Map<string, { provider: string; key: string; previous: string | undefined }>();
+
+function exportApiKey(envVar: string, provider: string, key: string): void {
+  const exported = exportedApiKeys.get(envVar);
+  // Saving again keeps the value from before the first export.
+  const previous = exported && process.env[envVar] === exported.key ? exported.previous : process.env[envVar];
+  exportedApiKeys.set(envVar, { provider, key, previous });
+  process.env[envVar] = key;
+}
+
+/**
  * Best/default models for each OAuth provider.
  * Used when auto-selecting a model after login.
  */
@@ -365,7 +380,25 @@ export class AuthStorage {
   setStoredApiKey(provider: string, key: string, envVar?: string): void {
     this.set(`apikey:${provider}`, { type: 'api_key', key });
     if (envVar) {
-      process.env[envVar] = key;
+      exportApiKey(envVar, provider, key);
+    }
+  }
+
+  /**
+   * Remove a stored API key for a provider.
+   * Also undoes the environment variable export done by {@link setStoredApiKey} or
+   * {@link loadStoredApiKeysIntoEnv}: the variable gets back the value it had before
+   * (for example the key the process was started with), or is unset if it had none.
+   * A variable changed since the export is left alone.
+   */
+  removeStoredApiKey(provider: string): void {
+    this.remove(`apikey:${provider}`);
+    for (const [envVar, exported] of exportedApiKeys) {
+      if (exported.provider !== provider) continue;
+      exportedApiKeys.delete(envVar);
+      if (process.env[envVar] !== exported.key) continue;
+      if (exported.previous === undefined) delete process.env[envVar];
+      else process.env[envVar] = exported.previous;
     }
   }
 
@@ -380,7 +413,7 @@ export class AuthStorage {
       const provider = key.substring('apikey:'.length);
       const envVar = providerEnvVars[provider];
       if (envVar && !process.env[envVar]) {
-        process.env[envVar] = cred.key;
+        exportApiKey(envVar, provider, cred.key);
       }
     }
   }

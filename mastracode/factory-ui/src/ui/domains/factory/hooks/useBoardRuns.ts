@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
-import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -18,7 +17,8 @@ export function useBoardRuns({
   refetchItems,
 }: {
   factoryProjectId: string;
-  refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
+  /** A fresh read of the cards a click can land on. */
+  refetchItems: () => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const repositorySlugFor = useCardRepositorySlug(repositories);

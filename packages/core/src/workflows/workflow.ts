@@ -102,7 +102,7 @@ import { claimWorkflowRunOwnership } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
 import { createRunStorage } from './run-storage';
 import type { RunStorage } from './run-storage';
-import { validateCron } from './scheduler/cron';
+import { validateScheduleTiming } from './scheduler/cron';
 import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
   ConditionFunction,
@@ -534,7 +534,7 @@ export function createStep<TStepId extends string>(
 export function createStep<TStepId extends string, TStepOutput>(
   agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-    structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+    structuredOutput: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -2108,7 +2108,9 @@ export class Workflow<
       }
     }
     for (const entry of schedules) {
-      validateCron(entry.cron, entry.timezone);
+      // Declarative schedules are re-validated on every boot, so a `runAt`
+      // or `endAt` that has already passed must not break construction.
+      validateScheduleTiming(entry, { requireFuture: false });
     }
     this.#schedules = schedules.map(cfg => ({ ...cfg }));
     this.id = id;
@@ -2429,7 +2431,7 @@ export class Workflow<
   agent<TStepId extends string, TStepOutput>(
     agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
     options: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-      structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+      structuredOutput: { schema: PublicSchema<TStepOutput> };
       retries?: number;
       scorers?: DynamicArgument<MastraScorers>;
       metadata?: StepMetadata;

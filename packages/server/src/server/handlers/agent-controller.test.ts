@@ -1196,6 +1196,33 @@ describe('agent-controller routes', () => {
       expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
     });
 
+    // The adapter can hand the route a signal that aborted while earlier middleware ran. Without checking
+    // `aborted` up front the session subscription and its 25 s heartbeat stay alive until something cancels the
+    // stream, which a client that already left never does. (#28480)
+    it('ends the stream when the client left before the stream started', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-gone-early',
+        id: 'user-gone-early',
+        ownerId: 'code',
+      });
+      const client = new AbortController();
+      client.abort();
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-gone-early',
+        abortSignal: client.signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+
+      const frames: unknown[] = [];
+      for (let next = await reader.read(); !next.done; next = await reader.read()) frames.push(next.value);
+
+      expect(frames.map(frame => (frame as { type: string }).type)).toEqual(['display_state_changed']);
+    });
+
     it('still sends live display state changes by default', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
@@ -2075,6 +2102,8 @@ describe('agent-controller routes', () => {
         .getAgentController('code')!
         .createSession({ resourceId: 'user-limit', id: 'user-limit', ownerId: 'code' });
       for (let i = 0; i < 4; i++) await session.thread.create({ title: `t${i}` });
+      const memory = (await mastra.getStorage()!.getStore('memory'))!;
+      const listThreads = vi.spyOn(memory, 'listThreads');
 
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
@@ -2091,6 +2120,28 @@ describe('agent-controller routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+      // In-memory storage scans once instead of materializing the whole map for each page.
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(listThreads.mock.calls[0]?.[0]).toMatchObject({
+        perPage: false,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      const fractional = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 1.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(fractional.threads.length).toBe(1);
+
+      const subOne = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 0.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(subOne.threads).toEqual([]);
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {

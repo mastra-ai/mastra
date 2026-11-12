@@ -1,6 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it, vi } from 'vitest';
-import { AISDKV5LanguageModel } from './model';
+import { AISDKV5LanguageModel, prepareAzureStrictToolSchemas } from './model';
 
 function createMockV2Model() {
   return {
@@ -135,6 +135,34 @@ describe('AISDKV5LanguageModel', () => {
       expect(call.providerOptions?.openai?.strictJsonSchema).toBe(false);
     },
   );
+
+  // Strict mode cannot express these schemas: preparing them would drop the record's keys or
+  // throw, so they are sent unchanged (#28593).
+  it.each([
+    [
+      'a free-form record',
+      { type: 'object', properties: { labels: { type: 'object', additionalProperties: { type: 'string' } } } },
+    ],
+    [
+      'conflicting allOf branches',
+      {
+        allOf: [
+          { type: 'object', properties: { id: { type: 'string' } } },
+          { type: 'object', properties: { id: { type: 'number' } } },
+        ],
+      },
+    ],
+  ])('sends a strict Azure tool with %s unchanged', (_name, inputSchema) => {
+    const tool = { type: 'function' as const, name: 'tool', inputSchema: inputSchema as any };
+
+    const prepared = prepareAzureStrictToolSchemas({
+      prompt: [],
+      providerOptions: { openai: { strictJsonSchema: true } },
+      tools: [tool],
+    });
+
+    expect(prepared.tools?.[0]).toEqual(tool);
+  });
 
   describe('supportsStructuredOutputs', () => {
     it('exposes the wrapped model capability', () => {

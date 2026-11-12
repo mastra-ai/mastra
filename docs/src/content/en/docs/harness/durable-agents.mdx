@@ -180,7 +180,7 @@ for await (const chunk of output.fullStream) {
 
 Calling `observe(runId)` without an offset is the supported general reconnect flow. It replays all available cached events before delivering live events. For a completed run, observation replays the retained events and closes. If the run is unknown or its history has been cleared and no live run remains, observation closes without events. The HTTP observe endpoint returns 404 in this case, because it can't check that the caller owns the run.
 
-The optional `offset` is an inclusive, zero-based PubSub event index, not a chunk number, and the public stream doesn't expose it. If an offset skips earlier text deltas, aggregated text is partial and structured output may be invalid. On transports with numeric offset support, an offset beyond the highest retained index also skips live events with lower indexes. A live run waits for the published index to reach the requested offset. A completed run with a retained terminal event closes even when the offset skips every event. Evented agents on a cross-process PubSub, such as Redis Streams, need a server cache shared by every process, such as `RedisServerCache`, for offsets to skip earlier events. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for the full offset and transport behavior.
+The optional `offset` is a run-log position, which chunks report as `chunk.index`. To resume after a dropped connection, pass `index + 1` of the last chunk that has an `index`, or omit `offset` if nothing arrived. This works the same with `stream()` and `observe()`, over HTTP, and in `@mastra/client-js`. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for which chunks carry no index, structured output, and transport limits.
 
 Replay isn't a permanent execution archive. Events remain available only until [cleanup](#cleanup) clears them or the cache removes them. A workflow snapshot can't reconstruct cleared stream events, and disabling caching prevents historical replay.
 
@@ -294,7 +294,7 @@ Durable agent runs are excluded from the generic boot-time restart of active wor
 
 :::warning
 
-Automatic and manual recovery re-run the agentic loop from the last persisted snapshot, which can reissue LLM calls (with real cost) and re-execute tool calls. A sub-agent delegation is one generated `agent-<name>` tool call, and recovery doesn't checkpoint the LLM or tool calls inside that delegation independently. If recovery replays the delegation step, the entire sub-agent run starts again and can repeat inner LLM calls and already-completed tool side effects. Make tools, including tools used by sub-agents, idempotent, or deduplicate their external side effects.
+Automatic and manual recovery continue the run from the last persisted snapshot. Any tool call whose result isn't in that snapshot runs again. Any model response that wasn't saved is requested again, and the model provider bills it again. Make tools idempotent before you rely on recovery. See [make tools safe to repeat](#make-tools-safe-to-repeat).
 
 :::
 
@@ -419,11 +419,109 @@ Durable and evented agents request cancellation of in-flight tool and model call
 
 Cancellation is cooperative. Use the tool execution context's `abortSignal` for cancellable operations, and check it before starting another side effect. A tool that ignores the signal can keep running. Work already completed outside Mastra isn't rolled back.
 
-Recovery can start the same tool call before the old invocation detects ownership loss. Keep tools idempotent or deduplicate external effects even when they handle cancellation. Cancellation reduces overlapping work. It doesn't guarantee exactly-once execution.
+Recovery can start the same tool call before the previous execution detects ownership loss, so cancellation reduces overlapping work but doesn't stop a tool from running twice. See [make tools safe to repeat](#make-tools-safe-to-repeat).
 
 ### Multi-instance deployments
 
 Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boot together race to recover the same orphaned runs, but only one claim succeeds per run and the other replicas skip it. This requires a claim that every replica shares: a workflows store that supports run fencing, or a PubSub backend whose lease every replica shares. Without either, gate recovery behind your own leader election or run it from a single replica.
+
+## Database load
+
+Mastra doesn't publish a benchmarked hardware reference for durable agents, so size your database from your own workload. This section covers what drives the load and what to watch.
+
+Each checkpoint upserts the run's full snapshot as JSONB in `mastra_workflow_snapshot`, with one row for the agent workflow and one for its nested execution workflow. The snapshot holds the conversation and every tool result so far, so it grows during a run, and the total bytes a run writes grow faster than its step count. Write load depends on:
+
+- **Checkpoint frequency**: A `createDurableAgent()` agent with `recovery.durableAgents` set to `'off'` (the default) writes few checkpoints. With `'auto'`, it writes a `running` checkpoint at every step. A `createEventedAgent()` agent always writes at every step. See [snapshot persistence](#snapshot-persistence).
+- **Steps per run and payload size**: Every byte a tool returns is written again in each later checkpoint of the run.
+- **Concurrent runs**: Load grows with the number of runs in progress.
+
+To reduce writes and keep crash recovery:
+
+- Give the agent a fixed memory instance, so checkpoints store references to saved messages instead of full copies.
+- Return small tool results, such as IDs or URLs, instead of large documents.
+- Split long tasks into shorter runs.
+
+Each `PostgresStore` opens up to `max` connections, 20 by default, per process. A `pool`, `writePool`, or separate `readPool` you pass in uses its own limit. Add up the limits of every pool that connects to the server, across all replicas and processes, and keep the total below the server's `max_connections` with room for other clients. If you put a transaction-mode pooler such as PgBouncer in front, budget its server-side connections the same way. See [PostgreSQL](/integrations/databases/postgresql).
+
+Every checkpoint upsert leaves a dead row version, and Mastra deletes a finished run's rows, so `mastra_workflow_snapshot` collects dead rows fast. Suspended runs keep their rows. If deletion fails, Mastra logs a `Failed to delete workflow snapshot rows` warning and the rows stay until you delete or [prune](/reference/storage/retention) them. The exception is a `createEventedAgent()` agent on a shared pub/sub transport with storage-backed fencing: it logs `durable execution delivery failed` and retries the delete with the event. Pruning removes snapshots by inactivity, including suspended runs and running runs whose step hasn't written a checkpoint recently. Set `workflowSnapshot.maxAge` longer than your longest expected suspension and your longest step, or leave snapshot pruning off if you can't bound them. Make autovacuum more aggressive for this table. Replace `public` with your `schemaName` if you set one:
+
+```sql
+ALTER TABLE public.mastra_workflow_snapshot SET (
+  autovacuum_vacuum_scale_factor = 0.01,
+  toast.autovacuum_vacuum_scale_factor = 0.01
+);
+```
+
+To decide whether to add capacity or tune the workload, watch:
+
+- `n_dead_tup` and `last_autovacuum` for `mastra_workflow_snapshot` in `pg_stat_user_tables`, and for its TOAST table in `pg_stat_all_tables`, where large snapshots are stored
+- The snapshot upsert's share of `total_exec_time` and `wal_bytes` in `pg_stat_statements`. This requires `pg_stat_statements` in `shared_preload_libraries` (a server restart) and `CREATE EXTENSION pg_stat_statements`
+- WAL bytes per second (`pg_stat_wal`)
+- Active connections compared with the pool `max`
+
+If the snapshot upsert dominates writes, reduce checkpoint size or frequency first. If many unrelated queries are slow, add capacity.
+
+## Make tools safe to repeat
+
+A durable or evented agent can run the same tool call more than once. A tool call is one request from the model to run a tool. A repeat happens in these situations:
+
+- The process stops while the tool runs, or after the tool returns but before Mastra saves its result. When the run is [recovered](#crash-recovery), the tool runs again.
+- With Postgres storage and Redis Streams PubSub, an evented worker stops before it publishes the tool's result. Another worker [reclaims the step](/reference/pubsub/redis-streams#evented-agent-worker-takeover) and runs the tool again.
+- Recovery takes over a run while the previous execution is still running the tool, for example with [`recover()` and `force: true`](#manual-recovery). Both executions can run the tool concurrently. See [stop work after ownership loss](#stop-work-after-ownership-loss).
+
+[Inngest agents](#inngest-powered-with-createinngestagent) configured with `retries` also run an interrupted tool step again.
+
+Mastra can't undo work a tool already did in another system. A tool that sends an email, charges a card, or deletes a record can do it twice. Make these tools idempotent. An idempotent tool has no additional effect when it runs a second time for the same call.
+
+### Use the tool call ID as an idempotency key
+
+When an agent runs a tool, `context.agent.toolCallId` identifies the tool call. Mastra saves the model's response before it runs any tool in that response, so a tool that runs again for the same call receives the same `toolCallId`.
+
+Pass the ID to services that accept an idempotency key. This tool refunds a Stripe payment and sends the tool call ID as Stripe's [idempotency key](https://docs.stripe.com/api/idempotent_requests). When the tool runs again for the same call, Stripe returns the first refund instead of creating a second one:
+
+```typescript title="src/mastra/tools/refund-payment.ts"
+import { createTool } from '@mastra/core/tools'
+import Stripe from 'stripe'
+import { z } from 'zod'
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+
+export const refundPayment = createTool({
+  id: 'refund-payment',
+  description: 'Refunds a customer payment',
+  inputSchema: z.object({
+    paymentIntentId: z.string(),
+  }),
+  outputSchema: z.object({
+    refundId: z.string(),
+    status: z.string().nullable(),
+  }),
+  execute: async ({ paymentIntentId }, context) => {
+    const toolCallId = context.agent?.toolCallId
+    if (!toolCallId) throw new Error('refund-payment must be called by an agent')
+
+    const refund = await stripe.refunds.create(
+      { payment_intent: paymentIntentId },
+      { idempotencyKey: `refund-payment:${paymentIntentId}:${toolCallId}` },
+    )
+
+    return { refundId: refund.id, status: refund.status }
+  },
+})
+```
+
+`context.agent` is only set when an agent runs the tool, which is why the example checks for it. The tool call ID comes from the model provider, and some providers reuse IDs across responses. Adding the payment ID keeps two different refunds from sharing a key. Stripe can remove an idempotency key once it's 24 hours old, so a run recovered after that can create a second refund.
+
+If a service doesn't accept idempotency keys, build the key the same way and record it together with the change:
+
+- In a database, write the key to a column with a unique constraint in the same transaction as the change, and skip the change when the key already exists, for example with `INSERT ... ON CONFLICT DO NOTHING` in Postgres. Store the tool's result with the key so a repeated call can return the same result to the model.
+- With other services, attach the key to the request and check for it before you perform the action, for example by searching for an email that carries the key in a header. When executions overlap, each one can pass this check before the other sends its request.
+
+### Protect tools inside subagents
+
+A [subagent](/docs/subagents) delegation is one `agent-<name>` tool call. Recovery doesn't save the model and tool calls inside it, so when the delegation runs again, the subagent starts over and its tools receive new `toolCallId` values. A key built from the tool call ID doesn't detect these repeats.
+
+For tools a subagent uses, build the key from data that identifies the intended effect. For a refund, that could be the payment ID combined with an order line ID from the tool's input. Avoid a key that would also block a legitimate second action, such as a key built from the payment ID alone when partial refunds are allowed.
 
 ## Related
 

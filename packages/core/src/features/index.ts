@@ -40,6 +40,10 @@ export const coreFeatures = new Set<string>([
   // Experiments can be deleted, including experiments orphaned by dataset
   // deletion, and the deletion cascades to the experiment's observability traces.
   'experiment-deletion',
+  // compareExperiments filters by organizationId and projectId. Older cores
+  // accept those arguments and ignore them, so callers must fail closed on a
+  // scoped comparison unless this flag is present.
+  'experiment-comparison-tenancy',
   // Processors can declare the span type they are traced as, and the built-in
   // subsystems declare theirs: SKILL_ACTION, AGENT_SIGNAL, and the memory and
   // workspace types for skills, state signals, memory and workspace
