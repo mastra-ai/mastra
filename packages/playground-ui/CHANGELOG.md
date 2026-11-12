@@ -1,5 +1,59 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.15
+
+### Minor Changes
+
+- One settings layout for Studio, Factory and Platform, from `@mastra/playground-ui/new/settings`: ([#29400](https://github.com/mastra-ai/mastra/pull/29400))
+
+  - `SettingsLayout` is the page: a centered 640px column with the title above its sections, 28px apart. Pass `header` for an app's own header.
+  - `SettingsTitle` sits dimmed above each card. `info` shows a section description as a tooltip on the title.
+  - `SettingsContainer` is a borderless card that owns its rows' spacing (14px padding, hairlines between rows that stop at it), so rows carry no padding of their own. Rows with nothing in them take no space.
+  - `SettingsRow` keeps the label and description on the left and the control on the right. Text fields share one 13.75rem width; selects hug their value up to that width; switches and buttons keep their size. `controlPlacement="below"` puts a control under its label at full width.
+  - Lists: `SettingsListHeader` puts a count and the list's action at the top of its card, `SettingsEmptyRow` holds the empty text and that same action in one row, and `SettingsItem` (with `SettingsItemIcon` for logos and icons, the same size as `Avatar size="md"`) is one thing in a list. `SettingsNoticeRow` keeps a list's errors inside its card.
+  - `SettingsSkeleton` is the one loading state for settings: placeholder rows (`variant="row"`) or list items (`variant="item"`) built from the real rows, inside the same card.
+  - `CopyInput` (`@mastra/playground-ui/components/CopyInput`) shows a read-only value, like an ID, with a copy button.
+
+  Breaking changes in `@mastra/playground-ui/new/settings`:
+
+  - `SettingsLayout` no longer takes `description`, `inset` or `variant`. Put a page description in the first section, and pass `header` for a header of your own instead of `variant="header"`.
+  - `SettingsContainer` no longer takes `variant`, and `SettingsContainerVariant` is no longer exported. Drop `variant="inset"`; every settings card has the same look.
+
+  Input, InputGroup and select values now use the regular-weight `text-body-sm`, like Textarea.
+
+  ```tsx
+  <SettingsLayout title="General">
+    <SettingsGroup>
+      <SettingsTitle>Accounts</SettingsTitle>
+      <SettingsContainer>
+        {accounts.length === 0 ? (
+          <SettingsEmptyRow action={addButton}>No accounts connected</SettingsEmptyRow>
+        ) : (
+          <>
+            <SettingsListHeader action={addButton}>{accounts.length} accounts</SettingsListHeader>
+            {accounts.map(account => (
+              <SettingsItem
+                key={account.id}
+                media={<SettingsItemIcon>{account.icon}</SettingsItemIcon>}
+                title={account.name}
+              />
+            ))}
+          </>
+        )}
+      </SettingsContainer>
+    </SettingsGroup>
+  </SettingsLayout>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6ad8e7e`](https://github.com/mastra-ai/mastra/commit/6ad8e7eb9d096aa3e2c7d291aa3d4cafa5f960ef), [`4fcc168`](https://github.com/mastra-ai/mastra/commit/4fcc168fa1b65b77e622a3d6d7a88041cd3d0843), [`18168d5`](https://github.com/mastra-ai/mastra/commit/18168d518cc663b189cced787efb70c376efc0b3), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`4ba2bde`](https://github.com/mastra-ai/mastra/commit/4ba2bdef8973889c664c14ff1e221016c94eb3f4), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`e58a7d5`](https://github.com/mastra-ai/mastra/commit/e58a7d5cd68b8b7b4fc34051eb5593bbbee63f01), [`5ff479a`](https://github.com/mastra-ai/mastra/commit/5ff479a34b6b0151da2699a347f8e680b8d558ae), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`5251e71`](https://github.com/mastra-ai/mastra/commit/5251e7199e71278ccfde7ca2d33320b3ea681731), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781), [`0b24f9c`](https://github.com/mastra-ai/mastra/commit/0b24f9cdb0b0835289acbc860c4bb29934845534)]:
+  - @mastra/react@1.15.0-alpha.13
+  - @mastra/core@1.83.0-alpha.13
+  - @mastra/client-js@1.60.0-alpha.13
+  - @mastra/memory@1.41.1-alpha.5
+  - @mastra/ai-sdk@1.12.0-alpha.1
+
 ## 69.0.0-alpha.14
 
 ### Minor Changes

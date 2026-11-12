@@ -1,5 +1,18 @@
 # @mastra/inngest
 
+## 1.11.2-alpha.9
+
+### Patch Changes
+
+- Fixed resumed Inngest workflows and durable agents keeping the user who started the run. Resuming now takes the authenticated user, roles and permissions only from the request doing the resuming, so a resume without a signed-in user no longer sees the original user in `requestContext` or in the `user` argument of dynamic agent options. ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+  `@mastra/inngest` now requires `@mastra/core` 1.83.0 or later.
+
+- Inngest durable agents now stop steps running on other workers when `modelSettings.timeout.totalMs` expires. Previously only the process that started the run stopped at the deadline; a tool already running on a separate Inngest worker kept going and the run could call the model again. Now the tool's `abortSignal` fires with a `MastraTimeoutError` on whichever worker runs it, the run makes no further model calls, and the caller still receives exactly one `MastraTimeoutError`. A step that first reaches a worker after the deadline stops there too, because the deadline travels with the run. A tool that ignores its `abortSignal` no longer holds the run open: once the abort grace period passes, its step is saved with the aborted-tool notice, the same as a tool that returns after the deadline. ([#29002](https://github.com/mastra-ai/mastra/pull/29002))
+
+- Updated dependencies [[`4fcc168`](https://github.com/mastra-ai/mastra/commit/4fcc168fa1b65b77e622a3d6d7a88041cd3d0843), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`4ba2bde`](https://github.com/mastra-ai/mastra/commit/4ba2bdef8973889c664c14ff1e221016c94eb3f4), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`e58a7d5`](https://github.com/mastra-ai/mastra/commit/e58a7d5cd68b8b7b4fc34051eb5593bbbee63f01), [`5ff479a`](https://github.com/mastra-ai/mastra/commit/5ff479a34b6b0151da2699a347f8e680b8d558ae), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`5251e71`](https://github.com/mastra-ai/mastra/commit/5251e7199e71278ccfde7ca2d33320b3ea681731), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781), [`0b24f9c`](https://github.com/mastra-ai/mastra/commit/0b24f9cdb0b0835289acbc860c4bb29934845534)]:
+  - @mastra/core@1.83.0-alpha.13
+
 ## 1.11.2-alpha.8
 
 ### Patch Changes

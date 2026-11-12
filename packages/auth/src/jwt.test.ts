@@ -1,5 +1,11 @@
+import { createHmac, createSecretKey, KeyObject } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
+import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import jwt from 'jsonwebtoken';
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 
 import { MastraJwtAuth } from './jwt';
 
@@ -191,6 +197,167 @@ describe('MastraJwtAuth', () => {
       const payload = await auth.authenticateToken(token);
 
       expect(payload.sub).toBe('user-123');
+    });
+
+    // RBAC and FGA look the user up by `id`; an OIDC access token only carries `sub`.
+    it('exposes the subject as the user id when the token has no id claim', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+
+      const payload = await auth.authenticateToken(signToken({ sub: 'user-123' }));
+
+      expect(payload.id).toBe('user-123');
+    });
+
+    it('keeps an id claim the token already has', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+
+      const payload = await auth.authenticateToken(signToken({ sub: 'user-123', id: 'custom-id' }));
+
+      expect(payload).toEqual(expect.objectContaining({ sub: 'user-123', id: 'custom-id' }));
+    });
+
+    it('adds no id to a token without a subject', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+
+      const payload = await auth.authenticateToken(signToken({ email: 'a@example.com' }));
+
+      expect(payload.id).toBeUndefined();
+    });
+
+    it('enforces the issuer when configured', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET, issuer: 'https://issuer.example' });
+
+      await expect(
+        auth.authenticateToken(jwt.sign({ sub: 'u', iss: 'https://issuer.example' }, SECRET)),
+      ).resolves.toEqual(expect.objectContaining({ sub: 'u' }));
+      await expect(
+        auth.authenticateToken(jwt.sign({ sub: 'u', iss: 'https://other.example' }, SECRET)),
+      ).rejects.toThrow(/issuer/);
+      await expect(auth.authenticateToken(signToken({ sub: 'u' }))).rejects.toThrow(/issuer/);
+    });
+  });
+
+  describe('construction', () => {
+    it('rejects both a secret and a jwksUri', () => {
+      expect(() => new MastraJwtAuth({ secret: SECRET, jwksUri: 'http://localhost/jwks' })).toThrow(/either/);
+    });
+
+    it('rejects JWT_AUTH_SECRET and JWT_AUTH_JWKS_URI set together', () => {
+      vi.stubEnv('JWT_AUTH_SECRET', SECRET);
+      vi.stubEnv('JWT_AUTH_JWKS_URI', 'http://localhost/jwks');
+      try {
+        expect(() => new MastraJwtAuth()).toThrow(/either/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+  });
+
+  describe('JWKS', () => {
+    const ISSUER = 'https://issuer.example';
+    let server: Server;
+    let jwksUri: string;
+    let privateKey: CryptoKey;
+    let otherPrivateKey: CryptoKey;
+    let publicKeyPem: string;
+    let jwksRequests = 0;
+
+    beforeAll(async () => {
+      const pair = await generateKeyPair('RS256');
+      privateKey = pair.privateKey;
+      publicKeyPem = KeyObject.from(pair.publicKey).export({ type: 'spki', format: 'pem' }) as string;
+      otherPrivateKey = (await generateKeyPair('RS256')).privateKey;
+      const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
+      server = createServer((_req, res) => {
+        jwksRequests++;
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ keys: [jwk] }));
+      });
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      jwksUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}/.well-known/jwks.json`;
+    });
+
+    afterAll(async () => {
+      await new Promise(resolve => server.close(resolve));
+    });
+
+    function sign(claims: Record<string, unknown>, key: CryptoKey = privateKey) {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+        .setIssuer(ISSUER)
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(key);
+    }
+
+    it('rate-limits JWKS fetches for tokens with unknown key ids', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      const before = jwksRequests;
+      const tokens = await Promise.all(
+        Array.from({ length: 30 }, (_, i) =>
+          new SignJWT({ sub: 'attacker' })
+            .setProtectedHeader({ alg: 'RS256', kid: `random-${i}-${Math.random()}` })
+            .setIssuer(ISSUER)
+            .setExpirationTime('5m')
+            .sign(otherPrivateKey),
+        ),
+      );
+      for (const token of tokens) {
+        await expect(auth.authenticateToken(token)).rejects.toThrow();
+      }
+      expect(jwksRequests - before).toBeLessThanOrEqual(10);
+    });
+
+    it('verifies tokens signed by a key in the JWKS', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      const payload = await auth.authenticateToken(await sign({ sub: 'user-1' }));
+      expect(payload).toEqual(expect.objectContaining({ sub: 'user-1', iss: ISSUER }));
+    });
+
+    it('rejects tokens signed by another key', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      await expect(auth.authenticateToken(await sign({ sub: 'user-1' }, otherPrivateKey))).rejects.toThrow(/signature/);
+    });
+
+    it('rejects HMAC tokens signed with the public key material (algorithm confusion)', async () => {
+      const auth = new MastraJwtAuth({ jwksUri });
+      // The attack: HS256 keyed with the public key exactly as the JWKS client hands it to the verifier.
+      const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+      const now = Math.floor(Date.now() / 1000);
+      const unsigned = `${encode({ alg: 'HS256', typ: 'JWT', kid: 'key-1' })}.${encode({ sub: 'attacker', iat: now, exp: now + 300 })}`;
+      const forged = `${unsigned}.${createHmac('sha256', publicKeyPem).update(unsigned).digest('base64url')}`;
+      // Sanity check: the signature is a valid HS256 signature keyed with the public key bytes.
+      expect(jwt.verify(forged, createSecretKey(Buffer.from(publicKeyPem)), { algorithms: ['HS256'] })).toMatchObject({
+        sub: 'attacker',
+      });
+      await expect(auth.authenticateToken(forged)).rejects.toThrow();
+    });
+
+    it('rejects tokens from another issuer', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: 'https://someone-else.example' });
+      await expect(auth.authenticateToken(await sign({ sub: 'user-1' }))).rejects.toThrow(/issuer/);
+    });
+
+    it('advertises the issuer as authorization server', () => {
+      expect(new MastraJwtAuth({ jwksUri, issuer: ISSUER }).getOAuthMetadata()).toEqual({
+        authorizationServers: [ISSUER],
+      });
+      expect(new MastraJwtAuth({ jwksUri }).getOAuthMetadata()).toBeUndefined();
+    });
+
+    it('checks the token audience for string and array aud claims', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      const resource = 'https://api.example.com/api/mcp';
+
+      const single = await auth.authenticateToken(await sign({ sub: 'u', aud: resource }));
+      const multiple = await auth.authenticateToken(await sign({ sub: 'u', aud: ['https://other', resource] }));
+      const other = await auth.authenticateToken(await sign({ sub: 'u', aud: 'https://other' }));
+      const none = await auth.authenticateToken(await sign({ sub: 'u' }));
+
+      expect(auth.verifyAudience(single, resource)).toBe(true);
+      expect(auth.verifyAudience(multiple, resource)).toBe(true);
+      expect(auth.verifyAudience(other, resource)).toBe(false);
+      expect(auth.verifyAudience(none, resource)).toBe(false);
     });
   });
 });
