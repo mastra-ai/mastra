@@ -27,6 +27,7 @@ import {
   restartOutcome,
   runIsLive,
   runStatus,
+  scanning,
   shapes,
   sleep,
   startReplica,
@@ -68,7 +69,7 @@ describe('evented restart refusal (#28712)', () => {
     await Promise.all(booting.map(replica => replica.mastra.restartAllActiveWorkflowRuns()));
     expect(tracked.executions).toEqual(['A:a']);
 
-    // The sweeps re-check once the leases could have lapsed, and one of them recovers the run.
+    // Their recovery loops look again once the leases could have lapsed, and one of them recovers the run.
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 15_000 });
     const recovered = tracked.executions.filter(e => !e.startsWith('A:'));
     expect(recovered).toHaveLength(1);
@@ -108,17 +109,19 @@ describe('evented restart refusal (#28712)', () => {
     const storage = new InMemoryStore();
     const tracked = track({ blocks: ['a'] });
     const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    const c = await startReplica(storage, shapes.step.build(tracked.reporter('C')));
+    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')), { recovery: scanning });
+    const c = await startReplica(storage, shapes.step.build(tracked.reporter('C')), { recovery: scanning });
     const run = await a.workflow.createRun();
     await run.startAsync({ inputData: { n: 1 } });
     await tracked.allBlocked;
+    const blockedSince = Date.now();
 
-    // Both sweeps are refused, then re-check the run once the liveness they saw could have
-    // lapsed. A keeps it fresh, so at least one re-check is refused as well.
+    // Both boot calls leave the run alone, and so do the recovery loops ticking on while A keeps
+    // the run live for longer than the liveness TTL.
     const leases = await recordLeases(storage);
     await Promise.all([b.mastra.restartAllActiveWorkflowRuns(), c.mastra.restartAllActiveWorkflowRuns()]);
     await leases.until(() => leases.reads.filter(key => key === runLivenessKey(run.runId)).length >= 3);
+    await sleep(Math.max(0, blockedSince + WORKFLOW_RUN_LEASE_TTL_MS * 2 - Date.now()));
 
     tracked.release();
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));

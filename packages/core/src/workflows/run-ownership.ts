@@ -16,17 +16,24 @@ const UNFENCED: WorkflowRunOwnership = { release: async () => {} };
  * Runs `tick` `intervalMs` after it starts, then again `intervalMs` after
  * each run of it settles, until the returned function is called. A tick that
  * is running when the chain is stopped finishes, and nothing runs after it.
- * The timer is unref'd and stays the one created here, so every tick runs in
- * the async context this function was called in. `tick` reports its own
- * failures and must not reject.
+ * Every tick runs in the async context this function was called in, and the
+ * timer is unref'd. `tick` reports its own failures and must not reject.
+ *
+ * `intervalMs` can be a function, read before each wait, for a delay that
+ * follows what the last tick saw. With `immediately`, the first tick runs at
+ * once instead of after the first wait.
  */
-export function repeatAfterSettled(tick: () => Promise<void>, intervalMs: number): () => void {
+export function repeatAfterSettled(
+  tick: () => Promise<void>,
+  intervalMs: number | (() => number),
+  { immediately = false }: { immediately?: boolean } = {},
+): () => void {
   let stopped = false;
-  let timer: ReturnType<typeof setTimeout>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
   const arm = () => {
     // `run` never rejects: `tick` handles its own errors.
-    timer = setTimeout(() => void run(), intervalMs);
+    timer = setTimeout(() => void run(), typeof intervalMs === 'number' ? intervalMs : intervalMs());
     timer.unref?.();
   };
 
@@ -36,10 +43,11 @@ export function repeatAfterSettled(tick: () => Promise<void>, intervalMs: number
     } finally {
       // Checked after the tick: stopping while a tick runs must keep it from re-arming.
       if (!stopped) {
-        // Runtimes whose timers are plain numbers (Workers, browsers) have no refresh(); a new
-        // timer created here inherits this callback's context, which is the first timer's.
-        const { refresh } = timer as { refresh?: () => unknown };
-        if (refresh) {
+        // A fixed delay reuses the timer. A changing delay, and runtimes whose timers are plain
+        // numbers (Workers, browsers), need a new one, which inherits this callback's context: the
+        // first timer's, or the caller's for an immediate first tick.
+        const { refresh } = (timer ?? {}) as { refresh?: () => unknown };
+        if (refresh && typeof intervalMs === 'number') {
           refresh.call(timer);
         } else {
           arm();
@@ -48,7 +56,11 @@ export function repeatAfterSettled(tick: () => Promise<void>, intervalMs: number
     }
   };
 
-  arm();
+  if (immediately) {
+    void run();
+  } else {
+    arm();
+  }
 
   return () => {
     stopped = true;

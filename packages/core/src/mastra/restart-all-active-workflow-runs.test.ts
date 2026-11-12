@@ -287,11 +287,18 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       workflowConcurrency: 5,
       // The in-process pubsub is the default.
       workflowGraceMs: 2_000,
+      workflowScanIntervalMs: 60_000,
       durableAgents: 'off',
     });
     expect(
-      new Mastra({ logger: false, recovery: { workflows: 'off', workflowConcurrency: 0 } }).recoveryConfig,
-    ).toMatchObject({ workflows: 'off', workflowConcurrency: 1 });
+      new Mastra({
+        logger: false,
+        recovery: { workflows: 'off', workflowConcurrency: 0, workflowScanIntervalMs: -1 },
+      }).recoveryConfig,
+    ).toMatchObject({ workflows: 'off', workflowConcurrency: 1, workflowScanIntervalMs: 60_000 });
+    expect(new Mastra({ logger: false, recovery: { workflowScanIntervalMs: 2 ** 40 } }).recoveryConfig).toMatchObject({
+      workflowScanIntervalMs: 2 ** 31 - 1,
+    });
     // A minute when events go through a broker, unless set.
     const broker = sharedBroker();
     expect(new Mastra({ logger: false, pubsub: broker.connect() }).recoveryConfig.workflowGraceMs).toBe(60_000);

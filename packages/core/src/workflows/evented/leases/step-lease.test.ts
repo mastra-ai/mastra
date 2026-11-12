@@ -31,6 +31,7 @@ import {
   recordLeases,
   replicas,
   runStatus,
+  scanning,
   shapes,
   sleep,
   startReplica,
@@ -248,7 +249,7 @@ describe('evented step leases (#28712)', () => {
   it.each([
     ['hands a waiting delivery back to the broker when its replica shuts down', 2, 'while waiting', true],
     ['does not fail a run when a delivery of its running step has used up its attempts', 10, undefined, false],
-    // B schedules no re-check while shutting down, so it must not acknowledge the delivery.
+    // B is going away, so it hands the delivery back for a replica that stays rather than acknowledge it.
     [
       'hands an exhausted delivery of a running step back to the broker when its replica shuts down',
       10,
@@ -315,10 +316,13 @@ describe('evented step leases (#28712)', () => {
   );
 
   it('recovers a run once when the replica running its step crashes after an exhausted delivery was dropped', async () => {
-    const { storage, tracked, a, b, run, delivery } = await stepRunningOnA({ hangForever: true });
+    const { storage, tracked, a, b, run, delivery } = await stepRunningOnA({
+      hangForever: true,
+      b: { recovery: scanning },
+    });
     expect(await b.mastra.handleWorkflowEvent({ ...delivery, deliveryAttempt: 10 })).toEqual({ ok: true });
 
-    // The dropped delivery can no longer bring the step back, so B re-checks the run itself.
+    // The dropped delivery can no longer bring the step back; B's recovery loop restarts the run.
     await crash(a, storage, [stepOccurrenceKey(run.runId, [0]), runLivenessKey(run.runId)]);
 
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 15_000 });
@@ -331,8 +335,6 @@ describe('evented step leases (#28712)', () => {
   ] as const)(
     '%s whose nested step dropped an exhausted delivery before its replica crashed',
     async (_, restartable) => {
-      // Re-checks fire right at the lease expiry, so a re-check that would happen does so within the wait below.
-      vi.spyOn(Math, 'random').mockReturnValue(0);
       const storage = new InMemoryStore();
       const executions: string[] = [];
       const build = (replica: string) => {
@@ -363,7 +365,7 @@ describe('evented step leases (#28712)', () => {
       const onA = build('A');
       const onB = build('B');
       const a = await startReplica(storage, onA.parent, { nested: { child: onA.child } });
-      const b = await startReplica(storage, onB.parent, { nested: { child: onB.child } });
+      const b = await startReplica(storage, onB.parent, { nested: { child: onB.child }, recovery: scanning });
       let delivery: Event | undefined;
       await a.pubsub.subscribe('workflows', event => {
         // A nested event carries its parent's step graph; the broker delivers it serialized.
@@ -386,7 +388,8 @@ describe('evented step leases (#28712)', () => {
         await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 10_000 });
         expect(executions).toEqual(['A', 'B']);
       } else {
-        await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 3);
+        // Past the point B's loop restarts the restartable parent.
+        await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 3_000);
         expect(executions).toEqual(['A']);
         expect(await runStatus(storage, run.runId)).toBe('running');
       }

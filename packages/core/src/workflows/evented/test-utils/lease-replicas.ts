@@ -9,6 +9,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
+import type { MastraRecoveryConfig } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { runLivenessKey } from '../leases';
 import { abandonLease } from './abandon-lease';
@@ -130,11 +131,21 @@ export async function stopReplicas() {
   await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown({ drainTimeout: 0 })));
 }
 
-/** Starts a replica running `workflow` (registered as `leased`) and any nested workflows it calls. */
+/** Recovery settings under which a replica's recovery loop finds a stopped run within a test. */
+export const scanning = { workflowScanIntervalMs: 100 };
+
+/**
+ * Starts a replica running `workflow` (registered as `leased`) and any nested workflows it calls,
+ * with `recovery` as its recovery settings.
+ */
 export async function startReplica<W extends Built>(
   storage: Store,
   workflow: W,
-  { pubsub = new EventEmitterPubSub() as PubSub, nested = {} as Record<string, Built> } = {},
+  {
+    pubsub = new EventEmitterPubSub() as PubSub,
+    nested = {} as Record<string, Built>,
+    recovery = undefined as MastraRecoveryConfig | undefined,
+  } = {},
 ) {
   const mastra = new Mastra({
     logger: false,
@@ -142,7 +153,7 @@ export async function startReplica<W extends Built>(
     pubsub,
     workflows: { leased: workflow, ...nested } as any,
     // A zero grace leaves only the leases to keep a replica's recovery off a run, which is what these tests check.
-    recovery: { workflowGraceMs: 0 },
+    recovery: { workflowGraceMs: 0, ...recovery },
   });
   await mastra.startWorkers();
   replicas.push(mastra);

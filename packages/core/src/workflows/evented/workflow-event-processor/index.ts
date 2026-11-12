@@ -5411,35 +5411,21 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
         // Deliveries a shutting-down process deferred while another worker ran the step count
         // toward the transport's attempt number, though no attempt ran. Failing the run here would
-        // fail a step that is still running. The holder finishes it instead. This delivery was the
-        // run's way back if the holder dies, so the top-level run is re-checked for recovery the
-        // way a refused boot-time restart is, until it settles or its liveness lapses. A workflow
-        // recovery does not restart, or one this instance cannot resolve, gets no re-check.
+        // fail a step that is still running. The holder finishes it instead. Should the holder die,
+        // the recovery loop of any instance running workers restarts the run once its liveness
+        // lapses and the grace period passes.
         const lease = event.type === 'workflow.step.run' ? await this.#stepLeaseElsewhere(event) : null;
         if (lease && 'live' in lease) {
-          // A process shutting down schedules no re-check, so acknowledging here would leave no way
-          // back if the holder dies. Hand the delivery back to the transport, as a deferral does.
+          // A process shutting down is handing its work back; the transport redelivers the event to
+          // an instance that stays, as it does a deferral.
           if (this.mastra.__shuttingDown) {
             return { ok: false, retry: true };
           }
 
-          const holder = lease.live;
           this.deliveryAttempts.delete(eventKey);
-          // Recovery restarts top-level runs; a nested run is driven again through its root.
-          let root = event.data as { workflowId: string; runId: string; parentWorkflow?: ParentWorkflow };
-          while (root.parentWorkflow) {
-            root = root.parentWorkflow;
-          }
-
-          const rechecked = this.mastra.__scheduleWorkflowRecoveryRecheck(
-            root.workflowId,
-            root.runId,
-            holder.leaseExpiresAt?.getTime() ?? Date.now(),
-          );
           this.mastra.getLogger()?.warn('Dropped an exhausted delivery of a step another worker is running', {
             runId: event.runId,
             deliveryAttempt: event.deliveryAttempt,
-            recheckRunId: rechecked ? root.runId : undefined,
           });
           return { ok: true };
         }
