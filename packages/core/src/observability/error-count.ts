@@ -51,14 +51,9 @@ export function getSpanErrorOrigin(error: unknown): SpanErrorOrigin | undefined 
   return undefined;
 }
 
-/** @internal Keep origin available to both local forwarding and error serializers. */
+/** @internal Keep origin available to forwarding and explicit serializers without mutating user errors. */
 export function setSpanErrorOrigin(error: object, origin: SpanErrorOrigin): void {
   origins.set(error, origin);
-  try {
-    Object.defineProperty(error, key, { value: origin, enumerable: false, configurable: true });
-  } catch {
-    // Frozen errors still work in process through the WeakMap.
-  }
 }
 
 /** @internal Return an occurrence only to the span where it originated. */
