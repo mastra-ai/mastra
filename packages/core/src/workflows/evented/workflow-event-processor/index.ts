@@ -1217,11 +1217,21 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    // The run's end was already published: a run whose final snapshot `shouldPersistSnapshot`
-    // declined still reads running until its end deletes it, and a restart then would end it again.
+    // The run's end was already published. A restart: a run whose final snapshot
+    // `shouldPersistSnapshot` declined still reads running until its end deletes it, and the
+    // restart would end it again. A start with no run record: `start()`, time travel and resume
+    // save one before they publish, so this is a late copy of the ended run's own start.
     const leaseStore = await this.#leaseStore(workflow);
-    if (restart && leaseStore && (await leaseStore.getRunOwnership({ runId: runEndedKey(runId) }))?.live) {
-      this.mastra.getLogger()?.info('Dropping a workflow restart: the run already ended', { workflowId, runId });
+    if (
+      leaseStore &&
+      (restart || !existingRun) &&
+      (await leaseStore.getRunOwnership({ runId: runEndedKey(runId) }))?.live
+    ) {
+      this.mastra.getLogger()?.info('Dropping a workflow start: the run already ended', {
+        workflowId,
+        runId,
+        restart: !!restart,
+      });
       return;
     }
 
