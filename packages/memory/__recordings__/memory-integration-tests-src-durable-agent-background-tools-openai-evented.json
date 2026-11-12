@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "26a827800c894341",
+      "hash": "4cacd595c225ec74",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -77,11 +77,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"
@@ -238,7 +238,7 @@
       }
     },
     {
-      "hash": "e089e431b47973d6",
+      "hash": "7dcf84b3d5859ed9",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -321,11 +321,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"
@@ -434,7 +434,7 @@
       }
     },
     {
-      "hash": "1eef21c8e2b16a0c",
+      "hash": "59093d6b18fcf1a4",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -502,11 +502,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"
@@ -681,7 +681,7 @@
       }
     },
     {
-      "hash": "02c2b091648a380b",
+      "hash": "a9a0f23409061790",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -714,7 +714,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_971bNObLRcjriR1ZVAJUKQM5",
-              "output": "Background task started. Task ID: 4e91877e-609b-4f57-9ae0-8f207a1185bc. The tool \"fetchRecord\" is running in the background. You will be notified when it completes."
+              "output": "Background task started. Task ID: 4e91877e-609b-4f57-9ae0-8f207a1185bc. The tool \"fetchRecord\" is running in the background. You will be notified when it completes. Do not poll or wait for it. Continue with independent work, or end your turn."
             }
           ],
           "tools": [
@@ -764,11 +764,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"
@@ -1025,7 +1025,7 @@
       }
     },
     {
-      "hash": "36ce454aed8082c1",
+      "hash": "371536592ed262a3",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1121,11 +1121,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"
@@ -1250,7 +1250,7 @@
       }
     },
     {
-      "hash": "3c8152c111c62e11",
+      "hash": "e82e55339489b314",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1318,11 +1318,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"
@@ -1499,7 +1499,7 @@
       }
     },
     {
-      "hash": "db5b6bccf9550cb5",
+      "hash": "15258fd265316a2f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1582,11 +1582,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"
@@ -1693,7 +1693,7 @@
       }
     },
     {
-      "hash": "a3490734f6ae2b94",
+      "hash": "476501d48cbb41d1",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1789,11 +1789,11 @@
                             ]
                           },
                           "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
+                            "description": "Override timeout in milliseconds for this call. 0 means no timeout.",
                             "anyOf": [
                               {
                                 "type": "number",
-                                "description": "Override timeout in milliseconds for this call."
+                                "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                               },
                               {
                                 "type": "null"

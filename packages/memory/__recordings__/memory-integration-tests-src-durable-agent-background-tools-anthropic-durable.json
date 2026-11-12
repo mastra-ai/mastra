@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "dd7853b5d7409a58",
+      "hash": "1b3ec53bd799cc91",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -62,7 +62,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -138,7 +138,7 @@
       }
     },
     {
-      "hash": "76ddd4e9469d20ae",
+      "hash": "4adeb8ea359c16e6",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -220,7 +220,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -296,7 +296,7 @@
       }
     },
     {
-      "hash": "a0c62f77e2e76f6c",
+      "hash": "077f565836bdaf03",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -349,7 +349,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -429,7 +429,7 @@
       }
     },
     {
-      "hash": "3ea7c6c77dc089f3",
+      "hash": "a8d69951bd38c5f1",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -481,7 +481,7 @@
                 {
                   "type": "tool_result",
                   "tool_use_id": "toolu_01WxprGKFTavnFqEzs9FMUsV",
-                  "content": "Background task started. Task ID: a9acb0e2-a553-46df-9254-66e86ce5c373. The tool \"fetchRecord\" is running in the background. You will be notified when it completes."
+                  "content": "Background task started. Task ID: a9acb0e2-a553-46df-9254-66e86ce5c373. The tool \"fetchRecord\" is running in the background. You will be notified when it completes. Do not poll or wait for it. Continue with independent work, or end your turn."
                 }
               ]
             }
@@ -515,7 +515,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -727,7 +727,7 @@
       }
     },
     {
-      "hash": "06cf99b0f0ad7f79",
+      "hash": "eea55f8cde4ecae7",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -826,7 +826,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -882,7 +882,7 @@
       }
     },
     {
-      "hash": "3766f38734ab0c2f",
+      "hash": "5bf99ea875ccb45b",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -990,7 +990,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -1066,7 +1066,7 @@
       }
     },
     {
-      "hash": "f3c5ff0c2291470b",
+      "hash": "6f229befe76a27fd",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -1119,7 +1119,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -1193,7 +1193,7 @@
       }
     },
     {
-      "hash": "4953588aad2aaa1d",
+      "hash": "1255d970fe8f936a",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -1275,7 +1275,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -1355,7 +1355,7 @@
       }
     },
     {
-      "hash": "35f2b81f890b3120",
+      "hash": "cae0049964af6a58",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -1450,7 +1450,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
@@ -1506,7 +1506,7 @@
       }
     },
     {
-      "hash": "1ccd8d4fc9721984",
+      "hash": "51d513452a203a07",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -1610,7 +1610,7 @@
                       },
                       "timeoutMs": {
                         "type": "number",
-                        "description": "Override timeout in milliseconds for this call."
+                        "description": "Override timeout in milliseconds for this call. 0 means no timeout."
                       },
                       "maxRetries": {
                         "type": "number",
