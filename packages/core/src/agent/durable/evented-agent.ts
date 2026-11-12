@@ -365,6 +365,16 @@ export class EventedAgent<
           // re-driven by recoverActiveRuns() (#22209). If the process dies
           // before this fires, the recover path performs the same cleanup.
           result => {
+            // A suspended run keeps its lease so a resume can take the thread
+            // back, but nothing registers a thread run for it here, so this
+            // process keeps renewing it for the rest of its life. The workflow
+            // event processor bounds that too, but in a dedicated-worker
+            // deployment it runs in a worker, which holds no timer to stop —
+            // so bound it here, in the process that owns the timer (#30069).
+            if (result?.status === 'suspended') {
+              const { pubsub } = this.#sharedExecutionState(runId);
+              if (pubsub) agentThreadStreamRuntime.boundSuspendedRunLeaseRenewal(pubsub, runId);
+            }
             if (sharedExecution) {
               executionFence?.detach();
               return;

@@ -684,4 +684,56 @@ describe('thread lease of a suspended run', () => {
       await proc.stop();
     }
   }, 30_000);
+
+  it('bounds the lease where it is renewed when another process handles the suspension', async () => {
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');
+    vi.stubEnv('MASTRA_SUSPENDED_RUN_TTL_MS', '1500');
+    const proc = await startProcess({ engine: 'evented', sharedTransport: true, suspendingTool: true });
+    try {
+      const { durableAgent, options } = proc;
+      const lease = proc.pubsub as unknown as LeaseDouble;
+      // The process that claims the lease is not always the process that handles the
+      // run's terminal event: with dedicated workers the workflow event processor runs
+      // elsewhere, so its bound for a suspended run reaches a runtime holding no renewal
+      // timer for it. Let that call stand in for the other process by not stopping
+      // anything here.
+      const runtime = proc.agentThreadStreamRuntime;
+      const stopFromThisProcess = runtime.boundSuspendedRunLeaseRenewal.bind(runtime);
+      const boundCallers: string[] = [];
+      vi.spyOn(runtime, 'boundSuspendedRunLeaseRenewal').mockImplementation((pubsub, runId) => {
+        const caller = new Error().stack ?? '';
+        boundCallers.push(caller);
+        if (caller.includes('evented-execution.ts')) return;
+        stopFromThisProcess(pubsub, runId);
+      });
+
+      const parked = await durableAgent.generate('please approve', options);
+      expect(parked.finishReason).toBe('suspended');
+
+      // The run keeps the thread through the suspension window so a resume can take
+      // it back.
+      await sleep(900);
+      expect(await lease.getLeaseOwner(proc.threadKey)).toBeDefined();
+
+      // Once the window passes the lease is let go instead of pinning the thread for
+      // the lifetime of the process that called generate().
+      await vi.waitFor(
+        async () => {
+          expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
+        },
+        { timeout: 5000 },
+      );
+
+      // The bound that ended it was scheduled here, where the renewal timer lives, and
+      // not only by the handler that stood in for the worker.
+      expect(boundCallers.some(caller => caller.includes('evented-agent.ts'))).toBe(true);
+
+      // The thread is free again, so a later message runs on it.
+      expect((await durableAgent.generate('second message', options)).text).toBe('done');
+    } finally {
+      vi.unstubAllEnvs();
+      await proc.stop();
+    }
+  }, 30_000);
 });
