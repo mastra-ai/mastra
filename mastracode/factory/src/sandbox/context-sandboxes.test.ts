@@ -3,7 +3,13 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
+import { Mastra } from '@mastra/core/mastra';
+import { InMemoryStore } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
+import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
+import { Workspace } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxContext, MastraSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
@@ -14,7 +20,7 @@ import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { createContextSandboxStops, createTerminalSandboxStops } from './context-sandboxes.js';
+import { controllerRunInFlight, createContextSandboxStops, createTerminalSandboxStops } from './context-sandboxes.js';
 import { LocalFactorySandbox } from './local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './session-retirement.js';
 import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
@@ -77,7 +83,10 @@ function recordingSandbox(calls: string[], { failStop = false } = {}): FactorySa
     create: (ctx: FactorySandboxContext) => ({
       id: ctx.sessionId,
       stop: async () => {
-        if (failStop) throw new Error('pause failed');
+        if (failStop) {
+          calls.push(`stop-attempt:${ctx.sessionId}:${ctx.sandboxId}`);
+          throw new Error('pause failed');
+        }
         calls.push(`stop:${ctx.sessionId}:${ctx.sandboxId}`);
       },
       destroy: async () => {
@@ -338,8 +347,9 @@ describe.each(backends)('card sandboxes across Factory processes, on %s', backen
   });
 
   it('still commits the move when stopping the left sandbox fails', async () => {
+    const calls: string[] = [];
     const [storage] = await sharedDatabase(backend);
-    const factory = await factoryOn(storage, recordingSandbox([], { failStop: true }));
+    const factory = await factoryOn(storage, recordingSandbox(calls, { failStop: true }));
     const card = await cardWithSessions(factory.seed, 'triage');
     await card.github.sessions.setSandbox({
       id: card.rows.triage.id,
@@ -349,7 +359,99 @@ describe.each(backends)('card sandboxes across Factory processes, on %s', backen
 
     const moved = await move(factory.service, card, 'planning', card.item.revision);
 
+    expect(calls).toEqual([`stop-attempt:${card.rows.triage.id}:vm-triage`]);
     expect(moved).toMatchObject({ status: 'accepted', stage: 'planning' });
     expect((await factory.seed.workItems.get({ orgId: card.orgId, id: card.item.id }))?.stages).toEqual(['planning']);
+  });
+});
+
+const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+/** A provider stream held open until `gate` settles, so the run is provably in flight. */
+function textStream(gate: Promise<void>) {
+  return new ReadableStream({
+    async start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-text', modelId: 'mock', timestamp: new Date(0) });
+      controller.enqueue({ type: 'text-start', id: 'text-1' });
+      controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Triaging.' });
+      await gate;
+      controller.enqueue({ type: 'text-end', id: 'text-1' });
+      controller.enqueue({ type: 'finish', finishReason: 'stop', usage });
+      controller.close();
+    },
+  });
+}
+
+/** A real controller whose agent's reply streams until `release()` is called. */
+async function gatedController() {
+  let release = () => {};
+  const gate = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const model = new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: textStream(gate) }) });
+  const agent = new Agent({ id: 'triager', name: 'triager', instructions: 'Triage the card.', model });
+  const store = new InMemoryStore();
+  const mastra = new Mastra({ agents: { triager: agent }, logger: false, storage: store });
+  const controller = new AgentController({
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+    id: 'code',
+    storage: store,
+    modes: [{ id: 'build', name: 'Build', default: true, agent: mastra.getAgent('triager') }],
+  });
+  await controller.init();
+  return { controller, release };
+}
+
+describe.each(backends)('a run in flight on the session the card left, on a real controller, on %s', backend => {
+  async function setup() {
+    const root = await mkdtemp(join(tmpdir(), 'factory-sandboxes-'));
+    onTestFinished(() => rm(root, { recursive: true, force: true }));
+    const local = new LocalFactorySandbox({ root });
+    const { controller, release } = await gatedController();
+    const [storage] = await sharedDatabase(backend);
+    // The same check Factory wires: the controller's session for the card's session id.
+    const factory = await factoryOn(
+      storage,
+      local,
+      controllerRunInFlight(sessionId => controller.getSession(sessionId)),
+    );
+    const card = await cardWithSessions(factory.seed, 'triage');
+    const session = await controller.createSession({
+      id: card.rows.triage.sessionId,
+      resourceId: card.factoryProjectId,
+      ownerId: 'user-1',
+    });
+    await session.thread.create();
+    const triage = await startSandbox(local, card.rows.triage);
+    return { ...factory, card, session, triage, release };
+  }
+
+  it('keeps the triage sandbox running until the run ends, then stops it', async () => {
+    const { service, card, session, triage, release } = await setup();
+    const events: string[] = [];
+    session.subscribe(event => events.push(event.type));
+    void session.sendMessage({ content: 'Triage this issue.' }).catch(() => {});
+    await vi.waitFor(() => expect(session.stream.isActive()).toBe(true));
+
+    const moved = await move(service, card, 'planning', card.item.revision);
+    expect(moved).toMatchObject({ status: 'accepted', stage: 'planning' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(events).not.toContain('agent_end');
+    expect(triage.status).toBe('running');
+
+    release();
+    await vi.waitFor(() => expect(events).toContain('agent_end'));
+    await vi.waitFor(() => expect(triage.status).toBe('stopped'));
+  });
+
+  it('stops the triage sandbox at once when its session is idle', async () => {
+    const { service, card, session, triage } = await setup();
+    expect(session.stream.isActive()).toBe(false);
+
+    const moved = await move(service, card, 'planning', card.item.revision);
+
+    expect(moved).toMatchObject({ status: 'accepted', stage: 'planning' });
+    expect(triage.status).toBe('stopped');
   });
 });

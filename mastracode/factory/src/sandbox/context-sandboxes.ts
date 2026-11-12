@@ -1,3 +1,5 @@
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
@@ -31,6 +33,37 @@ export interface ContextLeftArgs {
   context: string;
   /** Revision the move committed at. */
   revision: number;
+}
+
+/** What the run-in-flight check reads from a controller session. */
+export interface RunWatchSession {
+  readonly stream: { isActive(): boolean };
+  subscribe(listener: (event: AgentControllerEvent) => void): () => void;
+}
+
+/**
+ * The run in flight on a session this process holds, ending at its
+ * `agent_end`. Subscribes before reading `isActive()`, so a run that ends in
+ * between still settles `ended`.
+ */
+export function controllerRunInFlight(
+  getSession: (sessionId: string) => Promise<RunWatchSession | undefined>,
+): ContextSandboxStopsOptions['runInFlight'] {
+  return async sessionId => {
+    const session = await getSession(sessionId);
+    if (!session) return null;
+    let unsubscribe = () => {};
+    const ended = new Promise<void>(resolve => {
+      unsubscribe = session.subscribe(event => {
+        if (event.type === 'agent_end') resolve();
+      });
+    });
+    if (!session.stream.isActive()) {
+      unsubscribe();
+      return null;
+    }
+    return { ended: ended.finally(unsubscribe) };
+  };
 }
 
 function sessionIdOf(item: Card, context: string): string | undefined {

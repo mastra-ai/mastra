@@ -122,7 +122,11 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
-import { createContextSandboxStops, createTerminalSandboxStops } from './sandbox/context-sandboxes.js';
+import {
+  controllerRunInFlight,
+  createContextSandboxStops,
+  createTerminalSandboxStops,
+} from './sandbox/context-sandboxes.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { CachedSandboxEnvs } from './sandbox/sandbox-env-cache.js';
@@ -1316,21 +1320,9 @@ export class MastraFactory {
             sessions: sourceControlSessions,
             retirement: sessionRetirement,
             // `this.#prepared` is assigned below; transitions only run long after.
-            runInFlight: async sessionId => {
-              const session = await this.#prepared?.base.controller.getSession(sessionId);
-              if (!session) return null;
-              let unsubscribe = () => {};
-              const ended = new Promise<void>(resolve => {
-                unsubscribe = session.subscribe(event => {
-                  if (event.type === 'agent_end') resolve();
-                });
-              });
-              if (!session.stream.isActive()) {
-                unsubscribe();
-                return null;
-              }
-              return { ended: ended.finally(unsubscribe) };
-            },
+            runInFlight: controllerRunInFlight(async sessionId =>
+              this.#prepared?.base.controller.getSession(sessionId),
+            ),
           })
         : undefined;
     const transitionService = workItemsReady
