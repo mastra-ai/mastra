@@ -9,7 +9,14 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const SENTINEL = 'sentinel-value-7f3a';
 
-async function setup(options: { writable?: boolean; audit?: AuditEmitter; enabled?: boolean } = {}) {
+async function setup(
+  options: {
+    writable?: boolean;
+    audit?: AuditEmitter;
+    enabled?: boolean;
+    onEnvironmentSaved?: (projectId: string) => void;
+  } = {},
+) {
   const seed = await createFactoryStorageForTests();
   // As in factory.ts; a frozen clock means only writes, never age, refresh it.
   const sandboxEnvs = new CachedSandboxEnvs(seed.sandboxEnvs, { now: () => 0 });
@@ -28,6 +35,7 @@ async function setup(options: { writable?: boolean; audit?: AuditEmitter; enable
       sandboxEnvs,
       writable: options.writable ?? true,
       ...(options.audit ? { audit: options.audit } : {}),
+      ...(options.onEnvironmentSaved ? { onEnvironmentSaved: options.onEnvironmentSaved } : {}),
     }).routes(),
   );
   const base = `/web/factory/projects/${project.id}/sandbox-envs`;
@@ -42,7 +50,8 @@ async function setup(options: { writable?: boolean; audit?: AuditEmitter; enable
 describe('SandboxEnvRoutes', () => {
   it('sets, lists, updates and deletes a variable without ever returning its value', async () => {
     const audit = { emit: vi.fn(async () => {}) };
-    const { seed, project, send } = await setup({ audit });
+    const onEnvironmentSaved = vi.fn();
+    const { seed, project, send } = await setup({ audit, onEnvironmentSaved });
 
     const put = await send('PUT', '/NPM_TOKEN', { value: SENTINEL, appliesTo: 'runtime' });
     expect(put.status).toBe(200);
@@ -101,6 +110,8 @@ describe('SandboxEnvRoutes', () => {
       },
     ]);
     expect(JSON.stringify(audit.emit.mock.calls)).not.toContain(SENTINEL);
+    // Build variables are template inputs: every stored change, and only those, hands the project to builds.
+    expect(onEnvironmentSaved.mock.calls).toEqual([[project.id], [project.id], [project.id]]);
   });
 
   it('marks every response no-store, including errors', async () => {

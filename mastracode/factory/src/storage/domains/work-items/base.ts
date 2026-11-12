@@ -51,6 +51,7 @@ import {
   LEGACY_TRIAGE_PHASE,
   LEGACY_WORK_BOARD,
   readReviewBoardInUse,
+  releaseLegacyReviewCards,
 } from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
@@ -1379,8 +1380,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
   readonly #reviewRedundant = new Set<string>();
 
+  #ownReviewBoard: ReviewBoardInUse | undefined;
+
+  /**
+   * Tells cards apart from the retired Review board's: where `owned` answers true the project has
+   * a board of its own under `review`, and the cards stored on it are that board's.
+   */
+  useOwnReviewBoard(owned: ReviewBoardInUse): void {
+    this.#ownReviewBoard = owned;
+  }
+
   /** {@link reviewBoardInUse} through `ops`, so a caller inside a transaction reads within it. */
   readonly #reviewInUse: ReviewBoardInUse = async (ops, scope) => {
+    // Asked every time: a project can make or delete a board of its own under `review` at any moment.
+    if (await this.#ownReviewBoard?.(ops, scope)) return true;
     const key = `${scope.orgId}\0${scope.factoryProjectId}`;
     if (this.#reviewRedundant.has(key)) return false;
     const inUse = await readReviewBoardInUse(ops, scope, {
@@ -1393,12 +1406,33 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   };
 
   /**
-   * Whether the project still uses the retired Review board: it holds a card stored on Review
-   * that isn't Done or Canceled. Such a project keeps the board and its cards stay on it; in any
-   * other project Review is redundant and its cards read as Work.
+   * Whether cards stored on `review` stay there: the project has a board of its own under that
+   * key, or still uses the retired Review board (it holds a card stored on Review that isn't Done
+   * or Canceled) and keeps it. In any other project Review is redundant and its cards read as Work.
    */
   reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
     return this.#reviewInUse(this.#db, scope);
+  }
+
+  /**
+   * Leaves `review` to a board about to take it: stores the Work placement of the cards the
+   * retired Review board left there, through `ops`, so it happens in the board write's
+   * transaction. See {@link releaseLegacyReviewCards} for `open`.
+   */
+  async releaseReviewCards(
+    ops: FactoryStorageOps,
+    scope: ReviewBoardScope,
+    { open }: { open: 'refuse' | 'move' },
+  ): Promise<void> {
+    const rewritten = await releaseLegacyReviewCards(
+      ops,
+      scope,
+      // Legacy cards not copied yet still count.
+      { split: !this.#legacyMode, legacy: this.#legacyMode || this.#split.pending },
+      open,
+    );
+    // An open card that moved was listed on Review until now.
+    if (rewritten > 0) await bumpBoardVersions(ops, [scope]);
   }
 
   constructor() {

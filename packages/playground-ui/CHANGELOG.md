@@ -1,5 +1,24 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.14
+
+### Minor Changes
+
+- Widened what dashboard widgets can show: ([#30192](https://github.com/mastra-ai/mastra/pull/30192))
+
+  - KPIs can combine values with `ratio`, `minus`, `max` and `coalesce`, read trace and span aggregates (for example `duration.p95`) and score aggregates, and are formatted as `duration`, `percent` or `score`. Combined values are compared with the previous window.
+  - Charts accept six more colors: `blue`, `orange`, `pink`, `yellow`, `red` and `purple`.
+  - KPI `icon` and `detail`, series `color` and table `emptyMessage` are optional. Series without a color pick one from a palette, and tables without an empty message show "No data".
+
+### Patch Changes
+
+- Fixed hover highlights on cards and other surfaces stopping short of the edge. The highlight now covers the whole surface and follows its rounded corners exactly, including the sidebar credits card and clickable cards. Hover highlights on these surfaces now switch instantly instead of fading. ([#30047](https://github.com/mastra-ai/mastra/pull/30047))
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4)]:
+  - @mastra/core@1.83.0-alpha.12
+  - @mastra/client-js@1.60.0-alpha.12
+  - @mastra/react@1.15.0-alpha.12
+
 ## 69.0.0-alpha.13
 
 ### Patch Changes

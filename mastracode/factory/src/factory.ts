@@ -37,7 +37,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
-import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
@@ -63,7 +63,7 @@ import {
   REVIEW_CONTEXT,
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
-import { occupiedPhasesOf, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
+import { occupiedPhasesOf, ownReviewBoard, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
@@ -123,6 +123,11 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
+import {
+  controllerRunInFlight,
+  createContextSandboxStops,
+  createTerminalSandboxStops,
+} from './sandbox/context-sandboxes.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { CachedSandboxEnvs } from './sandbox/sandbox-env-cache.js';
@@ -638,8 +643,11 @@ export class MastraFactory {
    * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
-   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `reserved_board` for the
-   * retired Review board's key, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
+   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use` when cards
+   * sit in a phase it removes, `board_in_use` when the key is `review` and the retired Review board
+   * still has an open card in the project, `project_not_found`). Projects are written one at a
+   * time and the call stops at the first one that refuses: the projects before it keep the board,
+   * so fix what was refused and run it again.
    * Available after `prepare()`.
    *
    * @example
@@ -672,7 +680,7 @@ export class MastraFactory {
     }
     const { writes, boards, projects, audit } = store;
     const input = writes.validate(board);
-    // Work and app boards are stored per project like any other; the retired Review board's key is reserved.
+    // Work and app boards are stored per project like any other.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
@@ -971,6 +979,8 @@ export class MastraFactory {
       );
     }
 
+    // Cards on a board of the project's own under `review` are that board's, not the retired Review board's.
+    workItemsStorage.useOwnReviewBoard(ownReviewBoard(this.#boards, { stored: storage.isDomainReady('boards') }));
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.
     if (storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
@@ -983,6 +993,8 @@ export class MastraFactory {
         ...(storage.isDomainReady('work-items')
           ? {
               reviewBoardInUse: (scope: StoredBoardScope) => workItemsStorage.reviewBoardInUse(scope),
+              releaseReviewCards: (ops: FactoryStorageOps, scope: StoredBoardScope) =>
+                workItemsStorage.releaseReviewCards(ops, scope, { open: 'move' }),
               occupiedPhases: occupiedPhasesOf(workItemsStorage),
             }
           : {}),
@@ -1181,23 +1193,11 @@ export class MastraFactory {
         : undefined;
     const retireTerminalSessions =
       sessionRetirement && workItemsReady
-        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) => {
-            const item = await workItemsStorage.get({ orgId, id: workItemId });
-            if (!item) return;
-            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
-            await Promise.all(
-              sessionIds.map(async sessionId => {
-                const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
-                if (!sourceControl) return;
-                await sessionRetirement.retireSession({
-                  sourceControl,
-                  orgId,
-                  sessionId,
-                  deleteSession: false,
-                });
-              }),
-            );
-          }
+        ? createTerminalSandboxStops({
+            workItems: workItemsStorage,
+            sessions: sourceControlSessions,
+            retirement: sessionRetirement,
+          })
         : undefined;
     // Terminal-stage cleanup: ingest any trailing tool results from the item's
     // bound threads, then revoke the bindings so completed items leave the
@@ -1320,6 +1320,20 @@ export class MastraFactory {
             ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),
           })
       : retireTerminalSessions;
+    // Leaving a context's last phase stops that context's sandbox; coming back resumes it.
+    const stopLeftContextSandbox =
+      sessionRetirement && workItemsReady
+        ? createContextSandboxStops({
+            workItems: workItemsStorage,
+            boards,
+            sessions: sourceControlSessions,
+            retirement: sessionRetirement,
+            // `this.#prepared` is assigned below; transitions only run long after.
+            runInFlight: controllerRunInFlight(async sessionId =>
+              this.#prepared?.base.controller.getSession(sessionId),
+            ),
+          })
+        : undefined;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
@@ -1327,6 +1341,7 @@ export class MastraFactory {
           storage: workItemsStorage,
           audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          ...(stopLeftContextSandbox ? { onContextLeft: stopLeftContextSandbox } : {}),
           onTransitionCommitted: (() => {
             const notifyStageChange = createStageChangeNotifier({
               workItems: workItemsStorage,
@@ -2089,7 +2104,12 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
-            ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
+            ...(environmentBuilds
+              ? {
+                  onRepositoryPush: environmentBuilds.onRepositoryPush,
+                  onEnvironmentSaved: environmentBuilds.onEnvironmentSaved,
+                }
+              : {}),
             sessionRetirement,
             moveThread: async ({ threadId, resourceId }) => {
               // The sessions' own Memory, so a moved thread takes its observation vectors along.
@@ -2188,6 +2208,7 @@ export class MastraFactory {
             sandboxEnvs: sandboxEnvsStorage,
             writable: !secretsUnencrypted,
             audit: auditDomain,
+            ...(environmentBuilds ? { onEnvironmentSaved: environmentBuilds.onEnvironmentSaved } : {}),
           }).routes(),
           ...buildFeedEventsRoutes({ auth: routeAuth, projects: factoryProjectsStorage, pubsub: eventBus }),
           ...buildIntakeCandidateRoutes({

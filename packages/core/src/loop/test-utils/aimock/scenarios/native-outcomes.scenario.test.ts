@@ -832,6 +832,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended().at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_INFERENCE).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
+    expect(ended().at(-1)?.errorCount).toBe(0);
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)?.errorCount).toBe(0);
+    expect(ended(SpanType.MODEL_INFERENCE).at(-1)?.errorCount).toBe(1);
   });
 
   it('records a real tool error after requesting suspension', async () => {

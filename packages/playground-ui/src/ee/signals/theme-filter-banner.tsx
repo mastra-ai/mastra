@@ -75,7 +75,7 @@ export function ThemeFilterBanner({
             }
             onClick={() => onRemove(selection.signalName)}
             type="button"
-            className="state-layer flex items-center gap-1.5 rounded-full border border-border bg-background py-1 pr-2 pl-2.5 text-foreground"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-background state-layer py-1 pr-2 pl-2.5 text-foreground"
           >
             <span aria-hidden="true" style={{ backgroundColor: color }} className="rounded-0.5 size-2" />
             <Txt as="span" variant="column" className="block">

@@ -1,5 +1,16 @@
 # @mastra/mcp-apps-components
 
+## 0.1.0-alpha.7
+
+### Minor Changes
+
+- Dashboards authored in chat now accept the same widgets as the dashboard editor: KPIs that combine values (ratio, difference, max, fallback), read trace, span or score aggregates (for example p95 span duration) and use duration, percent or score formats; line charts of scores; six more chart colors (blue, orange, pink, yellow, red, purple); and optional KPI icon and detail, series color and table empty message. ([#30192](https://github.com/mastra-ai/mastra/pull/30192))
+
+### Patch Changes
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+
 ## 0.1.0-alpha.6
 
 ### Minor Changes
