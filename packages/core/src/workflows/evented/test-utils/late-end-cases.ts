@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { Event } from '../../../events/types';
 import type { MastraStorage } from '../../../storage';
+import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import { nestedHandOffKey, restartLeaseKey, runEndedKey, runLivenessKey, stepOccurrenceKey } from '../leases';
 import { abandonLease } from './abandon-lease';
 import {
@@ -582,7 +583,7 @@ export function describeLateEndCases({
       await conditionRuns.promise;
 
       // The first child's end reaches B while A still evaluates the condition, after a lease TTL.
-      await new Promise(resolve => setTimeout(resolve, 3 * Number(process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS)));
+      await new Promise(resolve => setTimeout(resolve, 3 * WORKFLOW_RUN_LEASE_TTL_MS));
       const childEnd = childEnds(a.published, run.runId)[0]!;
       const store = (await getStorage().getStore('workflows'))!;
       const claim = await store.getRunOwnership({ runId: nestedHandOffKey(run.runId, [0], childEnd.runId) });
