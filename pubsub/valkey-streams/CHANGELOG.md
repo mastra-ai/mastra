@@ -1,5 +1,14 @@
 # @mastra/redis-streams
 
+## 0.6.2-alpha.0
+
+### Patch Changes
+
+- Tag Mastra-created Valkey connections with a `clientInfoTag` of `mastra`, so the server reports them as `GlideJS(mastra)` instead of a generic `GlideJS`. This makes it possible to tell which connections on a shared Valkey instance come from Mastra. The tag is only applied when Mastra creates the client itself: a user-supplied `clientInfoTag` in the connection config still takes precedence, and a client passed in via `{ client }` is left untouched. This also bumps `@valkey/valkey-glide` from `2.5.1` to `2.5.2`, the release that introduced the option. ([#30156](https://github.com/mastra-ai/mastra/pull/30156))
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83)]:
+  - @mastra/core@1.83.0-alpha.10
+
 ## 0.6.1
 
 ### Patch Changes

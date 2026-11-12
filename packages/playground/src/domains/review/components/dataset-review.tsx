@@ -26,7 +26,7 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
 import { useDatasetMutations, useDataset, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
-import { useReviewItems, useCompletedItems } from '@mastra/react/hooks/review';
+import { useInfiniteCompletedItems, useInfiniteReviewItems } from '@mastra/react/hooks/review';
 import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -121,20 +121,22 @@ export function DatasetReview({
   const client = useMastraClient();
   const { paths } = useLinkComponent();
   const { data: dataset } = useDataset({ datasetId: datasetId ?? '', queryOptions: { enabled: Boolean(datasetId) } });
-  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({
+  const reviewQuery = useInfiniteReviewItems({
     experimentId,
     targetType,
     targetId,
     experiments,
     isLoadingExperiments,
   });
-  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({
+  const completedQuery = useInfiniteCompletedItems({
     experimentId,
     targetType,
     targetId,
     experiments,
     isLoadingExperiments,
   });
+  const { data: reviewItems, isLoading: isLoadingReview } = reviewQuery;
+  const { data: completedItems, isLoading: isLoadingCompleted } = completedQuery;
   const { updateExperimentResult } = useDatasetMutations();
 
   const [featuredItemId, setFeaturedItemId] = useState<string | null>(featuredItemIdRequest ?? null);
@@ -399,6 +401,15 @@ export function DatasetReview({
     experimentId: featuredItem?.experimentId ?? '',
     queryOptions: { enabled: Boolean(featuredItem?.experimentId) },
   });
+
+  const displayQuery = showCompleted ? completedQuery : reviewQuery;
+  // Tag filters and deep links only see loaded pages, so keep loading until something shows.
+  const needsMoreItems = displayItems.length === 0 || Boolean(featuredItemId && !featuredItem);
+  useEffect(() => {
+    if (needsMoreItems && displayQuery.hasNextPage && !displayQuery.isFetching) {
+      void displayQuery.fetchNextPage({ cancelRefetch: false });
+    }
+  }, [needsMoreItems, displayQuery]);
 
   const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
   const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;
@@ -676,7 +687,7 @@ export function DatasetReview({
 
       <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
-          {isLoadingDisplay ? (
+          {isLoadingDisplay || (displayItems.length === 0 && displayQuery.hasNextPage) ? (
             <Spinner fill />
           ) : displayItems.length === 0 ? (
             <EmptyState
@@ -698,6 +709,9 @@ export function DatasetReview({
               selectedIds={showCompleted ? undefined : selectedItemIds}
               onToggleSelect={showCompleted ? undefined : toggleSelect}
               onToggleSelectAll={showCompleted ? undefined : toggleSelectAll}
+              setEndOfListElement={displayQuery.setEndOfListElement}
+              hasNextPage={displayQuery.hasNextPage}
+              isFetchingNextPage={displayQuery.isFetchingNextPage}
             />
           )}
         </div>

@@ -90,10 +90,7 @@ describeForAllEngines('Controller tool status matches the tool outcome', engine 
     const delegated = route !== 'direct';
     const builtIn = route === 'built-in subagent';
     const approved = route === 'approved delegation';
-    // Durable/evented delegations resumed after an approval emit no subagent_tool_end.
-    // Reproduced before and after the classification fix; not yet investigated.
-    const test = approved && (engine === 'durable' || engine === 'evented') ? it.fails : it;
-    test.each(cases)(`${route}: $name`, async ({ tool, args, isError, errorMessage }) => {
+    it.each(cases)(`${route}: $name`, async ({ tool, args, isError, errorMessage }) => {
       const llm = getMock();
       const tools = { lookup: tool };
       const worker =

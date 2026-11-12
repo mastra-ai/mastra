@@ -22,7 +22,7 @@ import { InMemoryServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_NORMALIZED_USER_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -1114,6 +1114,51 @@ describe('InngestAgent parity surface', () => {
       try {
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme:fr']));
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it("does not resolve resume() defaultOptions or dispatch with the starting run's user", async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDynamicDefaults(
+        'default-callbacks-resume-user',
+        ({ user, requestContext }) => ({
+          onFinish: () => {
+            fired.push(`onFinish:${user?.id ?? 'anon'}:${requestContext.get('tenant')}`);
+          },
+        }),
+      );
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            loadWorkflowSnapshot: vi.fn().mockResolvedValue({
+              value: {},
+              context: {},
+              status: 'suspended',
+              suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+              requestContext: {
+                tenant: 'acme',
+                [MASTRA_NORMALIZED_USER_KEY]: { id: 'alice', role: 'admin' },
+                mastra__user: { sub: 'alice' },
+                mastra__userRoles: ['admin'],
+                mastra__userPermissions: ['admin:*'],
+              },
+            }),
+          }),
+        }),
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'default-callbacks-resume-user-run';
+
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
+        await publishStepAndFinish(durableAgent, runId);
+        await vi.waitFor(() => expect(fired).toEqual(['onFinish:anon:acme']));
+        const resumeEvent = sendSpy.mock.calls.map(([event]) => event as any).find(event => event.data?.resume);
+        expect(resumeEvent.data.requestContext).toEqual({ tenant: 'acme' });
       } finally {
         result.cleanup();
         sendSpy.mockRestore();

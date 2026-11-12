@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
@@ -30,6 +29,7 @@ import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
+import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import {
@@ -200,20 +200,12 @@ export function SessionsSection() {
       </div>
 
       {loadFailed && (
-        <div className="flex items-center gap-2 px-2 py-1">
-          <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
-            Couldn’t load sessions
-          </Txt>
-          <Button variant="ghost" size="sm" onClick={retry}>
-            Retry
-          </Button>
-        </div>
+        // Sessions has always reported a failed load without an alert; sharing the row doesn't change that.
+        <SidebarLoadError onRetry={retry} announce={false}>
+          Couldn’t load sessions
+        </SidebarLoadError>
       )}
-      {loaded && emptyMessage !== undefined && (
-        <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
-          {emptyMessage}
-        </Txt>
-      )}
+      {loaded && emptyMessage !== undefined && <SidebarEmptyNote>{emptyMessage}</SidebarEmptyNote>}
 
       {deletion.pendingConfirmation && (
         <DeleteSessionDialog

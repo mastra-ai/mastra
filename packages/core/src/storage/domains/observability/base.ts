@@ -119,6 +119,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
  * - `span-query-duration-sort`: ordering completed spans by `durationMs`
+ * - `span-query-model-provider-sort`: ordering completed spans by their model/provider columns
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
  * - `span-query-text-search`: literal substring search in `querySpans`
  * - `trace-query-text-search`: literal substring search across any span in `queryTraces`
@@ -161,6 +162,7 @@ export type ObservabilityStorageFeature =
   | 'metric-discovery'
   | 'span-query'
   | 'span-query-duration-sort'
+  | 'span-query-model-provider-sort'
   | 'span-query-context-fields'
   | 'span-query-text-search'
   | 'trace-query-text-search'

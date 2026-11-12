@@ -1370,6 +1370,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const legacy = (await new Cards(storage.ops).findOne({ id: a.item.id }))!;
       delete legacy.work_item;
       delete legacy.work_item_sources;
+      delete legacy.changed_at;
       await storage.ops.insertOne('work_items', { ...legacy, claim_key: 'jira:issue:X' });
 
       const b = await upsert('project-b');

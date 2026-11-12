@@ -30,9 +30,14 @@ import {
   EntityType,
 } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+  withoutLiveRequestKeys,
+} from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
-import { toStandardSchema } from '../../schema';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
@@ -92,6 +97,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
+import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
@@ -120,6 +126,7 @@ import type {
   DurableAgentStreamOptions as DurableStreamAdapterOptions,
   DurableAgentStreamResult as DurableStreamAdapterResult,
 } from './stream-adapter';
+import { toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type {
   AgentAbortEventData,
   AgentChunkEventData,
@@ -1790,7 +1797,10 @@ export class DurableAgent<
       structuredOutput: workflowInput.options?.structuredOutput?.schema
         ? {
             ...workflowInput.options.structuredOutput,
-            schema: toStandardSchema(workflowInput.options.structuredOutput.schema),
+            schema: toLiveStructuredOutputSchema(
+              workflowInput.options.structuredOutput.schema,
+              workflowInput.options.structuredOutput.nullToUndefined,
+            ),
           }
         : undefined,
       backgroundTaskManager,
@@ -2169,11 +2179,14 @@ export class DurableAgent<
     return this.#wrappedAgent.hasOwnPubSub();
   }
 
+  override getPubSub() {
+    return this.#wrappedAgent.getPubSub();
+  }
+
   // --- Setters called by AgentController — forward to BOTH wrapper and wrapped ---
   // We propagate to both so that:
   //  - The wrapped agent sees the value for its own internal use.
-  //  - The DurableAgent's inherited getPubSub()/getMemory()/getWorkspace()
-  //    also work (they read #inheritedPubSub / #memory / #workspace set by super).
+  //  - The DurableAgent's inherited getMemory()/getWorkspace() also work.
   override __setMemory(memory: any) {
     super.__setMemory(memory);
     this.#wrappedAgent.__setMemory(memory);
@@ -3740,8 +3753,9 @@ export class DurableAgent<
       )?.memoryInfo;
       const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
       const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
+      // The starting request's user and token are left out, so they come only from this resume.
       const snapshotRequestContext = workflowInput.requestContextEntries
-        ? new RequestContext<unknown>(Object.entries(workflowInput.requestContextEntries))
+        ? new RequestContext<unknown>(Object.entries(withoutLiveRequestKeys(workflowInput.requestContextEntries)))
         : undefined;
       if (snapshotRequestContext) restoreRunAgentScopes(snapshotRequestContext);
       const persistedScopes = workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY];
@@ -3818,12 +3832,21 @@ export class DurableAgent<
       scopes: Array.isArray(snapshotScopes) ? snapshotScopes : undefined,
     };
 
-    let resumeRequestContext = entry.requestContext;
+    // The suspended run's values carry over, except the starting request's user and
+    // token: those come only from this resume, so a resume without a signed-in user
+    // can't act as the user who started the run.
+    const carriedEntries = entry.requestContext
+      ? Object.entries(withoutLiveRequestKeys(Object.fromEntries(entry.requestContext.entries())))
+      : undefined;
+    // Tools built for the starting request are bound to its context, so they are rebuilt below.
+    const droppedStartingUser = carriedEntries !== undefined && carriedEntries.length < entry.requestContext!.size();
+    // Copy only when user keys were removed; otherwise keep the run's own instance.
+    let resumeRequestContext = droppedStartingUser ? new RequestContext<unknown>(carriedEntries) : entry.requestContext;
     if (options?.requestContext) {
       // Keep the caller's instance so schema-transformed contexts retain their
       // input source. Caller values win except for framework-managed memory.
       resumeRequestContext = options.requestContext;
-      for (const [key, value] of entry.requestContext?.entries() ?? []) {
+      for (const [key, value] of carriedEntries ?? []) {
         // The suspended run's scopes are applied on the run's own context below, never the caller's.
         if (key === MASTRA_SCOPES_KEY) continue;
         if (!resumeRequestContext.has(key)) resumeRequestContext.set(key, value);
@@ -3907,7 +3930,7 @@ export class DurableAgent<
     // tools a processor added or replaced are kept. Processor-added tools are
     // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks)) {
+    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
       try {
         const requestTools = await this.#wrappedAgent.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
@@ -3924,7 +3947,9 @@ export class DurableAgent<
             ? resolvedOptions.delegation
             : (entry.delegation ?? resolvedOptions.delegation),
           hooks: resolvedOptions.hooks,
-          methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
+          // Build for the method that started the run. `closeOnSuspend` is also a
+          // stream() option and resumeStream() always sets it, so it cannot tell (#29436).
+          methodType: entry.methodType ?? 'stream',
           backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
           model: entry.model,
@@ -5796,7 +5821,10 @@ export class DurableAgent<
       const persistedStructuredOutput = workflowInput.options?.structuredOutput;
       if (persistedStructuredOutput?.schema) {
         const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
-        const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
+        const schema = toLiveStructuredOutputSchema<{}>(
+          persistedStructuredOutput.schema,
+          persistedStructuredOutput.nullToUndefined,
+        );
         // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
         structuredOutput =
           errorStrategy === 'fallback'
@@ -6012,36 +6040,7 @@ export class DurableAgent<
     // the observer. MastraModelOutput fans out to several readers and only drops
     // the cancelled reader's listeners, so the cancel never reaches the pubsub
     // subscription — pass it through here.
-    const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      get(this: typeof output) {
-        // `this` is the real instance (the destructurable proxy reads getters
-        // with its target as receiver); the proxy itself can't reach private fields.
-        const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
-        return new ReadableStream<ChunkType<TOutput>>({
-          async pull(controller) {
-            let result: ReadableStreamReadResult<ChunkType<TOutput>>;
-            try {
-              result = await reader.read();
-            } catch (error) {
-              detach();
-              throw error;
-            }
-            if (result.done) {
-              detach();
-              controller.close();
-            } else {
-              controller.enqueue(result.value);
-            }
-          },
-          cancel(reason) {
-            detach();
-            return reader.cancel(reason);
-          },
-        });
-      },
-    });
+    detachFullStreamOnEnd(output, detach);
 
     // Wait for subscription to be ready
     try {

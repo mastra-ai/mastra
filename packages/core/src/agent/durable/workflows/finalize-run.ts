@@ -10,7 +10,7 @@ import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { ProcessorRunner } from '../../../processors/runner';
-import { RequestContext } from '../../../request-context';
+import { RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
 import {
   persistProcessorDataChunk,
@@ -31,6 +31,7 @@ import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
+import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 import { hydrateMessageListState } from './shared/message-list-state';
@@ -94,7 +95,9 @@ function restoreRequestContext(
   if (!entries) return fallback ?? new RequestContext();
 
   const restored = new RequestContext<unknown>(fallback?.entries());
-  for (const [key, value] of Object.entries(entries)) restored.set(key, value);
+  // The snapshot's token and signed-in user belong to whoever started the run;
+  // the live ones in `fallback` are kept.
+  for (const [key, value] of Object.entries(withoutLiveRequestKeys(entries))) restored.set(key, value);
   restoreRunAgentScopes(restored);
   return restored;
 }
@@ -207,7 +210,11 @@ export async function runDurableFinishSideEffects({
   const structuredOutput = initData.options?.structuredOutput;
   const structuredOutputText = resolveOutputText(messageList);
   const liveStructuredOutput = registryEntry?.structuredOutput;
-  const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
+  const structuredOutputSchema =
+    liveStructuredOutput?.schema ??
+    (structuredOutput?.schema
+      ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
+      : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;

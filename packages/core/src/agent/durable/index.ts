@@ -153,6 +153,10 @@ export {
   type DurableAgentStreamResult as StreamAdapterResult,
 } from './stream-adapter';
 
+// Detach an observer's fullStream subscription when its consumer stops reading,
+// shared with durable-agent integrations outside core
+export { detachFullStreamOnEnd } from './observe-full-stream';
+
 // Constants
 export {
   AGENT_STREAM_TOPIC,
@@ -168,7 +172,10 @@ export {
   requestAcknowledgedAbort,
   subscribeToAbortRequests,
   ensureRemoteAbortListener,
+  readRunDeadline,
+  RUN_DEADLINE_KEY,
 } from './abort-transport';
+export type { RunDeadline } from './abort-transport';
 
 // Types
 export type {
