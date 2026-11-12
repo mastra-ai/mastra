@@ -116,7 +116,7 @@ The **Alerts** page and each alert's page show one of these states:
 | **Error** | The query failed, for example because it timed out. |
 | **Disabled** | The alert is turned off and isn't checked. |
 
-Only firing and recovery send notifications. **No data** and **Error** are shown on the alert's page. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
+Only firing and recovery send notifications. **No data** and **Error** are shown on the alert's page. Alerts created through the API can instead treat missing data as firing and notify. Their page then shows a **When there is no data** setting. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
 
 ## Manage alerts
 
