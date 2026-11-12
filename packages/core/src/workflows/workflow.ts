@@ -5401,13 +5401,16 @@ export class Run<
    * for the run. On an engine that runs the restart in the caller, it resolves
    * when the run finishes.
    *
-   * Rejects when the restart is refused (`WORKFLOW_RESTART_RUN_OWNED`) or
-   * fails before it is published. The recovery pass uses it for evented runs,
-   * which workers drive.
+   * Resolves to whether the restart was published: `false` when the run had
+   * already finished, and the restart only returned its stored result. Rejects
+   * when the restart is refused (`WORKFLOW_RESTART_RUN_OWNED`), fails before it
+   * is published, or finds the run ended without a stored result. The recovery
+   * pass uses it for evented runs, which workers drive.
    * @internal
    */
-  async restartInBackground(): Promise<void> {
-    await this._restart({ detachAfterDispatch: true });
+  async restartInBackground(): Promise<boolean> {
+    // A detached execution resolves without a result; a run that already ended returns its stored one.
+    return (await this._restart({ detachAfterDispatch: true })) === undefined;
   }
 
   /**
