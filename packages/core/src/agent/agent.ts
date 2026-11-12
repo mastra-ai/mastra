@@ -818,6 +818,21 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
 const SLOW_TOOL_SOURCE_MS = 100;
 
 /**
+ * Assistant messages in a delegating agent's context that keep content once tool calls
+ * and tool results are removed. Reasoning still counts, so this matches the iteration
+ * delegation hooks saw before `stripParentToolParts` also dropped reasoning (#29276).
+ */
+function countParentAssistantSteps(messages: ModelMessage[]): number {
+  return messages.filter(
+    message =>
+      (message as { id?: string }).id !== 'om-continuation' &&
+      message.role === 'assistant' &&
+      (!Array.isArray(message.content) ||
+        message.content.some(part => part.type !== 'tool-call' && part.type !== 'tool-result')),
+  ).length;
+}
+
+/**
  * Creates an AI agent that generates and streams responses, with optional tools,
  * memory, and voice capabilities.
  *
@@ -5946,6 +5961,15 @@ export class Agent<
    *
    * This function removes those parts while preserving all other
    * conversation context (user messages, assistant text, etc.).
+   *
+   * Reasoning parts are removed from assistant messages too. The parent's
+   * reasoning is replayable only as part of the parent's own unmodified
+   * responses: once tool calls and tool messages are removed,
+   * `@ai-sdk/anthropic` merges the now-adjacent assistant steps into one
+   * message, and Anthropic rejects any signed thinking (`signature` /
+   * `redactedData`) in it as a modified thinking block (#29276). The forwarded
+   * context never ends in a tool-use continuation, so no provider requires
+   * thinking blocks in it.
    * @internal
    */
   private stripParentToolParts(messages: ModelMessage[]): ModelMessage[] {
@@ -5960,7 +5984,9 @@ export class Agent<
         }
 
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter(part => part.type !== 'tool-call' && part.type !== 'tool-result');
+          const filtered = message.content.filter(
+            part => part.type !== 'tool-call' && part.type !== 'tool-result' && part.type !== 'reasoning',
+          );
           if (filtered.length === 0) return null;
           return { ...message, content: filtered };
         }
@@ -6070,8 +6096,10 @@ export class Agent<
             let fullSubAgentMessages = sanitizedMessages as unknown as MastraDBMessage[];
 
             // Derive iteration from the number of assistant messages (rough approximation)
-            // Each iteration typically produces an assistant message
-            const derivedIteration = Math.max(1, sanitizedMessages.filter(m => m.role === 'assistant').length);
+            // Each iteration typically produces an assistant message. Counted on the parent
+            // context with tool parts removed but reasoning kept, so dropping reasoning from
+            // the forwarded context doesn't change what delegation hooks see.
+            const derivedIteration = Math.max(1, countParentAssistantSteps(contextMessages));
 
             // The sub-agent run gets its own RequestContext map derived from the
             // parent's entries, excluding run-scoped identity keys. This isolates
