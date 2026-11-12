@@ -411,28 +411,38 @@ describe('workflow recovery loop (#28712)', () => {
     expect(order).toEqual(['listed', 'shut down']);
   });
 
-  it('keeps checking after a pass whose store failed to answer', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const executions: string[] = [];
-    const mastra = replica(storage, 'default', 'B', executions, { workflowGraceMs: 0, ...scanning });
-    const list = store.listWorkflowRuns.bind(store);
-    let failures = 0;
-    vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
-      if (failures < 3) {
-        failures++;
-        throw new Error('connection reset');
+  it.each(['listing the runs', 'opening the workflows store'])(
+    'keeps checking after passes whose store failed %s',
+    async failing => {
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('workflows'))!;
+      const executions: string[] = [];
+      const mastra = replica(storage, 'default', 'B', executions, { workflowGraceMs: 0, ...scanning });
+      await persistActiveRun(storage, 'stopped');
+      let failures = 0;
+      const failThrice = async <T>(answer: () => Promise<T>) => {
+        if (failures < 3) {
+          failures++;
+          throw new Error('connection reset');
+        }
+
+        return answer();
+      };
+      if (failing === 'listing the runs') {
+        const list = store.listWorkflowRuns.bind(store);
+        vi.spyOn(store, 'listWorkflowRuns').mockImplementation(args => failThrice(() => list(args)));
+      } else {
+        const getStore = storage.getStore.bind(storage);
+        vi.spyOn(storage, 'getStore').mockImplementation(((domain: string) =>
+          domain === 'workflows' ? failThrice(() => getStore(domain as 'workflows')) : getStore(domain as any)) as any);
       }
 
-      return list(args);
-    });
-    await persistActiveRun(storage, 'stopped');
+      await mastra.startWorkers();
 
-    await mastra.startWorkers();
-
-    await vi.waitFor(() => expect(executions).toEqual(['B:work']));
-    expect(failures).toBe(3);
-  });
+      await vi.waitFor(() => expect(executions).toEqual(['B:work']));
+      expect(failures).toBe(3);
+    },
+  );
 
   it('keeps checking, and leaves a live run alone, on the passes that failed to probe the store for run fencing', async () => {
     const storage = new InMemoryStore();

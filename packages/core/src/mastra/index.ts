@@ -935,7 +935,7 @@ interface RecoveryCandidate {
 interface RecoveryPass {
   /** The earliest time a run the pass left in its grace period becomes due. */
   earliestDueAt?: number;
-  /** Whether the store had run fencing; `undefined` when the probe failed. */
+  /** Whether the store had run fencing; `undefined` when the store or the probe failed to answer. */
   runFencing: boolean | undefined;
   /**
    * Whether the pass, a recovery loop's, left every run alone because the store had no run fencing or the
@@ -4628,7 +4628,8 @@ export class Mastra<
   async #runRecoveryPass(fencedOnly: boolean): Promise<RecoveryPass> {
     const restarts: Promise<void>[] = [];
     let earliestDueAt: number | undefined;
-    let runFencing: boolean | undefined = false;
+    // Unknown until the probe answers: a store that failed to open says nothing about the next pass.
+    let runFencing: boolean | undefined;
     // A pass, and the restarts it queued, stop once the instance shuts down or its workers stop: the
     // workers a restarted run needs are going away.
     const stops = this.#workerStops;
