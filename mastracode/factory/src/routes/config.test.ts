@@ -866,7 +866,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     it('lists the gateway as already connected and offers no one-click connect', async () => {
       const row = await gatewayRow(buildApp(fakePlatform()));
 
-      expect(row).toMatchObject({ provider: 'mastra', source: 'deployment' });
+      expect(row).toMatchObject({ provider: 'mastra', source: 'deployment', serverKey: true });
       expect(row).not.toHaveProperty('connectWithMastraAccount');
     });
 
@@ -875,7 +875,13 @@ describe('Mastra Gateway routes with a tenant', () => {
 
       const row = await gatewayRow(buildApp(fakePlatform()));
 
-      expect(row).toMatchObject({ provider: 'mastra', source: 'stored-org', orgCredential: 'api_key' });
+      // The stored key wins for the company account, and the server key still serves personal sessions.
+      expect(row).toMatchObject({
+        provider: 'mastra',
+        source: 'stored-org',
+        orgCredential: 'api_key',
+        serverKey: true,
+      });
       expect(row).not.toHaveProperty('connectWithMastraAccount');
     });
 
@@ -887,7 +893,12 @@ describe('Mastra Gateway routes with a tenant', () => {
 
       const row = await gatewayRow(buildApp(fakePlatform()));
 
-      expect(row).toMatchObject({ provider: 'mastra', source: 'stored-user', userCredential: 'api_key' });
+      expect(row).toMatchObject({
+        provider: 'mastra',
+        source: 'stored-user',
+        userCredential: 'api_key',
+        serverKey: true,
+      });
     });
 
     it.each(['org', 'user'] as const)('creates no key when a client still calls connect for %s', async scope => {
@@ -985,6 +996,14 @@ describe('Mastra Gateway routes with a tenant', () => {
     const res = await buildApp(platform).request('/web/config/providers/mastra/credits');
 
     expect(await res.json()).not.toHaveProperty('remaining');
+  });
+
+  it('reports no server key when the server has none', async () => {
+    const { providers } = (await (await buildApp(fakePlatform()).request('/web/config/providers')).json()) as {
+      providers: Array<{ provider: string }>;
+    };
+
+    expect(providers.find(p => p.provider === 'mastra')).not.toHaveProperty('serverKey');
   });
 
   it('offers the one-click gateway only when auth can act on the Mastra platform', async () => {

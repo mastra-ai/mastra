@@ -521,7 +521,9 @@ describe('Model provider onboarding', () => {
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
           HttpResponse.json({
             orgKeyAdmin: true,
-            providers: [{ provider: 'mastra', envVar: 'MASTRA_GATEWAY_API_KEY', source: 'deployment' }],
+            providers: [
+              { provider: 'mastra', envVar: 'MASTRA_GATEWAY_API_KEY', source: 'deployment', serverKey: true },
+            ],
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>

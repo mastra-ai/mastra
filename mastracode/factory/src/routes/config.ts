@@ -113,6 +113,12 @@ export interface ProviderInfo {
   custom?: true;
   /** Tenant mode: Factory can mint this provider's key with the caller's Mastra account (the Mastra Gateway). */
   connectWithMastraAccount?: true;
+  /**
+   * Tenant mode: the server has its own key for this provider (the Mastra Gateway), which serves
+   * any scope that has no stored credential. Reported apart from `source`, which names only the
+   * credential that wins for the caller.
+   */
+  serverKey?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -266,6 +272,7 @@ export async function listProviders({
       !serverGatewayKey
         ? { connectWithMastraAccount: true as const }
         : {}),
+      ...(tenantCredentials && serverGatewayKey ? { serverKey: true as const } : {}),
     });
   }
 

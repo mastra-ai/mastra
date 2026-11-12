@@ -58,12 +58,12 @@ export interface ProviderConnection {
 }
 
 /**
- * The Mastra Gateway running on a key the server already has, such as the one the
- * Mastra platform adds to a deploy. Unlike other server-held credentials, it serves
- * personal sessions too, so personal setup shows it as connected.
+ * The Mastra Gateway on a server that has its own key, such as the one the Mastra platform
+ * adds to a deploy. Unlike other server-held credentials, that key serves every scope that
+ * has no stored credential, personal sessions included.
  */
-function isServerGateway(provider: ProviderInfo): boolean {
-  return provider.provider === 'mastra' && provider.source === 'deployment';
+function hasServerGatewayKey(provider: ProviderInfo): boolean {
+  return provider.serverKey === true;
 }
 
 export function providerCredentialMethod(
@@ -71,9 +71,10 @@ export function providerCredentialMethod(
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
   if (provider.custom) return 'api_key';
-  if (scope === 'user') return credentialAt(provider, 'user') ?? (isServerGateway(provider) ? 'api_key' : undefined);
+  const serverKey = hasServerGatewayKey(provider) ? ('api_key' as const) : undefined;
+  if (scope === 'user') return credentialAt(provider, 'user') ?? serverKey;
   if (provider.source === 'deployment') return 'api_key';
-  if (scope === 'org') return credentialAt(provider, 'org');
+  if (scope === 'org') return credentialAt(provider, 'org') ?? serverKey;
   if (provider.source === 'none') return undefined;
   return provider.source.startsWith('oauth') ? 'oauth' : 'api_key';
 }
@@ -194,7 +195,7 @@ export function useProviderConnection({
     signInProviders: providerChoices.filter(candidate => candidate.oauth?.supported === true),
     keyProviders: providerChoices.filter(
       candidate =>
-        !(hidesDeploymentKeys && candidate.source === 'deployment' && !isServerGateway(candidate)) &&
+        !(hidesDeploymentKeys && candidate.source === 'deployment' && !hasServerGatewayKey(candidate)) &&
         offersApiKey(candidate),
     ),
     provider,
