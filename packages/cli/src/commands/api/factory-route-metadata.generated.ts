@@ -448,6 +448,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "backgroundToolsEnabled",
       "buildTriggers",
       "repositories",
       "sandboxWorkingDirectory",
@@ -2317,6 +2318,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "null"
               ]
             },
+            "backgroundToolsEnabled": {
+              "type": "boolean"
+            },
             "activeTemplateId": {
               "type": [
                 "string",
@@ -2508,6 +2512,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "settings",
             "sandboxWorkingDirectory",
             "workspaceSetupCommand",
+            "backgroundToolsEnabled",
             "activeTemplateId",
             "activeTemplateHeads",
             "repositories"
@@ -4531,11 +4536,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "workspaceSetupCommand": {
           "$ref": "#/$defs/__schema4"
         },
-        "buildTriggers": {
+        "backgroundToolsEnabled": {
           "$ref": "#/$defs/__schema5"
         },
-        "repositories": {
+        "buildTriggers": {
           "$ref": "#/$defs/__schema6"
+        },
+        "repositories": {
+          "$ref": "#/$defs/__schema7"
         }
       },
       "$defs": {
@@ -4582,6 +4590,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema5": {
+          "type": "boolean"
+        },
+        "__schema6": {
           "type": "object",
           "properties": {
             "schedule": {
@@ -4620,14 +4631,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           }
         },
-        "__schema6": {
+        "__schema7": {
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema7"
+            "$ref": "#/$defs/__schema8"
           }
         },
-        "__schema7": {
+        "__schema8": {
           "type": "object",
           "properties": {
             "projectRepositoryId": {
@@ -4743,6 +4754,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "string",
                 "null"
               ]
+            },
+            "backgroundToolsEnabled": {
+              "type": "boolean"
             },
             "activeTemplateId": {
               "type": [
@@ -4935,6 +4949,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "settings",
             "sandboxWorkingDirectory",
             "workspaceSetupCommand",
+            "backgroundToolsEnabled",
             "activeTemplateId",
             "activeTemplateHeads",
             "repositories"
