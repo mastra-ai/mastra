@@ -487,15 +487,22 @@ export function describeFinishedOccurrenceCases({
       return { executions, build, run, original };
     }
 
-    it('continues a run whose worker stopped after saving a step result, without running the step again', async () => {
-      const { executions, build, run, original } = await crashAfterSavingFirst();
+    it.each([
+      { delivery: 'a redelivery', attempt: 2 },
+      { delivery: 'a redelivery that used up its attempts', attempt: EXHAUSTED_ATTEMPT },
+    ])(
+      'continues a run whose worker stopped after saving a step result from $delivery, without running the step again',
+      async ({ attempt }) => {
+        const { executions, build, run, original } = await crashAfterSavingFirst();
 
-      const b = await startReplica(build('B'));
-      expect(await redeliver(b, original)).toEqual({ ok: true });
+        const b = await startReplica(build('B'));
+        expect(await redeliver(b, original, attempt)).toEqual({ ok: true });
 
-      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-      expect(executions).toEqual(['A:first', 'B:second']);
-    }, 20_000);
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+        expect(executions).toEqual(['A:first', 'B:second']);
+      },
+      20_000,
+    );
 
     it("continues a run whose worker stopped after saving a step result once another worker's lease on the step expires", async () => {
       const { executions, build, run, original } = await crashAfterSavingFirst();
@@ -521,18 +528,6 @@ export function describeFinishedOccurrenceCases({
       const lease = await store.getRunOwnership({ runId: key });
       expect(lease?.ownerId).not.toBe('stopped-worker');
       expect(lease?.generation).toBeGreaterThan(record!.generation);
-    }, 20_000);
-
-    it("continues a run whose worker stopped after saving a step result when the step's redelivery used up its attempts", async () => {
-      const { executions, build, run, original } = await crashAfterSavingFirst();
-
-      const b = await startReplica(build('B'));
-      expect(
-        await b.mastra.handleWorkflowEvent({ ...copyEvent(original), deliveryAttempt: EXHAUSTED_ATTEMPT }),
-      ).toEqual({ ok: true });
-
-      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-      expect(executions).toEqual(['A:first', 'B:second']);
     }, 20_000);
 
     it.each(Object.keys(shapes) as (keyof typeof shapes)[])(
