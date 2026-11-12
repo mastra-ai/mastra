@@ -696,6 +696,21 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'starters', FACTORY_API_ROUTE_CATALOG.workItemStarters, {
+    description: 'Count the cards behind each new-session starter',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'activity', FACTORY_API_ROUTE_CATALOG.workItemActivity, {
+    description: 'List when Factory work items were created and completed since an instant',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Activity since the start of June',
+        command: `mastra api factory work-item activity <project-id> '{"since":"2026-06-01T00:00:00.000Z"}'`,
+      },
+    ],
+  });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
     description: 'Create a Factory work item in Intake',
     input: 'required',

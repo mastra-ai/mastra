@@ -62,5 +62,20 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/work-items/starters', () =>
+    HttpResponse.json({
+      failed: 0,
+      changesRequested: 0,
+      review: { count: 0 },
+      undecided: 0,
+      untriaged: 0,
+      unplannedBugs: 0,
+      stale: 0,
+    }),
+  ),
+  http.get('*/web/factory/projects/:id/work-items/activity', () =>
+    HttpResponse.json({ total: 0, createdAt: [], doneAt: [] }),
+  ),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
 );

@@ -13,9 +13,13 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, cardWriteMutationKey, queryKeys } from '../api/keys';
+import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
+import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import {
   createWorkItem,
   deleteWorkItem,
+  fetchWorkItemActivity,
+  fetchWorkItemStarters,
   listWorkItems,
   transitionWorkItem,
   updateWorkItem,
@@ -119,6 +123,33 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
     // `readBoard` shares cards by id. React Query shares by index, which would rebuild every card
     // after an added or removed one.
     structuralSharing: !!scope,
+  });
+}
+
+/** What the draft page's starter buttons count: the server counts, so the page never loads the board for them. */
+export function workItemStartersQueryOptions(baseUrl: string, factoryProjectId: string) {
+  return queryOptions({
+    queryKey: queryKeys.workItemStarters(factoryProjectId),
+    queryFn: ({ signal }) => fetchWorkItemStarters(baseUrl, factoryProjectId, signal),
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
+  });
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** When cards were created and completed over `period`, for the activity band. */
+export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: string, period: ActivityPeriod) {
+  const depth = activityDepth(period);
+  return queryOptions({
+    queryKey: queryKeys.workItemActivity(factoryProjectId, depth),
+    queryFn: ({ signal }) => {
+      // From the hour, so the address repeats and the browser can revalidate it; the band drops what falls before its own start.
+      const since = Math.floor(activityStart(depth, Date.now()) / HOUR_MS) * HOUR_MS;
+      return fetchWorkItemActivity(baseUrl, factoryProjectId, since, signal);
+    },
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
   });
 }
 
