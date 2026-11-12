@@ -31,6 +31,10 @@ export async function executeExpressRequest(app: Application, req: MockHttpReque
   return await new Promise((resolve, reject) => {
     const socket = new PassThrough() as any;
     socket.remoteAddress = '127.0.0.1';
+    // Behave like a real connection for large/streamed responses: consume what the response writes, and (below)
+    // forward the socket's 'drain' to the response as Node's HTTP server does. Without both, a response past the
+    // stream highWaterMark (64 KiB on Node >=22) stalls on backpressure, never emits 'finish', and NestJS shutdown waits on the request forever.
+    socket.resume();
 
     const request = new IncomingMessage(socket);
     request.method = req.method.toUpperCase();
@@ -59,6 +63,7 @@ export async function executeExpressRequest(app: Application, req: MockHttpReque
 
     const response = new ServerResponse(request);
     response.assignSocket(socket);
+    socket.on('drain', () => response.emit('drain'));
     (response as any).req = request;
     (request as any).res = response;
 

@@ -13,6 +13,7 @@ export type {
   HookStdinUserPrompt,
   HookStdinStop,
   HookStdinSession,
+  SessionStartSource,
   HookStdinNotification,
   HookStdinAgentStart,
   HookStdinAgentEnd,

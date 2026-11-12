@@ -131,6 +131,39 @@ export interface IMastraAuthProvider<TUser = unknown> {
    * reach the browser.
    */
   consumePendingResponseHeaders?(request: MastraAuthRequest): Record<string, string> | undefined;
+  /**
+   * OAuth 2.0 Protected Resource Metadata (RFC 9728) hints, used by the built-in MCP server's
+   * `/.well-known/oauth-protected-resource` endpoint when `server.mcp.oauth` does not set them.
+   */
+  getOAuthMetadata?(): MastraAuthOAuthMetadata | undefined;
+  /**
+   * Whether the token that authenticated `user` was issued for `audience` (its `aud` claim includes it).
+   * `user` is the value returned by `authenticateToken`. Called by the built-in MCP server when
+   * `server.mcp.oauth.resource` is set.
+   */
+  verifyAudience?(user: TUser, audience: string): boolean | Promise<boolean>;
+}
+
+/** Authorization server hints for MCP clients (RFC 9728). */
+export interface MastraAuthOAuthMetadata {
+  /** Issuer URLs of the authorization servers that issue tokens accepted by this provider. */
+  authorizationServers?: string[];
+  /** OAuth scopes the provider understands. */
+  scopesSupported?: string[];
+}
+
+/** Whether a JWT `aud` claim (string or array) includes `audience`. */
+export function jwtAudienceIncludes(aud: unknown, audience: string): boolean {
+  return Array.isArray(aud) ? aud.includes(audience) : aud === audience;
+}
+
+/**
+ * JWT claims as the authenticated user. OIDC tokens name the user in `sub`, while RBAC and FGA look the user up
+ * by `id`, so `id` is filled from `sub` when the token has no `id` claim of its own.
+ */
+export function withSubjectAsId<T extends object>(claims: T): T {
+  const { sub, id } = claims as { sub?: unknown; id?: unknown };
+  return id == null && typeof sub === 'string' && sub ? { ...claims, id: sub } : claims;
 }
 
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
@@ -329,9 +362,8 @@ export class CompositeAuth
 
   private takeAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
     if (isObjectLike(user)) {
-      const provider = this.authenticatedProviderByObject.get(user);
-      this.authenticatedProviderByObject.delete(user);
-      return provider;
+      // Kept (WeakMap) so later per-request hooks such as verifyAudience still find the provider.
+      return this.authenticatedProviderByObject.get(user);
     }
 
     const primitiveUser = user as PrimitiveAuthUser;
@@ -429,6 +461,47 @@ export class CompositeAuth
       }
     }
     return merged;
+  }
+
+  /** The wrapped provider that authenticated `user`, or undefined when it can't be determined. */
+  getAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
+    return isObjectLike(user)
+      ? this.authenticatedProviderByObject.get(user)
+      : this.authenticatedProviderByPrimitive.get(user as PrimitiveAuthUser);
+  }
+
+  /** The wrapped providers, in the order they are tried. */
+  getProviders(): readonly IMastraAuthProvider[] {
+    return this.providers;
+  }
+
+  /** Union of the wrapped providers' OAuth metadata. */
+  getOAuthMetadata(): MastraAuthOAuthMetadata | undefined {
+    const authorizationServers = new Set<string>();
+    const scopesSupported = new Set<string>();
+    for (const provider of this.providers) {
+      const metadata = provider.getOAuthMetadata?.();
+      metadata?.authorizationServers?.forEach(server => authorizationServers.add(server));
+      metadata?.scopesSupported?.forEach(scope => scopesSupported.add(scope));
+    }
+    if (!authorizationServers.size && !scopesSupported.size) return undefined;
+    return {
+      ...(authorizationServers.size && { authorizationServers: [...authorizationServers] }),
+      ...(scopesSupported.size && { scopesSupported: [...scopesSupported] }),
+    };
+  }
+
+  /**
+   * Delegates to the provider that authenticated `user`. Returns true (audience not enforced) when that
+   * provider has no `verifyAudience`. When the authenticating provider can't be determined (for example the
+   * user object was replaced after authentication), returns false if any wrapped provider could check the
+   * audience, so the check fails closed.
+   */
+  async verifyAudience(user: unknown, audience: string): Promise<boolean> {
+    const provider = this.getAuthenticatedProvider(user);
+    if (!provider) return !this.providers.some(p => typeof p.verifyAudience === 'function');
+    if (typeof provider.verifyAudience !== 'function') return true;
+    return provider.verifyAudience(user, audience);
   }
 
   async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {

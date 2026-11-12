@@ -1,6 +1,6 @@
 {
   "name": "@mastra/tanstack-start",
-  "version": "0.2.41-alpha.12",
+  "version": "0.2.41-alpha.13",
   "description": "Mastra TanStack Start server adapter — drop your Mastra instance into a TanStack Start app",
   "type": "module",
   "main": "dist/index.js",
@@ -31,9 +31,11 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
+    "@hono/node-server": "^2.1.3",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/server-adapters-test-suite": "workspace:*",
     "@types/node": "22.19.15",
     "hono": "^4.13.13",
     "tsdown": "0.23.1",
