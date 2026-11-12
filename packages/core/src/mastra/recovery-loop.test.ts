@@ -197,6 +197,15 @@ describe('workflow recovery loop (#28712)', () => {
   it('restarts a run whose instance crashed mid-step once its liveness lapsed and the grace period passed, though no instance boots', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];
+    const intervalMs = 500;
+    // B runs all along: its loop is on before A starts the run.
+    const restarts: string[] = [];
+    const onB = replica(storage, 'evented', 'B', executions, {
+      recovery: { workflowGraceMs: GRACE_MS, workflowScanIntervalMs: intervalMs },
+      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
+    });
+    await onB.startWorkers();
+
     const a = killableProcess({ storage, pubsub: new EventEmitterPubSub() });
     const onA = new Mastra({
       logger: false,
@@ -210,25 +219,16 @@ describe('workflow recovery loop (#28712)', () => {
     await run.startAsync({ inputData: {} });
     await vi.waitFor(() => expect(executions).toEqual(['A:work']));
 
-    // B checks storage once a minute, so only the run its first pass saw live brings its next passes forward.
-    const restarts: string[] = [];
-    const onB = replica(storage, 'evented', 'B', executions, {
-      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
-    });
-    await onB.startWorkers();
-    await onB.restartAllActiveWorkflowRuns();
-    await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 2);
-    expect(restarts).toEqual([]);
-
     a.kill();
     const killedAt = Date.now();
-    await vi.waitFor(async () => expect(await statusOf(storage, run.runId)).toBe('success'), {
-      timeout: 6_000,
-      interval: 50,
-    });
+    await vi.waitFor(() => expect(restarts).toEqual([run.runId]), { timeout: 6_000, interval: 10 });
+    const restartedAfter = Date.now() - killedAt;
 
-    expect(Date.now() - killedAt).toBeGreaterThanOrEqual(GRACE_MS);
-    expect(restarts).toEqual([run.runId]);
+    // A renewed the run's liveness at least every third of a lease TTL, so its key outlived the
+    // crash by two thirds of one at least. B's next pass after that and the grace period picks it up.
+    expect(restartedAfter).toBeGreaterThanOrEqual((WORKFLOW_RUN_LEASE_TTL_MS * 2) / 3 + GRACE_MS);
+    expect(restartedAfter).toBeLessThan(intervalMs * 1.2 + WORKFLOW_RUN_LEASE_TTL_MS + GRACE_MS + 500);
+    await vi.waitFor(async () => expect(await statusOf(storage, run.runId)).toBe('success'));
     expect(executions).toEqual(['A:work', 'B:work']);
   }, 15_000);
 
@@ -249,7 +249,8 @@ describe('workflow recovery loop (#28712)', () => {
     await vi.waitFor(() => expect(executions).toEqual(['A:work']));
 
     // A shuts down giving up on the step, as a reload does, and its process exits. The default grace
-    // with the in-process pubsub is 2 s.
+    // with the in-process pubsub is 2 s, counted from when the shutdown expired A's keys.
+    const shuttingDownAt = Date.now();
     await onA.shutdown({ drainTimeout: 0 });
     a.kill();
     const shutDownAt = Date.now();
@@ -267,9 +268,8 @@ describe('workflow recovery loop (#28712)', () => {
       timeout: 5_000,
       interval: 50,
     });
-    const recoveredAfter = Date.now() - shutDownAt;
-    expect(recoveredAfter).toBeGreaterThanOrEqual(1_900);
-    expect(recoveredAfter).toBeLessThan(4_000);
+    expect(Date.now() - shuttingDownAt).toBeGreaterThanOrEqual(2_000);
+    expect(Date.now() - shutDownAt).toBeLessThan(4_000);
     expect(executions).toEqual(['A:work', 'B:work']);
   }, 15_000);
 
@@ -332,7 +332,17 @@ describe('workflow recovery loop (#28712)', () => {
     await vi.waitFor(() => expect(listings.mock.calls.length).toBeGreaterThanOrEqual(4));
 
     await stop(mastra);
-    const listed = listings.mock.calls.length;
+    // A pass already running may still list; wait until the count holds still for two intervals.
+    let listed = -1;
+    await vi.waitFor(
+      async () => {
+        const before = listings.mock.calls.length;
+        await sleep(scanning.workflowScanIntervalMs * 2);
+        listed = listings.mock.calls.length;
+        expect(listed).toBe(before);
+      },
+      { timeout: 5_000 },
+    );
     await sleep(scanning.workflowScanIntervalMs * 5);
 
     expect(listings.mock.calls.length).toBe(listed);
@@ -387,13 +397,15 @@ describe('workflow recovery loop (#28712)', () => {
   });
 
   it.each([
-    ['the store has no run fencing', { workflowGraceMs: 0, ...scanning }, false],
-    ["recovery.workflows is 'off'", { workflows: 'off', workflowGraceMs: 0, ...scanning }, true],
-  ] as const)('checks nothing on a timer when %s', async (_, recovery, fenced) => {
+    // The loop asks the store once, and stops when it has no fencing.
+    ['the store has no run fencing', { workflowGraceMs: 0, ...scanning }, false, 1],
+    // The loop never starts, so it doesn't even ask.
+    ["recovery.workflows is 'off'", { workflows: 'off', workflowGraceMs: 0, ...scanning }, true, 0],
+  ] as const)('checks nothing on a timer when %s', async (_, recovery, fenced, probes) => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
-    vi.spyOn(store, 'supportsRunFencing').mockResolvedValue(fenced);
+    const fencing = vi.spyOn(store, 'supportsRunFencing').mockResolvedValue(fenced);
     const listings = vi.spyOn(store, 'listWorkflowRuns');
     const mastra = replica(storage, 'default', 'B', executions, { recovery });
     await persistActiveRun(storage, 'stopped');
@@ -401,6 +413,7 @@ describe('workflow recovery loop (#28712)', () => {
     await mastra.startWorkers();
     await sleep(scanning.workflowScanIntervalMs * 5);
 
+    expect(fencing).toHaveBeenCalledTimes(probes);
     expect(listings).not.toHaveBeenCalled();
     expect(executions).toEqual([]);
   });

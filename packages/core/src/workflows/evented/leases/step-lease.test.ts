@@ -378,18 +378,30 @@ describe('evented step leases (#28712)', () => {
       await vi.waitFor(() => expect(executions).toEqual(['A']));
       expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({ ok: true });
 
+      const listedAt: number[] = [];
+      const store = (await storage.getStore('workflows'))!;
+      const list = store.listWorkflowRuns.bind(store);
+      vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
+        listedAt.push(Date.now());
+        return list(args);
+      });
       await crash(a, storage, [
         stepOccurrenceKey(delivery!.runId, [0]),
         runLivenessKey(delivery!.runId),
         runLivenessKey(run.runId),
       ]);
+      const crashedAt = Date.now();
 
       if (restartable) {
         await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 10_000 });
         expect(executions).toEqual(['A', 'B']);
       } else {
-        // Past the point B's loop restarts the restartable parent.
-        await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 3_000);
+        // B's loop lists three times after it would have restarted a restartable parent: its
+        // liveness lapsed and the 2 s grace of the in-process pubsub passed.
+        const dueAt = crashedAt + WORKFLOW_RUN_LEASE_TTL_MS + 2_000;
+        await vi.waitFor(() => expect(listedAt.filter(at => at >= dueAt).length).toBeGreaterThanOrEqual(3), {
+          timeout: 10_000,
+        });
         expect(executions).toEqual(['A']);
         expect(await runStatus(storage, run.runId)).toBe('running');
       }
