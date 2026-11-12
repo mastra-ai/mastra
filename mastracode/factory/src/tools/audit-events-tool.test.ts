@@ -185,6 +185,7 @@ describe('factory_list_audit_events', () => {
         { at: 7, ...agent('session:mine'), metadata: {} },
         { at: 8, ...agent('session:private'), metadata: {} },
         { at: 9, ...agent('session:run-session'), metadata: {} },
+        { at: 10, ...agent('session:shared'), metadata: {} },
       ],
       bindings: [{ threadId: 'run-thread', sessionId: 'run-session' }],
       threads: [
@@ -201,6 +202,7 @@ describe('factory_list_audit_events', () => {
 
     const result = await run();
     expect(result.events.map(e => e.actor.id)).toEqual([
+      'agent:session:shared',
       'agent:session:run-session',
       'agent:session:mine',
       'agent:own-run',
@@ -208,7 +210,7 @@ describe('factory_list_audit_events', () => {
       'agent:shared-thread',
       'agent:run-thread',
     ]);
-    expect(result.events[2]!.startedBy).toBe('user-1');
+    expect(result.events[3]!.startedBy).toBe('user-1');
   });
 
   it("leaves out people's events about another person's private session", async () => {
