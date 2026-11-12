@@ -757,8 +757,11 @@ export interface MastraRecoveryConfig {
    * running it, and neither the run nor the lease of the instance that last
    * ran it changed for this long. Covers the time an event can spend between
    * instances, so it should exceed how long your pubsub can hold a message
-   * before a worker takes it.
-   * @default 2000 with the in-process pubsub, 60000 otherwise
+   * before a worker takes it. A run skipped as live or in its grace period is
+   * looked at again up to 5 s after that period ends, so with the in-process
+   * pubsub a run that a graceful shutdown left behind is recovered 2 to 7 s
+   * after the shutdown.
+   * @default 2000 with the default in-process pubsub, 60000 with any other pubsub
    */
   workflowGraceMs?: number;
   /**
@@ -858,12 +861,14 @@ const DEFAULT_WORKFLOW_GRACE_MS = 60_000;
 // liveness renew intervals: an instance whose key write another instance superseded cannot expire it,
 // so the key's last expiry can sit up to that far in the past while the other instance still works.
 const IN_PROCESS_WORKFLOW_GRACE_MS = 2_000;
+// The longest delay `setTimeout` honours.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 // The active runs whose liveness keys one `getRunOwnerships` call reads during a recovery pass.
 const RECOVERY_OWNERSHIP_BATCH_SIZE = 100;
 
-/** `recovery.workflowGraceMs` as configured, or `fallback` when it is unset or not a non-negative number. */
+/** `recovery.workflowGraceMs` as configured, or `fallback` when it is unset or not a finite non-negative number. */
 function normalizeGraceMs(graceMs: number | undefined, fallback: number): number {
-  if (typeof graceMs !== 'number' || Number.isNaN(graceMs) || graceMs < 0) {
+  if (typeof graceMs !== 'number' || !Number.isFinite(graceMs) || graceMs < 0) {
     return fallback;
   }
 
@@ -4886,7 +4891,11 @@ export class Mastra<
 
     const key = JSON.stringify(['workflow', workflowName, runId]);
     clearTimeout(this.#durableRecoveryRechecks.get(key));
-    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    // Timers fire at once past 2^31 - 1 ms; a recheck that far out comes back at the cap instead and looks again.
+    const delay = Math.min(
+      MAX_TIMER_DELAY_MS,
+      Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS,
+    );
     const timer = setTimeout(() => {
       this.#durableRecoveryRechecks.delete(key);
       if (this.#shuttingDown) {
