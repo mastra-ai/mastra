@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.83.0-alpha.12
+
+### Minor Changes
+
+- Add model and provider as span query sort fields. ([#30096](https://github.com/mastra-ai/mastra/pull/30096))
+
+  ```ts
+  orderBy: [{ field: 'model', direction: 'asc' }];
+  ```
+
+- Add span-local error counts. ([#30088](https://github.com/mastra-ai/mastra/pull/30088))
+
+### Patch Changes
+
+- Name the agent in the missing-storage error thrown by `Memory`. When an agent's memory never received storage because the agent was never attached to a Mastra instance, accessing `memory.storage` now fails with `[Agent:<name>] Memory requires a storage provider to function. ...`, so it is clear which agent is misconfigured. The registration and standalone-storage guidance added in #29972 is unchanged, and agents that inherit storage from their Mastra or configure it directly on `Memory` are unaffected. ([#30164](https://github.com/mastra-ai/mastra/pull/30164))
+
+- Experiments with a scorer or processor target now save their scores, and workflow step scorers in experiments now save their step scores. Previously these scores were silently discarded. ([#30145](https://github.com/mastra-ai/mastra/pull/30145))
+
 ## 1.83.0-alpha.11
 
 ### Patch Changes

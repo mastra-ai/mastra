@@ -1,5 +1,16 @@
 # @mastra/clickhouse
 
+## 1.30.0-alpha.4
+
+### Minor Changes
+
+- Sort span queries by model or provider in ascending or descending order. ([#30096](https://github.com/mastra-ai/mastra/pull/30096))
+
+### Patch Changes
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+
 ## 1.30.0-alpha.3
 
 ### Minor Changes
