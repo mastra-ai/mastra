@@ -276,6 +276,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
+  // Deliveries of a step whose holder stopped mid-step still run it up to here; see #handle.
+  private static readonly MAX_ABANDONED_DELIVERY_ATTEMPTS = WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS * 3;
   /** TTL of the lease fencing a running `workflow.step.run`; renewed every ttl/3. */
   static STEP_FENCE_TTL_MS = 30_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
@@ -2366,13 +2368,16 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * The live lease another delivery holds on the leaf occurrence this
-   * `workflow.step.run` delivers, or `null`. A hand-off the event carries for
-   * that very lease does not count: the lease is waiting for this delivery
-   * then. Events {@link processWorkflowStepRun} routes to a dispatcher or a
-   * sleep take no lease, so they get `null` too.
+   * The lease of the leaf occurrence this `workflow.step.run` delivers when
+   * another delivery holds it (`live`) or held it and stopped mid-step without
+   * releasing it (`abandoned`), or `null`. A released lease, a missing one and
+   * a live hand-off the event carries for that very lease give `null`. Events
+   * {@link processWorkflowStepRun} routes to a dispatcher or a sleep take no
+   * lease, so they get `null` too.
    */
-  async #liveStepLeaseElsewhere(event: Event): Promise<RunOwnershipRecord | null> {
+  async #stepLeaseElsewhere(
+    event: Event,
+  ): Promise<{ live: RunOwnershipRecord } | { abandoned: RunOwnershipRecord } | null> {
     const data = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
     if (!data?.workflowId || !data.executionPath?.length) {
       return null;
@@ -2406,13 +2411,18 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const record = await store.getRunOwnership({ runId: this.#stepLeaseKey(data, leaf) });
-    if (!record?.live) {
+    if (!record) {
       return null;
+    }
+
+    // Expired without a release: the last holder stopped in the middle of the step.
+    if (!record.live) {
+      return record.leaseExpiresAt ? { abandoned: record } : null;
     }
 
     const handoff = data.stepLeaseHandoff;
     const handedToThisDelivery = handoff && handoff.key === record.runId && handoff.generation === record.generation;
-    return handedToThisDelivery ? null : record;
+    return handedToThisDelivery ? null : { live: record };
   }
 
   /** Evaluates the loop condition after an iteration, then starts the next one or leaves the loop. */
@@ -5261,8 +5271,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         // run's way back if the holder dies, so the top-level run is re-checked for recovery the
         // way a refused boot-time restart is, until it settles or its liveness lapses. A workflow
         // recovery does not restart, or one this instance cannot resolve, gets no re-check.
-        const holder = event.type === 'workflow.step.run' ? await this.#liveStepLeaseElsewhere(event) : null;
-        if (holder) {
+        const lease = event.type === 'workflow.step.run' ? await this.#stepLeaseElsewhere(event) : null;
+        if (lease && 'live' in lease) {
+          const holder = lease.live;
           this.deliveryAttempts.delete(eventKey);
           // Recovery restarts top-level runs; a nested run is driven again through its root.
           let root = event.data as { workflowId: string; runId: string; parentWorkflow?: ParentWorkflow };
@@ -5282,6 +5293,22 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
           return { ok: true };
         }
+
+        // The holder those deliveries deferred to stopped mid-step, so they never ran it: run it
+        // once more. A delivery that runs the step releases its lease even when it fails, so a
+        // later exhausted delivery finds it released and fails the run as before. A step that
+        // brings its worker down every time it runs leaves the same state, so these extra runs
+        // stop at a cap and the run then fails as before.
+        if (lease && 'abandoned' in lease && priorAttempts < WorkflowEventProcessor.MAX_ABANDONED_DELIVERY_ATTEMPTS) {
+          this.mastra.getLogger()?.warn('Running an exhausted delivery of a step whose worker stopped mid-step', {
+            runId: event.runId,
+            deliveryAttempt: event.deliveryAttempt,
+          });
+          await this.#dispatch(event);
+          this.deliveryAttempts.delete(eventKey);
+          return { ok: true };
+        }
+
         return this.#publishPendingFailure(event, eventKey, {
           error: new Error(`Event ${event.type} exhausted its delivery attempts`),
           publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
