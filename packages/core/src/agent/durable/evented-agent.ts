@@ -111,6 +111,26 @@ export class EventedAgent<
   #warnedUnfencedSharedExecution = false;
 
   /**
+   * The thread lease this run claimed before its input write, keyed by run id.
+   *
+   * Recorded at claim time, because giving the lease back has to name the lease
+   * this run took. Re-reading the registry when the write fails can find nothing
+   * — output-error cleanup drops the entry while the write is still in flight —
+   * or a successor's fence, and re-reading it would leave this process renewing a
+   * lease on a thread no run holds.
+   */
+  #heldThreadLeases = new Map<
+    string,
+    {
+      pubsub: PubSub;
+      threadId: string;
+      resourceId: string | undefined;
+      generation: number | undefined;
+      executionId: string | undefined;
+    }
+  >();
+
+  /**
    * The evented engine stores runs only as version 1, and a hostless
    * EventedAgent that falls back to the default engine stays on version 1 too.
    * @internal
@@ -191,9 +211,9 @@ export class EventedAgent<
 
   /**
    * The thread this run claimed before it persisted its input, or undefined when
-   * it did not claim one. Both the pre-persist claim and a failed input write
-   * resolve it the same way, so the lease is given back by the same owner that
-   * took it.
+   * it did not claim one. Resolved once at claim time; the identity a failed run
+   * gives back comes from what was claimed rather than a second read of the
+   * registry.
    */
   #threadClaimTarget(runId: string, workflowInput: DurableAgenticWorkflowInput) {
     const entry = getRunRegistryEntry(runId, this.getMastraInstance());
@@ -218,23 +238,17 @@ export class EventedAgent<
    * Give back the thread lease a run claimed before it persisted its input. The
    * run never reached the engine, so nothing else settles that claim and this
    * process would keep renewing a lease on a thread no run holds.
+   *
+   * The lease is named by what {@link beforePersistInitialInput} recorded, not by
+   * what the registry holds now: the give-back must not depend on an entry that a
+   * timeout or output-error cleanup may already have removed.
    */
-  async #abandonHeldThreadLease(
-    runId: string,
-    workflowInput: DurableAgenticWorkflowInput,
-    failure: string,
-  ): Promise<void> {
-    const target = this.#threadClaimTarget(runId, workflowInput);
-    if (!target) return;
+  async #abandonHeldThreadLease(runId: string, failure: string): Promise<void> {
+    const held = this.#heldThreadLeases.get(runId);
+    if (!held) return;
+    this.#heldThreadLeases.delete(runId);
     await agentThreadStreamRuntime
-      .abandonDurableThreadLease(
-        target.pubsub,
-        runId,
-        target.threadId,
-        target.resourceId,
-        target.executionFence.generation,
-        target.executionFence.executionId,
-      )
+      .abandonDurableThreadLease(held.pubsub, runId, held.threadId, held.resourceId, held.generation, held.executionId)
       .catch(leaseError => this.logger.warn(failure, { runId, error: leaseError }));
   }
 
@@ -272,6 +286,13 @@ export class EventedAgent<
       target.executionFence.generation,
       target.executionFence.executionId,
     );
+    this.#heldThreadLeases.set(runId, {
+      pubsub: target.pubsub,
+      threadId: target.threadId,
+      resourceId: target.resourceId,
+      generation: target.executionFence.generation,
+      executionId: target.executionFence.executionId,
+    });
     setExecutionClaim(target.requestContext, runId, {
       ...target.executionFence.claim,
       threadId: target.threadId,
@@ -293,7 +314,6 @@ export class EventedAgent<
     } catch (error) {
       await this.#abandonHeldThreadLease(
         runId,
-        workflowInput,
         'Failed to release the thread lease of a run that could not save its input',
       );
       throw error;
@@ -416,14 +436,14 @@ export class EventedAgent<
       // The engine never took ownership of this run, so the thread lease held
       // since before the input write has no successor: give it back, or this
       // process keeps renewing a lease on a thread no run holds.
-      await this.#abandonHeldThreadLease(
-        runId,
-        workflowInput,
-        'Failed to release the thread lease of a run that never started',
-      );
+      await this.#abandonHeldThreadLease(runId, 'Failed to release the thread lease of a run that never started');
       await this.settleExecution(runId, executionFence, {
         error: this.workflowExecutionError(error, 'Workflow execution failed'),
       });
+    } finally {
+      // The run has either handed its lease to the engine or given it back; the
+      // recorded identity is no longer needed and must not outlive the setup.
+      this.#heldThreadLeases.delete(runId);
     }
   }
 }

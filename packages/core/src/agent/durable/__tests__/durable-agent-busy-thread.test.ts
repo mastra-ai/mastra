@@ -144,7 +144,7 @@ async function startProcess({
     { PubSub },
     { agentThreadStreamTopic },
     { agentThreadStreamRuntime },
-    { ExtendedRunRegistry, globalRunRegistry },
+    { ExtendedRunRegistry, globalRunRegistry, deleteRunRegistryEntry },
     { createTool },
     streamAdapter,
     preparation,
@@ -340,9 +340,11 @@ async function startProcess({
     resourceId,
     threadKey,
     pubsub,
+    mastra,
     agentThreadStreamRuntime,
     ExtendedRunRegistry,
     globalRunRegistry,
+    deleteRunRegistryEntry,
     streamAdapter,
     preparation,
     otherDurableAgent,
@@ -512,6 +514,7 @@ describe('second message on a busy thread', () => {
 type LeaseDouble = {
   getLeaseOwner(key: string): Promise<string | undefined>;
   acquireLease(key: string, owner: string, ttlMs?: number): Promise<{ acquired: boolean; owner?: string }>;
+  releaseLease(key: string, owner: string): Promise<void>;
 };
 
 describe('run ownership around the initial input write', () => {
@@ -551,6 +554,10 @@ describe('run ownership around the initial input write', () => {
     try {
       const { durableAgent, options } = proc;
       const lease = proc.pubsub as unknown as LeaseDouble;
+      // A 300 ms TTL means a lease whose renewal merely stopped reports no owner
+      // once it lapses, so only this spy tells an explicit release apart from
+      // that: both would satisfy the owner check below.
+      const releaseSpy = vi.spyOn(proc.pubsub as any, 'releaseLease');
       const ensureWorkers = vi
         .spyOn(Object.getPrototypeOf(durableAgent) as any, 'ensureEngineWorkersStarted')
         .mockRejectedValueOnce(new Error('engine workers unavailable'));
@@ -560,9 +567,10 @@ describe('run ownership around the initial input write', () => {
       await expect(durableAgent.generate('first message', options)).rejects.toThrow('engine workers unavailable');
       ensureWorkers.mockRestore();
 
-      await vi.waitFor(async () => {
-        expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
+      await vi.waitFor(() => {
+        expect(releaseSpy.mock.calls.some(([key]) => key === proc.threadKey)).toBe(true);
       });
+      expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
 
       // The thread is usable again rather than being held by a run that never
       // started.
@@ -650,6 +658,9 @@ describe('run ownership around the initial input write', () => {
     try {
       const { durableAgent, memory, options } = proc;
       const lease = proc.pubsub as unknown as LeaseDouble;
+      // Only this spy tells an explicit release apart from renewal merely
+      // stopping: both clear the owner once the 300 ms TTL passes.
+      const releaseSpy = vi.spyOn(proc.pubsub as any, 'releaseLease');
       vi.spyOn(memory, 'saveMessages').mockRejectedValue(new Error('storage unavailable'));
 
       const result = durableAgent.generate('unsaveable message', options);
@@ -658,10 +669,47 @@ describe('run ownership around the initial input write', () => {
       // The run never started, so nothing renews its claim: the lease must be
       // given back instead of being held for the process lifetime.
       expect(proc.modelCalls()).toBe(0);
-      await vi.waitFor(async () => {
-        expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
+      await vi.waitFor(() => {
+        expect(releaseSpy.mock.calls.some(([key]) => key === proc.threadKey)).toBe(true);
       });
+      expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
       expect(await lease.acquireLease(proc.threadKey, 'rival-replica', 300)).toMatchObject({ acquired: true });
+    } finally {
+      vi.unstubAllEnvs();
+      await proc.stop();
+    }
+  }, 30_000);
+
+  it('gives the thread lease back under the identity it claimed when the registry entry is gone', async () => {
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');
+    const proc = await startProcess({ engine: 'evented', sharedTransport: true });
+    try {
+      const { durableAgent, memory, options, mastra, deleteRunRegistryEntry } = proc;
+      const lease = proc.pubsub as unknown as LeaseDouble;
+      const runId = 'registry-entry-gone';
+      const releaseSpy = vi.spyOn(proc.pubsub as any, 'releaseLease');
+
+      // Stands in for output-error cleanup dropping the run's registry entry
+      // while its input write is still in flight. The release must name the lease
+      // this run claimed, not whatever the registry holds at failure time:
+      // re-reading it here finds nothing and leaves the claim renewing on the
+      // thread forever.
+      let dropped = false;
+      vi.spyOn(memory, 'saveMessages').mockImplementation(async () => {
+        if (!dropped) {
+          dropped = true;
+          deleteRunRegistryEntry(runId, mastra);
+        }
+        throw new Error('storage unavailable');
+      });
+
+      await expect(durableAgent.generate('unsaveable message', { ...options, runId })).rejects.toThrow();
+
+      await vi.waitFor(() => {
+        expect(releaseSpy.mock.calls.some(([key]) => key === proc.threadKey)).toBe(true);
+      });
+      expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
       await proc.stop();
