@@ -88,7 +88,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const messageList = runScope.getOrThrow(MESSAGE_LIST_KEY);
     setPersistencePolicy(messageList, {
       readOnly: !!memoryConfig?.readOnly,
-      memoryStorage: await memory?.storage.getStore('memory'),
+      getMemoryStorage: async () => memory?.storage.getStore('memory'),
+      memoryThreadId: memoryData.thread?.id ?? threadIdFromArgs,
       authorize: async (threadId, resolvedResourceId) => {
         const threadIds = new Set([threadId, memoryData.thread?.id, threadIdFromArgs].filter(Boolean));
         for (const id of threadIds) {

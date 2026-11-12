@@ -19,69 +19,95 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
 
   // A fresh durable worker must resolve context-dependent processors before resuming (#29772).
   if (engine === 'durable' || engine === 'evented') {
-    for (const supplyContext of [false, true]) {
-      it(`cold resume retains explicit history with ${supplyContext ? 'supplied' : 'persisted'} request context`, async () => {
-        const store = new InMemoryStore();
-        const storage = (await store.getStore('memory'))!;
-        const threadId = `cold-history-${engine}-${supplyContext}`;
-        const resourceId = 'history-resource';
-        const seen: unknown[] = [];
-        const createWorker = () => {
-          const agent = new Agent({
-            id: 'cold-history',
-            name: 'Cold history',
-            instructions: 'Look up the order.',
-            model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat('gpt-4o-mini'),
-            tools: {
-              lookup: createTool({
-                id: 'lookup',
-                description: 'Look up an order.',
-                inputSchema: z.object({}),
-                requireApproval: true,
-                execute: async (_input, context) => {
-                  seen.push(context?.requestContext?.get('MastraMemory'));
-                  return { order: 'ORDER_29772' };
+    for (const contextChange of ['unchanged', 'input-redirect', 'input-read-only'] as const) {
+      for (const supplyContext of [false, true]) {
+        it(`cold resume retains ${contextChange} history with ${supplyContext ? 'supplied' : 'persisted'} request context`, async () => {
+          const store = new InMemoryStore();
+          const storage = (await store.getStore('memory'))!;
+          const threadId = `cold-history-${engine}-${supplyContext}-${contextChange}`;
+          const resourceId = 'history-resource';
+          const memoryContext = {
+            thread: { id: threadId },
+            resourceId,
+            ...(contextChange === 'input-read-only' ? { memoryConfig: { readOnly: true } } : {}),
+          };
+          const seen: unknown[] = [];
+          const createWorker = () => {
+            const agent = new Agent({
+              id: 'cold-history',
+              name: 'Cold history',
+              instructions: 'Look up the order.',
+              model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat('gpt-4o-mini'),
+              tools: {
+                lookup: createTool({
+                  id: 'lookup',
+                  description: 'Look up an order.',
+                  inputSchema: z.object({}),
+                  requireApproval: true,
+                  execute: async (_input, context) => {
+                    seen.push(context?.requestContext?.get('MastraMemory'));
+                    return { order: 'ORDER_29772' };
+                  },
+                }),
+              },
+              inputProcessors: [
+                {
+                  id: 'change-history-context',
+                  processInput: ({ requestContext, messageList }) => {
+                    if (contextChange !== 'unchanged' && !requestContext.get('history-context-applied')) {
+                      requestContext.set('MastraMemory', memoryContext);
+                      requestContext.set('history-context-applied', true);
+                    }
+                    return messageList;
+                  },
                 },
-              }),
+              ],
+              outputProcessors: ({ requestContext }) =>
+                requestContext.get('MastraMemory') ? [new MessageHistory({ storage })] : [],
+            });
+            const wrapped = engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent });
+            const mastra = new Mastra({ agents: { history: wrapped }, storage: store, logger: false });
+            return mastra.getAgent('history');
+          };
+          getMock().on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: {} }],
             },
-            outputProcessors: ({ requestContext }) =>
-              requestContext.get('MastraMemory') ? [new MessageHistory({ storage })] : [],
+          );
+          getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'Your order is ready.' });
+          const requestContext = new RequestContext();
+          requestContext.set('MastraMemory', {
+            thread: { id: contextChange === 'input-redirect' ? `${threadId}-original` : threadId },
+            resourceId,
           });
-          const wrapped = engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent });
-          const mastra = new Mastra({ agents: { history: wrapped }, storage: store, logger: false });
-          return mastra.getAgent('history');
-        };
-        getMock().on(
-          { endpoint: 'chat', hasToolResult: false },
-          {
-            toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: {} }],
-          },
-        );
-        getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'Your order is ready.' });
-        const requestContext = new RequestContext();
-        requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
-        const first = await createWorker().stream('Find my order', { requestContext, closeOnSuspend: true });
-        for await (const _chunk of first.fullStream) {
-          /* Drain until suspension is committed. */
-        }
-        expect((await first.output.getFullOutput()).finishReason).toBe('suspended');
-        first.cleanup();
-        const resumed = await createWorker().approveToolCall({
-          runId: first.runId,
-          toolCallId: 'call_lookup',
-          ...(supplyContext ? { requestContext: new RequestContext() } : {}),
+          const first = await createWorker().stream('Find my order', { requestContext, closeOnSuspend: true });
+          for await (const _chunk of first.fullStream) {
+            /* Drain until suspension is committed. */
+          }
+          expect((await first.output.getFullOutput()).finishReason).toBe('suspended');
+          first.cleanup();
+          const resumed = await createWorker().approveToolCall({
+            runId: first.runId,
+            toolCallId: 'call_lookup',
+            ...(supplyContext ? { requestContext: new RequestContext() } : {}),
+          });
+          let resumedText = '';
+          for await (const chunk of resumed.fullStream) {
+            if (chunk.type === 'text-delta') resumedText += chunk.payload.text;
+          }
+          expect(resumedText).toBe('Your order is ready.');
+          expect(seen).toEqual([expect.objectContaining(memoryContext)]);
+          const { messages } = await storage.listMessages({ threadId, perPage: false });
+          if (contextChange === 'input-read-only') {
+            expect(messages).toEqual([]);
+          } else {
+            expect(messages.flatMap(message => message.content.parts)).toContainEqual(
+              expect.objectContaining({ type: 'text', text: 'Your order is ready.' }),
+            );
+          }
         });
-        let resumedText = '';
-        for await (const chunk of resumed.fullStream) {
-          if (chunk.type === 'text-delta') resumedText += chunk.payload.text;
-        }
-        expect(resumedText).toBe('Your order is ready.');
-        expect(seen).toEqual([expect.objectContaining({ thread: { id: threadId }, resourceId })]);
-        const { messages } = await storage.listMessages({ threadId, perPage: false });
-        expect(messages.flatMap(message => message.content.parts)).toContainEqual(
-          expect.objectContaining({ type: 'text', text: 'Your order is ready.' }),
-        );
-      });
+      }
     }
   }
 
@@ -100,6 +126,7 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
       'input-redirect',
       'input-read-only',
       'memory-tripwire',
+      'memory-redirect-tripwire',
     ] as const) {
       // Inngest does not yet run output processors at the total deadline (#29047).
       it.skipIf(terminal === 'deadline' && engine === 'inngest')(
@@ -107,13 +134,24 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
         async () => {
           const store = new InMemoryStore();
           const storage = (await store.getStore('memory'))!;
-          const memory = variant === 'memory-tripwire' ? new Memory({ storage: new InMemoryStore() }) : undefined;
+          const memory =
+            variant === 'memory-redirect-tripwire'
+              ? new Memory({ storage: store })
+              : variant === 'memory-tripwire'
+                ? new Memory({ storage: new InMemoryStore() })
+                : undefined;
           const threadId = `history-${engine}-${terminal}-${variant}`;
           const runThreadId = `${threadId}-run`;
           const resourceId = 'history-resource';
           const events: string[] = [];
           const saveMessages = storage.saveMessages.bind(storage);
           storage.saveMessages = async args => {
+            if (
+              variant === 'memory-redirect-tripwire' &&
+              args.messages.every(message => message.threadId === runThreadId && message.resourceId === resourceId)
+            ) {
+              return saveMessages(args);
+            }
             events.push('save');
             expect(
               args.messages.every(message => message.threadId === threadId && message.resourceId === resourceId),
@@ -140,11 +178,14 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
             },
           };
           const processors: OutputProcessor[] = [];
-          if (variant === 'redirect-denied')
+          if (variant === 'redirect-denied' || variant === 'memory-redirect-tripwire')
             processors.push({
               id: 'redirect-history',
               processOutputResult: ({ messageList, requestContext }) => {
-                requestContext.set('MastraMemory', { thread: { id: deniedThread }, resourceId });
+                requestContext.set('MastraMemory', {
+                  thread: { id: variant === 'memory-redirect-tripwire' ? threadId : deniedThread },
+                  resourceId,
+                });
                 return messageList;
               },
             });
@@ -176,7 +217,12 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
             };
             processors.push(new MessageHistory({ storage: failingStorage }));
           }
-          if (variant === 'tripwire' || variant === 'undo-failure' || variant === 'memory-tripwire')
+          if (
+            variant === 'tripwire' ||
+            variant === 'undo-failure' ||
+            variant === 'memory-tripwire' ||
+            variant === 'memory-redirect-tripwire'
+          )
             processors.push({
               id: 'block-response',
               processOutputResult: ({ abort }) => abort('Blocked response'),
@@ -208,7 +254,9 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
                   : undefined,
               memory,
               threadId: memory
-                ? threadId
+                ? variant === 'memory-redirect-tripwire'
+                  ? runThreadId
+                  : threadId
                 : variant === 'conflicting-threads' || variant === 'run-denied'
                   ? runThreadId
                   : undefined,
@@ -248,7 +296,11 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
             const { messages } = await storage.listMessages({ threadId, perPage: false });
             const redirected = await storage.listMessages({ threadId: deniedThread, perPage: false });
             const runMessages = await storage.listMessages({ threadId: runThreadId, perPage: false });
-            expect(runMessages.messages).toEqual([]);
+            if (variant === 'memory-redirect-tripwire') {
+              expect(runMessages.messages.some(message => message.role === 'assistant')).toBe(false);
+            } else {
+              expect(runMessages.messages).toEqual([]);
+            }
             if (
               variant === 'allowed' ||
               variant === 'conflicting-threads' ||
@@ -263,7 +315,12 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
                 expect(events.indexOf(`authorize:${runThreadId}`)).toBeGreaterThanOrEqual(0);
                 expect(events.indexOf(`authorize:${runThreadId}`)).toBeLessThan(events.indexOf('save'));
               }
-            } else if (variant === 'tripwire' || variant === 'undo-failure' || variant === 'memory-tripwire') {
+            } else if (
+              variant === 'tripwire' ||
+              variant === 'undo-failure' ||
+              variant === 'memory-tripwire' ||
+              variant === 'memory-redirect-tripwire'
+            ) {
               expect(events).toContain('save');
               expect(messages.map(message => message.role)).toEqual(['user']);
               if (memory) {

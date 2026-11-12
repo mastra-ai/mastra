@@ -204,7 +204,8 @@ export async function runDurableFinishSideEffects({
   }
   setPersistencePolicy(messageList, {
     readOnly: !!durableState?.memoryConfig?.readOnly,
-    memoryStorage: await (registryEntry?.memory ?? rebuiltMemory)?.storage.getStore('memory'),
+    getMemoryStorage: async () => (registryEntry?.memory ?? rebuiltMemory)?.storage.getStore('memory'),
+    memoryThreadId: durableState?.threadId,
     authorize: async (threadId, resourceId) => {
       const threadIds = new Set([threadId, durableState?.threadId].filter(Boolean));
       for (const id of threadIds) {
@@ -649,7 +650,8 @@ export async function runDurableDeadlineOutputPass({
   );
   setPersistencePolicy(messageList, {
     readOnly: !!durableState?.memoryConfig?.readOnly,
-    memoryStorage: await entry.memory?.storage.getStore('memory'),
+    getMemoryStorage: async () => entry.memory?.storage.getStore('memory'),
+    memoryThreadId: durableState?.threadId,
     authorize: async (threadId, targetResourceId) => {
       for (const id of new Set([threadId, durableState?.threadId].filter((id): id is string => !!id))) {
         await checkThreadFGA({

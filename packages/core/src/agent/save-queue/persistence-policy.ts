@@ -3,7 +3,8 @@ import type { MessageList } from '../message-list';
 
 interface PersistencePolicy {
   readOnly: boolean;
-  memoryStorage?: MemoryStorage;
+  getMemoryStorage?: () => Promise<MemoryStorage | undefined>;
+  memoryThreadId?: string;
   authorize: (threadId: string, resourceId?: string) => Promise<void>;
   undo: Array<() => Promise<void>>;
 }
