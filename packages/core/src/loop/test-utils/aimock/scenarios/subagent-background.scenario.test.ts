@@ -214,6 +214,30 @@ describeForAllEngines('A backgrounded AgentController subagent', engine => {
     }
   });
 
+  it('ends the task failed and fires onTaskFailed when the subagent model call fails', async () => {
+    const { llm, controller, session, completed, failed } = await setup();
+    llm.on(
+      { endpoint: 'chat', systemMessage: COUNT_INSTRUCTIONS },
+      { error: { message: 'model exploded', type: 'invalid_request_error' }, status: 400 },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: false }, delegate('counter'));
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Counting in the background.' });
+
+    try {
+      await session.sendMessage({ content: 'How many files are there?' });
+      await vi.waitFor(() => expect(failed).toHaveLength(1), { timeout: 10_000 });
+
+      expect(failed[0]).toMatchObject({
+        toolName: 'subagent',
+        status: 'failed',
+        error: { message: expect.stringContaining('Subagent "Counter" failed') },
+      });
+      expect(completed).toHaveLength(0);
+    } finally {
+      await controller.destroy();
+    }
+  });
+
   it('stops the subagent and ends the task cancelled when the task is cancelled', async () => {
     const { llm, controller, session, events, completed, cancelled, wait } = await setup();
     scriptWaiter(llm);
