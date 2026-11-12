@@ -2172,11 +2172,14 @@ export class DurableAgent<
     return this.#wrappedAgent.hasOwnPubSub();
   }
 
+  override getPubSub() {
+    return this.#wrappedAgent.getPubSub();
+  }
+
   // --- Setters called by AgentController — forward to BOTH wrapper and wrapped ---
   // We propagate to both so that:
   //  - The wrapped agent sees the value for its own internal use.
-  //  - The DurableAgent's inherited getPubSub()/getMemory()/getWorkspace()
-  //    also work (they read #inheritedPubSub / #memory / #workspace set by super).
+  //  - The DurableAgent's inherited getMemory()/getWorkspace() also work.
   override __setMemory(memory: any) {
     super.__setMemory(memory);
     this.#wrappedAgent.__setMemory(memory);

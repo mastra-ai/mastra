@@ -4540,6 +4540,7 @@ export class Agent<
       fork.#primitives = this.#primitives;
     }
 
+    fork.#inheritedPubSub = this.#inheritedPubSub;
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
     // A version fork runs inside this agent's `untilIdle` wrapper, so it must see that wrapper
