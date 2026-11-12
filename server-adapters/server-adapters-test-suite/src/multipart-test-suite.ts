@@ -250,6 +250,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
                 ![
                   'mastra',
                   'requestContext',
+                  'requestBody',
                   'tools',
                   'taskStore',
                   'abortSignal',
@@ -375,6 +376,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
                 ![
                   'mastra',
                   'requestContext',
+                  'requestBody',
                   'tools',
                   'taskStore',
                   'abortSignal',

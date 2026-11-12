@@ -232,7 +232,7 @@ A `provider-tool` entry resolves one OAuth-backed tool from a `ToolProvider` whe
 | `description` | `string` | No | Human-readable step description |
 | `options` | `object` | No | JSON-safe `retries` and `metadata` |
 
-Each entry resolves exactly one tool. `kind: "author"` uses the persisted workflow owner, and `kind: "invoker"` uses the execution identity. When the provider's default scope is `caller-supplied`, omit `connection` to derive the identity from request context. Schema snapshots don't replace runtime resolution. Mastra executes the current tool returned by the provider.
+Each entry resolves exactly one tool. `kind: "author"` uses the persisted workflow owner, and `kind: "invoker"` uses the execution identity. When the provider's default scope is `caller-supplied`, omit `connection` to derive the identity from request context. Schema snapshots guide graph validation, while Mastra executes the current tool returned by the provider.
 
 ### Mapping steps
 

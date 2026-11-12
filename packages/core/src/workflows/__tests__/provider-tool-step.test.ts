@@ -224,10 +224,7 @@ describe('provider tool step construction', () => {
     });
 
     expect(() =>
-      workflow.tool(
-        { type: 'provider', providerId: 'mock', toolSlug: 'mock.double' },
-        { metadata } as any,
-      ),
+      workflow.tool({ type: 'provider', providerId: 'mock', toolSlug: 'mock.double' }, { metadata } as any),
     ).toThrow(/metadata.*JSON/i);
     expect(workflow.stepGraph).toEqual([]);
   });

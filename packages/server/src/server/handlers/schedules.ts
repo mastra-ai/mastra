@@ -113,14 +113,27 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
     'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Completed schedules are excluded unless requested with a status filter. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, workflowId, status, threadId, resourceId, name }) => {
+  handler: async ({ mastra, agentId, workflowId, status, threadId, resourceId, name, requestContext }) => {
     const schedulesStore = await mastra.getStorage()?.getStore('schedules');
     if (!schedulesStore) {
       // Schedules domain not configured — there are no schedules to return.
       return { schedules: [] };
     }
     const schedules = await mastra.schedules.list({ agentId, workflowId, status, threadId, resourceId, name });
-    const hydrated = await Promise.all(schedules.map(schedule => hydrateScheduleResponse(mastra, schedule)));
+    const accessible = await Promise.all(
+      schedules.map(async schedule => {
+        try {
+          await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
+          return schedule;
+        } catch (error) {
+          if (error instanceof HTTPException && error.status === 404) return undefined;
+          throw error;
+        }
+      }),
+    );
+    const hydrated = await Promise.all(
+      accessible.filter(schedule => schedule !== undefined).map(schedule => hydrateScheduleResponse(mastra, schedule)),
+    );
     return { schedules: hydrated };
   },
 });
@@ -135,8 +148,9 @@ export const GET_SCHEDULE_ROUTE = createRoute({
   description: 'Returns a single schedule by its id.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, scheduleId }) => {
+  handler: async ({ mastra, scheduleId, requestContext }) => {
     const schedule = await loadSchedule(mastra, scheduleId);
+    await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
     return hydrateScheduleResponse(mastra, schedule);
   },
 });
@@ -344,13 +358,15 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
   description: 'Returns the audit trail of trigger attempts for a schedule, ordered by actualFireAt descending.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, scheduleId, limit, fromActualFireAt, toActualFireAt }) => {
+  handler: async ({ mastra, scheduleId, limit, fromActualFireAt, toActualFireAt, requestContext }) => {
     const schedulesStore = await mastra.getStorage()?.getStore('schedules');
     if (!schedulesStore) {
       return { triggers: [] };
     }
     const schedule = await mastra.schedules.get(scheduleId);
-    const triggers = await schedulesStore.listTriggers(schedule?.id ?? scheduleId, {
+    if (!schedule) return { triggers: [] };
+    await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
+    const triggers = await schedulesStore.listTriggers(schedule.id, {
       limit,
       fromActualFireAt,
       toActualFireAt,
