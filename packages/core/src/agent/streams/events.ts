@@ -2,7 +2,6 @@ import { MastraError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { currentRunGeneration } from '../../storage/run-fencing';
 import { getChunkProducedAt } from '../../stream/base/produced-at';
-import { slimNestedAgentChunks } from '../../stream/strip-model-snapshots';
 import { ChunkFrom } from '../../stream/types';
 import type { ChunkType, DataChunkType, StepStartPayload } from '../../stream/types';
 // TODO: move these event payload types into streams/types once their durable
@@ -39,10 +38,7 @@ export async function emitChunkEvent<OUTPUT = undefined>(
   await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
-    // Delegated sub-agent chunks carry the sub-agent's full prompt, history and
-    // steps; drop them so every forwarded chunk doesn't repeat them in the run
-    // stream and replay cache. Top-level chunks are published unchanged.
-    data: slimNestedAgentChunks(chunk),
+    data: chunk,
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
     ...(outputProcessed ? { outputProcessed } : {}),

@@ -2,6 +2,7 @@ import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
+import { slimNestedAgentChunks } from '../../stream/strip-model-snapshots';
 import type { ChunkType } from '../../stream/types';
 import { createRunAbortController } from '../durable/run-abort';
 import type { AgentSuspendedEventData } from '../durable/types';
@@ -281,6 +282,13 @@ export function createAgentStreamPublisher({
               throw error;
             }
           });
+          return;
+        }
+        case 'tool-output':
+        case 'workflow-step-output': {
+          // A delegated agent's chunks arrive wrapped here, with their own prompts and steps.
+          const published = keepProducedAt(chunk, slimNestedAgentChunks(chunk));
+          void enqueue(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
         case 'finish': {

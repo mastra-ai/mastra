@@ -4,8 +4,10 @@
  * Delegated sub-agent chunks are forwarded on the durable run stream wrapped in
  * `tool-output` payloads. The nested agent `step-start` / `step-finish` /
  * `finish` chunks carry the sub-agent's full request, input messages,
- * cumulative steps and message history. Published verbatim, every forwarded
- * chunk repeated those snapshots in the run stream and its 24h replay cache.
+ * cumulative steps and message history. Stored verbatim, every forwarded chunk
+ * repeated those snapshots in the run's 24h replay cache. The cached log keeps
+ * them slimmed; live subscribers (the caller reading its own run) still get the
+ * chunk as published.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -43,7 +45,7 @@ function nestedSnapshotFields(chunk: any, path = '$'): string[] {
   return found;
 }
 
-describe('durable run stream strips snapshots from delegated chunks (#29035)', () => {
+describe('durable run replay cache strips snapshots from delegated chunks (#29035)', () => {
   let inner: EventEmitterPubSub;
   let pubsub: CachingPubSub;
 
@@ -61,8 +63,8 @@ describe('durable run stream strips snapshots from delegated chunks (#29035)', (
     const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
     expect(history).toHaveLength(1);
     expect(received).toHaveLength(1);
-    // Live subscribers and the replay cache get the same slimmed chunk.
-    expect(received[0]!.data).toEqual(history[0]!.data);
+    // Live subscribers get the chunk as published; only the cached copy is slimmed.
+    expect(received[0]!.data).toEqual(chunk);
     return history[0]!.data;
   }
 
@@ -246,10 +248,14 @@ describe('durable run stream strips snapshots from delegated chunks (#29035)', (
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub: inner, cache: new InMemoryServerCache() });
     const output = await durableAgent.stream('Please delegate', { runId, maxSteps: 3 });
     let text = '';
+    const liveDelegated: any[] = [];
     for await (const chunk of output.fullStream) {
       if (chunk.type === 'text-delta') text += chunk.payload.text;
+      if (chunk.type === 'tool-output' && (chunk.payload as any)?.output?.from === 'AGENT') liveDelegated.push(chunk);
     }
     expect(text).toBe('Done');
+    // The caller still sees the sub-agent's full nested chunks, as a plain Agent's caller does.
+    expect(liveDelegated.some(chunk => 'messages' in chunk.payload.output.payload)).toBe(true);
 
     // Read before cleanup(), which clears the run's cached topic.
     const history = await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
