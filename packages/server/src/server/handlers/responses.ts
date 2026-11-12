@@ -1,5 +1,6 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -353,6 +354,7 @@ async function executeGenerate({
   threadContext: ThreadExecutionContext | null;
 }) {
   const executionMemory = createExecutionMemory(threadContext);
+  stripClientAuthoredTurnMarks(input);
   const structuredOutput = createStructuredOutput(text);
   const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
@@ -419,6 +421,7 @@ async function executeStream({
   threadContext: ThreadExecutionContext | null;
 }) {
   const executionMemory = createExecutionMemory(threadContext);
+  stripClientAuthoredTurnMarks(input);
   const structuredOutput = createStructuredOutput(text);
   const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {

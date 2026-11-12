@@ -59,6 +59,41 @@ export function messageDeclaresAuthoredTurn(message: unknown): boolean {
   return isAuthoredUserTurn((content as { metadata?: unknown }).metadata);
 }
 
+function withoutUserTurn(metadata: unknown): unknown {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return metadata;
+  const record = metadata as Record<string, unknown>;
+  const mastra = record.mastra;
+  if (!mastra || typeof mastra !== 'object' || Array.isArray(mastra) || !('userTurn' in mastra)) return metadata;
+  const { userTurn: _userTurn, ...rest } = mastra as Record<string, unknown>;
+  if (Object.keys(rest).length === 0) {
+    const { mastra: _mastra, ...metaRest } = record;
+    return Object.keys(metaRest).length === 0 ? undefined : metaRest;
+  }
+  return { ...record, mastra: rest };
+}
+
+/** Drop a client-supplied authored-turn mark. In-process `asUserTurn` calls are not passed through this. */
+export function stripClientAuthoredTurnMarks(messages: unknown): void {
+  if (!Array.isArray(messages)) return;
+  for (let index = 0; index < messages.length; index++) {
+    const message = messages[index];
+    if (!message || typeof message !== 'object') continue;
+    const record = message as Record<string, unknown>;
+    let next = record;
+    const metadata = withoutUserTurn(record.metadata);
+    if (metadata !== record.metadata) next = { ...next, metadata };
+    const content = record.content;
+    if (content && typeof content === 'object' && !Array.isArray(content)) {
+      const contentRecord = content as Record<string, unknown>;
+      const contentMetadata = withoutUserTurn(contentRecord.metadata);
+      if (contentMetadata !== contentRecord.metadata) {
+        next = { ...next, content: { ...contentRecord, metadata: contentMetadata } };
+      }
+    }
+    messages[index] = next;
+  }
+}
+
 /**
  * Wrap one user's text in a `<turn>` tag.
  *

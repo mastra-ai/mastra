@@ -17,6 +17,7 @@ import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -1710,6 +1711,8 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -1825,6 +1828,8 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -1896,6 +1901,8 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -2111,6 +2118,8 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -2454,7 +2463,10 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
       return await handleAgentMessageRoute({
         ...params,
         methodName: 'sendMessage',
-        invoke: (agent, target) => agent.sendMessage(params.message, target),
+        invoke: (agent, target) => {
+          stripClientAuthoredTurnMarks([params.message]);
+          return agent.sendMessage(params.message, target);
+        },
       });
     } catch (error) {
       return handleSignalRoutingError(error, 'error sending agent message');
@@ -2480,7 +2492,10 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
       return await handleAgentMessageRoute({
         ...params,
         methodName: 'queueMessage',
-        invoke: (agent, target) => agent.queueMessage(params.message, target),
+        invoke: (agent, target) => {
+          stripClientAuthoredTurnMarks([params.message]);
+          return agent.queueMessage(params.message, target);
+        },
       });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent message');
@@ -2969,6 +2984,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
 
       const agent = await getAgentFromSystem({
         mastra,
@@ -3617,6 +3634,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         options.untilIdle = untilIdle;
       }
 
+      stripClientAuthoredTurnMarks(resumeData);
       const streamResult = structuredOutput
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
         : await agent.resumeStream(resumeData, options);
@@ -3828,6 +3846,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
+      stripClientAuthoredTurnMarks(resumeData);
       const streamResult = structuredOutput
         ? await agent.resumeStreamUntilIdle(resumeData, { ...options, structuredOutput })
         : await agent.resumeStreamUntilIdle(resumeData, options);
@@ -3973,6 +3992,8 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       stripClientCredentialHeaders(params);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
 
       // Authorization: context values take precedence over client-provided values
       let authorizedMemoryOption = params.memory;
