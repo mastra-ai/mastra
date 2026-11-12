@@ -32,7 +32,7 @@ export function linearIssue(identifier: string, projectId: string | null, title 
 export const linearIssues: LinearIssue[] = [
   linearIssue('ENG-101', 'project-a', 'Portal: add account switcher'),
   linearIssue('ENG-201', 'project-b', 'Billing: export invoices'),
-  // This filed card moved to Billing; its live metadata must override the older stored project.
+  // Already filed: the board shows its card, in the project the server last synced it to.
   linearIssue('ENG-301', 'project-b', 'Move to Billing'),
   linearIssue('ENG-401', null, 'Unassigned project'),
 ];
@@ -55,7 +55,7 @@ function card(id: string, title: string, source: WorkItem['source'], stage: stri
     metadata: { linearProjectId: projectId, labels: ['feature'] },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: now,
     updatedAt: now,
@@ -67,7 +67,7 @@ export const sourceCards: WorkItem[] = [
   card('ENG-103', 'Portal: workspace settings', 'linear-issue', 'planning', 'project-a'),
   card('ENG-104', 'Portal: member permissions', 'linear-issue', 'execute', 'project-a'),
   card('ENG-202', 'Billing: payment history', 'linear-issue', 'planning', 'project-b'),
-  card('ENG-301', 'Moved project card', 'linear-issue', 'planning', 'project-a'),
+  card('ENG-301', 'Moved project card', 'linear-issue', 'planning', 'project-b'),
   card('50', 'GitHub: update dependencies', 'github-issue', 'planning'),
   card('manual', 'Manual follow-up', 'manual', 'intake'),
 ];

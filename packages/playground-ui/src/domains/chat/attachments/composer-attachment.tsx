@@ -9,8 +9,9 @@ import { cn } from '@/utils/cn';
 
 // Dark attachments need a fill above the muted composer. Light attachments keep
 // the white card material and use the shared rim and shadow for elevation.
-// Both stay opaque so the sleeve controls cannot show through the cover.
-const attachmentSurfaceStyle = cn(raisedSurfaceStyle, 'dark:bg-linear-to-b dark:from-fill dark:to-fill');
+// Both stay opaque so the sleeve controls cannot show through the cover. The dark
+// fill sits in `--surface-tint`, so the state layer's hover image stacks under it.
+const attachmentSurfaceStyle = cn(raisedSurfaceStyle, 'dark:[--surface-tint:var(--fill)]');
 
 export interface ComposerAttachmentProps {
   name: string;

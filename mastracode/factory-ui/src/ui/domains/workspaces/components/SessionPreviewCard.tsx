@@ -8,7 +8,7 @@ import type { RefObject } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
-import type { FactoryMentionMember } from '../../factory/services/members';
+import type { TrailPerson } from '../hooks/useSessionTrail';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
 import { useSessionTrail } from '../hooks/useSessionTrail';
@@ -115,7 +115,7 @@ function SessionPreview({
   );
 }
 
-function ownerDetailsFor(people: ReadonlyMap<string, FactoryMentionMember>, personId: string): SessionOwnerDetails {
+function ownerDetailsFor(people: ReadonlyMap<string, TrailPerson>, personId: string): SessionOwnerDetails {
   const person = people.get(personId);
   return { name: person?.name ?? personId, ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}) };
 }

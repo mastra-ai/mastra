@@ -133,6 +133,9 @@ export interface MCPClientOptions<TServers extends MCPClientServers<TServers> = 
   webhook?: MCPClientWebhookOptions;
 }
 
+/** Which server and tool each `serverName_toolName` key came from, to detect two pairs producing one key. */
+type NamespacedToolKeySources = Map<string, { serverName: string; toolName: string }>;
+
 /**
  * Manages Model Context Protocol (MCP) server connections and tool namespacing,
  * with access to tools, resources, prompts, and elicitation.
@@ -1233,6 +1236,7 @@ To fix this you have three different options:
       options,
     );
 
+    const keySources: NamespacedToolKeySources = new Map();
     for (const { serverName, value, error, duration } of settled) {
       durations[serverName] = duration;
       if (error !== undefined) {
@@ -1241,7 +1245,7 @@ To fix this you have three different options:
         continue;
       }
       for (const [toolName, toolConfig] of Object.entries(value)) {
-        connectedTools[`${serverName}_${toolName}`] = toolConfig;
+        this.setNamespacedTool(connectedTools, keySources, serverName, toolName, toolConfig);
       }
     }
 
@@ -1464,6 +1468,7 @@ To fix this you have three different options:
   }): Promise<Record<string, Tool<any, any, any, any>>> {
     const configuredServers = new Set(Object.keys(this.serverConfigs));
     const tools: Record<string, Tool<any, any, any, any>> = {};
+    const keySources: NamespacedToolKeySources = new Map();
 
     for (const [serverName, definitions] of Object.entries(catalog)) {
       if (!configuredServers.has(serverName)) {
@@ -1475,7 +1480,8 @@ To fix this you have three different options:
 
       for (const [toolName, definition] of Object.entries(modelVisibleDefinitions(definitions))) {
         try {
-          tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+          const tool = await this.toolFromDefinition({ serverName, definition });
+          this.setNamespacedTool(tools, keySources, serverName, toolName, tool);
         } catch (error) {
           // The client already logged which tool was skipped and why.
           if (!(error instanceof MastraError && error.id === 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA')) throw error;
@@ -1559,6 +1565,30 @@ To fix this you have three different options:
 
     const result = { values, errors, errorDetails };
     return options ? { ...result, durations } : result;
+  }
+
+  /**
+   * Stores a tool under its `serverName_toolName` key. Server and tool names can both contain `_`,
+   * so two different pairs can produce one key (`local` + `x_status` and `local_x` + `status`).
+   * The later pair keeps the key, as before; this logs a warning instead of dropping a tool silently.
+   */
+  private setNamespacedTool(
+    tools: Record<string, Tool<any, any, any, any>>,
+    keySources: NamespacedToolKeySources,
+    serverName: string,
+    toolName: string,
+    tool: Tool<any, any, any, any>,
+  ): void {
+    const key = `${serverName}_${toolName}`;
+    const replaced = keySources.get(key);
+    if (replaced) {
+      this.logger.warn(
+        `MCP tool key "${key}" from server "${serverName}" (tool "${toolName}") replaces the tool from server "${replaced.serverName}" (tool "${replaced.toolName}"), which produces the same key. Only the tool from "${serverName}" is kept. Rename one of the servers in \`servers\` to keep both.`,
+        { key, replaced, replacedBy: { serverName, toolName } },
+      );
+    }
+    keySources.set(key, { serverName, toolName });
+    tools[key] = tool;
   }
 
   /**

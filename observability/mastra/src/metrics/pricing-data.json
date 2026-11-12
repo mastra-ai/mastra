@@ -7651,6 +7651,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic.claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "anthropic.claude-haiku-4-5-20251001-v1:0": {
         "cost": {
           "input": 1,
@@ -8111,6 +8119,14 @@
           "cache_write": 12.5
         }
       },
+      "global.anthropic.claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "global.anthropic.claude-haiku-4-5-20251001-v1:0": {
         "cost": {
           "input": 1,
@@ -8233,6 +8249,14 @@
           "output": 15,
           "cache_read": 0.3,
           "cache_write": 3.75
+        }
+      },
+      "global.moonshotai.kimi-k3.1": {
+        "cost": {
+          "input": 4,
+          "output": 20,
+          "cache_read": 0.2,
+          "cache_write": 5
         }
       },
       "global.openai.gpt-5.6-luna": {
@@ -9175,6 +9199,14 @@
           "cache_write": 13.75
         }
       },
+      "us.anthropic.claude-fable-5-2": {
+        "cost": {
+          "input": 8.8,
+          "output": 44,
+          "cache_read": 0.22,
+          "cache_write": 11
+        }
+      },
       "us.anthropic.claude-haiku-4-5-20251001-v1:0": {
         "cost": {
           "input": 1.1,
@@ -9347,6 +9379,14 @@
           "output": 16.5,
           "cache_read": 0.33,
           "cache_write": 4.125
+        }
+      },
+      "us.moonshotai.kimi-k3.1": {
+        "cost": {
+          "input": 4.4,
+          "output": 22,
+          "cache_read": 0.22,
+          "cache_write": 5.5
         }
       },
       "us.openai.gpt-5.6-luna": {
@@ -9820,6 +9860,14 @@
           "cache_write": 12.5
         }
       },
+      "claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "claude-haiku-4-5": {
         "cost": {
           "input": 1,
@@ -10265,6 +10313,14 @@
           "output": 50,
           "cache_read": 0.25,
           "cache_write": 12.5
+        }
+      },
+      "claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "claude-haiku-4-5": {
@@ -11160,6 +11216,14 @@
           "output": 50,
           "cache_read": 0.25,
           "cache_write": 12.5
+        }
+      },
+      "claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "claude-haiku-4-5": {
@@ -12473,74 +12537,81 @@
   },
   "chutes": {
     "models": {
+      "Qwen/Qwen3.5-27B-TEE": {
+        "cost": {
+          "input": 0.2,
+          "output": 1.75,
+          "cache_read": 0.02
+        }
+      },
       "Qwen/Qwen3.5-397B-A17B-TEE": {
         "cost": {
           "input": 0.45,
           "output": 3,
-          "cache_read": 0.04499999999999999
+          "cache_read": 0.045
         }
       },
       "Qwen/Qwen3.6-27B-TEE": {
         "cost": {
           "input": 0.25,
           "output": 2,
-          "cache_read": 0.024999999999999994
+          "cache_read": 0.025
         }
       },
       "Qwen/Qwen3.8-27B-TEE": {
         "cost": {
           "input": 0.039,
           "output": 1.25,
-          "cache_read": 0.003899999999999999
+          "cache_read": 0.0039
         }
       },
       "deepseek-ai/DeepSeek-V3.2-TEE": {
         "cost": {
           "input": 1,
           "output": 1,
-          "cache_read": 0.09999999999999998
+          "cache_read": 0.1
         }
       },
       "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": {
         "cost": {
           "input": 0.44,
           "output": 1.32,
-          "cache_read": 0.04399999999999999
+          "cache_read": 0.044
         }
       },
       "google/gemma-4-31B-turbo-TEE": {
         "cost": {
           "input": 0.12,
           "output": 0.37,
-          "cache_read": 0.011999999999999997
+          "cache_read": 0.012
         }
       },
       "moonshotai/Kimi-K2.6-TEE": {
         "cost": {
           "input": 0.39,
           "output": 1.8,
-          "cache_read": 0.03899999999999999
+          "cache_read": 0.039
         }
       },
       "moonshotai/Kimi-K3-TEE": {
         "cost": {
           "input": 1.85,
           "output": 9.5,
-          "cache_read": 0.18499999999999997
+          "cache_read": 0.185
         }
       },
       "zai-org/GLM-5.1-TEE": {
         "cost": {
           "input": 0.9,
           "output": 2.9,
-          "cache_read": 0.08999999999999998
+          "cache_read": 0.09
         }
       },
       "zai-org/GLM-5.2-TEE": {
         "cost": {
           "input": 1.25,
           "output": 3.95,
-          "cache_read": 0.12499999999999997
+          "cache_read": 0.125
         }
       }
     }
@@ -13097,6 +13168,13 @@
           "input": 2,
           "output": 10,
           "cache_read": 0.1
+        }
+      },
+      "meta/muse-ember-1.0": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004
         }
       },
       "meta/muse-spark-1.1": {
@@ -15335,6 +15413,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "anthropic/claude-haiku-4-5": {
         "cost": {
           "input": 1,
@@ -15633,6 +15719,14 @@
           "cache_write": 3
         }
       },
+      "moonshot/kimi-k3.1-pro": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.2,
+          "cache_write": 2
+        }
+      },
       "openai/gpt-4o-mini": {
         "cost": {
           "input": 0.15,
@@ -15911,6 +16005,32 @@
           }
         }
       },
+      "openai/gpt-6.1-terra": {
+        "cost": {
+          "input": 1,
+          "output": 5,
+          "cache_read": 0.05,
+          "cache_write": 1.25,
+          "tiers": [
+            {
+              "input": 2,
+              "output": 7.5,
+              "cache_read": 0.1,
+              "cache_write": 2.5,
+              "tier": {
+                "type": "context",
+                "size": 272000
+              }
+            }
+          ],
+          "context_over_200k": {
+            "input": 2,
+            "output": 7.5,
+            "cache_read": 0.1,
+            "cache_write": 2.5
+          }
+        }
+      },
       "qwen/qwen3.6-flash": {
         "cost": {
           "input": 0.19,
@@ -16057,6 +16177,14 @@
           "output": 0.64,
           "cache_read": 0.04,
           "cache_write": 0.16
+        }
+      },
+      "tencent/hy4": {
+        "cost": {
+          "input": 0.96,
+          "output": 2.88,
+          "cache_read": 0.048,
+          "cache_write": 0.96
         }
       },
       "tencent/hy4-preview": {
@@ -18577,12 +18705,20 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "anthropic/claude-fable-latest": {
         "cost": {
-          "input": 10,
-          "output": 50,
-          "cache_read": 0.25,
-          "cache_write": 12.5
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "anthropic/claude-haiku-5-5": {
@@ -19623,6 +19759,16 @@
           "input_audio": 4
         }
       },
+      "google/gemini-4-carbon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "reasoning": 10,
+          "cache_read": 0.1,
+          "cache_write": 0.1875,
+          "input_audio": 2
+        }
+      },
       "google/gemini-flash-latest": {
         "cost": {
           "input": 1.5,
@@ -19667,34 +19813,34 @@
       },
       "greenpt/deepseek-v4-flash-0731": {
         "cost": {
-          "input": 0.156702,
-          "output": 0.391755,
-          "cache_read": 0.044772
+          "input": 0.156996,
+          "output": 0.39249,
+          "cache_read": 0.044856
         }
       },
       "greenpt/deepseek-v4.1-flash": {
         "cost": {
-          "input": 0.246246,
-          "output": 1.231229,
-          "cache_read": 0.012312
+          "input": 0.246708,
+          "output": 1.233541,
+          "cache_read": 0.012335
         }
       },
       "greenpt/gpt-oss-120b": {
         "cost": {
-          "input": 0.22386,
-          "output": 0.78351
+          "input": 0.22428,
+          "output": 0.78498
         }
       },
       "greenpt/llama-3.3-70b-instruct": {
         "cost": {
-          "input": 1.231229,
-          "output": 1.231229
+          "input": 1.233541,
+          "output": 1.233541
         }
       },
       "greenpt/qwen3-235b-a22b-instruct-2507": {
         "cost": {
-          "input": 1.007369,
-          "output": 3.022108
+          "input": 1.009261,
+          "output": 3.027782
         }
       },
       "groq/meta-llama/llama-prompt-guard-2-22m": {
@@ -19734,26 +19880,26 @@
       },
       "infomaniak/mistralai/Ministral-3-14B-Instruct-2512": {
         "cost": {
-          "input": 0.33579,
-          "output": 0.44772
+          "input": 0.33642,
+          "output": 0.44856
         }
       },
       "ionos/Qwen/Qwen3-Coder-Next": {
         "cost": {
-          "input": 0.167895,
-          "output": 0.89544
+          "input": 0.16821,
+          "output": 0.89712
         }
       },
       "ionos/meta-llama/Llama-3.3-70B-Instruct": {
         "cost": {
-          "input": 0.727545,
-          "output": 0.727545
+          "input": 0.72891,
+          "output": 0.72891
         }
       },
       "ionos/openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.167895,
-          "output": 0.727545
+          "input": 0.16821,
+          "output": 0.72891
         }
       },
       "meta/muse-spark-1.1": {
@@ -20158,25 +20304,11 @@
           "cache_read": 0.1
         }
       },
-      "nebius/deepseek-ai/DeepSeek-V4-Flash-0731": {
-        "cost": {
-          "input": 0.14,
-          "output": 0.28,
-          "cache_read": 0.14
-        }
-      },
       "nebius/deepseek-ai/DeepSeek-V4-Pro-0813": {
         "cost": {
           "input": 1.32,
           "output": 3.96,
           "cache_read": 1.32
-        }
-      },
-      "nebius/deepseek-ai/DeepSeek-V4.1-Flash": {
-        "cost": {
-          "input": 0.3,
-          "output": 1.2,
-          "cache_read": 0.3
         }
       },
       "nebius/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
@@ -20857,9 +20989,9 @@
       },
       "scaleway/deepseek-v4-flash-0731": {
         "cost": {
-          "input": 0.44772,
-          "output": 0.89544,
-          "cache_read": 0.089544
+          "input": 0.44856,
+          "output": 0.89712,
+          "cache_read": 0.089712
         }
       },
       "scaleway/deepseek-v4.1-flash": {
@@ -20871,9 +21003,9 @@
       },
       "scaleway/deepseek-v4.1-flash-1017": {
         "cost": {
-          "input": 0.67158,
-          "output": 2.014739,
-          "cache_read": 0.134316
+          "input": 0.67284,
+          "output": 2.018521,
+          "cache_read": 0.134568
         }
       },
       "scaleway/gemma-3-27b-it": {
@@ -20884,20 +21016,20 @@
       },
       "scaleway/gpt-oss-120b": {
         "cost": {
-          "input": 0.167895,
-          "output": 0.67158
+          "input": 0.16821,
+          "output": 0.67284
         }
       },
       "scaleway/llama-3.3-70b-instruct": {
         "cost": {
-          "input": 1.007369,
-          "output": 1.007369
+          "input": 1.009261,
+          "output": 1.009261
         }
       },
       "scaleway/qwen3-235b-a22b-instruct-2507": {
         "cost": {
-          "input": 0.839475,
-          "output": 2.518424
+          "input": 0.84105,
+          "output": 2.523151
         }
       },
       "scaleway/qwen3-coder-30b-a3b-instruct": {
@@ -21143,7 +21275,6 @@
               "input": 4,
               "output": 18,
               "cache_read": 0.4,
-              "cache_write": 0.25,
               "tier": {
                 "type": "context",
                 "size": 200000
@@ -21153,8 +21284,7 @@
           "context_over_200k": {
             "input": 4,
             "output": 18,
-            "cache_read": 0.4,
-            "cache_write": 0.25
+            "cache_read": 0.4
           }
         }
       },
@@ -21329,6 +21459,36 @@
         }
       },
       "vertex/gemini-4-argon@us": {
+        "cost": {
+          "input": 4,
+          "output": 20,
+          "reasoning": 20,
+          "cache_read": 0.2,
+          "cache_write": 0.375,
+          "input_audio": 4
+        }
+      },
+      "vertex/gemini-4-carbon": {
+        "cost": {
+          "input": 4,
+          "output": 20,
+          "reasoning": 20,
+          "cache_read": 0.2,
+          "cache_write": 0.375,
+          "input_audio": 4
+        }
+      },
+      "vertex/gemini-4-carbon@eu": {
+        "cost": {
+          "input": 4,
+          "output": 20,
+          "reasoning": 20,
+          "cache_read": 0.2,
+          "cache_write": 0.375,
+          "input_audio": 4
+        }
+      },
+      "vertex/gemini-4-carbon@us": {
         "cost": {
           "input": 4,
           "output": 20,
@@ -24476,6 +24636,14 @@
           "input_audio": 2
         }
       },
+      "gemini-4-carbon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.1,
+          "input_audio": 2
+        }
+      },
       "gemini-embedding-001": {
         "cost": {
           "input": 0.15,
@@ -24555,6 +24723,14 @@
           "output": 50,
           "cache_read": 0.25,
           "cache_write": 12.5
+        }
+      },
+      "claude-fable-5-2@default": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "claude-fable-5@default": {
@@ -24904,6 +25080,14 @@
           "input_audio": 2
         }
       },
+      "gemini-4-carbon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.1,
+          "input_audio": 2
+        }
+      },
       "gemini-embedding-001": {
         "cost": {
           "input": 0.15,
@@ -25140,6 +25324,14 @@
           "output": 50,
           "cache_read": 0.25,
           "cache_write": 12.5
+        }
+      },
+      "claude-fable-5-2@default": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "claude-fable-5@default": {
@@ -26924,9 +27116,9 @@
       },
       "prism": {
         "cost": {
-          "input": 3.2664,
-          "output": 16.332,
-          "cache_read": 0.32664
+          "input": 2.2,
+          "output": 11,
+          "cache_read": 0.22
         }
       },
       "prism-core": {
@@ -27843,7 +28035,7 @@
         "cost": {
           "input": 1.4,
           "output": 4.4,
-          "cache_read": 0.19,
+          "cache_read": 0.26,
           "cache_write": 0
         }
       },
@@ -29324,6 +29516,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5.2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "anthropic/claude-haiku-4.5": {
         "cost": {
           "input": 1,
@@ -29808,6 +30008,15 @@
           "cache_write": 0.1875
         }
       },
+      "google/gemini-4-carbon": {
+        "cost": {
+          "input": 4,
+          "output": 20,
+          "reasoning": 20,
+          "cache_read": 0.2,
+          "cache_write": 0.375
+        }
+      },
       "google/gemini-nano-banana-2.1": {
         "cost": {
           "input": 1.5,
@@ -29853,9 +30062,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.04,
-          "output": 0.15,
-          "cache_read": 0.01
+          "input": 0.036,
+          "output": 0.108,
+          "cache_read": 0.018
         }
       },
       "google/gemma-4-31b-it": {
@@ -30049,9 +30258,9 @@
       },
       "meta-llama/llama-4-maverick": {
         "cost": {
-          "input": 0.1875,
-          "output": 0.6525,
-          "cache_read": 0.05
+          "input": 0.35,
+          "output": 1,
+          "cache_read": 0.17
         }
       },
       "meta-llama/llama-4-scout": {
@@ -30064,6 +30273,14 @@
         "cost": {
           "input": 0.144,
           "output": 0.144
+        }
+      },
+      "meta/muse-ember": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004,
+          "cache_write": 0.125
         }
       },
       "meta/muse-glimmer-30b": {
@@ -30383,6 +30600,13 @@
           "input": 0.075,
           "output": 0.25,
           "cache_read": 0.015
+        }
+      },
+      "nex-agi/nex-n2.6": {
+        "cost": {
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03
         }
       },
       "nousresearch/hermes-4-405b": {
@@ -30983,8 +31207,8 @@
       },
       "qwen/qwen3-14b": {
         "cost": {
-          "input": 0.12,
-          "output": 0.24
+          "input": 0.1,
+          "output": 0.22
         }
       },
       "qwen/qwen3-235b-a22b-2507": {
@@ -31258,9 +31482,9 @@
       },
       "ricursiveai/ripple-65b-preview": {
         "cost": {
-          "input": 0.2,
-          "output": 0.6,
-          "cache_read": 0.05
+          "input": 0.1,
+          "output": 0.3,
+          "cache_read": 0.025
         }
       },
       "sakana/fugu-max": {
@@ -31312,12 +31536,6 @@
       "scaledown/summarize": {
         "cost": {
           "input": 0.05,
-          "output": 0
-        }
-      },
-      "stealth/crouton-alpha": {
-        "cost": {
-          "input": 0,
           "output": 0
         }
       },
@@ -31427,6 +31645,12 @@
           "input": 1,
           "output": 4.05,
           "cache_read": 0.17
+        }
+      },
+      "thinkingmachines/inkling-2-small:free": {
+        "cost": {
+          "input": 0,
+          "output": 0
         }
       },
       "thinkingmachines/inkling-small": {
@@ -31577,7 +31801,7 @@
         "cost": {
           "input": 0.1,
           "output": 0.28,
-          "cache_read": 0.05
+          "cache_read": 0.003
         }
       },
       "xiaomi/mimo-v2.6-pro": {
@@ -31714,10 +31938,10 @@
       },
       "~anthropic/claude-fable-latest": {
         "cost": {
-          "input": 10,
-          "output": 50,
-          "cache_read": 0.25,
-          "cache_write": 12.5
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "~anthropic/claude-haiku-latest": {
@@ -31846,8 +32070,8 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0335,
-          "output": 0.083,
+          "input": 0.0399,
+          "output": 0.0784,
           "cache_read": 0.03
         }
       },
@@ -32071,6 +32295,14 @@
           "cache_write": 12.5
         }
       },
+      "claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "claude-haiku-4-5": {
         "cost": {
           "input": 1,
@@ -32209,6 +32441,13 @@
           "cache_read": 0.014
         }
       },
+      "deepseek-v4-flash-0731": {
+        "cost": {
+          "input": 0.08,
+          "output": 0.18,
+          "cache_read": 0.016
+        }
+      },
       "deepseek-v4-pro": {
         "cost": {
           "input": 0.66,
@@ -32235,6 +32474,13 @@
           "input": 0.3,
           "output": 1,
           "cache_read": 0.007
+        }
+      },
+      "deepseek-v4.1-flash-uncensored": {
+        "cost": {
+          "input": 0.18,
+          "output": 0.65,
+          "cache_read": 0.005
         }
       },
       "devstral-2512": {
@@ -33255,6 +33501,13 @@
           "output": 0.6
         }
       },
+      "muse-ember-1.0": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004
+        }
+      },
       "muse-glimmer-30b": {
         "cost": {
           "input": 0.3,
@@ -33622,6 +33875,13 @@
           "cache_read": 0.04
         }
       },
+      "alibaba/deepseek-v4-flash-0731": {
+        "cost": {
+          "input": 0.2,
+          "output": 0.4,
+          "cache_read": 0.04
+        }
+      },
       "alibaba/deepseek-v4-pro": {
         "cost": {
           "input": 2.4,
@@ -33849,6 +34109,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "anthropic/claude-haiku-4-5": {
         "cost": {
           "input": 1,
@@ -33975,6 +34243,14 @@
           "output": 50,
           "cache_read": 0.25,
           "cache_write": 12.5
+        }
+      },
+      "aws-bedrock/claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "aws-bedrock/claude-haiku-4-5": {
@@ -34534,6 +34810,13 @@
           "cache_read": 0.014
         }
       },
+      "baidu/deepseek-v4-flash-0731": {
+        "cost": {
+          "input": 0.44,
+          "output": 1.32,
+          "cache_read": 0.014
+        }
+      },
       "baidu/deepseek-v4-pro": {
         "cost": {
           "input": 1.32,
@@ -34598,6 +34881,13 @@
         }
       },
       "bytedance/deepseek-v4-flash": {
+        "cost": {
+          "input": 0.44,
+          "output": 1.32,
+          "cache_read": 0.014
+        }
+      },
+      "bytedance/deepseek-v4-flash-0731": {
         "cost": {
           "input": 0.44,
           "output": 1.32,
@@ -34688,6 +34978,13 @@
           "cache_read": 0.1
         }
       },
+      "canopywave/deepseek-v4-flash-0731": {
+        "cost": {
+          "input": 0.44,
+          "output": 1.32,
+          "cache_read": 0.04
+        }
+      },
       "canopywave/glm-5.2": {
         "cost": {
           "input": 1.4,
@@ -34743,6 +35040,13 @@
           "cache_read": 0.014
         }
       },
+      "cloudflare/deepseek-v4-flash-0731": {
+        "cost": {
+          "input": 0.44,
+          "output": 1.32,
+          "cache_read": 0.014
+        }
+      },
       "cloudflare/deepseek-v4-pro": {
         "cost": {
           "input": 1.32,
@@ -34792,6 +35096,13 @@
           "cache_read": 0.005
         }
       },
+      "consensusprotocol/deepseek-v4.1-flash-uncensored": {
+        "cost": {
+          "input": 0.18,
+          "output": 0.65,
+          "cache_read": 0.005
+        }
+      },
       "consensusprotocol/gemma-4-31b-it": {
         "cost": {
           "input": 0.1,
@@ -34821,6 +35132,13 @@
         }
       },
       "deepinfra/deepseek-v4-flash": {
+        "cost": {
+          "input": 0.09,
+          "output": 0.18,
+          "cache_read": 0.018
+        }
+      },
+      "deepinfra/deepseek-v4-flash-0731": {
         "cost": {
           "input": 0.08,
           "output": 0.18,
@@ -35245,6 +35563,13 @@
           "output": 0.5
         }
       },
+      "inference.net/deepseek-v4-flash": {
+        "cost": {
+          "input": 0.23,
+          "output": 0.62,
+          "cache_read": 0.0028
+        }
+      },
       "inference.net/deepseek-v4.1-flash-1017": {
         "cost": {
           "input": 0.3,
@@ -35312,6 +35637,13 @@
           "input": 0.1,
           "output": 0.2,
           "cache_read": 0.002
+        }
+      },
+      "meta/muse-ember-1.0": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004
         }
       },
       "meta/muse-spark-1.1": {
@@ -35542,6 +35874,13 @@
         }
       },
       "novita/deepseek-v4-flash": {
+        "cost": {
+          "input": 0.14,
+          "output": 0.28,
+          "cache_read": 0.028
+        }
+      },
+      "novita/deepseek-v4-flash-0731": {
         "cost": {
           "input": 0.14,
           "output": 0.28,
@@ -36201,6 +36540,13 @@
           "cache_read": 0.3
         }
       },
+      "runware/kimi-k3.1-pro": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.2
+        }
+      },
       "sakana/fugu-max": {
         "cost": {
           "input": 2,
@@ -36327,6 +36673,13 @@
         }
       },
       "tencent/deepseek-v4-flash": {
+        "cost": {
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.003
+        }
+      },
+      "tencent/deepseek-v4-flash-0731": {
         "cost": {
           "input": 0.15,
           "output": 0.6,
@@ -37844,6 +38197,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "anthropic/claude-haiku-4-5-20251001": {
         "cost": {
           "input": 1,
@@ -38271,6 +38632,13 @@
         }
       },
       "google/gemini-4-argon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.1
+        }
+      },
+      "google/gemini-4-carbon": {
         "cost": {
           "input": 2,
           "output": 10,
@@ -39566,6 +39934,29 @@
   },
   "meta": {
     "models": {
+      "muse-ember-1.0": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004,
+          "tiers": [
+            {
+              "input": 0.3,
+              "output": 1.5,
+              "cache_read": 0.012,
+              "tier": {
+                "type": "context",
+                "size": 200000
+              }
+            }
+          ],
+          "context_over_200k": {
+            "input": 0.3,
+            "output": 1.5,
+            "cache_read": 0.012
+          }
+        }
+      },
       "muse-spark-1.1": {
         "cost": {
           "input": 1.25,
@@ -41236,20 +41627,6 @@
           "cache_read": 1.75
         }
       },
-      "TEE/qwen2.5-vl-72b-instruct": {
-        "cost": {
-          "input": 0.7,
-          "output": 0.7,
-          "cache_read": 0.35
-        }
-      },
-      "TEE/qwen3.5-397b-a17b": {
-        "cost": {
-          "input": 0.55,
-          "output": 3.5,
-          "cache_read": 0.225
-        }
-      },
       "TEE/qwen3.6-27b": {
         "cost": {
           "input": 0.32,
@@ -41488,8 +41865,8 @@
       },
       "anthracite-org/magnum-v4-72b": {
         "cost": {
-          "input": 2.006,
-          "output": 2.992,
+          "input": 2.65,
+          "output": 5.3,
           "cache_read": 1.003
         }
       },
@@ -41509,6 +41886,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5.2": {
+        "cost": {
+          "input": 10,
+          "output": 50,
+          "cache_read": 0.25,
+          "cache_write": 12.5
+        }
+      },
       "anthropic/claude-fable-latest": {
         "cost": {
           "input": 10,
@@ -41521,14 +41906,16 @@
         "cost": {
           "input": 1,
           "output": 5,
-          "cache_read": 0.1
+          "cache_read": 0.1,
+          "cache_write": 1.25
         }
       },
       "anthropic/claude-haiku-4.5:thinking": {
         "cost": {
           "input": 1,
           "output": 5,
-          "cache_read": 0.1
+          "cache_read": 0.1,
+          "cache_write": 1.25
         }
       },
       "anthropic/claude-haiku-5.5": {
@@ -41575,112 +41962,128 @@
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking:1024": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking:32768": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking:8192": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.5": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.5:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking:low": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking:max": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking:medium": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.7": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.7:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.8": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.8:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-5": {
@@ -41711,28 +42114,32 @@
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-4.5:thinking": {
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-4.6": {
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-4.6:thinking": {
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-5": {
@@ -41966,9 +42373,9 @@
       },
       "deepseek/deepseek-latest": {
         "cost": {
-          "input": 0.65868,
-          "output": 1.97604,
-          "cache_read": 0.020958
+          "input": 0.66,
+          "output": 1.98,
+          "cache_read": 0.022
         }
       },
       "deepseek/deepseek-v3.2": {
@@ -42050,16 +42457,16 @@
       },
       "deepseek/deepseek-v4-pro-0813": {
         "cost": {
-          "input": 0.65868,
-          "output": 1.97604,
-          "cache_read": 0.020958
+          "input": 0.66,
+          "output": 1.98,
+          "cache_read": 0.022
         }
       },
       "deepseek/deepseek-v4-pro-0813:thinking": {
         "cost": {
-          "input": 0.65868,
-          "output": 1.97604,
-          "cache_read": 0.020958
+          "input": 0.66,
+          "output": 1.98,
+          "cache_read": 0.022
         }
       },
       "deepseek/deepseek-v4-pro:thinking": {
@@ -42074,20 +42481,6 @@
           "input": 0.022,
           "output": 0.4,
           "cache_read": 0.004
-        }
-      },
-      "deepseek/deepseek-v4.1-flash-0910-uncensored": {
-        "cost": {
-          "input": 0.33,
-          "output": 1.32,
-          "cache_read": 0.00825
-        }
-      },
-      "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking": {
-        "cost": {
-          "input": 0.33,
-          "output": 1.32,
-          "cache_read": 0.00825
         }
       },
       "deepseek/deepseek-v4.1-flash-1017": {
@@ -42604,9 +42997,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.06,
-          "output": 0.18,
-          "cache_read": 0.03
+          "input": 0.032,
+          "output": 0.097,
+          "cache_read": 0.016
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42618,9 +43011,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.06,
-          "output": 0.18,
-          "cache_read": 0.03
+          "input": 0.032,
+          "output": 0.097,
+          "cache_read": 0.016
         }
       },
       "google/gemma-4-31b-it": {
@@ -42918,8 +43311,8 @@
       },
       "meta-llama/llama-4-maverick": {
         "cost": {
-          "input": 0.1875,
-          "output": 0.6525,
+          "input": 0.15,
+          "output": 0.6,
           "cache_read": 0.05
         }
       },
@@ -43396,6 +43789,13 @@
           "input": 0.075,
           "output": 0.25,
           "cache_read": 0.015
+        }
+      },
+      "nex-agi/nex-n2.6": {
+        "cost": {
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03
         }
       },
       "nothingiisreal/L3.1-70B-Celeste-V0.1-BF16": {
@@ -44079,15 +44479,15 @@
       },
       "qwen/qwen3-235b-a22b": {
         "cost": {
-          "input": 0.0875,
-          "output": 0.35,
+          "input": 0.09,
+          "output": 0.55,
           "cache_read": 0.0175
         }
       },
       "qwen/qwen3-235b-a22b-instruct-2507": {
         "cost": {
-          "input": 0.0875,
-          "output": 0.35,
+          "input": 0.09,
+          "output": 0.55,
           "cache_read": 0.0175
         }
       },
@@ -44196,16 +44596,16 @@
       },
       "qwen/qwen3.5-27b": {
         "cost": {
-          "input": 0.25,
-          "output": 2,
-          "cache_read": 0.135
+          "input": 0.2,
+          "output": 1.75,
+          "cache_read": 0.02
         }
       },
       "qwen/qwen3.5-27b:thinking": {
         "cost": {
-          "input": 0.25,
-          "output": 2,
-          "cache_read": 0.135
+          "input": 0.2,
+          "output": 1.75,
+          "cache_read": 0.02
         }
       },
       "qwen/qwen3.5-35b-a3b": {
@@ -44261,14 +44661,16 @@
         "cost": {
           "input": 0.4,
           "output": 2.4,
-          "cache_read": 0.04
+          "cache_read": 0.04,
+          "cache_write": 0.5
         }
       },
       "qwen/qwen3.5-plus:thinking": {
         "cost": {
           "input": 0.4,
           "output": 2.4,
-          "cache_read": 0.04
+          "cache_read": 0.04,
+          "cache_write": 0.5
         }
       },
       "qwen/qwen3.6-27b": {
@@ -44984,16 +45386,16 @@
       },
       "z-ai/GLM-4.6-turbo": {
         "cost": {
-          "input": 1,
-          "output": 3,
-          "cache_read": 0.5
+          "input": 0.55,
+          "output": 2.2,
+          "cache_read": 0.11
         }
       },
       "z-ai/GLM-4.6-turbo:thinking": {
         "cost": {
-          "input": 1,
-          "output": 3,
-          "cache_read": 0.5
+          "input": 0.55,
+          "output": 2.2,
+          "cache_read": 0.11
         }
       },
       "z-ai/glm-4.5": {
@@ -45019,23 +45421,23 @@
       },
       "z-ai/glm-4.6": {
         "cost": {
-          "input": 0.5,
-          "output": 2,
-          "cache_read": 0.1
+          "input": 0.55,
+          "output": 2.2,
+          "cache_read": 0.11
         }
       },
       "z-ai/glm-4.6-original": {
         "cost": {
-          "input": 0.5,
-          "output": 2,
-          "cache_read": 0.1
+          "input": 0.55,
+          "output": 2.2,
+          "cache_read": 0.11
         }
       },
       "z-ai/glm-4.6:thinking": {
         "cost": {
-          "input": 0.5,
-          "output": 2,
-          "cache_read": 0.1
+          "input": 0.55,
+          "output": 2.2,
+          "cache_read": 0.11
         }
       },
       "z-ai/glm-4.6v": {
@@ -49970,6 +50372,14 @@
           "cache_write": 12.5
         }
       },
+      "claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "claude-haiku-4-5": {
         "cost": {
           "input": 1,
@@ -50268,29 +50678,37 @@
       },
       "gemini-3.6-flash": {
         "cost": {
-          "input": 1.5,
-          "output": 7.5,
-          "cache_read": 0.15,
-          "input_audio": 1.5
+          "input": 0.75,
+          "output": 3.75,
+          "cache_read": 0.075,
+          "input_audio": 0.75
         }
       },
       "gemini-3.7-flash": {
         "cost": {
-          "input": 1.5,
-          "output": 7.5,
-          "cache_read": 0.15,
-          "input_audio": 1.5
+          "input": 0.75,
+          "output": 3.75,
+          "cache_read": 0.075,
+          "input_audio": 0.75
         }
       },
       "gemini-3.8-flash": {
         "cost": {
-          "input": 1.5,
-          "output": 7.5,
-          "cache_read": 0.15,
-          "input_audio": 1.5
+          "input": 0.75,
+          "output": 3.75,
+          "cache_read": 0.075,
+          "input_audio": 0.75
         }
       },
       "gemini-4-argon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.1,
+          "input_audio": 2
+        }
+      },
+      "gemini-4-carbon": {
         "cost": {
           "input": 2,
           "output": 10,
@@ -51035,7 +51453,25 @@
           "input": 0.1,
           "output": 0.5,
           "cache_read": 0.004,
-          "cache_write": 0
+          "cache_write": 0,
+          "tiers": [
+            {
+              "input": 0.3,
+              "output": 1.5,
+              "cache_read": 0.012,
+              "cache_write": 0,
+              "tier": {
+                "type": "context",
+                "size": 200000
+              }
+            }
+          ],
+          "context_over_200k": {
+            "input": 0.3,
+            "output": 1.5,
+            "cache_read": 0.012,
+            "cache_write": 0
+          }
         }
       },
       "muse-spark-1.2": {
@@ -51708,6 +52144,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5.2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "anthropic/claude-haiku-4.5": {
         "cost": {
           "input": 1,
@@ -52101,9 +52545,9 @@
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
-          "input": 0.894012,
-          "output": 1.788024,
-          "cache_read": 0.074501
+          "input": 0.95526,
+          "output": 1.91052,
+          "cache_read": 0.079605
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
@@ -52115,9 +52559,9 @@
       },
       "deepseek/deepseek-v4.1-flash": {
         "cost": {
-          "input": 0.051,
-          "output": 0.567,
-          "cache_read": 0.018
+          "input": 0.3,
+          "output": 1.2,
+          "cache_read": 0.006
         }
       },
       "deepseek/deepseek-v4.1-flash-1017": {
@@ -52408,6 +52852,16 @@
           "input_audio": 2
         }
       },
+      "google/gemini-4-carbon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "reasoning": 10,
+          "cache_read": 0.1,
+          "cache_write": 0.1875,
+          "input_audio": 2
+        }
+      },
       "google/gemini-nano-banana-2.1": {
         "cost": {
           "input": 1.5,
@@ -52453,9 +52907,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.09,
-          "output": 0.3,
-          "cache_read": 0.05
+          "input": 0.08,
+          "output": 0.1,
+          "cache_read": 0.046
         }
       },
       "google/gemma-4-26b-a4b-it:free": {
@@ -52616,9 +53070,9 @@
       },
       "meta-llama/llama-3.3-70b-instruct": {
         "cost": {
-          "input": 0.59,
-          "output": 0.79,
-          "cache_read": 0.295
+          "input": 0.71,
+          "output": 0.71,
+          "cache_read": 0.71
         }
       },
       "meta-llama/llama-4-maverick": {
@@ -52638,6 +53092,14 @@
         "cost": {
           "input": 0.18,
           "output": 0.18
+        }
+      },
+      "meta/muse-ember": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004,
+          "cache_write": 0.125
         }
       },
       "meta/muse-glimmer-30b": {
@@ -52958,6 +53420,13 @@
           "cache_read": 0.015
         }
       },
+      "nex-agi/nex-n2.6": {
+        "cost": {
+          "input": 0.12,
+          "output": 0.4,
+          "cache_read": 0.024
+        }
+      },
       "nousresearch/hermes-4-405b": {
         "cost": {
           "input": 1,
@@ -53019,7 +53488,7 @@
       "nvidia/nemotron-3.5-super-vl": {
         "cost": {
           "input": 0.15,
-          "output": 0.5,
+          "output": 0.47,
           "cache_read": 0.02
         }
       },
@@ -53908,8 +54377,8 @@
       },
       "qwen/qwen3-14b": {
         "cost": {
-          "input": 0.12,
-          "output": 0.24
+          "input": 0.1,
+          "output": 0.22
         }
       },
       "qwen/qwen3-235b-a22b-2507": {
@@ -54400,12 +54869,6 @@
           "output": 0
         }
       },
-      "stealth/crouton-alpha": {
-        "cost": {
-          "input": 0,
-          "output": 0
-        }
-      },
       "stepfun/step-3.5-flash": {
         "cost": {
           "input": 0.1,
@@ -54503,6 +54966,12 @@
           "input": 1,
           "output": 4.05,
           "cache_read": 0.17
+        }
+      },
+      "thinkingmachines/inkling-2-small:free": {
+        "cost": {
+          "input": 0,
+          "output": 0
         }
       },
       "thinkingmachines/inkling-small": {
@@ -54826,9 +55295,9 @@
       },
       "z-ai/glm-5.2": {
         "cost": {
-          "input": 0.006,
+          "input": 0.007,
           "output": 6.8,
-          "cache_read": 0.005
+          "cache_read": 0.006
         }
       },
       "z-ai/glm-5.3": {
@@ -54840,8 +55309,8 @@
       },
       "z-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.0335,
-          "output": 0.083,
+          "input": 0.0399,
+          "output": 0.0784,
           "cache_read": 0.03
         }
       },
@@ -54875,10 +55344,10 @@
       },
       "~anthropic/claude-fable-latest": {
         "cost": {
-          "input": 10,
-          "output": 50,
-          "cache_read": 0.25,
-          "cache_write": 12.5
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
         }
       },
       "~anthropic/claude-haiku-latest": {
@@ -55127,8 +55596,8 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0335,
-          "output": 0.083,
+          "input": 0.0399,
+          "output": 0.0784,
           "cache_read": 0.03
         }
       },
@@ -66426,6 +66895,14 @@
           "cache_write": 12.5
         }
       },
+      "claude-fable-5-2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
       "claude-haiku-5-5": {
         "cost": {
           "input": 0.1,
@@ -68073,6 +68550,22 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5.2": {
+        "cost": {
+          "input": 8,
+          "output": 40,
+          "cache_read": 0.2,
+          "cache_write": 10
+        }
+      },
+      "anthropic/claude-fable-5.2-fast": {
+        "cost": {
+          "input": 16,
+          "output": 80,
+          "cache_read": 0.4,
+          "cache_write": 20
+        }
+      },
       "anthropic/claude-haiku-4.5": {
         "cost": {
           "input": 1,
@@ -68587,6 +69080,13 @@
           "cache_read": 0.1
         }
       },
+      "google/gemini-4-carbon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.1
+        }
+      },
       "google/gemini-nano-banana-2.1": {
         "cost": {
           "input": 1.5,
@@ -68756,6 +69256,13 @@
         "cost": {
           "input": 0.17,
           "output": 0.66
+        }
+      },
+      "meta/muse-ember": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004
         }
       },
       "meta/muse-glimmer-30b": {
@@ -71715,7 +72222,7 @@
       "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": {
         "cost": {
           "input": 0.15,
-          "output": 0.5,
+          "output": 0.47,
           "cache_read": 0.02
         }
       },

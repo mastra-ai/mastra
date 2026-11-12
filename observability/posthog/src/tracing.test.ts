@@ -1652,6 +1652,11 @@ describe('PosthogExporter', () => {
       await exporter.onFeedbackEvent(createFeedbackEvent({ metadata: { userId: 'meta' } }));
       expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'meta' }));
 
+      await exporter.onFeedbackEvent(
+        createFeedbackEvent({ feedbackUserId: null, userId: 'legacy', metadata: { userId: 'meta' } }),
+      );
+      expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'anonymous' }));
+
       await exporter.onFeedbackEvent(createFeedbackEvent());
       expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'anonymous' }));
     });

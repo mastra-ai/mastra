@@ -102,6 +102,83 @@ function fixAISDKNullableUnionTypes(schema: Record<string, any>): Record<string,
   return result;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
+/**
+ * The JSON Schema types of a set of literal values (all numbers count as one
+ * `integer` or `number` type), or `undefined` when there are none or one is an
+ * object or array.
+ */
+function inferLiteralTypes(values: unknown[]): string[] | undefined {
+  const numberType = values.every(value => typeof value !== 'number' || Number.isInteger(value)) ? 'integer' : 'number';
+  const types = new Set<string>();
+  for (const value of values) {
+    if (typeof value === 'string' || typeof value === 'boolean') {
+      types.add(typeof value);
+    } else if (typeof value === 'number') {
+      types.add(numberType);
+    } else {
+      return undefined;
+    }
+  }
+  return types.size > 0 ? [...types] : undefined;
+}
+
+function appendDescription(description: unknown, note: string): string {
+  return typeof description === 'string' && description !== '' ? `${description} ${note}` : note;
+}
+
+/** Nodes whose description got an allowed-values note from `toGeminiEnum`. */
+const nodesWithAllowedValuesNote = new WeakSet<object>();
+
+/**
+ * Gemini's `Schema.enum` only accepts non-empty strings, so any other enum value
+ * (numbers, booleans, `""`, `null`) makes the whole request fail with HTTP 400 (#29167).
+ *
+ * - A string enum on a string (or untyped) node is kept and gets `type: 'string'`;
+ *   a `null` among its values becomes `nullable: true`.
+ * - Any other enum is dropped. The node keeps (or gets) a `type`, and the allowed
+ *   values move into `description` so the model still sees the constraint.
+ *
+ * Tool-call arguments are still validated against the original schema, so this
+ * only changes what is sent to Gemini, not which inputs are accepted.
+ */
+function toGeminiEnum(s: Record<string, unknown>): void {
+  const values = s['enum'];
+  if (!Array.isArray(values) || values.length === 0) return;
+
+  // Gemini only allows `enum` on a string node. External JSON Schema may omit `type`.
+  const isStringNode = s['type'] === 'string' || (s['type'] === undefined && s['anyOf'] === undefined);
+  const hasNull = values.includes(null);
+  const nonNull = values.filter(value => value !== null);
+
+  if (isStringNode && nonNull.length > 0 && nonNull.every(isNonEmptyString)) {
+    s['enum'] = nonNull;
+    s['type'] = 'string';
+    if (hasNull) s['nullable'] = true;
+    return;
+  }
+
+  delete s['enum'];
+  if (hasNull) s['nullable'] = true;
+
+  if (s['type'] === undefined && s['anyOf'] === undefined) {
+    const types = inferLiteralTypes(nonNull);
+    if (types?.length === 1) {
+      s['type'] = types[0];
+    } else if (types) {
+      s['anyOf'] = types.map(type => ({ type }));
+    }
+  }
+
+  const formatted = values.map(value => JSON.stringify(value));
+  const note = formatted.length === 1 ? `Must be ${formatted[0]}.` : `Must be one of: ${formatted.join(', ')}.`;
+  s['description'] = appendDescription(s['description'], note);
+  nodesWithAllowedValuesNote.add(s);
+}
+
 /**
  * Inline `$ref` pointers one level and drop `definitions`/`$defs`.
  * Gemini can't follow JSON Schema `$ref`s — they cause silent mis-fills.
@@ -346,6 +423,8 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
       delete s['const'];
     }
 
+    toGeminiEnum(s);
+
     // Fix tuple items: `items: [schema, ...]` (array form) → `items: { anyOf: [...] }` (single-schema)
     if (Array.isArray(s['items'])) {
       s['items'] = { anyOf: s['items'] };
@@ -362,8 +441,26 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
 
       if (hasNull && nonNull.length === 1) {
         const base = nonNull[0]!;
+        const parentDescription = s['description'];
+        const carriesNote = nodesWithAllowedValuesNote.has(s) || nodesWithAllowedValuesNote.has(base);
         delete s['anyOf'];
         Object.assign(s, base);
+        // When either side carries an allowed-values note from `toGeminiEnum`, keep both
+        // descriptions (parent first) instead of letting the branch overwrite the parent's.
+        // Zod v3 and `.nullish()` already copy the parent description into the branch, so
+        // skip the merge when the branch description starts with it.
+        if (carriesNote) {
+          const baseDescription = base['description'];
+          if (
+            isNonEmptyString(parentDescription) &&
+            isNonEmptyString(baseDescription) &&
+            !baseDescription.startsWith(parentDescription)
+          ) {
+            s['description'] = appendDescription(parentDescription, baseDescription);
+          }
+          // A further nullable wrapper around this node must merge its description too.
+          nodesWithAllowedValuesNote.add(s);
+        }
         s['nullable'] = true;
       } else if (hasNull && nonNull.length > 1) {
         s['anyOf'] = nonNull;

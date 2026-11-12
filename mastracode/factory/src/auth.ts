@@ -1,3 +1,4 @@
+import { MastraAuthStudio } from '@mastra/auth-studio';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import type { MessageAuthor } from '@mastra/core/agent-controller';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
@@ -19,7 +20,6 @@ import {
   isPlatformAuthSupportedHost,
 } from './platform-auth-host.js';
 import type { RouteAuth } from './routes/route.js';
-import { actorFromAuthUser } from './storage/domains/comments/actor.js';
 import { isFactoryTelemetryEnabled } from './telemetry.js';
 import { timedAboveThreshold } from './timing.js';
 
@@ -186,11 +186,12 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
 function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
-  const actor = actorFromAuthUser(userId, user);
+  const name = user.name?.trim() || user.email?.trim();
+  const avatarUrl = user.avatarUrl?.trim();
   return {
-    id: actor.id,
-    ...(actor.displayName ? { name: actor.displayName } : {}),
-    ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
+    id: userId,
+    ...(name ? { name } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
   };
 }
 
@@ -424,6 +425,15 @@ export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined
     ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
     tenant: (c: Context) => factoryAuthTenant(c),
     isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
+    ...(provider instanceof MastraAuthStudio
+      ? {
+          fetchPlatformAsUser: async (c: Context, path: string, init?: RequestInit) => {
+            const res = await provider.fetchAsRequestUser(c.req.raw, path, init);
+            forwardPendingResponseHeaders(provider, c);
+            return res;
+          },
+        }
+      : {}),
   };
 }
 

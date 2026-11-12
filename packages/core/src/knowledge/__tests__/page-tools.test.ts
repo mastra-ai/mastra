@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { setRunAgentScopes } from '../../agent/scopes';
-import { RequestContext } from '../../request-context';
 import { standardSchemaToJSONSchema } from '../../schema';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
@@ -10,6 +8,7 @@ import type { KnowledgeScopeDeclarations } from '../declarations';
 import { KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
 import { buildKnowledgePageTools } from '../page-tools';
 import { KnowledgeScopeRuntime } from '../scope-runtime';
+import { agentRunContext } from './agent-run-context';
 
 /** The §10 reference setup of the access spec. */
 const scopes: KnowledgeScopeDeclarations = {
@@ -71,12 +70,10 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
   let tools: ReturnType<typeof buildKnowledgePageTools>;
   let runtime: KnowledgeScopeRuntime;
 
-  /** Runs a tool as an agent holding `held` (raw run scopes). */
+  /** Runs a tool as an agent run with `held` as its Agent scopes. */
   const as = (agentId: string, held: string[]) => {
     const call = async (tool: string, input: Record<string, unknown>): Promise<Result> => {
-      const requestContext = new RequestContext();
-      setRunAgentScopes(requestContext, held);
-      return (await tools[tool]!.execute!(input as never, { requestContext, agent: { agentId } } as never)) as Result;
+      return (await tools[tool]!.execute!(input as never, agentRunContext(agentId, held) as never)) as Result;
     };
     return {
       call,
@@ -579,15 +576,18 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
       });
     });
 
-    it("refuses a typo'd run scope the way a run does, and takes raw run scopes", async () => {
+    it("refuses a typo'd run scope the way a run does, and takes canonical run scopes", async () => {
       await expect(runtime.explainAccess(['org:acme', 'role:acme:suport'], { scope: 'org:acme' })).rejects.toThrow(
         KnowledgeDeclarationError,
       );
       await expect(as('typo', ['org:acme', 'role:acme:suport']).read()).rejects.toThrow(/role:acme:suport/);
 
-      // A raw resource id with "/" is encoded exactly like run ingress encodes it.
-      const raw = await runtime.explainAccess(['resource:user/1'], { scope: 'resource:user%2F1' });
-      expect(raw.role).toBe('owner');
+      // Run scopes are canonical: an id with "/" is passed encoded, and the raw spelling is refused.
+      const encoded = await runtime.explainAccess(['resource:user%2F1'], { scope: 'resource:user%2F1' });
+      expect(encoded.role).toBe('owner');
+      await expect(runtime.explainAccess(['resource:user/1'], { scope: 'resource:user%2F1' })).rejects.toThrow(
+        /encodeKnowledgeScopeId/,
+      );
     });
   });
 });

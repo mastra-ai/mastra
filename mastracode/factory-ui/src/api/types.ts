@@ -20,6 +20,36 @@ export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGe
 export type StoredBoardInfo = StoredBoardResponse['board'];
 export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
 export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
+export type IntakeRouteListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteList.responseSchema>;
+export type IntakeRouteInfo = IntakeRouteListResponse['intakeRoutes'][number];
+export type IntakeRouteInput = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema>;
+export type IntakeRoutePatch = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema>;
+export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate.bodySchema>;
+export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema>;
+export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
+export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
+export type BoardPhasesResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema>;
+export type WorkItemFilterOptions = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.responseSchema>;
+type BoardPhasesQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema>;
+export type BoardPhasesSort = BoardPhasesQuery['sort'];
+/** The filters of a board view: each is sent once per picked value. */
+export type BoardPhasesFilter = {
+  [Field in keyof BoardPhasesQuery]-?: BoardPhasesQuery[Field] extends Set<string> ? Field : never;
+}[keyof BoardPhasesQuery];
+
+/** What the board read is asked: one view of a board, and how deep each of its phases is listed. */
+export interface BoardPhasesRequest {
+  board: string;
+  sort: BoardPhasesSort;
+  /** Empty searches nothing. */
+  q: string;
+  /** The picked values of each filter, sorted. A filter that picks nothing is left out. */
+  filters: Partial<Record<BoardPhasesFilter, readonly string[]>>;
+  /** How many cards a phase lists, for the phases listed deeper than the server's first page. */
+  windows: Readonly<Record<string, number>>;
+  /** A card to answer for apart from the listing: its body, and where each phase holding it places it. */
+  item?: string;
+}
 
 import type {
   CustomProviderInfo,
@@ -45,9 +75,10 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
 import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
-export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
   ArtifactEntry,
   ArtifactListing,

@@ -1,4 +1,3 @@
-import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode, Ref } from 'react';
 
@@ -18,20 +17,23 @@ export function LaneCard({
   children: ReactNode;
 }) {
   return (
-    <Card as="section" ref={anchorRef} aria-label={MODEL_LANE_LABELS[lane]}>
-      <CardContent className="flex items-center gap-3">
-        <IconTile icon={MODEL_LANE_ICONS[lane]} className="text-muted-foreground" />
-        <div className="flex min-w-0 flex-col gap-1">
-          <Txt as="h3" variant="label">
-            {MODEL_LANE_LABELS[lane]}
-          </Txt>
-          <ul className="text-muted-foreground flex flex-wrap items-center gap-2.5 [&_svg]:size-3.5">{children}</ul>
-          <Txt variant="meta" tone="muted" className="@min-[44rem]:sr-only">
-            Uses {MODEL_DEFAULTS_LABELS[destination]}
-          </Txt>
-        </div>
-      </CardContent>
-    </Card>
+    // The settings card surface (no rim or shadow), like the defaults cards it connects to.
+    <section
+      ref={anchorRef}
+      aria-label={MODEL_LANE_LABELS[lane]}
+      className="bg-card flex items-center gap-3 rounded-xl p-3.5"
+    >
+      <IconTile icon={MODEL_LANE_ICONS[lane]} className="text-muted-foreground" />
+      <div className="flex min-w-0 flex-col gap-1">
+        <Txt as="h3" variant="label">
+          {MODEL_LANE_LABELS[lane]}
+        </Txt>
+        <ul className="text-muted-foreground flex flex-wrap items-center gap-2.5 [&_svg]:size-3.5">{children}</ul>
+        <Txt variant="meta" tone="muted" className="@min-[38rem]:sr-only">
+          Uses {MODEL_DEFAULTS_LABELS[destination]}
+        </Txt>
+      </div>
+    </section>
   );
 }
 

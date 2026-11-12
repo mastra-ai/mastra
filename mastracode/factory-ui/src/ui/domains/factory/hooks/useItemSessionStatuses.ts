@@ -1,5 +1,4 @@
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useParkedSessions } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { sessionRowStatus } from '../../workspaces/services/sessionStatus';
@@ -15,17 +14,20 @@ export function useItemSessionStatuses({
   factoryProjectId,
   projectRepositoryId,
   items,
+  parkedSessionIds: parked,
 }: {
   factoryProjectId: string;
   projectRepositoryId: string;
   items: readonly WorkItem[];
+  /** The sessions parked on a plan or a question, read with `items` so a card and its marker agree. */
+  parkedSessionIds: readonly string[];
 }): ReadonlyMap<string, SessionRowStatus> {
   const boundSessionIds = items.flatMap(item => Object.values(item.sessions ?? {}).map(ref => ref.sessionId));
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: boundSessionIds,
   });
-  const parkedSessionIds = useParkedSessions(factoryProjectId);
+  const parkedSessionIds = new Set(parked);
   const workspaces = useWorkspacesQuery(factoryProjectId);
   const materializingSessionIds = new Set(
     allSessionRows(workspaces.data)

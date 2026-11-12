@@ -1,11 +1,10 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Fragment, startTransition, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
-import { collapsedRowsKeepingActive, nestCardSessions } from '../services/sessionGroups';
+import { collapsedRowsKeepingActive } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
 
@@ -65,22 +64,9 @@ export function SessionGroupList({
         </Sidebar.NavHeader>
       )}
       <Sidebar.NavList>
-        {nestCardSessions(visibleRows).map(entry =>
-          entry.kind === 'row' ? (
-            <Fragment key={entry.row.session.sessionId}>{renderRow(entry.row)}</Fragment>
-          ) : (
-            <li key={`card:${entry.itemId}`} className="flex flex-col">
-              <Txt as="span" variant="caption" tone="muted" className="truncate px-2 pt-1" title={entry.title}>
-                {entry.title}
-              </Txt>
-              <Sidebar.NavList aria-label={entry.title} className="pl-3">
-                {entry.rows.map(row => (
-                  <Fragment key={row.session.sessionId}>{renderRow(row)}</Fragment>
-                ))}
-              </Sidebar.NavList>
-            </li>
-          ),
-        )}
+        {visibleRows.map(row => (
+          <Fragment key={row.session.sessionId}>{renderRow(row)}</Fragment>
+        ))}
       </Sidebar.NavList>
       <div className="flex items-center gap-3">
         <Sidebar.NavShowMore

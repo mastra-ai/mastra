@@ -1,15 +1,22 @@
 import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
+import { slimNestedAgentChunks } from '../../stream/strip-model-snapshots';
 import type { ChunkType } from '../../stream/types';
 import { createRunAbortController } from '../durable/run-abort';
 import type { AgentSuspendedEventData } from '../durable/types';
+import type { MessageList } from '../message-list';
+import { whenRunStepsSettle } from '../run-lease-fence';
 import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
+import { diffResponseMessages } from './response-messages';
+import type { ResponseMessagesCursor, ResponseMessagesDiff } from './response-messages';
 import type { AgentRunRecordTarget } from './run-records';
 import { deleteAgentRunRecord, readAgentRunRecord, writeAgentRunRecord } from './run-records';
+import { toStreamFinish, toStreamStepFinish, toStreamStepStart } from './wire';
 
 /**
  * Publishes a run's chunks on its stream topic as the loop produces them, so
@@ -27,8 +34,11 @@ export interface AgentStreamPublisher {
   readonly abortSignal: AbortSignal;
   /** Abort the run in this process. */
   abort(reason?: unknown): void;
-  /** Queue a chunk the loop emitted to its caller. */
-  publish(chunk: ChunkType<any>): void;
+  /**
+   * Queue a chunk the loop emitted to its caller. `messageList` is the run's
+   * message list, which a `step-finish` event takes the step's content from.
+   */
+  publish(chunk: ChunkType<any>, messageList?: MessageList): void;
   /**
    * The loop closed its stream. Publishes the terminal event readers wait for
    * when the loop didn't end with `finish`: `suspended` when the run paused,
@@ -61,9 +71,12 @@ export interface CreateAgentStreamPublisherOptions {
  * Map the default loop's chunks onto the agent stream events DurableAgent
  * publishes, so one reader handles runs from either engine.
  *
- * - `step-start` → `step-start`
- * - `finish` → `finish` (readers rebuild the `abort` chunk from its reason, so
- *   the loop's own `abort` chunk is not published)
+ * - `step-start` → `step-start`, `step-finish` → `chunk`, and `finish` →
+ *   `finish`, each reduced to what readers need (see `wire.ts`); readers
+ *   rebuild the `abort` chunk from the finish reason, so the loop's own
+ *   `abort` chunk is not published
+ * - `tool-output` / `workflow-step-output` → `chunk`, with a delegated agent's
+ *   nested chunks stripped of their prompts and steps
  * - `tool-call-approval` / `tool-call-suspended` → `chunk`, then `suspended`
  *   once the run's snapshot is persisted (when the loop closes)
  * - anything else → `chunk`, with errors serialized so they survive JSON transports
@@ -102,7 +115,9 @@ export function createAgentStreamPublisher({
       logger?.warn?.('[AgentStream:' + runId + '] failed to listen for abort requests', { error });
     });
   const stopAbortListener = async () => {
-    detach();
+    // A segment that ends on a suspension can leave a sibling tool call of the same step running. Keep forwarding the
+    // caller's abort until it settles, so aborting the run (e.g. at shutdown) still reaches that tool.
+    whenRunStepsSettle(callerSignal, detach);
     const pending = listening;
     listening = undefined;
     await pending;
@@ -133,6 +148,43 @@ export function createAgentStreamPublisher({
   // The record goes first, so a reader that sees any event can authorize.
   let queue: Promise<void> = writeRecord('running')();
   let finished = false;
+  /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
+  let stepToolCallIds: string[] = [];
+  /**
+   * The response messages published so far. Each step-finish sends only what changed; a run
+   * resumed in a new publisher starts over with the full list.
+   */
+  let responseMessagesCursor: ResponseMessagesCursor | { producer: string } = { producer: publisherId };
+  /** The next diff holds the whole list; its `seq` still follows on, so readers don't take it for a late copy. */
+  const forgetSentResponseMessages = () => {
+    if ('fingerprints' in responseMessagesCursor)
+      responseMessagesCursor = { ...responseMessagesCursor, fingerprints: [] };
+  };
+  /** A reader that attaches mid-run on a bus that keeps no history can only place whole lists. */
+  const sendWholeLists = !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(runId));
+  const diffStepResponseMessages = (messages: ResponseMessagesDiff['messages'] | undefined) => {
+    if (!messages) return undefined;
+    if (sendWholeLists) forgetSentResponseMessages();
+    try {
+      const { diff, cursor } = diffResponseMessages(responseMessagesCursor, messages);
+      responseMessagesCursor = cursor;
+      return diff;
+    } catch (error) {
+      // Readers report no messages for this step; publishing must not fail the run.
+      logger?.warn?.(`[AgentStream:${runId}] failed to diff response messages`, { error });
+      forgetSentResponseMessages();
+      return undefined;
+    }
+  };
+  const readStepContent = (messageList: MessageList | undefined, toolCallIds: string[]) => {
+    try {
+      return messageList?.get.response.aiV5.modelContent(-1, toolCallIds);
+    } catch (error) {
+      // Readers fall back to their own messages; publishing must not fail the run.
+      logger?.warn?.(`[AgentStream:${runId}] failed to read step content`, { error });
+      return undefined;
+    }
+  };
   let suspended: AgentSuspendedEventData | undefined;
   let lastError: unknown;
 
@@ -197,20 +249,52 @@ export function createAgentStreamPublisher({
     runId,
     abortSignal: controller.signal,
     abort,
-    publish(chunk) {
+    publish(chunk, messageList) {
       if (ended) return;
       switch (chunk.type) {
         case 'abort':
           return;
         case 'step-start': {
-          const payload = chunk.payload;
-          void enqueue(() => emitStepStartEvent(pubsub, runId, payload));
+          const data = toStreamStepStart(chunk.payload);
+          void enqueue(() => emitStepStartEvent(pubsub, runId, data));
+          return;
+        }
+        case 'tool-call':
+          stepToolCallIds.push(chunk.payload.toolCallId);
+          break;
+        case 'step-finish': {
+          // The same content the caller's output reports for this step, read now, while the
+          // run's messages still end with it. A retried attempt was rolled back, and readers
+          // report no content for it.
+          const content =
+            (chunk.payload?.stepResult?.reason as string) === 'retry'
+              ? undefined
+              : readStepContent(messageList, stepToolCallIds);
+          stepToolCallIds = [];
+          const responseMessages = diffStepResponseMessages(chunk.payload?.messages?.nonUser);
+          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content, responseMessages));
+          void enqueue(async () => {
+            try {
+              await emitChunkEvent(pubsub, runId, published);
+            } catch (error) {
+              // Readers that missed this diff can't place the next ones: resend the whole list.
+              if (responseMessages) forgetSentResponseMessages();
+              throw error;
+            }
+          });
+          return;
+        }
+        case 'tool-output':
+        case 'workflow-step-output': {
+          // A delegated agent's chunks arrive wrapped here, with their own prompts and steps.
+          const published = keepProducedAt(chunk, slimNestedAgentChunks(chunk));
+          void enqueue(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
         case 'finish': {
           finished = true;
-          const { output, stepResult, messages } = chunk.payload as any;
-          void enqueue(() => emitFinishEvent(pubsub, runId, { output, stepResult, ...(messages ? { messages } : {}) }));
+          const data = toStreamFinish(chunk.payload);
+          void enqueue(() => emitFinishEvent(pubsub, runId, data));
           return;
         }
         case 'tool-call-approval':
@@ -224,10 +308,7 @@ export function createAgentStreamPublisher({
         }
         case 'error': {
           lastError = chunk.payload.error;
-          const serialized = {
-            ...chunk,
-            payload: { ...chunk.payload, error: serializeIfError(chunk.payload.error) },
-          } as ChunkType<any>;
+          const serialized = withPayload(chunk, { ...chunk.payload, error: serializeIfError(chunk.payload.error) });
           void enqueue(() => emitChunkEvent(pubsub, runId, serialized));
           return;
         }
@@ -243,6 +324,18 @@ export function createAgentStreamPublisher({
       return end(() => reason);
     },
   };
+}
+
+/** A copy of `chunk` with another payload, keeping when the chunk was produced. */
+function withPayload(chunk: ChunkType<any>, payload: unknown): ChunkType<any> {
+  return keepProducedAt(chunk, { ...chunk, payload } as ChunkType<any>);
+}
+
+/** `copy`, stamped with when `chunk` was produced; publishing would otherwise stamp the copy when it's sent. */
+function keepProducedAt(chunk: ChunkType<any>, copy: ChunkType<any>): ChunkType<any> {
+  const producedAt = getChunkProducedAt(chunk);
+  if (copy !== chunk && producedAt !== undefined) stampChunkProducedAt(copy, producedAt);
+  return copy;
 }
 
 function serializeIfError(error: unknown) {

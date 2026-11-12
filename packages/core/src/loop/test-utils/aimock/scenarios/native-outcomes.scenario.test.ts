@@ -5,19 +5,48 @@ import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { createScorer } from '../../../../evals';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { MockMemory } from '../../../../memory/mock';
 import { SCENARIO_MODEL_ID } from '../types';
 import { SamplingStrategyType, SpanType, TracingEventType } from '../../../../observability';
+import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runApprovalScenario, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { captureOutcomeEvents as capture } from '../outcome-test-utils';
+
+/**
+ * Resolves once the provider stream of a model call has finished. MODEL_INFERENCE is
+ * exported only when its processed step finishes (#29818), so tests that need the
+ * provider boundary watch the provider stream itself rather than the exported span.
+ */
+function watchProviderFinish() {
+  const descriptor = Object.getOwnPropertyDescriptor(ModelSpanTracker.prototype, 'wrapInferenceStream')!;
+  const original = descriptor.value as ModelSpanTracker['wrapInferenceStream'];
+  const finishedAt: number[] = [];
+  Object.defineProperty(ModelSpanTracker.prototype, 'wrapInferenceStream', {
+    ...descriptor,
+    value: function (this: ModelSpanTracker, stream: ReadableStream<any>) {
+      return original.call(this, stream).pipeThrough(
+        new TransformStream({
+          transform(chunk, controller) {
+            if (chunk?.type === 'finish') finishedAt.push(Date.now());
+            controller.enqueue(chunk);
+          },
+        }),
+      );
+    },
+  });
+  onTestFinished(() => Object.defineProperty(ModelSpanTracker.prototype, 'wrapInferenceStream', descriptor));
+  return finishedAt;
+}
 
 describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   const getMock = useLoopScenarioAimock();
 
   it.each([true, false])('keeps processed chunks inside their logical step (buffered=%s)', async buffered => {
     const { observability, ended } = capture();
+    const providerFinishedAt = watchProviderFinish();
     let bufferedText = '';
-    let releasedAfterInference = false;
+    let releasedAt: number | undefined;
     const { chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -35,10 +64,10 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
                   return null;
                 }
                 if (part.type === 'text-end') {
-                  // Hold content until provider completion has been exported. This makes
+                  // Hold content until the provider stream has finished. This makes
                   // the delayed-processor boundary deterministic rather than racing clocks.
-                  await expect.poll(() => ended(SpanType.MODEL_INFERENCE).length).toBe(1);
-                  releasedAfterInference = true;
+                  await expect.poll(() => providerFinishedAt.length).toBe(1);
+                  releasedAt = Date.now();
                   return { ...part, type: 'text-delta', payload: { ...part.payload, text: bufferedText } };
                 }
                 return part;
@@ -51,7 +80,12 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       },
       fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'Buffered reply' }),
     });
-    expect(releasedAfterInference).toBe(buffered);
+    expect(releasedAt !== undefined).toBe(buffered);
+    // The model call span stops at the provider finish, not at the delayed release,
+    // and carries the response as the processor released it.
+    const [inference] = ended(SpanType.MODEL_INFERENCE);
+    expect(inference?.output).toMatchObject({ text: 'Buffered reply' });
+    if (releasedAt !== undefined) expect(inference!.endTime!.getTime()).toBeLessThanOrEqual(releasedAt);
     expect(
       chunks
         ?.filter(chunk => chunk.type === 'text-delta')
@@ -255,6 +289,228 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     }
   });
 
+  // The durable engines keep the caller's deadline running until the run ends, so it reports the
+  // timeout and the run must end as it. The plain loop has already finished its stream by then.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'reports a deadline that expires while the run is finishing as a limit',
+    async () => {
+      const { observability, ended } = capture();
+      const slowFinish: Processor = {
+        id: 'slow-finish',
+        processOutputResult: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Quick answer',
+        errorProcessors: [],
+        maxRetries: 0,
+        outputProcessors: [slowFinish],
+        modelSettings: { timeout: { totalMs: 1500 } },
+        fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'quick answer' }),
+      });
+      expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+      expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    },
+  );
+
+  // A caller abort stops the caller's deadline, so a deadline passing later while the aborted run
+  // finishes must not turn the abort into a timeout.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'keeps a caller abort when the deadline passes while the aborted run finishes',
+    async () => {
+      const { observability, ended } = capture();
+      const controller = new AbortController();
+      const slowFinish: Processor = {
+        id: 'slow-finish',
+        processOutputResult: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Look up the order',
+        abortSignal: controller.signal,
+        maxSteps: 3,
+        errorProcessors: [],
+        maxRetries: 0,
+        outputProcessors: [slowFinish],
+        modelSettings: { timeout: { totalMs: 1500 } },
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up an order',
+            inputSchema: z.object({}),
+            execute: async () => {
+              controller.abort();
+              throw new DOMException('Tool canceled', 'AbortError');
+            },
+          }),
+        },
+        fixtures: llm =>
+          llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+      });
+      expect(ended().at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+    },
+  );
+
+  // emitEvent holds the end of the run until the title is generated, so a slow title model
+  // runs the run past its deadline after the finish side effects are done.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'reports a deadline that expires while the thread title is generated as a limit',
+    async () => {
+      const { observability, ended } = capture();
+      const llm = getMock();
+      // The title model answers only after the deadline has passed. The test waits for its
+      // request to finish so it cannot reach the shared aimock server during a later test.
+      const titleCalls: Promise<unknown>[] = [];
+      const titleModel = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` }).chat('title-model');
+      const slowTitleModel: typeof titleModel = {
+        ...titleModel,
+        specificationVersion: titleModel.specificationVersion,
+        provider: titleModel.provider,
+        modelId: titleModel.modelId,
+        supportedUrls: titleModel.supportedUrls,
+        doGenerate: options => {
+          const call = new Promise(resolve => setTimeout(resolve, 2500)).then(() => titleModel.doGenerate(options));
+          titleCalls.push(call.catch(() => {}));
+          return call;
+        },
+        doStream: options => {
+          const call = new Promise(resolve => setTimeout(resolve, 2500)).then(() => titleModel.doStream(options));
+          titleCalls.push(call.catch(() => {}));
+          return call;
+        },
+      };
+      const memory = new MockMemory({ options: { generateTitle: { model: slowTitleModel, emitEvent: true } } });
+      await runLoopScenario({
+        engine,
+        llm,
+        observability,
+        memory,
+        threadId: 'deadline-title',
+        resourceId: 'user-1',
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Quick answer',
+        errorProcessors: [],
+        maxRetries: 0,
+        modelSettings: { timeout: { totalMs: 1500 } },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', predicate: (request: any) => request?.model === 'title-model' },
+            { content: 'Slow Title' },
+          );
+          llm.on({ endpoint: 'chat' }, { content: 'quick answer' });
+        },
+      });
+      await expect.poll(() => titleCalls.length, { timeout: 8000 }).toBeGreaterThan(0);
+      await Promise.all(titleCalls);
+      expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+      expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    },
+  );
+
+  it('reports a deadline hit during a tool call as a limit', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      maxSteps: 3,
+      modelSettings: { timeout: { totalMs: 1500 } },
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up an order',
+          inputSchema: z.object({}),
+          execute: async (_input, context) => {
+            await new Promise<void>(resolve => {
+              const timer = setTimeout(resolve, 4000);
+              context?.abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return { status: 'shipped' };
+          },
+        }),
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+    });
+    expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+  });
+
+  it('reports a deadline hit during a tool call whose toModelOutput throws as a limit', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      maxSteps: 3,
+      modelSettings: { timeout: { totalMs: 1500 } },
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up an order',
+          inputSchema: z.object({}),
+          // Resolves as the deadline stops it, then its output mapping fails.
+          execute: async (_input, context) => {
+            await new Promise<void>(resolve => {
+              const timer = setTimeout(resolve, 4000);
+              context?.abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return { status: 'shipped' };
+          },
+          toModelOutput: () => {
+            throw new Error('tool output mapping failed');
+          },
+        }),
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+    });
+    expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+  });
+
   it.each([401, 403])('reports a provider access denial (%s) as blocked', async status => {
     const { observability, ended } = capture();
     await runLoopScenario({
@@ -456,7 +712,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
 
   it('records caller cancellation while a tool is executing', async () => {
     const { observability, ended } = capture();
+    const providerFinishedAt = watchProviderFinish();
     const controller = new AbortController();
+    let toolStartedAt: number | undefined;
     const { requests } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -475,7 +733,8 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
           execute: async () => {
             // Cancel tool work only after the provider has completed, so the
             // test also proves cancellation preserves an already settled child.
-            await expect.poll(() => ended(SpanType.MODEL_INFERENCE).at(-1)?.outcome).toBe('success');
+            toolStartedAt = Date.now();
+            await expect.poll(() => providerFinishedAt.length).toBe(1);
             controller.abort();
             throw new DOMException('Tool canceled', 'AbortError');
           },
@@ -488,6 +747,8 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
     expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
     expect(ended(SpanType.MODEL_INFERENCE)[0]).toMatchObject({ outcome: 'success', stopReason: null });
+    // Tool time is not part of the model call.
+    expect(ended(SpanType.MODEL_INFERENCE)[0]!.endTime!.getTime()).toBeLessThanOrEqual(toolStartedAt!);
     // Normal execution can enter the next attempt before observing cancellation;
     // it must abort that attempt without rewriting the completed provider call.
     for (const inference of ended(SpanType.MODEL_INFERENCE).slice(1)) {
@@ -795,6 +1056,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended().at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_INFERENCE).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
+    expect(ended().at(-1)?.errorCount).toBe(0);
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)?.errorCount).toBe(0);
+    expect(ended(SpanType.MODEL_INFERENCE).at(-1)?.errorCount).toBe(1);
   });
 
   it('records a real tool error after requesting suspension', async () => {

@@ -1,4 +1,3 @@
-import { factoryLaneForRole } from '../rules/types.js';
 import { codeBoardOf } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
 import { workBoard } from './work.js';
@@ -12,6 +11,14 @@ import { workBoard } from './work.js';
 
 const LEGACY_PLAN_ROLE = 'plan';
 
+// Each Work role and the lane its run holds the card in, kept for the roles above.
+const WORK_ROLE_LANES: Readonly<Record<string, string>> = Object.freeze({
+  triage: 'triage',
+  [LEGACY_PLAN_ROLE]: 'planning',
+  work: 'execute',
+  review: 'review',
+});
+
 /*
  * Only the built-in Work board, as code defines it or as a project edited it, gets
  * these rules. A board installed as `work` in place of it is matched by its own
@@ -24,7 +31,7 @@ function isWorkBoard(board: unknown): board is InstalledBoard {
 
 /** The built-in Work lane a role's run belongs to: `plan` plans, `work` builds. Undefined on other boards. */
 export function workLaneForRole(board: unknown, role: string): string | undefined {
-  return isWorkBoard(board) ? factoryLaneForRole(role) : undefined;
+  return isWorkBoard(board) && Object.hasOwn(WORK_ROLE_LANES, role) ? WORK_ROLE_LANES[role] : undefined;
 }
 
 /**
