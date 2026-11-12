@@ -114,6 +114,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
       return undefined;
     }
 
+    // The marker first: an end stores its result before it claims the marker, so a run that ends
+    // between the two reads shows its stored result instead of a running snapshot.
+    const markedEnded =
+      (await store.supportsRunFencing()) && !!(await store.getRunOwnership({ runId: runEndedKey(runId) }))?.live;
     const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId });
     if (snapshot?.status === 'success' || snapshot?.status === 'failed') {
       return {
@@ -125,8 +129,6 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
     }
 
-    const markedEnded =
-      (await store.supportsRunFencing()) && !!(await store.getRunOwnership({ runId: runEndedKey(runId) }))?.live;
     if (!snapshot || markedEnded) {
       return { error: new Error(`Workflow run ${runId} ended before its restart started; its result is not stored`) };
     }

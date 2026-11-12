@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Event } from '../../../events/types';
 import type { MastraStorage } from '../../../storage';
-import { nestedHandOffKey, restartLeaseKey, runLivenessKey, stepOccurrenceKey } from '../leases';
+import { nestedHandOffKey, restartLeaseKey, runEndedKey, runLivenessKey, stepOccurrenceKey } from '../leases';
 import { abandonLease } from './abandon-lease';
 import {
   copyEvent,
@@ -197,47 +197,54 @@ export function describeLateEndCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
-    it('settles a restart from the stored result when the run ends after the restart read it', async () => {
-      const executions: string[] = [];
-      const build = () =>
-        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
-          .then(work('first', async id => void executions.push(id)))
-          .then(work('second', async id => void executions.push(id)))
-          .commit();
-      // The last step's end sits in A's broker queue past a lease TTL, so the run looks stopped.
-      const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [1]));
-      const a = await startReplica(build(), fromA.intercept);
-      const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      startInBackground(run, { n: 1 });
-      await fromA.firstHeld;
-      await waitUntilOrphaned(run.runId);
+    it.each([
+      { moment: 'before the restart listens for its finish', method: 'claimRunOwnership', key: restartLeaseKey },
+      { moment: 'while the restart reads whether it ended', method: 'getRunOwnership', key: runEndedKey },
+    ] as const)(
+      'settles a restart from the stored result when the run ends $moment',
+      async ({ method, key }) => {
+        const executions: string[] = [];
+        const build = () =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .then(work('first', async id => void executions.push(id)))
+            .then(work('second', async id => void executions.push(id)))
+            .commit();
+        // The last step's end sits in A's broker queue past a lease TTL, so the run looks stopped.
+        const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [1]));
+        const a = await startReplica(build(), fromA.intercept);
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await fromA.firstHeld;
+        await waitUntilOrphaned(run.runId);
 
-      // B's restart reads the run, and A ends it before B listens for its finish.
-      const b = await startReplica(build());
-      const store = (await b.mastra.getStorage()!.getStore('workflows'))!;
-      const claim = store.claimRunOwnership.bind(store);
-      let ended = false;
-      const spy = vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
-        if (!ended && args.runId === restartLeaseKey(run.runId)) {
-          ended = true;
-          fromA.holdAll();
-          await fromA.drain(a);
+        // B's restart reads the run, and A ends it at the given moment.
+        const b = await startReplica(build());
+        const store = (await b.mastra.getStorage()!.getStore('workflows'))!;
+        const original = (store[method] as (args: { runId: string }) => Promise<unknown>).bind(store);
+        let ended = false;
+        const spy = vi.spyOn(store, method).mockImplementation((async (args: { runId: string }) => {
+          if (!ended && args.runId === key(run.runId)) {
+            ended = true;
+            fromA.holdAll();
+            await fromA.drain(a);
+          }
+
+          return original(args);
+        }) as never);
+        try {
+          expect(await (await b.workflow.createRun({ runId: run.runId })).restart()).toMatchObject({
+            status: 'success',
+            result: { n: 1 },
+          });
+        } finally {
+          spy.mockRestore();
         }
 
-        return claim(args);
-      });
-      try {
-        expect(await (await b.workflow.createRun({ runId: run.runId })).restart()).toMatchObject({
-          status: 'success',
-          result: { n: 1 },
-        });
-      } finally {
-        spy.mockRestore();
-      }
-
-      expect(executions).toEqual(['first', 'second']);
-      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
-    }, 20_000);
+        expect(executions).toEqual(['first', 'second']);
+        expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+      },
+      20_000,
+    );
 
     it('restarts a time travel of an ended run whose start event never reached a worker', async () => {
       const build = () =>
