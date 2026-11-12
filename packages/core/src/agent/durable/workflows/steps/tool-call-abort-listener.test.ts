@@ -4,10 +4,14 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { MastraTimeoutError } from '../../../../loop/timeout';
+import { Mastra } from '../../../../mastra';
+import { MockStore } from '../../../../storage';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
-import { ensureRemoteAbortListener, publishAbortRequest } from '../../abort-transport';
+import { MessageList } from '../../../message-list';
+import { ensureRemoteAbortListener, publishAbortRequest, RUN_DEADLINE_KEY } from '../../abort-transport';
 import { globalRunRegistry } from '../../run-registry';
 import type { RunRegistryEntry } from '../../types';
 import { createDurableToolCallStep } from './tool-call';
@@ -127,5 +131,89 @@ describe('durable tool-call remote abort listener', () => {
 
     expect(output.mappingError?.message).toBe('tool output mapping failed');
     expect(output.deadlineTimeout).toEqual({ timeoutType: 'total', timeoutMs: 100 });
+  });
+
+  describe.each(['foreground', 'background'])('%s dispatch after a run stops', mode => {
+    it.each(['deadline', 'abort', 'running'])(
+      'does not start stopped tools but preserves running tools (%s)',
+      async stop => {
+        const pubsub = new EventEmitterPubSub();
+        const mastra = new Mastra({ logger: false, storage: new MockStore() });
+        const manager = new BackgroundTaskManager({ enabled: true });
+        await mastra.startWorkers();
+        manager.__registerMastra(mastra);
+        await manager.init(pubsub);
+        const controller = new AbortController();
+        if (stop === 'abort') controller.abort(new Error('Aborted'));
+        const execute = vi.fn(async () => 'done');
+        const entry = {
+          tools: {
+            wait: {
+              id: 'wait',
+              execute,
+              backgroundConfig: { enabled: mode === 'background', defaultDisposition: 'awaited' },
+            },
+          },
+          model: {},
+          outputProcessors: [],
+          processorStates: new Map(),
+          messageList: new MessageList({ threadId: 'thread-1', resourceId: 'user-1' }),
+          abortController: controller,
+          abortSignal: controller.signal,
+          backgroundTaskManager: manager,
+        } as unknown as RunRegistryEntry;
+        globalRunRegistry.set(RUN_ID, entry);
+        // Exercise the carried-deadline boundary, not a manually pre-aborted timeout signal.
+        const requestContext = new Map([
+          [RUN_DEADLINE_KEY, { at: Date.now() + (stop === 'deadline' ? -5000 : 60000), timeoutMs: 100 }],
+        ]);
+        try {
+          const output = await (createDurableToolCallStep() as any)
+            .execute({
+              inputData: { toolCallId: 'call-wait', toolName: 'wait', args: {} },
+              mastra,
+              suspend: vi.fn(),
+              requestContext,
+              getInitData: () => ({
+                runId: RUN_ID,
+                agentId: 'waiter',
+                options: { requireToolApproval: false },
+                state: { threadId: 'thread-1', resourceId: 'user-1', threadExists: false },
+              }),
+              [PUBSUB_SYMBOL]: pubsub,
+            })
+            .catch((error: unknown) => error);
+          const { tasks } = await manager.listTasks({});
+          if (stop === 'running') {
+            expect(output).not.toBeInstanceOf(Error);
+            expect(output.result).toBe('done');
+            expect(output.aborted).not.toBe(true);
+            expect(output.deadlineTimeout).toBeUndefined();
+            expect(execute).toHaveBeenCalledTimes(1);
+            if (mode === 'background') {
+              expect(tasks).toHaveLength(1);
+              expect(tasks[0]?.status).toBe('completed');
+            } else {
+              expect(tasks).toHaveLength(0);
+            }
+          } else {
+            expect(execute).not.toHaveBeenCalled();
+            expect(tasks).toHaveLength(0);
+            expect(output).not.toBeInstanceOf(Error);
+            expect(output.aborted).toBe(true);
+            if (stop === 'deadline') {
+              expect(output.deadlineTimeout).toEqual({ timeoutType: 'total', timeoutMs: 100 });
+            } else {
+              expect(output.runAborted).toBe(true);
+            }
+          }
+        } finally {
+          globalRunRegistry.delete(RUN_ID);
+          await manager.shutdown();
+          await pubsub.close();
+          await mastra.stopWorkers();
+        }
+      },
+    );
   });
 });

@@ -1498,6 +1498,16 @@ export function createDurableToolCallStep() {
       // cancellation (mirrors the non-durable tool-call-step).
       const toolAbortSignal = ownership?.composeSignal(registryEntry?.abortSignal) ?? registryEntry?.abortSignal;
 
+      // A queued step must not start tool side effects after its run has stopped.
+      if (toolAbortSignal?.aborted) {
+        return {
+          ...typedInput,
+          result: TOOL_ABORT_NOTICE,
+          aborted: true,
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
+        };
+      }
+
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
       // Non-transient data-* chunks are also collected for persistence, as the
