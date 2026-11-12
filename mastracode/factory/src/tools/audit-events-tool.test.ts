@@ -230,8 +230,9 @@ describe('factory_list_audit_events', () => {
         {
           at: 1,
           actorId: 'user-2',
-          action: 'factory.session.owner_transferred',
-          targets: [{ type: 'session', id: 'private', name: 'Secret plan' }],
+          action: 'factory.git.commit',
+          targets: [{ type: 'session', id: 'private' }],
+          metadata: { sessionId: 'private' },
         },
         {
           at: 2,
@@ -243,8 +244,9 @@ describe('factory_list_audit_events', () => {
         {
           at: 3,
           actorId: 'user-2',
-          action: 'factory.session.owner_transferred',
-          targets: [{ type: 'session', id: 'shared', name: 'Shared plan' }],
+          action: 'factory.git.commit',
+          targets: [{ type: 'session', id: 'shared' }],
+          metadata: { sessionId: 'shared' },
         },
         {
           at: 4,
@@ -261,6 +263,14 @@ describe('factory_list_audit_events', () => {
           action: 'factory.agent.signaled',
           targets: [{ type: 'session', id: 'private' }],
           metadata: { startedBy: 'user-1' },
+        },
+        // An ownership transfer names the session's row id, which no session lookup resolves.
+        {
+          at: 7,
+          actorId: 'user-2',
+          action: 'factory.session.owner_transferred',
+          targets: [{ type: 'session', id: 'row-of-shared', name: 'Shared plan' }],
+          metadata: { fromOwnerId: 'user-3', toOwnerId: 'user-2' },
         },
       ],
       bindings: [{ threadId: 'run-thread' }],

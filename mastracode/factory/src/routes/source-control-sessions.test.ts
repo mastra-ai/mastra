@@ -424,7 +424,6 @@ describe('source-control session routes', () => {
       expect.objectContaining({
         actorId: 'user-2',
         action: 'factory.session.owner_transferred',
-        targets: [expect.objectContaining({ type: 'session', id: sessionId })],
         metadata: { fromOwnerId: 'user-1', toOwnerId: 'user-2' },
         factoryProjectId: project.id,
       }),
