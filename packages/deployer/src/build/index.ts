@@ -5,6 +5,7 @@ export { analyzeEntryProjectType } from './analyzeEntryProjectType';
 export { FileService } from '../services/fs';
 export { Deps } from '../services/deps';
 export { getServerOptions } from './serverOptions';
+export { serverShutdownBudgetMs } from '../server/shutdown-budget';
 export { getBundlerOptions } from './bundlerOptions';
 export { extractMastraOption } from './shared/extract-mastra-option';
 export { normalizeStudioBase, detectRuntime, injectStudioHtmlConfig, escapeStudioHtmlValue } from './utils';

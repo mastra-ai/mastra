@@ -35,6 +35,7 @@ import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
+import { CORE_SHUTDOWN_TIMEOUT_MS, DEFAULT_SERVER_DRAIN_TIMEOUT_MS } from './shutdown-budget';
 import type { ServerBundleOptions } from './types';
 import { welcomeHtml } from './welcome';
 
@@ -599,7 +600,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const injectWebSocket = (app as any).injectWebSocket;
   const serverOptions = mastra.getServer();
   const apiPrefix = serverOptions?.apiPrefix ?? '/api';
-  const drainTimeoutMs = serverOptions?.drainTimeout ?? 5000;
+  const drainTimeoutMs = serverOptions?.drainTimeout ?? DEFAULT_SERVER_DRAIN_TIMEOUT_MS;
   if (
     serverOptions?.handleShutdownSignals !== false &&
     (!Number.isFinite(drainTimeoutMs) || drainTimeoutMs < 0 || drainTimeoutMs > 2_147_483_647)
@@ -696,11 +697,9 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // rolling deploys can let long-running agent turns finish.
   if (serverOptions?.handleShutdownSignals !== false) {
     // Core teardown gets the drain window (for in-flight evented workflow
-    // runs) plus a fixed 6.5s for the teardown itself: up to 1.5s to hand back
-    // agent thread runs, then cleanup that must always run (e.g. DuckDB's file
-    // lock release), but a hanging shutdown can't be allowed to block process
-    // exit.
-    const CORE_SHUTDOWN_TIMEOUT_MS = 6500;
+    // runs) plus CORE_SHUTDOWN_TIMEOUT_MS for the teardown itself, but a
+    // hanging shutdown can't be allowed to block process exit. `mastra dev`
+    // waits serverShutdownBudgetMs() before it kills the server.
     const timedOut = Symbol('shutdown-timeout');
     const race = async (work: Promise<unknown>, ms: number): Promise<unknown> => {
       let timeout: ReturnType<typeof setTimeout> | undefined;

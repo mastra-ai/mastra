@@ -24,7 +24,9 @@ vi.mock('@expo/devcert', () => ({
   },
 }));
 
-vi.mock('@mastra/deployer/build', () => ({
+vi.mock('@mastra/deployer/build', async () => ({
+  serverShutdownBudgetMs: (await vi.importActual<typeof import('@mastra/deployer/build')>('@mastra/deployer/build'))
+    .serverShutdownBudgetMs,
   normalizeStudioBase: (base: string) => (base === '/' || base === '' ? '' : base),
   prepareFsAgentsEntry: vi.fn().mockImplementation(async (_mastraDir: string, entryFile: string | undefined) => ({
     entryFile: entryFile ?? '/mock/.mastra-fs-agents-entry.mjs',
@@ -768,37 +770,46 @@ describe('dev command - Ctrl-C shutdown', () => {
     vi.clearAllMocks();
   });
 
-  it('gives the server the same 5 seconds as a hot reload to shut down before killing it', async () => {
-    const { dev } = await import('./dev');
-    await dev({
-      dir: undefined,
-      root: process.cwd(),
-      tools: undefined,
-      env: undefined,
-      inspect: false,
-      inspectBrk: false,
-      customArgs: undefined,
-      https: false,
-      debug: false,
-    });
-    const onSigint = process.listeners('SIGINT').find(listener => !priorListeners.get('SIGINT')!.includes(listener));
-    expect(onSigint).toBeDefined();
+  // Both drains of the server (HTTP, then evented runs) plus core teardown: 2 x drain + 6.5s.
+  it.each([
+    ['the default drain window', undefined, 16_500],
+    ['the configured server.drainTimeout', 1_000, 8_500],
+  ])(
+    'gives the server the same window as a hot reload to shut down before killing it, with %s',
+    async (_, drainTimeout, windowMs) => {
+      const { getServerOptions } = await import('@mastra/deployer/build');
+      vi.mocked(getServerOptions).mockResolvedValueOnce({ port: 4111, host: 'localhost', drainTimeout });
+      const { dev } = await import('./dev');
+      await dev({
+        dir: undefined,
+        root: process.cwd(),
+        tools: undefined,
+        env: undefined,
+        inspect: false,
+        inspectBrk: false,
+        customArgs: undefined,
+        https: false,
+        debug: false,
+      });
+      const onSigint = process.listeners('SIGINT').find(listener => !priorListeners.get('SIGINT')!.includes(listener));
+      expect(onSigint).toBeDefined();
 
-    vi.useFakeTimers();
-    onSigint!('SIGINT');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(mockChildProcess.kill).toHaveBeenCalledOnce();
+      vi.useFakeTimers();
+      onSigint!('SIGINT');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockChildProcess.kill).toHaveBeenCalledOnce();
 
-    await vi.advanceTimersByTimeAsync(4999);
-    expect(mockChildProcess.kill).not.toHaveBeenCalledWith('SIGKILL');
-    expect(exitSpy).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(windowMs - 1);
+      expect(mockChildProcess.kill).not.toHaveBeenCalledWith('SIGKILL');
+      expect(exitSpy).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(1);
-    expect(mockChildProcess.kill).toHaveBeenCalledWith('SIGKILL');
-    // The CLI itself outlasts that window, since its exit would signal the server again.
-    expect(exitSpy).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mockChildProcess.kill).toHaveBeenCalledWith('SIGKILL');
+      // The CLI itself outlasts that window, since its exit would signal the server again.
+      expect(exitSpy).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(exitSpy).toHaveBeenCalledWith(0);
-  });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    },
+  );
 });

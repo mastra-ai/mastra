@@ -7,6 +7,7 @@ import {
   getServerOptions,
   normalizeStudioBase,
   prepareFsAgentsEntry,
+  serverShutdownBudgetMs,
   writeFsAgentsEntry,
   mirrorFsAgentWorkspaces,
 } from '@mastra/deployer/build';
@@ -35,11 +36,14 @@ let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 // How long a stopping server gets to drain and run Mastra's shutdown (including its final
-// usage telemetry report) before it is killed, on both hot reload and Ctrl-C.
-const SERVER_SHUTDOWN_TIMEOUT_MS = 5000;
+// usage telemetry report and the end of the liveness of the evented runs it drove) before it is killed, on
+// both hot reload and Ctrl-C. A server that exits sooner is not waited for. Set from the
+// project's `server.drainTimeout` once the config is read; the default drain window until then.
+let configuredShutdownTimeoutMs: number | undefined;
+const serverShutdownTimeoutMs = () => configuredShutdownTimeoutMs ?? serverShutdownBudgetMs();
 const environmentState = createEnvironmentState();
 
-function waitForProcessExit(child: ChildProcess, timeoutMs = SERVER_SHUTDOWN_TIMEOUT_MS): Promise<void> {
+function waitForProcessExit(child: ChildProcess, timeoutMs = serverShutdownTimeoutMs()): Promise<void> {
   if (child.exitCode !== null) {
     return Promise.resolve();
   }
@@ -401,7 +405,7 @@ async function rebundleAndRestart(
               resolve();
             }
           }
-        }, SERVER_SHUTDOWN_TIMEOUT_MS);
+        }, serverShutdownTimeoutMs());
       });
       if (currentServerProcess === serverProcess) {
         currentServerProcess = undefined;
@@ -512,6 +516,8 @@ export async function dev({
   await bundler.prepare(dotMastraPath);
 
   const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
+  // A drain window changed after `mastra dev` started takes effect on its next start.
+  configuredShutdownTimeoutMs = serverShutdownBudgetMs(serverOptions?.drainTimeout);
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
@@ -627,10 +633,13 @@ export async function dev({
 
     // Leave the server its full shutdown window: exiting first would let execa's cleanup
     // signal it again, which force-quits it.
-    const forceExit = setTimeout(() => {
-      releaseDevLock(dotMastraPath);
-      process.exit(0);
-    }, SERVER_SHUTDOWN_TIMEOUT_MS + 1000);
+    const forceExit = setTimeout(
+      () => {
+        releaseDevLock(dotMastraPath);
+        process.exit(0);
+      },
+      Math.min(serverShutdownTimeoutMs() + 1000, 2 ** 31 - 1),
+    );
     forceExit.unref();
 
     devLogger.shutdown();
