@@ -1705,32 +1705,45 @@ describe('renderExistingMessages subagents', () => {
     expect(state.pendingSubagents.has('tool-background-plugin-cancelled')).toBe(false);
   });
 
-  /** The notice for a task a crash and restart cut off, as it arrives live. */
-  function interruption(toolCallId: string, toolName: string, taskId: string): MastraDBMessage {
+  /**
+   * The notice posted for a task cut off by a restart or a shutdown. Recovery
+   * after a restart fails the task; a shutdown usually cancels it, but a task
+   * that fails while the shutdown aborts it is reported as failed.
+   */
+  function interruption(
+    toolCallId: string,
+    toolName: string,
+    taskId: string,
+    reason: 'restart' | 'shutdown' = 'restart',
+    status: 'failed' | 'cancelled' = reason === 'shutdown' ? 'cancelled' : 'failed',
+  ): MastraDBMessage {
     return createSignal({
-      id: `background-task:${taskId}:failed`,
+      id: `background-task:${taskId}:${status}`,
       type: 'notification',
       tagName: 'notification',
-      contents: `Background ${toolName} call was interrupted by a restart before it finished. See the original ${toolName} call (${toolCallId}).`,
-      attributes: { source: 'background-work', status: 'failed' },
+      contents: `Background ${toolName} call was interrupted by a ${reason} before it finished. See the original ${toolName} call (${toolCallId}).`,
+      attributes: { source: 'background-work', status },
       metadata: {
         backgroundCompletion: {
-          eventId: `background-task:${taskId}:failed`,
+          eventId: `background-task:${taskId}:${status}`,
           taskId,
           originRunId: 'run-1',
           originToolCallId: toolCallId,
           toolName,
-          status: 'failed',
-          interrupted: 'restart',
+          status,
+          interrupted: reason,
         },
       },
     }).toDBMessage();
   }
+  const interruptions = [
+    ['restart', 'failed'],
+    ['shutdown', 'cancelled'],
+    ['shutdown', 'failed'],
+  ] as const;
 
-  it('ends a replayed running tool row when the restart that cut it off is reported', async () => {
-    const state = createState();
-    state.options.backgroundToolsEnabled = true;
-    const message = assistantToolMessage('assistant-background-view', [
+  describe('background tool rows', () => {
+    const viewCall = assistantToolMessage('assistant-background-view', [
       {
         id: 'view-call',
         name: 'view',
@@ -1739,17 +1752,48 @@ describe('renderExistingMessages subagents', () => {
         providerMetadata: { mastra: { backgroundTask: { taskId: 'task-view-1', status: 'running' } } },
       },
     ]);
-    state.session = {
-      ...state.session,
-      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
-    } as unknown as TUIState['session'];
-    await renderExistingMessages(state);
-    expect(state.pendingTools.has('view-call')).toBe(true);
 
-    addUserMessage(state, interruption('view-call', 'view', 'task-view-1'));
+    async function replay(messages: MastraDBMessage[]) {
+      const state = createState();
+      state.options.backgroundToolsEnabled = true;
+      // Expanded, so the row shows its result.
+      state.toolOutputExpanded = true;
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      } as unknown as TUIState['session'];
+      await renderExistingMessages(state);
+      return { state, rendered: () => stripAnsi(state.chatContainer.render(120).join('\n')) };
+    }
 
-    expect(state.pendingTools.has('view-call')).toBe(false);
-    expect(stripAnsi(state.chatContainer.render(120).join('\n'))).not.toContain('◌ background');
+    it.each(interruptions)('ends a replayed running one when a %s is reported live (%s)', async (reason, status) => {
+      const { state, rendered } = await replay([viewCall]);
+      expect(state.pendingTools.has('view-call')).toBe(true);
+
+      addUserMessage(state, interruption('view-call', 'view', 'task-view-1', reason, status));
+
+      expect(state.pendingTools.has('view-call')).toBe(false);
+      expect(rendered()).not.toContain('◌ background');
+      expect(rendered()).toContain('✗ background');
+      expect(rendered()).toContain(`Background execution interrupted by a ${reason}.`);
+      expect(rendered()).not.toContain('Background execution cancelled.');
+      expect(rendered()).toContain(`↳ view interrupted by a ${reason}`);
+    });
+
+    it.each(interruptions)('replays one cut off by a %s as failed (%s)', async (reason, status) => {
+      const { state, rendered } = await replay([
+        viewCall,
+        interruption('view-call', 'view', 'task-view-1', reason, status),
+      ]);
+
+      expect(state.pendingTools.has('view-call')).toBe(false);
+      expect(rendered()).not.toContain('◌ background');
+      expect(rendered()).toContain('✗ background');
+      expect(rendered()).not.toContain('✓ background');
+      expect(rendered()).not.toContain('■ background');
+      expect(rendered()).toContain(`Background execution interrupted by a ${reason}.`);
+      expect(rendered()).toContain(`↳ view interrupted by a ${reason}`);
+    });
   });
 
   describe('background subagent calls', () => {
@@ -1827,13 +1871,30 @@ describe('renderExistingMessages subagents', () => {
       expect(stripAnsi(box.render(120).join('\n'))).toContain('openai/gpt-5.5');
     });
 
-    it('ends a replayed running one when the restart that cut it off is reported', async () => {
+    it.each(interruptions)('ends a replayed running one when a %s is reported live (%s)', async (reason, status) => {
       const { state, rendered } = await replay([subagentCall]);
 
-      addUserMessage(state, interruption('sub-call', 'subagent', 'task-sub-1'));
+      addUserMessage(state, interruption('sub-call', 'subagent', 'task-sub-1', reason, status));
 
       expect(rendered()).not.toContain('◌');
       expect(rendered()).toContain('✗ background');
+      expect(rendered()).not.toContain('■');
+      expect(state.pendingSubagents.has('sub-call')).toBe(false);
+    });
+
+    it.each(interruptions)('replays one cut off by a %s as failed (%s)', async (reason, status) => {
+      const { state, box, rendered } = await replay([
+        subagentCall,
+        interruption('sub-call', 'subagent', 'task-sub-1', reason, status),
+      ]);
+
+      expect(rendered()).not.toContain('◌');
+      expect(rendered()).toContain('✗ background');
+      expect(rendered()).not.toContain('■');
+      box.setExpanded(true);
+      // The card says what happened; the box neither repeats it nor shows the placeholder.
+      expect(rendered()).not.toContain(placeholder);
+      expect(rendered()).not.toContain('interrupted by a');
       expect(state.pendingSubagents.has('sub-call')).toBe(false);
     });
 

@@ -598,7 +598,12 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
         ?.get(backgroundCompletion.originToolCallId)
         ?.setBackgroundProcessExit?.({ exitCode: backgroundCompletion.exitCode, killed: false });
     }
-    if (backgroundCompletion?.taskId && backgroundCompletion.status === 'cancelled') {
+    // A shutdown's notice is also `cancelled`; an interruption is settled, not shown as a user cancel.
+    if (
+      backgroundCompletion?.taskId &&
+      backgroundCompletion.status === 'cancelled' &&
+      !backgroundCompletion.interrupted
+    ) {
       const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
       const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
       toolComponent?.setBackgroundTaskId?.(backgroundCompletion.taskId);
@@ -613,7 +618,7 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       subagentComponent?.cancel();
       state.pendingSubagents.delete(backgroundCompletion.originToolCallId);
     } else if (backgroundCompletion?.taskId) {
-      settleBackgroundCall(state, backgroundCompletion, notification.message);
+      settleBackgroundCall(state, { ...backgroundCompletion, taskId: backgroundCompletion.taskId });
     }
     const component = new NotificationComponent({
       message: notification.message,
@@ -946,26 +951,31 @@ function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefi
 }
 
 /**
- * Ends a call still shown as running when its task's finished or failed
- * notice arrives and nothing else will end it: a box replayed from history
+ * Ends a call still shown as running when its task's finished, failed or
+ * interrupted notice arrives and nothing else will end it: a box replayed from history
  * gets no `subagent_end`, and no result reaches a call a restart or a
  * shutdown cut off. A live plugin subagent's box and a live tool row still
  * get their result in `tool_end`.
  */
-function settleBackgroundCall(state: TUIState, completion: BackgroundCompletionView, notice: string): void {
+function settleBackgroundCall(state: TUIState, completion: BackgroundCompletionView & { taskId: string }): void {
   const toolCallId = completion.originToolCallId;
-  const failed = completion.status === 'failed';
+  // A shutdown cancels the tasks it cuts off; either interruption is a failure here.
+  const failed = completion.status === 'failed' || !!completion.interrupted;
   const subagentComponent = state.pendingSubagents.get(toolCallId);
   if (subagentComponent && (completion.interrupted || !isLivePluginSubagentCall(toolCallId))) {
-    if (completion.taskId) subagentComponent.setBackgroundTaskId(completion.taskId);
-    subagentComponent.finish(failed, 0, notice);
+    subagentComponent.setBackgroundTaskId(completion.taskId);
+    // The completion card next to the box says what happened; the box shows
+    // no result rather than repeating it.
+    subagentComponent.finish(failed, undefined);
     state.pendingSubagents.delete(toolCallId);
     forgetPluginSubagentCall(toolCallId);
   }
   const toolComponent = completion.interrupted ? state.pendingTools.get(toolCallId) : undefined;
   if (toolComponent) {
-    if (completion.taskId) toolComponent.setBackgroundTaskId?.(completion.taskId);
-    toolComponent.updateResult({ content: [{ type: 'text', text: notice }], isError: failed }, false);
+    toolComponent.setBackgroundTaskId?.(completion.taskId);
+    // A row leaves its running state only with a result, so it gets a short one.
+    const text = `Background execution interrupted by a ${completion.interrupted}.`;
+    toolComponent.updateResult({ content: [{ type: 'text', text }], isError: failed }, false);
     state.pendingTools.delete(toolCallId);
     state.pendingTaskToolIds?.delete(toolCallId);
   }
@@ -1025,6 +1035,10 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
   const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
+  // A restart or shutdown leaves the stored call holding its placeholder. Kept
+  // out of `backgroundTasksByToolCallId` so the placeholder check still sees the
+  // call as running; its notice, later in this replay, ends it.
+  const interruptedTasksByToolCallId = new Map<string, string>();
   const backgroundProcessExits = new Map<string, number>();
   const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
@@ -1032,6 +1046,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
     const completion = getBackgroundCompletionView(message);
     if (completion?.kind === 'process' && completion.exitCode !== undefined) {
       backgroundProcessExits.set(completion.originToolCallId, completion.exitCode);
+    } else if (completion?.taskId && completion.interrupted) {
+      interruptedTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
     } else if (completion?.taskId) {
       backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
       if (completion.status === 'cancelled') cancelledBackgroundToolCalls.add(completion.originToolCallId);
@@ -1083,7 +1099,9 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
           const backgroundTaskId =
             (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
               ? part.backgroundTask?.taskId
-              : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+              : undefined) ??
+            backgroundTasksByToolCallId.get(part.toolCallId) ??
+            interruptedTasksByToolCallId.get(part.toolCallId);
           const isCancelledBackground = cancelledBackgroundToolCalls.has(part.toolCallId);
 
           // Render subagent tool calls with dedicated component
