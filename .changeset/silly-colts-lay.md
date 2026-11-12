@@ -17,6 +17,7 @@ Some cases keep the earlier behavior:
 - When a workflow uses the same step at more than one place, a late event for the step before a later use can still run that later use again.
 - The run is read again right before a restart writes it, but not in the same storage call as the write. A step saved in the few milliseconds between the two, or in the same millisecond as the restart's read, can still be overwritten by the restart.
 - A run is marked ended once its end is reported. Two ends handled at the same moment, or a worker that stops between reporting the end and marking the run, can report the run's end a second time.
+- A nested workflow's hand-off checks that its claim is still its own right before it continues the parent, in a separate storage call from the publish. A worker that stalls between the two, after another worker took the claim over, can continue the parent a second time. Step leases have the same window.
 - When `shouldPersistSnapshot` declined a run's final snapshot, the marker that keeps a late event from running its steps again lasts six hours. An event a broker redelivers later than that, for example from a Redis Streams consumer group that had no running member for that long, can run its step again.
 
 This needs a storage adapter with run-ownership support. Workflows with `autoRestartActiveRuns: false`, including durable agent workflows, are unchanged.

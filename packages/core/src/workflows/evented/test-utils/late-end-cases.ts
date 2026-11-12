@@ -644,55 +644,71 @@ export function describeLateEndCases({
       expect((await storedRun(run.runId))?.status).toBe('success');
     }, 20_000);
 
-    it('continues the parent once when a stalled nested hand-off resumes after its claim was taken over', async () => {
-      const slow = deferred<void>();
-      const conditionRuns = deferred<void>();
-      let evaluations = 0;
-      // Only the first evaluation is slow.
-      const { checks, iterations, build } = nestedLoop({
-        condition: async () => {
-          if (++evaluations > 1) {
-            return;
-          }
+    it.each([
+      { outcome: 'decides', throws: false, checked: [1, 2, 1] },
+      { outcome: 'throws', throws: true, checked: [1, 2] },
+    ])(
+      'continues the parent once when a stalled nested hand-off resumes after its claim was taken over and its condition $outcome',
+      async ({ throws, checked }) => {
+        const slow = deferred<void>();
+        const conditionRuns = deferred<void>();
+        let evaluations = 0;
+        // Only the first evaluation is slow, and it throws when `throws` is set.
+        const { checks, iterations, build } = nestedLoop({
+          condition: async () => {
+            if (++evaluations > 1) {
+              return;
+            }
 
-          conditionRuns.resolve();
-          await slow.promise;
-        },
-      });
-      // The first child's end is held, so the test hands it to A and knows when A is done with it.
-      let parentRunId = '';
-      const fromA = heldQueue(event => event.type === 'workflow.end' && event.runId !== parentRunId);
-      const a = await startReplica(build(), fromA.intercept);
-      const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      parentRunId = run.runId;
-      startInBackground(run, { n: 0 });
-      await fromA.firstHeld;
-      const childEnd = fromA.queue.shift()!;
-      const handled = a.mastra.handleWorkflowEvent(childEnd);
-      await conditionRuns.promise;
+            conditionRuns.resolve();
+            await slow.promise;
+            if (throws) {
+              throw new Error('condition boom');
+            }
+          },
+        });
+        // The first child's end is held, so the test hands it to A and knows when A is done with it.
+        let parentRunId = '';
+        const fromA = heldQueue(event => event.type === 'workflow.end' && event.runId !== parentRunId);
+        const a = await startReplica(build(), fromA.intercept);
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        parentRunId = run.runId;
+        startInBackground(run, { n: 0 });
+        await fromA.firstHeld;
+        const childEnd = fromA.queue.shift()!;
+        const handled = a.mastra.handleWorkflowEvent(childEnd);
+        await conditionRuns.promise;
 
-      // A stalls past the TTL of its liveness and of its hand-off claim, and B's restart takes the
-      // hand-off over and continues the parent.
-      await abandonLease(getStorage(), runLivenessKey(run.runId), nestedHandOffKey(run.runId, [0], childEnd.runId));
-      const fromB = heldQueue(() => true);
-      const b = await startReplica(build(), fromB.intercept);
-      (await b.workflow.createRun({ runId: run.runId }))
-        .restart()
-        .catch(error => console.error('The restart rejected', error));
-      await fromB.firstHeld;
-      await fromB.drain(b);
-      expect((await storedRun(run.runId))?.status).toBe('success');
+        // A stalls past the TTL of its liveness and of its hand-off claim, and B's restart takes the
+        // hand-off over and continues the parent.
+        await abandonLease(getStorage(), runLivenessKey(run.runId), nestedHandOffKey(run.runId, [0], childEnd.runId));
+        const fromB = heldQueue(() => true);
+        const b = await startReplica(build(), fromB.intercept);
+        (await b.workflow.createRun({ runId: run.runId }))
+          .restart()
+          .catch(error => console.error('The restart rejected', error));
+        await fromB.firstHeld;
+        await fromB.drain(b);
+        expect((await storedRun(run.runId))?.status).toBe('success');
+        const claim = await (await getStorage().getStore('workflows'))!.getRunOwnership({
+          runId: nestedHandOffKey(run.runId, [0], childEnd.runId),
+        });
+        expect(claim).toMatchObject({ live: true });
+        expect(claim?.ownerId).not.toBe('crashed-process');
 
-      // A resumes, finds its claim taken over and publishes no continuation of the parent.
-      fromA.holdAll();
-      slow.resolve();
-      expect(await handled).toEqual({ ok: true });
-      expect(fromA.queue.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
-      await fromA.drain(a);
+        // A resumes, finds its claim taken over and publishes no continuation of the parent.
+        fromA.holdAll();
+        slow.resolve();
+        expect(await handled).toEqual({ ok: true });
+        expect(fromA.queue.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
+        await fromA.drain(a);
 
-      expect(checks).toEqual([1, 2, 1]);
-      expect(iterations).toEqual([1, 2]);
-    }, 20_000);
+        expect(checks).toEqual(checked);
+        expect(iterations).toEqual([1, 2]);
+        expect((await storedRun(run.runId))?.status).toBe('success');
+      },
+      20_000,
+    );
 
     it('evaluates a dountil condition once per iteration when a restart hands off a nested iteration whose end is held', async () => {
       const { checks, iterations, build } = nestedLoop();

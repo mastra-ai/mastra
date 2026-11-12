@@ -3131,7 +3131,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Evaluates the loop condition after an iteration, then starts the next one or leaves the loop.
    * With `saveProgress`, set by the delivery that ran the body under its step lease, the loop's
    * progress is saved before the next event is published (see {@link #saveLoopProgress}).
-   * `superseded`, set by a nested hand-off, stops it before that save when its claim was taken over.
+   * `superseded`, set by a nested hand-off, stops it before that save, and before a throwing
+   * condition's failure is reported, when the hand-off's claim was taken over.
    */
   async #processLoop(
     args: ProcessorArgs,
@@ -3150,6 +3151,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       const conditionError = error as Error;
       const failed = failedLoopStep(result, conditionError);
       const bodyState = resolveCurrentState({ stepResult: result, stepResults: args.stepResults, state: args.state });
+
+      // A hand-off another worker took over reports nothing: that worker continues the loop.
+      if (await superseded?.()) {
+        return;
+      }
+
       try {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
@@ -3176,6 +3183,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: args.runId,
           error: publishError,
         });
+        if (await superseded?.()) {
+          return;
+        }
+
         await this.#recordFailedLoopStep(args, getEntryId(step.step), failed, bodyState);
         const { workflow: _workflow, ...run } = args;
         // handle() then publishes this run's workflow.fail, at the loop step.
