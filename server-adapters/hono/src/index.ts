@@ -140,6 +140,21 @@ export interface HonoApp {
   all(path: string, ...handlers: HonoRouteHandler[]): unknown;
 }
 
+const requestClones = new WeakMap<Request, Request[]>();
+
+/**
+ * Clones a request and keeps the clone alive for as long as the request itself. Node 22 makes a request's body
+ * unreadable once a clone of it is garbage collected, which loses the body for anything that reads the original
+ * later, such as the MCP transport.
+ */
+function cloneRequest(request: Request): Request {
+  const clone = request.clone();
+  const clones = requestClones.get(request);
+  if (clones) clones.push(clone);
+  else requestClones.set(request, [clone]);
+  return clone;
+}
+
 export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
@@ -179,7 +194,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Only parse if content-type is JSON and body is not empty
         if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
-            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
+            const body = (await cloneRequest(c.req.raw).json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
               bodyRequestContext = body.requestContext;
             }
@@ -347,7 +362,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       } else if (contentType.includes('application/json')) {
         // Clone the request to read the body text first
         // This allows us to check if there's actual content before parsing
-        const clonedReq = request.raw.clone();
+        const clonedReq = cloneRequest(request.raw);
         const bodyText = await clonedReq.text();
 
         if (bodyText && bodyText.trim().length > 0) {

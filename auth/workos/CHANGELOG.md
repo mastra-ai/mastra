@@ -1,5 +1,12 @@
 # @mastra/auth-workos
 
+## 1.6.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781)]:
+  - @mastra/auth@1.2.0-alpha.0
+
 ## 1.6.8
 
 ### Patch Changes

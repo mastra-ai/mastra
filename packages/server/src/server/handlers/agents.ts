@@ -1516,6 +1516,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
   summary: 'List all agents',
   description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'list_agents',
+    description: 'List the agents you can call, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, partial }) => {
@@ -1657,6 +1662,11 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   description:
     'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'get_agent',
+    description: 'Get details for one agent: description, instructions, model, and tools.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
@@ -1749,6 +1759,12 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'call_agent',
+    description:
+      'Send a message to an agent and get its reply. Pass threadId (and resourceId) to continue a conversation with memory.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
