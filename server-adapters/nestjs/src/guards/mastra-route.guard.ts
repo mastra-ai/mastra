@@ -40,6 +40,7 @@ export class MastraRouteGuard implements CanActivate {
     if (this.authService.isEnabled()) {
       const user = await this.authService.authenticate(request, {
         requestContext: this.requestContext.requestContext,
+        bearerOnly: matchResult.route.authTransport === 'bearer',
         response: context.switchToHttp().getResponse<Response>(),
         // As on the other adapters, a route that requires auth is not opened by a public path.
         requiresAuth: matchResult.route.requiresAuth,

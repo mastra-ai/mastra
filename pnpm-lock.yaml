@@ -6514,6 +6514,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat

@@ -43,6 +43,7 @@ import type { MastraAuthMode } from '../constants';
 import { formatZodError, isZodError } from '../handlers/error';
 import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
+import { resolveServerRoute } from '../mcp/route';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
@@ -54,6 +55,7 @@ export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
 export { propagateRequestAbort } from './mcp-disconnect';
+export { BUILTIN_MCP_HTTP_ROUTE, resolveServerRoute } from '../mcp/route';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -832,6 +834,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       customRouteAuthConfig?: Map<string, boolean>;
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
+    if (route.authTransport === 'bearer') {
+      return this.checkBearerRouteAuth(route, context);
+    }
+
     // Determine which auth config to use based on request type
     const effectiveAuth = this.getEffectiveAuthConfig(context.getHeader);
 
@@ -894,6 +900,35 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
     return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
+  }
+
+  /**
+   * Auth for routes with `authTransport: 'bearer'` (the built-in MCP server): only the
+   * `Authorization` header counts, always against `server.auth`. Studio client-type routing,
+   * cookies, and the `apiKey` query parameter are ignored, so a browser session can't be used.
+   */
+  private checkBearerRouteAuth(
+    route: ServerRoute,
+    context: Parameters<MastraServer<TApp, TRequest, TResponse>['checkRouteAuth']>[1],
+  ): ReturnType<MastraServer<TApp, TRequest, TResponse>['checkRouteAuth']> {
+    context.requestContext.set(MASTRA_IS_STUDIO_KEY, false);
+    const authorization = context.getHeader('authorization');
+    const getHeader = (name: string) => {
+      const lower = name.toLowerCase();
+      return lower === 'cookie' || lower === MASTRA_CLIENT_TYPE_HEADER ? undefined : context.getHeader(name);
+    };
+    return this.checkRouteAuth(
+      { ...route, authTransport: undefined },
+      {
+        ...context,
+        getHeader,
+        getQuery: name => (name === 'apiKey' ? undefined : context.getQuery(name)),
+        request: new Request(context.request?.url ?? `http://localhost${context.path}`, {
+          method: context.method,
+          headers: authorization ? { authorization } : {},
+        }),
+      },
+    );
   }
 
   /**
@@ -1570,7 +1605,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // more specific routes (e.g., /versions/compare) must be registered before
     // parameterized routes (e.g., /versions/:versionId)
     for (const route of SERVER_ROUTES) {
-      await this.registerRoute(this.app, route, { prefix: this.prefix });
+      await this.registerRoute(this.app, resolveServerRoute(route, this.mastra, SERVER_ROUTES), {
+        prefix: this.prefix,
+      });
     }
 
     if (this.openapiPath) {
