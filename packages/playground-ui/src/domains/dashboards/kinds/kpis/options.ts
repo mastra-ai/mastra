@@ -36,10 +36,23 @@ const changeOf = (value: number | undefined, previous: number | undefined) =>
     ? ((value - previous) / Math.abs(previous)) * 100
     : undefined;
 
-/** An ungrouped trace or span aggregate's one row, read at `ref`'s measure. */
+const countsOrSums = (measure: string) =>
+  measure === 'count' ||
+  measure === 'errorCount' ||
+  measure.endsWith('.sum') ||
+  measure.endsWith('.count') ||
+  measure.startsWith('countDistinct.');
+
+/**
+ * An ungrouped trace or span aggregate's one row, read at `ref`'s measure. A window with nothing in it
+ * answers no rows at all, which is 0 for a count or sum, and no figure for an average, rate or percentile.
+ */
 const rowMeasure = (answer: DashboardAnswer | undefined, ref: ValueRef) => {
-  const row = rowsOf(answer)?.rows[0];
-  return row && ref.measure ? measureOf(row.measures, ref.measure) : undefined;
+  const rows = rowsOf(answer)?.rows;
+  if (!rows || !ref.measure) return undefined;
+  const row = rows[0];
+  if (!row) return countsOrSums(ref.measure) ? 0 : undefined;
+  return measureOf(row.measures, ref.measure);
 };
 
 /**

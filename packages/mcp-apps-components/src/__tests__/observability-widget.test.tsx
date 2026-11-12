@@ -275,6 +275,33 @@ it('shows no change for a KPI whose parts do not all compare with the window bef
   expect(document.body.textContent?.match(/vs previous/g)).toHaveLength(1);
 });
 
+it('counts a window with no traces as 0, and leaves its percentiles without a figure', async () => {
+  const mcp = observabilityServer({ answers: { aggregateTraces: { data: { rows: [], truncated: false } } } });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Quiet',
+              kpis: {
+                items: [
+                  { label: 'Errors', format: 'count', value: { traceAggregate: { measure: 'errorCount' } } },
+                  { label: 'p95 latency', format: 'duration', value: { traceAggregate: { measure: 'duration.p95' } } },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  await waitFor(() => expect(document.body.textContent).toContain('Errors0'));
+  expect(document.body.textContent).toContain('p95 latency—');
+});
+
 it('draws a line chart of scores and a table, with the colors and empty message they leave out', async () => {
   const mcp = observabilityServer({
     answers: {
