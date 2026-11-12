@@ -5042,7 +5042,11 @@ describe('FactoryDecisionDispatcher', () => {
     expect(prepareBinding).toHaveBeenCalledWith(
       expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'triage' }),
     );
-    expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-2' });
+    // Switching subscribes to the thread, which resolves memory and model
+    // credentials, so it must run as the session owner, never as nobody.
+    expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-2', requestContext: expect.anything() });
+    const switchContext = session.thread.switch.mock.calls[0]![0].requestContext as RequestContext;
+    expect(switchContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ tagName: 'skill', attributes: { name: 'understand-issue' } }),
       { requestContext: expect.anything(), requireDelivery: true },
