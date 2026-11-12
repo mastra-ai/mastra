@@ -103,6 +103,7 @@ import {
   rehydrateWorkflow,
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
+import { endRunLiveness } from '../workflows/evented/leases';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import {
   cancelNestedRun,
@@ -8081,6 +8082,19 @@ export class Mastra<
    * `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
+    try {
+      await this.#shutdown(options);
+    } finally {
+      // A shutdown that failed before its drain finished must not keep vouching for the evented
+      // runs it drove. Ending the liveness twice changes nothing.
+      if (this.#shuttingDown) {
+        await endRunLiveness(this);
+      }
+    }
+  }
+
+  /** The teardown {@link shutdown} runs. */
+  async #shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
 
     // `drainTimeout` is a single deadline shared by every drain in this method
@@ -8156,7 +8170,14 @@ export class Mastra<
     }
 
     // SchedulerWorker is stopped as part of stopWorkers().
-    await this.stopWorkers({ drainTimeout: Math.max(0, deadline - Date.now()) });
+    try {
+      await this.stopWorkers({ drainTimeout: Math.max(0, deadline - Date.now()) });
+    } finally {
+      // The evented runs this process drove were kept live through the drain above, so no instance
+      // restarted one it still drove. Their keys expire now, while storage is still open, so the
+      // time this process stopped is recorded for recovery to measure from.
+      await endRunLiveness(this);
+    }
 
     // Stop — don't destroy — registered workspaces. Remote sandboxes
     // suspend/pause and stay resumable across process restarts, and

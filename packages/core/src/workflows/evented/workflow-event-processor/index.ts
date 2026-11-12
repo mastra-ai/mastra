@@ -70,7 +70,7 @@ import {
   RunFailure,
   withoutAuthToken,
 } from '../helpers';
-import { acquireStepLease, markRunLive, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
+import { acquireStepLease, enterRunLiveness, markRunLive, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
 import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../leases';
 import { StepExecutor } from '../step-executor';
 import {
@@ -1234,11 +1234,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       }) ?? true;
 
     // Every start, resume, restart and nested run passes here before its first step event is
-    // published. Marking it live first keeps a booting instance from restarting it in the gap
-    // before that step takes its lease, also when the start message sat in the queue for long.
-    const leaseStore = await this.#leaseStore(workflow);
-    if (leaseStore) {
-      await markRunLive({ scope: this.mastra, store: leaseStore, runId, logger: this.mastra.getLogger() });
+    // published. Marking it and its ancestors live first keeps a booting instance from restarting
+    // them before that step is handled, also when the start message sat in the queue for long.
+    for (const live of await this.#livenessRuns(workflow, { runId, parentWorkflow })) {
+      await markRunLive({ scope: this.mastra, store: live.store, runId: live.runId, logger: this.mastra.getLogger() });
     }
 
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
@@ -2278,6 +2277,59 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * The runs whose liveness an event of `runId` vouches for: the run itself and
+   * every ancestor on the event's parent chain, each with the store it is kept
+   * in. A run whose workflow takes no leases (see {@link #leaseStore}) is left
+   * out, judged by its own workflow, so an opted-out parent stays opted out.
+   *
+   * Ancestors are covered because a parent step that dispatched a nested run
+   * handles no event while the nested run works.
+   */
+  async #livenessRuns(
+    workflow: Workflow | undefined,
+    { runId, parentWorkflow }: { runId: string; parentWorkflow?: ParentWorkflow },
+  ): Promise<{ runId: string; store: WorkflowsStorage }[]> {
+    const runs: { runId: string; store: WorkflowsStorage }[] = [];
+    const ownStore = await this.#leaseStore(workflow);
+    if (ownStore) {
+      runs.push({ runId, store: ownStore });
+    }
+
+    for (let parent = parentWorkflow; parent?.runId; parent = parent.parentWorkflow) {
+      const parentStore = await this.#leaseStore(this.#resolveLiveWorkflow(parent) ?? undefined);
+      if (parentStore) {
+        runs.push({ runId: parent.runId, store: parentStore });
+      }
+    }
+
+    return runs;
+  }
+
+  /**
+   * Counts this event's handler toward the liveness of the run it names and of
+   * its ancestors, and returns the function that counts it out again. Taken
+   * before the handler waits on any step lease, so a delivery waiting on a
+   * crashed holder keeps the run live while it waits.
+   */
+  async #enterLiveness(
+    workflow: Workflow | undefined,
+    data: { runId: string; parentWorkflow?: ParentWorkflow },
+  ): Promise<() => void> {
+    const runs = await this.#livenessRuns(workflow, data);
+    const leaves = await Promise.all(
+      runs.map(({ runId, store }) =>
+        enterRunLiveness({ scope: this.mastra, store, runId, logger: this.mastra.getLogger() }),
+      ),
+    );
+
+    return () => {
+      for (const leave of leaves) {
+        leave();
+      }
+    };
+  }
+
+  /**
    * Takes the lease of the leaf step occurrence `args` delivers, so a step
    * runs on one worker at a time even when several deliveries of it are in
    * flight (a restart from another replica, a broker redelivery). See
@@ -2298,7 +2350,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     return acquireStepLease({
       scope: this.mastra,
       store,
-      runId: args.runId,
       key: this.#stepLeaseKey(args, step),
       handoff,
       claimAfterRelease: args.resumeSteps?.[0] === leafId,
@@ -5501,82 +5552,90 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (type === 'workflow.start' || type === 'workflow.resume') {
-      const { runId } = workflowData;
-      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-start',
-          payload: {
-            runId,
+    // Every event of a run keeps it and its ancestors live, so a run is live between its steps
+    // and while a nested run works for its parent. `workflowData.runId` is the run the event is
+    // for: nested start and resume events are routed on the parent's run ID.
+    const leaveLiveness = await this.#enterLiveness(workflow ?? undefined, workflowData);
+    try {
+      if (type === 'workflow.start' || type === 'workflow.resume') {
+        const { runId } = workflowData;
+        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-start',
+            payload: {
+              runId,
+            },
           },
-        },
-      });
-    }
+        });
+      }
 
-    // For the cleanup-path events (`workflow.fail`/`workflow.end`/
-    // `workflow.cancel`) we may have fallen through above with no resolved
-    // workflow. The processors for those events tolerate `workflow=undefined`
-    // (they rely on optional chaining / persisted state), so we cast here to
-    // avoid widening the shared `ProcessorArgs.workflow` type across the
-    // hundreds of usage sites in this file.
-    const workflowArg = workflow as Workflow;
+      // For the cleanup-path events (`workflow.fail`/`workflow.end`/
+      // `workflow.cancel`) we may have fallen through above with no resolved
+      // workflow. The processors for those events tolerate `workflow=undefined`
+      // (they rely on optional chaining / persisted state), so we cast here to
+      // avoid widening the shared `ProcessorArgs.workflow` type across the
+      // hundreds of usage sites in this file.
+      const workflowArg = workflow as Workflow;
 
-    switch (type) {
-      case 'workflow.cancel':
-        await this.processWorkflowCancel({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.start':
-        await this.processWorkflowStart({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.resume':
-        await this.processWorkflowStart({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.end':
-        await this.processWorkflowEnd({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.step.end':
-        await this.processWorkflowStepEnd({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.step.run':
-        await this.processWorkflowStepRun(
-          {
+      switch (type) {
+        case 'workflow.cancel':
+          await this.processWorkflowCancel({
             workflow: workflowArg,
             ...workflowData,
-          },
-          control,
-        );
-        break;
-      case 'workflow.suspend':
-        await this.processWorkflowSuspend({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.fail':
-        await this.processWorkflowFail({
-          workflow: workflowArg,
-          ...workflowData,
-        });
-        break;
-      default:
-        break;
+          });
+          break;
+        case 'workflow.start':
+          await this.processWorkflowStart({
+            workflow: workflowArg,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.resume':
+          await this.processWorkflowStart({
+            workflow: workflowArg,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.end':
+          await this.processWorkflowEnd({
+            workflow: workflowArg,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.step.end':
+          await this.processWorkflowStepEnd({
+            workflow: workflowArg,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.step.run':
+          await this.processWorkflowStepRun(
+            {
+              workflow: workflowArg,
+              ...workflowData,
+            },
+            control,
+          );
+          break;
+        case 'workflow.suspend':
+          await this.processWorkflowSuspend({
+            workflow: workflowArg,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.fail':
+          await this.processWorkflowFail({
+            workflow: workflowArg,
+            ...workflowData,
+          });
+          break;
+        default:
+          break;
+      }
+    } finally {
+      leaveLiveness();
     }
   }
 }

@@ -10,7 +10,6 @@ import {
   WORKFLOW_RUN_LEASE_TTL_MS,
   renewWorkflowLease,
 } from '../../run-ownership';
-import { processLiveness } from './liveness';
 import type { LivenessScope } from './liveness';
 
 /** The claim a same-key follow-up event carries so its receiver can take the lease over. */
@@ -86,16 +85,12 @@ export type StepLeaseClaim = StepLease | 'drop' | 'defer';
  * runs. If the holder releases instead, it ran the occurrence and the delivery
  * is dropped, unless `claimAfterRelease` marks it as a new attempt of the same
  * occurrence, such as a resume of the step the holder suspended. A process
- * shutting down stops waiting and defers the delivery.
- *
- * While the lease is held the step counts toward the run's liveness key (see
- * {@link runLivenessKey}), which `scope`, the process running the step, keeps
- * fresh.
+ * shutting down stops waiting and defers the delivery. `scope` is the process
+ * the delivery runs in.
  */
 export async function acquireStepLease({
   scope,
   store,
-  runId,
   key,
   handoff,
   claimAfterRelease,
@@ -103,7 +98,6 @@ export async function acquireStepLease({
 }: {
   scope: LivenessScope;
   store: WorkflowsStorage;
-  runId: string;
   key: string;
   handoff?: StepLeaseHandoff;
   claimAfterRelease: boolean;
@@ -123,7 +117,7 @@ export async function acquireStepLease({
     // Forced but fenced on the publisher's generation, so only the first receiver of the hand-off wins.
     const adopted = await claim({ force: true, expectedGeneration: handoff.generation });
     if (adopted.acquired) {
-      return holdStepLease({ scope, store, runId, record: adopted.record, logger });
+      return holdStepLease({ store, record: adopted.record, logger });
     }
 
     // A live or released lease means another receiver adopted it. An expired one means that
@@ -164,32 +158,20 @@ export async function acquireStepLease({
     result = await claim({ force: false, expectedGeneration: current?.generation ?? 0 });
   }
 
-  return holdStepLease({ scope, store, runId, record: result.record, logger });
+  return holdStepLease({ store, record: result.record, logger });
 }
 
-/**
- * Renews the acquired step lease, counts the step toward the run's liveness
- * and returns the lease handle. The step stops counting when the handle is
- * released, even after a hand-off: the handler that holds it ran until then.
- * If counting the step throws, the lease is released before the error
- * propagates.
- */
-async function holdStepLease({
-  scope,
+/** Renews the acquired step lease until it is released or handed off, and returns its handle. */
+function holdStepLease({
   store,
-  runId,
   record,
   logger,
 }: {
-  scope: LivenessScope;
   store: WorkflowsStorage;
-  runId: string;
   record: RunOwnershipRecord;
   logger?: IMastraLogger;
-}): Promise<StepLease> {
+}): StepLease {
   const fence: RunFence = { runId: record.runId, generation: record.generation, ownerId: record.ownerId };
-  // Renewal starts before the liveness write is awaited: a write that stalls past the TTL must
-  // not let the step lease lapse while this worker still holds it.
   const stopRenewing = renewWorkflowLease({
     store,
     fence,
@@ -200,20 +182,6 @@ async function holdStepLease({
       }),
     onError: error => logger?.warn('Failed to renew workflow step lease', { key: fence.runId, error }),
   });
-
-  let leaveRun: () => void;
-  try {
-    leaveRun = await processLiveness(scope, logger).enter(runId, store);
-  } catch (error) {
-    // The caller never gets a handle, so nothing else would release this lease before it expires.
-    stopRenewing();
-    try {
-      await store.releaseRunOwnership(fence);
-    } catch (releaseError) {
-      logger?.warn('Failed to release workflow step lease', { key: fence.runId, error: releaseError });
-    }
-    throw error;
-  }
 
   let handedOff = false;
   let released = false;
@@ -228,7 +196,6 @@ async function holdStepLease({
     },
     async release() {
       stopRenewing();
-      leaveRun();
 
       // A handed-off lease belongs to the follow-up's receiver now.
       if (handedOff || released) {
