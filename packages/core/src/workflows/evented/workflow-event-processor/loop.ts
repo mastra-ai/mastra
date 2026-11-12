@@ -1,4 +1,4 @@
-import type { StepFlowEntry, StepResult } from '../..';
+import type { StepFlowEntry, StepResult, WorkflowResumeLabel } from '../..';
 import { RequestContext } from '../../../di';
 import { getErrorFromUnknown } from '../../../error';
 import type { PubSub } from '../../../events';
@@ -290,7 +290,7 @@ async function advanceForEach(
   const targetLen = (prevResult as any)?.output?.length ?? 0;
 
   const publishSuspendedState = async (suspendedForEachIndex: number | undefined) => {
-    const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+    const collectedResumeLabels: Record<string, WorkflowResumeLabel> = {};
     let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
     for (const iterResult of currentResult.output) {
       if (iterResult?.status === 'suspended') {
@@ -305,7 +305,7 @@ async function advanceForEach(
 
     const suspendMeta: {
       foreachIndex?: number;
-      resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
     } = {
       foreachIndex: suspendedForEachIndex,
     };

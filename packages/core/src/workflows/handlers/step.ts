@@ -35,6 +35,7 @@ import type {
   StepExecutionResult,
   StepResult,
   TimeTravelExecutionParams,
+  WorkflowResumeLabel,
 } from '../types';
 import {
   validateStepInput,
@@ -408,7 +409,7 @@ export async function executeStep(
       let bailed: { payload: any } | undefined;
       const contextMutations: {
         suspendedPaths: Record<string, number[]>;
-        resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
+        resumeLabels: Record<string, WorkflowResumeLabel>;
         stateUpdate: any;
         stateBase?: Record<string, unknown>;
         requestContextUpdate: Record<string, any> | null;
@@ -556,9 +557,15 @@ export async function executeStep(
             const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
               ? suspendOptions.resumeLabel
               : [suspendOptions.resumeLabel];
+            // A nested workflow that propagates its inner labels up passes the path to each of
+            // those inner steps along, so the parent records where the suspension really is
+            // instead of only naming this step.
+            const nestedLabelPaths = suspendOptions.__nestedResumeLabelPaths as Record<string, string[]> | undefined;
             for (const label of resumeLabel) {
-              const labelData = {
+              const innerPath = nestedLabelPaths?.[label];
+              const labelData: WorkflowResumeLabel = {
                 stepId: step.id,
+                ...(innerPath ? { path: [step.id, ...innerPath] } : {}),
                 foreachIndex: executionContext.foreachIndex,
               };
               // Capture for return value

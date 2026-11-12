@@ -238,14 +238,14 @@ if (state?.status === 'suspended') {
   const run = await workflow.createRun({ runId: state.runId })
 
   await run.resume({
-    step: approvalLabel?.stepId ?? suspendedStep?.path,
+    step: approvalLabel?.path ?? suspendedStep?.path,
     resumeData: { approved: true },
     forEachIndex: approvalLabel?.foreachIndex,
   })
 }
 ```
 
-For nested workflows, `suspendedStep.path` contains the resume path. For `foreach` suspensions, matching resume labels include `foreachIndex` when the label points to a specific iteration.
+For nested workflows, `suspendedStep.path` contains the resume path. A resume label for a step suspended inside a nested workflow includes a `path` that points at that step, so pass the label's `path` to `resume()` to resume exactly that step — its `stepId` names only the nested workflow. Resuming by a nested workflow's step ID when that workflow has several suspended steps throws before execution, and the run stays suspended; pass the full path or the label instead. For `foreach` suspensions, matching resume labels include `foreachIndex` when the label points to a specific iteration.
 
 ## Sleep
 

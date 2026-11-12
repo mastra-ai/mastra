@@ -686,7 +686,9 @@ export type SkippableTest =
   | 'foreachProgressConcurrentStreaming'
   | 'foreachProgressFailStreaming'
   // stepExecutionPath deduplication on suspend/resume (default engine only)
-  | 'resumeStepExecutionPath';
+  | 'resumeStepExecutionPath'
+  // Resume labels from steps suspended inside a nested workflow carry the full resume path
+  | 'resumeNestedLabelPath';
 
 /**
  * Configuration for creating a workflow test suite

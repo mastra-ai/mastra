@@ -15324,6 +15324,7 @@ createWorkflowTestSuite({
     resumeNested: true, // Nested step path resume not supported on Inngest
     directNestedChildResume: true, // Direct child resume does not wake the suspended parent
     resumeNestedWithLabel: true, // same as resumeNested
+    resumeNestedLabelPath: true, // same as resumeNested (resumes by the label's nested path)
     resumeParallelMulti: true, // parallel suspended steps behavior differs on Inngest
     resumeAutoDetect: true, // Inngest result doesn't include 'suspended' array property
     resumeBranchingStatus: true, // Inngest branching + suspend behavior differs (returns 'failed' not 'suspended')

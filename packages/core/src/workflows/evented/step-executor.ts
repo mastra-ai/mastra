@@ -24,7 +24,7 @@ import { workflowTermination, completeWorkflowSpan } from '../execution-outcome'
 import { getStepResult, getStepResultAsync } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
-import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
+import type { SingleStepEntry, StepFlowEntry, StepResult, WorkflowResumeLabel } from '../types';
 import {
   validateStepInput,
   createDeprecationProxy,
@@ -295,7 +295,7 @@ export class StepExecutor extends MastraBase {
                   throw validationError;
                 }
                 // Build resume labels if provided
-                const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+                const resumeLabels: Record<string, WorkflowResumeLabel> = {};
                 if (suspendOptions?.resumeLabel) {
                   const labels = Array.isArray(suspendOptions.resumeLabel)
                     ? suspendOptions.resumeLabel

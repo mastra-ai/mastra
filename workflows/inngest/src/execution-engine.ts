@@ -15,6 +15,7 @@ import type {
   StepFailure,
   ExecutionEngineOptions,
   TimeTravelExecutionParams,
+  WorkflowResumeLabel,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
@@ -824,8 +825,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             // this a caller can only target the outer step, and concurrent suspensions inside the
             // nested workflow become impossible to disambiguate. Mirrors `Workflow.execute()` in
             // packages/core/src/workflows/workflow.ts.
-            for (const label of Object.keys((result as any)?.resumeLabels ?? {})) {
-              executionContext.resumeLabels[label] = { stepId: step.id };
+            for (const [label, labelData] of Object.entries(
+              ((result as any)?.resumeLabels ?? {}) as Record<string, WorkflowResumeLabel>,
+            )) {
+              executionContext.resumeLabels[label] = {
+                stepId: step.id,
+                path: [step.id, ...(labelData.path ?? [labelData.stepId])],
+              };
             }
 
             // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when

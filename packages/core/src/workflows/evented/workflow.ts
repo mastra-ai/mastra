@@ -101,7 +101,7 @@ import { createStepFromClassifier, createStepFromTool } from '../step-factories'
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { waitForSuspendedSnapshot } from '../utils';
+import { assertNestedResumeIsUnambiguous, getSuspendedStepPaths, waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
@@ -2547,25 +2547,7 @@ export class EventedRun<
       }
     } else {
       // Use suspendedPaths to detect suspended steps
-      const suspendedStepPaths: string[][] = [];
-
-      Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
-        // Check if this step has nested workflow suspension data
-        const stepResult = snapshot?.context?.[stepId];
-        if (stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
-          const stepRes = stepResult as any;
-          if (stepRes.status === 'suspended') {
-            const nestedPath = stepRes.suspendPayload?.__workflow_meta?.path;
-            if (nestedPath && Array.isArray(nestedPath)) {
-              // For nested workflows, combine the parent step ID with the nested path
-              suspendedStepPaths.push([stepId, ...nestedPath]);
-            } else {
-              // For single-level suspension, just use the step ID
-              suspendedStepPaths.push([stepId]);
-            }
-          }
-        }
-      });
+      const suspendedStepPaths = getSuspendedStepPaths(snapshot);
 
       if (suspendedStepPaths.length === 0) {
         throw new Error('No suspended steps found in this workflow run');
@@ -2610,6 +2592,18 @@ export class EventedRun<
       throw new Error(
         `This workflow step "${steps?.[0]}" was not suspended. Available suspended steps: [${suspendedStepIds.join(', ')}]`,
       );
+    }
+
+    // Naming a nested workflow says nothing about which of its suspended steps to resume, so
+    // reject that up front rather than letting the nested step fail the run (#29782).
+    if (!params.label && steps.length === 1 && params.forEachIndex === undefined) {
+      await assertNestedResumeIsUnambiguous({
+        snapshot,
+        steps,
+        workflowId: this.workflowId,
+        runId: this.runId,
+        loadSnapshot: args => workflowsStore.loadWorkflowSnapshot(args),
+      });
     }
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;

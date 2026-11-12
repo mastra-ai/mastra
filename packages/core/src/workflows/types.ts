@@ -317,6 +317,14 @@ export type WorkflowRunStatus =
 
 export type WorkflowResumeLabel = {
   stepId: string;
+  /**
+   * Full path from the top-level workflow down to the step that suspended, e.g.
+   * `['review', 'approve-b']` for a step labelled inside a nested `review` workflow.
+   *
+   * Only set on labels that were propagated out of a nested workflow. Labels recorded
+   * directly on a top-level step omit it, because there the path is just `[stepId]`.
+   */
+  path?: string[];
   foreachIndex?: number;
 };
 
@@ -1178,7 +1186,7 @@ export type WorkflowResult<
       status: 'success';
       state?: TState;
       stepExecutionPath?: string[];
-      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
       result: TOutput;
       input: TInput;
       steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
@@ -1188,7 +1196,7 @@ export type WorkflowResult<
       input: TInput;
       state?: TState;
       stepExecutionPath?: string[];
-      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
       steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
       error: Error;
     } & TracingProperties)
@@ -1197,7 +1205,7 @@ export type WorkflowResult<
       input: TInput;
       state?: TState;
       stepExecutionPath?: string[];
-      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
       steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
       /** Tripwire data including reason, retry flag, metadata, and processor ID */
       tripwire: StepTripwireInfo;
@@ -1207,7 +1215,7 @@ export type WorkflowResult<
       input: TInput;
       state?: TState;
       stepExecutionPath?: string[];
-      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
       steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
       suspendPayload: any;
       suspended: [string[], ...string[][]];
@@ -1216,7 +1224,7 @@ export type WorkflowResult<
       status: 'paused';
       state?: TState;
       stepExecutionPath?: string[];
-      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
       input: TInput;
       steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
     } & TracingProperties);
@@ -1389,13 +1397,7 @@ export type ExecutionContext = {
   activeStepsPath: Record<string, number[]>;
   foreachIndex?: number;
   suspendedPaths: Record<string, number[]>;
-  resumeLabels: Record<
-    string,
-    {
-      stepId: string;
-      foreachIndex?: number;
-    }
-  >;
+  resumeLabels: Record<string, WorkflowResumeLabel>;
   waitingPaths?: Record<string, number[]>;
   retryConfig: {
     attempts: number;
@@ -1426,13 +1428,7 @@ export type MutableContext = {
    */
   stateBase?: Record<string, unknown>;
   suspendedPaths: Record<string, number[]>;
-  resumeLabels: Record<
-    string,
-    {
-      stepId: string;
-      foreachIndex?: number;
-    }
-  >;
+  resumeLabels: Record<string, WorkflowResumeLabel>;
 };
 
 /**
