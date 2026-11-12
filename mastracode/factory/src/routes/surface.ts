@@ -34,6 +34,7 @@ import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactorySourceControl,
+  requireOrganizationModelKey,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -330,13 +331,12 @@ export interface PhaseSessionOwnerSources {
 }
 
 /**
- * Who a newly minted phase session runs as. A person who started the move into the
- * phase owns it: whoever moved or approved the card, or the user of the session whose
- * agent moved it. Work nobody started (a webhook, an automatic phase, a rule) belongs
- * to the Factory itself wherever runs use the Factory's credentials. A Factory whose
- * runs use personal credentials has no keys of its own, so there such work falls to
- * whoever created the Factory; `undefined` leaves the last resort to the caller:
- * whoever connected the repository.
+ * Who a newly minted phase session runs as. Wherever runs use the Factory's credentials
+ * that is the Factory itself, whoever moved the card: the mover is the actor on the move,
+ * not the owner of the run. A Factory whose runs use personal credentials has no keys of
+ * its own, so there a person owns the run: whoever moved or approved the card, or the user
+ * of the session whose agent moved it, else whoever created the Factory. `undefined`
+ * leaves the last resort to the caller: whoever connected the repository.
  */
 async function phaseSessionOwner(args: {
   sourceControl: SourceControlStorageHandle;
@@ -345,6 +345,7 @@ async function phaseSessionOwner(args: {
   approver: string | undefined;
 }): Promise<string | undefined> {
   const { sourceControl, workItems, project, approver } = args;
+  if (effectiveModelScope(project.modelScope, 'run') === 'factory') return factoryPrincipalId(project.id);
   if (approver?.startsWith('agent:')) {
     // `agent:session:<sessionId>` is a person's own session; `agent:<bindingId>` a phase run.
     const ref = approver.slice('agent:'.length);
@@ -357,26 +358,7 @@ async function phaseSessionOwner(args: {
   } else if (isHumanActorId(approver)) {
     return approver;
   }
-  if (effectiveModelScope(project.modelScope, 'run') === 'factory') return factoryPrincipalId(project.id);
   return isHumanActorId(project.createdBy) ? project.createdBy : undefined;
-}
-
-/**
- * A run owned by the Factory resolves the organization's model keys and nothing else.
- * With none stored it cannot run however often it is retried, so say what to add
- * instead of starting a run that dies on its first model call.
- */
-async function requireOrganizationModelKey(
-  sources: PhaseSessionOwnerSources | undefined,
-  project: FactoryProject,
-): Promise<void> {
-  if (!sources?.modelCredentials || sources.deploymentModelProviders?.size) return;
-  const credentials = await sources.modelCredentials.listCredentials(project.orgId, factoryPrincipalId(project.id));
-  if (credentials.some(credential => credential.scope === 'org')) return;
-  throw new FactoryDispatchError(
-    'factory_org_key_missing',
-    "This Factory runs automatic work on the organization's model keys, and none is set. Add an organization key under Settings → Models, then retry.",
-  );
 }
 
 /**

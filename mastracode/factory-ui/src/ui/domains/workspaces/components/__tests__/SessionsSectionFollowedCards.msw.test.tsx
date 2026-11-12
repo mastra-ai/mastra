@@ -93,11 +93,13 @@ function card(id: string, title: string, sessions: WorkItem['sessions']): WireWo
 }
 
 let parkedSessionIds: string[];
+let phaseSessionOwner: string;
 let answers: Array<{ sessionId: string; body: unknown }>;
 
 beforeEach(() => {
   localStorage.removeItem('mastracode.pinnedSessions');
   parkedSessionIds = [];
+  phaseSessionOwner = OWNER;
   answers = [];
   // The viewer is signed in as `user-1`, so sessions of other people read as teammates'.
   window.__MASTRACODE_CONFIG__ = { authEnabled: true };
@@ -114,7 +116,15 @@ beforeEach(() => {
       HttpResponse.json(workBoardCatalog satisfies BoardCatalogResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/sessions`, () =>
-      HttpResponse.json({ sessions: [planSession, docsSession, requesterSession, teammateSession, scratchSession] }),
+      HttpResponse.json({
+        sessions: [
+          { ...planSession, userId: phaseSessionOwner },
+          docsSession,
+          requesterSession,
+          teammateSession,
+          scratchSession,
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json({
@@ -176,6 +186,23 @@ describe("Sessions sidebar links a card's phase sessions to the session that ask
     expect(within(listItem(requester)).queryByRole('link', { name: 'Write docs' })).not.toBeInTheDocument();
     const scratch = screen.getByRole('link', { name: 'Scratch notes' });
     expect(within(listItem(scratch)).queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  it('says the Factory runs the phase session listed under the session of the person who moved the card', async () => {
+    phaseSessionOwner = `factory-project:${factoryId}`;
+    const user = userEvent.setup();
+    renderSection();
+    const requester = await screen.findByRole('link', { name: 'Ask for a login fix' });
+
+    await openSessionProperties(user);
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Reveal child sessions' }));
+    await closeSessionProperties(user);
+
+    const linked = await within(listItem(requester)).findByRole('link', {
+      name: 'Run by Factory: Plan fix login',
+    });
+    expect(linked).toHaveAttribute('href', expect.stringContaining('plan-session'));
+    expect(within(linked).getByText('run by Factory')).toBeVisible();
   });
 
   it('marks the asking session as waiting on you while the followed card waits on an approval', async () => {

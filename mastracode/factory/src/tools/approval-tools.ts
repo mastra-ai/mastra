@@ -7,6 +7,7 @@ import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryMessaging } from './messaging-tools.js';
+import { resumesOnDecision } from './run-watch.js';
 import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 
@@ -42,29 +43,6 @@ interface WaitingApproval {
   toolName: string;
   /** `gate`: the call has not run yet. `resume`: the tool paused itself to ask. */
   channel: 'gate' | 'resume';
-}
-
-/**
- * Whether a bare yes or no is all a paused tool needs to carry on: its resume data is an
- * object whose `action` is `approved` or `rejected`, and nothing else is required. A
- * question to the person (free text, a choice, a decision plus a required detail) does
- * not fit, and is answered in the session itself.
- */
-function resumesOnDecision(resumeSchema: string | undefined): boolean {
-  if (!resumeSchema) return false;
-  try {
-    const schema = JSON.parse(resumeSchema) as { properties?: { action?: { enum?: unknown } }; required?: unknown };
-    const actions = schema.properties?.action?.enum;
-    const required = Array.isArray(schema.required) ? schema.required : [];
-    return (
-      Array.isArray(actions) &&
-      actions.includes('approved') &&
-      actions.includes('rejected') &&
-      required.every(field => field === 'action')
-    );
-  } catch {
-    return false;
-  }
 }
 
 function waitingApprovals(live: ApprovalGateSession): WaitingApproval[] {

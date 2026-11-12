@@ -39,6 +39,7 @@ import type { LivePullRequestStatus } from '../../../../hooks/useWorkspacePullRe
 export function SessionNavRow({
   name,
   label,
+  runByFactory,
   level,
   title,
   url,
@@ -70,6 +71,8 @@ export function SessionNavRow({
   name: string;
   /** Shown instead of the name, which stays in the accessible name: a child session's phase. */
   label?: string;
+  /** The Factory owns this session, though it is listed under a person's. */
+  runByFactory?: boolean;
   /** Indent level: 1 for a card's child sessions. */
   level?: number;
   /** Hover tooltip, typically the branch name. */
@@ -136,7 +139,7 @@ export function SessionNavRow({
       to={url}
       state={from ? { from } : undefined}
       aria-current={active ? 'page' : undefined}
-      aria-label={label ? `${label}: ${name}` : name}
+      aria-label={[runByFactory ? 'Run by Factory' : undefined, label, name].filter(Boolean).join(': ')}
       aria-describedby={statusLabel ? statusId : undefined}
       aria-disabled={disabled || loading || undefined}
       tabIndex={disabled || loading ? -1 : undefined}
@@ -169,6 +172,7 @@ export function SessionNavRow({
         }
       >
         {label ?? name}
+        {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />

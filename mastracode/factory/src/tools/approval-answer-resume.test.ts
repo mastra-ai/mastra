@@ -19,6 +19,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { createBoardRegistry } from '../boards/index.js';
 import { buildSourceControlSessionRoutes } from '../routes/source-control-sessions.js';
 import {
   registerTenantCredentialResolver,
@@ -29,7 +30,10 @@ import { resolveFactoryCredentialTenant } from '../session/credential-policy.js'
 import { factoryPrincipalId } from '../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactoryApprovalTools } from './approval-tools.js';
+import { createSessionApprovalNotifier, createSessionRunEndReporter } from './reports.js';
+import { observeSessionRunReports } from './run-watch.js';
 import type { FactoryToolScope } from './scope.js';
+import { createFactoryWorkItemTools } from './work-item-tools.js';
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -115,7 +119,12 @@ const PARKED = {
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
   'a tool call waiting for approval, answered from a session following the card (%s)',
   backend => {
-    async function parkedPhaseSession(options?: { ownedByFactory?: boolean; parkedOn?: keyof typeof PARKED }) {
+    async function parkedPhaseSession(options?: {
+      ownedByFactory?: boolean;
+      parkedOn?: keyof typeof PARKED;
+      /** The person moved the card from their own session, rather than filing it. */
+      movedFromOwnSession?: boolean;
+    }) {
       const parkedOn = options?.parkedOn ?? 'plan';
       const parked = PARKED[parkedOn];
       const settingsPath = path.join(directory, 'settings.json');
@@ -256,16 +265,48 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         baseBranch: 'main',
         visibility: 'org',
       });
-      await seeded.workItems.subscribeToWorkItem({
+      const scope: FactoryToolScope = {
         orgId: ORG,
         factoryProjectId: project.id,
-        workItemId: item.id,
-        sessionId: requesterSessionId,
-        threadId: requesterSessionId,
-        resourceId: requesterSessionId,
         userId: REQUESTER,
-        reason: 'created',
-      });
+        sessionId: requesterSessionId,
+        resourceId: requesterSessionId,
+        threadId: requesterSessionId,
+        kind: 'user',
+        interactive: true,
+      };
+      if (options?.movedFromOwnSession) {
+        // The person's session moves the card with the tool its agent has. The board's rules are
+        // not under test here, so the move is accepted as asked.
+        const workItemTools = createFactoryWorkItemTools(scope, {
+          workItems: seeded.workItems,
+          boards: createBoardRegistry(),
+          transitionService: {
+            transition: async request => ({
+              status: 'accepted',
+              transitionId: randomUUID(),
+              itemId: request.workItemId,
+              revision: request.expectedRevision + 1,
+              stage: request.stage,
+              decisions: [],
+            }),
+          },
+          auditRecorder: { record: async () => null },
+          sessions: { getSourceControlBySessionId: async () => sourceControl },
+        } as never) as unknown as Record<string, { execute: (input: unknown, context: unknown) => Promise<unknown> }>;
+        await workItemTools.factory_transition_work_item!.execute({ workItem: item.id, stage: 'plan' }, {});
+      } else {
+        await seeded.workItems.subscribeToWorkItem({
+          orgId: ORG,
+          factoryProjectId: project.id,
+          workItemId: item.id,
+          sessionId: requesterSessionId,
+          threadId: requesterSessionId,
+          resourceId: requesterSessionId,
+          userId: REQUESTER,
+          reason: 'created',
+        });
+      }
 
       const ownerContext = () => new RequestContext([['user', { workosId: owner, organizationId: ORG }]]);
       const session = await code.controller.createSession({
@@ -279,6 +320,39 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       session.subscribe(event => {
         if (event.type === 'error') errors.push(event.error.message);
       });
+      // What the Factory server tells the sessions following the card about this session's runs.
+      const signals: Array<{ sessionId: string; kind: string; priority?: string; summary: string }> = [];
+      const reports = {
+        sessions: { getBySessionId: (sessionId: string) => sourceControl.sessions.getBySessionId(sessionId) },
+        workItems: seeded.workItems,
+        reporting: async () => ({
+          notifications: { listNotifications: async () => [] },
+          deliver: async (
+            target: { sessionId: string },
+            notification: { kind: string; priority?: string; summary: string },
+          ) => {
+            signals.push({
+              sessionId: target.sessionId,
+              kind: notification.kind,
+              priority: notification.priority,
+              summary: notification.summary,
+            });
+            return { status: 'delivered' };
+          },
+        }),
+      } as never;
+      const reportRunEnd = createSessionRunEndReporter(reports);
+      const notifyApproval = createSessionApprovalNotifier(reports);
+      stops.push(
+        observeSessionRunReports(
+          session,
+          (outcome, since) => reportRunEnd({ sessionId: phase.sessionId, threadId: phase.sessionId, outcome, since }),
+          {
+            onApprovalRequested: request =>
+              notifyApproval({ sessionId: phase.sessionId, threadId: phase.sessionId, ...request }),
+          },
+        ),
+      );
       if (parkedOn === 'plan') await session.mode.switch({ modeId: 'plan' });
       void session.sendMessage({ content: 'Plan the fix.', requestContext: ownerContext() }).catch(() => {});
       /** The tool the run is stopped on, however it stopped. */
@@ -288,16 +362,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       await vi.waitFor(() => expect(waitingOn()).toBe(parked.toolName), { timeout: 30_000 });
       expect(errors).toEqual([]);
 
-      const scope: FactoryToolScope = {
-        orgId: ORG,
-        factoryProjectId: project.id,
-        userId: REQUESTER,
-        sessionId: requesterSessionId,
-        resourceId: requesterSessionId,
-        threadId: requesterSessionId,
-        kind: 'user',
-        interactive: true,
-      };
       const audit: Array<{ actorId: string }> = [];
       const profileLookups: string[] = [];
       const tools = createFactoryApprovalTools(scope, {
@@ -355,6 +419,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         project,
         item,
         requesterSessionId,
+        signals,
         phase,
         owner,
         profileLookups,
@@ -415,6 +480,51 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
       },
     );
+
+    // A person moves a card from their own session. The phase that starts is the Factory's, but the
+    // person's session is where it reports to: it hears the plan is waiting, and answers it there.
+    it("tells the session that moved the card when the Factory's phase session waits on its plan, and resumes on its answer", async () => {
+      const { answer, errors, audit, owner, signals, phase, requesterSessionId } = await parkedPhaseSession({
+        ownedByFactory: true,
+        movedFromOwnSession: true,
+      });
+
+      await vi.waitFor(() =>
+        expect(signals).toEqual([
+          {
+            sessionId: requesterSessionId,
+            kind: 'blocked',
+            priority: 'urgent',
+            summary: `The plan session for "Broken login" is waiting on submit_plan and needs an answer. Approve or decline it with factory_answer_approval (sessionId "${phase.sessionId}", toolCallId "call_plan").`,
+          },
+        ]),
+      );
+      const requestsBefore = mock.getRequests().length;
+      resolved = [];
+
+      await answer('approve');
+
+      await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
+      expect(errors).toEqual([]);
+      expect([...new Set(resolved.map(tenant => `${tenant?.userId} ${tenant?.credentialScope}`))]).toEqual([
+        `${owner} factory`,
+      ]);
+      expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
+    });
+
+    it("tells a following session when a tool in the Factory's phase session waits for a person to allow it", async () => {
+      const { signals, phase, requesterSessionId } = await parkedPhaseSession({
+        ownedByFactory: true,
+        movedFromOwnSession: true,
+        parkedOn: 'release',
+      });
+
+      await vi.waitFor(() => expect(signals).toHaveLength(1));
+      expect(signals[0]).toMatchObject({ sessionId: requesterSessionId, kind: 'approval', priority: 'urgent' });
+      expect(signals[0]!.summary).toContain(
+        `Answer it with factory_answer_approval (sessionId "${phase.sessionId}", toolCallId "call_release")`,
+      );
+    });
 
     it('names the Factory as the owner of its own session, without looking it up as a person', async () => {
       const { web, project, phase, owner, profileLookups } = await parkedPhaseSession({ ownedByFactory: true });

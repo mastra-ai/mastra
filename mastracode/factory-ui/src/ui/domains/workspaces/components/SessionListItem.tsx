@@ -54,6 +54,7 @@ export function SessionListItem({
     <SessionNavRow
       name={row.name}
       label={row.phaseLabel}
+      runByFactory={row.runByFactory}
       level={level}
       url={row.openPath}
       externalLinks={row.externalLinks}

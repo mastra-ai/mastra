@@ -13,7 +13,12 @@ import type { PullRequestStatus } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
-import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
+import {
+  getFactorySessionSource,
+  getSessionOwnerDetails,
+  getUserSessionLabel,
+  isFactoryOwnedSession,
+} from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
@@ -90,6 +95,8 @@ export interface SessionListRow {
   cardStatus?: SessionActivityStatus;
   /** What a child row is named in the sidebar: the phase its session ran in. */
   phaseLabel?: string;
+  /** Listed under a person's session, but the Factory owns and runs it. */
+  runByFactory?: boolean;
   /** A followed card's phase session that waits on a person, answerable from this row. */
   waitingSessionId?: string;
   createdAt: string;
@@ -300,9 +307,11 @@ export function linkFollowedCards(
       ...(waiting ? { status: 'waiting' as const, waitingSessionId: waiting.session.sessionId } : {}),
       ...(revealChildSessions
         ? {
-            childRows: linked.map(cardRow =>
-              waitsOnViewer(cardRow) ? { ...cardRow, waitingSessionId: cardRow.session.sessionId } : cardRow,
-            ),
+            childRows: linked.map(cardRow => ({
+              ...cardRow,
+              ...(waitsOnViewer(cardRow) ? { waitingSessionId: cardRow.session.sessionId } : {}),
+              ...(isFactoryOwnedSession(cardRow.session) ? { runByFactory: true } : {}),
+            })),
           }
         : {}),
     };

@@ -242,7 +242,7 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  describe('who owns a phase session nobody approved in person', () => {
+  describe('who owns a new phase session', () => {
     type Seed = Awaited<ReturnType<typeof seedFactoryWithRepository>>;
 
     function start(seed: Seed, approvedBy: string | undefined) {
@@ -287,79 +287,94 @@ describe('prepareFactoryRuleBinding', () => {
       return seed.seeded.credentials.setCredential({ orgId: 'org-1' }, 'openai', { type: 'api_key', key: 'sk-org' });
     }
 
-    describe.each(['factory', 'hybrid', 'user'] as const)('in a Factory on %s credentials', modelScope => {
-      // The triage agent of a card a teammate asked for moves it on to Planning: the next
-      // phase runs for that teammate, not for whoever connected the repository.
-      it("runs the next phase for the person whose phase session's agent moved the card", async () => {
-        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
-        const triage = await sessionOf(seed, 'requester-1');
-        const { binding } = await seed.seeded.workItems.prepareRunStart({
-          orgId: 'org-1',
-          userId: 'requester-1',
-          factoryProjectId: seed.project.id,
-          workItem: {
-            input: {
-              board: 'work',
-              externalSource: { integrationId: 'github', type: 'issue', externalId: '49' },
-              title: 'Broken login',
-              stages: ['triage'],
-              sessions: {},
-              metadata: {},
-            },
+    /** A phase run of a card `requester-1` asked for, whose agent then moves the card on. */
+    async function phaseRunOf(seed: Seed) {
+      const triage = await sessionOf(seed, 'requester-1');
+      const { binding } = await seed.seeded.workItems.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'requester-1',
+        factoryProjectId: seed.project.id,
+        workItem: {
+          input: {
+            board: 'work',
+            externalSource: { integrationId: 'github', type: 'issue', externalId: '49' },
+            title: 'Broken login',
+            stages: ['triage'],
+            sessions: {},
+            metadata: {},
           },
-          role: 'triage',
-          session: { sessionId: triage.sessionId, branch: triage.branch, threadId: triage.sessionId },
-          resourceId: triage.sessionId,
-          kickoffKey: 'kickoff-1',
-          kickoffMessage: null,
-        });
+        },
+        role: 'triage',
+        session: { sessionId: triage.sessionId, branch: triage.branch, threadId: triage.sessionId },
+        resourceId: triage.sessionId,
+        kickoffKey: 'kickoff-1',
+        kickoffMessage: null,
+      });
+      return binding;
+    }
 
-        await expect(ownerOfPreparedSession(seed, `agent:${binding.id}`)).resolves.toBe('requester-1');
+    // Whoever moves the card, its phases run on the Factory's model and the organization's keys.
+    describe.each(['factory', 'hybrid'] as const)('in a Factory on %s credentials', modelScope => {
+      async function seedWithKey() {
+        const seed = await seedFactoryWithRepository({
+          createdBy: 'factory-creator',
+          modelScope,
+          defaultModelId: 'openai/gpt-5.5',
+        });
+        await addOrganizationKey(seed);
+        return { seed, factory: `factory-project:${seed.project.id}` };
+      }
+
+      it('runs the phase as the Factory, on its model, when a person moves or approves the card', async () => {
+        const { seed, factory } = await seedWithKey();
+        const { prepare, started } = start(seed, 'approver-1');
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({ userId: factory, modelScope: 'factory', defaultModelId: 'openai/gpt-5.5' }),
+        );
+        const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+        expect(await seed.sourceControl.sessions.getBySessionId(sessionId)).toMatchObject({ userId: factory });
       });
 
-      it("runs the phase for the person whose own session's agent moved the card", async () => {
-        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+      it("runs the phase as the Factory when a person's own session moves the card", async () => {
+        const { seed, factory } = await seedWithKey();
         const chat = await sessionOf(seed, 'requester-1');
 
-        await expect(ownerOfPreparedSession(seed, `agent:session:${chat.sessionId}`)).resolves.toBe('requester-1');
+        await expect(ownerOfPreparedSession(seed, `agent:session:${chat.sessionId}`)).resolves.toBe(factory);
       });
 
-      it('runs the phase for the person who approved it', async () => {
-        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+      it('runs the next phase as the Factory when the agent of an earlier phase moves the card', async () => {
+        const { seed, factory } = await seedWithKey();
+        const binding = await phaseRunOf(seed);
 
-        await expect(ownerOfPreparedSession(seed, 'approver-1')).resolves.toBe('approver-1');
+        await expect(ownerOfPreparedSession(seed, `agent:${binding.id}`)).resolves.toBe(factory);
       });
-    });
 
-    // A card a webhook filed, or one an automatic phase picked up, has nobody behind its move.
-    describe.each(['factory', 'hybrid'] as const)(
-      'in a Factory on %s credentials, with nobody behind the move',
-      modelScope => {
-        it('runs the phase as the Factory, not as whoever set it up or connected the repository', async () => {
+      // A card a webhook filed, or one an automatic phase picked up.
+      it('runs the phase as the Factory when nobody is behind the move', async () => {
+        const { seed, factory } = await seedWithKey();
+
+        await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe(factory);
+      });
+
+      it.each([
+        ['a person moved the card', 'approver-1'],
+        ['nobody is behind the move', undefined],
+      ])(
+        'says to add an organization key instead of starting a run that cannot reach a model, when %s',
+        async (_who, approvedBy) => {
           const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
-          await addOrganizationKey(seed);
-
-          await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe(`factory-project:${seed.project.id}`);
-        });
-
-        it('runs as the Factory when the agent that moved the card can no longer be traced to a person', async () => {
-          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
-          await addOrganizationKey(seed);
-
-          await expect(ownerOfPreparedSession(seed, 'agent:binding-that-is-gone')).resolves.toBe(
-            `factory-project:${seed.project.id}`,
-          );
-        });
-
-        it('says to add an organization key instead of starting a run that cannot reach a model', async () => {
-          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
-          // A personal key is not the Factory's to spend.
-          await seed.seeded.credentials.setCredential({ orgId: 'org-1', userId: 'factory-creator' }, 'openai', {
-            type: 'api_key',
-            key: 'sk-personal',
-          });
+          // Personal keys, the mover's included, are not the Factory's to spend.
+          for (const userId of ['factory-creator', 'approver-1']) {
+            await seed.seeded.credentials.setCredential({ orgId: 'org-1', userId }, 'openai', {
+              type: 'api_key',
+              key: 'sk-personal',
+            });
+          }
           const createSession = vi.spyOn(seed.sourceControl.sessions, 'create');
-          const { prepare, started } = start(seed, undefined);
+          const { prepare, started } = start(seed, approvedBy);
 
           const error = await started.catch((caught: unknown) => caught);
 
@@ -370,27 +385,49 @@ describe('prepareFactoryRuleBinding', () => {
           });
           expect(prepare).not.toHaveBeenCalled();
           expect(createSession).not.toHaveBeenCalled();
-        });
+        },
+      );
+    });
 
-        it('starts a run a person is behind without an organization key check on their behalf', async () => {
-          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+    // A Factory on personal credentials has no keys of its own, so a person has to own the run.
+    describe('in a Factory on personal credentials', () => {
+      const seedPersonal = (createdBy = 'factory-creator') =>
+        seedFactoryWithRepository({ createdBy, modelScope: 'user' });
 
-          await expect(ownerOfPreparedSession(seed, 'approver-1')).resolves.toBe('approver-1');
-        });
-      },
-    );
+      it('runs the phase for the person who moved or approved the card', async () => {
+        const seed = await seedPersonal();
+        const { prepare, started } = start(seed, 'approver-1');
 
-    describe('in a Factory on personal credentials, with nobody behind the move', () => {
-      it('runs the phase for whoever set the Factory up', async () => {
-        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope: 'user' });
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ userId: 'approver-1', modelScope: 'user' }));
+      });
+
+      it("runs the phase for the person whose own session's agent moved the card", async () => {
+        const seed = await seedPersonal();
+        const chat = await sessionOf(seed, 'requester-1');
+
+        await expect(ownerOfPreparedSession(seed, `agent:session:${chat.sessionId}`)).resolves.toBe('requester-1');
+      });
+
+      // The triage agent of a card a teammate asked for moves it on to Planning.
+      it("runs the next phase for the person whose phase session's agent moved the card", async () => {
+        const seed = await seedPersonal();
+        const binding = await phaseRunOf(seed);
+
+        await expect(ownerOfPreparedSession(seed, `agent:${binding.id}`)).resolves.toBe('requester-1');
+      });
+
+      it('runs the phase for whoever set the Factory up when nobody is behind the move', async () => {
+        const seed = await seedPersonal();
 
         await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe('factory-creator');
-        const second = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope: 'user' });
+        const second = await seedPersonal();
         await expect(ownerOfPreparedSession(second, 'agent:binding-that-is-gone')).resolves.toBe('factory-creator');
       });
 
       it('falls back to whoever connected the repository only when the Factory names no person', async () => {
-        const seed = await seedFactoryWithRepository({ createdBy: 'system', modelScope: 'user' });
+        const seed = await seedPersonal('system');
 
         await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe('user-1');
       });
@@ -553,7 +590,8 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   async function planOwnedSession(branch = 'factory/issue-49') {
-    const setup = await seedFactoryWithRepository();
+    // On personal credentials, where a fresh session belongs to whoever approved the move.
+    const setup = await seedFactoryWithRepository({ modelScope: 'user' });
     const planSession = await setup.sourceControl.sessions.create({
       sessionId: 'sess-plan',
       projectRepositoryId: setup.projectRepository.id,
@@ -634,7 +672,9 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   it("does not inherit an earlier session on another of the card's repositories", async () => {
-    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository({
+      modelScope: 'user',
+    });
     const installation = await sourceControl.installations.upsert({
       orgId: 'org-1',
       connectedByUserId: 'user-1',
@@ -677,7 +717,9 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   it('mints a fresh session when the held ref no longer resolves to the project', async () => {
-    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository({
+      modelScope: 'user',
+    });
     const installation = await sourceControl.installations.upsert({
       orgId: 'org-1',
       connectedByUserId: 'user-1',
@@ -734,7 +776,9 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   it('mints a fresh session when the held ref lives in another factory project', async () => {
-    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository({
+      modelScope: 'user',
+    });
     const otherProject = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Other' } });
     const installation = await sourceControl.installations.upsert({
       orgId: 'org-1',
@@ -796,8 +840,8 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it("attributes an approved decision's run to the approver, not the repo connector", async () => {
-    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+  it("attributes an approved decision's run to the approver, not the repo connector, on personal credentials", async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository({ modelScope: 'user' });
     const prepare = vi.fn(async () => ({}) as never);
 
     const input = bindingInput(project.id);
@@ -817,8 +861,8 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it("opens a card_action run under the clicker's id", async () => {
-    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+  it("opens a card_action run under the clicker's id on personal credentials", async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository({ modelScope: 'user' });
     const { item } = await seeded.workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',

@@ -132,7 +132,7 @@ export function createFactoryWorkItemTools(
         : `${slug} is not linked to this Factory, and it has no linked repositories.`,
     );
   };
-  const follow = (item: Card, reason: 'created' | 'subscribed') =>
+  const follow = (item: Card, reason: 'created' | 'moved' | 'subscribed') =>
     deps.workItems.subscribeToWorkItem({
       ...project,
       workItemId: item.id,
@@ -232,6 +232,9 @@ export function createFactoryWorkItemTools(
               }),
         });
         if (result.status === 'rejected') throw new Error(`The move was refused (${result.code}): ${result.reason}`);
+        // The move can start a phase session the Factory owns. Following the card is what lets
+        // this session hear when that run waits on someone, and answer it from here.
+        await follow(item, 'moved');
         return { workItemId: item.id, stage: result.stage, revision: result.revision };
       },
     }),

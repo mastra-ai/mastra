@@ -19,6 +19,7 @@ import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import {
   ensureFactorySourceSession,
   hydrateFactorySession,
+  requireOrganizationModelKey,
   resolveFactorySessionModel,
 } from '../session/factory-session.js';
 import { recordSessionRunStart } from '../session/run-audit.js';
@@ -28,7 +29,7 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -407,6 +408,18 @@ export function createFactorySessionTools(
     if (!project) throw new Error('This Factory no longer exists.');
     // A work-item start is a run, so a hybrid Factory uses the Factory's scope (as the Start route does).
     const modelScope = effectiveModelScope(project.modelScope, 'run');
+    // On the Factory's credentials the card's session is the Factory's own, as when the board starts it;
+    // the person asking stays the one who started it, and follows it from this session.
+    const ownerUserId = modelScope === 'factory' ? factoryPrincipalId(project.id) : scope.userId;
+    if (modelScope === 'factory') {
+      await requireOrganizationModelKey(
+        {
+          modelCredentials: deps.sessionModel.tenantCatalog?.credentials,
+          deploymentModelProviders: deps.sessionModel.tenantCatalog?.deploymentProviders,
+        },
+        project,
+      );
+    }
     const projectRepositoryId = await resolveRepository(sourceControl, item);
 
     const sessionId = globalThis.crypto.randomUUID();
@@ -417,7 +430,7 @@ export function createFactorySessionTools(
       sessionId,
       branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
       projectRepositoryId,
-      attributeToUserId: scope.userId,
+      attributeToUserId: ownerUserId,
       // A run works a shared card, so the org can open it and answer its approvals even when the session that
       // started it is private.
       visibility: 'org',
@@ -443,7 +456,7 @@ export function createFactorySessionTools(
     try {
       prepared = await coordinator.prepare({
         orgId: scope.orgId,
-        userId: scope.userId,
+        userId: ownerUserId,
         factoryProjectId: scope.factoryProjectId,
         sessionId: ensured.sessionId,
         threadTitle: title ?? `${label} ${role}`,
@@ -497,7 +510,7 @@ export function createFactorySessionTools(
     // The run's end reaches this item's followers through the session's listener.
     const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
     const kickoffContext = new RequestContext();
-    kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
+    kickoffContext.set('user', { workosId: ownerUserId, organizationId: scope.orgId });
     try {
       await session.sendSignal(
         { id: kickoffId, type: 'user', tagName: 'user', contents: prompt },

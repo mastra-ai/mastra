@@ -1051,12 +1051,55 @@ describe('factory_start_session in work-item mode', () => {
     expect(request.requestContext).toBeUndefined();
   });
 
-  it("starts a work-item role in a hybrid Factory on the Factory's scope, like the Start route", async () => {
-    const env = await withItem();
-    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
-    await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
+  // The person asked for the run, but the card's session is the Factory's: it runs on the
+  // organization's keys, and the person follows it from the session they asked in.
+  it.each(['hybrid', 'factory'] as const)(
+    'starts a work-item role in a %s Factory as the Factory, followed by the session that asked',
+    async modelScope => {
+      const env = await withItem();
+      await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope } });
+      const factory = `factory-project:${env.scope.factoryProjectId}`;
 
-    expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory' });
+      const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
+
+      expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory', userId: factory });
+      await expect(env.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ userId: factory });
+      const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
+      expect(session.state.get()).toMatchObject({ factoryOwnerUserId: factory, factoryModelScope: 'factory' });
+      expect(session.sendSignal.mock.calls[0]![1].requestContext.get('user')).toEqual({
+        workosId: factory,
+        organizationId: 'org-1',
+      });
+      const after = (await env.seed.workItems.get({ orgId: 'org-1', id: env.item.id }))!;
+      expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId, startedBy: factory });
+      expect(await env.subscriptions()).toEqual([
+        expect.objectContaining({ workItemId: env.item.id, userId: 'user-1', reason: 'started' }),
+      ]);
+    },
+  );
+
+  it('refuses to start a Factory-run role while the organization has no model key, and says what to add', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    // The caller's own key is not the Factory's to spend.
+    await env.seed.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'openai', {
+      type: 'api_key',
+      key: 'sk-personal',
+    });
+    const before = await env.sessionRows();
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
+      'Add an organization key under Settings → Models',
+    );
+
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect(await env.sessionRows()).toEqual(before);
+    expect(await env.subscriptions()).toEqual([]);
+
+    await env.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
   });
 
   it("bills the work-item session to the caller's credential tenant", async () => {

@@ -2,9 +2,11 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
 import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
+import { FactoryDispatchError } from '../rules/dispatch-errors.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
-import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryPrincipalId } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
 import type {
   SourceControlSession,
@@ -386,4 +388,28 @@ export async function hydrateFactorySession(
   }
   // Callers pin this id to the thread, so only report a model the session actually runs on.
   return switched ? selectedModelId : undefined;
+}
+
+/**
+ * A run owned by the Factory resolves the organization's model keys and nothing else.
+ * With none stored it cannot run however often it is retried, so say what to add
+ * instead of starting a run that dies on its first model call.
+ */
+export async function requireOrganizationModelKey(
+  sources:
+    | {
+        modelCredentials?: Pick<ModelCredentialsStorage, 'listCredentials'>;
+        /** Providers that run on the server process's own credentials, so need no stored key. */
+        deploymentModelProviders?: ReadonlySet<string>;
+      }
+    | undefined,
+  project: Pick<FactoryProject, 'id' | 'orgId'>,
+): Promise<void> {
+  if (!sources?.modelCredentials || sources.deploymentModelProviders?.size) return;
+  const credentials = await sources.modelCredentials.listCredentials(project.orgId, factoryPrincipalId(project.id));
+  if (credentials.some(credential => credential.scope === 'org')) return;
+  throw new FactoryDispatchError(
+    'factory_org_key_missing',
+    "This Factory runs its cards on the organization's model keys, and none is set. Add an organization key under Settings → Models, then retry.",
+  );
 }

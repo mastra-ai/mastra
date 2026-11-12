@@ -629,8 +629,8 @@ export const FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/** Why a session follows a work item: it filed it, started a role on it, or asked to. */
-export type WorkItemSubscriptionReason = 'created' | 'started' | 'subscribed';
+/** Why a session follows a work item: it filed it, moved it, started a role on it, or asked to. */
+export type WorkItemSubscriptionReason = 'created' | 'moved' | 'started' | 'subscribed';
 
 /** A session following a work item, so it hears what happens to it. */
 export interface WorkItemSubscription {
