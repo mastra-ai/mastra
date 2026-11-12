@@ -619,6 +619,9 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   if (messages.every(message => onScreenIndex.has(message))) return reconcileToolResults(anchored, messages);
 
+  const drawnToolCallIds = new Set(
+    anchored.entries.flatMap(entry => (entry.kind === 'message' ? toolCallIdsOf(entry.message.content.parts) : [])),
+  );
   const entries: TimelineEntry[] = [];
   let cursor = 0;
   let missing: MastraDBMessage[] = [];
@@ -626,7 +629,8 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   for (const message of messages) {
     const anchorIndex = onScreenIndex.get(message);
     if (anchorIndex === undefined) {
-      missing.push(message);
+      const unseen = withoutDrawnToolCalls(message, drawnToolCallIds);
+      if (unseen) missing.push(unseen);
       continue;
     }
 
@@ -638,6 +642,18 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   entries.push(...anchored.entries.slice(cursor), ...messagesToEntries(missing));
 
   return reconcileToolResults({ ...anchored, entries }, messages);
+}
+
+// A stored step of a streamed run can arrive unclaimed while its tool calls are
+// already drawn by the run's entry; inserting them again duplicates their cards.
+function withoutDrawnToolCalls(message: MastraDBMessage, drawn: Set<string>): MastraDBMessage | undefined {
+  const parts = message.content.parts.filter(part => {
+    const toolCallId = toolCallIdForPart(part);
+    return toolCallId === undefined || !drawn.has(toolCallId);
+  });
+  if (parts.length === message.content.parts.length) return message;
+  if (parts.length === 0) return undefined;
+  return { ...message, content: { ...message.content, parts } };
 }
 
 function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
@@ -713,13 +729,13 @@ function claimOnScreenEntries(
 
     for (const [index, candidate] of onScreen.entries()) {
       if (!candidate || (eligible && !eligible(candidate.entry))) continue;
-      const sameId = candidate.entry.id === message.id || candidate.entry.message.id === message.id;
-      // Tool call ids are unique, so every persisted step of a streamed run
-      // anchors to that run's one entry, not just the first step.
-      const sharesToolCall = toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
+      const sameMessage =
+        candidate.entry.id === message.id ||
+        candidate.entry.message.id === message.id ||
+        toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
       const alreadyDrawn = redrawsEntry(candidate, displayed, texts, toolCallIds);
 
-      const claimsIdentity = sharesToolCall || (sameId && !claimedEntries.has(index));
+      const claimsIdentity = sameMessage && !claimedEntries.has(index);
       const claimsText = alreadyDrawn && !claimedTexts.has(textClaim(index));
       if (!claimsIdentity && !claimsText) continue;
 

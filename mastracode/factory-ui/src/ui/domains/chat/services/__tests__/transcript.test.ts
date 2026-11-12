@@ -1389,6 +1389,70 @@ describe('transcript reducer mergeWindow', () => {
     });
 
     expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0]).filter(isToolInvocationPart)).toHaveLength(2);
+  });
+
+  it('keeps unseen text from a later stored step whose tool call is already drawn', () => {
+    const view: MastraMessagePart = {
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+    };
+    const plan: MastraMessagePart = {
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId: 'plan-1', toolName: 'submit_plan', args: {} },
+    };
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('streamed-turn', 'assistant', [view, plan]) },
+    });
+    const window = [
+      dbMessage('step-1', 'assistant', [view]),
+      dbMessage('step-2', 'assistant', [plan, { type: 'text', text: 'Final answer' }]),
+    ];
+
+    const next = transcriptReducer(state, { type: 'mergeWindow', messages: window });
+    const again = transcriptReducer(next, { type: 'mergeWindow', messages: window });
+
+    for (const merged of [next, again]) {
+      const parts = merged.entries.flatMap(messageParts);
+      expect(parts.filter(isToolInvocationPart)).toHaveLength(2);
+      expect(parts).toContainEqual({ type: 'text', text: 'Final answer' });
+    }
+  });
+
+  it('draws a tool call the stream missed from a stored step that repeats a drawn one', () => {
+    const tool = (toolCallId: string, toolName: string): MastraMessagePart => ({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: 'ok' },
+    });
+    const plan: MastraMessagePart = {
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId: 'plan-1', toolName: 'submit_plan', args: {} },
+    };
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('streamed-turn', 'assistant', [tool('a', 'view'), tool('b', 'view')]),
+      },
+    });
+    const window = [
+      dbMessage('step-1', 'assistant', [tool('a', 'view')]),
+      dbMessage('step-2', 'assistant', [tool('b', 'view'), plan]),
+      dbMessage('step-3', 'assistant', [tool('b', 'view'), { type: 'text', text: 'Final answer' }]),
+    ];
+
+    const next = transcriptReducer(state, { type: 'mergeWindow', messages: window });
+    const again = transcriptReducer(next, { type: 'mergeWindow', messages: window });
+
+    for (const merged of [next, again]) {
+      const parts = merged.entries.flatMap(messageParts);
+      const ids = parts.filter(isToolInvocationPart).map(part => part.toolInvocation.toolCallId);
+      expect(ids.sort()).toEqual(['a', 'b', 'plan-1']);
+      expect(parts).toContainEqual({ type: 'text', text: 'Final answer' });
+    }
   });
 
   it('does not redraw a step the stream has already written further', () => {
