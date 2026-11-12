@@ -4,6 +4,7 @@ import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import type { IMastraLogger } from '../../logger';
 import { LOCAL_MODEL_REQUEST_KEY } from '../../loop/run-scope-keys';
 import {
   getRunStreamSlot,
@@ -1893,6 +1894,11 @@ export class DurableAgent<
   // are empty on the DurableAgent instance. Every public/protected method that
   // reads those fields must be overridden to delegate to the wrapped agent.
   // ===========================================================================
+
+  override __setLogger(logger: IMastraLogger) {
+    super.__setLogger(logger);
+    this.#wrappedAgent.__setLogger(logger);
+  }
 
   // --- Model & LLM ---
   override getModel(options?: any) {
