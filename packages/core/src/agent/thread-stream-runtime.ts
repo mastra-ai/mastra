@@ -3439,6 +3439,12 @@ export class AgentThreadStreamRuntime {
       }
       for (const runId of ended) {
         if (this.#requeueUnadmittedForwards(state, key, runId)) {
+          // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
+          // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting.
+          if (state.activeThreadRunIds.get(key) === runId) {
+            state.activeThreadRunIds.delete(key);
+            state.activeThreadStreamIds.delete(key);
+          }
           await this.#drainPendingIdleSignals(state, pubsub, key, runId);
         }
       }

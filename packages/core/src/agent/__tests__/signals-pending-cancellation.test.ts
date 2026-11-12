@@ -2040,6 +2040,67 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it('drains the message once the lease drops a remote run whose end this runtime stopped watching', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const pubsub = new ControlledLeasePubSub();
+      const scope = { resourceId: 'vanished-remote', threadId: 'vanished-remote' };
+      const key = `${scope.resourceId}\u0000${scope.threadId}`;
+      const runId = 'vanished-remote-run';
+      const model = createTextStreamModel('recovered');
+      const agent = new Agent({
+        id: 'vanished-remote',
+        name: 'Vanished remote',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+        pubsub,
+      });
+      const follower = new AgentThreadStreamRuntime();
+      const observer = await follower.subscribeToThread(agent, scope, pubsub);
+      try {
+        pubsub.owners.set(key, 'old-remote-run');
+        await pubsub.publish(agentThreadStreamTopicForKey(key), {
+          type: 'agent.thread-stream',
+          runId: 'old-remote-run',
+          data: {
+            type: 'run-registered',
+            runId: 'old-remote-run',
+            streamId: 'old-stream',
+            streamSeq: 1,
+            agentId: agent.id,
+          },
+        });
+        await vi.waitFor(() => expect(observer.activeRunId()).toBe('old-remote-run'));
+        await follower.queueMessage(agent, 'recover me', scope, pubsub).accepted;
+        pubsub.owners.set(key, runId);
+        await pubsub.publish(agentThreadStreamTopicForKey(key), {
+          type: 'agent.thread-stream',
+          runId: 'old-remote-run',
+          data: { type: 'run-completed', runId: 'old-remote-run', streamId: 'old-stream' },
+        });
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === runId)).toBe(true),
+        );
+        await pubsub.publish(agentThreadStreamTopicForKey(key), {
+          type: 'agent.thread-stream',
+          runId,
+          data: { type: 'run-registered', runId, streamId: 'remote-stream', streamSeq: 1, agentId: agent.id },
+        });
+        await vi.waitFor(() => expect(observer.activeRunId()).toBe(runId));
+        observer.unsubscribe();
+        pubsub.owners.delete(key);
+        for (let tick = 0; tick < 5; tick++) {
+          await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+          await pubsub.flush();
+          await nextTick();
+        }
+        await vi.waitFor(() => expect(model.doStreamCalls).toHaveLength(1));
+      } finally {
+        observer.unsubscribe();
+        follower.resetForTests();
+      }
+    });
+
     it('counts a slow lease read once when the next check comes due before it returns', async () => {
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       const { scope, pubsub, model, stream, getStreamCount, deliver, releaseFollowUp, cleanup } =

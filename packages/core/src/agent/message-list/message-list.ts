@@ -2938,13 +2938,19 @@ export class MessageList {
   // into it. Stored history sits underneath the live turn, so a live message tied with a stored
   // one moves 1 ms later. Live messages that tie only with each other keep their timestamps.
   // A live message that ties later (a response stamped in the same millisecond) lands after the
-  // ones already moved off that time, so the turn keeps the order it was added in.
+  // ones already moved off that time, and a later live message that a moved one would now pass
+  // moves after it too, so the turn keeps the order it was added in. A message that was loaded
+  // from memory stays stored even if it is added again under another source, and a signal anchored
+  // before a message (precedesMessageId) keeps its place.
   private movedPastStoredTie = new Map<number, number>();
+  private seenAsStored = new WeakSet<MastraDBMessage>();
+  private movedOffStoredTie = new WeakSet<MastraDBMessage>();
 
   private moveLiveMessagesPastStoredTies(): void {
     const memory = this.memoryMessages;
     if (!memory.size) return;
-    const live = this.messages.filter(message => !memory.has(message));
+    for (const message of memory) this.seenAsStored.add(message);
+    const live = this.messages.filter(message => !this.seenAsStored.has(message));
     if (!live.length) return;
 
     const storedTimes = new Set<number>();
@@ -2953,12 +2959,22 @@ export class MessageList {
     }
 
     let moved = false;
+    // The last live message moved this pass; a later live one it would now pass moves after it too,
+    // unless an earlier pass already placed it (a later arrival is meant to land after those).
+    let movedUpTo: number | undefined;
     for (const message of live) {
+      if (this.isAnchoredSignal(message)) continue;
       const original = message.createdAt.getTime();
-      if (!storedTimes.has(original)) continue;
-      let time = (this.movedPastStoredTie.get(original) ?? original) + 1;
+      const passedBy =
+        movedUpTo !== undefined && original <= movedUpTo && !this.movedOffStoredTie.has(message)
+          ? movedUpTo
+          : undefined;
+      if (passedBy === undefined && !storedTimes.has(original)) continue;
+      let time = Math.max(this.movedPastStoredTie.get(original) ?? original, passedBy ?? original) + 1;
       while (storedTimes.has(time)) time++;
       this.movedPastStoredTie.set(original, time);
+      movedUpTo = time;
+      this.movedOffStoredTie.add(message);
 
       const previous = message.createdAt.toISOString();
       message.createdAt = new Date(time);
@@ -2968,6 +2984,13 @@ export class MessageList {
       moved = true;
     }
     if (moved) this.sortMessages();
+  }
+
+  // A signal placed just before the message it names (addSignal's precedesMessageId) keeps that place.
+  private isAnchoredSignal(message: MastraDBMessage): boolean {
+    const signal = message.content.metadata?.signal as { metadata?: { precedesMessageId?: unknown } } | undefined;
+    const precedes = signal?.metadata?.precedesMessageId;
+    return typeof precedes === 'string' && this.getMessageById(precedes) !== undefined;
   }
 
   private updateLastCreatedAt(message: MastraDBMessage): void {

@@ -66,4 +66,53 @@ describe('input stamped in the same millisecond as the stored history it follows
     expect(all[2]!.createdAt.getTime()).toBe(same.getTime());
     expect(all[3]!.createdAt.getTime()).toBe(same.getTime());
   });
+  it('keeps live inputs ahead of the response when moving them past a stored tie', () => {
+    const tie = new Date('2026-11-01T09:03:24.929Z').getTime();
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add([stored('a', 'user', 'a', new Date(tie)), stored('b', 'user', 'b', new Date(tie))], 'input');
+    list.add(stored('response', 'assistant', 'response', new Date(tie + 1)), 'response');
+    list.add(stored('history', 'assistant', 'history', new Date(tie)), 'memory');
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history', 'a', 'b', 'response']);
+  });
+
+  it('keeps a reminder anchored before its message when later messages are added', () => {
+    const tie = new Date('2026-11-01T09:03:24.929Z').getTime();
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(
+      [
+        stored('history', 'assistant', 'history', new Date(tie - 1)),
+        stored('successor', 'user', 'successor', new Date(tie)),
+      ],
+      'memory',
+    );
+    list.addSignal(
+      createSignal({
+        id: 'reminder',
+        type: 'system-reminder',
+        contents: 'gap',
+        metadata: { precedesMessageId: 'successor' },
+      }),
+    );
+    list.add(stored('response', 'assistant', 'response', new Date(tie + 10)), 'response');
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history', 'reminder', 'successor', 'response']);
+  });
+
+  it('leaves remembered messages in place when they are added again as the current turn', () => {
+    const same = new Date('2026-11-01T09:03:24.929Z');
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    const messages = [
+      stored('history', 'user', 'history', same),
+      stored('input', 'user', 'input', same),
+      stored('response', 'assistant', 'response', same),
+      stored('context', 'user', 'context', same),
+    ];
+    list.add(messages, 'memory');
+    list.add(messages[1]!, 'input');
+    list.add(messages[2]!, 'response');
+    list.add(messages[3]!, 'context');
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history', 'input', 'response', 'context']);
+  });
 });
