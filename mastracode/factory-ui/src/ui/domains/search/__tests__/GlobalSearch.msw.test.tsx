@@ -147,7 +147,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       }
       const cards = String(params.factoryProjectId) === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems) : [];
       if (options.serverNarrowsBySessionOnly) {
-        for (const ignored of ['started', 'q', 'limit', 'source']) query.delete(ignored);
+        for (const ignored of ['started', 'q', 'limit', 'source', 'workItemId']) query.delete(ignored);
       }
       const listed = listWorkItemsResponse(cards, query);
       return listed ? HttpResponse.json(listed) : HttpResponse.json({ error: 'invalid_scope' }, { status: 400 });
@@ -897,6 +897,65 @@ describe('Global search', () => {
     );
     expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
     expect(requests.createSessionRequests).toBe(0);
+  });
+
+  it('starts a session on a listed card that a later update pushed out of the search', async () => {
+    const cards: WorkItem[] = Array.from({ length: 21 }, (_, index) => ({
+      ...unstartedCard(`backlog-${index}`, `Backlog chore ${index}`, `2026-07-${String(index + 1).padStart(2, '0')}`),
+      board: 'custom',
+      metadata: { repository: 'mastra-ai/mastra' },
+    }));
+    stubSearchApi({ workItems: cards });
+    const starts: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+        starts.push(await request.json());
+        return HttpResponse.json({ threadId: 'thread-search' });
+      }),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const search = await openWithShortcut();
+    // The last of the 20 the search lists.
+    const row = await within(search).findByText('Backlog chore 1');
+
+    // Another card is touched since: the search would now list it in this one's place.
+    cards[0] = { ...cards[0], updatedAt: '2026-08-01T10:00:00.000Z' };
+    await user.click(row);
+
+    await waitFor(() =>
+      expect(starts).toEqual([expect.objectContaining({ workItem: expect.objectContaining({ id: 'backlog-1' }) })]),
+    );
+    expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
+  });
+
+  it('says a listed card was deleted since, and starts nothing on it', async () => {
+    const cards: WorkItem[] = [
+      {
+        ...unstartedCard('deleted-since', 'Card someone deletes', '2026-07-01'),
+        board: 'custom',
+        metadata: { repository: 'mastra-ai/mastra' },
+      },
+    ];
+    const requests = stubSearchApi({ workItems: cards });
+    const starts: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+        starts.push(await request.json());
+        return HttpResponse.json({ threadId: 'thread-search' });
+      }),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const search = await openWithShortcut();
+    const row = await within(search).findByText('Card someone deletes');
+
+    cards.length = 0;
+    await user.click(row);
+
+    expect(await screen.findByText(/This card no longer exists/)).toBeInTheDocument();
+    expect(requests.createSessionRequests).toBe(0);
+    expect(starts).toEqual([]);
   });
 
   it('reports a session failure while retaining navigation and Factories, then recovers on retry', async () => {

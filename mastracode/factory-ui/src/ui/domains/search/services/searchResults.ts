@@ -184,6 +184,7 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
       sourceLabel,
       stage,
       identifier,
+      // Not always in the identifier, which leaves out the key of a card filed in Factory itself.
       item.workItem?.key,
       searchedNumber(item),
       item.sourceKey,

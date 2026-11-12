@@ -306,15 +306,29 @@ export interface BoardSnapshot {
  * List the org's work items for a Factory project: the whole board, or with `only` a part of it.
  * `sessionId` and `scope: 'sessions'` ask for the cards holding that session or any session, with
  * the cards related to them; `started: 'false'` for the most recently updated cards holding no
- * session whose text has every word of `q`; `source` for the cards filed from those source ids or URLs.
+ * session whose text has every word of `q`; `source` for the cards filed from those source ids or
+ * URLs; `workItemId` for the cards with those ids.
  */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-  only?: { sessionId: string } | { scope: 'sessions' } | { started: 'false'; q: string } | { source: string[] },
+  only?:
+    | { sessionId: string }
+    | { scope: 'sessions' }
+    | { started: 'false'; q: string }
+    | { source: string[] }
+    | { workItemId: string[] },
 ): Promise<BoardSnapshot> {
-  const params = only && new URLSearchParams('source' in only ? only.source.map(source => ['source', source]) : only);
+  const params =
+    only &&
+    new URLSearchParams(
+      'source' in only
+        ? only.source.map(source => ['source', source])
+        : 'workItemId' in only
+          ? only.workItemId.map(id => ['workItemId', id])
+          : only,
+    );
   const data = await requestJson<{
     workItems: WireWorkItem[];
     runningSessionIds?: string[];
