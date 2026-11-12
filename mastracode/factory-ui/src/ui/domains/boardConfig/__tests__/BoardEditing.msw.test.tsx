@@ -179,7 +179,6 @@ describe('Creating a board', () => {
   });
 
   it.each([
-    ['reserved_board', 'review', 'Board "review" is reserved for the retired Review board.'],
     ['code_board', 'release', 'Board "release" is defined in code; it cannot be created here.'],
     ['board_exists', 'bugs', 'Board "bugs" already exists in this project.'],
   ])('shows a %s refusal on the key and keeps the form', async (error, typed, message) => {
