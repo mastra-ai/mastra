@@ -426,6 +426,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
 
     const pool = this.#queryable as Pool;
     const client = await pool.connect();
+    let releaseError: Error | undefined;
     try {
       await client.query('BEGIN');
       try {
@@ -433,11 +434,16 @@ class PgFactoryStorageOps implements FactoryStorageOps {
         await client.query('COMMIT');
         return result;
       } catch (error) {
-        await client.query('ROLLBACK');
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+          throw new AggregateError([error, rollbackError], 'Factory transaction and rollback both failed');
+        }
         throw error;
       }
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   }
 }

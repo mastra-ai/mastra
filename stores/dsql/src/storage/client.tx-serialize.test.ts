@@ -112,4 +112,25 @@ describe('TransactionClient COMMIT/ROLLBACK drain (dsql)', () => {
 
     expect(statements).toEqual(['BEGIN', 'FAIL1', 'ROLLBACK']);
   });
+
+  it('preserves the original failure and destroys the pooled client if rollback fails', async () => {
+    const { client, query } = createStrictClient();
+    const primary = new Error('operation failed');
+    const rollbackError = new Error('rollback failed');
+    query.mockImplementationOnce(async () => ({ rows: [] }) as QueryResult);
+    query.mockImplementationOnce(async () => {
+      throw rollbackError;
+    });
+    const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
+    const onRollbackError = vi.fn();
+    const adapter = new PoolAdapter(pool, onRollbackError);
+
+    await expect(
+      adapter.tx(async () => {
+        throw primary;
+      }),
+    ).rejects.toBe(primary);
+    expect(onRollbackError).toHaveBeenCalledWith(rollbackError);
+    expect(client.release).toHaveBeenCalledWith(true);
+  });
 });

@@ -82,6 +82,37 @@ describe('PgFactoryStorage capabilities', () => {
     }
   });
 
+  it('destroys the updateAtomic client if its rollback fails', async () => {
+    const storage = new PgFactoryStorage({ connectionString });
+    const primary = new Error('select failed');
+    const rollbackError = new Error('rollback failed');
+    const release = vi.fn();
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(primary)
+      .mockRejectedValueOnce(rollbackError);
+    const pool = storage.authDatabase().pool;
+
+    try {
+      await storage.ensureCollections([{ name: 'atomic_rollback_test', columns: { id: { type: 'uuid-pk' } } }]);
+      const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+      try {
+        const failure = await storage.ops
+          .updateAtomic('atomic_rollback_test', {}, async row => row)
+          .catch(error => error);
+        expect(failure).toBeInstanceOf(AggregateError);
+        expect(failure.errors).toEqual([primary, rollbackError]);
+        expect(query).toHaveBeenNthCalledWith(3, 'ROLLBACK');
+        expect(release).toHaveBeenCalledWith(rollbackError);
+      } finally {
+        connect.mockRestore();
+      }
+    } finally {
+      await storage.close();
+    }
+  });
+
   it('authDatabase exposes the shared pool tagged as postgres', () => {
     const storage = new PgFactoryStorage({ connectionString });
     const db = storage.authDatabase();

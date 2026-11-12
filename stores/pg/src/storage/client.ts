@@ -107,7 +107,10 @@ function truncateQuery(query: string, maxLength = 100): string {
  * Adapter that wraps a pg.Pool to implement DbClient.
  */
 export class PoolAdapter implements DbClient {
-  constructor(public readonly $pool: Pool) {}
+  constructor(
+    public readonly $pool: Pool,
+    private readonly onRollbackError?: (error: unknown) => void,
+  ) {}
 
   connect(): Promise<PoolClient> {
     return this.$pool.connect();
@@ -163,6 +166,7 @@ export class PoolAdapter implements DbClient {
 
   async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
     const client = await this.$pool.connect();
+    let destroyClient = false;
     try {
       await client.query('BEGIN');
       const txClient = new TransactionClient(client);
@@ -180,13 +184,13 @@ export class PoolAdapter implements DbClient {
         try {
           await client.query('ROLLBACK');
         } catch (rollbackError) {
-          // Log rollback failure but throw original error
-          console.error('Transaction rollback failed:', rollbackError);
+          destroyClient = true;
+          this.onRollbackError?.(rollbackError);
         }
         throw error;
       }
     } finally {
-      client.release();
+      client.release(destroyClient || undefined);
     }
   }
 }
@@ -327,11 +331,17 @@ export class PinnedClientAdapter implements DbClient {
    * the reliance on pg's internal queue.
    */
   #tail: Promise<unknown> = Promise.resolve();
+  #rollbackError: unknown;
 
   constructor(
     public readonly $pool: Pool,
     private readonly pinnedClient: PoolClient,
+    private readonly onRollbackError?: (error: unknown) => void,
   ) {}
+
+  get shouldDestroyClient(): boolean {
+    return this.#rollbackError !== undefined;
+  }
 
   /**
    * Run `fn` after any previously enqueued work on this pinned client has
@@ -339,7 +349,11 @@ export class PinnedClientAdapter implements DbClient {
    * resume on the next caller's turn.
    */
   #enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const next = this.#tail.then(fn, fn);
+    const run = async () => {
+      if (this.shouldDestroyClient) throw this.#rollbackError;
+      return fn();
+    };
+    const next = this.#tail.then(run, run);
     // Swallow rejection on the chained tail so a failing call doesn't
     // leave an unhandled rejection on later enqueues.
     this.#tail = next.catch(() => undefined);
@@ -435,7 +449,8 @@ export class PinnedClientAdapter implements DbClient {
         try {
           await this.pinnedClient.query('ROLLBACK');
         } catch (rollbackError) {
-          console.error('Transaction rollback failed:', rollbackError);
+          this.#rollbackError = rollbackError;
+          this.onRollbackError?.(rollbackError);
         }
         throw error;
       }

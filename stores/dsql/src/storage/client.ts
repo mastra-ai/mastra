@@ -106,7 +106,10 @@ function truncateQuery(query: string, maxLength = 100): string {
  * Adapter that wraps a pg.Pool to implement DbClient.
  */
 export class PoolAdapter implements DbClient {
-  constructor(public readonly $pool: Pool) {}
+  constructor(
+    public readonly $pool: Pool,
+    private readonly onRollbackError?: (error: unknown) => void,
+  ) {}
 
   connect(): Promise<PoolClient> {
     return this.$pool.connect();
@@ -162,6 +165,7 @@ export class PoolAdapter implements DbClient {
 
   async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
     const client = await this.$pool.connect();
+    let destroyClient = false;
     try {
       await client.query('BEGIN');
       const txClient = new TransactionClient(client);
@@ -179,13 +183,13 @@ export class PoolAdapter implements DbClient {
         try {
           await client.query('ROLLBACK');
         } catch (rollbackError) {
-          // Log rollback failure but throw original error
-          console.error('Transaction rollback failed:', rollbackError);
+          destroyClient = true;
+          this.onRollbackError?.(rollbackError);
         }
         throw error;
       }
     } finally {
-      client.release();
+      client.release(destroyClient || undefined);
     }
   }
 }
