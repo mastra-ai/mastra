@@ -3626,6 +3626,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "resourceId",
+      "tail",
       "threadId"
     ],
     "bodyParams": [],

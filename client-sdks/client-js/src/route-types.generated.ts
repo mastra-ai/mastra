@@ -182,7 +182,7 @@ type InputShared_Auxiliary_278 =
           };
     };
 
-type InputShared_Auxiliary_737 =
+type InputShared_Auxiliary_738 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,19 +227,19 @@ type InputShared_Auxiliary_737 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_737[];
+      args: InputShared_Auxiliary_738[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_737;
+      arg: InputShared_Auxiliary_738;
     };
 
-type InputShared_Auxiliary_811 = {
+type InputShared_Auxiliary_812 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_811[] | undefined;
+  children?: InputShared_Auxiliary_812[] | undefined;
 };
 
 type Shared_Auxiliary_800 = {
@@ -1849,7 +1849,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_737[];
+  predicates: InputShared_Auxiliary_738[];
 };
 
 type InputShared_Type_90 = {
@@ -1863,7 +1863,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_737;
+  predicate: InputShared_Auxiliary_738;
 };
 
 type InputShared_Type_91 =
@@ -15130,8 +15130,14 @@ export type GetWorkspacesWorkspaceIdSandboxProcessesPid_PathParams = {
   pid: string;
 };
 
-export type GetWorkspacesWorkspaceIdSandboxProcessesPid_QueryParams =
-  GetWorkspacesWorkspaceIdSandboxProcesses_QueryParams;
+export type GetWorkspacesWorkspaceIdSandboxProcessesPid_QueryParams = {
+  /** Only processes started on this memory thread. Also picks the sandbox when the workspace resolves one per thread. */
+  threadId?: string | undefined;
+  /** Only processes started for this resource. Resource-scoped callers are always limited to their own resource. */
+  resourceId?: string | undefined;
+  /** Return only the last N lines of stdout and stderr, like get_process_output. 0 or omitted returns all. */
+  tail?: number | undefined;
+};
 
 export type GetWorkspacesWorkspaceIdSandboxProcessesPid_Response = {
   pid: string;
@@ -19985,7 +19991,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_811[] | undefined;
+  files?: InputShared_Auxiliary_812[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -20043,7 +20049,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_811[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_812[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

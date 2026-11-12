@@ -54,7 +54,7 @@ describe('sandbox process routes', () => {
   });
   const list = (query: { threadId?: string; resourceId?: string }, requestContext?: RequestContext) =>
     WORKSPACE_LIST_SANDBOX_PROCESSES_ROUTE.handler({ ...route(requestContext), ...query } as any);
-  const read = (pid: string, query: { threadId?: string } = {}, requestContext?: RequestContext) =>
+  const read = (pid: string, query: { threadId?: string; tail?: number } = {}, requestContext?: RequestContext) =>
     WORKSPACE_GET_SANDBOX_PROCESS_ROUTE.handler({ ...route(requestContext), pid, ...query } as any);
   const kill = (pid: string, query: { threadId?: string } = {}, requestContext?: RequestContext) =>
     WORKSPACE_KILL_SANDBOX_PROCESS_ROUTE.handler({ ...route(requestContext), pid, ...query } as any);
@@ -112,15 +112,18 @@ describe('sandbox process routes', () => {
     });
 
     it('reads the output of an exited process without taking it from the agent', async () => {
-      const handle = await sandbox.processes!.spawn(`node -e "console.log('build done'); process.exit(2)"`, {
-        metadata: { threadId: 'thread-a' },
-      });
+      const handle = await sandbox.processes!.spawn(
+        `node -e "console.log('compiling'); console.log('build done'); process.exit(2)"`,
+        { metadata: { threadId: 'thread-a' } },
+      );
       await handle.wait();
 
       const first = await read(handle.pid, { threadId: 'thread-a' });
       expect(first).toMatchObject({ pid: handle.pid, running: false, exitCode: 2, stdoutTruncated: false });
+      expect(first.stdout).toContain('compiling');
       expect(first.stdout).toContain('build done');
       expect(await read(handle.pid, { threadId: 'thread-a' })).toEqual(first);
+      expect((await read(handle.pid, { threadId: 'thread-a', tail: 1 })).stdout.trim()).toBe('build done');
 
       // `get_process_output` reads the same way and still gets it.
       expect((await sandbox.processes!.get(handle.pid))?.stdout).toContain('build done');
@@ -140,6 +143,24 @@ describe('sandbox process routes', () => {
       await expectStatus(kill(handle.pid), 404);
     });
 
+    // Reading through the process manager would start a stopped cloud sandbox (or fail on a destroyed one).
+    it('reports no processes for a sandbox that was never started, and leaves it unstarted', async () => {
+      expect(await list({})).toEqual({ processes: [] });
+      await expectStatus(read('1234'), 404);
+      await expectStatus(kill('1234'), 404);
+      expect(sandbox.status).not.toBe('running');
+    });
+
+    it('reports no processes for a stopped sandbox, and leaves it stopped', async () => {
+      const handle = await start(sandbox, 'server', { threadId: 'thread-a' });
+      await sandbox._stop();
+
+      expect(await list({ threadId: 'thread-a' })).toEqual({ processes: [] });
+      await expectStatus(read(handle.pid, { threadId: 'thread-a' }), 404);
+      await expectStatus(kill(handle.pid, { threadId: 'thread-a' }), 404);
+      expect(sandbox.status).toBe('stopped');
+    });
+
     it('needs workspaces:read to list or read processes and workspaces:write to kill them', () => {
       expect(getEffectivePermission(WORKSPACE_LIST_SANDBOX_PROCESSES_ROUTE)).toBe('workspaces:read');
       expect(getEffectivePermission(WORKSPACE_GET_SANDBOX_PROCESS_ROUTE)).toBe('workspaces:read');
@@ -148,36 +169,52 @@ describe('sandbox process routes', () => {
   });
 
   describe('with a sandbox resolved per thread', () => {
+    // Each resolver call stands for provisioning a cloud sandbox.
+    let resolved: string[];
+
     function threadWorkspace(withCacheKey: boolean) {
-      const sandboxes = new Map<string, LocalSandbox>();
-      const sandboxFor = (threadId: string) => {
-        let sandbox = sandboxes.get(threadId);
-        if (!sandbox) {
-          sandbox = new LocalSandbox({ workingDirectory: dir });
-          sandboxes.set(threadId, sandbox);
-          cleanups.push(() => sandbox!.destroy());
-        }
-        return sandbox;
-      };
-      const threadOf = (requestContext: RequestContext) => requestContext.get(MASTRA_THREAD_ID_KEY) as string;
+      resolved = [];
+      const threadOf = (requestContext: RequestContext) =>
+        requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
       workspace = new Workspace({
         id: 'ws-processes',
-        // Without a cache key the resolver runs per request; a fresh sandbox has none of the agent's processes.
-        sandbox: ({ requestContext }) =>
-          withCacheKey ? sandboxFor(threadOf(requestContext)) : new LocalSandbox({ workingDirectory: dir }),
+        sandbox: ({ requestContext }) => {
+          resolved.push(threadOf(requestContext) ?? '(none)');
+          const sandbox = new LocalSandbox({ workingDirectory: dir });
+          cleanups.push(() => sandbox.destroy());
+          return sandbox;
+        },
         ...(withCacheKey ? { sandboxCacheKey: ({ requestContext }) => threadOf(requestContext) } : {}),
       });
       mastra = new Mastra({ logger: false, workspace });
-      return sandboxFor;
     }
 
-    it("finds a thread's processes in that thread's sandbox", async () => {
-      const sandboxFor = threadWorkspace(true);
-      const handle = await start(sandboxFor('thread-a'), 'a', { threadId: 'thread-a' });
+    // The sandbox an agent run on the thread gets.
+    async function agentSandbox(threadId: string) {
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+      return (await workspace.resolveSandbox({ requestContext })) as LocalSandbox;
+    }
+
+    it("finds a thread's processes in the sandbox its agent used", async () => {
+      threadWorkspace(true);
+      const handle = await start(await agentSandbox('thread-a'), 'a', { threadId: 'thread-a' });
 
       expect((await list({ threadId: 'thread-a' })).processes.map(p => p.pid)).toEqual([handle.pid]);
       expect((await read(handle.pid, { threadId: 'thread-a' })).stdout).toContain('a');
-      expect((await list({ threadId: 'thread-b' })).processes).toEqual([]);
+      expect(resolved).toEqual(['thread-a']);
+    });
+
+    it('never provisions a sandbox for a request without a thread or for a thread that has none', async () => {
+      threadWorkspace(true);
+      const handle = await start(await agentSandbox('thread-a'), 'a', { threadId: 'thread-a' });
+
+      for (const request of [list({}), list({ threadId: 'thread-b' }), read(handle.pid), kill(handle.pid)]) {
+        const error = await expectStatus(request, 404);
+        expect(error.message).toContain('pass the threadId or resourceId');
+      }
+      expect(resolved).toEqual(['thread-a']);
+      expect(handle.exitCode).toBeUndefined();
     });
 
     it('explains how to make the sandbox findable when it has no cache key', async () => {
@@ -185,6 +222,7 @@ describe('sandbox process routes', () => {
 
       const error = await expectStatus(list({ threadId: 'thread-a' }), 404);
       expect(error.message).toContain('configure sandboxCacheKey');
+      expect(resolved).toEqual([]);
     });
   });
 });

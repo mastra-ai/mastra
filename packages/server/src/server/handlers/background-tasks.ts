@@ -133,7 +133,15 @@ export const CANCEL_BACKGROUND_TASK_ROUTE = createRoute({
       throw new HTTPException(404, { message: 'Background task not found' });
     }
 
-    await bgManager.cancel(backgroundTaskId);
+    try {
+      await bgManager.cancel(backgroundTaskId);
+    } catch (error) {
+      // Deleted between the read above and the cancel.
+      if (error instanceof Error && error.message.startsWith('Task not found')) {
+        throw new HTTPException(404, { message: 'Background task not found' });
+      }
+      throw error;
+    }
     const cancelled = await bgManager.getTask(backgroundTaskId);
     if (!cancelled) throw new HTTPException(404, { message: 'Background task not found' });
     return cancelled;

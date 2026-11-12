@@ -15,6 +15,7 @@ import type {
   WorkspaceFilesystem,
   CompositeFilesystem,
   ProcessMetadata,
+  WorkspaceSandbox,
 } from '@mastra/core/workspace';
 
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
@@ -68,6 +69,7 @@ import {
   // Sandbox process schemas
   sandboxProcessPathParams,
   sandboxProcessQuerySchema,
+  sandboxProcessOutputQuerySchema,
   listSandboxProcessesResponseSchema,
   sandboxProcessOutputResponseSchema,
   killSandboxProcessResponseSchema,
@@ -1799,9 +1801,11 @@ export const WORKSPACE_SKILLS_SH_ROUTES = [
 // Sandbox Process Routes
 // =============================================================================
 
-// Same wording as the `get_process_output` and `kill_process` tools.
-const DYNAMIC_SANDBOX_HINT =
+// Same wording as `getDynamicSandboxCacheKeyHint` in the `get_process_output` and `kill_process` tools.
+const NO_CACHE_KEY_HINT =
   ' If this process was started from a dynamic sandbox resolver, configure sandboxCacheKey or have the resolver return the same sandbox for follow-up calls.';
+const CACHE_KEY_HINT =
+  " If this process was started in a sandbox resolved per thread or resource, pass the threadId or resourceId the workspace's sandboxCacheKey reads.";
 
 interface ProcessScope {
   threadId?: string;
@@ -1809,10 +1813,10 @@ interface ProcessScope {
 }
 
 /**
- * Finds the sandbox processes a request may see. A resolver-backed sandbox is looked up with
- * the request's thread and resource, so a `sandboxCacheKey` keyed on either finds the sandbox
- * the agent used. Without a cache key every request resolves a new sandbox, which never holds
- * the agent's processes.
+ * Finds the sandbox processes a request may see. Reading never creates or starts a sandbox:
+ * a resolver-backed sandbox is only found when the agent's run already cached it under the
+ * request's `sandboxCacheKey` (computed with the requested thread and resource), and a sandbox
+ * that isn't running reports no processes instead of being started by the process manager.
  */
 async function getSandboxProcesses(
   mastra: any,
@@ -1829,21 +1833,26 @@ async function getSandboxProcesses(
     throw new HTTPException(404, { message: 'Workspace not found' });
   }
 
-  let sandbox = workspace.sandbox;
+  let sandbox: WorkspaceSandbox | undefined = workspace.sandbox;
+  let hint = '';
   if (workspace.hasSandboxResolver?.()) {
     if (!workspace.hasSandboxCacheKey?.()) {
-      throw new HTTPException(404, { message: `Sandbox not found for this request.${DYNAMIC_SANDBOX_HINT}` });
+      throw new HTTPException(404, { message: `Sandbox not found for this request.${NO_CACHE_KEY_HINT}` });
     }
-    const resolveContext = new RequestContext(requestContext.entries());
-    if (scope.threadId) resolveContext.set(MASTRA_THREAD_ID_KEY, scope.threadId);
-    if (scope.resourceId) resolveContext.set(MASTRA_RESOURCE_ID_KEY, scope.resourceId);
-    sandbox = await workspace.resolveSandbox({ requestContext: resolveContext });
+    hint = CACHE_KEY_HINT;
+    const lookupContext = new RequestContext(requestContext.entries());
+    if (scope.threadId) lookupContext.set(MASTRA_THREAD_ID_KEY, scope.threadId);
+    if (scope.resourceId) lookupContext.set(MASTRA_RESOURCE_ID_KEY, scope.resourceId);
+    sandbox = await workspace.getCachedSandbox?.({ requestContext: lookupContext });
+    if (!sandbox) {
+      throw new HTTPException(404, { message: `Sandbox not found for this request.${hint}` });
+    }
   }
   if (!sandbox?.processes) {
     throw new HTTPException(404, { message: 'No sandbox with background processes configured' });
   }
 
-  return { processes: sandbox.processes, scope, hint: workspace.hasSandboxResolver?.() ? DYNAMIC_SANDBOX_HINT : '' };
+  return { processes: sandbox.processes, running: sandbox.status === 'running', scope, hint };
 }
 
 /** Processes outside the scope read as missing, so their existence is not disclosed. */
@@ -1851,6 +1860,36 @@ function inScope(metadata: ProcessMetadata | undefined, scope: ProcessScope): bo
   if (scope.resourceId !== undefined && metadata?.resourceId !== scope.resourceId) return false;
   if (scope.threadId !== undefined && metadata?.threadId !== scope.threadId) return false;
   return true;
+}
+
+/**
+ * The handle for a pid the request may see. A scoped request checks the process list first:
+ * `get()` can attach a provider process this manager never tracked, which would then stay
+ * tracked after the request was refused.
+ */
+async function getScopedProcess(
+  { processes, running, scope, hint }: Awaited<ReturnType<typeof getSandboxProcesses>>,
+  pid: string,
+) {
+  const notFound = () => new HTTPException(404, { message: `Process ${pid} not found.${hint}` });
+  if (!running) throw notFound();
+  if (scope.resourceId !== undefined || scope.threadId !== undefined) {
+    const listed = (await processes.list()).find(info => info.pid === pid);
+    if (!listed || !inScope(listed.metadata, scope)) throw notFound();
+  }
+  const handle = await processes.get(pid, { release: false });
+  if (!handle || !inScope(handle.metadata, scope)) throw notFound();
+  return handle;
+}
+
+/** The last `tail` lines of `output`, like `get_process_output`: either sign counts, 0 or omitted keeps everything. */
+function tailLines(output: string, tail: number | undefined): string {
+  const n = Math.floor(Math.abs(tail ?? 0));
+  if (!output || n === 0) return output;
+  const trailingNewline = output.endsWith('\n');
+  const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
+  if (lines.length <= n) return output;
+  return lines.slice(-n).join('\n') + (trailingNewline ? '\n' : '');
 }
 
 export const WORKSPACE_LIST_SANDBOX_PROCESSES_ROUTE = createRoute({
@@ -1866,10 +1905,11 @@ export const WORKSPACE_LIST_SANDBOX_PROCESSES_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, workspaceId, threadId, resourceId, requestContext }) => {
     try {
-      const { processes, scope } = await getSandboxProcesses(mastra, workspaceId, requestContext, {
+      const { processes, running, scope } = await getSandboxProcesses(mastra, workspaceId, requestContext, {
         threadId,
         resourceId,
       });
+      if (!running) return { processes: [] };
       const listed = await processes.list();
       return { processes: listed.filter(info => inScope(info.metadata, scope)) };
     } catch (error) {
@@ -1883,30 +1923,24 @@ export const WORKSPACE_GET_SANDBOX_PROCESS_ROUTE = createRoute({
   path: '/workspaces/:workspaceId/sandbox/processes/:pid',
   responseType: 'json',
   pathParamSchema: sandboxProcessPathParams,
-  queryParamSchema: sandboxProcessQuerySchema,
+  queryParamSchema: sandboxProcessOutputQuerySchema,
   responseSchema: sandboxProcessOutputResponseSchema,
   summary: 'Get sandbox process output',
   description:
     'Returns the status and retained output of a background process. Reading it here does not release an exited process, so the agent can still read it.',
   tags: ['Workspace'],
-  handler: async ({ mastra, workspaceId, pid, threadId, resourceId, requestContext }) => {
+  handler: async ({ mastra, workspaceId, pid, threadId, resourceId, tail, requestContext }) => {
     try {
-      const { processes, scope, hint } = await getSandboxProcesses(mastra, workspaceId, requestContext, {
-        threadId,
-        resourceId,
-      });
-      const handle = await processes.get(pid, { release: false });
-      if (!handle || !inScope(handle.metadata, scope)) {
-        throw new HTTPException(404, { message: `Process ${pid} not found.${hint}` });
-      }
+      const sandbox = await getSandboxProcesses(mastra, workspaceId, requestContext, { threadId, resourceId });
+      const handle = await getScopedProcess(sandbox, pid);
       return {
         pid: handle.pid,
         command: handle.command,
         running: handle.exitCode === undefined,
         exitCode: handle.exitCode,
         metadata: handle.metadata,
-        stdout: handle.stdout,
-        stderr: handle.stderr,
+        stdout: tailLines(handle.stdout, tail),
+        stderr: tailLines(handle.stderr, tail),
         stdoutTruncated: handle.stdoutTruncated,
         stderrTruncated: handle.stderrTruncated,
       };
@@ -1929,15 +1963,9 @@ export const WORKSPACE_KILL_SANDBOX_PROCESS_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, workspaceId, pid, threadId, resourceId, requestContext }) => {
     try {
-      const { processes, scope, hint } = await getSandboxProcesses(mastra, workspaceId, requestContext, {
-        threadId,
-        resourceId,
-      });
-      const handle = await processes.get(pid, { release: false });
-      if (!handle || !inScope(handle.metadata, scope)) {
-        throw new HTTPException(404, { message: `Process ${pid} not found.${hint}` });
-      }
-      return { pid, killed: await processes.kill(pid) };
+      const sandbox = await getSandboxProcesses(mastra, workspaceId, requestContext, { threadId, resourceId });
+      await getScopedProcess(sandbox, pid);
+      return { pid, killed: await sandbox.processes.kill(pid) };
     } catch (error) {
       return handleWorkspaceError(error, 'Error killing sandbox process');
     }

@@ -514,6 +514,14 @@ export const sandboxProcessQuerySchema = z.object({
     ),
 });
 
+export const sandboxProcessOutputQuerySchema = sandboxProcessQuerySchema.extend({
+  tail: z.coerce
+    .number()
+    .int()
+    .optional()
+    .describe('Return only the last N lines of stdout and stderr, like get_process_output. 0 or omitted returns all.'),
+});
+
 export const sandboxProcessMetadataSchema = z.object({
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
