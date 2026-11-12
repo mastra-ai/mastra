@@ -146,6 +146,7 @@ export function buildFullPromptSections(ctx: PromptContext, loadedInstructions?:
     plansDir: getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir }),
   });
 
+  const hasSubagents = ctx.hasSubagents !== false && !deniedTools.has('subagent');
   // Map new context to base context
   const baseCtx: BasePromptContext = {
     projectPath: ctx.workingDir || '(no workspace attached)',
@@ -159,7 +160,10 @@ export function buildFullPromptSections(ctx: PromptContext, loadedInstructions?:
     coAuthorName: ctx.coAuthorName,
     coAuthorEmail: ctx.coAuthorEmail,
     activePlan: ctx.state?.activePlan,
-    hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
+    hasSubagents,
+    // The tool guidance then says when to run one subagent in the background, which the
+    // base prompt's parallel-only rule would contradict.
+    backgroundSubagents: hasSubagents && !!ctx.backgroundTools,
     planApprovalStartsGoal: ctx.planApprovalStartsGoal,
     toolGuidance,
   };
