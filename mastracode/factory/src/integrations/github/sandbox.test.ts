@@ -417,6 +417,39 @@ describe('materializeRepo', () => {
     expect(sandbox.calls).toHaveLength(0);
   });
 
+  it('refuses a default branch git could read as an option', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await materializeRepo(makeRow(), makeRepoInfo({ defaultBranch: '-main' }), sandbox, 'tok').catch(
+      e => e,
+    );
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
+
+  it('refuses a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await materializeRepo(
+      makeRow(),
+      makeRepoInfo({ repoFullName: 'octocat/../secret' }),
+      sandbox,
+      'tok',
+    ).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
+
+  it('refuses a clone URL whose path rewrites to a different repository', async () => {
+    for (const cloneUrl of [
+      'https://github.com/octocat/../secret.git',
+      'https://github.com/octocat/%2e%2e/secret.git',
+    ]) {
+      const sandbox = new FakeSandbox();
+      const err = await materializeRepo(makeRow(), makeRepoInfo({ cloneUrl }), sandbox, 'tok').catch(e => e);
+      expect(err).toBeInstanceOf(MaterializeError);
+      expect(sandbox.calls).toHaveLength(0);
+    }
+  });
+
   it('refuses to run git when the repo full name is not owner/name shaped', async () => {
     const sandbox = new FakeSandbox();
     const err = await materializeRepo(makeRow(), makeRepoInfo({ repoFullName: 'evil; whoami' }), sandbox, 'tok').catch(
@@ -429,6 +462,16 @@ describe('materializeRepo', () => {
 
 describe('checkoutSessionBranch', () => {
   const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
+
+  it('does not fetch a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      ...opts,
+      repoFullName: 'octocat/../secret',
+    }).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
 
   it('removes the legacy environment credential helper for GitLab sessions', async () => {
     const sandbox = new FakeSandbox(script => {

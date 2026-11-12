@@ -53,7 +53,7 @@ export function scopedSnapshot(
   parkedSessionIds: readonly string[],
   total?: number,
 ): BoardSnapshot {
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, { total });
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, etagDigest, { total });
 }
 
 /** What moved on a board, for the one reader whose cursor it answers: nothing of it is kept. */
@@ -68,7 +68,7 @@ export function movedBody(body: unknown): Pick<BoardSnapshot, 'json' | 'gzipped'
  */
 export function hashedBody(body: unknown): Pick<BoardSnapshot, 'etag' | 'json'> {
   const json = JSON.stringify(body);
-  return { etag: `W/"${sha1(json)}"`, json };
+  return { etag: `W/"${etagDigest(json)}"`, json };
 }
 
 const checks = new WeakMap<readonly Card[], string>();
@@ -96,7 +96,7 @@ function snapshot(
   }
   // Everything the body holds beside the cards: a 304 must never hide a change to any of it.
   const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, ...more });
-  const etag = `W/"${cards.id}.${sha1(rest)}"`;
+  const etag = `W/"${cards.id}.${etagDigest(rest)}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 
   const json = `{"workItems":${cards.json},${rest.slice(1)}`;
@@ -106,8 +106,8 @@ function snapshot(
   return cards.latest;
 }
 
-function sha1(text: string): string {
-  return createHash('sha1').update(text).digest('base64url');
+function etagDigest(text: string): string {
+  return createHash('sha256').update(text).digest('base64url');
 }
 
 /** Whether an `If-None-Match` header names this ETag (weak comparison, as for GET). */
