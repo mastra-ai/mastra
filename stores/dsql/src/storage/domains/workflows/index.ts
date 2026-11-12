@@ -61,6 +61,18 @@ function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipReco
   };
 }
 
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status`, `timestamp`, and
+ * for a nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths are
+ * read, so `context` is never sent. The snapshot is stored as TEXT, so each path casts it.
+ */
+const SUMMARY_SNAPSHOT_SQL = `(jsonb_build_object('status', snapshot::jsonb -> 'status', 'timestamp', snapshot::jsonb -> 'timestamp')
+  || CASE WHEN jsonb_typeof(snapshot::jsonb -> 'parentWorkflow') = 'object'
+    THEN jsonb_build_object('parentWorkflow', jsonb_build_object(
+      'workflowId', snapshot::jsonb -> 'parentWorkflow' -> 'workflowId',
+      'runId', snapshot::jsonb -> 'parentWorkflow' -> 'runId'))
+    ELSE '{}'::jsonb END)`;
+
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
   if (typeof parsedSnapshot === 'string') {
@@ -714,6 +726,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     page,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -769,8 +782,12 @@ export class WorkflowsDSQL extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : undefined;
 
+      // init() adds resourceId and the Z columns to older tables, so they can be named here.
+      const columns = summary
+        ? `workflow_name, run_id, "resourceId", ${SUMMARY_SNAPSHOT_SQL} AS snapshot, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"`
+        : '*';
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+          SELECT ${columns} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
