@@ -9,18 +9,6 @@ import {
   listRepositoryPullRequests,
 } from '../ui/domains/factory/services/factory';
 
-/** Board intake candidates come from external APIs (GitHub / Linear via the
- * server) — poll on a gentler cadence than the DB-backed work-items list. */
-export const INTAKE_POLL_MS = 30_000;
-
-/** Back-off once the feed fails: each poll burns the installation's mint budget,
- * but the feed must still self-heal after the connection is repaired. */
-export const INTAKE_ERROR_POLL_MS = 5 * 60_000;
-
-function intakePollInterval(query: { state: { status: string } }): number {
-  return query.state.status === 'error' ? INTAKE_ERROR_POLL_MS : INTAKE_POLL_MS;
-}
-
 /** Each linked repository's next page; a repository drops out once it is exhausted. */
 type RepositoryPages = Record<string, number>;
 
@@ -36,7 +24,7 @@ function remainingPages(pages: RepositoryPages): RepositoryPages | undefined {
  * Read one page from every repository still holding more. A repository whose
  * read fails is skipped so one broken link cannot blank every other
  * repository's intake; the feed only errors when every repository fails, and
- * the next poll retries them all from page one.
+ * the next read retries them all from page one.
  */
 async function loadRepositoryPages<T>(
   pages: RepositoryPages,
@@ -76,10 +64,7 @@ export function useProjectIssuesQuery(projectRepositoryIds: readonly string[], l
     initialPageParam: firstPages(projectRepositoryIds),
     getNextPageParam: lastPage => remainingPages(lastPage.next),
     select: data => data.pages.flatMap(page => page.items),
-    // New intake must show up on the board without a reload. The endpoint
-    // proxies the live GitHub API (and a refetch replays every loaded page),
-    // so poll gently and refresh when the user returns to the tab.
-    refetchInterval: intakePollInterval,
+    // The endpoint proxies the live GitHub API: read when search opens and on return to the tab, never on a timer.
     refetchOnWindowFocus: true,
   });
 }
@@ -100,8 +85,6 @@ export function useProjectPullRequestsQuery(projectRepositoryIds: readonly strin
     initialPageParam: firstPages(projectRepositoryIds),
     getNextPageParam: lastPage => remainingPages(lastPage.next),
     select: data => data.pages.flatMap(page => page.items),
-    // Same intake-freshness contract as the issues feed above.
-    refetchInterval: intakePollInterval,
     refetchOnWindowFocus: true,
   });
 }

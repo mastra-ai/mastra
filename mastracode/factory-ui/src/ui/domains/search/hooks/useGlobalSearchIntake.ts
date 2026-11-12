@@ -13,8 +13,8 @@ const NO_REPOSITORIES: readonly string[] = [];
 
 /**
  * Live intake feeds: a card is persisted only once somebody acts on a candidate, so a PR/MR opened
- * minutes ago is searchable nowhere else. GitHub feeds cover every linked GitHub repository with the
- * same query keys as the board Intake column; GitLab follows the first linked repository like the board.
+ * minutes ago is searchable nowhere else. GitHub feeds cover every linked GitHub repository; GitLab
+ * follows the first linked one. Each is read when search opens, and none on a timer.
  */
 export function useGlobalSearchIntake(
   factoryProjectId: string,

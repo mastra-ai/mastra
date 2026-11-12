@@ -12,12 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { GithubIssue, GithubPullRequest } from '../../ui/domains/factory/services/factory';
-import {
-  INTAKE_ERROR_POLL_MS,
-  INTAKE_POLL_MS,
-  useProjectIssuesQuery,
-  useProjectPullRequestsQuery,
-} from '../useFactoryData';
+import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../useFactoryData';
 
 const PROJECT_ID = 'github-project-1';
 const ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/issues`;
@@ -102,33 +97,6 @@ describe('useProjectIssuesQuery', () => {
     expect(hit).not.toHaveBeenCalled();
   });
 
-  it('given new intake arrives after mount, when the poll interval elapses, then the feed refreshes without a reload', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      let hits = 0;
-      const freshIssue: GithubIssue = { ...issues[0], number: 99, title: 'Fresh intake' };
-      server.use(
-        http.get(ISSUES_URL, () => {
-          hits += 1;
-          return hits === 1
-            ? HttpResponse.json({ issues, nextPage: null })
-            : HttpResponse.json({ issues: [...issues, freshIssue], nextPage: null });
-        }),
-      );
-
-      const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
-      await waitFor(() => expect(result.current.data).toBeDefined());
-      expect(result.current.data).toHaveLength(1);
-
-      await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS + 1_000);
-
-      await waitFor(() => expect(result.current.data).toHaveLength(2));
-      expect(result.current.data?.map(issue => issue.number)).toEqual([12, 99]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('given the server fails, when the hook resolves, then it surfaces the server message', async () => {
     server.use(
       http.get(ISSUES_URL, () => HttpResponse.json({ error: 'github_error', message: 'boom' }, { status: 502 })),
@@ -139,31 +107,6 @@ describe('useProjectIssuesQuery', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBeInstanceOf(Error);
     expect((result.current.error as Error).message).toBe('boom');
-  });
-
-  it('given the feed keeps failing, when the normal poll interval elapses, then it backs off instead of hammering', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      let hits = 0;
-      server.use(
-        http.get(ISSUES_URL, () => {
-          hits += 1;
-          return HttpResponse.json({ error: 'github_error', message: 'installation unavailable' }, { status: 502 });
-        }),
-      );
-
-      const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
-      await waitFor(() => expect(result.current.isError).toBe(true));
-      expect(hits).toBe(1);
-
-      await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS + 1_000);
-      expect(hits).toBe(1);
-
-      await vi.advanceTimersByTimeAsync(INTAKE_ERROR_POLL_MS);
-      await waitFor(() => expect(hits).toBe(2));
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 

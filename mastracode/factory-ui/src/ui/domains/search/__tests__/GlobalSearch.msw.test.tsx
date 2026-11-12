@@ -4,7 +4,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
@@ -1486,6 +1486,24 @@ describe('Global search', () => {
     const results = within(dialog).getByRole('region', { name: 'Search results' });
     await waitFor(() => expect(within(results).getAllByRole('option')).toHaveLength(1));
     expect(within(results).getByText('Review Sessions')).toBeInTheDocument();
+  });
+
+  it('reads the intake feeds once and sends no further request while it stays open and idle', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const requests = stubSearchApi();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    expect(await within(dialog).findByText('Harden the review board drop target')).toBeInTheDocument();
+    const read = requests.intakeRequests;
+    expect(read).toBeGreaterThan(0);
+
+    // Two minutes: four of the 30 second polls the feeds used to run.
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+
+    expect(requests.intakeRequests).toBe(read);
   });
 
   it('keeps board cards searchable when the GitHub intake feeds fail', async () => {

@@ -10,7 +10,7 @@ import {
   listGitLabMergeRequests,
   listGitLabIssues,
 } from '../ui/domains/factory/services/gitlab';
-import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
+import { DETAIL_STALE_MS } from './useFactoryData';
 
 export function gitLabStatusQueryOptions(baseUrl: string) {
   return queryOptions({ queryKey: queryKeys.gitlabStatus(baseUrl), queryFn: () => fetchGitLabStatus(baseUrl) });
@@ -41,7 +41,6 @@ export function useGitLabIssuesQuery(factoryProjectId: string | undefined) {
     getNextPageParam: lastPage => lastPage.nextCursor,
     enabled: factoryProjectId !== undefined,
     select: data => data.pages.flatMap(page => page.issues),
-    refetchInterval: INTAKE_POLL_MS,
     refetchOnWindowFocus: true,
   });
 }
@@ -73,7 +72,6 @@ export function useGitLabMergeRequestsQuery(
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(factoryProjectId && projectRepositoryId),
     select: data => data.pages.flatMap(page => page.pullRequests),
-    refetchInterval: INTAKE_POLL_MS,
     refetchOnWindowFocus: true,
   });
 }
