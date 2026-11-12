@@ -853,4 +853,51 @@ describe('issue reconcilers', () => {
     expect((await seeded.workItems.get({ orgId: 'org-1', id: other.id }))?.workItem.labels).toEqual(['triage']);
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
+
+  it('keeps what another write changed on the card while Linear was being read', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const card = (
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: project.createdBy,
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+          title: 'ENG-42: Issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: { linearIssueId: 'linear-uuid', labels: ['triage'], openPullRequestNumber: 3 },
+        },
+      })
+    ).item;
+    const intake = {
+      resolveIntakeDispatch: vi
+        .fn()
+        .mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
+      getIssue: vi.fn(async () => {
+        // A pull request opens for the card while Linear answers.
+        await seeded.workItems.syncCard({
+          orgId: 'org-1',
+          id: card.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { openPullRequestNumber: 7 } },
+        });
+        return issue({ labels: ['area: docs'] });
+      }),
+    } as unknown as Intake;
+    const sync = attachLinearIssueReconciler(
+      { intake, rules: resolveLinearRules(undefined) },
+      {
+        storage: { projects: seeded.projects },
+        runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createTriageWorkRegistry() },
+      } as never,
+    )?.sync;
+
+    await sync!(card);
+
+    const synced = await seeded.workItems.get({ orgId: 'org-1', id: card.id });
+    expect(synced?.workItem.labels).toEqual(['area: docs']);
+    expect(synced?.metadata.openPullRequestNumber).toBe(7);
+  });
 });

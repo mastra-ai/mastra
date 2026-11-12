@@ -264,7 +264,8 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
       id: item.id,
       userId: 'factory-rule-dispatcher',
       patch: {
-        metadata: { ...baseMetadata, ...metadata, ...(missing ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}) },
+        // Only what the provider said: a snapshot of the rest could undo a write made while it answered.
+        metadata: { ...metadata, ...(missing ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}) },
       },
     });
   };
