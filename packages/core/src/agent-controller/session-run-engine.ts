@@ -1119,6 +1119,7 @@ export class SessionRunEngine {
         let emitSuspension = true;
         if (suspRunId) {
           const runScope = this.#machinery.getRunScope(suspRunId);
+          const suspAgent = runScope?.get(SUSPENDED_RUN_AGENT_KEY) ?? agent;
           // A subscription restored for the current mode can replay this
           // suspension after a plan→build transition. Keep the agent that first
           // owned the run so a later resume reaches its original snapshot.
@@ -1157,6 +1158,10 @@ export class SessionRunEngine {
               threadId: suspThreadId,
               resourceId: suspResourceId,
             });
+            this.#session.__recordSuspensionAgent(
+              { toolCallId: suspToolCallId, runId: suspRunId, threadId: suspThreadId, resourceId: suspResourceId },
+              suspAgent,
+            );
           }
         }
         state.isSuspended = true;

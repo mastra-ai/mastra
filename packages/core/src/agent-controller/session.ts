@@ -5976,6 +5976,15 @@ export class Session<TState = unknown> {
   #suspensionAgents = new WeakMap<PendingSuspension, Agent>();
   #threadOwnerIdsByRunId = new Map<string, string>();
 
+  /**
+   * @internal Remember the agent that parked a suspension. Its run scope can be
+   * released, and its snapshot not yet stored, by the time it is answered.
+   */
+  __recordSuspensionAgent(address: SuspensionAddress, agent: Agent): void {
+    const suspension = this.suspensions.get(address);
+    if (suspension && !this.#suspensionAgents.has(suspension)) this.#suspensionAgents.set(suspension, agent);
+  }
+
   /** @internal Capture the trusted owner snapshot while processing a run's stream. */
   __captureRunThreadOwnerId(runId: string, requestContext: RequestContext): void {
     const threadOwnerId = requestContext.getRaw(THREAD_OWNER_ID_CONTEXT_KEY);

@@ -30,7 +30,10 @@ describeForAllEngines('Controller answers a tool suspension from another thread'
       events.push(event);
     });
     await session.permissions.setForTool({ toolName: 'ask', policy: 'allow' });
-    llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { toolCalls: [{ id: 'ask-call', name: 'ask', arguments: { q: 'Ok?' } }] });
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 0 },
+      { toolCalls: [{ id: 'ask-call', name: 'ask', arguments: { q: 'Ok?' } }] },
+    );
     llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Thanks.' });
 
     try {
