@@ -34,6 +34,15 @@ export interface Observation extends Attribution {
   againstPlain?: Attribution;
 }
 
+const APPROVAL_HEAD =
+  'start,step-start,tool-call-input-streaming-start,' +
+  'tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,' +
+  'tool-call-input-streaming-end,tool-call,tool-call-approval';
+const APPROVAL_TAIL =
+  'tool-call-resumed,tool-result[{"value":"found:harness"}],step-finish,' +
+  'step-start,text-start,text-delta[The lookup found it.],text-end,step-finish,finish';
+const APPROVAL_FULL = `${APPROVAL_HEAD},${APPROVAL_TAIL}`;
+
 /** Plain's live stream for each scenario: the reference every reader of every engine is held to. */
 export const BASELINES: Record<string, string> = {
   'structured-output':
@@ -50,6 +59,19 @@ export const BASELINES: Record<string, string> = {
     'start,step-start,tool-call-input-streaming-start,tool-call-delta,tool-call-input-streaming-end,tool-call,' +
     'tool-result[null],step-finish,step-start,text-start,text-delta[The tool returned nothing.],text-end,step-finish,finish',
   'input-tripwire': 'tripwire[blocked by harness]',
+  'tool-approval': APPROVAL_HEAD,
+  'run-id-reuse': 'start,step-start,text-start,text-delta[Second answer.],text-end,step-finish,finish',
+  // Abort timing determines the text boundary; compare frame types, not partial text.
+  'observer-cleanup': 'start,step-start,text-start,text-delta[Watched.],text-end,step-finish,finish',
+  abort: 'start,step-start,text-start,text-delta,abort,finish',
+  'key-cleanup': 'start,step-start,text-start,text-delta[Done.],text-end,step-finish,finish',
+};
+
+/** Plain's value of each fact a scenario records (single frames, compared with plain only). */
+export const FACT_BASELINES: Record<string, Partial<Record<ReaderName, string>>> = {
+  abort: { ack: 'ack[status=200 aborted=true]' },
+  'generate-abort': { ack: 'ack[status=200 aborted=true]', generate: 'generate[finish=aborted text=empty]' },
+  'key-cleanup': { keys: '(memory)' },
 };
 
 const PLAIN = ['plain'] as const;
@@ -62,7 +84,7 @@ const MAIN = 'main ef2c03fc121';
 
 // Durable's own stream code: expected to disappear once durable runs on plain's stream layer.
 const REBUILT_OBJECT: Attribution = {
-  ticket: 'COR-1390',
+  ticket: 'COR-1547',
   cause: 'durable-stream',
   evidence:
     'Durable never publishes object/object-result or the structured-output validation error: its read-back ' +
@@ -70,7 +92,7 @@ const REBUILT_OBJECT: Attribution = {
     `stream/base/output.ts:1062). Harness topic capture has none of them (${MAIN}).`,
 };
 const NOT_ON_TOPIC: Attribution = {
-  ticket: 'COR-1390',
+  ticket: 'COR-1547',
   cause: 'durable-stream',
   evidence:
     'The raw topic carries only what durable published: no object/object-result/validation error (rebuilt ' +
@@ -78,7 +100,7 @@ const NOT_ON_TOPIC: Attribution = {
     `(agent/durable/workflows/durable-loop-builder.ts:984) that observe() strips (${MAIN}).`,
 };
 const NO_REBUILD: Attribution = {
-  ticket: 'COR-1390',
+  ticket: 'COR-1547',
   cause: 'durable-stream',
   evidence:
     'Readers without the run schema get only what durable published: the /observe route forwards the raw topic ' +
@@ -96,7 +118,7 @@ const ITERATION: Attribution = {
 
 // Execution engine: the chunks themselves differ.
 const DURABLE_TOOL_ERROR: Attribution = {
-  ticket: 'COR-1544',
+  ticket: 'COR-1548',
   cause: 'engine',
   evidence:
     'The durable tool step replaces the thrown Error with serializeError() output ' +
@@ -105,7 +127,7 @@ const DURABLE_TOOL_ERROR: Attribution = {
     `${MAIN}).`,
 };
 const DURABLE_START: Attribution = {
-  ticket: 'COR-1544',
+  ticket: 'COR-1548',
   cause: 'engine',
   evidence:
     "Durable emits a start chunk before input processors run (agent/durable/durable-agent.ts:3454); plain's " +
@@ -195,7 +217,135 @@ const toolThrows = (error: string, iterations = false) => {
  * and fails on any it does not see (stale) or sees but cannot derive
  * (unlisted).
  */
+const SUSPENSION_BOUNDARY: Attribution = {
+  ticket: 'COR-1543',
+  cause: 'durable-stream',
+  evidence:
+    'The original durable stream stays open across suspension (agent/durable/stream-adapter.ts:934), ' +
+    'whereas the plain caller ends its segment; observers follow the complete run. The separate resume reader ' +
+    `starts at tool-call-resumed. Harness approval captures (${MAIN}); this is a contract difference, not duplicated execution.`,
+};
+const THREAD_RESUME_START: Attribution = {
+  ticket: 'COR-1546',
+  cause: 'plain-layer',
+  evidence:
+    'Plain thread broadcasting injects a start before the resumed segment because that segment has none ' +
+    `(agent/thread-stream-runtime.ts:3767-3781). The caller and run observers do not receive it (${MAIN}).`,
+};
+const REUSED_RUN: Attribution = {
+  ticket: 'COR-1542',
+  cause: 'durable-stream',
+  evidence:
+    'Plain clears finished run history before claiming a reused ID (agent/agent.ts:9411-9419); durable observe ' +
+    `resolves its previous registry entry (agent/durable/durable-agent.ts:5763), replaying First answer. (${MAIN}).`,
+};
+const OBSERVER_DELETES_HISTORY: Attribution = {
+  ticket: 'COR-1541',
+  cause: 'durable-stream',
+  evidence:
+    'A remote durable observer arms its own 1s cleanup after finish and clears the shared topic ' +
+    '(agent/durable/durable-agent.ts:5741-5761), before the publisher default cleanup. ' +
+    `Split replay 2.5s later times out with an empty topic; plain retains both (${MAIN}).`,
+};
+const EXPIRED_HISTORY: Attribution = {
+  ticket: 'COR-1543',
+  cause: 'plain-layer',
+  evidence:
+    'Publisher cleanup deletes the run topic (agent/streams/publisher.ts:216); after the single-process ' +
+    `1s cleanup, plain observe waits until timeout and durable returns empty. No explicit history-expired result (${MAIN}).`,
+};
+const ABORT_TOPIC: Attribution = {
+  ticket: 'COR-1544',
+  cause: 'plain-layer',
+  evidence:
+    'The publisher deliberately omits abort chunks because observers rebuild them from finishReason ' +
+    `(agent/streams/publisher.ts:76, :255). All engines have finish on the raw topic but abort,finish on readers (${MAIN}).`,
+};
+const REMAINING_KEYS: Attribution = {
+  ticket: 'COR-1534',
+  cause: 'plain-layer',
+  evidence:
+    'Run cleanup deletes run/control/ack topics, not the thread-stream topic (agent/streams/publisher.ts:216). ' +
+    'The dedicated fixture prefix also exposes scheduler/workflow infrastructure keys; these are reported, not ' +
+    `claimed as leaked run logs. TTLs bucketed 4s after finish (${MAIN}; stream-harness-node.entry.ts:332).`,
+};
+const DURABLE_REMAINING_KEYS: Attribution = {
+  ticket: 'COR-1534',
+  cause: 'durable-stream',
+  evidence:
+    'Durable cleanup clears its run topic (agent/durable/durable-agent.ts:6123), leaving agent.control.<run> ' +
+    `with hours TTL after the 2s cleanup window; plain removes it (${MAIN}; stream-harness-node.entry.ts:332).`,
+};
+const EVENTED_INFRA_KEYS: Attribution = {
+  ticket: 'COR-1534',
+  cause: 'engine',
+  evidence:
+    'Evented execution additionally leaves workflow control/finish and short-lived workflow-step lease keys ' +
+    `(stream-harness-node.entry.ts:332). These are engine infrastructure, not extra agent stream histories (${MAIN}).`,
+};
+const BUS_KEYS =
+  'key[:agent.thread-stream.harness-user%00<thread> ttl=hours],key[:scheduler ttl=hours],key[:workflows ttl=hours]';
+const DURABLE_KEYS = 'key[:agent.control.<run> ttl=hours],' + BUS_KEYS;
+const EVENTED_KEYS =
+  'key[:agent.control.<run> ttl=hours],key[:agent.thread-stream.harness-user%00<thread> ttl=hours],' +
+  'key[:lease:workflow-step-run:<id>:<id> ttl=seconds],key[:lease:workflow-step-run:<run>:<id> ttl=seconds],' +
+  'key[:scheduler ttl=hours],key[:workflow.control ttl=hours],key[:workflows ttl=hours],key[:workflows-finish ttl=hours]';
+
 export const OBSERVATIONS: readonly Observation[] = [
+  // Lifecycle: original and resume streams are separate captures, never concatenated.
+  obs('tool-approval', ['plain', ...DURABLE], ['live-resume'], APPROVAL_TAIL, SUSPENSION_BOUNDARY),
+  obs('tool-approval', PLAIN, ['observe-mid', 'observe-0', 'http-observe'], APPROVAL_FULL, SUSPENSION_BOUNDARY),
+  obs('tool-approval', PLAIN, ['topic'], `${APPROVAL_HEAD},suspended,${APPROVAL_TAIL}`, SUSPENSION_BOUNDARY),
+  obs('tool-approval', PLAIN, ['thread'], `${APPROVAL_HEAD},start,${APPROVAL_TAIL}`, THREAD_RESUME_START),
+  obs(
+    'tool-approval',
+    DURABLE,
+    ['live', 'observe-mid', 'observe-0', 'http-observe', 'thread'],
+    APPROVAL_FULL,
+    SUSPENSION_BOUNDARY,
+  ),
+  obs(
+    'tool-approval',
+    DURABLE,
+    ['topic'],
+    `${APPROVAL_HEAD},suspended,${APPROVAL_TAIL.replaceAll('step-finish', 'step-finish,iteration-complete')}`,
+    ITERATION,
+    { againstPlain: ITERATION },
+  ),
+
+  obs(
+    'run-id-reuse',
+    DURABLE,
+    ['observe-mid', 'observe-0', 'http-observe'],
+    'start,step-start,text-start,text-delta[First answer.],text-end,step-finish,finish',
+    REUSED_RUN,
+  ),
+  obs(
+    'run-id-reuse',
+    DURABLE,
+    ['topic'],
+    'start,step-start,text-start,text-delta[First answer.],text-end,step-finish,iteration-complete,finish,' +
+      'start,step-start,text-start,text-delta[Second answer.],text-end,step-finish,iteration-complete,finish',
+    REUSED_RUN,
+  ),
+
+  obs('observer-cleanup', PLAIN, ['observe-0'], '(timeout)', EXPIRED_HISTORY, { layouts: SINGLE }),
+  obs('observer-cleanup', PLAIN, ['topic'], '', EXPIRED_HISTORY, { layouts: SINGLE }),
+  obs('observer-cleanup', DURABLE, ['observe-0', 'topic'], '', EXPIRED_HISTORY, { layouts: SINGLE }),
+  obs('observer-cleanup', DURABLE, ['observe-0'], '(timeout)', OBSERVER_DELETES_HISTORY, { layouts: SPLIT }),
+  obs('observer-cleanup', DURABLE, ['topic'], '', OBSERVER_DELETES_HISTORY, { layouts: SPLIT }),
+
+  obs('abort', ['plain', ...DURABLE], ['topic'], 'start,step-start,text-start,text-delta,finish', ABORT_TOPIC),
+  obs(
+    'abort',
+    ['plain', ...DURABLE],
+    ['thread'],
+    'start,step-start,text-start,text-delta,abort',
+    THREAD_ENDS_AT_TERMINAL,
+  ),
+  obs('key-cleanup', PLAIN, ['keys'], BUS_KEYS, REMAINING_KEYS, { layouts: OVER_BUS }),
+  obs('key-cleanup', ['durable'], ['keys'], DURABLE_KEYS, DURABLE_REMAINING_KEYS, { layouts: OVER_BUS }),
+  obs('key-cleanup', ['evented'], ['keys'], EVENTED_KEYS, EVENTED_INFRA_KEYS, { layouts: OVER_BUS }),
   // structured-output
   obs('structured-output', DURABLE, ['live', 'observe-mid', 'thread'], STRUCTURED_DURABLE, REBUILT_OBJECT),
   obs('structured-output', DURABLE, ['observe-0'], STRUCTURED_DURABLE, REBUILT_OBJECT, { layouts: SINGLE }),

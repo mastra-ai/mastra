@@ -32,7 +32,19 @@ export const layoutName = (layout: Layout): LayoutName => `${layout.topology}/${
  * - `thread`: `agent.subscribeToThread()` in the reader process, subscribed before the turn.
  */
 export const READERS = ['live', 'observe-mid', 'topic', 'observe-0', 'http-observe', 'thread'] as const;
-export type ReaderName = (typeof READERS)[number];
+export type StreamReader = (typeof READERS)[number] | 'live-resume';
+
+/**
+ * Single results, not streams. A fact is compared with plain's same fact
+ * only, never with the run's live stream:
+ * - `ack`: what the server's abort route (`POST /api/agents/:id/runs/:runId/abort`) answered.
+ * - `generate`: how the caller's `generate()` ended.
+ * - `keys`: the run's Redis/Valkey keys and their TTLs, some time after the run.
+ */
+export const FACTS = ['ack', 'generate', 'keys'] as const;
+export type Fact = (typeof FACTS)[number];
+export type ReaderName = StreamReader | Fact;
+export const isFact = (reader: string): reader is Fact => (FACTS as readonly string[]).includes(reader);
 
 /**
  * One delivered frame, reduced to what a reader can rely on. `shape` carries

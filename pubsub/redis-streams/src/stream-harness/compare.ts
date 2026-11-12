@@ -1,3 +1,4 @@
+import { isFact } from './types';
 import type { Cell, Difference, Frame, KnownDifference, ReaderName, RunCapture } from './types';
 
 const types = (frames: Frame[]) => frames.map(f => f.type).join(',') || '(none)';
@@ -24,11 +25,12 @@ export function diffFrames(expected: Frame[], actual: Frame[]): Pick<Difference,
  */
 export function compareRun(cell: Cell, capture: RunCapture, plain?: RunCapture): Difference[] {
   const live = capture.live;
-  if (!live) throw new Error(`no live capture for ${cellName(cell)}`);
   const differences: Difference[] = [];
   const readers = Object.entries(capture) as [ReaderName, Frame[]][];
   for (const [reader, frames] of readers) {
-    if (reader === 'live') continue;
+    // Facts are not streams: they are only compared with plain's.
+    if (reader === 'live' || isFact(reader)) continue;
+    if (!live) throw new Error(`no live capture for ${cellName(cell)}`);
     const diff = diffFrames(live, frames);
     if (diff) differences.push({ ...cell, reader, against: 'live', ...diff });
   }

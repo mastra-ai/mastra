@@ -1,8 +1,9 @@
 import { compareRun, diffFrames, judgeCell } from './compare';
 import type { Verdict } from './compare';
 import type { Attribution, Observation } from './known-differences';
-import { BASELINES, OBSERVATIONS } from './known-differences';
-import { READERS, layoutName } from './types';
+import { BASELINES, FACT_BASELINES, OBSERVATIONS } from './known-differences';
+import { getScenario, readersOf } from './scenarios';
+import { isFact, layoutName } from './types';
 import type { Cell, Frame, KnownDifference, ReaderName, RunCapture } from './types';
 
 /** Splits a compact frame list on top-level commas: `a,b[{"x":1,"y":2}],c`. */
@@ -52,9 +53,10 @@ export function parseFrames(compact: string, baseline?: Frame[]): Frame[] {
   });
 }
 
-export function baselineFrames(scenario: string): Frame[] {
-  const compact = BASELINES[scenario];
-  if (compact === undefined) throw new Error(`no baseline for scenario ${scenario}`);
+/** Plain's live stream for the scenario, or plain's value of a fact. */
+export function baselineFrames(scenario: string, reader: ReaderName = 'live'): Frame[] {
+  const compact = isFact(reader) ? FACT_BASELINES[scenario]?.[reader] : BASELINES[scenario];
+  if (compact === undefined) throw new Error(`no baseline for ${reader} in scenario ${scenario}`);
   return parseFrames(compact);
 }
 
@@ -80,9 +82,9 @@ export function observationFor(cell: Cell, reader: ReaderName): Observation | un
 
 /** What every reader of a cell is expected to deliver: the baseline, unless an observation says otherwise. */
 export function expectedCapture(cell: Cell): RunCapture {
-  const baseline = baselineFrames(cell.scenario);
   const capture: RunCapture = {};
-  for (const reader of READERS) {
+  for (const reader of readersOf(getScenario(cell.scenario))) {
+    const baseline = baselineFrames(cell.scenario, reader);
     const observation = observationFor(cell, reader);
     capture[reader] = observation ? parseFrames(observation.frames, baseline) : baseline;
   }
@@ -134,7 +136,7 @@ export interface CellCheck {
 export function checkCell(cell: Cell, capture: RunCapture, plain?: RunCapture): CellCheck {
   const verdict = judgeCell(cell, compareRun(cell, capture, plain), knownDifferencesFor(cell));
   const expected = expectedCapture(cell);
-  const drift = READERS.flatMap(reader => {
+  const drift = readersOf(getScenario(cell.scenario)).flatMap(reader => {
     const diff = diffFrames(expected[reader]!, capture[reader] ?? []);
     return diff ? [{ reader, ...diff }] : [];
   });

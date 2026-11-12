@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { checkCell, expectedCapture } from './expected';
 import { UNFILED, UNFILED_DIFFERENCES } from './known-differences';
-import { READERS } from './types';
+import { SCENARIO_NAMES } from './scenarios';
+import { LAYOUTS, READERS } from './types';
 import type { Cell, Frame, RunCapture } from './types';
 
 // These run the real observations file against hand-built captures, so they
@@ -20,16 +21,10 @@ const types = (frames: Frame[] | undefined) => (frames ?? []).map(f => f.type).j
 
 describe('checkCell with the real observations', () => {
   it('passes every grid cell whose capture matches its observations', () => {
-    for (const scenario of [
-      'structured-output',
-      'structured-invalid',
-      'tool-throws',
-      'tool-undefined',
-      'input-tripwire',
-    ]) {
-      for (const backend of ['memory', 'redis', 'valkey'] as const) {
+    for (const scenario of SCENARIO_NAMES) {
+      for (const { backend, topology } of LAYOUTS) {
         for (const engine of ['plain', 'durable', 'evented'] as const) {
-          const cell: Cell = { scenario, engine, backend, topology: 'single' };
+          const cell: Cell = { scenario, engine, backend, topology };
           const plain = engine === 'plain' ? undefined : expectedCapture(plainOf(cell));
           const { verdict, drift } = checkCell(cell, expectedCapture(cell), plain);
           expect({ verdict, drift }, `${scenario} ${engine} ${backend}`).toEqual({
@@ -104,6 +99,32 @@ describe('checkCell with the real observations', () => {
 
     expect(verdict).toEqual({ unlisted: [], stale: [] });
     expect(drift.map(d => d.reader).sort()).toEqual([...READERS].sort());
+  });
+
+  it('rejects a changed abort acknowledgement without comparing facts with live frames', () => {
+    const cell = durable('redis', 'generate-abort');
+    const capture = clone(expectedCapture(cell));
+    capture.ack = [{ type: 'ack', shape: 'status=200 aborted=false' }];
+    const { verdict, drift } = checkCell(cell, capture, expectedCapture(plainOf(cell)));
+    expect(verdict.unlisted.map(d => `${d.reader} vs ${d.against}`)).toEqual(['ack vs plain']);
+    expect(drift.map(d => d.reader)).toEqual(['ack']);
+    delete capture.generate;
+    expect(checkCell(cell, capture, expectedCapture(plainOf(cell))).drift.map(d => d.reader)).toEqual([
+      'ack',
+      'generate',
+    ]);
+  });
+
+  it('rejects duplicated resume output even when the original stream is unchanged', () => {
+    const cell = durable('redis', 'tool-approval');
+    const capture = clone(expectedCapture(cell));
+    capture['live-resume']!.push(...capture['live-resume']!);
+    const { verdict, drift } = checkCell(cell, capture, expectedCapture(plainOf(cell)));
+    expect(verdict.unlisted.map(d => `${d.reader} vs ${d.against}`)).toEqual([
+      'live-resume vs live',
+      'live-resume vs plain',
+    ]);
+    expect(drift.map(d => d.reader)).toEqual(['live-resume']);
   });
 
   it('lists every difference still waiting for a ticket', () => {

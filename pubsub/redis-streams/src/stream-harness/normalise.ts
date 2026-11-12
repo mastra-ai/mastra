@@ -64,6 +64,8 @@ function shapeOf(frame: RawFrame): string | undefined {
       return stable(p?.object);
     case 'tool-result':
       return stable(p?.result);
+    case '(threw)':
+      return `${errorShape(p?.error)} id=${p?.error?.id ?? p?.error?.code ?? '-'}`;
     case 'tripwire':
       return String(p?.reason ?? p?.tripwireReason ?? '');
     default:

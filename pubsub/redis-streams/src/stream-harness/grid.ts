@@ -6,55 +6,223 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getFreePort, makeStorageDir } from '../../test-fixtures/harness';
 import { formatVerdict } from './compare';
 import { checkCell } from './expected';
-import { httpObserve } from './http-observe';
+import { httpAbort, httpObserve } from './http-observe';
 import { HarnessNode } from './node';
+import type { NodeOptions } from './node';
 import { SCENARIO_GROUPS, getScenario } from './scenarios';
-import type { ScenarioGroup } from './scenarios';
+import type { Scenario, ScenarioGroup } from './scenarios';
 import { ENGINES, LAYOUTS } from './types';
-import type { Cell, RunCapture } from './types';
+import type { Backend, Cell, Engine, Frame, RunCapture, Topology } from './types';
 
 const AGENT_ID = 'harness-agent';
+const RESOURCE = 'harness-user';
 const skipRedis = process.env.SKIP_REDIS_TESTS === '1';
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * One turn, every reader. The publisher streams; the reader process (the same
- * process in the single topology) subscribes to the thread before the turn,
- * attaches `observe()` as soon as the run starts, and after the turn reads
- * the raw topic, `observe()` from 0 and the server `/observe` route.
- */
-async function captureTurn(publisher: HarnessNode, reader: HarnessNode, port: number, scenario: string) {
-  const runId = randomUUID();
-  const threadId = `thread-${runId}`;
-  const thread = randomUUID();
-  reader.send({ cmd: 'subscribeThread', id: thread, threadId, resourceId: 'harness-user' });
-  await reader.next(e => e.type === 'subscribed' && e.id === thread);
+/** The processes a scenario runs on; `reader` is `publisher` in the single topology. */
+interface Nodes {
+  publisher: HarnessNode;
+  reader: HarnessNode;
+  /** The reader's HTTP port (server `/observe` and abort routes). */
+  port: number;
+}
 
-  const streamId = randomUUID();
-  publisher.send({ cmd: 'stream', id: streamId, scenario, runId, threadId, resourceId: 'harness-user' });
-  // Attach once the first step has started on the publisher, and (durable,
-  // evented) once the run's snapshot is persisted, so the observer sees the
-  // same run state on every run. The model's first token is 500ms out, so the
-  // observer is attached before any text exists.
-  await publisher.next(e => (e.type === 'step-started' || e.type === 'stream-done') && e.id === streamId);
-  const mid = reader.frames(
-    { cmd: 'observe', runId, reader: 'observe-mid', afterPersisted: true, timeoutMs: 8_000 },
-    'observe-mid',
-  );
+async function subscribeThread(reader: HarnessNode, threadId: string) {
+  const id = randomUUID();
+  reader.send({ cmd: 'subscribeThread', id, threadId, resourceId: RESOURCE });
+  await reader.next(e => e.type === 'subscribed' && e.id === id);
+  return () => reader.frames({ cmd: 'stopThread', id }, 'thread');
+}
 
-  const capture: RunCapture = {};
-  capture.live = (await publisher.next(e => e.type === 'frames' && e.id === streamId && e.reader === 'live')).frames;
-  capture['observe-mid'] = await mid;
-  capture.topic = await reader.frames({ cmd: 'tapTopic', runId }, 'topic');
-  capture['observe-0'] = await reader.frames({ cmd: 'observe', runId }, 'observe-0');
-  capture['http-observe'] = await httpObserve(port, AGENT_ID, runId);
-  capture.thread = await reader.frames({ cmd: 'stopThread', id: thread }, 'thread');
-  return capture;
+function startStream(publisher: HarnessNode, scenario: Scenario, runId: string, threadId?: string, variant?: string) {
+  const id = randomUUID();
+  publisher.send({ cmd: 'stream', id, scenario: scenario.name, variant, runId, threadId, resourceId: RESOURCE });
+  const live = publisher
+    .next(e => e.type === 'frames' && e.id === id && e.reader === 'live', 45_000)
+    .then(e => e.frames as Frame[]);
+  const event = (type: string) => publisher.next(e => (e.type === type || e.type === 'stream-done') && e.id === id);
+  return { id, live, event };
 }
 
 /**
- * Runs each scenario on every engine, backend and topology, captures every
- * reader and fails on any difference not listed in `known-differences.ts`, or
- * on any listed difference that no longer reproduces.
+ * Attaches `observe()` once the first step has started on the publisher, and
+ * (durable, evented) once the run's snapshot is persisted, so the observer
+ * sees the same run state on every run. The model's first token is 500ms out,
+ * so the observer is attached before any text exists.
+ */
+async function observeMid(reader: HarnessNode, started: Promise<unknown>, runId: string, timeoutMs = 8_000) {
+  await started;
+  return reader.frames(
+    { cmd: 'observe', runId, reader: 'observe-mid', afterPersisted: true, timeoutMs },
+    'observe-mid',
+  );
+}
+
+/** The readers that read a run after it ended: raw topic, `observe()` from 0, the `/observe` route. */
+async function readBack({ reader, port }: Nodes, runId: string): Promise<RunCapture> {
+  return {
+    topic: await reader.frames({ cmd: 'tapTopic', runId }, 'topic'),
+    'observe-0': await reader.frames({ cmd: 'observe', runId }, 'observe-0'),
+    'http-observe': await httpObserve(port, AGENT_ID, runId),
+  };
+}
+
+/**
+ * How each flow drives a turn and what it captures. The publisher streams;
+ * the reader process (the same process in the single topology) does all the
+ * reading.
+ */
+const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scenario) => Promise<RunCapture>> = {
+  /** One turn, every reader. */
+  async turn(nodes, scenario) {
+    const runId = randomUUID();
+    const stopThread = await subscribeThread(nodes.reader, `thread-${runId}`);
+    const turn = startStream(nodes.publisher, scenario, runId, `thread-${runId}`);
+    const mid = observeMid(nodes.reader, turn.event('step-started'), runId);
+    const live = await turn.live;
+    const observe = await mid;
+    return { live, 'observe-mid': observe, ...(await readBack(nodes, runId)), thread: await stopThread() };
+  },
+
+  /**
+   * The turn suspends on `lookup`'s approval; as soon as the caller sees the
+   * approval request it calls `approveToolCall()`. Capture the original and
+   * resume streams separately: durable keeps the original open and delivers
+   * the resumed segment there too, so concatenating them duplicates output.
+   */
+  async approval(nodes, scenario) {
+    const runId = randomUUID();
+    const stopThread = await subscribeThread(nodes.reader, `thread-${runId}`);
+    const turn = startStream(nodes.publisher, scenario, runId, `thread-${runId}`);
+    const mid = observeMid(nodes.reader, turn.event('step-started'), runId, 15_000);
+    const approval = await nodes.publisher.next(e => e.type === 'approval' && e.runId === runId);
+    const resumed = await nodes.publisher.frames(
+      { cmd: 'approve', runId, toolCallId: approval.toolCallId },
+      'live-resume',
+      45_000,
+    );
+    const first = await turn.live;
+    const observe = await mid;
+    return {
+      live: first,
+      'live-resume': resumed,
+      'observe-mid': observe,
+      ...(await readBack(nodes, runId)),
+      thread: await stopThread(),
+    };
+  },
+
+  /**
+   * A first turn ends, then a second turn on another thread reuses its run ID
+   * straight away, inside the first run's cleanup window. Every reader reads
+   * the second turn.
+   */
+  async reuse(nodes, scenario) {
+    const runId = randomUUID();
+    await startStream(nodes.publisher, scenario, runId, `thread-first-${runId}`, 'first').live;
+    const stopThread = await subscribeThread(nodes.reader, `thread-second-${runId}`);
+    const second = startStream(nodes.publisher, scenario, runId, `thread-second-${runId}`, 'second');
+    const mid = observeMid(nodes.reader, second.event('step-started'), runId);
+    const live = await second.live;
+    const observe = await mid;
+    return { live, 'observe-mid': observe, ...(await readBack(nodes, runId)), thread: await stopThread() };
+  },
+
+  /**
+   * An observer in the reader process (1s cleanup) watches the whole run;
+   * 2.5s after it ends, well inside the publisher's own cleanup window, the
+   * publisher replays the run from 0 and reads its topic. If the observer's
+   * shorter cleanup deleted the run's log, those come back empty.
+   */
+  async 'observer-cleanup'(nodes, scenario) {
+    const runId = randomUUID();
+    const turn = startStream(nodes.publisher, scenario, runId);
+    const mid = observeMid(nodes.reader, turn.event('step-started'), runId);
+    const live = await turn.live;
+    const observe = await mid;
+    await sleep(2_500);
+    return {
+      live,
+      'observe-mid': observe,
+      'observe-0': await nodes.publisher.frames({ cmd: 'observe', runId, reader: 'observe-0' }, 'observe-0'),
+      topic: await nodes.publisher.frames({ cmd: 'tapTopic', runId, timeoutMs: 2_000 }, 'topic'),
+    };
+  },
+
+  /** 800ms into the text, the reader aborts the run through the server's abort route. */
+  async abort(nodes, scenario) {
+    const runId = randomUUID();
+    const stopThread = await subscribeThread(nodes.reader, `thread-${runId}`);
+    const turn = startStream(nodes.publisher, scenario, runId, `thread-${runId}`);
+    const mid = observeMid(nodes.reader, turn.event('step-started'), runId);
+    await turn.event('text-started');
+    await sleep(800);
+    const ack = await httpAbort(nodes.port, AGENT_ID, runId);
+    const live = await turn.live;
+    const observe = await mid;
+    return { live, 'observe-mid': observe, ...(await readBack(nodes, runId)), thread: await stopThread(), ack };
+  },
+
+  /** As `abort`, for a run started with `generate()`; 1.3s after the call (0.8s into the text). */
+  async 'generate-abort'(nodes, scenario) {
+    const runId = randomUUID();
+    const id = randomUUID();
+    const generate = nodes.publisher.frames(
+      { cmd: 'generate', id, scenario: scenario.name, runId },
+      'generate',
+      45_000,
+    );
+    await sleep(1_300);
+    expect(
+      nodes.publisher.events.some(e => e.type === 'frames' && e.id === id && e.reader === 'generate'),
+      'generate completed before abort; fixture timing did not keep the request in flight',
+    ).toBe(false);
+    const ack = await httpAbort(nodes.port, AGENT_ID, runId);
+    return { ack, generate: await generate };
+  },
+
+  /** One turn; 4s after it ends (both processes clean up after 2s), list the run's keys. */
+  async 'key-cleanup'(nodes, scenario) {
+    const runId = randomUUID();
+    const threadId = `thread-${runId}`;
+    const live = await startStream(nodes.publisher, scenario, runId, threadId).live;
+    await sleep(4_000);
+    return { live, keys: await nodes.reader.frames({ cmd: 'scanKeys', runId, threadId }, 'keys') };
+  },
+};
+
+/** Drops text bodies when a scenario's text is cut at a timing-dependent point. */
+function withoutText(capture: RunCapture): RunCapture {
+  const strip = (frames: Frame[]) =>
+    frames.map(f => (f.type === 'text-delta' || f.type === 'reasoning-delta' ? { type: f.type } : f));
+  return Object.fromEntries(Object.entries(capture).map(([reader, frames]) => [reader, strip(frames!)]));
+}
+
+async function startNodes(
+  topology: Topology,
+  common: Omit<NodeOptions, 'nodeId' | 'cleanupMs' | 'port'>,
+  cleanup: Scenario['nodes'] = {},
+): Promise<Nodes> {
+  const port = await getFreePort();
+  if (topology === 'single') {
+    const node = await HarnessNode.start({ ...common, port, cleanupMs: cleanup.readerCleanupMs ?? cleanup.cleanupMs });
+    return { publisher: node, reader: node, port };
+  }
+  const [publisher, reader] = await Promise.all([
+    HarnessNode.start({ ...common, nodeId: 'publisher', cleanupMs: cleanup.cleanupMs }),
+    HarnessNode.start({ ...common, nodeId: 'reader', port, cleanupMs: cleanup.readerCleanupMs }),
+  ]);
+  return { publisher, reader, port };
+}
+
+const stopNodes = (nodes?: Nodes) => Promise.all([nodes?.publisher.stop(), nodes?.reader.stop()]);
+
+/**
+ * Runs each scenario of a group on every engine, backend and topology,
+ * captures every reader and fails on any difference not listed in
+ * `known-differences.ts`, or on any listed difference that no longer
+ * reproduces. A scenario with its own `nodes` settings runs on fresh
+ * processes; the rest share one set per engine and layout.
  */
 export function defineGrid(group: ScenarioGroup) {
   const scenarios = SCENARIO_GROUPS[group];
@@ -78,41 +246,43 @@ export function defineGrid(group: ScenarioGroup) {
 
       describe.each(ENGINES)('%s', engine => {
         let storage: Awaited<ReturnType<typeof makeStorageDir>>;
-        let publisher: HarnessNode;
-        let reader: HarnessNode;
-        let port: number;
+        let shared: Nodes | undefined;
+        const common = (engine: Engine, backend: Backend) => ({
+          engine,
+          backend,
+          llmUrl,
+          keyPrefix: `stream-harness-${randomUUID()}`,
+          storageUrl: storage.storageUrl,
+        });
 
         beforeAll(async () => {
           storage = await makeStorageDir('stream-harness-');
-          port = await getFreePort();
-          const common = {
-            engine,
-            backend,
-            llmUrl,
-            keyPrefix: `stream-harness-${randomUUID()}`,
-            storageUrl: storage.storageUrl,
-          };
-          if (topology === 'single') {
-            publisher = reader = await HarnessNode.start({ ...common, port });
-          } else {
-            [publisher, reader] = await Promise.all([
-              HarnessNode.start({ ...common, nodeId: 'publisher' }),
-              HarnessNode.start({ ...common, nodeId: 'reader', port }),
-            ]);
-          }
         });
 
         afterAll(async () => {
-          await Promise.all([publisher?.stop(), reader?.stop()]);
+          await stopNodes(shared);
           await storage?.cleanup();
         });
 
-        it.each(scenarios)('%s', async scenario => {
-          const cell: Cell = { scenario, engine, backend, topology };
-          const capture = await captureTurn(publisher, reader, port, scenario);
-          if (engine === 'plain') plain.set(scenario, capture);
+        it.each(scenarios)('%s', async name => {
+          const scenario = getScenario(name);
+          const cell: Cell = { scenario: name, engine, backend, topology };
+          let own: Nodes | undefined;
+          let capture: RunCapture;
+          try {
+            if (scenario.nodes) {
+              own = await startNodes(topology, common(engine, backend), scenario.nodes);
+            } else {
+              shared ??= await startNodes(topology, common(engine, backend));
+            }
+            capture = await FLOWS[scenario.flow ?? 'turn'](own ?? shared!, scenario);
+          } finally {
+            await stopNodes(own);
+          }
+          if (scenario.ignoreText) capture = withoutText(capture);
+          if (engine === 'plain') plain.set(name, capture);
 
-          const { verdict, drift: drifted } = checkCell(cell, capture, plain.get(scenario));
+          const { verdict, drift: drifted } = checkCell(cell, capture, plain.get(name));
           const drift = drifted.map(d => `  DRIFT ${d.reader} [${d.kind}] ${d.detail}`);
           const report = [formatVerdict(cell, verdict), ...drift].join('\n');
           if (process.env.STREAM_HARNESS_VERBOSE) console.log(`${report}\n${JSON.stringify(capture)}`);

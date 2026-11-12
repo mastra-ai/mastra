@@ -44,3 +44,18 @@ export async function httpObserve(port: number, agentId: string, runId: string, 
   }
   return normalise(raw);
 }
+
+/**
+ * Aborts a run through the real server route
+ * `POST /api/agents/:agentId/runs/:runId/abort`, which only answers
+ * `aborted: true` once the process executing the run confirms.
+ */
+export async function httpAbort(port: number, agentId: string, runId: string): Promise<Frame[]> {
+  const res = await fetch(`http://127.0.0.1:${port}/api/agents/${agentId}/runs/${runId}/abort`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  const body: any = await res.json().catch(() => undefined);
+  return [{ type: 'ack', shape: `status=${res.status} aborted=${body?.aborted ?? '-'}` }];
+}

@@ -14,13 +14,15 @@
  *
  * Reads newline-delimited JSON commands on stdin, writes newline-delimited
  * JSON events on stdout:
- *   {"cmd":"stream","id","scenario","runId","threadId?","resourceId?"} -> run, step-started, approval*, frames(live), stream-done
+ *   {"cmd":"stream","id","scenario","variant?","runId","threadId?","resourceId?"} -> run, step-started, text-started, approval*, frames(live), stream-done
+ *   {"cmd":"generate","id","scenario","runId"}                        -> frames(generate)
  *   {"cmd":"observe","id","runId","reader?","offset?","timeoutMs?","afterPersisted?"} -> frames(observe-0 | observe-mid)
  *   {"cmd":"tapTopic","id","runId"}                                   -> frames(topic)
  *   {"cmd":"subscribeThread","id","threadId","resourceId"}            -> subscribed
  *   {"cmd":"stopThread","id"}                                         -> frames(thread)
  *   {"cmd":"approve","id","runId","toolCallId"}                       -> frames(live-resume)
  *   {"cmd":"abort","id","runId"}                                      -> aborted
+ *   {"cmd":"scanKeys","id","runId","threadId"}                        -> frames(keys)
  *   {"cmd":"exit"}
  */
 import { createRequire } from 'node:module';
@@ -45,7 +47,7 @@ import { nodeRedisPreset, RedisServerCache } from '../../../stores/redis/src/cac
 import { RedisStreamsPubSub } from '../src/index';
 import { fromChunk, fromTopicEvent, normalise } from '../src/stream-harness/normalise';
 import type { RawFrame } from '../src/stream-harness/normalise';
-import { getScenario } from '../src/stream-harness/scenarios';
+import { ABORT_ANSWER, getScenario } from '../src/stream-harness/scenarios';
 
 const {
   ENGINE = 'plain',
@@ -141,6 +143,7 @@ async function main() {
   let cache: InMemoryServerCache | RedisServerCache | ValkeyServerCache;
   let tapCache: InMemoryServerCache | RedisServerCache | ValkeyServerCache;
   const clients: { quit: () => Promise<unknown> }[] = [];
+  let valkeyScanClient: any;
   if (BACKEND === 'memory') {
     transport = new EventEmitterPubSub();
     cache = new InMemoryServerCache();
@@ -158,6 +161,7 @@ async function main() {
   } else if (BACKEND === 'valkey') {
     const [cacheClient, tapClient] = await Promise.all([glideClient(VALKEY_URL), glideClient(VALKEY_URL)]);
     clients.push({ quit: async () => cacheClient.close() }, { quit: async () => tapClient.close() });
+    valkeyScanClient = tapClient;
     transport = new ValkeyStreamsPubSub({ url: VALKEY_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
     cache = new ValkeyServerCache({ client: cacheClient }, { keyPrefix: `${KEY_PREFIX}:cache:` });
     tapCache = new ValkeyServerCache({ client: tapClient }, { keyPrefix: `${KEY_PREFIX}:cache:` });
@@ -202,10 +206,15 @@ async function main() {
 
   const onLiveChunk = (id: string, runId: string) => {
     let stepStarted = false;
+    let textStarted = false;
     return (chunk: any) => {
       if (chunk.type === 'step-start' && !stepStarted) {
         stepStarted = true;
         emit({ type: 'step-started', id, runId });
+      }
+      if (chunk.type === 'text-delta' && !textStarted) {
+        textStarted = true;
+        emit({ type: 'text-started', id, runId });
       }
       if (chunk.type === 'tool-call-approval') emit({ type: 'approval', runId, toolCallId: chunk.payload?.toolCallId });
     };
@@ -231,12 +240,21 @@ async function main() {
   const handlers: Record<string, (cmd: any) => Promise<void> | void> = {
     async stream(cmd) {
       const scenario = getScenario(cmd.scenario);
-      const out = await registered.stream(scenario.prompt, {
-        runId: cmd.runId,
-        maxSteps: 5,
-        ...(cmd.threadId ? { memory: { thread: cmd.threadId, resource: cmd.resourceId } } : {}),
-        ...scenario.streamOptions?.(),
-      });
+      const prompt = cmd.variant ? scenario.variants![cmd.variant]! : scenario.prompt;
+      let out: any;
+      try {
+        out = await registered.stream(prompt, {
+          runId: cmd.runId,
+          maxSteps: 5,
+          ...(cmd.threadId ? { memory: { thread: cmd.threadId, resource: cmd.resourceId } } : {}),
+          ...scenario.streamOptions?.(),
+        });
+      } catch (error) {
+        // A run the engine refuses to start (e.g. a run ID still claimed) is a result, not a harness error.
+        frames(cmd.id, 'live', [{ type: '(threw)', payload: { error } }]);
+        emit({ type: 'stream-done', id: cmd.id });
+        return;
+      }
       emit({ type: 'run', id: cmd.id, runId: out.runId });
       frames(cmd.id, 'live', await drain(out.fullStream, cmd.timeoutMs ?? 20_000, onLiveChunk(cmd.id, out.runId)));
       emit({ type: 'stream-done', id: cmd.id, runId: out.runId });
@@ -293,6 +311,60 @@ async function main() {
     },
     abort(cmd) {
       emit({ type: 'aborted', id: cmd.id, result: registered.abortRunStream(cmd.runId) });
+    },
+    /** How `generate()` ended: finish reason and whether the text is whole, cut or missing. */
+    async generate(cmd) {
+      const scenario = getScenario(cmd.scenario);
+      let shape: string;
+      try {
+        const result = await registered.generate(scenario.prompt, { runId: cmd.runId, maxSteps: 5 });
+        const text = String(result?.text ?? '');
+        const whole = text === ABORT_ANSWER ? 'whole' : text ? 'cut' : 'empty';
+        shape = `finish=${result?.finishReason ?? '-'} text=${whole}`;
+      } catch (error: any) {
+        shape = `threw ${error?.name ?? typeof error}`;
+      }
+      emit({ type: 'frames', id: cmd.id, reader: 'generate', frames: [{ type: 'generate', shape }] });
+    },
+    /**
+     * Every key under this node's prefix with its TTL bucket, run and thread
+     * IDs replaced so runs compare. Memory has no keys to list.
+     */
+    async scanKeys(cmd) {
+      const keys: { name: string; ttl: number }[] = [];
+      if (BACKEND === 'redis') {
+        const client = clients[0] as any;
+        for await (const batch of client.scanIterator({ MATCH: `${KEY_PREFIX}*`, COUNT: 500 })) {
+          for (const name of Array.isArray(batch) ? batch : [batch]) keys.push({ name, ttl: await client.ttl(name) });
+        }
+      } else if (BACKEND === 'valkey') {
+        const client = valkeyScanClient!;
+        let cursor = '0';
+        do {
+          const [next, batch] = await client.scan(cursor, { match: `${KEY_PREFIX}*`, count: 500 });
+          cursor = String(next);
+          for (const raw of batch) {
+            const name = String(raw);
+            keys.push({ name, ttl: Number(await client.ttl(name)) });
+          }
+        } while (cursor !== '0');
+      } else {
+        emit({ type: 'frames', id: cmd.id, reader: 'keys', frames: [{ type: '(memory)' }] });
+        return;
+      }
+      const bucket = (ttl: number) => (ttl < 0 ? 'none' : ttl <= 60 ? 'seconds' : ttl <= 3600 ? 'minutes' : 'hours');
+      const names = keys
+        .filter(k => k.ttl !== -2)
+        .map(k => {
+          const name = k.name
+            .slice(KEY_PREFIX.length)
+            .replaceAll(cmd.threadId, '<thread>')
+            .replaceAll(cmd.runId, '<run>')
+            .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<id>');
+          return `${name} ttl=${bucket(k.ttl)}`;
+        });
+      const frames = [...new Set(names)].sort().map(shape => ({ type: 'key', shape }));
+      emit({ type: 'frames', id: cmd.id, reader: 'keys', frames: frames.length ? frames : [{ type: '(no keys)' }] });
     },
     exit: () => shutdown(),
   };
