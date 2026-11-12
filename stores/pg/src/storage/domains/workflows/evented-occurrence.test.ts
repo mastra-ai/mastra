@@ -963,6 +963,9 @@ describe('Postgres evented occurrence replay', () => {
         ).toBe('failed');
         expect(calls).toBe(1);
         interrupted.mockRestore();
+        // The worker died: the step lease it handed to the retry it never published lapses, where
+        // this live process would keep renewing it.
+        await abandonLease(storage, stepOccurrenceKey(run.runId, [0], kind === 'loop' ? 0 : undefined));
         const original = structuredClone(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
         expect(original.data.stepResults.increment?.metadata?.startedBy).not.toBe(original.id);
         const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;

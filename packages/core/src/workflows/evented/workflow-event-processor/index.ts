@@ -3209,7 +3209,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       prevResult,
       resumeData,
       parentWorkflow,
-      retryCount = 0,
       perStep,
       state,
       outputOptions,
@@ -3226,6 +3225,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     // It stays a declarative entry - the step executor interprets it per kind.
     const leaf: SingleStepEntry = step.type === 'loop' || step.type === 'foreach' ? step.step : step;
     const leafId = getEntryId(leaf);
+    // A restart of an attempt that was running continues its attempt count, so a step that keeps
+    // failing still runs out of retries when its worker crashes between them.
+    const storedAttempt = stepResults?.[leafId];
+    const retryCount: number =
+      args.retryCount ??
+      (restart && storedAttempt?.status === 'running' ? storedAttempt.metadata?.retryCount : undefined) ??
+      0;
 
     if (!isExecutableStep(step)) {
       return this.errorWorkflow(
@@ -3423,16 +3429,24 @@ export class WorkflowEventProcessor extends EventProcessor {
               }
             : {}),
         };
+        // A retry records its attempt, which a restart continues from.
+        const attemptRecord =
+          retryCount > 0
+            ? {
+                ...runningRecord,
+                metadata: { ...(runningRecord.metadata as Record<string, unknown> | undefined), retryCount },
+              }
+            : runningRecord;
         // Name the new child run before it exists. Otherwise a loop leaf keeps the
         // previous iteration's finished child here until the new child starts, and a
         // restart in that gap would reuse the finished child's result.
         const runningResult =
           nestedWorkflowStep && nestedDispatch === 'start'
             ? {
-                ...runningRecord,
-                metadata: { ...(runningRecord.metadata as Record<string, unknown> | undefined), nestedRunId },
+                ...attemptRecord,
+                metadata: { ...(attemptRecord.metadata as Record<string, unknown> | undefined), nestedRunId },
               }
-            : runningRecord;
+            : attemptRecord;
         try {
           await workflowsStore.updateWorkflowResults({
             workflowName: workflowId,
@@ -4369,6 +4383,37 @@ export class WorkflowEventProcessor extends EventProcessor {
           result: stepResult,
           requestContext: withoutAuthToken(requestContext),
           completionGuard: { eventId: args.eventId! },
+        });
+      } else if (!guardStart && stepLease !== UNLEASED_STEP && step.type !== 'foreach' && workflowsStore) {
+        // The record still shows the failed attempt running. Should the hand-off below lapse before
+        // the retry's delivery takes it, the restart that follows continues from that retry. A
+        // store that guards step starts keeps the saved failed attempt instead, even on a
+        // redelivery that found it saved: the retry's start guard claims the step from it. The
+        // event's copy holds all the start wrote, except for a resumed step: its start kept the
+        // suspend and resume data on the stored record, which a restart re-enters the step with.
+        // Nested workflow steps, whose start also records authorization metadata, return before this.
+        const resumed = resumeSteps?.[0] === leafId;
+        const stored = resumed
+          ? (await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId }))?.context[leafId]
+          : undefined;
+        const attempt: Record<string, unknown> & { metadata?: Record<string, unknown> } =
+          stored?.status === 'running'
+            ? { ...stored, startedAt: Date.now() }
+            : {
+                ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
+                status: 'running',
+                payload: prevResult.status === 'success' ? prevResult.output : undefined,
+                startedAt: Date.now(),
+              };
+        await workflowsStore.updateWorkflowResults({
+          workflowName: workflowId,
+          runId,
+          stepId: leafId,
+          result: {
+            ...attempt,
+            metadata: { ...attempt.metadata, retryCount: retryCount + 1 },
+          } as unknown as StepResult<any, any, any, any>,
+          requestContext: withoutAuthToken(requestContext),
         });
       }
       if (guardStart) stepResults[leafId] = stepResult;

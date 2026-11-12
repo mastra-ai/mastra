@@ -76,7 +76,7 @@ export function describeLateDeliveryCases({
   updatedAtMovesOnEveryWrite?: boolean;
 }) {
   describe('evented runs whose events arrive late or twice (#28712)', () => {
-    const { startReplica, storedRun, redeliver } = useLateDeliveryReplicas({ getStorage, connect });
+    const { startReplica, crash, storedRun, redeliver } = useLateDeliveryReplicas({ getStorage, connect });
 
     /** Waits until the run's liveness lapsed, so `restart()` takes it over. */
     async function waitUntilOrphaned(runId: string) {
@@ -326,6 +326,48 @@ export function describeLateDeliveryCases({
 
       expect((await (await a.workflow.createRun({ runId })).start({ inputData: { n: 2 } })).status).toBe('success');
       expect(executions).toEqual(['first', 'second', 'first', 'second']);
+    }, 20_000);
+
+    it('keeps counting the attempts of a failing step across a restart', async ({ skip }) => {
+      // A store with step guards keeps the failed attempt saved instead of the retry it hands off,
+      // and a restart starts the attempts over from it.
+      if ((await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards()) {
+        skip();
+      }
+
+      let attempts = 0;
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, retryConfig: { attempts: 2 } })
+          .then(
+            createStep({
+              id: 'broken',
+              inputSchema: Num,
+              outputSchema: Num,
+              execute: async () => {
+                attempts++;
+                throw new Error('always fails');
+              },
+            }),
+          )
+          .commit();
+      // A publishes the first retry and stops before any worker gets it.
+      const retryLost = deferred<void>();
+      const a = await startReplica(build(), event => {
+        if (event.type !== 'workflow.step.run' || !(event.data as { retryCount?: number }).retryCount) {
+          return undefined;
+        }
+
+        retryLost.resolve();
+        return 'drop';
+      });
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await retryLost.promise;
+      await crash(a, [stepOccurrenceKey(run.runId, [0]), runLivenessKey(run.runId)]);
+
+      const b = await startReplica(build());
+      expect((await (await b.workflow.createRun({ runId: run.runId })).restart()).status).toBe('failed');
+      expect(attempts).toBe(3);
     }, 20_000);
 
     it('still runs every attempt of a step that fails before it succeeds', async () => {
