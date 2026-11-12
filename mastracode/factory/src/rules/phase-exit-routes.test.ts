@@ -160,7 +160,7 @@ async function setup() {
       board,
       stage,
       expectedRevision: current.revision,
-      actor: { type: 'agent', id: 'triage-agent' },
+      actor: { type: 'agent', bindingId: 'triage-binding', role: 'triage' },
       ingress: { type: 'agent', identity: `move-${moves}` },
       cause: 'agent_tool',
     });
@@ -202,7 +202,10 @@ describe('phase-exit routes', () => {
       factoryProjectId: scope.factoryProjectId,
       actions: ['factory.work_item.stage_moved'],
     });
-    expect(audit.events.find(row => row.action === 'factory.work_item.stage_moved')?.metadata).toMatchObject({
+    const moveEvent = audit.events.find(row => row.action === 'factory.work_item.stage_moved');
+    // The Triage agent moved the card; the route only chose where to.
+    expect(moveEvent).toMatchObject({ actorType: 'agent', actorId: 'agent:triage-binding' });
+    expect(moveEvent?.metadata).toMatchObject({
       route: { id: docsRoute.id, name: 'Docs work' },
       fromBoard: 'shipyard',
       toBoard: 'docs',
