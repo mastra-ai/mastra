@@ -23,11 +23,11 @@ try {
 }
 ```
 
-An instance that calls `shutdown()` keeps its runs until its shutdown drain ends, then lets them go: `restart()` on them succeeds right after. An instance that stops without shutting down lets its runs go `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) after it last worked on them.
+Runs of an instance that calls `shutdown()` stay with it until `shutdown()` finishes draining (`drainTimeout`). Other instances can restart them right after. Runs of an instance that stops without calling `shutdown()` can be restarted `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) after that instance last worked on them.
 
 **Duplicate step deliveries**
 
-Concurrent `restart()` calls on one run restart it once. A step whose event is delivered again while an instance runs it waits for that instance instead of running beside it. If that instance stops, another instance runs the step once the stopped instance let it go. Workflows with `autoRestartActiveRuns: false` are unchanged. This needs a storage adapter with run-ownership support.
+Concurrent `restart()` calls on one run restart it once. A step whose event is delivered again while an instance runs it waits for that instance instead of running beside it. If that instance stops, another instance runs the step once its runs can be restarted, as described above. Workflows with `autoRestartActiveRuns: false` are unchanged. This needs a storage adapter with run-ownership support.
 
 **Storage growth**
 
