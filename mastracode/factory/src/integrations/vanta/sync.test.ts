@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+import { createBoardRegistry } from '../../boards/index.js';
+import { createTestBoard } from '../../boards/test-utils.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { VantaRules } from './rules.js';
+import { createVantaSync } from './sync.js';
+import type { VantaVulnerability } from './sync.js';
+
+const vulnerability: VantaVulnerability = {
+  id: 'vuln-1',
+  name: 'CVE-2026-1',
+  description: 'Prototype pollution when merging untrusted objects.',
+  packageIdentifier: 'lodash',
+  severity: 'HIGH',
+  isFixable: true,
+  remediateByDate: '2026-12-01T00:00:00Z',
+  firstDetectedDate: '2026-11-01T00:00:00Z',
+  externalURL: 'https://app.vanta.com/vulnerabilities/vuln-1',
+};
+
+async function setup(options: { enabled: boolean; bound?: (projectId: string) => string[] }) {
+  const seeded = await createFactoryStorageForTests();
+  const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'acme' } });
+  const rules = new VantaRules({
+    projects: seeded.projects,
+    storage: seeded.workItems,
+    configVersion: 'factory-config-v1',
+    boards: createBoardRegistry({ boards: [createTestBoard()] }),
+  });
+  const sync = createVantaSync({
+    listVulnerabilities: async () => [vulnerability],
+    listProjects: async () => [{ orgId: 'org-1', id: project.id }],
+    intakeEnabled: async () => options.enabled,
+    boundProjectIds: async () => options.bound?.(project.id) ?? [],
+    ingest: input => rules.ingest(input),
+    userId: 'factory-rule-dispatcher',
+  });
+  return { project, sync, workItems: seeded.workItems };
+}
+
+describe('createVantaSync', () => {
+  it('files each active vulnerability as a security-labeled card with its details', async () => {
+    const { project, sync, workItems } = await setup({ enabled: true });
+
+    const summary = await sync();
+
+    expect(summary).toMatchObject({ projects: 1, checked: 1, failed: 0 });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        decision: {
+          type: 'upsertLinkedWorkItem',
+          source: 'vanta-vulnerability',
+          title: 'lodash: CVE-2026-1',
+          description: expect.stringContaining('Prototype pollution when merging untrusted objects.'),
+        },
+      },
+    ]);
+  });
+
+  it('files nothing for an org that has not enabled Vanta intake', async () => {
+    const { project, sync, workItems } = await setup({ enabled: false });
+
+    expect(await sync()).toMatchObject({ projects: 0, checked: 0 });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it('skips projects the vulnerabilities source is not bound to', async () => {
+    const { project, sync, workItems } = await setup({ enabled: true, bound: () => ['other-project'] });
+
+    expect(await sync()).toMatchObject({ projects: 0 });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+});
