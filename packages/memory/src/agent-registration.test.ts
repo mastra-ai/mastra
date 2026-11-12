@@ -19,6 +19,18 @@ describe('agent memory storage diagnostics', () => {
     expect(() => memory!.storage).toThrow('Standalone agents must configure storage directly on Memory');
   });
 
+  it('omits the agent name when one memory is shared by several agents', async () => {
+    const shared = new Memory();
+    const agentA = agentWithMemory('shared-a', shared);
+    const agentB = agentWithMemory('shared-b', shared);
+
+    await agentA.getMemory();
+    await agentB.getMemory();
+
+    expect(() => shared.storage).toThrow('Memory requires a storage provider');
+    expect(() => shared.storage).not.toThrow('[Agent:');
+  });
+
   it('inherits storage once the agent is registered', async () => {
     const agent = agentWithMemory('registered', new Memory());
     const mastra = new Mastra({ storage: new InMemoryStore() });
