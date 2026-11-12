@@ -59,18 +59,31 @@ function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
   };
 }
 
-/** A run with its snapshot reduced to what `listWorkflowRuns({ summary: true })` returns. */
+/**
+ * A run with its snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status`
+ * and `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot, or one that failed to parse and stayed a string, reduces to `{}`.
+ */
 function summarizeWorkflowRun(run: WorkflowRun): WorkflowRun {
-  // A snapshot that failed to parse stays a string, as it does without summary.
-  if (typeof run.snapshot === 'string') {
-    return run;
+  const source = run.snapshot !== null && typeof run.snapshot === 'object' ? run.snapshot : {};
+  const { status, timestamp, parentWorkflow } = source as Partial<WorkflowRunState>;
+  const snapshot: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    snapshot.status = status;
   }
 
-  const { status, timestamp, parentWorkflow } = run.snapshot;
-  const snapshot = parentWorkflow
-    ? { status, timestamp, parentWorkflow: { workflowId: parentWorkflow.workflowId, runId: parentWorkflow.runId } }
-    : { status, timestamp };
-  return { ...run, snapshot: snapshot as WorkflowRunState };
+  if (timestamp !== undefined && timestamp !== null) {
+    snapshot.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    snapshot.parentWorkflow = { workflowId, runId };
+  }
+
+  return { ...run, snapshot: snapshot as unknown as WorkflowRunState };
 }
 
 export class WorkflowsValkey extends WorkflowsStorage {
