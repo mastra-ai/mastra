@@ -35,10 +35,10 @@ let isRestarting = false;
 let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
-// How long a stopping server gets to drain and run Mastra's shutdown (including its final
-// usage telemetry report and the end of the liveness of the evented runs it drove) before it is killed, on
-// both hot reload and Ctrl-C. A server that exits sooner is not waited for. Set from the
-// project's `server.drainTimeout` once the config is read; the default drain window until then.
+// How long a stopping server gets to drain and run Mastra's shutdown (including its final usage
+// telemetry report and the release of the evented runs it drove) before it is killed, on both hot
+// reload and Ctrl-C. A server that exits sooner is not waited for. Set from the project's
+// `server.drainTimeout` once the config is read; the default drain window until then.
 let configuredShutdownTimeoutMs: number | undefined;
 const serverShutdownTimeoutMs = () => configuredShutdownTimeoutMs ?? serverShutdownBudgetMs();
 const environmentState = createEnvironmentState();

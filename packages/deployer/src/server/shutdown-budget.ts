@@ -8,10 +8,11 @@ export const DEFAULT_SERVER_DRAIN_TIMEOUT_MS = 5000;
 export const CORE_SHUTDOWN_TIMEOUT_MS = 6500;
 
 /**
- * The longest a server takes to exit after a shutdown signal: the HTTP drain, then `mastra.shutdown()`
- * with the same drain window plus core teardown. A supervisor that kills the server sooner can cut
- * off the teardown, such as the end of the liveness of the evented runs it drove. A drain window the server
- * would reject counts as the default; the result is capped at the longest timer delay.
+ * The longest a server takes to exit after a shutdown signal: the HTTP drain, then
+ * `mastra.shutdown()` with the same drain window plus core teardown. A supervisor that kills the
+ * server sooner can cut off the teardown, such as the release of the evented runs it drove. A drain
+ * window the server would reject counts as the default; the result is capped at the longest timer
+ * delay.
  */
 export function serverShutdownBudgetMs(drainTimeoutMs?: number): number {
   const drain =

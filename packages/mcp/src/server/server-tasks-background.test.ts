@@ -1240,7 +1240,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
      */
     async function bootLikeServer(mastra: Mastra) {
       await mastra.startWorkers();
-      // Not awaited, as the server doesn't; the call logs its per-run failures and never rejects.
+      // Not awaited, as the dev server's boot handler doesn't; the call logs its per-run failures and never rejects.
       void mastra.restartAllActiveWorkflowRuns();
     }
 
