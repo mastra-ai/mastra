@@ -160,10 +160,11 @@ describe('workflow recovery rule (#28712)', () => {
   });
 
   /**
-   * A replica whose default-engine `recovered-wf` records each run it runs, and holds `blocked` until
-   * `release`. `order` gets `'step-done'` once the held step resumes.
+   * A replica whose default-engine `recovered-wf` records each run it runs, and holds the `blocked` runs
+   * until `release`. `started` resolves once one of them runs. `order` gets `'step-done'` once a held step
+   * resumes.
    */
-  function startBlockingReplica(storage: InMemoryStore, blocked: string, recovery: MastraRecoveryConfig) {
+  function startBlockingReplica(storage: InMemoryStore, blocked: string | string[], recovery: MastraRecoveryConfig) {
     const executions: string[] = [];
     const order: string[] = [];
     const started = Promise.withResolvers<void>();
@@ -176,7 +177,7 @@ describe('workflow recovery rule (#28712)', () => {
           outputSchema: schema,
           execute: async ({ runId }) => {
             executions.push(runId);
-            if (runId === blocked) {
+            if ([blocked].flat().includes(runId)) {
               started.resolve();
               await release.promise;
               order.push('step-done');
@@ -248,6 +249,30 @@ describe('workflow recovery rule (#28712)', () => {
     b.release();
     await first;
     expect(b.executions).toEqual(['run-1', 'run-2']);
+  }, 10_000);
+
+  it('restarts runs whose rechecks come due together workflowConcurrency at a time', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const b = startBlockingReplica(storage, ['run-1', 'run-2'], { workflowGraceMs: GRACE_MS, workflowConcurrency: 1 });
+    await persistActiveRun(storage, 'run-1');
+    await persistActiveRun(storage, 'run-2');
+    // No recheck jitter: both runs are in their grace period now, and their rechecks fire together.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const runReads = vi.spyOn(store, 'getWorkflowRunById');
+
+    await b.mastra.restartAllActiveWorkflowRuns();
+    await b.started;
+    await vi.waitFor(() => {
+      const read = runReads.mock.calls.map(([args]) => args.runId);
+      expect(read).toEqual(expect.arrayContaining(['run-1', 'run-2']));
+    });
+    // Both rechecks read their run; a restart outside the limiter would start the second run right after.
+    await sleep(100);
+
+    expect(b.executions).toHaveLength(1);
+    b.release();
+    await vi.waitFor(() => expect([...b.executions].sort()).toEqual(['run-1', 'run-2']));
   }, 10_000);
 
   it('waits at shutdown for a restart the recovery pass is running', async () => {

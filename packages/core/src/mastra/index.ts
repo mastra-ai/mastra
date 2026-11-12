@@ -4574,45 +4574,6 @@ export class Mastra<
       const candidates = await this.#recoveryCandidates(workflowsStore, listed);
       const graceMs = this.#workflowGraceMs();
 
-      // The verdict is from the run's batch read. While the restart waited for a slot, another instance can
-      // have restarted the run, whose lease and liveness then lapsed in a worker backlog; `restart()` alone
-      // would not see that, as it ignores the grace period. So the keys are read once more first.
-      const restartIfStopped = async ({ workflow, run }: RecoveryCandidate) => {
-        if (this.#shuttingDown) {
-          return;
-        }
-
-        if (runFencing) {
-          const keys = livenessKeysOf(workflow, run.runId);
-          let owners: Map<string, RunOwnershipRecord>;
-          try {
-            owners = await workflowsStore.getRunOwnerships({ runIds: keys });
-          } catch (error) {
-            // As for a failed batch read: look again once a grace period passed.
-            this.#logger.warn('Failed to read workflow run liveness before restarting', {
-              workflow: workflow.id,
-              runId: run.runId,
-              error,
-            });
-            this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, Date.now() + graceMs);
-            return;
-          }
-
-          const verdict = recoveryVerdict({
-            records: keys.map(key => owners.get(key)),
-            updatedAt: run.updatedAt,
-            graceMs,
-            now: Date.now(),
-          });
-          if (!verdict.restart) {
-            this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, verdict.dueAt);
-            return;
-          }
-        }
-
-        await this.#restartWorkflowRun(workflow, run.runId);
-      };
-
       for (let start = 0; start < candidates.length; start += RECOVERY_OWNERSHIP_BATCH_SIZE) {
         if (this.#shuttingDown) {
           break;
@@ -4651,23 +4612,19 @@ export class Mastra<
           if (verdict.restart) {
             // Queued without waiting for a slot, so long default-engine restarts never hold up the pass.
             const key = recoveryRunKey(run.workflowName, run.runId);
-            this.#queuedRecoveryRestarts.add(key);
-            const restart = this.#recoveryRestarts
-              .run(() => this.#trackDurableRecovery(restartIfStopped(candidate)))
-              .then(
-                () => void this.#failedRecoveryRestarts.delete(key),
-                error => {
-                  // Every pass retries a run whose restart throws, so only its first failure is an error.
-                  const context = { workflow: workflow.id, runId: run.runId, error };
-                  if (this.#failedRecoveryRestarts.has(key)) {
-                    this.#logger.debug('Failed to restart workflow run again', context);
-                  } else {
-                    this.#failedRecoveryRestarts.add(key);
-                    this.#logger.error('Failed to restart workflow run', context);
-                  }
-                },
-              )
-              .finally(() => this.#queuedRecoveryRestarts.delete(key));
+            const restart = this.#queueRecoveryRestart({ workflow, run, workflowsStore, runFencing }).then(
+              () => void this.#failedRecoveryRestarts.delete(key),
+              error => {
+                // Every pass retries a run whose restart throws, so only its first failure is an error.
+                const context = { workflow: workflow.id, runId: run.runId, error };
+                if (this.#failedRecoveryRestarts.has(key)) {
+                  this.#logger.debug('Failed to restart workflow run again', context);
+                } else {
+                  this.#failedRecoveryRestarts.add(key);
+                  this.#logger.error('Failed to restart workflow run', context);
+                }
+              },
+            );
             restarts.push(restart);
             continue;
           }
@@ -4687,6 +4644,68 @@ export class Mastra<
 
     // Each restart logs its own failure and never rejects.
     return { earliestDueAt, runFencing, settled: Promise.all(restarts).then(() => {}) };
+  }
+
+  /**
+   * Restarts a run the recovery rule picked once `#recoveryRestarts` has a free slot, and rejects when the
+   * restart fails. The run counts as queued meanwhile, so recovery leaves it to this restart.
+   *
+   * The verdict is from keys read before the run was queued. While it waited for a slot, another instance
+   * can have restarted the run, whose lease and liveness then lapsed in a worker backlog; `restart()` alone
+   * would not see that, as it ignores the grace period. So the keys are read once more first.
+   */
+  #queueRecoveryRestart({
+    workflow,
+    run,
+    workflowsStore,
+    runFencing,
+  }: {
+    workflow: AnyWorkflow;
+    run: WorkflowRun;
+    workflowsStore: WorkflowsStorage;
+    runFencing: boolean;
+  }): Promise<void> {
+    const restartIfStopped = async () => {
+      if (this.#shuttingDown) {
+        return;
+      }
+
+      if (runFencing) {
+        const keys = livenessKeysOf(workflow, run.runId);
+        let owners: Map<string, RunOwnershipRecord>;
+        try {
+          owners = await workflowsStore.getRunOwnerships({ runIds: keys });
+        } catch (error) {
+          // As for a failed batch read: look again once a grace period passed.
+          this.#logger.warn('Failed to read workflow run liveness before restarting', {
+            workflow: workflow.id,
+            runId: run.runId,
+            error,
+          });
+          this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, Date.now() + this.#workflowGraceMs());
+          return;
+        }
+
+        const verdict = recoveryVerdict({
+          records: keys.map(key => owners.get(key)),
+          updatedAt: run.updatedAt,
+          graceMs: this.#workflowGraceMs(),
+          now: Date.now(),
+        });
+        if (!verdict.restart) {
+          this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, verdict.dueAt);
+          return;
+        }
+      }
+
+      await this.#restartWorkflowRun(workflow, run.runId);
+    };
+
+    const key = recoveryRunKey(run.workflowName, run.runId);
+    this.#queuedRecoveryRestarts.add(key);
+    return this.#recoveryRestarts
+      .run(() => this.#trackDurableRecovery(restartIfStopped()))
+      .finally(() => this.#queuedRecoveryRestarts.delete(key));
   }
 
   /** The grace period of the recovery rule (`recovery.workflowGraceMs`). */
@@ -4904,13 +4923,15 @@ export class Mastra<
     try {
       const workflow = this.#recoveryRestartableWorkflow(workflowName);
       const workflowsStore = await this.#storage?.getStore('workflows');
-      if (!workflow || !workflowsStore) {
+      // A run queued on the limiter gets the rule applied again once its slot is free.
+      if (!workflow || !workflowsStore || this.#queuedRecoveryRestarts.has(recoveryRunKey(workflowName, runId))) {
         return;
       }
 
       // The keys first: a run another process still drives costs no snapshot read.
       const keys = livenessKeysOf(workflow, runId);
-      const owners = (await this.#supportsRunFencing(workflowsStore))
+      const runFencing = await this.#supportsRunFencing(workflowsStore);
+      const owners = runFencing
         ? await workflowsStore.getRunOwnerships({ runIds: keys })
         : new Map<string, RunOwnershipRecord>();
       const records = keys.map(key => owners.get(key));
@@ -4938,7 +4959,8 @@ export class Mastra<
         return;
       }
 
-      await this.#restartWorkflowRun(workflow, runId);
+      // Through the limiter, so rechecks that come due together restart `workflowConcurrency` runs at a time.
+      await this.#queueRecoveryRestart({ workflow, run, workflowsStore, runFencing });
     } catch (error) {
       const context = { workflow: workflowName, runId, error };
       if (failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
