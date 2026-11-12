@@ -1259,10 +1259,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             : undefined;
         successorActiveStepsPath = {};
         stepResults = { ...stepResults };
-        // A loop that runs again keeps counting its iterations.
+        // A loop that runs again keeps counting its iterations from the count its commit saved.
         const iterationCount: number | undefined =
           successor === captured && successor.type === 'loop'
-            ? restart!.stepResults[getEntryId(successor.step)]?.metadata?.iterationCount
+            ? restart!.stepResults[getEntryId(successor.step)]?.metadata?.nextIterationCount
             : undefined;
         for (const [branchIndex, id] of ids.entries()) {
           stepResults[id] = {
@@ -3222,7 +3222,9 @@ export class WorkflowEventProcessor extends EventProcessor {
             throw conditionError;
           }
         }
-        stepResult = { ...result, metadata: { ...result.metadata, startedBy, loopCondition } };
+        // A restart that finds this commit starts the next iteration with this count.
+        const nextIterationCount = (args.stepResults?.[leafId]?.metadata?.iterationCount ?? 0) + 1;
+        stepResult = { ...result, metadata: { ...result.metadata, startedBy, loopCondition, nextIterationCount } };
         await store.updateWorkflowResults({
           workflowName: args.workflowId,
           runId: args.runId,
@@ -3574,6 +3576,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                         __restartPending: undefined,
                         __continuationStarted: undefined,
                         loopCondition: undefined,
+                        nextIterationCount: undefined,
                       }
                     : {}),
                   // Carry only authorization occurrences, not stale routing metadata.

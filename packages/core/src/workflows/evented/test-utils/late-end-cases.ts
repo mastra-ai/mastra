@@ -426,6 +426,55 @@ export function describeLateEndCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
+    it.each(['step', 'nested workflow'] as const)(
+      'keeps counting the iterations of a loop with a %s body when a restart reads it before its next iteration starts',
+      async body => {
+        const inputs: number[] = [];
+        const build = () => {
+          const count = createStep({
+            id: 'count',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              inputs.push(inputData.n);
+              return { n: inputData.n + 1 };
+            },
+          });
+          const loopBody =
+            body === 'step'
+              ? count
+              : createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num }).then(count).commit();
+          return createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .dountil(loopBody, async ({ iterationCount }) => iterationCount >= 3)
+            .commit();
+        };
+        let parentRunId = '';
+        let loopRuns = 0;
+        // The loop's second iteration sits in A's broker queue past a lease TTL.
+        const fromA = heldQueue(
+          event =>
+            event.type === 'workflow.step.run' &&
+            event.runId === parentRunId &&
+            samePath(event, [0]) &&
+            ++loopRuns === 2,
+        );
+        const a = await startReplica(build(), fromA.intercept);
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        parentRunId = run.runId;
+        startInBackground(run, { n: 0 });
+        await fromA.firstHeld;
+        await waitUntilOrphaned(run.runId);
+
+        const b = await startReplica(build());
+        expect(await (await b.workflow.createRun({ runId: run.runId })).restart()).toMatchObject({
+          status: 'success',
+          result: { n: 3 },
+        });
+        expect(inputs).toEqual([0, 1, 2]);
+      },
+      20_000,
+    );
+
     /** A two-step workflow that keeps no snapshot, so its run's end deletes it. */
     const keepsNoSnapshot = (executions: string[]) =>
       createWorkflow({
