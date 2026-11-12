@@ -5,6 +5,7 @@ vi.hoisted(() => {
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest';
 import { PostgresStore } from '../..';
 import { describeFinishedOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/finished-occurrence-cases';
+import { describeLateDeliveryCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/late-delivery-cases';
 import { TEST_CONFIG } from '../../test-utils';
 
 // Postgres arbitrates some late deliveries through its workflow step guards (#28712).
@@ -22,12 +23,11 @@ describe('Postgres evented finished step deliveries', () => {
   });
 
   // Each replica opens its own connection pool, as separate pods do.
-  describeFinishedOccurrenceCases({
-    getStorage: () => storage,
-    connect: async () => {
-      const replica = open();
-      await replica.init();
-      return replica;
-    },
-  });
+  const connect = async () => {
+    const replica = open();
+    await replica.init();
+    return replica;
+  };
+  describeFinishedOccurrenceCases({ getStorage: () => storage, connect });
+  describeLateDeliveryCases({ getStorage: () => storage, connect });
 });
