@@ -1324,11 +1324,26 @@ export const mastra = new Mastra({
           expect(output).toContain('shutdown-thread-run:tool-started');
           expect(output).not.toContain('shutdown-thread-run:aborted');
 
+          const signalledAt = Date.now();
           server.kill('SIGTERM');
 
           await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          const exitedAfterMs = Date.now() - signalledAt;
           expect(output).toContain('shutdown-thread-run:aborted');
           expect(output).not.toContain('Mastra shutdown timed out');
+          // `mastra dev` kills a reloading server after the installed deployer's budget for the app's
+          // `server.drainTimeout` (the default here), so the generated server must exit within it.
+          const { stdout: budgetMs } = await execa(
+            'node',
+            [
+              '--input-type=module',
+              '-e',
+              `import { serverShutdownBudgetMs } from '@mastra/deployer/build';
+console.log(serverShutdownBudgetMs());`,
+            ],
+            { cwd: join(fixturePath, 'apps', 'custom') },
+          );
+          expect(exitedAfterMs).toBeLessThan(Number(budgetMs));
         } finally {
           server.kill('SIGKILL');
           await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
