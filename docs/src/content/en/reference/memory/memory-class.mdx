@@ -111,9 +111,9 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
           },
           {
             name: 'semanticRecall',
-            type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+            type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource'; maxChunkChars?: number }",
             description:
-              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires a vector store, and an embedder unless the vector store embeds text itself (`isSelfEmbedding`). Default topK is 4, default messageRange is {before: 1, after: 1}.',
+              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires a vector store, and an embedder unless the vector store embeds text itself (`isSelfEmbedding`). Default topK is 4, default messageRange is {before: 1, after: 1}. `maxChunkChars` caps the characters of message text per embedded chunk; see [Long messages](/docs/memory/semantic-recall#long-messages).',
             isOptional: true,
             defaultValue: 'false',
           },

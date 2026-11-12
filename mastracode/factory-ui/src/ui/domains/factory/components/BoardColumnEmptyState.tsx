@@ -3,9 +3,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
-import type { BoardKind } from '../boardStages';
 import { stageLabel } from '../stages';
 import type { BoardStageId } from '../stages';
+
+/** What the initial phase is missing before cards can arrive: a connected source, or a route to this board. */
+export type IntakeSetup = 'source' | 'route';
 
 interface BoardColumnEmptyCopy {
   title: string;
@@ -14,20 +16,20 @@ interface BoardColumnEmptyCopy {
 
 function boardColumnEmptyCopy(
   stage: BoardStageId,
-  kind: BoardKind,
-  hasIntakeSource: boolean,
+  intakeSetup: IntakeSetup | undefined,
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (isInitialPhase) {
-    if (kind === 'review')
-      return {
-        title: 'No change requests waiting',
-        description: 'Open change requests from connected repositories appear here.',
-      };
-    if (!hasIntakeSource) {
+    if (intakeSetup === 'source') {
       return {
         title: 'No intake sources',
         description: 'Create a card or connect an issue source in Work Intake settings.',
+      };
+    }
+    if (intakeSetup === 'route') {
+      return {
+        title: 'No intake route sends cards here',
+        description: 'Your connected sources file onto other boards. Create a card or add an intake route.',
       };
     }
     return {
@@ -52,11 +54,6 @@ function boardColumnEmptyCopy(
         description: 'Drag planned work here when implementation starts.',
       };
     case 'review':
-      if (kind === 'review')
-        return {
-          title: 'No active reviews',
-          description: 'Drag a change request here when review starts.',
-        };
       return {
         title: 'Nothing awaiting review',
         description: 'Drag built work here when it is ready for review.',
@@ -67,11 +64,6 @@ function boardColumnEmptyCopy(
         description: 'Press Review on a pull request card in Intake to start a review.',
       };
     case 'done':
-      if (kind === 'review')
-        return {
-          title: 'No completed reviews',
-          description: 'Drag a reviewed pull request here when it is complete.',
-        };
       return {
         title: 'Nothing completed yet',
         description: 'Drag finished work here to close it out.',
@@ -91,19 +83,18 @@ function boardColumnEmptyCopy(
 
 function boardEmptyCopy(
   stage: BoardStageId,
-  kind: BoardKind,
-  hasIntakeSource: boolean,
+  intakeSetup: IntakeSetup | undefined,
   filtersExcludeAll: boolean,
   alreadyMaterialized: number,
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (filtersExcludeAll) {
     return {
-      title: kind === 'review' ? 'No change requests match filters' : 'No work items match filters',
+      title: 'No work items match filters',
       description: 'Try adjusting or clearing your filters.',
     };
   }
-  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource, isInitialPhase);
+  const copy = boardColumnEmptyCopy(stage, intakeSetup, isInitialPhase);
   if (alreadyMaterialized <= 0) return copy;
   const itemsLabel =
     alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have';
@@ -116,8 +107,7 @@ function boardEmptyCopy(
 export function BoardColumnEmptyState({
   stage,
   isInitialPhase,
-  kind,
-  hasIntakeSource,
+  intakeSetup,
   filtersExcludeAll = false,
   alreadyMaterialized = 0,
   layout,
@@ -125,15 +115,14 @@ export function BoardColumnEmptyState({
 }: {
   stage: BoardStageId;
   isInitialPhase: boolean;
-  kind: BoardKind;
-  hasIntakeSource: boolean;
+  intakeSetup?: IntakeSetup;
   filtersExcludeAll?: boolean;
   /** Feed items withheld because their card sits on another board in this Factory. */
   alreadyMaterialized?: number;
   layout: BoardLayout;
   actionSlot?: ReactNode;
 }) {
-  const copy = boardEmptyCopy(stage, kind, hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
+  const copy = boardEmptyCopy(stage, intakeSetup, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
   if (layout === 'list') {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">

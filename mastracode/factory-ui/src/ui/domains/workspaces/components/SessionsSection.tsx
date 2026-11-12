@@ -1,13 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
+import { useWorkspacePullRequestStatuses } from '../../../../hooks/useWorkspacePullRequestStatuses';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
@@ -23,6 +24,7 @@ import {
 } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
+import type { SessionListRow } from '../services/sessionRows';
 import { compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
@@ -41,8 +43,6 @@ export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const openNewUserSession = useOpenNewUserSession();
-  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
-  const catalog = useBoardCatalog(factoryId);
   const {
     view,
     hiddenGroupKeys,
@@ -53,6 +53,12 @@ export function SessionsSection() {
     changeGroupOrder,
     resetView,
   } = useSessionListView();
+  const sidebarState = useMaybeSidebarState()?.state;
+  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId, {
+    // Collapsed to icons, nested rows are hidden, so the card folds back and carries the open session.
+    revealChildSessions: view.revealChildSessions && sidebarState !== 'collapsed',
+  });
+  const catalog = useBoardCatalog(factoryId);
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const deletion = useSessionDeletion(factoryId);
@@ -64,7 +70,7 @@ export function SessionsSection() {
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
-  const mergedBySessionId = useWorkspacePullRequestMerges({
+  const liveStatusBySessionId = useWorkspacePullRequestStatuses({
     baseUrl,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
@@ -140,6 +146,16 @@ export function SessionsSection() {
                 onVisibilityChange={changeGroupVisibility}
                 onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
               />
+              <DropdownMenu.Separator />
+              <DropdownMenu.CheckboxItem checked={view.compact} onCheckedChange={compact => updateView({ compact })}>
+                Compact view
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem
+                checked={view.revealChildSessions}
+                onCheckedChange={revealChildSessions => updateView({ revealChildSessions })}
+              >
+                Reveal child sessions
+              </DropdownMenu.CheckboxItem>
             </PropertiesMenu>
           </div>
         }
@@ -154,15 +170,31 @@ export function SessionsSection() {
             key={group.key}
             group={group}
             showHeader={view.groupBy !== 'none'}
-            renderRow={row => (
-              <SessionListItem
-                factoryId={factoryId}
-                row={row}
-                disabled={deletion.deleting}
-                merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
-                onDelete={deletion.requestDeletion}
-              />
-            )}
+            renderRow={row => {
+              const item = (entry: SessionListRow, level?: number, subItems?: ReactNode) => (
+                <SessionListItem
+                  key={entry.session.sessionId}
+                  factoryId={factoryId}
+                  row={entry}
+                  level={level}
+                  compact={view.compact}
+                  disabled={deletion.deleting}
+                  liveStatus={
+                    liveStatusBySessionId[entry.session.sessionId] ??
+                    (entry.pullRequest?.knownMerged ? 'merged' : undefined)
+                  }
+                  onDelete={deletion.requestDeletion}
+                  subItems={subItems}
+                />
+              );
+              return item(
+                row,
+                undefined,
+                row.childRows?.length ? (
+                  <Sidebar.NavList className="mt-0.5">{row.childRows.map(child => item(child, 1))}</Sidebar.NavList>
+                ) : undefined,
+              );
+            }}
           />
         ))}
       </div>

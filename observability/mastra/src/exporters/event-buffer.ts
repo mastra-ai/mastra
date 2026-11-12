@@ -16,7 +16,8 @@ export interface UpdateSpanPartial {
 }
 
 /** An observability event augmented with retry tracking for the buffer. */
-export type BufferedEvent = ObservabilityEvent & RetryCount;
+export type BufferableEvent = Exclude<ObservabilityEvent, { type: 'feedback_replacement' | 'feedback_review_status' }>;
+export type BufferedEvent = BufferableEvent & RetryCount;
 
 /**
  * Buffers observability events (creates and updates) for batch flushing.
@@ -65,20 +66,20 @@ export class EventBuffer {
     }
   }
 
-  private pushCreate(event: ObservabilityEvent): void {
+  private pushCreate(event: BufferableEvent): void {
     const buffered = this.#byteTracker ? this.#byteTracker.capture(event) : { ...event, retryCount: 0 };
     this.setFirstEventTime();
     this.#creates.push(buffered);
   }
 
-  private pushUpdate(event: ObservabilityEvent): void {
+  private pushUpdate(event: BufferableEvent): void {
     const buffered = this.#byteTracker ? this.#byteTracker.capture(event) : { ...event, retryCount: 0 };
     this.setFirstEventTime();
     this.#updates.push(buffered);
   }
 
   /** Route an event to the create or update buffer based on its type and the storage strategy. */
-  addEvent(event: ObservabilityEvent) {
+  addEvent(event: BufferableEvent) {
     if (!this.#storageStrategy) {
       this.#preInit.push({ ...event, retryCount: 0 });
       return;

@@ -3,7 +3,8 @@ import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import type { FactoryJiraRuleContext } from '../../rules/types.js';
+import { FACTORY_JIRA_EVENTS } from '../../rules/types.js';
+import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveJiraRules } from './default-rules.js';
 import type { JiraRuleOverrides } from './default-rules.js';
@@ -51,7 +52,6 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
       configVersion: 'factory-config-v1',
     }),
     intakeRoutes: seeded.boards,
-    isAutoRunEnabled: async () => false,
     ownerId: 'jira-rules-test',
   });
   /** Files every committed decision, as the dispatcher's poll would. */
@@ -73,16 +73,7 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
 }
 
 describe('JiraRules', () => {
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: '10001', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: '10002', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: '10003',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed issue on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -91,11 +82,10 @@ describe('JiraRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { '10001': 'release', '10003': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 
@@ -388,6 +378,53 @@ describe('JiraRules', () => {
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+});
+
+describe('JiraRules and the shared board list', () => {
+  // The rules find an issue's card in the board list the storage caches for every reader in the
+  // process. A rule may write to the card it is handed, so a card leaked from that cache would
+  // corrupt every later read of the board.
+  it('hands every event kind its own copy of the card, leaving the cached board list untouched', async () => {
+    const seen = new Map<FactoryJiraEventName, FactoryRuleItemContext[]>();
+    const mutateItem = (event: FactoryJiraEventName) => (context: Readonly<FactoryJiraRuleContext>) => {
+      if (!context.item) return;
+      seen.set(event, [...(seen.get(event) ?? []), context.item]);
+      context.item.workItem.title = `mutated by ${event}`;
+      context.item.workItem.metadata = { ...context.item.workItem.metadata, mutatedBy: event };
+      if (context.item.metadata) context.item.metadata.mutatedBy = event;
+    };
+    const { project, service, workItems } = await setup(
+      Object.fromEntries(FACTORY_JIRA_EVENTS.map(event => [event, mutateItem(event)])),
+    );
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'jira', type: 'issue', externalId: issue.id, url: issue.url },
+        title: 'ENG-42: Fix intake sync',
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const deliveries: Array<[FactoryJiraEventName, typeof issue]> = [
+      ['issueObserved', issue],
+      ['issueClosed', { ...issue, stateType: 'completed', updatedAt: '2026-12-01T00:00:00Z' }],
+    ];
+
+    for (const [event, delivery] of deliveries) {
+      const before = structuredClone(await workItems.listShared(scope));
+      await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [delivery] });
+      const after = await workItems.listShared(scope);
+      expect(after, `${event} wrote to the cached board list`).toEqual(before);
+      const cached = new Set<unknown>(after);
+      expect((seen.get(event) ?? []).some(item => cached.has(item.workItem))).toBe(false);
+    }
+    expect(seen.get('issueObserved')).toHaveLength(1);
+    expect(seen.get('issueClosed')).toHaveLength(1);
   });
 });
 

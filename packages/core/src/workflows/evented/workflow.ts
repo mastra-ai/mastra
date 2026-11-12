@@ -2025,7 +2025,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
@@ -2176,7 +2176,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
@@ -2562,6 +2562,25 @@ export class EventedRun<
           `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
             'Please specify which step to resume using the "step" parameter.',
         );
+      }
+    }
+
+    // A label raised inside a nested workflow is recorded against the step that
+    // wraps it, so follow it down through the nested snapshots to the step that
+    // owns it. Otherwise the nested run would resume whichever step it finds first.
+    if (params.label && snapshotResumeLabel) {
+      let levelSnapshot: WorkflowRunState | null = snapshot;
+      while (levelSnapshot) {
+        const stepResult = (levelSnapshot.context as any)?.[steps[steps.length - 1]!];
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? stepResult?.suspendPayload?.__workflow_meta?.runId;
+        if (!nestedRunId) break;
+        levelSnapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: steps[steps.length - 1]!,
+          runId: nestedRunId,
+        });
+        const nestedStepId = levelSnapshot?.resumeLabels?.[params.label]?.stepId;
+        if (!nestedStepId) break;
+        steps = [...steps, nestedStepId];
       }
     }
 

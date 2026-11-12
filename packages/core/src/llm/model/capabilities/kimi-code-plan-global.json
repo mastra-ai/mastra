@@ -8,12 +8,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-for-coding": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "k3.1-pro": [
       {
         "type": "effort",
@@ -24,6 +18,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-for-coding": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "k3-256k": [

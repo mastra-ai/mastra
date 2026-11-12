@@ -26,4 +26,6 @@ export const githubWorkItemAdapter = externalAdapter('github', {
     return typeof number === 'number' ? `#${number}` : null;
   },
   state: mergedState,
+  // The key carries the repository whenever the item's URL did: `acme/app#12`.
+  repository: ({ key }) => (key ? (/^([^/#]+\/[^/#]+)#\d+$/.exec(key)?.[1] ?? null) : null),
 });

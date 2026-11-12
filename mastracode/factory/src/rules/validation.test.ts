@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
-import { createBoardRegistry } from '../boards/registry.js';
+import { boardRegistryOf, createBoardRegistry } from '../boards/registry.js';
 import type { FactoryRuleDecision } from './types.js';
 import {
   assertFactoryConfigVersion,
@@ -87,23 +87,20 @@ describe('Factory rule validation', () => {
   );
 
   describe('installed decision targets', () => {
-    const boards = createBoardRegistry({
-      includeDefaultBoards: false,
-      boards: [
-        defineBoard({
-          id: 'release',
-          title: 'Release',
-          initialPhase: 'queued',
-          phases: { queued: { title: 'Queued', kind: 'resting' }, shipped: { title: 'Shipped', kind: 'terminal' } },
-        }),
-        defineBoard({
-          id: 'archive',
-          title: 'Archive',
-          initialPhase: 'waiting',
-          phases: { waiting: { title: 'Waiting', kind: 'resting' } },
-        }),
-      ],
-    });
+    const boards = boardRegistryOf([
+      defineBoard({
+        id: 'release',
+        title: 'Release',
+        initialPhase: 'queued',
+        phases: { queued: { title: 'Queued', kind: 'resting' }, shipped: { title: 'Shipped', kind: 'terminal' } },
+      }),
+      defineBoard({
+        id: 'archive',
+        title: 'Archive',
+        initialPhase: 'waiting',
+        phases: { waiting: { title: 'Waiting', kind: 'resting' } },
+      }),
+    ]);
     const transition: FactoryRuleDecision = {
       type: 'transition',
       idempotencyKey: 'target',
@@ -353,6 +350,34 @@ describe('Factory rule validation', () => {
       { type: 'invokeSkill', idempotencyKey: 'build-3', role: 'work' },
     ]) {
       expect(() => validateFactoryRuleDecision(invalid)).toThrow(/exactly one of skillName or prompt/);
+    }
+  });
+
+  it('carries a goal on an invokeSkill decision and refuses a malformed one', () => {
+    const base = {
+      type: 'invokeSkill',
+      idempotencyKey: 'build-goal',
+      role: 'work',
+      skillName: 'factory-build',
+    } as const;
+    expect(validateFactoryRuleDecision({ ...base, goal: { objective: '  Ship the plan.  ', maxRuns: 20 } })).toEqual({
+      ...base,
+      goal: { objective: 'Ship the plan.', maxRuns: 20 },
+    });
+    expect(validateFactoryRuleDecision({ ...base, goal: { objective: 'Ship the plan.' } })).toEqual({
+      ...base,
+      goal: { objective: 'Ship the plan.' },
+    });
+    for (const goal of [
+      'Ship the plan.',
+      { objective: '' },
+      { objective: 'x'.repeat(2001) },
+      { objective: 'Ship.', maxRuns: 0 },
+      { objective: 'Ship.', maxRuns: 51 },
+      { objective: 'Ship.', maxRuns: 1.5 },
+      { objective: 'Ship.', judge: 'model' },
+    ]) {
+      expect(() => validateFactoryRuleDecision({ ...base, goal } as never)).toThrow(/Factory skill goal/);
     }
   });
 

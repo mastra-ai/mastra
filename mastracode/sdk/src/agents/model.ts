@@ -11,6 +11,7 @@ import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   loadSettings,
+  MASTRA_GATEWAY_PROVIDER,
   resolveDefaultThinkingLevel,
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
@@ -304,7 +305,7 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
 
   const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
-  const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
+  const mgApiKey = mastraGatewayApiKey(tenantCredentialStore);
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
   const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
@@ -343,6 +344,14 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
   });
 }
 
+/** A tenant's own gateway key wins over the server's, so each org is billed to its own Mastra account. */
+function mastraGatewayApiKey(tenantCredentialStore: CredentialStore | undefined): string | undefined {
+  return (
+    tenantCredentialStore?.getStoredApiKey(MASTRA_GATEWAY_PROVIDER)?.trim() ||
+    MastraCodeGateway.getMastraGatewayApiKey()
+  );
+}
+
 /**
  * Which provider-executed web search tool fits the transport a model resolves to:
  * - `anthropic` / `openai`: the native provider API (direct keys, and Claude or
@@ -366,10 +375,7 @@ function classifyWebSearchModel(
   const normalizedInput = normalizeLegacyModelId(modelId);
   const providerId = stripMastraGatewayPrefix(normalizedInput).split('/')[0];
   if (providerId !== 'anthropic' && providerId !== 'openai') return { route: undefined };
-  if (!normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX)) return { route: providerId };
-  // Read the gateway key from fresh storage, as `resolveModelForRequest` does.
-  reloadAuthStorage();
-  return MastraCodeGateway.getMastraGatewayApiKey() ? { gatewayProvider: providerId } : { route: providerId };
+  return normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX) ? { gatewayProvider: providerId } : { route: providerId };
 }
 
 /**
@@ -397,9 +403,14 @@ export function resolveProviderWebSearchRoute(
   if (!('gatewayProvider' in model)) return model.route;
   const providerId = model.gatewayProvider;
 
-  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
-  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
-  return credentialStore.get(NATIVE_OAUTH_CREDENTIAL_IDS[providerId])?.type === 'oauth' ? providerId : 'mastra-gateway';
+  reloadAuthStorage();
+  const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
+  const credentialStore = createRequestScopedCredentialStore(
+    tenantCredentialStore ?? getGlobalAuthStorage(),
+    options?.requestContext,
+  );
+  if (credentialStore.get(NATIVE_OAUTH_CREDENTIAL_IDS[providerId])?.type === 'oauth') return providerId;
+  return mastraGatewayApiKey(tenantCredentialStore) ? 'mastra-gateway' : providerId;
 }
 
 /**

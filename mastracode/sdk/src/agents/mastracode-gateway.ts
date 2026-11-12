@@ -495,9 +495,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    const customProvider = this.#getCustomProviders().find(
-      provider => args.providerId === getCustomProviderId(provider.name),
-    );
+    // A gateway model carries the gateway key, so it must never reach a custom
+    // provider whose name matches the model's provider (e.g. one named "Anthropic").
+    const customProvider = this.#routeThroughMastraGateway
+      ? undefined
+      : this.#getCustomProviders().find(provider => args.providerId === getCustomProviderId(provider.name));
     if (customProvider) {
       const provider = createOpenAICompatible({
         name: args.providerId,
@@ -523,7 +525,8 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    if (args.providerId === 'moonshotai') {
+    // A gateway model's key is the gateway's: it must not go to Moonshot's own API.
+    if (args.providerId === 'moonshotai' && !this.#routeThroughMastraGateway) {
       // Prefer the gateway-resolved key (stored credentials), then the canonical
       // registry env var. Keep the legacy typo name as a fallback for anyone who
       // set it because of the previous error message.
