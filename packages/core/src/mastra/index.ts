@@ -885,11 +885,13 @@ interface RecoveryCandidate {
   run: WorkflowRun;
 }
 
-/** A recovery pass that dispatched every restart it picked. */
+/** A recovery pass that handed out every restart it picked. */
 interface RecoveryPass {
   /** The earliest time a run the pass left in its grace period becomes due. */
   earliestDueAt?: number;
-  /** Settles once every restart the pass dispatched settled; never rejects. */
+  /** Whether the store had run fencing; without it the pass restarted every active run. */
+  runFencing: boolean;
+  /** Settles once every restart the pass handed out settled; never rejects. */
   settled: Promise<void>;
 }
 
@@ -4546,14 +4548,15 @@ export class Mastra<
   async #runRecoveryPass(): Promise<RecoveryPass> {
     const restarts: Promise<void>[] = [];
     let earliestDueAt: number | undefined;
+    let runFencing = false;
     try {
       const workflowsStore = await this.#storage?.getStore('workflows');
       if (!workflowsStore) {
         this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
-        return { settled: Promise.resolve() };
+        return { runFencing, settled: Promise.resolve() };
       }
 
-      const readsLiveness = await this.#supportsRunFencing(workflowsStore);
+      runFencing = await this.#supportsRunFencing(workflowsStore);
       const listed = await this.#listActiveRunSummaries(workflowsStore);
       const candidates = await this.#recoveryCandidates(workflowsStore, listed);
       const graceMs = this.#workflowGraceMs();
@@ -4566,7 +4569,7 @@ export class Mastra<
           return;
         }
 
-        if (readsLiveness) {
+        if (runFencing) {
           const keys = livenessKeysOf(workflow, run.runId);
           const owners = await workflowsStore.getRunOwnerships({ runIds: keys });
           const verdict = recoveryVerdict({
@@ -4593,7 +4596,7 @@ export class Mastra<
         const batch = candidates
           .slice(start, start + RECOVERY_OWNERSHIP_BATCH_SIZE)
           .filter(({ run }) => !this.#queuedRecoveryRestarts.has(recoveryRunKey(run.workflowName, run.runId)));
-        const owners = readsLiveness ? await this.#readRunOwners(workflowsStore, batch) : undefined;
+        const owners = runFencing ? await this.#readRunOwners(workflowsStore, batch) : undefined;
         const now = Date.now();
 
         for (const candidate of batch) {
@@ -4603,7 +4606,7 @@ export class Mastra<
 
           const { workflow, run } = candidate;
           let verdict: RecoveryVerdict;
-          if (!readsLiveness) {
+          if (!runFencing) {
             // Without run fencing nothing tells a live run from a stopped one, so every active run is restarted.
             verdict = { restart: true };
           } else if (!owners) {
@@ -4657,7 +4660,7 @@ export class Mastra<
     }
 
     // Each restart logs its own failure and never rejects.
-    return { earliestDueAt, settled: Promise.all(restarts).then(() => {}) };
+    return { earliestDueAt, runFencing, settled: Promise.all(restarts).then(() => {}) };
   }
 
   /** The grace period of the recovery rule (`recovery.workflowGraceMs`). */
