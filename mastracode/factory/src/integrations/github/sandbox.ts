@@ -245,10 +245,13 @@ function cleanUrl(repoFullName: string): string {
 
 /**
  * True when a repository name or clone URL contains a `.` or `..` path segment.
- * `new URL` and git both collapse those, so `owner/../other` is a different repository
- * than the one the row names. Checked on the raw text, before that collapse.
+ * `new URL` and git both collapse those, and `new URL` also treats `\` as `/`,
+ * so `owner/../other` names a different repository than the row. Checked on the
+ * raw text, before that collapse. A backslash is refused on its own: the origin
+ * strip below would otherwise treat it as part of the host.
  */
 function pathHasDotSegment(value: string): boolean {
+  if (value.includes('\\')) return true;
   const withoutOrigin = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, '');
   const path = withoutOrigin.split(/[?#]/)[0] ?? '';
   return path.split('/').some(part => {
@@ -258,16 +261,19 @@ function pathHasDotSegment(value: string): boolean {
     } catch {
       return true;
     }
-    return decoded === '.' || decoded === '..';
+    return decoded === '.' || decoded === '..' || decoded.includes('\\');
   });
 }
 
 function assertRepositoryLocator(
-  repoFullName: string,
+  repoFullName: string | undefined,
   cloneUrl: string | undefined,
-  code: 'clone-failed' | 'pull-failed',
+  code: 'clone-failed' | 'pull-failed' | 'push-failed',
 ): void {
-  if (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName) || pathHasDotSegment(repoFullName)) {
+  if (
+    repoFullName !== undefined &&
+    (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName) || pathHasDotSegment(repoFullName))
+  ) {
     throw new MaterializeError(`Refusing to use an invalid repo full name '${repoFullName}'.`, code);
   }
   if (cloneUrl && pathHasDotSegment(cloneUrl)) {
@@ -709,6 +715,7 @@ export async function refreshMergeRequestCheckout(
   input: { branch: string; mergeRequestNumber: number; expectedHeadSha: string; access: RepositoryAccess },
 ): Promise<{ headSha: string; changed: boolean }> {
   const { branch, mergeRequestNumber, expectedHeadSha, access } = input;
+  assertRepositoryLocator(undefined, access.cloneUrl, 'pull-failed');
   if (
     !isValidGitRef(branch) ||
     !Number.isSafeInteger(mergeRequestNumber) ||
@@ -1064,9 +1071,7 @@ export async function pushBranch(
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
   }
-  if (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName)) {
-    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
-  }
+  assertRepositoryLocator(repoFullName, undefined, 'push-failed');
   await pushAuthenticatedBranch(sandbox, workdir, branch, cleanUrl(repoFullName), token, 'x-access-token');
 }
 
@@ -1084,9 +1089,7 @@ export async function pushRepositoryBranch(
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
   }
-  if (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName)) {
-    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
-  }
+  assertRepositoryLocator(repoFullName, access.cloneUrl, 'push-failed');
   const authorization = access.authorization;
   if (!authorization?.token) {
     throw new MaterializeError('Repository access did not include push credentials.', 'push-failed');

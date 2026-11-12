@@ -442,6 +442,8 @@ describe('materializeRepo', () => {
     for (const cloneUrl of [
       'https://github.com/octocat/../secret.git',
       'https://github.com/octocat/%2e%2e/secret.git',
+      'https://github.com/octocat\\..\\secret.git',
+      'https://github.com\\octocat\\..\\secret.git',
     ]) {
       const sandbox = new FakeSandbox();
       const err = await materializeRepo(makeRow(), makeRepoInfo({ cloneUrl }), sandbox, 'tok').catch(e => e);
@@ -882,6 +884,16 @@ describe('syncEnvironmentRepository', () => {
     ).rejects.toBeInstanceOf(MaterializeError);
     expect(sandbox.calls).toHaveLength(0);
   });
+
+  it('does not fetch a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await syncEnvironmentRepository(sandbox, '/workspace/docs', {
+      ...opts,
+      repoFullName: 'octocat/../secret',
+    }).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
 });
 
 describe('refreshMergeRequestCheckout', () => {
@@ -923,6 +935,16 @@ describe('refreshMergeRequestCheckout', () => {
     });
     await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).rejects.toThrow('local changes');
     expect(sandbox.calls.join('\n')).not.toContain('fetch origin');
+  });
+
+  it('does not fetch a clone URL whose path rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await refreshMergeRequestCheckout(sandbox, '/workspace/repo', {
+      ...input,
+      access: { ...input.access, cloneUrl: 'https://gitlab.com/acme/../secret.git' },
+    }).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
   });
 
   it('refuses a fetched head that differs from current provider metadata', async () => {
@@ -1053,6 +1075,14 @@ describe('pushBranch', () => {
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
   });
 
+  it('does not push a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok', 'octocat/../secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('push-failed');
+    expect(sandbox.calls).toHaveLength(0);
+  });
+
   it('rejects an unsafe branch name before running git', async () => {
     const sandbox = new FakeSandbox();
     const err = await pushBranch(sandbox, '/workspace/hello', "x'; rm -rf /; '", 'tok', 'octocat/hello').catch(e => e);
@@ -1109,6 +1139,20 @@ describe('pushRepositoryBranch', () => {
     expect(error.code).toBe('push-failed');
     expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
+  });
+
+  it('does not push a clone URL whose path rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await pushRepositoryBranch(
+      sandbox,
+      '/workspace/hello',
+      'feat/gitlab',
+      { ...access, cloneUrl: 'https://gitlab.com/acme\\..\\secret.git' },
+      'acme/hello',
+    ).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('push-failed');
+    expect(sandbox.calls).toHaveLength(0);
   });
 
   it('rejects missing credentials before running git', async () => {
