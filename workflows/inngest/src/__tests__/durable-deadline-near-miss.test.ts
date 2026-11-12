@@ -25,6 +25,10 @@ vi.setConfig({ testTimeout: 120_000, hookTimeout: 90_000 });
 const TOTAL_MS = 3000;
 /** Holds the loop snapshot write past the deadline whatever the machine's write latency. */
 const WRITE_DELAY_MS = 400;
+/** The run finishes this long before the deadline, so the caller sees it finish and clears its timer. */
+const FINISH_MARGIN_MS = 1000;
+/** Each of the finished run's snapshot writes reaches storage at least this long after the deadline. */
+const LATE_WRITE_MS = 500;
 /** The nested iteration parks this long before the deadline, so the caller sees it park first. */
 const NESTED_SUSPEND_MARGIN_MS = 600;
 /** The parked tool returns this long after the deadline, so the nested iteration's first write starts after it. */
@@ -81,12 +85,13 @@ const loopSnapshot = async (runId: string) =>
   });
 
 /** Delays the loop's `status` snapshot writes so they reach storage after the deadline. */
-async function delayLoopWrites(status: string) {
+async function delayLoopWrites(status: string, delayMs = WRITE_DELAY_MS, onLanded?: (runId: string) => void) {
   const workflows = (await getSharedMastra().getStorage()!.getStore('workflows'))!;
   const persist = workflows.persistWorkflowSnapshot.bind(workflows);
   return vi.spyOn(workflows, 'persistWorkflowSnapshot').mockImplementation(async params => {
     if (params.workflowName === InngestDurableStepIds.AGENTIC_LOOP && params.snapshot.status === status) {
-      await new Promise(resolve => setTimeout(resolve, WRITE_DELAY_MS));
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      return persist(params).finally(() => onLanded?.(params.runId));
     }
     return persist(params);
   });
@@ -176,16 +181,27 @@ describe('a run that parks or finishes just before its deadline', () => {
     await parkThenResume(buildAgent('nested-late', NESTED_SUSPEND_MARGIN_MS, true, NESTED_LINGER_PAST_DEADLINE_MS));
   });
 
-  it.each([1, 2, 3])('keeps a run that finished before the deadline as success (run %i)', async () => {
-    const { start } = buildAgent('finish', 1000, false);
-    const first = await start();
-    const finished = await drain(first.output.fullStream, type => type === 'finish');
-    first.cleanup();
-    expect(finished.errors).toEqual([]);
-    expect(finished.types).toContain('finish');
-    await vi.waitFor(async () => expect((await loopSnapshot(first.runId))?.status).toBe('success'), {
-      timeout: 5000,
-      interval: 100,
-    });
+  it('keeps a run that finished before the deadline as success when its final writes land after it', async () => {
+    const landed: string[] = [];
+    const delayed = await delayLoopWrites('success', FINISH_MARGIN_MS + LATE_WRITE_MS, runId => landed.push(runId));
+    try {
+      const { start } = buildAgent('finish', FINISH_MARGIN_MS, false);
+      const first = await start();
+      const finished = await drain(first.output.fullStream, type => type === 'finish');
+      first.cleanup();
+      expect(finished.errors).toEqual([]);
+      expect(finished.types).toContain('finish');
+
+      // The engine's terminal write, then the function's final one.
+      await vi.waitFor(() => expect(landed.filter(runId => runId === first.runId)).toHaveLength(2), {
+        timeout: 15_000,
+        interval: 100,
+      });
+      // A delete that follows the final write is awaited in the same step; give it time to land.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect((await loopSnapshot(first.runId))?.status).toBe('success');
+    } finally {
+      delayed.mockRestore();
+    }
   });
 });

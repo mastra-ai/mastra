@@ -151,6 +151,19 @@ class WorkflowEventPolicyPubSub extends PubSub {
   }
 }
 
+/**
+ * Whether a durable agent run stopped at its `modelSettings.timeout.totalMs` deadline. The step
+ * that hit the deadline records it in the iteration state, which is an iteration's result and the
+ * loop's last iteration output, so it reads the same on every replay.
+ */
+function stoppedAtDeadline(result: { result?: unknown; steps?: Record<string, unknown> }): boolean {
+  const outputs = [result.result, ...Object.values(result.steps ?? {}).map(step => (step as any)?.output)];
+  return outputs.some(output => {
+    const termination = (output as any)?.tracingTermination;
+    return termination?.stopReason === 'timeout' && termination.stopReasonContext?.timeoutType === 'total';
+  });
+}
+
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -794,12 +807,12 @@ export class InngestWorkflow<
                 });
 
                 // A durable agent's caller deletes the run's rows at its `modelSettings.timeout.totalMs`
-                // deadline (createInngestAgent `armTotalTimeout`). A terminal row this worker wrote past
-                // that deadline would bring the run back, so it goes too, and the run converges to
-                // deleted whichever of the write and the delete landed last. Deleting a row that is
-                // already gone is a no-op, so a replay of this step is safe. A suspended row stays: the
-                // caller cleared its timer when the run parked.
-                if (executionDeadline && result.status !== 'suspended' && Date.now() >= executionDeadline.at) {
+                // deadline (createInngestAgent `armTotalTimeout`). The row this worker just wrote for a
+                // run it stopped at that deadline would bring the run back, so it goes too, and the run
+                // converges to deleted whichever of the write and the delete landed last. Deleting a row
+                // that is already gone is a no-op, so a replay of this step is safe. The clock can't
+                // decide this: a run that finished in time keeps its row however late this write lands.
+                if (executionDeadline && stoppedAtDeadline(result)) {
                   await workflowsStore.deleteWorkflowRunById({ workflowName: this.id, runId });
                 }
               }
