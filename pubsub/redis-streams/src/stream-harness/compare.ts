@@ -17,26 +17,30 @@ function diffFrames(expected: Frame[], actual: Frame[]): Pick<Difference, 'kind'
 }
 
 /**
- * Compares every reader of one run with that run's live stream, and the live
- * stream with plain's live stream for the same scenario. Equality is
- * transitive, so this is enough for "all readers agree and every engine
- * agrees with plain" while attributing each difference once: a reader that
- * differs from its own live stream is a delivery difference, a live stream
- * that differs from plain's is a chunk difference.
+ * Compares every reader of one run with that run's live stream, and, for a
+ * non-plain engine, every reader with plain's same reader for the scenario.
+ * Both comparisons are always asserted, so a listed difference on one reader
+ * can't hide a new or changed difference on another.
  */
-export function compareRun(cell: Cell, capture: RunCapture, plainLive?: Frame[]): Difference[] {
+export function compareRun(cell: Cell, capture: RunCapture, plain?: RunCapture): Difference[] {
   const live = capture.live;
   if (!live) throw new Error(`no live capture for ${cellName(cell)}`);
   const differences: Difference[] = [];
-  for (const [reader, frames] of Object.entries(capture) as [ReaderName, Frame[]][]) {
+  const readers = Object.entries(capture) as [ReaderName, Frame[]][];
+  for (const [reader, frames] of readers) {
     if (reader === 'live') continue;
     const diff = diffFrames(live, frames);
     if (diff) differences.push({ ...cell, reader, against: 'live', ...diff });
   }
   if (cell.engine !== 'plain') {
-    if (!plainLive) throw new Error(`no plain live capture to compare ${cellName(cell)} against`);
-    const diff = diffFrames(plainLive, live);
-    if (diff) differences.push({ ...cell, reader: 'live', against: 'plain', ...diff });
+    // Every reader is compared against plain's same reader, not only live:
+    // a reader can match its own live stream and still differ from plain.
+    for (const [reader, frames] of readers) {
+      const reference = plain?.[reader];
+      if (!reference) throw new Error(`no plain ${reader} capture to compare ${cellName(cell)} against`);
+      const diff = diffFrames(reference, frames);
+      if (diff) differences.push({ ...cell, reader, against: 'plain', ...diff });
+    }
   }
   return differences;
 }

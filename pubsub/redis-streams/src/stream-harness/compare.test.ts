@@ -10,7 +10,8 @@ const durableCell: Cell = { ...plainCell, engine: 'durable' };
 describe('compareRun', () => {
   it('reports nothing when every reader and engine agree', () => {
     const live = f('start', 'finish');
-    expect(compareRun(durableCell, { live, topic: live, 'observe-0': live }, live)).toEqual([]);
+    const run = { live, topic: live, 'observe-0': live };
+    expect(compareRun(durableCell, run, run)).toEqual([]);
   });
 
   it('reports a reader that disagrees with its own live stream', () => {
@@ -28,12 +29,28 @@ describe('compareRun', () => {
   });
 
   it("reports an engine whose live stream differs from plain's", () => {
-    const [difference] = compareRun(durableCell, { live: f('start', 'x', 'finish') }, f('start', 'finish'));
+    const [difference] = compareRun(durableCell, { live: f('start', 'x', 'finish') }, { live: f('start', 'finish') });
     expect(difference).toMatchObject({ reader: 'live', against: 'plain', kind: 'sequence' });
+  });
+
+  it("compares every reader with plain's same reader, not only live", () => {
+    // topic agrees with its own live stream but not with plain's topic.
+    const run = { live: f('start', 'finish'), topic: f('start', 'finish') };
+    const plain = { live: f('start', 'finish'), topic: f('start', 'step-finish', 'finish') };
+    expect(compareRun(durableCell, run, plain)).toEqual([
+      expect.objectContaining({
+        reader: 'topic',
+        against: 'plain',
+        detail: 'expected start,step-finish,finish got start,finish',
+      }),
+    ]);
   });
 
   it('refuses to compare a non-plain engine without plain', () => {
     expect(() => compareRun(durableCell, { live: f('start') })).toThrow(/plain live capture/);
+    expect(() => compareRun(durableCell, { live: f('start'), topic: f('start') }, { live: f('start') })).toThrow(
+      /plain topic capture/,
+    );
   });
 });
 
@@ -73,6 +90,28 @@ describe('judgeCell', () => {
     const memoryCell: Cell = { ...plainCell, backend: 'memory' };
     expect(judgeCell(memoryCell, [], [entry]).stale).toEqual([entry]);
     expect(judgeCell(memoryCell, [], [{ ...entry, backend: 'redis' }]).stale).toEqual([]);
+  });
+
+  it('fails an unexpected non-live engine difference even when the other differences are listed', () => {
+    const plain = { live: f('start', 'finish'), topic: f('start', 'finish'), 'observe-0': f('start', 'finish') };
+    const run = {
+      live: f('start', 'x', 'finish'),
+      topic: f('start', 'x', 'finish'),
+      'observe-0': f('start', 'finish'),
+    };
+    const observed = compareRun(durableCell, run, plain);
+    const listed = observed
+      .filter(d => d.reader !== 'topic')
+      .map(d => ({ ...d, ticket: 'COR-1', cause: 'engine' as const, evidence: 'unit test' }));
+    const verdict = judgeCell(durableCell, observed, listed);
+    expect(verdict.stale).toEqual([]);
+    expect(verdict.unlisted).toEqual([
+      expect.objectContaining({
+        reader: 'topic',
+        against: 'plain',
+        detail: 'expected start,finish got start,x,finish',
+      }),
+    ]);
   });
 
   it('ignores entries for other cells', () => {

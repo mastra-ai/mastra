@@ -24,27 +24,27 @@ const STRUCTURED_EVIDENCE =
  * fails on any observed difference not listed here, and on any entry that
  * applies to a cell but does not reproduce in it (see `judgeCell`).
  */
+const structured = (
+  engine: 'durable' | 'evented',
+  reader: KnownDifference['reader'],
+  against: KnownDifference['against'],
+  expected: string,
+  got: string,
+): KnownDifference => ({
+  scenario: 'structured-output',
+  engine,
+  reader,
+  against,
+  kind: 'sequence',
+  detail: `expected ${expected} got ${got}`,
+  ticket: 'COR-1390',
+  cause: 'durable-stream',
+  evidence: STRUCTURED_EVIDENCE,
+});
+
 export const KNOWN_DIFFERENCES: readonly KnownDifference[] = (['durable', 'evented'] as const).flatMap(engine => [
-  {
-    scenario: 'structured-output',
-    engine,
-    reader: 'live',
-    against: 'plain',
-    kind: 'sequence',
-    detail: `expected ${PLAIN_STRUCTURED} got ${DURABLE_STRUCTURED}`,
-    ticket: 'COR-1390',
-    cause: 'durable-stream',
-    evidence: STRUCTURED_EVIDENCE,
-  },
-  {
-    scenario: 'structured-output',
-    engine,
-    reader: 'topic',
-    against: 'live',
-    kind: 'sequence',
-    detail: `expected ${DURABLE_STRUCTURED} got ${DURABLE_STRUCTURED_TOPIC}`,
-    ticket: 'COR-1390',
-    cause: 'durable-stream',
-    evidence: STRUCTURED_EVIDENCE,
-  },
+  structured(engine, 'live', 'plain', PLAIN_STRUCTURED, DURABLE_STRUCTURED),
+  structured(engine, 'observe-0', 'plain', PLAIN_STRUCTURED, DURABLE_STRUCTURED),
+  structured(engine, 'topic', 'live', DURABLE_STRUCTURED, DURABLE_STRUCTURED_TOPIC),
+  structured(engine, 'topic', 'plain', PLAIN_STRUCTURED, DURABLE_STRUCTURED_TOPIC),
 ]);

@@ -9,7 +9,7 @@ import { KNOWN_DIFFERENCES } from './known-differences';
 import { HarnessNode } from './node';
 import { SCENARIOS } from './scenarios';
 import { ENGINES } from './types';
-import type { Backend, Cell, Frame, RunCapture } from './types';
+import type { Backend, Cell, RunCapture } from './types';
 
 const BACKENDS: Backend[] = ['memory', 'redis'];
 const SCENARIO_NAMES = ['structured-output'];
@@ -47,8 +47,7 @@ describe.skipIf(skipRedis)('stream harness grid (single process)', () => {
 
   describe.each(BACKENDS)('backend %s', backend => {
     describe.each(SCENARIO_NAMES)('%s', scenarioName => {
-      const captures = new Map<string, RunCapture>();
-      let plainLive: Frame[] | undefined;
+      let plain: RunCapture | undefined;
 
       it.each(ENGINES)('%s', async engine => {
         const cell: Cell = { scenario: scenarioName, engine, backend, topology: 'single' };
@@ -66,10 +65,9 @@ describe.skipIf(skipRedis)('stream harness grid (single process)', () => {
           capture.live = await node.frames({ cmd: 'stream', scenario: scenarioName, runId }, 'live');
           capture.topic = await node.frames({ cmd: 'tapTopic', runId }, 'topic');
           capture['observe-0'] = await node.frames({ cmd: 'observe', runId }, 'observe-0');
-          captures.set(engine, capture);
-          if (engine === 'plain') plainLive = capture.live;
+          if (engine === 'plain') plain = capture;
 
-          const verdict = judgeCell(cell, compareRun(cell, capture, plainLive), KNOWN_DIFFERENCES);
+          const verdict = judgeCell(cell, compareRun(cell, capture, plain), KNOWN_DIFFERENCES);
           const report = formatVerdict(cell, verdict);
           if (process.env.STREAM_HARNESS_VERBOSE) console.log(`${report}\n${JSON.stringify(capture, null, 1)}`);
           expect(verdict.unlisted.length + verdict.stale.length, report).toBe(0);
