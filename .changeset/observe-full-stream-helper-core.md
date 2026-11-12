@@ -8,7 +8,8 @@
 import { createDurableAgentStream, detachFullStreamOnEnd } from '@mastra/core/agent/durable';
 
 // Wrap the observer's own stream output, right after the stream is created.
-const { output, detach } = createDurableAgentStream({ ... });
+// `pubsub`, `runId`, `messageId` and `model` are the options it requires.
+const { output, detach } = createDurableAgentStream({ pubsub, runId, messageId, model });
 detachFullStreamOnEnd(output, detach);
 ```
 
