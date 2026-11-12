@@ -99,6 +99,25 @@ describe('provider-neutral repository settings', () => {
     await expect(cleared.json()).resolves.toEqual({ setupCommand: null, teardownCommand: 'pnpm clean' });
   });
 
+  it('never answers a failure for commands it already saved when the project lookup fails', async () => {
+    const { sourceControl, linked } = await seedRepository('github');
+    const onEnvironmentSaved = vi.fn();
+    const app = buildApp([sourceControl], { workosId: 'user-1', organizationId: 'org-1' }, onEnvironmentSaved);
+    vi.spyOn(sourceControl.connections, 'get').mockRejectedValueOnce(new Error('connection lookup failed'));
+
+    const saved = await app.request(route(linked.id), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ setupCommand: 'pnpm install' }),
+    });
+
+    expect(saved.status).toBe(500);
+    await expect(sourceControl.projectRepositories.get({ orgId: 'org-1', id: linked.id })).resolves.toMatchObject({
+      setupCommand: null,
+    });
+    expect(onEnvironmentSaved).not.toHaveBeenCalled();
+  });
+
   it('keeps another organization and unauthenticated callers out', async () => {
     const { sourceControl, linked } = await seedRepository('gitlab');
     const otherOrg = buildApp([sourceControl], { workosId: 'user-2', organizationId: 'org-2' });

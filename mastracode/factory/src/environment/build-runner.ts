@@ -15,15 +15,15 @@ import type { EnvironmentBuildWorkflowOptions } from './build-workflow.js';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome, EnvironmentBuildTrigger } from './build.js';
 import { environmentBuildContextWithEnv, errorReason, resolveEnvironmentHeads } from './build.js';
 
-/** Tries at a `settings` run that keeps finding the build-start lease held, a second apart and doubling. */
-const SETTINGS_RETRY_ATTEMPTS = 5;
+/** Longest wait between `settings` runs that find another process holding the build-start lease. */
+const SETTINGS_RETRY_MAX_MS = 30_000;
 
 export type StartEnvironmentBuild = (
   projectId: string,
   trigger: EnvironmentBuildTrigger,
 ) => Promise<EnvironmentBuildOutcome>;
 
-export interface EnvironmentBuildRunnerOptions extends Omit<EnvironmentBuildWorkflowOptions, 'onStart'> {
+export interface EnvironmentBuildRunnerOptions extends Omit<EnvironmentBuildWorkflowOptions, 'onStart' | 'onSettled'> {
   /** The booted instance; `undefined` until the host finished `finalize()`. */
   getMastra: () => Mastra | undefined;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void };
@@ -42,6 +42,8 @@ export class EnvironmentBuildRunner {
   readonly #logger: EnvironmentBuildRunnerOptions['logger'];
   readonly #pending = new Map<string, (outcome: EnvironmentBuildOutcome) => void>();
   readonly #sleep: (ms: number) => Promise<void>;
+  /** Projects with a saved change that a run of theirs skipped; that run's end builds it. */
+  readonly #awaitingRun = new Set<string>();
   #scheduleAvailable = false;
 
   constructor(deps: EnvironmentBuildDeps, options: EnvironmentBuildRunnerOptions) {
@@ -55,6 +57,21 @@ export class EnvironmentBuildRunner {
       onStart: (runId, outcome) => {
         this.#pending.get(runId)?.(outcome);
         this.#pending.delete(runId);
+      },
+      // Fires for every run of the registered workflow, scheduled ones included.
+      // A started build always checks once more, since a save (here or in
+      // another process) may have been skipped against it; a run that held the
+      // lease without building hands back a save skipped meanwhile. A run that
+      // was itself skipped against the lease or a running build hands back
+      // nothing: the run it deferred to is still going.
+      onSettled: (projectId, result) => {
+        if (result.outcome === 'started') {
+          this.#awaitingRun.delete(projectId);
+          this.onEnvironmentSaved(projectId);
+          return;
+        }
+        if (result.outcome === 'skipped' && (result.reason === 'starting' || result.reason === 'in_progress')) return;
+        if (this.#awaitingRun.delete(projectId)) this.onEnvironmentSaved(projectId);
       },
     });
   }
@@ -129,18 +146,25 @@ export class EnvironmentBuildRunner {
   /**
    * A saved change to a project's environment (settings, setup commands,
    * repositories, Build variables) starts a `settings` run, which builds only
-   * when the template inputs changed. A run that finds another one holding
-   * the build-start lease (which may have read the environment before this
-   * save) tries again shortly; a lease held through a provider start ends in
-   * a build, whose completion checks the inputs once more. Fire and forget:
-   * the save never waits on it or fails because of it.
+   * when the template inputs changed. A run skipped because another one
+   * holds the build-start lease or its build is running (either may have read
+   * the environment before this save) stays pending until that run is over.
+   * A lease held by another process is retried, a second apart and doubling
+   * up to `SETTINGS_RETRY_MAX_MS`, until it is released or lapses. Fire and
+   * forget: the save never waits on it or fails because of it.
    */
   readonly onEnvironmentSaved = (projectId: string): void => {
     void (async () => {
-      for (let attempt = 0; attempt < SETTINGS_RETRY_ATTEMPTS; attempt++) {
-        if (attempt > 0) await this.#sleep(1000 * 2 ** (attempt - 1));
+      for (let delay = 1000; ; delay = Math.min(delay * 2, SETTINGS_RETRY_MAX_MS)) {
         const outcome = await this.start(projectId, 'settings');
-        if (outcome.outcome !== 'skipped' || outcome.reason !== 'starting') return;
+        if (outcome.outcome !== 'skipped' || (outcome.reason !== 'starting' && outcome.reason !== 'in_progress')) {
+          return;
+        }
+        this.#awaitingRun.add(projectId);
+        if (outcome.reason === 'in_progress') return;
+        await this.#sleep(delay);
+        // A run of this process ended meanwhile and handed the save back.
+        if (!this.#awaitingRun.has(projectId)) return;
       }
     })().catch((error: unknown) => {
       this.#logger?.info('environment build settings hand-off failed', {
@@ -173,17 +197,13 @@ export class EnvironmentBuildRunner {
     const outcome = new Promise<EnvironmentBuildOutcome>(resolve => this.#pending.set(run.runId, resolve));
     run
       .start({ inputData: { projectId, trigger } })
-      .then(async result => {
+      .then(result => {
         if (result.status !== 'success') {
           this.#logger?.info('environment build run did not succeed', {
             factoryProjectId: projectId,
             runId: run.runId,
           });
         }
-        // A save that landed while this build ran skipped as `in_progress`;
-        // once the build is over, build again if the inputs moved on.
-        // Still pending means the first step never answered: nothing started.
-        if (!this.#pending.has(run.runId) && (await outcome).outcome === 'started') this.onEnvironmentSaved(projectId);
       })
       .catch((error: unknown) => {
         this.#logger?.info('environment build run threw', {

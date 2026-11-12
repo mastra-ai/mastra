@@ -872,6 +872,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
           }
           await found.handle.connections.delete({ orgId: tenant.orgId, id: connectionId });
+          // Its repositories left the environment with it.
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.body(null, 204);
         },
       }),

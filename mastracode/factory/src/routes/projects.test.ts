@@ -1914,6 +1914,47 @@ describe('ProjectRoutes', () => {
         expect(setupCommands()).toBe(4);
       });
 
+      it('rebuilds once a deleted source-control connection took its repositories out of the environment', async () => {
+        const { app, project, sandbox, seed } = await seedBuilding();
+        const github = seed.sourceControl.forIntegration('github');
+        const installation = await github.installations.upsert({
+          orgId: 'org-1',
+          connectedByUserId: 'user-1',
+          externalId: 'gh-2',
+        });
+        const second = await github.connections.create({
+          orgId: 'org-1',
+          factoryProjectId: project.id,
+          installationId: installation.id,
+          createdByUserId: 'user-1',
+        });
+        const repository = await github.repositories.upsert({
+          orgId: 'org-1',
+          input: { installationId: installation.id, externalId: 'acme/web', slug: 'acme/web', defaultBranch: 'main' },
+        });
+        await github.projectRepositories.link({
+          orgId: 'org-1',
+          connectionId: second.id,
+          repositoryId: repository.id,
+          createdByUserId: 'user-1',
+          sandboxProvider: 'platform',
+          sandboxWorkdir: '/workspace',
+        });
+        const built = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
+        expect(await built.json()).toMatchObject({ outcome: 'started' });
+        await until(async () => (await seed.projects.getById({ id: project.id }))?.activeTemplateId === 'tpl-1');
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(sandbox.starts).toHaveLength(1);
+
+        const deleted = await app.request(
+          `/web/factory/projects/${project.id}/source-control-connections/${second.id}`,
+          { method: 'DELETE' },
+        );
+        expect(deleted.status).toBe(204);
+        await until(async () => sandbox.starts.length === 2);
+        expect(sandbox.starts).toHaveLength(2);
+      });
+
       it('builds a change saved while a build ran once that build is over', async () => {
         const sandbox = new BuildingSandbox();
         let held = true;
