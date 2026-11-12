@@ -396,8 +396,8 @@ describe('evented step leases (#28712)', () => {
         await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'), { timeout: 10_000 });
         expect(executions).toEqual(['A', 'B']);
       } else {
-        // B's loop lists three times after it would have restarted a restartable parent: its
-        // liveness lapsed and the 2 s grace of the in-process pubsub passed.
+        // B's loop lists three times after it would have restarted a restartable parent: lease replicas
+        // run with no grace, so once its liveness lapsed, plus 2 s to spare.
         const dueAt = crashedAt + WORKFLOW_RUN_LEASE_TTL_MS + 2_000;
         await vi.waitFor(() => expect(listedAt.filter(at => at >= dueAt).length).toBeGreaterThanOrEqual(3), {
           timeout: 10_000,

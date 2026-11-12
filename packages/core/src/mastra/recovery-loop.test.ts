@@ -405,16 +405,21 @@ describe('workflow recovery loop (#28712)', () => {
     const list = store.listWorkflowRuns.bind(store);
     const listing = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
+    const listed = Promise.withResolvers<void>();
     vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
       listing.resolve();
       await release.promise;
-      return list(args);
+      const runs = await list(args);
+      listed.resolve();
+      return runs;
     });
     await mastra.startWorkers();
     await listing.promise;
 
     await mastra.stopWorkers({ drainTimeout: 0 });
     release.resolve();
+    // The pass got the stopped run back from the store, so only the stop keeps it from restarting the run.
+    await listed.promise;
     await sleep(scanning.workflowScanIntervalMs * 3);
 
     expect(restarted).not.toHaveBeenCalled();
