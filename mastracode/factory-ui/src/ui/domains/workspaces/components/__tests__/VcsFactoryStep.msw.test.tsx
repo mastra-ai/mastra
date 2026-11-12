@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -127,6 +127,100 @@ describe('VCS Factory step', () => {
     expect(await screen.findByRole('button', { name: /Connect GitLab/ })).toBeEnabled();
     expect(screen.getByText('Projects, branches, and merge requests.')).toBeInTheDocument();
     expect(calls).toBe(2);
+  });
+
+  it('offers Retry when GitHub status cannot be loaded, instead of a Connect that would fail', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' });
+      }),
+    );
+    renderStep();
+
+    expect(await screen.findByText("Couldn't load GitHub status.")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect GitHub/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry GitHub' }));
+    expect(await screen.findByRole('button', { name: /Connect GitHub/ })).toBeEnabled();
+    expect(calls).toBe(2);
+  });
+
+  it('says why an install on a teammate-shared personal GitHub account shows nothing, even with GitLab ready', async () => {
+    // Platform hides a personal-account install from an org with more than one member, so status stays not_connected.
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+    );
+    const onConnect = vi.fn();
+    renderStep({ githubCallback: { kind: 'installed' }, onConnect });
+
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('Factory can’t use this GitHub installation');
+    expect(screen.getByRole('radio', { name: 'GitHub' })).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Choose another account' }));
+    expect(onConnect).toHaveBeenCalledOnce();
+  });
+
+  it('shows nothing extra when an install is usable right away', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)));
+    renderStep({ githubCallback: { kind: 'installed' } });
+
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('sends a refusal fixed in Mastra Platform there, and clears it once Refresh finds the installation', async () => {
+    let linkedInPlatform = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json(
+          linkedInPlatform
+            ? connectedGithub
+            : { enabled: true, connected: false, installations: [], reason: 'not_connected' },
+        ),
+      ),
+    );
+    const onDismissGithubCallback = vi.fn();
+    renderStep({
+      githubCallback: {
+        kind: 'error',
+        code: 'github_app_installation_preexisting',
+        message: 'This GitHub account already had the Mastra GitHub App.',
+      },
+      onDismissGithubCallback,
+    });
+
+    expect(await screen.findByRole('link', { name: 'Open Mastra Platform' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai',
+    );
+    linkedInPlatform = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(onDismissGithubCallback).toHaveBeenCalledOnce();
+  });
+
+  it('offers to connect again after a refusal only a new connect can fix', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+    );
+    const onConnect = vi.fn();
+    renderStep({
+      githubCallback: { kind: 'error', code: 'github_app_installation_not_owned', message: 'Only the owner can link.' },
+      onConnect,
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect GitHub again' }));
+    expect(onConnect).toHaveBeenCalledOnce();
   });
 
   it('opens connected repositories directly and lets the user switch providers', async () => {
@@ -393,9 +487,10 @@ describe('VCS Factory step', () => {
       }),
     );
 
-    const { client } = renderStep({ githubCallback: { kind: 'requested' } });
+    const onDismissGithubCallback = vi.fn();
+    const { client } = renderStep({ githubCallback: { kind: 'requested' }, onDismissGithubCallback });
 
-    expect(await screen.findByText('No GitHub repositories found.')).toBeInTheDocument();
+    expect(await screen.findByText(/No repositories are shared with the Mastra GitHub App yet/)).toBeInTheDocument();
     expect(screen.getByText('GitHub App installation requested')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     const before = statusCalls;
@@ -406,6 +501,33 @@ describe('VCS Factory step', () => {
     await waitForMutationsIdle(client);
     expect(refreshes).toHaveLength(1);
     expect(statusCalls).toBe(before + 1);
-    expect(screen.queryByText('GitHub App installation requested')).not.toBeInTheDocument();
+    expect(onDismissGithubCallback).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a pending approval request up while other repositories are already listed', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)));
+    renderStep({ githubCallback: { kind: 'requested' } });
+
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(screen.getByText('GitHub App installation requested')).toBeInTheDocument();
+  });
+
+  it('says when a repository refresh fails and retries it', async () => {
+    let failRefresh = true;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('refresh') && failRefresh)
+          return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ repos: [repo] });
+      }),
+    );
+    renderStep();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Refresh GitHub repositories' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('503');
+    failRefresh = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });

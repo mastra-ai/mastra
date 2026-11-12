@@ -5,6 +5,7 @@ import { RadioGroup } from '@mastra/playground-ui/components/RadioGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Building2, Split, UserRound } from 'lucide-react';
+import { useId } from 'react';
 import type { ReactNode } from 'react';
 
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
@@ -57,6 +58,8 @@ export function OnboardingModelSection({
   const companyChoice = useAccountSource(setup.company.connection);
   const personalChoice = useAccountSource(setup.personal.connection);
   const loading = setup.company.connection.isPending;
+  const blockedReasonId = useId();
+  const blockedReason = setup.canCreate || loading || creating ? undefined : createBlockedReason(setup, local);
 
   return (
     <>
@@ -121,14 +124,15 @@ export function OnboardingModelSection({
       </OnboardingStepCard>
       <OnboardingPageAction
         notice={
-          error && (
-            <Notice variant="destructive" role="alert">
-              {error}
-            </Notice>
-          )
+          (error || blockedReason) && <CreateNotice error={error} blockedReason={blockedReason} id={blockedReasonId} />
         }
       >
-        <Button variant="primary" disabled={!setup.canCreate || creating} onClick={onCreate}>
+        <Button
+          variant="primary"
+          disabled={!setup.canCreate || creating}
+          aria-describedby={blockedReason ? blockedReasonId : undefined}
+          onClick={onCreate}
+        >
           <CreateFactoryLabel creating={creating} />
         </Button>
       </OnboardingPageAction>
@@ -143,6 +147,36 @@ function SectionDetail({ children }: { children: ReactNode }) {
       {children}
     </Txt>
   );
+}
+
+/** A create failure wins; otherwise, while Create is off, the one thing still missing. */
+function CreateNotice({ error, blockedReason, id }: { error?: string; blockedReason?: string; id: string }) {
+  if (error)
+    return (
+      <Notice variant="destructive" role="alert">
+        {error}
+      </Notice>
+    );
+  if (!blockedReason) return null;
+  return (
+    <Txt id={id} as="p" variant="meta" tone="muted" className="m-0 text-end max-[899px]:text-center">
+      {blockedReason}
+    </Txt>
+  );
+}
+
+/** Why Create is off, in the words of the lanes above, so a disabled button never leaves the user guessing. */
+function createBlockedReason(setup: OnboardingModelSetup, local: boolean): string {
+  if (!setup.draft.repository) return 'Choose a repository in Codebase to create your factory.';
+  if (local) return 'Connect a provider and pick a model to create your factory.';
+  const companyMissing = !setup.company.choice;
+  const personalMissing = !setup.personal.choice;
+  if (setup.scope === 'user') return 'Connect your account and pick a model to create your factory.';
+  if (setup.scope === 'factory') return 'Connect the company account and pick a model to create your factory.';
+  if (companyMissing && personalMissing)
+    return 'Pick a model for Factory work and for your sessions to create your factory.';
+  if (companyMissing) return 'Pick a model for Factory work to create your factory.';
+  return 'Pick a model for your sessions to create your factory.';
 }
 
 function LoadingInset({ label, rows }: { label: string; rows: number }) {

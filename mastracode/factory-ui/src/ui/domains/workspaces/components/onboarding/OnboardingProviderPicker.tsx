@@ -8,7 +8,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronsUpDown, Plug, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
@@ -239,10 +239,13 @@ function ProviderOption({
   selected?: boolean;
   onPreview?: () => void;
 }) {
+  const metaId = useId();
   return (
     <button
       type="button"
       aria-label={title}
+      aria-describedby={meta ? metaId : undefined}
+      aria-current={selected || undefined}
       className={cn(
         'flex min-h-9 w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-start',
         'not-disabled:hover:bg-fill-subtle disabled:cursor-not-allowed disabled:opacity-50',
@@ -260,7 +263,7 @@ function ProviderOption({
           {title}
         </Txt>
         {meta && (
-          <Txt as="span" variant="meta" tone="muted" className="truncate">
+          <Txt as="span" id={metaId} variant="meta" tone="muted" className="truncate">
             {meta}
           </Txt>
         )}

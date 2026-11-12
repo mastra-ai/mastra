@@ -28,6 +28,7 @@ export function OnboardingChoiceRow({
   meta?: ReactNode;
 }) {
   const titleId = useId();
+  const metaId = useId();
   return (
     <label
       className={cn(
@@ -37,7 +38,13 @@ export function OnboardingChoiceRow({
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
       )}
     >
-      <RadioGroupItem value={value} disabled={disabled} aria-labelledby={titleId} className="sr-only" />
+      <RadioGroupItem
+        value={value}
+        disabled={disabled}
+        aria-labelledby={titleId}
+        aria-describedby={meta ? metaId : undefined}
+        className="sr-only"
+      />
       <span className="text-muted-foreground flex size-5 shrink-0 items-center justify-center [&_svg]:size-4">
         {icon}
       </span>
@@ -48,7 +55,7 @@ export function OnboardingChoiceRow({
         {meta && (
           <span aria-hidden={!selected} data-open={selected} className="onboarding-fold">
             <span className="min-h-0 overflow-hidden">
-              <Txt as="span" variant="meta" tone="muted" className="block pt-0.5">
+              <Txt as="span" id={metaId} variant="meta" tone="muted" className="block pt-0.5">
                 {meta}
               </Txt>
             </span>

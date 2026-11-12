@@ -14,7 +14,8 @@ export function EmptyFactoryState({
 }) {
   const auth = useFactoryAuth();
   if (auth.isPending) return <SkeletonRows label="Loading Factory setup" rows={3} />;
-  if (auth.isError)
+  // A failed background refetch keeps the form and its open dialogs; only a first load with no account blocks.
+  if (!auth.data)
     return (
       <div className="p-6">
         <Txt role="alert">Unable to load your account.</Txt>

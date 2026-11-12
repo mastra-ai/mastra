@@ -7,6 +7,7 @@ import { LogOut, SunMoon } from 'lucide-react';
 import { useApiConfig } from '../../../../../api/config';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../../auth/services/auth';
+import { clearOnboardingFlow } from '../../services/onboardingFlow';
 
 function accountDisplayName(user: { name?: string; email?: string }): string {
   if (user.name) return user.name;
@@ -58,6 +59,8 @@ export function OnboardingAccountMenu() {
         <DropdownMenu.Item
           onClick={() => {
             clearMastraCodeStorage();
+            // The draft lives in sessionStorage; the next account in this tab must not inherit it.
+            clearOnboardingFlow();
             redirectToLogout(baseUrl);
           }}
         >

@@ -1,5 +1,4 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -8,14 +7,12 @@ export function OnboardingConnectionRow({
   icon,
   name,
   description,
-  connected = false,
   action,
   tone = 'muted',
 }: {
   icon: ReactNode;
   name: string;
   description: string;
-  connected?: boolean;
   action?: ReactNode;
   /** Reconnect lines read as warnings, load failures as errors. */
   tone?: 'muted' | 'warning' | 'error';
@@ -29,9 +26,8 @@ export function OnboardingConnectionRow({
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <Txt as="h3" variant="caption" className="flex items-center gap-2">
+        <Txt as="h3" variant="caption">
           {name}
-          {connected && <Check className="text-success-indicator size-4" role="img" aria-label="Connected" />}
         </Txt>
         <Txt
           variant="meta"

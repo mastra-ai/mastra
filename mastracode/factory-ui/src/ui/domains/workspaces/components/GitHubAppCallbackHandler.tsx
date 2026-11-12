@@ -18,12 +18,13 @@ const callbackParamNames = [
 // Codes Mastra Platform's GitHub App callback redirects back with when it
 // refuses to link an installation or a GitHub account.
 const callbackErrorMessages: Record<string, string> = {
+  // Platform links an install made before the link only from its own Accounts page, in the user's session.
   github_app_installation_preexisting:
-    'Your GitHub account already had the Mastra GitHub App installed before you clicked Connect GitHub, so this link didn’t connect it. Uninstall the Mastra GitHub App from that GitHub account or organization, then choose Connect GitHub again.',
+    'This GitHub account already had the Mastra GitHub App, so this link didn’t connect it. In Mastra Platform, open your organization settings and choose Refresh accounts under Accounts, then refresh here.',
   github_app_installation_not_owned:
-    'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation.',
+    'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation. Ask them to connect GitHub, or choose an account you own.',
   github_app_installation_linked_elsewhere:
-    'This GitHub installation is already linked to another Mastra organization. Remove it there first, or install the app again for this organization.',
+    'This GitHub installation is already linked to another Mastra organization. Remove it there first, or install the app on a GitHub organization for this one.',
   github_app_sign_in_required: 'Sign in to Mastra Platform in this browser, then connect GitHub again.',
   github_app_session_mismatch:
     'This GitHub link was started for a different Mastra account or organization. Connect GitHub again from your own account.',
@@ -34,7 +35,7 @@ const callbackErrorMessages: Record<string, string> = {
   github_app_link_not_started_here:
     'This GitHub link was opened in a different browser, or opened directly instead of from Factory. Go back to Factory and choose Connect GitHub to start it again.',
   github_app_connection_mismatch:
-    'Your Mastra account is already connected to a different GitHub account. Disconnect that GitHub account in Mastra Platform first, then connect GitHub here again.',
+    'Your Mastra account is already connected to a different GitHub account. Disconnect it in Mastra Platform, then connect GitHub again.',
   github_app_user_authorization_required:
     'Mastra Platform needs you to authorize the GitHub App with your GitHub account to link this installation. Connect GitHub again and approve the authorization step.',
   github_app_user_authorization_failed: 'GitHub authorization failed. Connect GitHub again.',
@@ -48,19 +49,17 @@ export type GitHubAppCallbackResult =
   | { kind: 'requested' }
   | { kind: 'installed' }
   | { kind: 'user_authorized' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; code?: string; message: string };
 
 const GITHUB_CONNECTION_FAILED = 'GitHub connection failed';
 
-function callbackResult(searchParams: URLSearchParams): GitHubAppCallbackResult | undefined {
+/** The result a GitHub App callback URL reports; undefined when the URL carries none. */
+export function callbackResult(searchParams: URLSearchParams): GitHubAppCallbackResult | undefined {
   if (searchParams.get('github_app_requested') === 'true') return { kind: 'requested' };
   if (searchParams.get('github_app_installed') === 'true') return { kind: 'installed' };
   if (searchParams.get('github_app_user_authorized') === 'true') return { kind: 'user_authorized' };
-  if (searchParams.has('github_app_error'))
-    return {
-      kind: 'error',
-      message: callbackErrorMessage(searchParams.get('github_app_error')) ?? GITHUB_CONNECTION_FAILED,
-    };
+  const code = searchParams.get('github_app_error');
+  if (code !== null) return { kind: 'error', code, message: callbackErrorMessage(code) ?? GITHUB_CONNECTION_FAILED };
   return undefined;
 }
 
@@ -92,22 +91,18 @@ function hasGitHubAppCallback(searchParams: URLSearchParams): boolean {
 }
 
 /**
- * With `onResult`, the page shows the requested and error states inline and only success toasts remain.
- * Without it, every result is a toast.
+ * Refreshes GitHub data and strips the callback params. With `inline`, the page reads the result itself
+ * (`callbackResult`) and shows it in place, so nothing toasts; otherwise every result is a toast.
  */
-export function GitHubAppCallbackHandler({ onResult }: { onResult?: (result: GitHubAppCallbackResult) => void } = {}) {
+export function GitHubAppCallbackHandler({ inline = false }: { inline?: boolean } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const reportResult = useEffectEvent((result: GitHubAppCallbackResult) => {
-    onResult?.(result);
+    if (inline) return;
     // The route tree mounts before the app-level Toaster sibling in main.tsx.
     // Defer one microtask so the toaster's own passive effects subscribe before
     // this callback emits a notification on initial page load.
-    queueMicrotask(() => {
-      // A page with `onResult` shows the requested and error states inline instead.
-      if (onResult && (result.kind === 'requested' || result.kind === 'error')) return;
-      toastCallbackResult(result);
-    });
+    queueMicrotask(() => toastCallbackResult(result));
   });
 
   useEffect(() => {

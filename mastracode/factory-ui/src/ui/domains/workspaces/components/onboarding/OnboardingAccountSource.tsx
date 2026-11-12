@@ -12,18 +12,23 @@ export interface AccountSourceChoice {
   choose: (next: AccountSource) => void;
 }
 
+/** The source the lane's selected provider belongs to; undefined while nothing is selected. */
+function sourceOf(provider?: ProviderInfo, gateway?: ProviderInfo): AccountSource | undefined {
+  if (!provider || !gateway) return undefined;
+  return provider.provider === gateway.provider ? 'gateway' : 'own';
+}
+
 /**
- * Whether a lane that offers the Mastra Gateway is on it: the user's pick, else the restored provider's
- * kind, else the recommended gateway. The submitted provider always matches the pick: choosing the
- * gateway selects it, leaving it clears it.
+ * Whether a lane that offers the Mastra Gateway is on it. The selected provider decides, so the tab never
+ * disagrees with what Create submits; with nothing selected, the user's pick, else the recommended gateway
+ * unless this user can't connect it (a member on the company account), which opens on their own provider.
  */
 export function useAccountSource(connection: ProviderConnection): AccountSourceChoice {
   const [picked, setPicked] = useState<AccountSource>();
   const gateway = connection.gatewayProvider;
-  const restored = connection.provider;
-  const ownRestored = Boolean(restored && gateway && restored.provider !== gateway.provider);
+  const gatewayAllowed = !gateway || connection.canConfigure(gateway, 'api_key');
   return {
-    source: picked ?? (ownRestored ? 'own' : 'gateway'),
+    source: sourceOf(connection.provider, gateway) ?? picked ?? (gatewayAllowed ? 'gateway' : 'own'),
     choose: next => {
       setPicked(next);
       if (next === 'own') {

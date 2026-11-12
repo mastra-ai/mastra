@@ -45,10 +45,13 @@ interface LanePreview {
   model?: string;
 }
 
-/** A provider being previewed in the picker replaces the connected one, and hides its model until it connects. */
+/**
+ * A provider being previewed in the picker replaces the connected one, and hides its model until it connects.
+ * Previewing the lane's own provider shows its chosen model, the one Create submits.
+ */
 function lanePreview(lane: OnboardingModelLane, providerId?: string, method?: ProviderConnectionMethod): LanePreview {
   const shownMethod = method ?? lane.connection.method;
-  if (providerId) return { providerId, method: shownMethod };
+  if (providerId && providerId !== lane.connectedProvider?.provider) return { providerId, method: shownMethod };
   return { providerId: lane.connectedProvider?.provider, method: shownMethod, model: lane.modelId };
 }
 
@@ -85,13 +88,26 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
     mainRef.current?.querySelector('h2')?.focus();
   }, [openStep]);
 
-  // Functional: a gateway connect reports its selection after an await, against the latest draft.
-  const updateDraft = (patch: Partial<OnboardingDraft>) =>
-    setDraft(current => {
-      const next = { ...current, ...patch };
-      persistOnboardingDraft(next);
-      return next;
-    });
+  // Back from GitHub restores this page from the bfcache with the spinner still on; Connect must work again.
+  useEffect(() => {
+    const resetRedirect = (event: PageTransitionEvent) => {
+      if (event.persisted) setGithubRedirecting(false);
+    };
+    window.addEventListener('pageshow', resetRedirect);
+    return () => window.removeEventListener('pageshow', resetRedirect);
+  }, []);
+
+  // A ref, not a functional update: a gateway connect reports after an await and must merge into the
+  // latest draft, and the storage write has to stay out of the state updater.
+  const latestDraft = useRef(draft);
+  const updateDraft = (patch: Partial<OnboardingDraft>) => {
+    // The create failure was about the old choices; a change means the user is acting on it.
+    if (complete.isError) complete.reset();
+    const next = { ...latestDraft.current, ...patch };
+    latestDraft.current = next;
+    persistOnboardingDraft(next);
+    setDraft(next);
+  };
   const open = (step: OnboardingStep) => {
     persistOnboardingStep(step);
     focusOpenedSection.current = true;

@@ -1,13 +1,15 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { EmptyFactoryState } from '../domains/workspaces';
-import { GitHubAppCallbackHandler } from '../domains/workspaces/components/GitHubAppCallbackHandler';
-import type { GitHubAppCallbackResult } from '../domains/workspaces/components/GitHubAppCallbackHandler';
+import { callbackResult, GitHubAppCallbackHandler } from '../domains/workspaces/components/GitHubAppCallbackHandler';
 
 export const OnboardingPage = () => {
-  const [githubCallback, setGithubCallback] = useState<GitHubAppCallbackResult>();
+  const [searchParams] = useSearchParams();
+  // Read once on arrival: the handler strips the params right after, and the result stays until dismissed.
+  const [githubCallback, setGithubCallback] = useState(() => callbackResult(searchParams));
   return (
     <>
-      <GitHubAppCallbackHandler onResult={setGithubCallback} />
+      <GitHubAppCallbackHandler inline />
       <EmptyFactoryState githubCallback={githubCallback} onDismissGithubCallback={() => setGithubCallback(undefined)} />
     </>
   );

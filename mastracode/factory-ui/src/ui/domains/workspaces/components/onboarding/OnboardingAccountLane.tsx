@@ -16,7 +16,7 @@ import { FactoryDefaultModelForm } from '../FactoryDefaultModelForm';
 import { MastraGatewayBilling } from '../MastraGatewayBilling';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { pendingGateway } from './OnboardingAccountSource';
-import type { AccountSource, AccountSourceChoice } from './OnboardingAccountSource';
+import type { AccountSourceChoice } from './OnboardingAccountSource';
 import { OnboardingAccountHeading } from './OnboardingAccountHeading';
 import { OnboardingLaneStatus } from './OnboardingLaneStatus';
 import { OnboardingInset } from './OnboardingInset';
@@ -89,13 +89,11 @@ export function OnboardingAccountLane({
             </CollapsibleContent>
           </Collapsible>
         </OnboardingInset>
-        <OnboardingLaneStatus lane={lane} scope={scope} />
+        <OnboardingLaneStatus lane={lane} scope={scope} onCancel={() => onPreviewProvider(undefined)} />
       </div>
     </div>
   );
 }
-
-const SOURCES: AccountSource[] = ['gateway', 'own'];
 
 function LaneProvider({
   lane,
@@ -135,11 +133,11 @@ function LaneProvider({
         aria-label="Provider source"
         size="sm"
         value={choice.source}
+        // A gateway connect selects the gateway once it returns; switching mid-request would land it on the wrong tab.
+        disabled={connection.pending}
         onValueChange={next => {
-          const source = SOURCES.find(value => value === next);
-          if (!source) return;
-          choice.choose(source);
-          if (source === 'gateway') onPreviewProvider(gateway.provider, 'api_key');
+          choice.choose(next);
+          if (next === 'gateway') onPreviewProvider(gateway.provider, 'api_key');
           else onPreviewProvider(undefined);
         }}
         className="w-auto"
@@ -215,26 +213,40 @@ function ConnectGatewayButton({
 }) {
   const { connection } = lane;
   const preview = () => onPreviewProvider(gateway.provider, 'api_key');
+  const restore = () => onPreviewProvider(undefined);
   const verb = connection.isConfigured(gateway, 'api_key') ? 'Use' : 'Connect';
+  const allowed = connection.canConfigure(gateway, 'api_key');
+  const reasonId = useId();
   return (
-    <Button
-      variant="primary"
-      disabled={connection.pending || !connection.canConfigure(gateway, 'api_key')}
-      onMouseEnter={preview}
-      onFocus={preview}
-      onClick={() => {
-        connection.chooseGateway();
-        preview();
-      }}
-    >
-      {connection.connectingGateway ? (
-        <>
-          <Spinner size="sm" aria-hidden="true" />
-          Connecting…
-        </>
-      ) : (
-        `${verb} Mastra Gateway`
+    <div className="flex flex-col items-start gap-2">
+      <Button
+        variant="primary"
+        disabled={connection.pending || !allowed}
+        aria-describedby={allowed ? undefined : reasonId}
+        onMouseEnter={preview}
+        onMouseLeave={restore}
+        onFocus={preview}
+        onBlur={restore}
+        onClick={() => {
+          connection.chooseGateway();
+          preview();
+        }}
+      >
+        {connection.connectingGateway ? (
+          <>
+            <Spinner size="sm" aria-hidden="true" />
+            Connecting…
+          </>
+        ) : (
+          `${verb} Mastra Gateway`
+        )}
+      </Button>
+      {!allowed && (
+        <Txt id={reasonId} variant="meta" tone="muted">
+          Only an organization admin can connect Mastra Gateway for the company account. Choose Your own provider to use
+          one that is already connected.
+        </Txt>
       )}
-    </Button>
+    </div>
   );
 }

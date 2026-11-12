@@ -52,7 +52,8 @@ export interface ProviderConnection {
   chooseKeyProvider: (provider: ProviderInfo) => void;
   chooseCustomProvider: (providerId: string) => void;
   chooseGateway: () => void;
-  closeKeyDialog: () => void;
+  /** `saved` selects the provider the dialog was for; a cancel keeps the previous choice. */
+  closeKeyDialog: (saved: boolean) => void;
   closeOAuth: () => void;
   completeOAuth: () => void;
 }
@@ -117,7 +118,8 @@ export function useProviderConnection({
 }: {
   scope?: ProviderCredentialScope;
   initialSelection?: ProviderSelection;
-  /** Called whenever the user picks or clears a provider, before it is connected. */
+  /** Called whenever the user picks or clears a provider. A provider that needs a key or a sign-in is only
+   *  picked once that succeeds, so cancelling keeps the working choice. */
   onSelectionChange?: (selection: ProviderSelection | undefined) => void;
 } = {}): ProviderConnection {
   const providersQuery = useProvidersQuery();
@@ -214,24 +216,30 @@ export function useProviderConnection({
     clear: () => select(undefined),
     chooseSignInProvider: chosen => {
       if (!canConfigure(chosen, 'oauth')) return;
-      select({ providerId: chosen.provider, method: 'oauth' });
-      if (!isConfigured(chosen, 'oauth')) void startOAuth(chosen);
+      if (isConfigured(chosen, 'oauth')) select({ providerId: chosen.provider, method: 'oauth' });
+      else void startOAuth(chosen);
     },
     chooseKeyProvider: chosen => {
       if (!canConfigure(chosen, 'api_key')) return;
-      select({ providerId: chosen.provider, method: 'api_key' });
-      if (!isConfigured(chosen, 'api_key')) setKeyDialogProvider(chosen);
+      if (isConfigured(chosen, 'api_key')) select({ providerId: chosen.provider, method: 'api_key' });
+      else setKeyDialogProvider(chosen);
     },
     chooseCustomProvider: providerId => select({ providerId, method: 'api_key' }),
     chooseGateway: () => {
       if (gatewayProvider) void connectGateway(gatewayProvider);
     },
-    closeKeyDialog: () => setKeyDialogProvider(undefined),
+    closeKeyDialog: saved => {
+      setKeyDialogProvider(undefined);
+      if (saved && keyDialogProvider) select({ providerId: keyDialogProvider.provider, method: 'api_key' });
+    },
     closeOAuth: () => {
       const flow = activeOAuth;
       setActiveOAuth(undefined);
       if (flow) cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
     },
-    completeOAuth: () => setActiveOAuth(undefined),
+    completeOAuth: () => {
+      setActiveOAuth(undefined);
+      if (activeOAuth) select({ providerId: activeOAuth.provider, method: 'oauth' });
+    },
   };
 }

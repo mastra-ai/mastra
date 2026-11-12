@@ -4,8 +4,19 @@ import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { OnboardingModelLane } from '../../hooks/useOnboardingModelLane';
 import { ProviderConnectionDialogs } from '../ProviderConnectionDialogs';
 
-/** What went wrong with a lane's connection, plus its key and sign-in dialogs. */
-export function OnboardingLaneStatus({ lane, scope }: { lane: OnboardingModelLane; scope: 'org' | 'user' }) {
+/**
+ * What went wrong with a lane's connection, plus its key and sign-in dialogs. Cancelling a dialog keeps
+ * the lane's provider, so `onCancel` puts the preview back on it.
+ */
+export function OnboardingLaneStatus({
+  lane,
+  scope,
+  onCancel,
+}: {
+  lane: OnboardingModelLane;
+  scope: 'org' | 'user';
+  onCancel: () => void;
+}) {
   const { connection } = lane;
   return (
     <>
@@ -24,8 +35,14 @@ export function OnboardingLaneStatus({ lane, scope }: { lane: OnboardingModelLan
         oauth={connection.activeOAuth}
         authEnabled={connection.authEnabled}
         fixedScope={scope}
-        onCloseKeyDialog={connection.closeKeyDialog}
-        onCloseOAuth={connection.closeOAuth}
+        onCloseKeyDialog={saved => {
+          connection.closeKeyDialog(saved);
+          if (!saved) onCancel();
+        }}
+        onCloseOAuth={() => {
+          connection.closeOAuth();
+          onCancel();
+        }}
         onCompleteOAuth={connection.completeOAuth}
       />
     </>

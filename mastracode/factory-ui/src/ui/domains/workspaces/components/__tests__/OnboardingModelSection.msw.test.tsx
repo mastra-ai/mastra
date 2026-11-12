@@ -502,6 +502,50 @@ describe('Model provider onboarding', () => {
         model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
       });
     });
+
+    it('keeps OpenAI and its model when connecting another provider is cancelled', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: [
+              { provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true },
+              { provider: 'groq', source: 'none' },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
+      );
+      const user = userEvent.setup();
+
+      const { onCreate } = renderModelSection();
+      await chooseProvider(user, 'OpenAI');
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+
+      await chooseProvider(user, 'Groq');
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.getByRole('button', { name: 'Provider: OpenAI' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' } }),
+      );
+    });
+
+    it('says what is missing while Create factory is disabled', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [{ provider: 'groq', source: 'none' }] }),
+        ),
+      );
+
+      renderModelSection();
+
+      const create = await screen.findByRole('button', { name: 'Create factory' });
+      await waitFor(() => expect(create).toHaveAccessibleDescription(/company account/));
+      expect(create).toBeDisabled();
+    });
   });
 
   describe('when OpenAI has only a personal API key', () => {
@@ -627,6 +671,32 @@ describe('Model provider onboarding', () => {
       await user.click(screen.getByRole('button', { name: 'OpenAI' }));
       expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
       expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled();
+    });
+
+    it('opens a member on the shared providers when only an admin could connect the gateway', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [
+              { provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true },
+              { provider: 'mastra', source: 'none', orgKey: false, connectWithMastraAccount: true },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
+      );
+      const user = userEvent.setup();
+
+      renderModelSection();
+
+      const account = within(await screen.findByRole('group', { name: 'Company account' }));
+      expect(await account.findByRole('radio', { name: 'Your own provider' })).toBeChecked();
+      await user.click(account.getByRole('radio', { name: 'Mastra Gateway' }));
+      expect(account.getByRole('button', { name: 'Connect Mastra Gateway' })).toHaveAccessibleDescription(
+        /Only an organization admin/,
+      );
     });
 
     it('switches members without a company account to personal accounts', async () => {

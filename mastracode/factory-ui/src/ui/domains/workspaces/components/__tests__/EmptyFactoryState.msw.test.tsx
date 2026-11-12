@@ -854,8 +854,9 @@ describe('Account presets', () => {
     await user.click(await screen.findByRole('button', { name: 'Theme' }));
     expect(await screen.findByRole('menuitemradio', { name: 'System' })).toBeChecked();
     await user.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
-    await waitFor(() => expect(document.documentElement).toHaveClass('dark'));
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Theme' }));
+    expect(await screen.findByRole('menuitemradio', { name: 'Dark' })).toBeChecked();
   });
 
   it('locks every Change and control while the factory is created', async () => {
