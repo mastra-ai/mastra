@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   SettingsContainer,
@@ -8,7 +9,6 @@ import {
   SettingsItem,
   SettingsItemIcon,
   SettingsListHeader,
-  SettingsRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { ExternalLink } from 'lucide-react';
@@ -37,17 +37,12 @@ export function ConnectToolsSection() {
           <SettingsSkeleton variant="item" label="Loading Mastra Connect tools" />
         </SettingsContainer>
       ) : unavailable ? (
-        <SettingsContainer>
-          <SettingsRow
-            label={SECTION_LABEL}
-            description={
-              <>
-                Sessions on this Factory don't get Mastra Connect tools. They need Platform credentials and{' '}
-                <InlineCode>MASTRA_PROJECT_ID</InlineCode>, and no custom <InlineCode>tools</InlineCode> option.
-              </>
-            }
-          />
-        </SettingsContainer>
+        <Notice variant="info">
+          <Notice.Message>
+            Mastra Connect tools are off: this Factory sets a custom <InlineCode>tools</InlineCode> option or lacks
+            Platform credentials and <InlineCode>MASTRA_PROJECT_ID</InlineCode>.
+          </Notice.Message>
+        </Notice>
       ) : query.isError ? (
         <SettingsContainer>
           <RetryRow

@@ -61,7 +61,7 @@ describe('Mastra Connect tools settings', () => {
     server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ error: 'connect_tools_off' }, { status: 404 })));
     renderWithProviders(<ConnectToolsSection />);
 
-    expect(await screen.findByText(/Sessions on this Factory don't get Mastra Connect tools/)).toBeInTheDocument();
+    expect(await screen.findByText(/Mastra Connect tools are off/)).toBeInTheDocument();
   });
 
   it('offers a retry, not setup guidance, when the Platform refuses the listing', async () => {
@@ -73,6 +73,6 @@ describe('Mastra Connect tools settings', () => {
     renderWithProviders(<ConnectToolsSection />);
 
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.queryByText(/Sessions on this Factory don't get Mastra Connect tools/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Mastra Connect tools are off/)).not.toBeInTheDocument();
   });
 });
