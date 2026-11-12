@@ -1628,6 +1628,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  /**
+   * Handles a run's `workflow.end`: prunes the final snapshot, hands a nested
+   * run's result to its parent step once (see {@link #claimNestedHandOff}),
+   * publishes the run's finish, and deletes a snapshot `shouldPersistSnapshot`
+   * declined once that finish is out, leaving the `::ended` marker behind.
+   */
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
     const internalWorkflow = this.mastra.__hasInternalWorkflow(args.workflowId, args.runId)
       ? this.mastra.__getInternalWorkflow(args.workflowId, args.runId)
@@ -3333,6 +3339,13 @@ export class WorkflowEventProcessor extends EventProcessor {
    * executor's dispatch; here entries are only inspected via the `step-entry`
    * accessors. `stepLease` is the occurrence lease the caller holds; a retry
    * hands it to the worker that runs the next attempt.
+   *
+   * Under a lease, a step's success or final failure is saved before the event
+   * that ends the occurrence is published, and a loop saves its next
+   * iteration's start (see {@link #saveFinishedStep}, {@link #saveLoopProgress}).
+   * Foreach items and suspended results are saved by their step end. The
+   * attempt count is kept on the stored attempt, so a restart of a step that
+   * failed between retries continues with the next attempt.
    */
   protected async runLeafStep(
     args: ProcessorArgs & {
@@ -4439,14 +4452,15 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // A leased step saves its terminal result before the event that ends the occurrence and before
     // its lease is released, so a delivery or restart arriving in between finds the result. Foreach
-    // items are left to the foreach's step end: their step ends decide together, from the shared
-    // record, which item continues the foreach or fails the run, and an earlier save would let two
-    // of them decide. Workflows that persist no running snapshot have nothing to save into.
+    // items are left to their step ends, which merge them into the foreach's shared record one at a
+    // time: with items saved early, two items finishing together fail a step end. A workflow that
+    // persists no running snapshot saves nothing early, unless its store's step guards keep a row.
     const savesFinishedResult =
       stepLease !== UNLEASED_STEP &&
       step.type !== 'foreach' &&
       !!workflowsStore &&
       (shouldPersistRunning || guardStart);
+    /** Saves `result` as this occurrence's terminal record (see {@link #saveFinishedStep}). */
     const saveFinished = (result: StepResult<any, any, any, any>) =>
       this.#saveFinishedStep({
         args: { ...args, requestContext },

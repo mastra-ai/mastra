@@ -83,11 +83,11 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: 
  * redelivery or a message that sat in a backlog while `restart()` ran the step,
  * or a restart that read the snapshot just before the step saved its result.
  * The stored record ends the occurrence when it is terminal and is not an
- * earlier occurrence's record the delivery carried, so a step id used twice in
- * `stepGraph` still runs its second occurrence. For the steps a restart dispatches, any terminal
- * record ends them. For a loop body, a stored record from a later iteration
- * ends the iteration too. Foreach items are read from the foreach step's
- * per-item records.
+ * earlier occurrence's record the delivery carried, so a step id used twice
+ * in `stepGraph` still runs its second occurrence. For the steps a restart
+ * dispatches, any terminal record ends them. For a loop body, a stored record
+ * from a later iteration ends the iteration too. Foreach items are read from
+ * the foreach step's per-item records.
  *
  * A finished occurrence continues the run from its saved result while the run
  * has not started a later step, which recovers a run whose worker stopped
