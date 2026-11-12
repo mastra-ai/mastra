@@ -3,6 +3,41 @@ import type { RestartExecutionParams, StepFlowEntry, StepResult } from '../../ty
 import { getStepIds } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 
+/**
+ * The id of a finished sleep the run lists as active at its current path
+ * `[index]`. A sleep declared without an `id` gets a new generated id in every
+ * process that builds the workflow, so its result may be stored under an id
+ * this process's graph does not use.
+ */
+function finishedSleepAt(restart: RestartExecutionParams, index: number): string | undefined {
+  // Only the top-level entry the run is at: a sleep inside a parallel or nested branch has a longer path.
+  if (restart.activePaths.length !== 1 || restart.activePaths[0] !== index) {
+    return undefined;
+  }
+
+  return Object.entries(restart.activeStepsPath ?? {}).find(
+    ([id, path]) => path?.length === 1 && path[0] === index && restart.stepResults[id]?.status === 'success',
+  )?.[0];
+}
+
+/**
+ * The id the result of the sleep `entry` at `[index]` is stored under: this
+ * process's id when a finished result is stored under it, otherwise the id of
+ * a finished sleep at that path (see {@link finishedSleepAt}), since another
+ * process may have stored the sleep under its own id.
+ */
+function storedSleepId(
+  entry: Extract<StepFlowEntry, { type: 'sleep' | 'sleepUntil' }>,
+  restart: RestartExecutionParams,
+  index: number,
+): string {
+  if (restart.stepResults[entry.id]?.status === 'success') {
+    return entry.id;
+  }
+
+  return finishedSleepAt(restart, index) ?? entry.id;
+}
+
 /** Recognize only the captured occurrence; a saved ID may also occur later in the graph. */
 export function resolveCompletedRestartEntry(
   graph: StepFlowEntry[],
@@ -46,7 +81,7 @@ export function resolveCompletedRestartEntry(
       entry.type === 'foreach' || entry.type === 'loop'
         ? getEntryId(entry.step)
         : entry.type === 'sleep' || entry.type === 'sleepUntil'
-          ? entry.id
+          ? storedSleepId(entry, restart, index)
           : getEntryId(entry);
     const result = results[id];
     if (result?.status !== 'success') return;

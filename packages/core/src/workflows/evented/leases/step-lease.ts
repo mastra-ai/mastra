@@ -47,7 +47,7 @@ export const UNLEASED_STEP: StepLease = {
 };
 
 /** Waits `ms` without keeping the process alive for it. */
-const sleep = (ms: number) =>
+export const sleep = (ms: number) =>
   new Promise<void>(resolve => {
     const timer = setTimeout(resolve, ms);
     timer.unref?.();
@@ -58,7 +58,7 @@ const sleep = (ms: number) =>
  * the holder's lease could expire notices an early release, and jitter spreads
  * the waiters of one occurrence apart.
  */
-function holdDelay(holder: RunOwnershipRecord | null): number {
+export function holdDelay(holder: RunOwnershipRecord | null): number {
   const expiresIn = (holder?.leaseExpiresAt?.getTime() ?? Date.now()) - Date.now();
   const jitter = Math.random() * (WORKFLOW_RUN_LEASE_TTL_MS / 10);
   return Math.min(Math.max(0, expiresIn), WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS) + jitter;

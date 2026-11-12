@@ -143,10 +143,13 @@ export interface PruneResult {
  * records. `memory.runFences` holds one row per run. `workflows.runOwnership`
  * holds one row per run for default-engine runs and durable agents, and for
  * evented runs one row per step occurrence plus a `::live` and a `::restart`
- * row per run; pruning their released or expired rows is safe. `runOwnership`
- * is anchored on the claim's `updatedAt`, which every claim, renewal and
- * release refreshes, so a live execution's row is never older than its renewal
- * interval; keep `maxAge` well above the lease. `runFences` is anchored on
+ * row per run; pruning their released or expired rows is safe. Each evented
+ * sleep adds two rows: one that sets the sleep up once, and one whose release
+ * marks the sleep woken. Pruning a released wake row lets a restart that wrote
+ * an older snapshot back over the run wake the sleep a second time.
+ * `runOwnership` is anchored on the claim's `updatedAt`, which every claim,
+ * renewal and release refreshes, so a live execution's row is never older
+ * than its renewal interval; keep `maxAge` well above the lease. `runFences` is anchored on
  * `retiredAt`, which stays NULL until the execution holding the fence settles,
  * so a running execution's fence is never pruned.
  *

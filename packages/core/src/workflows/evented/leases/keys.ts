@@ -27,3 +27,20 @@ export function restartLeaseKey(runId: string): string {
 export function runLivenessKey(runId: string): string {
   return `${runId}::live`;
 }
+
+/**
+ * Lease key of one sleep occurrence: the sleep's step key and the time the
+ * occurrence started, so a sleep started again (time travel, a sleep recorded
+ * without a wake time) gets a new key.
+ */
+export function sleepOccurrenceKey(runId: string, executionPath: number[], startedAt: number): string {
+  return `${stepOccurrenceKey(runId, executionPath)}:sleep${startedAt}`;
+}
+
+/**
+ * Lease key that serializes starting and resuming the sleep at `executionPath`
+ * of `runId`, so concurrent deliveries of its event set up one occurrence.
+ */
+export function sleepStartKey(runId: string, executionPath: number[]): string {
+  return `${stepOccurrenceKey(runId, executionPath)}:sleep-start`;
+}

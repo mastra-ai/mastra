@@ -107,6 +107,7 @@ import {
 } from '../workflows/dynamic';
 import { endRunLiveness, runLivenessKey } from '../workflows/evented/leases';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import { pauseSleepWakes, resumeSleepWakes } from '../workflows/evented/workflow-event-processor/sleep';
 import {
   cancelNestedRun,
   createNestedRunParentStatusLookup,
@@ -8007,6 +8008,8 @@ export class Mastra<
       : !this.#workerFilter || this.#workerFilter.has('orchestration');
     if (handlesWorkflowEvents && this.#workerStops === stops) {
       this.#startWorkflowRecoveryLoop();
+      // The wakes of sleeps this instance started before its workers last stopped.
+      resumeSleepWakes(this);
     }
   }
 
@@ -8153,6 +8156,8 @@ export class Mastra<
 
     await this.#wirePushWorkflowSubscription();
     this.#executionWorkersStarted = true;
+    // A lazy start, for example from a restart, takes up the wakes the last stopWorkers() put aside.
+    resumeSleepWakes(this);
   }
 
   /**
@@ -8179,6 +8184,9 @@ export class Mastra<
     this.#workerStops++;
     this.#stopWorkflowRecoveryLoop?.();
     this.#recoveryPass = undefined;
+    // Before the consumers go: a sleep woken during the drain would publish its next step to no
+    // worker. Sleeps the drained runs start meanwhile are put aside too.
+    pauseSleepWakes(this);
 
     // A runtime signal may have kicked off a lazy worker start that is still in
     // flight. Wait for it so the teardown below covers what it started —
@@ -8694,6 +8702,9 @@ export class Mastra<
       // restarted one it still drove. Their keys expire now, while storage is still open, so the
       // time this process stopped is recorded for recovery to measure from. A shutdown that fails
       // before this point leaves the workers running, so the process keeps vouching for its runs.
+      // A stopWorkers() that failed must not leave the sleeps of those runs to wake either; pausing
+      // them twice changes nothing.
+      pauseSleepWakes(this);
       await endRunLiveness(this, { deadline });
     }
 

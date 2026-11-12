@@ -49,6 +49,12 @@ type CompletedCase = {
   build: Build;
   ready?: (snapshot: WorkflowRunState) => boolean;
   successorPath?: number[];
+  /**
+   * The successor is a sleep that stores its result and wake time before the
+   * restart reads the run, so the restart resumes it without calling its
+   * duration function, the call these cases record.
+   */
+  resumesSleep?: boolean;
 };
 
 const cases: CompletedCase[] = [
@@ -267,6 +273,7 @@ const cases: CompletedCase[] = [
   },
   ...(['sleep', 'sleepUntil'] as const).map(kind => ({
     name: `${kind} successor reusing the completed step ID`,
+    resumesSleep: true,
     index: 0,
     finished: [],
     next: { step: 'reused', input: { n: 2 } },
@@ -383,6 +390,7 @@ async function assertRecovered(
   recovered: RestartResult,
   runId: string,
   generation = 2,
+  nextRuns = 1,
 ) {
   expect(recovered.graph.workflow.engineType).toBe('evented');
   for (const done of spec.finished) {
@@ -393,8 +401,10 @@ async function assertRecovered(
   }
   if (spec.next) {
     const calls = effects.filter(effect => effect.generation === generation && effect.step === spec.next!.step);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.input).toEqual(spec.next.input);
+    expect(calls).toHaveLength(nextRuns);
+    if (nextRuns > 0) {
+      expect(calls[0]!.input).toEqual(spec.next.input);
+    }
   }
   expect(recovered.result).toMatchObject({ status: 'success', result: spec.expected });
   const snapshot = await recovered.graph.workflows.loadWorkflowSnapshot({
@@ -489,7 +499,9 @@ describe('evented restart after a saved completed entry (COR-1354)', () => {
       const before = findRow(checkpoint, original.graph.workflow.id, runId)!.snapshot;
       const after = findRow(secondCheckpoint!, original.graph.workflow.id, runId)!.snapshot;
       const recovered = await scenario.restart(secondCheckpoint!);
-      await assertRecovered(spec, effects, recovered, runId, 3);
+      // Only at this boundary was the sleep stored before the restart read the run.
+      const resumesSleep = boundary === 'successor input' && spec.resumesSleep;
+      await assertRecovered(spec, effects, recovered, runId, 3, resumesSleep ? 0 : 1);
       expect(after.activePaths).toEqual(
         spec.successorPath ?? (spec.next!.step === 'reused' ? [1] : before.activePaths),
       );
