@@ -116,8 +116,8 @@ Mastra applies this boundary automatically to memory and thread operations, incl
 Without `mapUserToResourceId`, this means:
 
 - Each user sees their own stored agents, skills, workspaces, and other owned records plus public ones. Records they create are owned by them and private by default. Records created before your app used these user IDs have no owner and stay visible to everyone. Users with an admin permission such as `stored-agents:admin` still see every record.
-- Per-author tool-provider connections are stored under the user's `sub`. Connections saved under the shared `default` owner aren't found, so users reconnect them. Shared connections aren't affected.
-- Feedback is recorded with the user's `sub` as the user ID.
+- Per-author tool-provider connections are stored under the user's `id`. Connections saved under the shared `default` owner aren't found, so users reconnect them. Shared connections aren't affected.
+- Feedback is recorded with the user's `id` as the user ID.
 
 To keep every user in one shared resource instead, pass `mapUserToResourceId: () => 'default'` to the auth provider. This also shares memory and owned records between all users, so use it only when that's how your app should work.
 

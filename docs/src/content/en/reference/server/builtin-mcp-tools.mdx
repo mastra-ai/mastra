@@ -45,13 +45,13 @@ Arguments marked with `*` are required. Routes are relative to the API prefix (`
 
 ## `tools`
 
-When the caller can see up to `enumLimit` tools, each tool gets its own entry:
+When the caller can see up to `enumLimit` tools and may call them, each tool gets its own entry:
 
 | Tool | Arguments | Route | Permission |
 | - | - | - | - |
 | `tool_<id>` | The tool's input schema | `POST /tools/:toolId/execute` | `tools:execute` |
 
-Above `enumLimit`, three operation tools replace them:
+Above `enumLimit`, or when the caller can't call tools (`readOnly: true` or no `tools:execute`), operation tools replace them. `call_tool` is only offered when the caller can call tools:
 
 | Tool | Arguments | Route | Permission |
 | - | - | - | - |
@@ -76,7 +76,7 @@ A `tool_<id>` entry uses the tool's own `mcp.annotations` when the tool defines 
 | `clone_thread` | `threadId*`, `agentId*`, `newThreadId`, `title`, `metadata`, `messageLimit` | `POST /memory/threads/:threadId/clone` | `memory:execute` |
 | `save_messages` | `agentId*`, `messages*` | `POST /memory/save-messages` | `memory:write` |
 
-- `resourceId` defaults to the caller when `server.auth` sets `mapUserToResourceId`. A caller can't read or write another resource's threads, messages, or Observational Memory.
+- `resourceId` defaults to the caller when `server.auth` sets `mapUserToResourceId`, and a caller can't read or write another resource's threads, messages, or Observational Memory. Without `mapUserToResourceId`, the tools use the `resourceId` the client sends, so keep memory private with [FGA](/docs/auth/fga) or by setting `mapUserToResourceId`.
 - `get_observations` reads resource-scoped Observational Memory when `threadId` is left out. `waitForPending: true` waits up to 30 seconds for pending observations, and is only offered when the caller may call `POST /memory/observational-memory/buffer-status`, which needs `memory:write`.
 - `search_memory` returns up to 20 results unless `limit` is set.
 

@@ -139,7 +139,7 @@ Resources include `agents`, `workflows`, `tools`, `datasets`, `memory`, `scores`
 
 `mcp:read` and `mcp:execute` gate the [built-in MCP server](/docs/server/mcp#authentication-and-permissions) and the routes of `MCPServer` instances you register. The default `viewer` role has `mcp:read` only, so a viewer can connect but gets an empty tool list. Each MCP tool call also needs the permission of the route it runs, such as `agents:execute`.
 
-Stored agents are private to their owner by default. `stored-agents:*` and `stored-agents:admin` let a user see and edit every stored agent. The default `admin` role doesn't include them. See [stored agent visibility](/docs/studio/editor#visibility).
+Stored agents are private to their owner by default. `stored-agents:*` lets a user see and edit every stored agent. `stored-agents:admin` lifts the owner check, but the user still needs each route's own permission, such as `stored-agents:read` or `stored-agents:write`. The default `admin` role doesn't include either. See [stored agent visibility](/docs/studio/editor#visibility).
 
 ### Map external provider roles
 
