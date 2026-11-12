@@ -44,3 +44,13 @@ services:
       interval: 2s
       timeout: 3s
       retries: 15
+  # Valkey for the stream harness's valkey backend (src/stream-harness).
+  valkey:
+    image: valkey/valkey:9-alpine
+    ports:
+      - '6383:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 10

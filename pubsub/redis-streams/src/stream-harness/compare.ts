@@ -2,7 +2,7 @@ import type { Cell, Difference, Frame, KnownDifference, ReaderName, RunCapture }
 
 const types = (frames: Frame[]) => frames.map(f => f.type).join(',') || '(none)';
 
-function diffFrames(expected: Frame[], actual: Frame[]): Pick<Difference, 'kind' | 'detail'> | undefined {
+export function diffFrames(expected: Frame[], actual: Frame[]): Pick<Difference, 'kind' | 'detail'> | undefined {
   if (types(expected) !== types(actual)) {
     return { kind: 'sequence', detail: `expected ${types(expected)} got ${types(actual)}` };
   }

@@ -16,6 +16,8 @@ export interface NodeOptions {
   storageUrl: string;
   nodeId?: string;
   cleanupMs?: number;
+  /** Serve the Mastra HTTP API on this port (for the `/observe` route reader). */
+  port?: number;
 }
 
 /** Drives one `stream-harness-node.entry.ts` child over its stdio JSON protocol. */
@@ -38,6 +40,7 @@ export class HarnessNode {
         LLM_URL: opts.llmUrl,
         NODE_ID: opts.nodeId ?? 'node',
         ...(opts.cleanupMs === undefined ? {} : { CLEANUP_MS: String(opts.cleanupMs) }),
+        ...(opts.port === undefined ? {} : { PORT: String(opts.port) }),
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     });

@@ -7,8 +7,13 @@ export interface RawFrame {
 }
 
 const DROPPED = new Set(['raw', 'response-metadata']);
-/** Frames whose bodies are split arbitrarily; consecutive ones collapse into one frame. */
-const JOINED = new Set(['text-delta', 'reasoning-delta']);
+/**
+ * Frames that stream at arbitrary granularity: deltas are split wherever the
+ * model's chunks fall, and a partial `object` follows whichever delta
+ * completed a token. A run of them reduces to one frame per type in a fixed
+ * order: joined reasoning, joined text, last partial object.
+ */
+const STREAMED = ['reasoning-delta', 'text-delta', 'object'];
 
 /**
  * A chunk from `fullStream` / `observe()`. Most chunks carry their content in
@@ -73,22 +78,25 @@ function shapeOf(frame: RawFrame): string | undefined {
  */
 export function normalise(raw: RawFrame[]): Frame[] {
   const frames: Frame[] = [];
+  let run = new Map<string, string>();
+  const flush = () => {
+    for (const type of STREAMED) if (run.has(type)) frames.push({ type, shape: run.get(type) });
+    run = new Map();
+  };
   for (const frame of raw) {
     if (DROPPED.has(frame.type)) continue;
-    const last = frames[frames.length - 1];
-    if (JOINED.has(frame.type)) {
-      const text = String(frame.payload?.text ?? '');
-      if (last?.type === frame.type) last.shape = `${last.shape ?? ''}${text}`;
-      else frames.push({ type: frame.type, shape: text });
+    if (frame.type === 'object') {
+      run.set('object', shapeOf(frame)!);
       continue;
     }
+    if (STREAMED.includes(frame.type)) {
+      run.set(frame.type, `${run.get(frame.type) ?? ''}${String(frame.payload?.text ?? '')}`);
+      continue;
+    }
+    flush();
     const shape = shapeOf(frame);
-    // Partial objects stream at arbitrary granularity; keep the last one of a run.
-    if (frame.type === 'object' && last?.type === 'object') {
-      last.shape = shape;
-      continue;
-    }
     frames.push(shape === undefined ? { type: frame.type } : { type: frame.type, shape });
   }
+  flush();
   return frames;
 }

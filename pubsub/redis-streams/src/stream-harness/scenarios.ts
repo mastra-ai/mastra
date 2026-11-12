@@ -17,14 +17,66 @@ export interface Scenario {
 
 const marker = (name: string) => `[scenario:${name}]`;
 const hasMarker = (name: string) => (req: any) => JSON.stringify(req.messages).includes(marker(name));
+const afterTool = (name: string) => (req: any) =>
+  hasMarker(name)(req) && (req.messages ?? []).some((m: any) => m.role === 'tool');
+const beforeTool = (name: string) => (req: any) =>
+  hasMarker(name)(req) && !(req.messages ?? []).some((m: any) => m.role === 'tool');
+
+/**
+ * Every model reply waits 500ms before its first chunk, so the mid-run
+ * observer is attached before the model says anything, whatever the backend's
+ * speed. The model output itself is identical for every engine.
+ */
+const SLOW = { chunkSize: 4, streamingProfile: { ttft: 500, tps: 40 } };
+
+/** The model calls `tool`, then answers `answer` once it has the tool result. */
+function toolTurn(name: string, tool: string, answer: string): Scenario['script'] {
+  return llm => {
+    llm.on({ endpoint: 'chat', predicate: afterTool(name) }, { content: answer }, SLOW);
+    llm.on(
+      { endpoint: 'chat', predicate: beforeTool(name) },
+      { toolCalls: [{ id: `call-${name}`, name: tool, arguments: '{}' }] },
+      SLOW,
+    );
+  };
+}
 
 export const SCENARIOS: Record<string, Scenario> = {
   'structured-output': {
     name: 'structured-output',
     prompt: `${marker('structured-output')} Answer as JSON.`,
     script: llm =>
-      llm.on({ endpoint: 'chat', predicate: hasMarker('structured-output') }, { content: '{"answer":"forty-two"}' }),
+      llm.on(
+        { endpoint: 'chat', predicate: hasMarker('structured-output') },
+        { content: '{"answer":"forty-two"}' },
+        SLOW,
+      ),
     streamOptions: () => ({ structuredOutput: { schema: z.object({ answer: z.string() }) } }),
+  },
+  /** The model's JSON fails the schema, so the turn ends with an error chunk. */
+  'structured-invalid': {
+    name: 'structured-invalid',
+    prompt: `${marker('structured-invalid')} Answer as JSON.`,
+    script: llm =>
+      llm.on({ endpoint: 'chat', predicate: hasMarker('structured-invalid') }, { content: '{"answer":42}' }, SLOW),
+    streamOptions: () => ({ structuredOutput: { schema: z.object({ answer: z.string() }) } }),
+  },
+  'tool-throws': {
+    name: 'tool-throws',
+    prompt: `${marker('tool-throws')} Call boom.`,
+    script: toolTurn('tool-throws', 'boom', 'The tool failed.'),
+  },
+  'tool-undefined': {
+    name: 'tool-undefined',
+    prompt: `${marker('tool-undefined')} Call nothing.`,
+    script: toolTurn('tool-undefined', 'nothing', 'The tool returned nothing.'),
+  },
+  /** The fixture's input processor aborts any prompt containing TRIPWIRE. */
+  'input-tripwire': {
+    name: 'input-tripwire',
+    prompt: `${marker('input-tripwire')} TRIPWIRE`,
+    script: llm =>
+      llm.on({ endpoint: 'chat', predicate: hasMarker('input-tripwire') }, { content: 'The tripwire did not fire.' }),
   },
 };
 

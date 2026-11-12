@@ -7,14 +7,15 @@
  *
  * Env:
  *   ENGINE      plain | durable | evented (evented is constructed directly so CLEANUP_MS applies)
- *   BACKEND     memory | redis
- *   REDIS_URL, KEY_PREFIX, STORAGE_URL, LLM_URL, NODE_ID
+ *   BACKEND     memory | redis | valkey
+ *   REDIS_URL, VALKEY_URL, KEY_PREFIX, STORAGE_URL, LLM_URL, NODE_ID
  *   CLEANUP_MS  stream cleanupTimeoutMs (engine default when unset)
+ *   PORT        when set, also serves the Mastra HTTP API (for the /observe route)
  *
  * Reads newline-delimited JSON commands on stdin, writes newline-delimited
  * JSON events on stdout:
- *   {"cmd":"stream","id","scenario","runId","threadId?","resourceId?"} -> run, approval*, frames(live), stream-done
- *   {"cmd":"observe","id","runId","offset?","timeoutMs?"}             -> frames(observe-0 | observe-mid)
+ *   {"cmd":"stream","id","scenario","runId","threadId?","resourceId?"} -> run, step-started, approval*, frames(live), stream-done
+ *   {"cmd":"observe","id","runId","reader?","offset?","timeoutMs?","afterPersisted?"} -> frames(observe-0 | observe-mid)
  *   {"cmd":"tapTopic","id","runId"}                                   -> frames(topic)
  *   {"cmd":"subscribeThread","id","threadId","resourceId"}            -> subscribed
  *   {"cmd":"stopThread","id"}                                         -> frames(thread)
@@ -22,6 +23,7 @@
  *   {"cmd":"abort","id","runId"}                                      -> aborted
  *   {"cmd":"exit"}
  */
+import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline';
 
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -32,7 +34,10 @@ import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { createNodeServer } from '@mastra/deployer/server';
 import { LibSQLStore } from '@mastra/libsql';
+import { ValkeyServerCache } from '@mastra/valkey';
+import { ValkeyStreamsPubSub } from '@mastra/valkey-streams';
 import { createClient } from 'redis';
 import { z } from 'zod';
 
@@ -46,12 +51,21 @@ const {
   ENGINE = 'plain',
   BACKEND = 'memory',
   REDIS_URL,
+  VALKEY_URL = 'valkey://localhost:6383',
   KEY_PREFIX = 'stream-harness',
   STORAGE_URL,
   LLM_URL,
   NODE_ID = 'node',
   CLEANUP_MS,
+  PORT,
 } = process.env;
+
+/** Valkey Glide is a dependency of @mastra/valkey, not of this package. */
+async function glideClient(url: string): Promise<any> {
+  const { GlideClient } = createRequire(import.meta.resolve('@mastra/valkey'))('@valkey/valkey-glide');
+  const { hostname, port } = new URL(url);
+  return GlideClient.createClient({ addresses: [{ host: hostname, port: Number(port) }] });
+}
 
 function emit(event: Record<string, unknown>) {
   process.stdout.write(`${JSON.stringify({ node: NODE_ID, ...event })}\n`);
@@ -116,8 +130,8 @@ async function drain(iterable: AsyncIterable<any>, timeoutMs: number, onChunk?: 
 
 async function main() {
   let transport: PubSub;
-  let cache: InMemoryServerCache | RedisServerCache;
-  let tapCache: InMemoryServerCache | RedisServerCache;
+  let cache: InMemoryServerCache | RedisServerCache | ValkeyServerCache;
+  let tapCache: InMemoryServerCache | RedisServerCache | ValkeyServerCache;
   const clients: { quit: () => Promise<unknown> }[] = [];
   if (BACKEND === 'memory') {
     transport = new EventEmitterPubSub();
@@ -133,6 +147,12 @@ async function main() {
     cache = new RedisServerCache({ client: cacheClient as any }, preset);
     // A separate connection, so the topic reader reads what reached Redis.
     tapCache = new RedisServerCache({ client: tapClient as any }, preset);
+  } else if (BACKEND === 'valkey') {
+    const [cacheClient, tapClient] = await Promise.all([glideClient(VALKEY_URL), glideClient(VALKEY_URL)]);
+    clients.push({ quit: async () => cacheClient.close() }, { quit: async () => tapClient.close() });
+    transport = new ValkeyStreamsPubSub({ url: VALKEY_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+    cache = new ValkeyServerCache({ client: cacheClient }, { keyPrefix: `${KEY_PREFIX}:cache:` });
+    tapCache = new ValkeyServerCache({ client: tapClient }, { keyPrefix: `${KEY_PREFIX}:cache:` });
   } else {
     throw new Error(`unsupported BACKEND ${BACKEND}`);
   }
@@ -163,6 +183,7 @@ async function main() {
     pubsub: transport,
     cache,
     agents: { 'harness-agent': agent as any },
+    ...(PORT ? { server: { port: Number(PORT) } } : {}),
   });
   const registered: any = mastra.getAgent('harness-agent' as any);
 
@@ -171,8 +192,32 @@ async function main() {
   const frames = (id: string, reader: string, raw: RawFrame[]) =>
     emit({ type: 'frames', id, reader, frames: normalise(raw) });
 
-  const onLiveChunk = (runId: string) => (chunk: any) => {
-    if (chunk.type === 'tool-call-approval') emit({ type: 'approval', runId, toolCallId: chunk.payload?.toolCallId });
+  const onLiveChunk = (id: string, runId: string) => {
+    let stepStarted = false;
+    return (chunk: any) => {
+      if (chunk.type === 'step-start' && !stepStarted) {
+        stepStarted = true;
+        emit({ type: 'step-started', id, runId });
+      }
+      if (chunk.type === 'tool-call-approval') emit({ type: 'approval', runId, toolCallId: chunk.payload?.toolCallId });
+    };
+  };
+
+  // A durable/evented observer in another process recovers the run's options
+  // (structured output schema, request context) from the persisted workflow
+  // snapshot. Attaching before that row carries the run input loses them on
+  // some runs and not others, so the mid-run observer waits for it.
+  const waitForPersistedRun = async (runId: string) => {
+    const workflows = await mastra.getStorage()?.getStore('workflows');
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      for (const workflowName of ['durable-agentic-loop', 'durable-agentic-execution']) {
+        const row: any = await workflows?.getWorkflowRunById({ runId, workflowName });
+        const snapshot = typeof row?.snapshot === 'string' ? JSON.parse(row.snapshot) : row?.snapshot;
+        if (snapshot?.context?.input?.__workflowKind === 'durable-agent') return;
+      }
+      await new Promise(r => setTimeout(r, 25));
+    }
   };
 
   const handlers: Record<string, (cmd: any) => Promise<void> | void> = {
@@ -185,23 +230,30 @@ async function main() {
         ...scenario.streamOptions?.(),
       });
       emit({ type: 'run', id: cmd.id, runId: out.runId });
-      frames(cmd.id, 'live', await drain(out.fullStream, cmd.timeoutMs ?? 20_000, onLiveChunk(out.runId)));
+      frames(cmd.id, 'live', await drain(out.fullStream, cmd.timeoutMs ?? 20_000, onLiveChunk(cmd.id, out.runId)));
       emit({ type: 'stream-done', id: cmd.id, runId: out.runId });
     },
     async observe(cmd) {
+      if (cmd.afterPersisted && ENGINE !== 'plain') await waitForPersistedRun(cmd.runId);
       const observation = await registered.observe(cmd.runId, cmd.offset === undefined ? {} : { offset: cmd.offset });
       const raw = await drain(observation.fullStream, cmd.timeoutMs ?? 5_000);
       observation.detach?.();
-      frames(cmd.id, cmd.offset ? 'observe-mid' : 'observe-0', raw);
+      frames(cmd.id, cmd.reader ?? 'observe-0', raw);
     },
     async tapTopic(cmd) {
       // Plain copies frames to the topic in the background, so the log can
-      // trail the caller's stream; wait for a terminal frame before reading.
+      // trail the caller's stream; wait for a terminal frame, then for the log
+      // to stop growing (a terminal chunk such as `tripwire` can be followed
+      // by run-level events).
       const deadline = Date.now() + (cmd.timeoutMs ?? 5_000);
       let raw: RawFrame[] = [];
+      let settledAt = Date.now();
       while (true) {
-        raw = (await tap.getHistory(`agent.stream.${cmd.runId}`, 0)).map(fromTopicEvent);
-        if (TERMINAL.has(raw[raw.length - 1]?.type ?? '') || Date.now() > deadline) break;
+        const next = (await tap.getHistory(`agent.stream.${cmd.runId}`, 0)).map(fromTopicEvent);
+        if (next.length !== raw.length) settledAt = Date.now();
+        raw = next;
+        const terminal = TERMINAL.has(raw[raw.length - 1]?.type ?? '');
+        if ((terminal && Date.now() - settledAt >= 300) || Date.now() > deadline) break;
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       frames(cmd.id, 'topic', raw);
@@ -239,6 +291,7 @@ async function main() {
 
   async function shutdown() {
     for (const thread of threads.values()) thread.unsubscribe();
+    (server as any)?.close?.();
     await mastra.shutdown?.().catch(() => {});
     await Promise.all(clients.map(client => client.quit().catch(() => {})));
     process.exit(0);
@@ -254,7 +307,8 @@ async function main() {
       .catch(error => emit({ type: 'error', cmd: cmd.cmd, id: cmd.id, message: String(error?.stack ?? error) }));
   });
 
-  emit({ type: 'ready' });
+  const server = PORT ? await createNodeServer(mastra, { tools: {}, studio: false, isDev: false }) : undefined;
+  emit({ type: 'ready', port: PORT ? Number(PORT) : undefined });
 }
 
 main().catch(error => {

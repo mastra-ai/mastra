@@ -6,12 +6,33 @@ export type Backend = 'memory' | 'redis' | 'valkey';
 /** `single`: publisher and readers share one process. `split`: readers run in another process. */
 export type Topology = 'single' | 'split';
 
+export interface Layout {
+  topology: Topology;
+  backend: Backend;
+}
+
+/** Split needs a shared bus, so the in-memory backend only runs in one process. */
+export const LAYOUTS: readonly Layout[] = [
+  { topology: 'single', backend: 'memory' },
+  { topology: 'single', backend: 'redis' },
+  { topology: 'single', backend: 'valkey' },
+  { topology: 'split', backend: 'redis' },
+  { topology: 'split', backend: 'valkey' },
+];
+
+export type LayoutName = `${Topology}/${Backend}`;
+export const layoutName = (layout: Layout): LayoutName => `${layout.topology}/${layout.backend}`;
+
 /**
  * - `live`: the caller's own `fullStream`.
+ * - `observe-mid`: `agent.observe(runId)` attached in the reader process as soon as the run starts.
  * - `topic`: the raw run topic (`agent.stream.<runId>`) read back from the replay cache.
- * - `observe-0`: `agent.observe(runId)` from the start of the log.
+ * - `observe-0`: `agent.observe(runId)` from the start of the log, after the turn.
+ * - `http-observe`: the server's `POST /api/agents/:agentId/observe` route, after the turn.
+ * - `thread`: `agent.subscribeToThread()` in the reader process, subscribed before the turn.
  */
-export type ReaderName = 'live' | 'topic' | 'observe-0' | 'observe-mid' | 'thread' | 'http-observe';
+export const READERS = ['live', 'observe-mid', 'topic', 'observe-0', 'http-observe', 'thread'] as const;
+export type ReaderName = (typeof READERS)[number];
 
 /**
  * One delivered frame, reduced to what a reader can rely on. `shape` carries
