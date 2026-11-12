@@ -157,8 +157,6 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     perStep?: boolean;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
-    /** Called once the run's event is published; see the base `ExecutionEngine.execute`. @internal */
-    onDispatched?: () => void;
     /** Resolve with `undefined` right after the publish; see the base `ExecutionEngine.execute`. @internal */
     detachAfterDispatch?: boolean;
     /** Called once a detached execution's run settled, with what it would have resolved to. @internal */
@@ -393,9 +391,6 @@ export class EventedExecutionEngine extends ExecutionEngine {
       releaseTracking();
       throw err;
     }
-
-    // Only after a successful publish: a restart that never reached the workers must not count as handed over.
-    params.onDispatched?.();
 
     // Nobody waits for this run's result, so shutdown() doesn't either. The finish subscription stays: the
     // run's lifecycle callbacks and trace span still get its outcome when it ends.

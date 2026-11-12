@@ -267,11 +267,6 @@ export abstract class ExecutionEngine extends MastraBase {
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
     inheritedState?: StateBase;
     /**
-     * Called once the run's start, resume or restart event was published to the workers that
-     * execute it. Engines that execute the run in the caller never call it. @internal
-     */
-    onDispatched?: () => void;
-    /**
      * Resolve with `undefined` once the run's event was published, without keeping `shutdown()`
      * waiting for the run. Its lifecycle callbacks still run when it ends. Engines that execute
      * the run in the caller ignore it. @internal
