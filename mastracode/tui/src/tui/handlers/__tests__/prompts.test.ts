@@ -414,6 +414,8 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
     expect(state.previousPlanSnapshot).toBeUndefined();
     expect(mocks.approvePlanFile).toHaveBeenCalledTimes(1);
+    // The reviewed text travels with the approval so the archive cannot pick up a later edit.
+    expect(mocks.approvePlanFile).toHaveBeenCalledWith(expect.objectContaining({ plan: 'Build the feature' }));
     expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
       path: PLAN_PATH,
     });

@@ -152,26 +152,35 @@ export async function readPlanFile(absPath: string): Promise<{ title: string; pl
  * archive so approved plans are findable later. The local named plan file is left in
  * place so the user can review every plan made over time.
  *
+ * Pass `plan` — the text the user actually reviewed — whenever the caller has it.
+ * The file can be edited, moved or removed while the approval card is open, so
+ * re-reading it can archive something the user never approved. Reading the file
+ * stays as the fallback for callers with no reviewed text.
+ *
  * Returns the local plan filename (e.g. `add-dark-mode.md`), or `undefined` when there
- * was no plan file to approve.
+ * was no plan to approve.
  */
 export async function approvePlanFile(opts: {
   planPath: string;
   title: string;
   resourceId: string;
   plansDir?: string;
+  /** The reviewed plan text. Preferred over re-reading the file at `planPath`. */
+  plan?: string;
 }): Promise<string | undefined> {
-  const { planPath, title, resourceId, plansDir } = opts;
+  const { planPath, title, resourceId, plansDir, plan } = opts;
 
-  const current = await readPlanFile(planPath);
-  if (!current) {
+  const reviewed = plan?.trim() ? plan : undefined;
+  const current = reviewed ? undefined : await readPlanFile(planPath);
+  const approvedPlan = reviewed ?? current?.plan;
+  if (approvedPlan === undefined) {
     return undefined;
   }
 
-  const resolvedTitle = title || current.title || 'Implementation Plan';
+  const resolvedTitle = title || current?.title || 'Implementation Plan';
 
   // Global archive (timestamped, never overwritten) so approved plans are findable later.
-  await savePlanToDisk({ title: resolvedTitle, plan: current.plan, resourceId, plansDir });
+  await savePlanToDisk({ title: resolvedTitle, plan: approvedPlan, resourceId, plansDir });
 
   return path.basename(planPath);
 }
