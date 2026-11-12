@@ -845,6 +845,21 @@ const SLOW_TOOL_SOURCE_MS = 100;
  * @see [Agent documentation](https://mastra.ai/docs/agents/overview)
  * if packaged docs are unavailable.
  */
+/**
+ * Assistant messages in a delegating agent's context that keep content once tool calls
+ * and tool results are removed. Reasoning still counts, so this matches the iteration
+ * delegation hooks saw before `stripParentToolParts` also dropped reasoning (#29276).
+ */
+function countParentAssistantSteps(messages: ModelMessage[]): number {
+  return messages.filter(
+    message =>
+      (message as { id?: string }).id !== 'om-continuation' &&
+      message.role === 'assistant' &&
+      (!Array.isArray(message.content) ||
+        message.content.some(part => part.type !== 'tool-call' && part.type !== 'tool-result')),
+  ).length;
+}
+
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -6081,8 +6096,10 @@ export class Agent<
             let fullSubAgentMessages = sanitizedMessages as unknown as MastraDBMessage[];
 
             // Derive iteration from the number of assistant messages (rough approximation)
-            // Each iteration typically produces an assistant message
-            const derivedIteration = Math.max(1, sanitizedMessages.filter(m => m.role === 'assistant').length);
+            // Each iteration typically produces an assistant message. Counted on the parent
+            // context with tool parts removed but reasoning kept, so dropping reasoning from
+            // the forwarded context doesn't change what delegation hooks see.
+            const derivedIteration = Math.max(1, countParentAssistantSteps(contextMessages));
 
             // The sub-agent run gets its own RequestContext map derived from the
             // parent's entries, excluding run-scoped identity keys. This isolates

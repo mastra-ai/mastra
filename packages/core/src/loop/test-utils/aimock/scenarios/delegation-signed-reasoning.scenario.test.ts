@@ -339,4 +339,71 @@ describeForAllEngines('AIMock loop scenario: delegation after a signed-thinking 
     expect(JSON.stringify(forwarded)).toContain('Checking the clock first.');
     expect(JSON.stringify(forwarded)).toContain(CURRENT_PROMPT);
   });
+
+  // Dropping reasoning from the forwarded context must not change the iteration
+  // that delegation hooks see: it still counts the supervisor's assistant steps
+  // the way it did before reasoning was stripped. Two tool steps that hold only
+  // reasoning and a tool call come before the delegation.
+  it('reports the same delegation iteration to hooks as before reasoning was stripped (#29276)', async () => {
+    const llm = getMock();
+    const subAgentBodies: WireBody[] = [];
+    const onDelegationStart = vi.fn(() => ({ proceed: true }));
+    const helper = new Agent({
+      id: 'helper',
+      name: 'helper',
+      description: 'Answers a question',
+      instructions: SUB_AGENT_INSTRUCTIONS,
+      model: anthropicModel(llm, subAgentBodies),
+      defaultOptions: { providerOptions: THINKING },
+    });
+
+    const { output } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: CURRENT_PROMPT,
+      model: anthropicModel(llm, []),
+      providerOptions: THINKING,
+      tools: { get_time: getTime },
+      agents: { helper },
+      delegation: { onDelegationStart },
+      stopWhen: stepCountIs(5),
+      fixtures: mock => {
+        mock.on({ endpoint: 'chat', predicate: isSubAgentRequest }, { content: 'It is noon.' });
+        mock.on(
+          { endpoint: 'chat', predicate: req => !isSubAgentRequest(req) && hasToolResultFor(req, 'toolu_helper') },
+          { content: 'The helper says it is noon.' },
+        );
+        mock.on(
+          { endpoint: 'chat', predicate: req => !isSubAgentRequest(req) && hasToolResultFor(req, 'toolu_time_2') },
+          {
+            reasoning: 'Both readings agree. Now I should delegate.',
+            reasoningSignature: 'sig-iteration-3',
+            toolCalls: [{ id: 'toolu_helper', name: 'agent-helper', arguments: { prompt: 'What time is it?' } }],
+          },
+        );
+        mock.on(
+          { endpoint: 'chat', predicate: req => !isSubAgentRequest(req) && hasToolResultFor(req, 'toolu_time_1') },
+          {
+            reasoning: 'Let me read the clock again.',
+            reasoningSignature: 'sig-iteration-2',
+            toolCalls: [{ id: 'toolu_time_2', name: 'get_time', arguments: {} }],
+          },
+        );
+        mock.on(
+          { endpoint: 'chat', predicate: req => !isSubAgentRequest(req) },
+          {
+            reasoning: 'First I need the current time.',
+            reasoningSignature: 'sig-iteration-1',
+            toolCalls: [{ id: 'toolu_time_1', name: 'get_time', arguments: {} }],
+          },
+        );
+      },
+    });
+
+    expect(output.error).toBeUndefined();
+    expect(await output.text).toBe('The helper says it is noon.');
+    expect(subAgentBodies).toHaveLength(1);
+    expect(onDelegationStart).toHaveBeenCalledTimes(1);
+    expect(onDelegationStart.mock.calls[0]![0]).toMatchObject({ iteration: 2 });
+  });
 });
