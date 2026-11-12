@@ -272,9 +272,9 @@ export abstract class ExecutionEngine extends MastraBase {
      */
     onDispatched?: () => void;
     /**
-     * Stop waiting for the run once its event was published: the engine drops what it keeps to
-     * report the result and resolves with `undefined`. Engines that execute the run in the caller
-     * ignore it. @internal
+     * Resolve with `undefined` once the run's event was published, without keeping `shutdown()`
+     * waiting for the run. Its lifecycle callbacks still run when it ends. Engines that execute
+     * the run in the caller ignore it. @internal
      */
     detachAfterDispatch?: boolean;
   }): Promise<TOutput>;

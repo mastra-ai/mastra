@@ -60,49 +60,62 @@ export class EventedExecutionEngine extends ExecutionEngine {
   /**
    * `Run.restart()` and `Run.timeTravel()` hand the engine a WORKFLOW_RUN span to own. Evented
    * steps only find a span registered on Mastra for their run, so hold it there while the run
-   * executes, then end it with the run's result as the default engine does.
+   * executes, then end it with the run's result as the default engine does. An execution that
+   * stopped waiting after its publish (`detachAfterDispatch`) ends it once its run settles.
    */
   private async executeInRunSpan<TOutput>(
     runId: string,
     workflowSpan: Span<SpanType.WORKFLOW_RUN>,
-    execute: () => Promise<TOutput>,
+    execute: (onDetachedSettled: (outcome: { result: TOutput } | { error: unknown }) => void) => Promise<TOutput>,
   ): Promise<TOutput> {
     this.mastra?.__registerRunTracingContext(runId, { currentSpan: workflowSpan });
-    try {
-      const result = await execute();
-      // An execution that stopped waiting after its publish (`detachAfterDispatch`) has no result: its span
-      // covers the hand-off to the workers.
-      if (result === undefined) {
-        workflowSpan.end({ attributes: { status: 'running' } });
-        return result;
-      }
+    const settle = (outcome: { result: TOutput } | { error: unknown }) => {
+      try {
+        if ('error' in outcome) {
+          workflowSpan.error({
+            ...executionFailureTermination(outcome.error),
+            error: getErrorFromUnknown(outcome.error),
+          });
+          return;
+        }
 
-      const settled = result as {
-        status: WorkflowRunStatus;
-        result?: unknown;
-        error?: unknown;
-        tripwire?: StepTripwireInfo;
-      };
-      const termination = workflowTermination(settled);
-      if (settled.error) {
-        workflowSpan.error({
-          ...termination,
-          error: getErrorFromUnknown(settled.error),
-          attributes: { status: settled.status },
-        });
-      } else {
-        workflowSpan.end({ ...termination, output: settled.result, attributes: { status: settled.status } });
+        const settled = outcome.result as {
+          status: WorkflowRunStatus;
+          result?: unknown;
+          error?: unknown;
+          tripwire?: StepTripwireInfo;
+        };
+        const termination = workflowTermination(settled);
+        if (settled.error) {
+          workflowSpan.error({
+            ...termination,
+            error: getErrorFromUnknown(settled.error),
+            attributes: { status: settled.status },
+          });
+        } else {
+          workflowSpan.end({ ...termination, output: settled.result, attributes: { status: settled.status } });
+        }
+      } finally {
+        // Another execution of this run may have registered its own span since.
+        if (this.mastra?.__getRunTracingContext(runId)?.currentSpan === workflowSpan) {
+          this.mastra.__unregisterRunTracingContext(runId);
+        }
       }
-      return result;
+    };
+
+    let result: TOutput;
+    try {
+      result = await execute(settle);
     } catch (error) {
-      workflowSpan.error({ ...executionFailureTermination(error), error: getErrorFromUnknown(error) });
+      settle({ error });
       throw error;
-    } finally {
-      // Another execution of this run may have registered its own span since.
-      if (this.mastra?.__getRunTracingContext(runId)?.currentSpan === workflowSpan) {
-        this.mastra.__unregisterRunTracingContext(runId);
-      }
     }
+
+    // A detached execution has no result yet; `settle` runs once its run does.
+    if (result !== undefined) {
+      settle({ result });
+    }
+    return result;
   }
 
   /**
@@ -148,11 +161,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
     onDispatched?: () => void;
     /** Resolve with `undefined` right after the publish; see the base `ExecutionEngine.execute`. @internal */
     detachAfterDispatch?: boolean;
+    /** Called once a detached execution's run settled, with what it would have resolved to. @internal */
+    onDetachedSettled?: (outcome: { result: TOutput } | { error: unknown }) => void;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
-      return this.executeInRunSpan(params.runId, workflowSpan, () =>
-        this.execute<TState, TInput, TOutput>(executeParams),
+      return this.executeInRunSpan(params.runId, workflowSpan, onDetachedSettled =>
+        this.execute<TState, TInput, TOutput>({ ...executeParams, onDetachedSettled }),
       );
     }
 
@@ -376,17 +391,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Only after a successful publish: a restart that never reached the workers must not count as handed over.
     params.onDispatched?.();
 
-    // Nobody waits for this run's result, so nothing should keep a finish subscription, or keep
-    // shutdown() waiting, until the run ends.
+    // Nobody waits for this run's result, so shutdown() doesn't either. The finish subscription stays: the
+    // run's lifecycle callbacks and trace span still get its outcome when it ends.
     if (params.detachAfterDispatch) {
-      stopWatchingLoss?.();
       releaseTracking();
-      try {
-        await pubsub.unsubscribe('workflows-finish', finishCb);
-      } catch (error) {
-        this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', error);
-      }
-
+      void resultPromise
+        .then(resultData => this.#settleExecution<TOutput>(params, resultData))
+        .then(
+          result => params.onDetachedSettled?.({ result }),
+          error => params.onDetachedSettled?.({ error }),
+        );
       return undefined as TOutput;
     }
 
@@ -398,6 +412,23 @@ export class EventedExecutionEngine extends ExecutionEngine {
       releaseTracking();
     }
 
+    return this.#settleExecution<TOutput>(params, resultData);
+  }
+
+  /** The result of a finished execution, built from its finish event's `resultData`, after the run's lifecycle callbacks ran. */
+  async #settleExecution<TOutput>(
+    params: {
+      workflowId: string;
+      runId: string;
+      resourceId?: string;
+      input?: unknown;
+      initialState?: unknown;
+      requestContext: RequestContext;
+      perStep?: boolean;
+      outputOptions?: { includeState?: boolean };
+    },
+    resultData: any,
+  ): Promise<TOutput> {
     // Extract state from resultData (stored in stepResults.__state)
     const finalState = resultData.state ?? resultData.stepResults?.__state ?? params.initialState ?? {};
 

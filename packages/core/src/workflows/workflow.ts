@@ -5396,9 +5396,8 @@ export class Run<
   /**
    * Restarts like {@link Run.restart}, but resolves once the restart was
    * published to the workers instead of when the run finishes, as
-   * `startAsync()` does for `start()`. Nothing waits for the run's result
-   * afterwards: no finish subscription is kept, and `shutdown()` does not wait
-   * for the run.
+   * `startAsync()` does for `start()`. `shutdown()` does not wait for the run;
+   * its lifecycle callbacks and trace span still get its outcome when it ends.
    *
    * Resolves to whether the restart was published: `false` when the run had
    * already finished, and the restart only returned its stored result. On an

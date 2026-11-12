@@ -13,6 +13,7 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
+import { NoOpObservability, SpanType } from '../observability';
 import { InMemoryStore } from '../storage/mock';
 import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createStep, createWorkflow } from '../workflows';
@@ -108,6 +109,46 @@ function recordRestarts(inner: PubSub, restarts: string[]): PubSub {
 
       const value = Reflect.get(target, prop, target);
       return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
+ * A span that records how each WORKFLOW_RUN span below it, itself included, ends in `runSpanEnds`. Its
+ * children are recording spans too; every other span method does nothing.
+ */
+function recordingSpan(
+  options: { type: SpanType; entityId?: string },
+  runSpanEnds: { attributes?: { status?: string }; output?: unknown }[],
+): any {
+  const fields: Record<string | symbol, unknown> = {
+    id: crypto.randomUUID(),
+    traceId: 'recovered-trace',
+    type: options.type,
+    entityId: options.entityId,
+    isValid: true,
+  };
+  const record = (ended?: { attributes?: { status?: string }; output?: unknown }) => {
+    if (options.type === SpanType.WORKFLOW_RUN) {
+      runSpanEnds.push({ attributes: ended?.attributes, output: ended?.output });
+    }
+  };
+  return new Proxy(fields, {
+    get(target, prop) {
+      if (prop in target) {
+        return target[prop];
+      }
+
+      if (prop === 'end' || prop === 'error') {
+        return record;
+      }
+
+      if (prop === 'createChildSpan' || prop === 'createEventSpan') {
+        return (child: { type: SpanType; entityId?: string }) => recordingSpan(child, runSpanEnds);
+      }
+
+      // Not a thenable, so `await` passes it through.
+      return prop === 'then' ? undefined : () => undefined;
     },
   });
 }
@@ -455,9 +496,8 @@ describe('workflow recovery rule (#28712)', () => {
     expect(executions).toHaveLength(1);
   });
 
-  it('leaves the restarted evented run without a finish waiter, so shutdown does not wait for it', async () => {
+  it('does not keep shutdown waiting for a restarted evented run', async () => {
     const storage = new InMemoryStore();
-    const pubsub = new EventEmitterPubSub();
     const executions: string[] = [];
     const workflow = createEventedWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
       .then(reportingStep('evented', 'B', 'work', executions))
@@ -466,26 +506,80 @@ describe('workflow recovery rule (#28712)', () => {
     const mastra = new Mastra({
       logger: false,
       storage,
-      pubsub,
       workflows: { 'recovered-wf': workflow },
       recovery: { workflowGraceMs: 0 },
     });
     await mastra.startWorkers();
     await persistActiveRun(storage, 'stopped');
-    const subscribe = vi.spyOn(pubsub, 'subscribe');
-    const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
 
     await mastra.restartAllActiveWorkflowRuns();
     // The run sleeps for a minute after its first step.
     await vi.waitFor(() => expect(executions).toEqual(['B:work']));
 
-    const finishWaiters = (spy: typeof subscribe | typeof unsubscribe) =>
-      spy.mock.calls.filter(([topic]) => topic === 'workflows-finish').length;
-    expect(finishWaiters(subscribe)).toBe(finishWaiters(unsubscribe));
     const startedAt = Date.now();
     await mastra.shutdown({ drainTimeout: 5_000 });
     expect(Date.now() - startedAt).toBeLessThan(2_500);
   }, 15_000);
+
+  it('calls onFinish once with the result of an evented run it restarted', async () => {
+    const storage = new InMemoryStore();
+    const onFinish = vi.fn();
+    const workflow = createEventedWorkflow({
+      id: 'recovered-wf',
+      inputSchema: schema,
+      outputSchema: schema,
+      options: { onFinish },
+    })
+      .then(reportingStep('evented', 'B', 'work', []))
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { 'recovered-wf': workflow },
+      recovery: { workflowGraceMs: 0 },
+    });
+    replicas.push({ mastra });
+    await mastra.startWorkers();
+    await persistActiveRun(storage, 'stopped');
+
+    await mastra.restartAllActiveWorkflowRuns();
+
+    await vi.waitFor(() =>
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'success', runId: 'stopped' })),
+    );
+    await mastra.shutdown();
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends the trace span of an evented run it restarted with its final status', async () => {
+    const storage = new InMemoryStore();
+    const observability = new NoOpObservability();
+    const runSpanEnds: { attributes?: { status?: string }; output?: unknown }[] = [];
+    vi.spyOn(observability, 'getSelectedInstance').mockReturnValue({
+      startSpan: (options: { type: SpanType }) => recordingSpan(options, runSpanEnds),
+    } as any);
+    const workflow = createEventedWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
+      .then(reportingStep('evented', 'B', 'work', []))
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      observability,
+      workflows: { 'recovered-wf': workflow },
+      recovery: { workflowGraceMs: 0 },
+    });
+    replicas.push({ mastra });
+    await mastra.startWorkers();
+    await persistActiveRun(storage, 'stopped');
+
+    await mastra.restartAllActiveWorkflowRuns();
+
+    await vi.waitFor(async () => expect(await statusOf(storage, 'stopped')).toBe('success'));
+    await vi.waitFor(() =>
+      expect(runSpanEnds).toContainEqual(expect.objectContaining({ attributes: { status: 'success' } })),
+    );
+    expect(runSpanEnds).not.toContainEqual(expect.objectContaining({ attributes: { status: 'running' } }));
+  });
 
   it('restarts nothing while a nested run works, and restarts the parent once when its instance crashes', async () => {
     const storage = new InMemoryStore();
