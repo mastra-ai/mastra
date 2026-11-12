@@ -9,7 +9,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
-import type { InMemoryStore } from '../../../storage/mock';
+import { InMemoryStore } from '../../../storage/mock';
 import { runLivenessKey } from '../leases';
 import { abandonLease } from './abandon-lease';
 import { createStep, createWorkflow } from '..';
@@ -140,6 +140,30 @@ export async function startReplica<W extends Built>(
   await mastra.startWorkers();
   replicas.push(mastra);
   return { mastra, pubsub, workflow };
+}
+
+/**
+ * Replicas A and B on a new store, with A running a `shapes.step` run and held in step `a`
+ * (for good with `hangForever`). `delivery` is the `workflow.step.run` A got, to redeliver to B.
+ */
+export async function stepRunningOnA({
+  hangForever = false,
+  b: bOptions = {},
+}: { hangForever?: boolean; b?: Parameters<typeof startReplica>[2] } = {}) {
+  const storage = new InMemoryStore();
+  const tracked = track({ blocks: ['a'] }, { hangForever });
+  const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
+  const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')), bOptions);
+  let delivery: Event | undefined;
+  await a.pubsub.subscribe('workflows', event => {
+    if (event.type === 'workflow.step.run') {
+      delivery = structuredClone(event);
+    }
+  });
+  const run = await a.workflow.createRun();
+  const result = run.start({ inputData: { n: 1 } });
+  await tracked.allBlocked;
+  return { storage, tracked, a, b, run, result, delivery: delivery! };
 }
 
 /** A replica crashing: it stops renewing anything, and the leases it held lapse. */

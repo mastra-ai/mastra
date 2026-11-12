@@ -34,6 +34,7 @@ import {
   shapes,
   sleep,
   startReplica,
+  stepRunningOnA,
   stopReplicas,
   track,
   work,
@@ -215,33 +216,22 @@ describe('evented step leases (#28712)', () => {
   }, 20_000);
 
   it('continues a run once from the replica that took over a step whose holder stalled past its lease', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: ['a'] });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    let delivery: Event | undefined;
+    const { storage, tracked, a, b, run, delivery } = await stepRunningOnA();
     const stepEnds: string[] = [];
     for (const [name, replica] of [
       ['A', a],
       ['B', b],
     ] as const) {
       await replica.pubsub.subscribe('workflows', event => {
-        if (event.type === 'workflow.step.run') {
-          delivery ??= structuredClone(event);
-        }
-
         if (event.type === 'workflow.step.end') {
           stepEnds.push(name);
         }
       });
     }
-    const run = await a.workflow.createRun();
-    void run.start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
 
     // A stalls past its lease, and the broker redelivers its message to B, which runs the step.
     await abandonLease(storage, stepOccurrenceKey(run.runId, [0]));
-    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 2 })).toEqual({ ok: true });
+    expect(await b.mastra.handleWorkflowEvent({ ...delivery, deliveryAttempt: 2 })).toEqual({ ok: true });
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
 
     // A's step finishes afterwards; shutting A down waits for its handler.
@@ -253,147 +243,80 @@ describe('evented step leases (#28712)', () => {
     expect(await runStatus(storage, run.runId)).toBe('success');
   }, 20_000);
 
-  it('runs a redelivered step once the lease of its crashed worker expires', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const tracked = track({ blocks: ['a'] }, { hangForever: true });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    let delivery: Event | undefined;
-    await a.pubsub.subscribe('workflows', event => {
-      if (event.type === 'workflow.step.run') delivery = structuredClone(event);
-    });
-    const run = await a.workflow.createRun();
-    void run.start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
-
-    // A crashes mid-step: its lease stops being renewed and runs out.
-    await a.mastra.shutdown({ drainTimeout: 0 });
-    const crashed = await store.claimRunOwnership({
-      runId: stepOccurrenceKey(run.runId, [0]),
-      ownerId: 'crashed-worker',
-      leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
-      force: true,
-    });
-
-    // The broker redelivers A's unacknowledged message to B.
-    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 2 })).toEqual({ ok: true });
-
-    expect(tracked.executions).toEqual(['A:a', 'B:a']);
-    expect(tracked.at['B:a']).toBeGreaterThanOrEqual(crashed.record!.leaseExpiresAt!.getTime());
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
-  }, 20_000);
-
-  it('hands a waiting delivery back to the broker when its replica shuts down', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: ['a'] });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    let delivery: Event | undefined;
-    await a.pubsub.subscribe('workflows', event => {
-      if (event.type === 'workflow.step.run') delivery = structuredClone(event);
-    });
-    const result = (await a.workflow.createRun()).start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
-
-    const leases = await recordLeases(storage);
-    const waiting = b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 2 });
-    await leases.until(() => leases.claims.some(c => !c.acquired));
-    void b.mastra.shutdown({ drainTimeout: 0 });
-
-    expect(await Promise.race([waiting, sleep(WORKFLOW_RUN_LEASE_TTL_MS * 3).then(() => 'still waiting')])).toEqual({
-      ok: false,
-      retry: true,
-    });
-    tracked.release();
-    expect((await result).status).toBe('success');
-    expect(tracked.executions).toEqual(['A:a']);
-  }, 20_000);
-
-  it('does not fail a run when a delivery of its running step has used up its attempts', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: ['a'] });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    let delivery: Event | undefined;
-    await a.pubsub.subscribe('workflows', event => {
-      if (event.type === 'workflow.step.run') delivery = structuredClone(event);
-    });
-    const result = (await a.workflow.createRun()).start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
-
-    // Replicas that shut down while this delivery waited for A handed it back, and the broker
-    // counted every hand-back as a delivery attempt.
-    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({ ok: true });
-
-    tracked.release();
-    expect((await result).status).toBe('success');
-    expect(tracked.executions).toEqual(['A:a']);
-  }, 20_000);
-
-  it('hands an exhausted delivery of a running step back to the broker when its replica shuts down', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: ['a'] });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    let delivery: Event | undefined;
-    await a.pubsub.subscribe('workflows', event => {
-      if (event.type === 'workflow.step.run') {
-        delivery = structuredClone(event);
-      }
-    });
-    const result = (await a.workflow.createRun()).start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
-
+  // Replicas that shut down while a delivery waited for A handed it back, and the broker counted
+  // every hand-back as a delivery attempt, so a delivery can arrive with its attempts used up.
+  it.each([
+    ['hands a waiting delivery back to the broker when its replica shuts down', 2, 'while waiting', true],
+    ['does not fail a run when a delivery of its running step has used up its attempts', 10, undefined, false],
     // B schedules no re-check while shutting down, so it must not acknowledge the delivery.
-    const shutdown = b.mastra.shutdown({ drainTimeout: 0 });
-    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({
-      ok: false,
-      retry: true,
-    });
-    await shutdown;
+    [
+      'hands an exhausted delivery of a running step back to the broker when its replica shuts down',
+      10,
+      'before',
+      true,
+    ],
+  ] as const)(
+    '%s',
+    async (_, deliveryAttempt, shutdown, handedBack) => {
+      const { storage, tracked, b, result, delivery } = await stepRunningOnA();
+      const leases = await recordLeases(storage);
 
-    tracked.release();
-    expect((await result).status).toBe('success');
-    expect(tracked.executions).toEqual(['A:a']);
-  }, 20_000);
-
-  it('runs a step whose deliveries used up their attempts deferring to a replica that then crashed', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: ['a'] }, { hangForever: true });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    let delivery: Event | undefined;
-    await a.pubsub.subscribe('workflows', event => {
-      if (event.type === 'workflow.step.run') {
-        delivery = structuredClone(event);
+      let stopping = shutdown === 'before' ? b.mastra.shutdown({ drainTimeout: 0 }) : undefined;
+      const handled = b.mastra.handleWorkflowEvent({ ...delivery, deliveryAttempt });
+      if (shutdown === 'while waiting') {
+        await leases.until(() => leases.claims.some(c => !c.acquired));
+        stopping = b.mastra.shutdown({ drainTimeout: 0 });
       }
-    });
-    const run = await a.workflow.createRun();
-    void run.start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
 
+      expect(await Promise.race([handled, sleep(WORKFLOW_RUN_LEASE_TTL_MS * 3).then(() => 'still waiting')])).toEqual(
+        handedBack ? { ok: false, retry: true } : { ok: true },
+      );
+      await stopping;
+      tracked.release();
+      expect((await result).status).toBe('success');
+      expect(tracked.executions).toEqual(['A:a']);
+    },
+    20_000,
+  );
+
+  it.each([
+    ['runs a redelivered step once the lease of its crashed worker expires', 2, false],
     // Replicas that shut down while this delivery waited for A handed it back, then A crashed.
-    await crash(a, storage, [stepOccurrenceKey(run.runId, [0]), runLivenessKey(run.runId)]);
-    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 5 })).toEqual({ ok: true });
+    ['runs a step whose deliveries used up their attempts deferring to a replica that then crashed', 5, true],
+  ] as const)(
+    '%s',
+    async (_, deliveryAttempt, lapsed) => {
+      const { storage, tracked, a, b, run, delivery } = await stepRunningOnA({ hangForever: true });
+      const store = (await storage.getStore('workflows'))!;
+      const key = stepOccurrenceKey(run.runId, [0]);
 
-    expect(tracked.executions).toEqual(['A:a', 'B:a']);
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
-  }, 20_000);
+      // A crashes mid-step: its lease stops being renewed and runs out one TTL later, or already ran out.
+      await a.mastra.shutdown({ drainTimeout: 0 });
+      if (lapsed) {
+        await abandonLease(storage, key, runLivenessKey(run.runId));
+      } else {
+        await store.claimRunOwnership({
+          runId: key,
+          ownerId: 'crashed-worker',
+          leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+          force: true,
+        });
+      }
+      const expiresAt = (await store.getRunOwnership({ runId: key }))!.leaseExpiresAt!.getTime();
+
+      // The broker redelivers A's unacknowledged message to B.
+      expect(await b.mastra.handleWorkflowEvent({ ...delivery, deliveryAttempt })).toEqual({ ok: true });
+
+      expect(tracked.executions).toEqual(['A:a', 'B:a']);
+      expect(tracked.at['B:a']).toBeGreaterThanOrEqual(expiresAt);
+      await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
+    },
+    20_000,
+  );
 
   it('recovers a run once when the replica running its step crashes after an exhausted delivery was dropped', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: ['a'] }, { hangForever: true });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-    let delivery: Event | undefined;
-    await a.pubsub.subscribe('workflows', event => {
-      if (event.type === 'workflow.step.run') delivery = structuredClone(event);
-    });
-    const run = await a.workflow.createRun();
-    void run.start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
-    expect(await b.mastra.handleWorkflowEvent({ ...delivery!, deliveryAttempt: 10 })).toEqual({ ok: true });
+    const { storage, tracked, a, b, run, delivery } = await stepRunningOnA({ hangForever: true });
+    expect(await b.mastra.handleWorkflowEvent({ ...delivery, deliveryAttempt: 10 })).toEqual({ ok: true });
 
     // The dropped delivery can no longer bring the step back, so B re-checks the run itself.
     await crash(a, storage, [stepOccurrenceKey(run.runId, [0]), runLivenessKey(run.runId)]);
