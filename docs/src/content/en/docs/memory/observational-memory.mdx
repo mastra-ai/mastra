@@ -71,6 +71,17 @@ console.log(second.text)
 
 If your Mastra instance already has storage, you can leave `storage` out of `Memory` and it uses that.
 
+:::warning
+When a client application calls your agent, send only the new message instead of the full conversation. OM already loads the thread's history from storage. See [message history](/docs/memory/message-history) for how Mastra handles echoed history and when to use `retainFullInput`.
+:::
+
+### Verify in Studio
+
+Open [Studio](/docs/studio/overview), chat with an agent that has OM enabled, and open the **Memory** tab in the sidebar. The **Observational Memory** section shows:
+
+- **Messages** and **Observations** progress bars show how close each is to its threshold, updating live during observation and reflection. Hover over the info icon to see the model and threshold.
+- **Analyze observations**: opens a detail view with the current observation log, a timeline of messages, observations, buffered observations and events, and a **History** list of earlier observation and reflection records.
+
 ## Benefits
 
 - **Long tasks stay in one thread**: The agent keeps working past its context limit without compacting and without losing earlier decisions.
