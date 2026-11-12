@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.4.0-alpha.2
+
+### Patch Changes
+
+- Generate JSON Schema for OpenAPI request parameters and bodies from their accepted inputs, while keeping response schemas based on emitted outputs. Zod v4 schemas with defaults or transformations now expose the correct input/output representations. ([#30187](https://github.com/mastra-ai/mastra/pull/30187))
+
 ## 1.4.0-alpha.1
 
 ### Minor Changes

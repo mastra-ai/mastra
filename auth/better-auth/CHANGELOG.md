@@ -1,5 +1,11 @@
 # @mastra/auth-better-auth
 
+## 1.1.11-alpha.2
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
 ## 1.1.11-alpha.1
 
 ### Patch Changes
