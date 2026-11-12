@@ -130,11 +130,11 @@ class ProcessRunLiveness {
    *
    * Each key is expired by its fence, so a key another process wrote since
    * stays live. Waits until `deadline`, the end of the shutdown's drain
-   * budget, and at most one renew interval, so a slow store cannot hold up the
-   * rest of shutdown; a drain that used up its deadline still gets
-   * {@link LIVENESS_EXPIRY_MIN_WAIT_MS}. A key not expired by then lapses one
-   * lease TTL after its last write, as it would have without this. Runs once;
-   * later calls do nothing.
+   * budget, but no less than {@link LIVENESS_EXPIRY_MIN_WAIT_MS} when the drain
+   * used it up, and never more than one renew interval, so a slow store cannot
+   * hold up the rest of shutdown. A key not expired by then lapses one lease
+   * TTL after its last write, as it would have without this. Runs once; later
+   * calls do nothing.
    */
   async end({ deadline }: { deadline: number }): Promise<void> {
     if (!this.#vouching) {
