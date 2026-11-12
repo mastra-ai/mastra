@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -19,8 +20,16 @@ import {
   useConnectPlatformProviderMutation,
   useReconnectPlatformProviderMutation,
 } from '../../../../hooks/usePlatformConnections';
-import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import { MASTRA_PLATFORM_URL, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
+import { IntegrationItem } from './IntegrationItem';
+import { ConnectionManagementButton } from './common/ConnectionManagementButton';
+
+const platformIcons = {
+  gitlab: 'gitlab',
+  jira: 'jira',
+  'incident-io': 'incidentio',
+} as const satisfies Record<PlatformConnectProviderId, string>;
 
 export function connectionName(connection: PlatformProviderConnection): string {
   return connection.displayName?.trim() || connection.accountLabel?.trim() || 'Connected account';
@@ -139,5 +148,79 @@ export function ProviderConnectControl({
         />
       )}
     </>
+  );
+}
+
+/** The integration icon and name `IntegrationItem` takes for a Platform provider. */
+export function platformIntegration(provider: PlatformConnectProviderId) {
+  return { provider: platformIcons[provider], name: PLATFORM_CONNECT_PROVIDERS[provider].displayName };
+}
+
+export function PlatformConnectButton({ provider }: { provider: PlatformConnectProviderId }) {
+  return (
+    <ProviderConnectControl
+      provider={provider}
+      label={`Connect ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
+      buttonLabel="Connect"
+      icon={<Link2 />}
+    />
+  );
+}
+
+export function PlatformReconnectButton({
+  provider,
+  connectionId,
+}: {
+  provider: PlatformConnectProviderId;
+  connectionId: string;
+}) {
+  return (
+    <ProviderConnectControl
+      provider={provider}
+      reconnectConnectionId={connectionId}
+      label={`Reconnect ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
+      buttonLabel="Reconnect"
+      icon={<Link2 />}
+    />
+  );
+}
+
+export function PlatformManageLink({ provider }: { provider: PlatformConnectProviderId }) {
+  return (
+    <ConnectionManagementButton
+      aria-label={`Manage ${PLATFORM_CONNECT_PROVIDERS[provider].displayName} connection`}
+      render={<a href={MASTRA_PLATFORM_URL} target="_blank" rel="noopener noreferrer" />}
+    >
+      Manage
+    </ConnectionManagementButton>
+  );
+}
+
+export function PlatformConnectionActions({
+  provider,
+  connections,
+}: {
+  provider: PlatformConnectProviderId;
+  connections: PlatformProviderConnection[];
+}) {
+  const expired = connections.find(connection => connection.status === 'needs_reauth');
+  return (
+    <>
+      {expired && <PlatformReconnectButton provider={provider} connectionId={expired.id} />}
+      <PlatformManageLink provider={provider} />
+    </>
+  );
+}
+
+export function AddPlatformAccountRow({ provider }: { provider: PlatformConnectProviderId }) {
+  return (
+    <IntegrationItem {...platformIntegration(provider)} description="Another account">
+      <ProviderConnectControl
+        provider={provider}
+        label={`Connect another ${PLATFORM_CONNECT_PROVIDERS[provider].displayName} account`}
+        buttonLabel="Connect"
+        icon={<Link2 />}
+      />
+    </IntegrationItem>
   );
 }

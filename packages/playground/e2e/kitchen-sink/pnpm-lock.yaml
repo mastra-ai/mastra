@@ -29,15 +29,15 @@ overrides:
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
   jose@>=4.14.0 <6.2.12: 6.2.12
   hono@<4.13.8: 4.13.11
-  better-auth: ^1.7.15
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.15
+  better-auth: ^1.7.18
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.18
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.42
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.45
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.7: 4.6.7
-  undici@<8.12.2: 8.12.2
+  undici@<8.12.4: 8.12.4
 
 importers:
 
@@ -131,8 +131,8 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@8.12.2:
-    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   zod@4.6.7:
@@ -152,7 +152,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider@2.0.5':
@@ -185,6 +185,6 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@8.12.2: {}
+  undici@8.12.4: {}
 
   zod@4.6.7: {}

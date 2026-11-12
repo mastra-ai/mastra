@@ -22,9 +22,10 @@ import { InMemoryServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_NORMALIZED_USER_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -262,6 +263,67 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
   });
 
+  it('reuses an inner CachingPubSub instead of double-wrapping it, reporting the configured cache', () => {
+    const wrapperCache = new InMemoryServerCache();
+    const configuredCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), wrapperCache);
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-caching'),
+      inngest,
+      pubsub: inner,
+      cache: configuredCache,
+    });
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(configuredCache);
+  });
+
+  it("reuses an inner CachingPubSub and reports Mastra's serverCache when no cache is configured", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-mastra'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache } as unknown as Mastra);
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it("wraps with Mastra's serverCache when registered first, and keeps the resolved bus afterwards", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-mastra-cache'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache, pubsub: new EventEmitterPubSub() } as unknown as Mastra);
+
+    const pubsub = durableAgent.pubsub as CachingPubSub;
+    expect(pubsub.getInner()).toBe(inner);
+    expect(pubsub.getCache()).toBe(serverCache);
+    expect(durableAgent.cache).toBe(serverCache);
+
+    durableAgent.__setMastra({ serverCache: new InMemoryServerCache(), pubsub: new EventEmitterPubSub() } as any);
+    expect(durableAgent.pubsub).toBe(pubsub);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it('forks onto the same inner pubsub and resolved cache', () => {
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-fork'), inngest, pubsub: inner });
+    const cache = durableAgent.cache;
+
+    const fork = durableAgent.__fork();
+    const forkPubsub = fork.pubsub as CachingPubSub;
+    expect(forkPubsub.getInner()).toBe(inner);
+    expect(forkPubsub.getCache()).toBe(cache);
+    expect(fork.cache).toBe(cache);
+  });
+
   // The next two tests mirror packages/core/src/agent/durable/__tests__/resumable-streams.test.ts
   // ("Late subscriber replay") to prove createInngestAgent wires the same replay semantics
   // that the in-memory DurableAgent provides. Without the CachingPubSub wrapper these would
@@ -372,6 +434,27 @@ describe('createInngestAgent observe-replay wiring', () => {
       }
     },
   );
+
+  // Steps send whole response lists when an observer that attaches mid-run can't read the run's
+  // earlier events, so the router must answer for the bus that carries the agent's stream.
+  it.each([
+    ['keeps', {}, true],
+    ['keeps no', { cache: false as const }, false],
+  ])('tells steps the agent stream %s history', (_, options, replays) => {
+    const durableAgent = createInngestAgent({
+      agent: makeAgent(`replay-routing-${replays}`),
+      inngest,
+      pubsub: new EventEmitterPubSub(),
+      ...options,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const routed = workflow.__getPubsubFactory()(new EventEmitterPubSub());
+    expect(routed.__replaysTopic(AGENT_STREAM_TOPIC('run'))).toBe(replays);
+    // Other topics follow the workflow's own bus.
+    expect(routed.__replaysTopic('workflow.events.v2.run')).toBe(false);
+  });
 
   it('routes workflow agent topics through the configured pubsub exactly once', async () => {
     const customPubsub = new EventEmitterPubSub();
@@ -842,6 +925,14 @@ describe('InngestAgent parity surface', () => {
     await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
   }
 
+  // Durable delivery stamps each chunk with its pubsub log index so late
+  // subscribers can order frames. The parity checks below assert the chunk
+  // sequence itself, so drop the index before comparing.
+  function withoutLogIndex<T extends { index?: number }>(chunk: T) {
+    const { index: _index, ...rest } = chunk;
+    return rest;
+  }
+
   it.each([
     { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
     { closeOnSuspend: true, registrationOptions: undefined },
@@ -1023,6 +1114,51 @@ describe('InngestAgent parity surface', () => {
       try {
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme:fr']));
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it("does not resolve resume() defaultOptions or dispatch with the starting run's user", async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDynamicDefaults(
+        'default-callbacks-resume-user',
+        ({ user, requestContext }) => ({
+          onFinish: () => {
+            fired.push(`onFinish:${user?.id ?? 'anon'}:${requestContext.get('tenant')}`);
+          },
+        }),
+      );
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            loadWorkflowSnapshot: vi.fn().mockResolvedValue({
+              value: {},
+              context: {},
+              status: 'suspended',
+              suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+              requestContext: {
+                tenant: 'acme',
+                [MASTRA_NORMALIZED_USER_KEY]: { id: 'alice', role: 'admin' },
+                mastra__user: { sub: 'alice' },
+                mastra__userRoles: ['admin'],
+                mastra__userPermissions: ['admin:*'],
+              },
+            }),
+          }),
+        }),
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'default-callbacks-resume-user-run';
+
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
+        await publishStepAndFinish(durableAgent, runId);
+        await vi.waitFor(() => expect(fired).toEqual(['onFinish:anon:acme']));
+        const resumeEvent = sendSpy.mock.calls.map(([event]) => event as any).find(event => event.data?.resume);
+        expect(resumeEvent.data.requestContext).toEqual({ tenant: 'acme' });
       } finally {
         result.cleanup();
         sendSpy.mockRestore();
@@ -1673,9 +1809,10 @@ describe('InngestAgent parity surface', () => {
       const received = [];
       for await (const chunk of result.fullStream) received.push(chunk);
 
-      expect(received).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
-      expect(received).not.toContainEqual(originalToolCall);
-      expect(received).not.toContainEqual(originalSuspension);
+      expect(received.map(withoutLogIndex)).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
+      const receivedWithoutIndex = received.map(withoutLogIndex);
+      expect(receivedWithoutIndex).not.toContainEqual(originalToolCall);
+      expect(receivedWithoutIndex).not.toContainEqual(originalSuspension);
     } finally {
       result.cleanup();
       globalRunRegistry.delete(runId);
@@ -1759,7 +1896,7 @@ describe('InngestAgent parity surface', () => {
 
       expect(result.finishReason).toBe('stop');
       expect(result.text).toBe('Done.');
-      expect(result.toolResults).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
+      expect(result.toolResults.map(withoutLogIndex)).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
       expect(result.toolCalls).toEqual([]);
     } finally {
       globalRunRegistry.delete(runId);
@@ -3415,5 +3552,89 @@ describe('thread and run abort (#25156)', () => {
 
     expect(() => durableAgent.abortRunStream('abort-run-publish-fails-run')).not.toThrow();
     await new Promise(resolve => setTimeout(resolve, 10));
+  });
+});
+
+describe('background task finished while untilIdle is open (#29785)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-bg-notify',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeRegistered(id: string) {
+    const storage = new InMemoryStore();
+    const durableAgent = createInngestAgent({
+      agent: new Agent({
+        id,
+        name: id,
+        instructions: 'Test',
+        model: createMockModel() as any,
+        memory: new Memory({ storage }),
+      }),
+      inngest,
+    });
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      agents: { [id]: durableAgent as any },
+      storage,
+      backgroundTasks: { enabled: true },
+      logger: false,
+    });
+    // The durable tool-call step resolves the owner like this before notifying it.
+    const owner = Object.values(mastra.listAgents()).find(a => a.id === id) as any;
+    return { durableAgent, owner };
+  }
+
+  function finishedTask(threadId: string, resourceId: string) {
+    return {
+      threadId,
+      resourceId,
+      taskId: 'task-1',
+      toolCallId: 'call-1',
+      toolName: 'brew',
+      status: 'completed' as const,
+    };
+  }
+
+  it('does not wake the thread when an untilIdle stream is open for it', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-open');
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal');
+    const threadId = 'bg-notify-open-t';
+    const resourceId = 'bg-notify-open-r';
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      untilIdle: true,
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    try {
+      await vi.waitFor(() => expect(owner.__untilIdleHandlesBackgroundTask(threadId, resourceId, 'probe')).toBe(true));
+
+      await owner.__notifyBackgroundTaskFinished(finishedTask(threadId, resourceId));
+
+      expect(signalSpy).not.toHaveBeenCalled();
+    } finally {
+      (result as any).cleanup?.();
+      durableAgent.abortThreadStream({ threadId, resourceId, localOnly: true } as any);
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('still wakes the thread when no untilIdle stream is open', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-idle');
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal').mockReturnValue({
+      signal: { id: 'sig-1' },
+      accepted: Promise.resolve({ action: 'woke' }),
+    } as any);
+
+    expect(owner.__untilIdleHandlesBackgroundTask('bg-notify-idle-t', 'bg-notify-idle-r', 'task-1')).toBe(false);
+    await owner.__notifyBackgroundTaskFinished(finishedTask('bg-notify-idle-t', 'bg-notify-idle-r'));
+
+    expect(signalSpy).toHaveBeenCalledTimes(1);
+    expect(signalSpy.mock.calls[0]?.[0]).toMatchObject({ type: 'notification', tagName: 'background-task' });
+    expect(signalSpy.mock.calls[0]?.[1]).toMatchObject({
+      threadId: 'bg-notify-idle-t',
+      resourceId: 'bg-notify-idle-r',
+    });
   });
 });

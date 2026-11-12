@@ -379,6 +379,8 @@ describe('Agent signals: claimed thread ownership', () => {
       requestContext.setRaw(MASTRA_AUTH_TOKEN_KEY, 'sender-token');
       requestContext.setRaw(MASTRA_VERSIONS_KEY, { agents: { other: { versionId: 'v1' } } });
       requestContext.setRaw('MastraMemory', { thread: { id: 'other-thread' } });
+      requestContext.setRaw('mastra__user', { id: 'sender-user' });
+      requestContext.setRaw('mastra__userRoles', ['admin']);
       requestContext.setRaw('onDone', () => {});
       return requestContext;
     }
@@ -3558,6 +3560,60 @@ describe('Agent signals: claimed thread ownership', () => {
     );
     // 100 + 200 + 400 + remaining 300ms fits in the 1s budget.
     expect(discoveryRequests).toBeLessThanOrEqual(4);
+  });
+
+  it('stops claimed-owner discovery retries at the deadline when timers fire a millisecond early', async () => {
+    // Node checks timers against a cached loop clock, so a timer can run just before
+    // Date.now() reaches its due time. That must not buy an extra request at the deadline.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const fakeSetTimeout = globalThis.setTimeout;
+    try {
+      globalThis.setTimeout = ((callback: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) =>
+        fakeSetTimeout(callback, ms && ms > 1 ? ms - 1 : ms, ...args)) as typeof setTimeout;
+
+      let discoveryRequests = 0;
+      class FailingDiscoveryPubSub extends EventEmitterPubSub {
+        override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+          const [topic, event] = args;
+          if (
+            topic === 'agent.thread-owner-discovery' &&
+            (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+          ) {
+            discoveryRequests++;
+            throw new Error('pubsub unavailable');
+          }
+          return super.publish(...args);
+        }
+      }
+      const pubsub = new FailingDiscoveryPubSub();
+      const senderAgent = new Agent({
+        id: 'early-timer-sender-agent',
+        name: 'Early Timer Sender Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+
+      const signalResult = new AgentThreadStreamRuntime().sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake nobody' },
+        {
+          resourceId: 'early-timer-user',
+          threadId: 'early-timer-thread',
+          ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+        },
+        pubsub,
+      );
+      const rejected = expect(signalResult.accepted).rejects.toThrow('No claimed thread owner responded');
+      await vi.advanceTimersByTimeAsync(1_100);
+      await rejected;
+      expect(discoveryRequests).toBe(4);
+    } finally {
+      // Put the fake clock's own setTimeout back before uninstalling it. Uninstalling over a
+      // replaced global leaves the dead fake setTimeout in place for later files in a shared worker.
+      globalThis.setTimeout = fakeSetTimeout;
+      vi.useRealTimers();
+    }
   });
 
   it('escapes NUL characters inside ids in thread-owner errors', async () => {

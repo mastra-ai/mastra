@@ -167,14 +167,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
           {
             ...work,
             phases: work.phases.map(phase =>
-              phase.key === 'triage' ? { ...phase, runner: { ...phase.runner, context: 'work' } } : phase,
+              // Runner fields are plain stored fields now; a terminal phase code moves cards to is still locked.
+              phase.key === 'done' ? { ...phase, kind: 'resting' as const } : phase,
             ),
           },
           { expectedRevision: 1, writer },
         ),
       ),
       await refusal(() => writes.create(scope, { ...bugs, key: 'work' }, writer)),
-      await refusal(() => writes.replace(scope, 'review', definition, { expectedRevision: 1, writer })),
       await refusal(() => writes.reset(scope, 'bugs', { expectedRevision: 1, writer })),
       await refusal(() =>
         writes.replace(
@@ -201,7 +201,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
       [422, 'unknown_skill'],
       [422, 'code_behaviour'],
       [409, 'code_board'],
-      [409, 'code_board'],
       [409, 'not_code_board'],
       [409, 'phase_in_use'],
       [409, 'board_in_use'],
@@ -209,11 +208,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
       [404, 'board_not_found'],
       [409, 'board_exists'],
     ]);
-    expect(refusals[2]!.body.conflicts).toEqual([
-      'Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
-    ]);
+    expect(refusals[2]!.body.conflicts).toEqual(['Phase "done" must stay terminal; its code behaviour depends on it.']);
     expect(await storage.readVersion(scope)).toBe(version);
     expect(audits.map(audit => audit.action)).toEqual(['factory.board.created']);
+  });
+
+  it('writes a board under the key `review` like any other key', async () => {
+    const { writes, writer, scope, storage, served } = await setup();
+    await served('work');
+    const { key: _key, ...definition } = bugs;
+    const review = { ...bugs, key: 'review' };
+
+    expect(writes.validate(review).key).toBe('review');
+    expect(await writes.upsert(scope, review, writer)).toBe('inserted');
+    expect((await served('review'))!.name).toBe('Bugs');
+    expect((await refusal(() => writes.create(scope, review, writer))).body).toEqual({
+      error: 'board_exists',
+      message: 'Board "review" already exists in this project.',
+    });
+    await writes.replace(scope, 'review', { ...definition, name: 'Reviews' }, { expectedRevision: 1, writer });
+    expect((await served('review'))!.name).toBe('Reviews');
+    expect((await refusal(() => writes.reset(scope, 'review', { expectedRevision: 2, writer }))).code).toBe(
+      'not_code_board',
+    );
+    await writes.remove(scope, 'review', { expectedRevision: 2, writer });
+    expect(await storage.get(scope, 'review')).toBeNull();
+    expect(await served('review')).toBeUndefined();
   });
 
   it('deletes a board no card sits on', async () => {

@@ -68,7 +68,7 @@ export function CustomProviderForm({ provider, requireModels = false, onCancel, 
   };
 
   return (
-    <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
+    <div className="flex flex-col gap-3">
       {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}

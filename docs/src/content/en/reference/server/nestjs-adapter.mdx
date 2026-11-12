@@ -133,8 +133,11 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
   },
   {
     name: 'mcpOptions',
-    type: '{ serverless?: boolean; sessionIdGenerator?: () => string }',
-    description: 'MCP transport options',
+    type: 'MCPOptions',
+    typeDescription:
+      '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
+    description:
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`. Defaults to `server.mcpOptions` from your `Mastra` config.',
     isOptional: true,
   },
   {

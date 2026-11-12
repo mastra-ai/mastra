@@ -18,7 +18,7 @@ import type { ReadyPreparedWidget } from '../lib/plan-widget';
 import { prepareWidget } from '../lib/prepare-widget';
 import { requestKey, sendRequest } from '../lib/requests';
 import type { DashboardRequest, DashboardResult } from '../lib/requests';
-import type { WidgetState } from '../widget-kind';
+import type { DashboardExpand, WidgetState } from '../widget-kind';
 import {
   find,
   metricsWidget,
@@ -32,6 +32,7 @@ import {
 } from './equality-harness';
 import type { Rendered } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -340,6 +341,33 @@ describe('StatelessWidget on its own', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  it.each([
+    ['a chart', metricsWidget('agent-runs')],
+    ['the KPI group', kpisWidget],
+  ])("shows the host's actions on %s", (_, definition) => {
+    const widget = prepared(definition, undefined);
+    const plan = planWidget(widget, env, {});
+    if (plan.status !== 'ready') throw new Error('not ready');
+    render(
+      <StatelessWidget
+        prepared={widget}
+        env={env}
+        state={{}}
+        onStateChange={() => {}}
+        results={results(plan.requests.length, { isLoading: true, isRefetching: false, isError: false })}
+        onRetry={() => {}}
+        scope="project"
+        actions={
+          <MetricsCard.Action label="Share it" className={onCardHover}>
+            <span />
+          </MetricsCard.Action>
+        }
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Share it' })).toBeDefined();
+  });
+
   it('asks the host to retry from its error card', () => {
     const onRetry = vi.fn();
     const widget = prepared(metricsWidget('breakdown'), undefined);
@@ -358,6 +386,68 @@ describe('StatelessWidget on its own', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /retry/i }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  describe('renaming from the title', () => {
+    function renderRenamable(
+      definition: DashboardWidget,
+      onTitleChange: (title: string) => void,
+      expand?: DashboardExpand,
+    ) {
+      const widget = prepared(definition, undefined);
+      const plan = planWidget(widget, env, {});
+      if (plan.status !== 'ready') throw new Error('not ready');
+      render(
+        <StatelessWidget
+          prepared={widget}
+          env={env}
+          state={{}}
+          onStateChange={() => {}}
+          results={results(plan.requests.length, { isLoading: true, isRefetching: false, isError: false })}
+          onRetry={() => {}}
+          scope="project"
+          expand={expand}
+          onTitleChange={onTitleChange}
+        />,
+      );
+    }
+
+    it("reports a timeseries widget's new title", () => {
+      const onTitleChange = vi.fn();
+      const [runs] = metricsWidget('agent-runs').views;
+      if (!runs) throw new Error('METRICS_DASHBOARD changed shape');
+      renderRenamable({ ...metricsWidget('agent-runs'), title: 'Agent runs', views: [runs] }, onTitleChange);
+
+      const title = screen.getByRole('textbox', { name: 'Widget title' });
+      expect(title).toHaveProperty('value', 'Agent runs');
+      title.focus();
+      fireEvent.change(title, { target: { value: 'Runs this week' } });
+      fireEvent.keyDown(title, { key: 'Enter' });
+      expect(onTitleChange).toHaveBeenCalledWith('Runs this week');
+    });
+
+    it('keeps the view menu of a widget with several views', () => {
+      renderRenamable(metricsWidget('agent-runs'), vi.fn());
+      expect(screen.queryByRole('textbox', { name: 'Widget title' })).toBeNull();
+    });
+
+    it('keeps the title of a widget that expands editable, and opens the expand page from its action', () => {
+      const onTitleChange = vi.fn();
+      const expand: DashboardExpand = {
+        href: widget => `/query?metric=${widget.id}`,
+        LinkComponent: props => <a {...props} />,
+      };
+      renderRenamable(metricsWidget('token-usage'), onTitleChange, expand);
+
+      const link = screen.getByRole('link', { name: 'Expand Token usage' });
+      expect(link.getAttribute('href')).toBe('/query?metric=token-usage');
+      const title = screen.getByRole('textbox', { name: 'Widget title' });
+      expect(title).toHaveProperty('value', 'Token usage');
+      title.focus();
+      fireEvent.change(title, { target: { value: 'Tokens this week' } });
+      fireEvent.keyDown(title, { key: 'Enter' });
+      expect(onTitleChange).toHaveBeenCalledWith('Tokens this week');
+    });
   });
 });
 

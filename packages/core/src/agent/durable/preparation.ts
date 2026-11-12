@@ -4,6 +4,7 @@ import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
+import { mergeProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
@@ -23,7 +24,6 @@ import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
-import { toStandardSchema } from '../../schema';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -58,6 +58,7 @@ import {
 import { authorizeDurableMemory } from './memory-fga';
 import { recordRunSavedMessages } from './run-message-refs';
 import { setRunScorerInstances } from './run-registry';
+import { needsNullToUndefined, toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import {
   createWorkflowInput,
@@ -782,8 +783,21 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  // Same strict-mode null → undefined handling as Agent.#execute, enabled when the main model or
+  // any fallback model uses strict mode (the flag is persisted once per run); skipped when a separate
+  // structuring model runs (its own agent call applies the transform).
+  const nullToUndefined =
+    Boolean(execOptions?.structuredOutput?.schema) &&
+    !(execOptions?.structuredOutput as any)?.model &&
+    // The model list already contains the enabled model, so the bare model is only used without a list.
+    (modelList ?? [{ model, providerOptions: undefined }]).some(candidate =>
+      needsNullToUndefined(
+        candidate.model as any,
+        mergeProviderOptions(execOptions?.providerOptions, candidate.providerOptions),
+      ),
+    );
   const structuredOutputSchema = execOptions?.structuredOutput?.schema
-    ? toStandardSchema(execOptions.structuredOutput.schema)
+    ? toLiveStructuredOutputSchema<{}>(execOptions.structuredOutput.schema, nullToUndefined)
     : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
@@ -795,6 +809,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         instructions: so.instructions,
         useAgent: so.useAgent,
         hasStructuringModel: so.model ? true : undefined,
+        nullToUndefined: nullToUndefined ? true : undefined,
         // Workers without the live config (remote/recovered runs) resolve the structuring
         // model from this. Model instances persist as `provider/modelId`, like the main model.
         structuringModelConfig:
@@ -951,6 +966,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     mastra,
     tools,
     requestTools: tools,
+    methodType,
     saveQueueManager,
     memory,
     memoryAuthorizationChecks,

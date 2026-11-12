@@ -1,10 +1,14 @@
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
+import { FactorySandbox } from '@mastra/core/workspace';
+import type { FactorySandboxBuilds } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../../../environment/build-workflow.js';
 import { MastraFactory } from '../../../factory.js';
 import { createPlaintextFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
+import { createIsolatedFactoryPostgresForTests } from '../../../storage/test-utils.js';
 import { subscribeToPullRequest } from '../../github/subscriptions.js';
 
 import { PlatformGithubIntegration } from './integration.js';
@@ -74,6 +78,38 @@ vi.mock('@mastra/code-sdk', () => ({
     };
   }),
 }));
+
+const SHA_NEW = 'b'.repeat(40);
+
+// GitHub's branch-head lookup is the outer edge the build resolves heads through.
+vi.mock('../../github/commits.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../github/commits.js')>()),
+  getBranchHead: vi.fn(async () => SHA_NEW),
+}));
+
+class TemplateBuildingSandbox extends FactorySandbox<Record<string, unknown>> {
+  readonly provider = 'recording';
+  readonly started: string[] = [];
+  readonly builds: FactorySandboxBuilds<Record<string, unknown>> = {
+    start: async ctx => {
+      this.started.push(ctx.sessionId);
+      return { buildId: 'build-1', templateId: 'tpl-1', status: 'building' };
+    },
+    get: async (_ctx, _settings, buildId) => ({ buildId, templateId: 'tpl-1', status: 'ready' }),
+  };
+  create(): never {
+    throw new Error('sessions are not started in this test');
+  }
+}
+
+async function storageForBackend() {
+  if (process.env.FACTORY_TEST_STORAGE_BACKEND === 'postgres') {
+    const url = process.env.FACTORY_TEST_POSTGRES_URL;
+    if (!url) throw new Error('FACTORY_TEST_POSTGRES_URL is required for the Postgres test backend.');
+    return createIsolatedFactoryPostgresForTests(url);
+  }
+  return new LibSQLFactoryStorage({ url: ':memory:', id: 'platform-push-rebuild' });
+}
 
 function json(data: unknown): Response {
   return new Response(JSON.stringify(data), {
@@ -230,6 +266,124 @@ describe('Platform GitHub event worker factory lifecycle', () => {
       expect(releaseLease).toHaveBeenCalledWith('platform-github-events:github', expect.any(String));
       expect(await pubsub.getLeaseOwner('platform-github-events:github')).toBeUndefined();
       expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await harness.controller.getMastra()?.stopWorkers();
+      await storage.close();
+    }
+  });
+});
+
+describe('Platform GitHub push rebuilds the environment template', () => {
+  // Shipyard: build-on-push on, 60-minute debounce, GitHub through the Platform
+  // lane (events arrive only through the polling worker). The worker's
+  // integration context is built without `onRepositoryPush`, so the push reaches
+  // `GithubRules.#handOffPush` with no hook and is dropped; `last_push_build_at`
+  // never moves.
+  it('starts a template build when the default branch of an environment repository is pushed', async () => {
+    const storage = await storageForBackend();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 99, fullName: 'octo/hello' }] });
+      }
+      if (url.pathname.endsWith('/repositories/99/events')) {
+        if (url.searchParams.has('afterTimestamp')) {
+          return json({
+            events: [
+              {
+                id: '1001-0',
+                deliveryId: 'delivery-push',
+                event: 'push',
+                payload: {
+                  ref: 'refs/heads/main',
+                  after: SHA_NEW,
+                  installation: { id: 7 },
+                  repository: { id: 99, full_name: 'octo/hello', default_branch: 'main' },
+                  sender: { login: 'ada' },
+                },
+              },
+            ],
+            nextCursor: '1001-0',
+          });
+        }
+        return json({ events: [], nextCursor: null });
+      }
+      return json({});
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const github = new PlatformGithubIntegration();
+    const sandbox = new TemplateBuildingSandbox();
+    const factory = new MastraFactory({
+      secretEncryption: createPlaintextFactorySecretEncryption(),
+      storage,
+      sandbox,
+      integrations: [github],
+    });
+
+    try {
+      const args = await factory.prepare();
+      const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+      const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
+      await projects.update({
+        orgId: 'org-1',
+        id: project.id,
+        input: { buildOnPushEnabled: true, buildPushDebounceMinutes: 60 },
+      });
+      const installation = await github.sourceControlStorage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+      });
+      const repository = await github.sourceControlStorage.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: '99', slug: 'octo/hello', defaultBranch: 'main' },
+      });
+      const connection = await github.sourceControlStorage.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const link = await github.sourceControlStorage.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/workspace/octo/hello',
+      });
+      expect(link.inEnvironment).toBe(true);
+
+      new Mastra(args);
+      await factory.finalize();
+
+      await vi.waitFor(async () => {
+        const fetched = fetchImpl.mock.calls.map(([input]) => new URL(String(input)).pathname);
+        expect(fetched.some(path => path.endsWith('/repositories/99/events'))).toBe(true);
+      });
+      await vi.waitFor(async () => {
+        expect((await projects.getById({ id: project.id }))?.lastPushBuildAt).toBeInstanceOf(Date);
+      });
+      expect(sandbox.started).toEqual([`environment-build:${project.id}`]);
+      // Sessions boot the new template once its build is ready.
+      await vi.waitFor(async () => {
+        const built = await projects.getById({ id: project.id });
+        expect(built?.activeTemplateId).toBe('tpl-1');
+        expect(built?.activeTemplateHeads).toEqual({ 'octo/hello': SHA_NEW });
+      });
+      // The finished build checks once more for a saved change; nothing changed, so it ends without one.
+      const workflow = harness.controller.getMastra()!.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID);
+      await vi.waitFor(async () => {
+        const { runs } = await workflow.listWorkflowRuns();
+        const statuses = runs.flatMap(({ snapshot }) =>
+          typeof snapshot !== 'string' && snapshot.context.input?.projectId === project.id ? [snapshot.status] : [],
+        );
+        expect(statuses.sort()).toEqual(['success', 'success']);
+      });
+      expect(sandbox.started).toHaveLength(1);
     } finally {
       await harness.controller.getMastra()?.stopWorkers();
       await storage.close();

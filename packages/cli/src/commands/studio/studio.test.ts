@@ -288,6 +288,27 @@ describe('studio base path support', () => {
     }
   });
 
+  it('serves the favicon file instead of the SPA shell', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    const studioDir = createStudioFixture();
+    writeFileSync(join(studioDir, 'mastra-dark-tile.svg'), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const favicon = await request(`http://127.0.0.1:${port}/agents/mastra-dark-tile.svg`);
+
+      expect(favicon.status).toBe(200);
+      expect(favicon.body).toContain('<svg');
+      expect(favicon.body).not.toContain('<body>studio</body>');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
   it('does not treat SPA routes with asset-like substrings as static assets', async () => {
     process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
     const studioDir = createStudioFixture();

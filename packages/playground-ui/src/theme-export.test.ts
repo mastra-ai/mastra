@@ -354,12 +354,24 @@ describe('theme.css export', () => {
     const variables = parseVariables(themeCss);
     expect(variables.get('text-display-lg')).toBe('1.75rem');
     expect(variables.get('text-display-lg--line-height')).toBe('127%');
-    expect(variables.get('text-display-lg--font-weight')).toBe('500');
+    expect(variables.get('text-display-lg--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
     expect(variables.get('text-display')).toBe('1.375rem');
     expect(variables.get('text-display--line-height')).toBe('127%');
-    expect(variables.get('text-display--font-weight')).toBe('500');
+    expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
+  });
+
+  it('gives text roles two weights, regular 465 and strong 515', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('font-weight-normal')).toBe('465');
+    expect(variables.get('font-weight-medium')).toBe('515');
+    for (const role of ['body', 'body-sm', 'caption', 'lead', 'menu']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-normal)');
+    }
+    for (const role of ['label', 'column', 'eyebrow', 'meta', 'subheading', 'heading', 'title']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-medium)');
+    }
   });
 
   it('generates the field and dialog fill utilities', async () => {
@@ -449,6 +461,16 @@ describe('theme.css export', () => {
         expect(output).toMatch(new RegExp(`\\.${prefix}-${token} \\{\\s*${property}: var\\(--${token}\\)`));
       }
     }
+  });
+
+  it('floors typed text at 16px on touch screens only, over any role or variant on the field', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['zoom-safe-text']);
+
+    expect(output).toMatch(
+      /@media \(pointer: coarse\) \{\s*\.zoom-safe-text \{\s*font-size: 16px !important;\s*\}\s*\}/,
+    );
+    expect(output.match(/\.zoom-safe-text \{/g)).toHaveLength(1);
   });
 
   it('registers semantic utilities and their :root defaults in the shared bundle', async () => {
@@ -681,9 +703,11 @@ describe('theme.css export', () => {
     const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:invert']);
 
     expect(compiler.sources).toEqual([]);
-    for (const utility of ['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field']) {
+    for (const utility of ['shadow-raised', 'prose', 'animate-in', 'bg-field']) {
       expect(output).toContain(`.${utility} {`);
     }
+    // Only states, no resting rule.
+    expect(output).toMatch(/\.state-layer:not\([^)]*\):hover/);
     expect(output).toContain('.dark\\:invert:is(.dark *)');
     expect(output).toContain('--syntax-string: var(--green-300)');
   });

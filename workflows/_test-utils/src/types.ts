@@ -370,6 +370,11 @@ export type CreateStepFn = typeof import('@mastra/core/workflows').createStep;
 export type AgentClass = typeof import('@mastra/core/agent').Agent;
 
 /**
+ * Mastra class type for tests that host a workflow on their own Mastra instance
+ */
+export type MastraClass = typeof import('@mastra/core/mastra').Mastra;
+
+/**
  * Function type for creating a workflow
  */
 export type CreateWorkflowFn = typeof import('@mastra/core/workflows').createWorkflow;
@@ -429,6 +434,9 @@ export type SkippableTest =
   | 'schemaNestedValidation'
   // ZodError cause preservation when validation fails
   | 'schemaZodErrorCause'
+  // Known failure, pinned with it.fails instead of skipped: getInitData() returns the
+  // validated input after inputSchema defaults apply (#29424)
+  | 'schemaInitDataDefaultFails'
   // waitForEvent removed error
   | 'schemaWaitForEvent'
   // Abort returning 'canceled' status
@@ -622,6 +630,8 @@ export type SkippableTest =
   | 'streamingTripwireOutputStream'
   // Streaming detailed event structure (exact event count/structure assertions)
   | 'streamingDetailedEvents'
+  // Exact streamLegacy event sequence for an agent used as a step
+  | 'streamingAgentDetailedEventsLegacy'
   // Streaming suspend/resume with streamLegacy API
   | 'streamingSuspendResumeLegacy'
   // Auto-resume without specifying step parameter (single suspended step)
@@ -697,6 +707,13 @@ export interface WorkflowTestConfig {
     createStep: CreateStepFn;
     createTool?: CreateToolFn;
     Agent?: AgentClass;
+    /**
+     * The Mastra class from the same copy of core as the engine under test. Tests that
+     * host a workflow themselves use this one: a host from another copy of core (source
+     * next to a built `dist`) runs steps with classes the engine's `instanceof` checks
+     * don't recognize.
+     */
+    Mastra?: MastraClass;
   };
 
   /**
@@ -938,6 +955,12 @@ export interface WorkflowCreatorContext {
  * Context passed to domain test creators
  */
 export interface WorkflowTestContext extends WorkflowCreatorContext {
+  /**
+   * Mastra class from the engine factory, for tests that host a workflow themselves
+   * (optional - tests that need it skip when the factory does not provide it)
+   */
+  Mastra?: MastraClass;
+
   /**
    * Execute a workflow and return the result
    */

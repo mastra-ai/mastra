@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Tools
 
-Agents use tools to call APIs or query databases. They can also run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/connections/mcp) to expand an agent's capabilities. For services like Linear, Slack, and GitHub, [Connect](/docs/mastra-platform/connect/tools) on Mastra platform supplies ready-made tools with managed credentials, which you can combine with your own.
+Agents use tools to call APIs or query databases. They can also run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/connections/mcp) to expand an agent's capabilities. For services like Linear, Slack, and GitHub, [Connect](/docs/mastra-platform/connect#add-tools-to-an-agent) on Mastra platform supplies ready-made tools with managed credentials, which you can combine with your own.
 
 <Inject>
   **For AI agents:** `execute` has exactly one signature: `execute(inputData, context)`. The first parameter is validated against `inputSchema`. The runtime always provides the second parameter with `requestContext`, `tracingContext`, `abortSignal`, and other execution metadata. You may omit it when unused. Other shapes are outdated. Run `npx mastra api tool execute weather-tool '{"location":"San Francisco"}'` to test this tool directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api tool execute --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -395,6 +395,7 @@ Use `hooks` to run custom logic before and after every tool call an agent makes.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
+import { db } from '../db' // your application database client
 
 export const supportAgent = new Agent({
   id: 'support-agent',
@@ -406,13 +407,20 @@ export const supportAgent = new Agent({
     beforeToolCall: ({ toolName, input }) => {
       console.log(`Running ${toolName}`, input)
     },
-    afterToolCall: ({ toolName, output, error }) => {
-      console.log(`Finished ${toolName}`, { output, error })
+    afterToolCall: async ({ toolName, input, output, error }) => {
+      await db.auditLog.insert({
+        toolName,
+        input,
+        output,
+        error: error ? String(error) : undefined,
+      })
     },
   },
   // highlight-end
 })
 ```
+
+`afterToolCall` must return `void` (or `Promise<void>`). Await your storage call, but don't return its result. If the storage call throws, the tool call fails with that error, so catch it inside the hook if audit logging should be best-effort. `afterToolCall` doesn't run for calls skipped by `beforeToolCall` or for declined [pre-execution approvals](/docs/agents/human-in-the-loop#pre-execution-approval), so record those decisions where you handle them.
 
 `beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely, the agent receives `output` as the tool result:
 
@@ -719,8 +727,9 @@ The [AgentController](/docs/harness/agent-controller) automatically includes all
 - [`createTool` reference](/reference/tools/create-tool)
 - [`Agent.generate()` reference](/reference/agents/generate): Runtime options for tool selection, steps, and callbacks
 - [Background tasks](/docs/harness/background-tasks): Run long-running tools without blocking the agent loop
+- [Make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat): Keep side effects from running twice in durable agents
 - [MCP overview](/docs/connections/mcp)
-- [Connect tools](/docs/mastra-platform/connect/tools): Ready-made tools for providers connected to a Mastra platform project
+- [Connect tools](/docs/mastra-platform/connect#add-tools-to-an-agent): Ready-made tools for providers connected to a Mastra platform project
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries
 - [Tools with structured output](/docs/agents/structured-output#combine-tools-and-structured-output): Model compatibility when combining tools and structured output
 - [Agent approval](/docs/agents/human-in-the-loop)

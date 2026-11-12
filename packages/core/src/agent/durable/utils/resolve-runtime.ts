@@ -12,13 +12,13 @@ import type {
   LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
-import { RequestContext } from '../../../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
-import { restoreRequestContext } from '../../request-context-snapshot';
+import { liveRequestEntries, restoreRequestContext } from '../../request-context-snapshot';
 import { SaveQueueManager } from '../../save-queue';
 import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
@@ -105,6 +105,22 @@ export interface ResolveRuntimeOptions {
 }
 
 export { restoreRequestContext };
+
+/**
+ * The run's `requestContextEntries` as handed to scorers (`customContext`), with
+ * the signed-in user taken from the live run-level context rather than the
+ * snapshot. The bearer token is never included.
+ */
+export function restoreCustomContext(
+  entries?: Record<string, unknown>,
+  runLevel?: RequestContext,
+): Record<string, unknown> | undefined {
+  if (!entries) return undefined;
+  return Object.fromEntries([
+    ...Object.entries(withoutLiveRequestKeys(entries)),
+    ...liveRequestEntries(runLevel).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
+  ]);
+}
 
 /**
  * Thrown when the per-request processor pipeline cannot be rebuilt during

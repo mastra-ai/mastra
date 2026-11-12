@@ -258,7 +258,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
     });
 
     if (engineOnly) {
-      it('should not save any message if interrupted before any part is emitted', async () => {
+      it('should keep the failed turn if interrupted before any part is emitted', async () => {
         const mockMemory = new MockMemory();
         let saveCallCount = 0;
 
@@ -299,13 +299,21 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         });
 
-        // TODO: output processors in v2 still run when the model throws an error! that doesn't seem right.
-        // it means in v2 our message history processor saves the input message.
+        const { messages } = await mockMemory.recall({ threadId: 'thread-3', resourceId: 'resource-3' });
         if (version === `v1`) {
-          const result = await mockMemory.recall({ threadId: 'thread-3', resourceId: 'resource-3' });
-          const messages = result.messages;
+          // streamLegacy does not run memory processors, so nothing is saved.
           expect(saveCallCount).toBe(0);
           expect(messages.length).toBe(0);
+        } else {
+          // History is append-only: the failed turn keeps the user message and the error it ended on.
+          expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+          expect(messages[0].content.content).toBe('interrupt before step');
+          expect(messages[1].content.parts).toEqual([
+            expect.objectContaining({
+              type: 'error',
+              error: expect.objectContaining({ message: 'Immediate interruption' }),
+            }),
+          ]);
         }
       });
     }

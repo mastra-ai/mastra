@@ -17,6 +17,8 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
+import { diffResponseMessages } from '../../streams/response-messages';
+import type { ResponseMessagesCursor } from '../../streams/response-messages';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
@@ -412,6 +414,77 @@ describe('observe() from an offset', () => {
   });
 });
 
+describe('__subscribeToRunStream() response messages', () => {
+  // The server's /observe route forwards these events to HTTP clients. Step-finish events carry
+  // only the response messages that changed; the frames must carry the rebuilt list, like the
+  // run's own stream does.
+  const assistant = (text: string) => ({ role: 'assistant' as const, content: [{ type: 'text' as const, text }] });
+  const lists = [
+    [assistant('x'.repeat(400)), assistant('a1')],
+    [assistant('x'.repeat(400)), assistant('a1'), assistant('a2')],
+    [assistant('x'.repeat(400)), assistant('a1'), assistant('a2'), assistant('a3')],
+  ];
+
+  async function publishSteps(pubsub: Awaited<ReturnType<typeof observedAgent>>['pubsub'], runId: string) {
+    let cursor: ResponseMessagesCursor | { producer: string } = { producer: 'execution-1' };
+    for (const list of lists) {
+      const { diff, cursor: next } = diffResponseMessages(cursor, list as any);
+      cursor = next;
+      await emitChunkEvent(pubsub, runId, {
+        type: 'step-finish',
+        runId,
+        from: 'AGENT',
+        payload: {
+          stepResult: { reason: 'tool-calls' },
+          output: { usage: {} },
+          metadata: {},
+          _durableResponseMessagesDiff: diff,
+        },
+      } as any);
+    }
+    await emitFinishEvent(pubsub, runId, finishData);
+  }
+
+  const stepFinishPayloads = (events: any[]) =>
+    events.filter(event => event.data?.type === 'step-finish').map(event => event.data.payload);
+
+  it('delivers each step-finish with the run’s full response messages', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    await publishSteps(pubsub, runId);
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => void events.push(event));
+    try {
+      const payloads = stepFinishPayloads(events);
+      expect(payloads.map(payload => payload._durableResponseMessages)).toEqual(lists);
+      expect(payloads.some(payload => '_durableResponseMessagesDiff' in payload)).toBe(false);
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('rebuilds the list from the skipped history when resuming at an offset', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    await publishSteps(pubsub, runId);
+    const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+    const secondStepFinish = history.filter(event => (event.data as any)?.type === 'step-finish')[1]!;
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(
+      runId,
+      { offset: secondStepFinish.index! + 1 },
+      event => void events.push(event),
+    );
+    try {
+      expect(stepFinishPayloads(events).map(payload => payload._durableResponseMessages)).toEqual([lists[2]]);
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+});
+
 describe('__subscribeToRunStream() lifecycle', () => {
   it('completes an unknown run without inserting a registry entry or clearing shared history', async () => {
     const { durable, transport } = await observedAgent();
@@ -789,12 +862,12 @@ describe('__subscribeToRunStream()', () => {
     await transport.close();
   });
 
-  it('forwards frames without the cache-assigned sequencing fields', async () => {
+  it('forwards each frame with its run-log index so observers can resume after it', async () => {
     const { durable, pubsub, transport } = await observedAgent();
     const runId = 'subscribed-run';
 
     // Published before the observer attaches, so this frame reaches it out of the
-    // topic history — the path that hands an event its `index`.
+    // topic history; the second arrives live. Both must carry their log position.
     await emitChunkEvent(pubsub, runId, textChunk('replayed'));
 
     const events: any[] = [];
@@ -805,10 +878,7 @@ describe('__subscribeToRunStream()', () => {
       [AgentStreamEventTypes.CHUNK, 'replayed', undefined],
       [AgentStreamEventTypes.CHUNK, 'live', undefined],
     ]);
-    // They exist for subscribers of the topic, not for the payload observe forwards.
-    for (const event of events) {
-      expect(event).not.toHaveProperty('index');
-    }
+    expect(events.map(event => event.index)).toEqual([0, 1]);
     await unsubscribe();
     await transport.close();
   });

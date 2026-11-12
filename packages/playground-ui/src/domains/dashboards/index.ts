@@ -6,7 +6,8 @@ export { DashboardGrid, DashboardGridCell, DashboardGridRow } from './components
 export type { DashboardSpan } from './components/dashboard-grid';
 export { ViewGate } from './components/view-gate';
 export { WidgetError } from './components/widget-error';
-export { DrilldownAction, PinAction } from './components/widget-controls';
+export { AlertAction, AlertMenu, DrilldownAction } from './components/widget-controls';
+export type { AlertEntry } from './components/widget-controls';
 export { METRICS_DASHBOARD } from './metrics-dashboard';
 export { StatelessWidget } from './components/stateless-widget';
 export type { StatelessWidgetProps } from './components/stateless-widget';
@@ -20,17 +21,21 @@ export type { AggregateGateInput, BlockedFields, DashboardEnvironment, PendingGa
 export * from './kinds';
 export { dashboardDefaults } from './lib/definition';
 export type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
-export { buildRequest, emptyAnswer, requestKey, sendRequest } from './lib/requests';
+export { buildRequest, emptyAnswer, pageQuery, requestKey, sendRequest } from './lib/requests';
 export type { DashboardAnswer, DashboardPageContext, DashboardRequest, DashboardResult } from './lib/requests';
 export { defineWidgetKind } from './widget-kind';
 export type {
   AnyWidgetKind,
+  DashboardAlert,
+  DashboardAlertAction,
+  DashboardAlertRef,
+  DashboardAlertSource,
+  DashboardAlertTarget,
   DashboardExpand,
   ResolvedView,
   ShownGate,
   WidgetKind,
   WidgetKindProps,
-  WidgetPin,
   WidgetPlanContext,
   WidgetRequests,
   WidgetState,

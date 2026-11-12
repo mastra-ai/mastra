@@ -244,3 +244,24 @@ export async function getPackageMetadata(
 
   return { rootPath: firstRootPath };
 }
+
+/**
+ * Whether `pkgName` is an optional peer dependency (`peerDependenciesMeta[pkgName].optional`) of the package that
+ * contains `importerId`. Such a package only imports the peer when it is installed, so an uninstalled one must not
+ * be added to the build output (it would otherwise be installed as `latest`).
+ */
+export async function isOptionalPeerOfImporter(pkgName: string, importerId: string | undefined): Promise<boolean> {
+  if (!importerId || importerId.startsWith('\x00') || !isAbsolute(importerId)) return false;
+  for (let dir = dirname(importerId); dir !== dirname(dir); dir = dirname(dir)) {
+    let pkg: { name?: unknown; peerDependenciesMeta?: Record<string, { optional?: boolean }> };
+    try {
+      pkg = await readJSON(`${dir}/package.json`);
+    } catch {
+      continue;
+    }
+    // Skip nested manifests without a name, e.g. `dist/package.json` with only `type`.
+    if (typeof pkg.name !== 'string') continue;
+    return pkg.peerDependenciesMeta?.[pkgName]?.optional === true;
+  }
+  return false;
+}

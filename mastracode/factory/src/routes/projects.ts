@@ -8,9 +8,12 @@ import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/wor
 import type { Context } from 'hono';
 
 import type { ProjectBoardCache } from '../boards/project-boards.js';
+import { createBoardRegistry } from '../boards/registry.js';
+import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
+import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type {
@@ -25,12 +28,11 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
-import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectListRepository } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -39,10 +41,7 @@ const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
 const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
-
-function loose(context: unknown): Context {
-  return context as Context;
-}
+const applyDefaultModelRuns = new Map<string, Promise<void>>();
 
 async function readJson(context: Context): Promise<unknown | undefined> {
   try {
@@ -204,15 +203,19 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
-  boards?: Pick<ProjectBoardCache, 'describe'>;
+  boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
 }
 
-/** Provider output is shown to the user; strip any clone credential from it first. */
-function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
+/**
+ * Provider output is shown to the user; strip any clone credential and any
+ * Build variable value from it first.
+ */
+function redactBuild<T extends { error?: string; logs?: string[] }>(build: T, buildEnv?: Record<string, string>): T {
+  const redact = (text: string) => maskSandboxEnvValues(redactCredentials(text), buildEnv);
   return {
     ...build,
-    ...(build.error !== undefined ? { error: redactCredentials(build.error) } : {}),
-    ...(build.logs ? { logs: build.logs.map(redactCredentials) } : {}),
+    ...(build.error !== undefined ? { error: redact(build.error) } : {}),
+    ...(build.logs ? { logs: build.logs.map(redact) } : {}),
   };
 }
 
@@ -481,7 +484,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const read = await capability.runner.readContext(project.id);
           if (!read) return context.json({ error: 'no_environment' }, 404);
           const builds = await capability.builds.list(read.ctx, read.settings);
-          return context.json({ builds: builds.map(redactBuild) });
+          return context.json({ builds: builds.map(build => redactBuild(build, read.ctx.buildEnv)) });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
@@ -512,7 +515,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               return context.json({ error: 'Build not found' }, 404);
             }
           }
-          return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
+          const build = await capability.builds.get(read.ctx, read.settings, buildId);
+          return context.json({ build: redactBuild(build, read.ctx.buildEnv) });
         },
       }),
     ];
@@ -593,8 +597,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
-          // The project's first board load retries anything this misses.
-          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+          // A new project gets today's Work, without Triage; a project that existed before keeps the
+          // Work it had. The project's first board load retries anything this misses, with Work as
+          // it was for older projects, as this one can't be told apart from them by then.
+          await this.deps.boards?.seedNewProject({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
             console.warn('[factory] could not store the boards of a new project:', error);
           });
           return context.json({ project }, 201);
@@ -650,8 +656,16 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               403,
             );
           }
-          // Plans are approved per board (`exitTool.autoApprove`); the old project switch is ignored.
-          const { autoApprovePlans: _ignored, ...input } = parsedBody.data;
+          // Retired project switches an old client may still send: the board owns automation now
+          // (`autoStart`, `exitTool.autoApprove`, a self-review phase), and the review skill decides
+          // whether to publish its test check.
+          const {
+            autoApprovePlans: _plans,
+            autoRunEnabled: _autoRun,
+            reviewTestChecksEnabled: _testChecks,
+            selfReviewEnabled: _selfReview,
+            ...input
+          } = parsedBody.data;
           const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
@@ -688,61 +702,80 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const { workItems, controller } = this.deps;
           if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
 
-          const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
-            binding => binding.status === 'active',
-          );
-          const seen = new Set<string>();
-          const applied: string[] = [];
-          const skipped: Array<{
-            threadId: string;
-            reason:
-              | 'not-running'
-              | 'work-item-missing'
-              | 'stage-inactive'
-              | 'thread-missing'
-              | 'mode-unknown'
-              | 'apply-failed';
-          }> = [];
+          // Do not hold the HTTP request open while visiting every running session: a slow
+          // session gateway can take longer than the proxy timeout.
+          // Serialize updates for a project so an older slow write cannot overwrite a newer request.
+          const runKey = `${tenant.orgId}:${project.id}`;
+          const priorRun = applyDefaultModelRuns.get(runKey);
+          const run = (priorRun ? priorRun.catch(() => {}) : Promise.resolve()).then(async () => {
+            const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
+              binding => binding.status === 'active',
+            );
+            const boards =
+              (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
+              createBoardRegistry();
+            const seen = new Set<string>();
+            let applied = 0;
+            let skipped = 0;
 
-          for (const binding of bindings) {
-            const key = `${binding.sessionId}:${binding.threadId}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
+            for (const binding of bindings) {
+              try {
+                // A default changed while this job was queued or running must not be written by this job.
+                if ((await this.#project(tenant.orgId, project.id))?.defaultModelId !== modelId) break;
+                const key = `${binding.sessionId}:${binding.threadId}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
 
-            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
-            if (!item || item.factoryProjectId !== project.id) {
-              skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
-              continue;
+                const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+                if (!item || item.factoryProjectId !== project.id) {
+                  skipped++;
+                  continue;
+                }
+                // A bound run can still act on its card anywhere short of a terminal phase.
+                const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
+                if (phaseKind === undefined || phaseKind === 'terminal') {
+                  skipped++;
+                  continue;
+                }
+                const session = await controller.getSession(binding.sessionId);
+                if (!session) {
+                  skipped++;
+                  continue;
+                }
+                const thread = await session.thread.getById({ threadId: binding.threadId });
+                if (!thread) {
+                  skipped++;
+                  continue;
+                }
+                // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
+                await session.thread.setSettingOn({
+                  threadId: binding.threadId,
+                  key: 'currentModelId',
+                  value: modelId,
+                });
+                applied++;
+              } catch (error) {
+                console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
+                skipped++;
+              }
             }
-            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
-              skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
-              continue;
-            }
-            const session = await controller.getSession(binding.sessionId);
-            if (!session) {
-              skipped.push({ threadId: binding.threadId, reason: 'not-running' });
-              continue;
-            }
-            const thread = await session.thread.getById({ threadId: binding.threadId });
-            if (!thread) {
-              skipped.push({ threadId: binding.threadId, reason: 'thread-missing' });
-              continue;
-            }
-            try {
-              // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
-              await session.thread.setSettingOn({
-                threadId: binding.threadId,
-                key: 'currentModelId',
-                value: modelId,
-              });
-              applied.push(binding.threadId);
-            } catch (error) {
-              console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
-              skipped.push({ threadId: binding.threadId, reason: 'apply-failed' });
-            }
-          }
+            console.info('[factory] apply-default-model completed', {
+              projectId: project.id,
+              modelId,
+              applied,
+              skipped,
+            });
+          });
+          applyDefaultModelRuns.set(runKey, run);
+          void run
+            .catch(error => {
+              console.error('[factory] apply-default-model failed', { projectId: project.id, modelId, error });
+            })
+            .finally(() => {
+              if (applyDefaultModelRuns.get(runKey) === run) applyDefaultModelRuns.delete(runKey);
+            });
 
-          return context.json({ modelId, applied, skipped });
+          return context.json({ modelId, status: 'started' }, 202);
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {
@@ -839,6 +872,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
           }
           await found.handle.connections.delete({ orgId: tenant.orgId, id: connectionId });
+          // Its repositories left the environment with it.
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.body(null, 204);
         },
       }),
@@ -883,6 +918,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           } catch (error) {
             console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
           }
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.json(
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
@@ -1015,6 +1051,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
             if (!result) return context.json({ error: 'Project not found' }, 404);
             updated = result;
+            runner?.onEnvironmentSaved(updated.id);
           }
           if (buildTriggers?.schedule && runner?.scheduleAvailable) {
             const stored = await readSchedule(runner.schedules()!, project.id);
@@ -1029,8 +1066,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                   : {}),
               });
           }
-          // Saving never builds: the next Build now, schedule or push run
-          // picks the changed template up.
           return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
@@ -1054,6 +1089,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             id: projectRepositoryId,
             input,
           });
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.json({
             projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository!),
           });
@@ -1076,6 +1112,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'session_retirement_unavailable' }, 409);
           }
           await found.handle.projectRepositories.unlink({ orgId: tenant.orgId, id: projectRepositoryId });
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.body(null, 204);
         },
       }),

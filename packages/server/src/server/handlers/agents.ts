@@ -34,6 +34,7 @@ import { z } from 'zod/v4';
 import {
   MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   WORKSPACE_TOOLS,
   resolveToolConfig,
@@ -96,7 +97,9 @@ import type { Context } from '../types';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
-import { assertWriteAccess, getCallerAuthorId } from './authorship';
+import { assertStoredAgentAccess } from './agent-access';
+import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAuthorFilter } from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -258,6 +261,13 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
+
 // Matches the snapshot wait of the durable resume path this check gates
 // (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
 const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
@@ -332,8 +342,11 @@ async function validateDurableToolCallAccess({
       !!snapshot &&
       snapshot.status === 'suspended' &&
       (toolCallId === undefined || hasSuspendedToolCall(snapshot, toolCallId));
+    // An aborted parked run is final: pass it on after the ownership checks so the agent
+    // refuses the resume with its aborted-run conflict instead of waiting out the deadline.
+    const aborted = !!workflowRun && snapshot?.status === 'canceled';
 
-    if (ready || Date.now() >= deadline || abortSignal?.aborted) {
+    if (ready || aborted || Date.now() >= deadline || abortSignal?.aborted) {
       if (!workflowRun) {
         throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
       }
@@ -343,7 +356,7 @@ async function validateDurableToolCallAccess({
         throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
       }
 
-      if (!ready || input?.agentId !== agent.id) {
+      if ((!ready && !aborted) || input?.agentId !== agent.id) {
         throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
       }
       await validateRunOwnership({ resourceId: persistedResourceId }, contextResourceId, mastra, requestContext);
@@ -368,6 +381,7 @@ type ResumableStreamsAgent = {
   __getStreamBus?: () => { pubsub: PubSub } | undefined;
   __getPublishedRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
   __getRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
+  __getReplayOwner?: (runId: string) => Promise<{ resourceId?: string; threadId?: string } | undefined>;
   __getRunRecord?: (runId: string) => Promise<PlainRunRecord | undefined>;
   __abortRunAcknowledged?: (runId: string) => Promise<boolean>;
 };
@@ -1110,16 +1124,26 @@ export function extractVersionOptions(
   return undefined;
 }
 
+/**
+ * Resolves an agent by id: code-defined agents first (with stored overrides applied), then sub-agents, then stored
+ * agents. Stored agents are owner/visibility scoped like `/stored/agents`: a caller without `access` to a private
+ * stored agent gets the same 404 as for a missing agent. Code agents are visible to every caller.
+ *
+ * `requestContext` is required: without the caller's context there is no one to check, so a missing one fails closed.
+ */
 export async function getAgentFromSystem({
   mastra,
   agentId,
   versionOptions,
   requestContext,
+  access = 'execute',
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
+  /** `read` for routes that only describe the agent; `execute` (default) for anything that runs or changes it. */
+  access?: 'read' | 'execute';
 }): Promise<Agent> {
   const logger = mastra.getLogger();
 
@@ -1172,10 +1196,12 @@ export async function getAgentFromSystem({
   }
 
   // If still not found, try to get stored agent
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
       agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
+      fromStore = !!agent;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -1185,7 +1211,24 @@ export async function getAgentFromSystem({
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
 
+  assertStoredAgentAccess({ agent, agentId, requestContext, access, fromStore });
+
   return agent;
+}
+
+/**
+ * Swapping or resetting a stored agent's in-memory model changes it for every caller, so it needs the same edit access
+ * as `PATCH /stored/agents/:id`; public visibility only grants execute. Code agents are not owner-scoped.
+ */
+function assertStoredAgentEditAccess(agent: Agent, agentId: string, requestContext: RequestContext): void {
+  if (agent.source !== 'stored') return;
+  assertWriteAccess({
+    requestContext,
+    resource: 'stored-agents',
+    resourceId: agentId,
+    action: 'edit',
+    record: (agent.toRawConfig() ?? {}) as OwnedRecord,
+  });
 }
 
 async function getAgentForModelListMutation({
@@ -1473,11 +1516,19 @@ export const LIST_AGENTS_ROUTE = createRoute({
   summary: 'List all agents',
   description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'list_agents',
+    description: 'List the agents you can call, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const codeAgents = mastra.listAgents();
+      // Hydrated stored agents are registered on Mastra too; list them through the visibility-filtered stored loop below.
+      const codeAgents = Object.fromEntries(
+        Object.entries(mastra.listAgents()).filter(([, agent]) => agent.source !== 'stored'),
+      );
 
       const isPartial = partial === 'true';
 
@@ -1520,7 +1571,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.agent.list();
+          storedAgentsResult = await editor?.agent.list({ perPage: false });
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;
@@ -1536,8 +1587,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
         }
 
         if (storedAgentsResult?.agents) {
+          // Same owner/visibility view as GET /stored/agents: own, public and legacy unowned agents.
+          const authorFilter = resolveAuthorFilter({ requestContext, resource: 'stored-agents' });
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            if (!matchesAuthorFilter(storedAgentConfig, authorFilter)) continue;
             // Skip stored configs that overlay an existing code-defined agent.
             // Those are overrides (no standalone model), not standalone stored agents,
             // and trying to hydrate them as standalone would fail model validation.
@@ -1608,12 +1662,17 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   description:
     'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'get_agent',
+    description: 'Get details for one agent: description, instructions, model, and tools.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext, access: 'read' });
       const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({
         mastra,
@@ -1658,15 +1717,28 @@ export const CLONE_AGENT_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
+
+      // Like POST /stored/agents, the clone belongs to the authenticated caller and any body-provided authorId is
+      // ignored. Without auth there is no caller, so the body's authorId is kept. A signed-in caller without an id
+      // can't own the clone, and an unowned clone is public, so refuse rather than publish a copy of the agent.
+      const callerAuthorId = getCallerAuthorId(requestContext);
+      const authenticated = callerAuthorId !== null || requestContext.get(MASTRA_USER_KEY) != null;
+      if (authenticated && callerAuthorId === null) {
+        throw new HTTPException(403, { message: 'Cloning an agent requires a signed-in user with an id' });
+      }
+      const ownerId = callerAuthorId ?? authorId;
 
       const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,
-        authorId,
+        authorId: ownerId,
+        ...(authenticated ? { visibility: 'private' as const } : {}),
         requestContext,
       });
 
@@ -1687,6 +1759,12 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'call_agent',
+    description:
+      'Send a message to an agent and get its reply. Pass threadId (and resourceId) to continue a conversation with memory.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
@@ -2572,40 +2650,63 @@ async function authorizeDurableRun({
 }
 
 /**
- * Authorizes observing a run: the caller must own it and have read access to
- * its thread. Plain agent runs are checked against their shared run record,
- * so any server sharing the agent's record cache can authorize them. Durable
- * runs use the owner the agent tracks in this process, then their workflow
- * rows. Throws 404 when the run cannot be found or verified.
+ * The ownership policy for observing (`MEMORY_READ`) and aborting
+ * (`MEMORY_WRITE`) a run: the caller must own the run and have `permission` on
+ * its thread. Throws 403 when access is denied and 503 when ownership cannot be
+ * read. Returns undefined when the run is unknown, expired, or its owner cannot
+ * be verified; the caller decides how to report that.
+ *
+ * Plain runs are checked against their shared run record. Durable runs are
+ * checked against their workflow rows; observers may also use the owner the
+ * agent tracks in this process, or, once the rows are gone, the replay owner
+ * the executing process shared. Both outlive the run so finished runs can be
+ * replayed from any server, and both go when the replay history is cleared.
+ * Aborts never use them, so a finished run is not reported stopped.
  */
-async function authorizeRunObservation({
+async function authorizeRunAccess({
   mastra,
   agent,
   runId,
   requestContext,
+  permission,
 }: {
   mastra: Mastra;
   agent: Agent<any, any, any, any>;
   runId: string;
   requestContext: RequestContext;
-}): Promise<void> {
-  const permission = MastraFGAPermissions.MEMORY_READ;
+  permission: string;
+}): Promise<{ status?: PlainRunRecord['status'] } | undefined> {
   if (!isDurableAgentLike(agent)) {
     const record = await getPlainRunRecord(agent, runId);
-    if (!record) throw new HTTPException(404, { message: 'Run not found' });
+    if (!record) return undefined;
     await authorizeRunOwner({ mastra, agent, owner: record, requestContext, permission });
-    return;
+    return record;
   }
   const getOwner = (agent as unknown as ResumableStreamsAgent).__getRunOwner;
-  const owner = typeof getOwner === 'function' ? getOwner.call(agent, runId) : undefined;
+  const owner =
+    permission === MastraFGAPermissions.MEMORY_READ && typeof getOwner === 'function'
+      ? getOwner.call(agent, runId)
+      : undefined;
   if (owner) {
     await authorizeRunOwner({ mastra, agent, owner, requestContext, permission });
-    return;
+    return {};
   }
   const access = await authorizeDurableRun({ mastra, agent, runId, requestContext, permission });
-  if (access !== 'ok') {
-    throw new HTTPException(404, { message: 'Run not found' });
+  if (access === 'ok') return {};
+  // Only a run with no workflow rows left may fall back to the shared replay owner; a row that
+  // cannot be verified yet, or one that refused the caller, stays authoritative.
+  if (access !== 'missing') return undefined;
+  const getReplayOwner = (agent as unknown as ResumableStreamsAgent).__getReplayOwner;
+  if (permission !== MastraFGAPermissions.MEMORY_READ || typeof getReplayOwner !== 'function') return undefined;
+  let replayOwner: { resourceId?: string; threadId?: string } | undefined;
+  try {
+    replayOwner = await getReplayOwner.call(agent, runId);
+  } catch {
+    throw new HTTPException(503, { message: 'Run ownership is temporarily unavailable' });
   }
+  if (!replayOwner) return undefined;
+  await authorizeRunOwner({ mastra, agent, owner: replayOwner, requestContext, permission });
+  return {};
 }
 
 export const ABORT_AGENT_RUN_ROUTE = createRoute({
@@ -2633,31 +2734,27 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
             message: 'Run-scoped cancellation requires a durable agent or an agent with resumable streams',
           });
         }
-        const record = await getPlainRunRecord(agent, runId);
-        if (!record) throw new HTTPException(404, { message: 'Run not found' });
-        await authorizeRunOwner({
-          mastra,
-          agent,
-          owner: record,
-          requestContext,
-          permission: MastraFGAPermissions.MEMORY_WRITE,
-        });
-        if (record.status === 'finished') return { aborted: false };
-        // The run may execute on another server: only report it aborted once
-        // the executing process confirms.
-        if (typeof resumable.__abortRunAcknowledged === 'function') {
-          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
-        }
-        return { aborted: agent.abortRunStream(runId) };
       }
-      const access = await authorizeDurableRun({
+      const run = await authorizeRunAccess({
         mastra,
         agent,
         runId,
         requestContext,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
-      if (access !== 'ok') return { aborted: false };
+      if (!isDurableAgentLike(agent)) {
+        if (!run) throw new HTTPException(404, { message: 'Run not found' });
+        if (run.status === 'finished') return { aborted: false };
+        // The run may execute on another server: only report it aborted once
+        // the executing process confirms.
+        const resumable = agent as unknown as ResumableStreamsAgent;
+        if (typeof resumable.__abortRunAcknowledged === 'function') {
+          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
+        }
+        return { aborted: agent.abortRunStream(runId) };
+      }
+      // A durable run that cannot be found or verified is not stopped.
+      if (!run) return { aborted: false };
       // Another server may be executing the run: only report it aborted once that server confirms.
       if (typeof agent.__abortRunAcknowledged === 'function') {
         return { aborted: await agent.__abortRunAcknowledged(runId) };
@@ -3029,7 +3126,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+    'Reconnect to an existing agent stream to receive missed events. Every frame except abort carries the run-log `index` it came from; pass `offset` as the index + 1 of the last frame that has one to resume without repeating indexed frames. Frames whose replay-cache write failed, or all frames when caching is off, carry no index, so no offset can resume at them; omitting `offset` replays whatever the transport itself retains, which can repeat frames already received.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
@@ -3038,7 +3135,14 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
-      await authorizeRunObservation({ mastra, agent, runId, requestContext });
+      const run = await authorizeRunAccess({
+        mastra,
+        agent,
+        runId,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
+      if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
@@ -3051,11 +3155,30 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         if (typeof durableAgent?.__subscribeToRunStream === 'function') {
           return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
-        const subscribed =
-          offset !== undefined
-            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
-            : pubsub.subscribeWithReplay(topic, onEvent);
-        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+        if (offset === undefined) {
+          return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));
+        }
+        return pubsub.subscribeFromOffset(topic, offset, onEvent).then(() => {
+          // Resuming past the run's last entry replays nothing; if that entry ended the
+          // run, nothing more will arrive, so close instead of waiting for the idle timeout.
+          // Read only after subscribing so a terminal entry racing attachment is not lost.
+          // A failed read only means we can't close early; the idle timer still bounds the stream.
+          // A client resuming at last index + 1 needs a one-entry read; only an offset
+          // further past the end falls back to the full log to find the true tail.
+          if (offset > 0) {
+            const readTail = async () => {
+              const window = await pubsub.getHistory(topic, offset - 1);
+              return window.length > 0 ? window.at(-1) : (await pubsub.getHistory(topic, 0)).at(-1);
+            };
+            // Don't hold back the unsubscribe handle while the read waits on the cache.
+            void readTail()
+              .catch(() => undefined)
+              .then(last => {
+                if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) onComplete();
+              });
+          }
+          return () => pubsub.unsubscribe(topic, onEvent);
+        });
       };
 
       let closed = false;
@@ -3198,6 +3321,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3339,6 +3463,8 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       // Honor server-enforced thread/resource scoping from the request context
@@ -3403,6 +3529,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3483,6 +3610,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3614,6 +3742,7 @@ export const RECOVER_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       // Durable-agent check via duck-typing to avoid a hard runtime dep on the
@@ -3695,6 +3824,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3800,6 +3930,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3854,6 +3985,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3909,6 +4041,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -3956,6 +4089,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3996,6 +4130,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -4029,9 +4164,10 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelId, provider }) => {
+  handler: async ({ mastra, requestContext, agentId, modelId, provider }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
@@ -4058,9 +4194,10 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId }) => {
+  handler: async ({ mastra, requestContext, agentId }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       agent.__resetToOriginalModel();
 
@@ -4269,9 +4406,9 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, requestContext, agentId, instructions, comment }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       // Find the first model with a connected provider (similar to how chat works)
       const model = await findConnectedModel(agent);
@@ -4383,10 +4520,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   tags: ['Agents', 'Skills'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ?? skillName;

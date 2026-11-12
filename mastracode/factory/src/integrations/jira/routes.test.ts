@@ -258,7 +258,7 @@ describe('issues route — Factory source bindings', () => {
   };
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId, board });
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
@@ -300,22 +300,6 @@ describe('issues route — Factory source bindings', () => {
 
   it('withholds the selection from a single-Factory org with no bindings', async () => {
     await seedProjects(1);
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('withholds a source routed to the Factory without a board', async () => {
-    await seedProjects(2);
-    await seed.intake.setBinding({
-      orgId: 'org1',
-      integrationId: 'jira',
-      sourceId: '1',
-      factoryProjectId: projectA,
-    });
 
     const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
 
@@ -373,7 +357,6 @@ describe('issues route — Factory source bindings', () => {
           sourceId: '1',
         }),
       ],
-      intakeBoards: { '1': 'work' },
     });
   });
 
@@ -421,7 +404,6 @@ describe('issue detail route', () => {
       integrationId: 'jira',
       sourceId: '1',
       factoryProjectId: projectA,
-      board: 'work',
     });
   });
 
