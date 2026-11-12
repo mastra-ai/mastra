@@ -16,7 +16,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { IntakeConfig } from '../../storage/domains/intake/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { IntegrationContext } from '../base.js';
-import { runIntakePasses } from '../intake-pass.js';
+import { INTAKE_PASS_MAX_PAGES, runIntakePasses } from '../intake-pass.js';
 import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIntakePasses, withChangedGithubIntakeSources } from './intake-pass.js';
 import { attachGithubRules, GithubRules } from './rules.js';
@@ -530,6 +530,82 @@ describe('the repositories an organization takes issues from', () => {
     await t.event(issueEvent('opened', 42));
 
     expect(await t.candidates()).toEqual([]);
+  });
+});
+
+describe('a project with more than one long repository', () => {
+  /** Link `acme/other` to the project beside `acme/repo`, and answer each with `pages` of one issue. */
+  async function twoRepositories(pages: { repo: number; other: number }) {
+    const t = await setup();
+    const sourceControl = t.seeded.sourceControl.forIntegration('github');
+    const [installation] = await sourceControl.installations.list({ orgId: 'org-1' });
+    const [connection] = await sourceControl.connections.listWithRepositories({
+      orgId: 'org-1',
+      factoryProjectIds: [t.scope.factoryProjectId],
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation!.id, externalId: '11', slug: 'acme/other', defaultBranch: 'main' },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection!.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace',
+    });
+    await t.select(['acme/repo', 'acme/other']);
+    t.github.intake.listIssues.mockImplementation((async (input: { sourceIds: string[]; cursor?: string }) => {
+      const slug = input.sourceIds[0] as 'acme/repo' | 'acme/other';
+      const page = Number(input.cursor ?? 0);
+      const length = slug === 'acme/repo' ? pages.repo : pages.other;
+      if (page >= length) return { issues: [], nextCursor: null };
+      const number = (slug === 'acme/repo' ? 0 : 1_000) + page + 1;
+      const url = `https://github.com/${slug}/issues/${number}`;
+      return {
+        issues: [listedIssue(number, BEFORE_LINK, { source: slug, url })],
+        nextCursor: page + 1 < length ? String(page + 1) : null,
+      };
+    }) as never);
+    const issues = async () => {
+      const numbers: number[] = [];
+      let after: { createdAt: Date; id: string } | undefined;
+      for (;;) {
+        const page = await t.workItems.listIntakeCandidates({
+          ...t.scope,
+          kind: 'issue',
+          ...(after ? { after } : {}),
+          limit: 100,
+        });
+        numbers.push(...page.candidates.map(candidate => Number(candidate.title.replace('Issue ', ''))));
+        if (!page.next) return numbers.sort((left, right) => left - right);
+        after = page.next;
+      }
+    };
+    return { ...t, pages, issues };
+  }
+
+  it('reads each to the end when together they hold more pages than one may, and drops what closed', async () => {
+    const t = await twoRepositories({ repo: 60, other: 60 });
+
+    expect(await t.pass()).toMatchObject({ failed: 0, stored: 120 });
+
+    t.pages.other = 59;
+    expect(await t.pass()).toMatchObject({ failed: 0, removed: 1 });
+    expect(await t.issues()).toHaveLength(119);
+  });
+
+  it('still offers the issues of the repository listed after one too long to read to the end', async () => {
+    const t = await twoRepositories({ repo: INTAKE_PASS_MAX_PAGES + 20, other: 2 });
+
+    expect(await t.pass()).toMatchObject({ failed: 0, removed: 0 });
+    expect((await t.issues()).filter(number => number > 1_000)).toEqual([1_001, 1_002]);
+
+    // The long repository was not read to the end, so what the pass did not see is not taken for closed.
+    t.pages.other = 1;
+    expect(await t.pass()).toMatchObject({ failed: 0, removed: 0 });
+    expect((await t.issues()).filter(number => number > 1_000)).toEqual([1_001, 1_002]);
   });
 });
 

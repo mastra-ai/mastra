@@ -13,7 +13,7 @@ import type { IssueReconcileSummary } from './issue-reconciler.js';
 
 /** Pages of a just-bound source offered to the rules, as linking a GitHub repository does. */
 export const INTAKE_IMPORT_MAX_PAGES = 5;
-/** A listing longer than this is not read to the end, so the pass removes nothing. */
+/** A source with more pages than this is not read to the end, so the pass removes nothing. */
 export const INTAKE_PASS_MAX_PAGES = 100;
 const CANDIDATE_PAGE = 200;
 
@@ -56,8 +56,6 @@ export interface IntakeListing<T> {
   /** Names a card may hold the record under, beyond its source id (an older id format, a stable provider id). */
   itemKeys?(item: T): readonly string[];
   cardKeys?(card: Card): readonly string[];
-  /** The stored candidates this listing speaks for; the others are left alone. */
-  covers?(candidate: IntakeCandidate): boolean;
   /** Created after its source was linked, or part of the import that linking runs. */
   eligible(item: T): boolean;
   /** Hand new records to the provider's rules, which file a card for the ones they take. */
@@ -89,9 +87,7 @@ async function storedCandidates(listing: IntakeListing<never>): Promise<Map<stri
       ...(after ? { after } : {}),
       limit: CANDIDATE_PAGE,
     });
-    for (const candidate of page.candidates) {
-      if (!listing.covers || listing.covers(candidate)) stored.set(candidate.externalSource.externalId, candidate);
-    }
+    for (const candidate of page.candidates) stored.set(candidate.externalSource.externalId, candidate);
     if (!page.next) return stored;
     after = page.next;
   }
@@ -279,11 +275,14 @@ function saveIntakePassStatus(
 export interface OrgIntakeListing<T> {
   /** The sources a project takes records from, and when each was bound to it. */
   sources(factoryProjectId: string): ReadonlyMap<string, Date>;
-  list(
-    factoryProjectId: string,
-    sourceIds: string[],
-    cursor: string | undefined,
-  ): Promise<{ items: T[]; nextCursor: string | null }>;
+  list(factoryProjectId: string, sourceIds: string[], cursor: string | undefined): Promise<IntakeListingPage<T>>;
+}
+
+export interface IntakeListingPage<T> {
+  items: T[];
+  nextCursor: string | null;
+  /** Set when a source was left before its last page, which leaves the listing incomplete. */
+  cut?: boolean;
 }
 
 export interface IntakePassOptions<T> {
@@ -403,15 +402,19 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
           });
 
           let complete = sources.size === 0;
+          let cut = false;
           let cursor: string | undefined;
-          for (let page = 0; org && sources.size > 0 && page < INTAKE_PASS_MAX_PAGES; page += 1) {
+          // Each source has its own pages: a project is not cut short by how many sources it has.
+          const pages = INTAKE_PASS_MAX_PAGES * sources.size;
+          for (let page = 0; org && page < pages; page += 1) {
             const listed = await org.list(factoryProjectId, [...sources.keys()], cursor);
             if (page < INTAKE_IMPORT_MAX_PAGES) for (const item of listed.items) imported.add(item);
             // Settled page by page: a record is stored moments after the provider said it is open,
             // not once every page after it has been read.
             await settlement.page(listed.items);
+            cut ||= listed.cut === true;
             if (listed.nextCursor === null) {
-              complete = true;
+              complete = !cut;
               break;
             }
             cursor = listed.nextCursor;
@@ -584,20 +587,23 @@ export async function linkedIntakeRepositories(
 }
 
 /**
- * List several sources as one paged listing: the cursor names the source being read and the
- * provider's own cursor within it.
+ * List several sources as one paged listing: the cursor names the source being read, how many of
+ * its pages have been read, and the provider's own cursor within it. A source longer than
+ * {@link INTAKE_PASS_MAX_PAGES} is left there, so the ones after it are still listed.
  */
 export async function listSourcesInTurn<S, T>(
   sources: readonly S[],
   cursor: string | undefined,
   list: (source: S, cursor: string | undefined) => Promise<{ items: T[]; nextCursor: string | null }>,
-): Promise<{ items: T[]; nextCursor: string | null }> {
-  const split = cursor?.indexOf(':') ?? -1;
-  const index = cursor ? Number(cursor.slice(0, split)) : 0;
-  const inner = cursor ? cursor.slice(split + 1) || undefined : undefined;
+): Promise<IntakeListingPage<T>> {
+  const [at = '0', read = '0', ...rest] = cursor?.split(':') ?? [];
+  const index = Number(at);
   const source = sources[index];
   if (source === undefined) return { items: [], nextCursor: null };
-  const page = await list(source, inner);
-  if (page.nextCursor !== null) return { items: page.items, nextCursor: `${index}:${page.nextCursor}` };
-  return { items: page.items, nextCursor: index + 1 < sources.length ? `${index + 1}:` : null };
+  const page = await list(source, rest.join(':') || undefined);
+  const nextSource = index + 1 < sources.length ? `${index + 1}:0:` : null;
+  if (page.nextCursor === null) return { items: page.items, nextCursor: nextSource };
+  const pages = Number(read) + 1;
+  if (pages < INTAKE_PASS_MAX_PAGES) return { items: page.items, nextCursor: `${index}:${pages}:${page.nextCursor}` };
+  return { items: page.items, nextCursor: nextSource, cut: true };
 }
