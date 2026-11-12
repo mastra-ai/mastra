@@ -31,11 +31,13 @@ afterEach(async () => {
 /**
  * A pubsub whose broker accepts `workflow.start` events at once but delivers them `delayMs` later,
  * or never when `delayMs` is `'never'` (the worker that took them crashed and nothing redelivers).
- * Every run end it publishes is recorded in `ends`.
+ * Every run end it publishes is recorded in `ends`, and every late delivery in `delivered`, which
+ * settles once the event was handed to the subscribers.
  */
-function backloggedPubSub(delayMs: number | 'never', ends: string[]): PubSub {
+function backloggedPubSub(delayMs: number | 'never', ends: string[]) {
   const inner = new EventEmitterPubSub();
-  return new Proxy(inner, {
+  const delivered: Promise<void>[] = [];
+  const pubsub: PubSub = new Proxy(inner, {
     get(target, prop) {
       if (prop === 'publish') {
         return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
@@ -49,7 +51,11 @@ function backloggedPubSub(delayMs: number | 'never', ends: string[]): PubSub {
 
           if (delayMs !== 'never') {
             // The in-process emitter's publish does not reject, so the late delivery needs no handler.
-            setTimeout(() => void target.publish(topic, event, options), delayMs);
+            delivered.push(
+              new Promise<void>(resolve => {
+                setTimeout(() => resolve(target.publish(topic, event, options)), delayMs);
+              }),
+            );
           }
         };
       }
@@ -58,6 +64,7 @@ function backloggedPubSub(delayMs: number | 'never', ends: string[]): PubSub {
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
+  return { pubsub, delivered };
 }
 
 /** A replica whose `recovered-wf` steps record `<replica>:<step>:<runId>`. */
@@ -119,12 +126,13 @@ describe('recovery of evented runs behind a worker backlog (#28712)', () => {
     const executions: string[] = [];
     const ends: string[] = [];
     // B's workers only get to the restarts three lease TTLs after B published them.
-    const b = await startReplica(storage, 'B', executions, backloggedPubSub(WORKFLOW_RUN_LEASE_TTL_MS * 3, ends));
+    const backlog = backloggedPubSub(WORKFLOW_RUN_LEASE_TTL_MS * 3, ends);
+    const b = await startReplica(storage, 'B', executions, backlog.pubsub);
     await b.restartAllActiveWorkflowRuns();
 
     // C boots once the liveness B wrote at its restarts lapsed and the grace period passed, before B's workers start.
     await sleep(WORKFLOW_RUN_LEASE_TTL_MS + GRACE_MS * 1.5);
-    const c = await startReplica(storage, 'C', executions, backloggedPubSub(0, ends));
+    const c = await startReplica(storage, 'C', executions, backloggedPubSub(0, ends).pubsub);
     const restarted = vi.spyOn(c.getWorkflow('recovered-wf'), 'createRun');
     await c.restartAllActiveWorkflowRuns();
     expect(restarted).toHaveBeenCalledTimes(runIds.length);
@@ -136,8 +144,12 @@ describe('recovery of evented runs behind a worker backlog (#28712)', () => {
       },
       { timeout: 10_000 },
     );
-    // B's queued restarts arrive after C finished the runs.
-    await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 2);
+    // B's queued restarts arrive after C finished the runs. Stopping B's workers waits for their handlers. If the
+    // step leases or the finished-step check regress, a queued restart runs the steps a second time.
+    expect(backlog.delivered).toHaveLength(runIds.length);
+    await Promise.all(backlog.delivered);
+    await backlog.pubsub.flush();
+    await b.stopWorkers();
 
     for (const runId of runIds) {
       const steps = executions.filter(execution => execution.endsWith(`:${runId}`)).map(e => e.split(':')[1]);
@@ -152,11 +164,11 @@ describe('recovery of evented runs behind a worker backlog (#28712)', () => {
     await sleep(GRACE_MS);
     const executions: string[] = [];
     // B's restart never reaches a worker.
-    const b = await startReplica(storage, 'B', executions, backloggedPubSub('never', []));
+    const b = await startReplica(storage, 'B', executions, backloggedPubSub('never', []).pubsub);
     await b.restartAllActiveWorkflowRuns();
 
     // Until then the restart counts as live, so C leaves the run alone.
-    const c = await startReplica(storage, 'C', executions, backloggedPubSub(0, []));
+    const c = await startReplica(storage, 'C', executions, backloggedPubSub(0, []).pubsub);
     await c.restartAllActiveWorkflowRuns();
     expect(executions).toEqual([]);
 
