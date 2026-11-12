@@ -39,6 +39,7 @@ The configured observability store must support each API. Call `getObservability
 | - | - | - |
 | `traceQuery` | `trace-query` | `queryTraces()` |
 | `spanQuery` | `span-query` | `querySpans()` |
+| `spanQueryDurationSort` | `span-query-duration-sort` | `orderBy` on `durationMs` in `querySpans()` |
 | `spanQueryContextFields` | `span-query-context-fields` | Additional identity, context, and parent/root entity predicates in span queries and aggregates |
 | `spanQueryModelFields` | `span-query-model-fields` | `model` and `provider` predicates in span queries and aggregates |
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
@@ -676,7 +677,7 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
 
 | Fields | Operators |
 | - | - |

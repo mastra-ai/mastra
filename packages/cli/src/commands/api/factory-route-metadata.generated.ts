@@ -358,9 +358,18 @@ export const FACTORY_API_ROUTE_METADATA = {
     "pathParams": [
       "id"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "limit",
+      "q",
+      "scope",
+      "sessionId",
+      "since",
+      "source",
+      "started",
+      "workItemId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -542,7 +551,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectApplyDefaultModel",
     "method": "POST",
     "path": "/web/factory/projects/:id/apply-default-model",
-    "description": "Apply the Factory default model to running work and review threads",
+    "description": "Start applying the Factory default model to running work and review threads in the background",
     "pathParams": [
       "id"
     ],
@@ -3416,6 +3425,94 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "id"
       ]
     },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "scope": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "started": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "q": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "limit": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "source": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "workItemId": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "since": {
+          "$ref": "#/$defs/__schema9"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "__schema1": {
+          "type": "string",
+          "enum": [
+            "sessions"
+          ]
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "false"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "__schema4": {
+          "type": "string"
+        },
+        "__schema5": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema6"
+          }
+        },
+        "__schema6": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "__schema7": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema8"
+          }
+        },
+        "__schema8": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "__schema9": {
+          "type": "string",
+          "pattern": "^\\d{1,15}$"
+        }
+      }
+    },
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -3491,6 +3588,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "type": "string"
           }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "removedIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "check": {
+          "type": "string"
         }
       },
       "required": [
@@ -5808,43 +5922,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "modelId": {
           "type": "string"
         },
-        "applied": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "skipped": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "threadId": {
-                "type": "string"
-              },
-              "reason": {
-                "type": "string",
-                "enum": [
-                  "not-running",
-                  "work-item-missing",
-                  "stage-inactive",
-                  "thread-missing",
-                  "mode-unknown",
-                  "apply-failed"
-                ]
-              }
-            },
-            "required": [
-              "threadId",
-              "reason"
-            ]
-          }
+        "status": {
+          "type": "string",
+          "const": "started"
         }
       },
       "required": [
         "modelId",
-        "applied",
-        "skipped"
+        "status"
       ]
     }
   },

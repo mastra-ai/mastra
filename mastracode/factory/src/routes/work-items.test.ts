@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib';
+
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -61,6 +63,7 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
@@ -2149,7 +2152,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
 
 describe('run activity on the work-item listing', () => {
   async function startRun(sessionId: string) {
-    await seed.workItems.prepareRunStart({
+    const { item } = await seed.workItems.prepareRunStart({
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId: PROJECT_ID,
@@ -2160,6 +2163,7 @@ describe('run activity on the work-item listing', () => {
       kickoffKey: `kickoff-${sessionId}`,
       kickoffMessage: null,
     });
+    return item;
   }
 
   it('stamps only the starting role, preserving other roles’ sessions and startedBy (#22254)', async () => {
@@ -2230,6 +2234,670 @@ describe('run activity on the work-item listing', () => {
     );
 
     expect((await res.json()).runningSessionIds).toEqual([]);
+  });
+
+  describe('repeat reads of an unchanged board', () => {
+    const listPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+
+    it('answers 304 without a body while the cards and their activity are unchanged', async () => {
+      await startRun('session-running');
+      const app = buildApp(orgUser, undefined, undefined, new Set(['session-running']));
+
+      const first = await app.request(listPath());
+      const etag = first.headers.get('etag');
+      expect(first.status).toBe(200);
+      expect(etag).toBeTruthy();
+      expect(first.headers.get('cache-control')).toBe('private, no-cache');
+
+      const again = await app.request(listPath(), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe('');
+    });
+
+    it('sends the board again once a card changes', async () => {
+      const card = await startRun('session-idle');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(listPath())).headers.get('etag')!;
+
+      await json('PATCH', `/web/factory/work-items/${card.id}`, { title: 'Renamed' });
+
+      const after = await app.request(listPath(), { headers: { 'if-none-match': etag } });
+      expect(after.status).toBe(200);
+      expect(after.headers.get('etag')).not.toBe(etag);
+      expect((await after.json()).workItems[0].title).toBe('Renamed');
+    });
+
+    it('sends the board again once a run starts or parks on an unchanged card', async () => {
+      await startRun('session-a');
+      const running = new Set<string>();
+      const parked = new Set<string>();
+      const app = buildApp(orgUser, undefined, undefined, running, undefined, parked);
+      const idle = (await app.request(listPath())).headers.get('etag')!;
+
+      running.add('session-a');
+      const started = await app.request(listPath(), { headers: { 'if-none-match': idle } });
+      expect(started.status).toBe(200);
+      expect((await started.json()).runningSessionIds).toEqual(['session-a']);
+
+      running.delete('session-a');
+      parked.add('session-a');
+      const parkedRes = await app.request(listPath(), { headers: { 'if-none-match': idle } });
+      expect(parkedRes.status).toBe(200);
+      expect((await parkedRes.json()).parkedSessionIds).toEqual(['session-a']);
+    });
+
+    it('gzips the body for clients that accept it', async () => {
+      await startRun('session-idle');
+      const res = await buildApp(orgUser).request(listPath(), { headers: { 'accept-encoding': 'gzip, br' } });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      expect(res.headers.get('vary')).toContain('Accept-Encoding');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems).toHaveLength(1);
+    });
+  });
+
+  const boardPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+  const listedIds = async (res: Response) =>
+    FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json()).workItems.map(item => item.id);
+  const createCard = async (externalId: string, overrides: Record<string, unknown> = {}): Promise<{ id: string }> => {
+    const res = await json(
+      'POST',
+      boardPath(),
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId }, ...overrides }),
+    );
+    const { workItem } = await res.json();
+    return workItem;
+  };
+
+  describe('a board read that sends its cursor back (?since=)', () => {
+    // Steps past the window a `since` read goes back to catch a writer whose clock runs behind.
+    const later = () => vi.setSystemTime(Date.now() + 10_000);
+    const read = async (since?: string) => {
+      const res = await buildApp(orgUser).request(since === undefined ? boardPath() : `${boardPath()}?since=${since}`);
+      const text = await res.text();
+      return { ...FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(JSON.parse(text)), bytes: text.length };
+    };
+    /** A board of `count` cards, read in full once every write to it is older than the window. */
+    const boardOf = async (count: number) => {
+      const cards: { id: string }[] = [];
+      for (let from = 0; from < count; from += 50) {
+        const ids = Array.from({ length: Math.min(50, count - from) }, (_, i) => `issue-${from + i}`);
+        cards.push(...(await Promise.all(ids.map(id => createCard(id)))));
+      }
+      later();
+      return { cards, board: await read() };
+    };
+
+    /** The card tables read from here on, and the table of deleted ids. */
+    const cardReads = () => {
+      const tables = ['factory_board_items', 'factory_work_items', 'factory_work_item_sources', 'work_items'];
+      const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+      return () =>
+        findMany.mock.calls
+          .map(([collection]) => collection)
+          .filter(collection => [...tables, 'factory_board_item_tombstones'].includes(collection));
+    };
+
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }));
+
+    it('sends only the cards written and the ids removed since the cursor', async () => {
+      const { cards, board } = await boardOf(4);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+      await json('PATCH', `/web/factory/work-items/${cards[2]!.id}`, { title: 'Reworded' });
+      await json('DELETE', `/web/factory/work-items/${cards[3]!.id}`);
+      later();
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title).sort()).toEqual(['Renamed', 'Reworded']);
+      expect(next).toMatchObject({ removedIds: [cards[3]!.id], check: boardCheck((await read()).workItems) });
+      later();
+      expect(await read(next.cursor)).toMatchObject({ workItems: [], removedIds: [], check: next.check });
+    });
+
+    it('sends a card stamped before the cursor that the cursor’s read did not hold', async () => {
+      const { board } = await boardOf(1);
+      // A second writer: its card lands after the read, stamped by a clock behind this one.
+      vi.setSystemTime(Date.now() - 2_000);
+      const late = await createCard('late');
+      later();
+
+      expect((await read(board.cursor)).workItems.map(card => card.id)).toEqual([late.id]);
+    });
+
+    it.each(['not-a-cursor', ''])('sends the whole board for the cursor %j, which it did not issue', async since => {
+      await boardOf(2);
+
+      const answer = await read(since);
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toEqual(expect.any(String));
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers one changed card in the same bytes on a board of 50 cards and of 2,000', async () => {
+      const bytes = [];
+      for (const count of [50, 2_000]) {
+        await seedProject();
+        const { cards, board } = await boardOf(count);
+        later();
+        await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+        const answer = await read(board.cursor);
+        bytes.push(answer.bytes - answer.check!.length);
+      }
+
+      expect(bytes[1]).toBe(bytes[0]);
+    }, 60_000);
+
+    it('names a board that holds an edit its reader was never sent', async () => {
+      const { cards, board } = await boardOf(2);
+      // A writer whose clock runs further behind than a `since` read goes back.
+      vi.setSystemTime(Date.now() - 6_000);
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      // Past the age at which the list is read whole again, which finds the edit.
+      vi.setSystemTime(Date.now() + 70_000);
+
+      const next = await read(board.cursor);
+
+      expect(next).toMatchObject({ workItems: [], removedIds: [] });
+      expect(next.check).not.toBe(boardCheck(board.workItems));
+      const whole = await read();
+      expect(whole.workItems.map(card => card.title)).toContain('Renamed');
+      expect(next.check).toBe(boardCheck(whole.workItems));
+    });
+
+    it.each([50, 2_000])(
+      'reads no card to answer a reader that holds the cached board of %i cards',
+      async count => {
+        const { board } = await boardOf(count);
+        const reads = cardReads();
+
+        for (let poll = 0; poll < 3; poll++) {
+          expect(await read(board.cursor)).toMatchObject({ workItems: [], removedIds: [], cursor: board.cursor });
+        }
+
+        expect(reads()).toEqual([]);
+      },
+      60_000,
+    );
+
+    it('reads only the deleted ids to answer a cursor older than the cached board', async () => {
+      const { cards, board } = await boardOf(3);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      await read(board.cursor);
+      const reads = cardReads();
+
+      const next = await read(board.cursor);
+      const all = await read('1');
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(all.workItems).toHaveLength(3);
+      expect(reads()).toEqual(['factory_board_item_tombstones', 'factory_board_item_tombstones']);
+    });
+
+    it('gzips what moved for a reader that accepts it', async () => {
+      const { cards, board } = await boardOf(1);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+
+      const res = await buildApp(orgUser).request(`${boardPath()}?since=${board.cursor}`, {
+        headers: { 'accept-encoding': 'gzip, br' },
+      });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      expect(res.headers.get('vary')).toBe('Accept-Encoding');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
+      expect(body.workItems.map((card: { title: string }) => card.title)).toEqual(['Renamed']);
+    });
+
+    it('leaves a card deleted after the list was read for the next read to remove', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      const listed = await read();
+      const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+      let deleting: Promise<unknown> | undefined;
+      vi.spyOn(seed.storage.ops, 'findMany').mockImplementation(async (collection, ...rest) => {
+        // The delete lands between this read's list and its read of the deleted ids.
+        if (collection === 'factory_board_item_tombstones') {
+          await (deleting ??= json('DELETE', `/web/factory/work-items/${cards[1]!.id}`));
+        }
+        return findMany(collection, ...rest);
+      });
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(next).toMatchObject({ removedIds: [], check: boardCheck(listed.workItems) });
+      later();
+      expect((await read(next.cursor)).removedIds).toEqual([cards[1]!.id]);
+    });
+
+    it('sends a board showing Review cards whole, without a cursor', async () => {
+      const card = await createCard('pull-request');
+      await createCard('issue');
+      // A row as the retired Review board left it.
+      await seed.storage.ops.updateMany('factory_board_items', { id: card.id }, { board: 'review' });
+
+      const answer = await read('1');
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toBeUndefined();
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers a narrowed list as it does without a cursor', async () => {
+      const held = await startRun('session-mine');
+      await startRun('session-other');
+      const { cursor } = await read();
+      later();
+      await json('PATCH', `/web/factory/work-items/${held.id}`, { title: 'Renamed' });
+
+      const narrowed = `${boardPath()}?sessionId=session-mine`;
+      const answer = await buildApp(orgUser).request(`${narrowed}&since=${cursor}`);
+
+      expect(answer.headers.get('etag')).toBe((await buildApp(orgUser).request(narrowed)).headers.get('etag'));
+      expect(await answer.json()).not.toHaveProperty('removedIds');
+    });
+
+    it('lists the card named by its id, not what moved since the cursor', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+
+      const answer = await buildApp(orgUser).request(`${boardPath()}?workItemId=${cards[0]!.id}&since=${board.cursor}`);
+
+      expect(await listedIds(answer)).toEqual([cards[0]!.id]);
+    });
+  });
+
+  describe('one session’s cards (?sessionId=)', () => {
+    const scopedPath = (...sessionIds: string[]) =>
+      `${boardPath()}?${sessionIds.map(sessionId => `sessionId=${encodeURIComponent(sessionId)}`).join('&')}`;
+
+    it('lists the card that holds the session, and the activity of that card only', async () => {
+      const mine = await startRun('session-mine');
+      await startRun('session-other');
+      const app = buildApp(orgUser, undefined, undefined, new Set(['session-mine', 'session-other']));
+
+      const res = await app.request(scopedPath('session-mine'));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual([mine.id]);
+      expect(body.runningSessionIds).toEqual(['session-mine']);
+    });
+
+    it('lists the cards of every session named, in board order', async () => {
+      const first = await startRun('session-first');
+      await startRun('session-second');
+      const third = await startRun('session-third');
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+
+      const res = await buildApp(orgUser).request(scopedPath('session-third', 'session-first'));
+
+      expect(await listedIds(res)).toEqual(board.filter(id => id === first.id || id === third.id));
+    });
+
+    it('lists nothing for a session no card holds', async () => {
+      await startRun('session-other');
+
+      const res = await buildApp(orgUser).request(scopedPath('session-unknown'));
+
+      expect(res.status).toBe(200);
+      expect(await listedIds(res)).toEqual([]);
+    });
+
+    it('brings the cards related to the session’s card: its parent, its children and the pull request pushed from its branch', async () => {
+      const mine = await startRun('session-mine');
+      const parent = await createCard('parent');
+      await json('PATCH', `/web/factory/work-items/${mine.id}`, { parentWorkItemId: parent.id });
+      const child = await createCard('child', { parentWorkItemId: mine.id });
+      const pullRequest = await createCard('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        metadata: { number: 7, headBranch: 'factory/session-mine' },
+      });
+      await createCard('unrelated');
+
+      const res = await buildApp(orgUser).request(scopedPath('session-mine'));
+
+      expect((await listedIds(res)).toSorted()).toEqual([mine.id, parent.id, child.id, pullRequest.id].toSorted());
+    });
+
+    it('answers 304 through writes to other cards, and sends the session’s card again once it changes', async () => {
+      const mine = await startRun('session-mine');
+      const other = await startRun('session-other');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(scopedPath('session-mine'))).headers.get('etag')!;
+
+      await json('PATCH', `/web/factory/work-items/${other.id}`, { title: 'Renamed elsewhere' });
+      const unchanged = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+      expect(await unchanged.text()).toBe('');
+
+      await json('PATCH', `/web/factory/work-items/${mine.id}`, { title: 'Renamed' });
+      const changed = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect((await changed.json()).workItems[0].title).toBe('Renamed');
+    });
+
+    it('sends the session’s card again once its run starts', async () => {
+      await startRun('session-mine');
+      const running = new Set<string>();
+      const app = buildApp(orgUser, undefined, undefined, running);
+      const idle = (await app.request(scopedPath('session-mine'))).headers.get('etag')!;
+
+      running.add('session-mine');
+      const started = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': idle } });
+
+      expect(started.status).toBe(200);
+      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
+    });
+
+    it('refuses a blank session id rather than sending the whole board', async () => {
+      await startRun('session-mine');
+
+      const res = await buildApp(orgUser).request(`${boardPath()}?sessionId=`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('the cards holding a session (?scope=sessions)', () => {
+    const sessionsPath = () => `${boardPath()}?scope=sessions`;
+
+    it('lists every card holding a session with its activity, in board order, without the cards holding none', async () => {
+      const first = await startRun('session-first');
+      await createCard('unstarted');
+      const second = await startRun('session-second');
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+      const app = buildApp(
+        orgUser,
+        undefined,
+        undefined,
+        new Set(['session-first']),
+        undefined,
+        new Set(['session-second']),
+      );
+
+      const res = await app.request(sessionsPath());
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
+        board.filter(id => id === first.id || id === second.id),
+      );
+      expect(body.runningSessionIds).toEqual(['session-first']);
+      expect(body.parkedSessionIds).toEqual(['session-second']);
+    });
+
+    it('brings the pull request pushed from a session’s branch, though it holds no session', async () => {
+      const mine = await startRun('session-mine');
+      const pullRequest = await createCard('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        metadata: { number: 7, headBranch: 'factory/session-mine' },
+      });
+      await createCard('unrelated');
+
+      const res = await buildApp(orgUser).request(sessionsPath());
+
+      expect((await listedIds(res)).toSorted()).toEqual([mine.id, pullRequest.id].toSorted());
+    });
+
+    it('answers 304 through writes to cards holding no session, and sends the list again once a listed card changes', async () => {
+      const mine = await startRun('session-mine');
+      const unstarted = await createCard('unstarted');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(sessionsPath())).headers.get('etag')!;
+
+      await json('PATCH', `/web/factory/work-items/${unstarted.id}`, { title: 'Renamed elsewhere' });
+      const unchanged = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+      expect(await unchanged.text()).toBe('');
+
+      await json('PATCH', `/web/factory/work-items/${mine.id}`, { title: 'Renamed' });
+      const changed = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect((await changed.json()).workItems[0].title).toBe('Renamed');
+    });
+
+    it('sends the list again each time a run starts or stops on an unchanged card', async () => {
+      await startRun('session-mine');
+      const running = new Set<string>();
+      const app = buildApp(orgUser, undefined, undefined, running);
+      const idle = (await app.request(sessionsPath())).headers.get('etag')!;
+
+      running.add('session-mine');
+      const started = await app.request(sessionsPath(), { headers: { 'if-none-match': idle } });
+      expect(started.status).toBe(200);
+      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
+
+      running.delete('session-mine');
+      const stopped = await app.request(sessionsPath(), {
+        headers: { 'if-none-match': started.headers.get('etag')! },
+      });
+      expect(stopped.status).toBe(200);
+      expect((await stopped.json()).runningSessionIds).toEqual([]);
+    });
+
+    it.each([
+      ['an unknown scope', '?scope=everything'],
+      ['a scope combined with session ids', '?scope=sessions&sessionId=session-mine'],
+    ])('refuses %s rather than guessing which cards to send', async (_case, query) => {
+      await startRun('session-mine');
+
+      const res = await buildApp(orgUser).request(`${boardPath()}${query}`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('the cards holding no session (?started=false)', () => {
+    const unstarted = async (query = '') => {
+      const res = await buildApp(orgUser).request(`${boardPath()}?started=false${query}`);
+      const body = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json());
+      return { titles: body.workItems.map(item => item.title), total: body.total };
+    };
+    const rename = (card: { id: string }, title: string) =>
+      json('PATCH', `/web/factory/work-items/${card.id}`, { title });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('lists the cards holding no session, most recently updated first, and counts them', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') });
+      await startRun('session-mine');
+      const oldest = await createCard('1', { title: 'Oldest card' });
+      vi.setSystemTime(new Date('2026-11-01T10:01:00Z'));
+      await createCard('2', { title: 'Middle card' });
+      vi.setSystemTime(new Date('2026-11-01T10:02:00Z'));
+      await createCard('3', { title: 'Newest card' });
+      vi.setSystemTime(new Date('2026-11-01T10:03:00Z'));
+      await json('PATCH', `/web/factory/work-items/${oldest.id}`, { metadata: { note: 'looked at' } });
+
+      expect(await unstarted()).toEqual({
+        titles: ['Oldest card', 'Newest card', 'Middle card'],
+        total: 3,
+      });
+    });
+
+    it('finds a card by every word typed, in any case, in its title, its key, its number or its source id', async () => {
+      await createCard('github:7:issue:12', { title: 'Fix the login flow', metadata: { number: 12 } });
+      await createCard('github:7:issue:345', { title: 'Rework the login palette', metadata: { number: 345 } });
+      await createCard('linear:issue-uuid', {
+        title: 'Tidy the settings page',
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:issue-uuid' },
+        metadata: { identifier: 'ENG-77' },
+      });
+
+      expect((await unstarted('&q=LOGIN%20fix')).titles).toEqual(['Fix the login flow']);
+      expect((await unstarted('&q=%2312')).titles).toEqual(['Fix the login flow']);
+      expect((await unstarted('&q=34')).titles).toEqual(['Rework the login palette']);
+      expect((await unstarted('&q=issue:345')).titles).toEqual(['Rework the login palette']);
+      expect((await unstarted('&q=eng-77')).titles).toEqual(['Tidy the settings page']);
+      expect(await unstarted('&q=fix%20palette')).toEqual({ titles: [], total: 0 });
+      expect((await unstarted('&q=login')).total).toBe(2);
+    });
+
+    it('never lists a card holding a session, whatever is typed', async () => {
+      await startRun('session-mine');
+      await createCard('1', { title: 'Work nobody started' });
+
+      expect(await unstarted('&q=work')).toEqual({ titles: ['Work nobody started'], total: 1 });
+    });
+
+    it('sends the first 20 matches unless told a limit, with the count of every match', async () => {
+      for (let number = 1; number <= 23; number += 1) {
+        await createCard(String(number), { title: number % 2 ? `Palette ${number}` : `Login ${number}` });
+      }
+
+      const all = await unstarted();
+      expect(all.titles).toHaveLength(20);
+      expect(all.total).toBe(23);
+      const typed = await unstarted('&q=palette&limit=5');
+      expect(typed.titles).toHaveLength(5);
+      expect(typed.titles.every(title => title.startsWith('Palette'))).toBe(true);
+      expect(typed.total).toBe(12);
+      expect((await unstarted('&limit=500')).titles).toHaveLength(23);
+    });
+
+    it('answers 304 while nothing changed, and sends the count again once only it changed', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') });
+      const older = await createCard('1', { title: 'Palette, older' });
+      vi.setSystemTime(new Date('2026-11-01T10:01:00Z'));
+      await createCard('2', { title: 'Palette, newer' });
+      const path = `${boardPath()}?started=false&q=palette&limit=1`;
+      const app = buildApp(orgUser);
+      const first = await app.request(path);
+      const etag = first.headers.get('etag')!;
+      expect(await first.json()).toMatchObject({ workItems: [{ title: 'Palette, newer' }], total: 2 });
+
+      const unchanged = await app.request(path, { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+
+      // The card that was past the limit stops matching: the listed card is the same, the count is not.
+      await rename(older, 'Login');
+      const changed = await app.request(path, { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect(await changed.json()).toMatchObject({ workItems: [{ title: 'Palette, newer' }], total: 1 });
+    });
+  });
+
+  describe('the cards filed from given sources (?source=)', () => {
+    const sourcePath = (...sources: string[]) =>
+      `${boardPath()}?${sources.map(source => `source=${encodeURIComponent(source)}`).join('&')}`;
+
+    it('lists the cards filed from a source named by its id or its URL, whatever sessions they hold', async () => {
+      const byId = await createCard('github:7:issue:12');
+      const byUrl = await createCard('github-issue:13', {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:13',
+          url: 'https://github.com/acme/app/issues/13',
+        },
+      });
+      const started = await createCard('github:7:pull-request:14');
+      await json('PATCH', `/web/factory/work-items/${started.id}`, {
+        sessions: { review: { sessionId: 'session-review', branch: 'factory/pr-14', threadId: 'thread-review' } },
+      });
+      await createCard('github:7:issue:99');
+
+      const res = await buildApp(orgUser).request(
+        sourcePath(
+          'github:7:issue:12',
+          'https://github.com/acme/app/issues/13',
+          'github:7:pull-request:14',
+          'github:7:issue:404',
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id).toSorted()).toEqual(
+        [byId.id, byUrl.id, started.id].toSorted(),
+      );
+      expect(body).not.toHaveProperty('total');
+    });
+
+    it('lists nothing when no card is filed from the sources', async () => {
+      await createCard('github:7:issue:12');
+
+      expect(await listedIds(await buildApp(orgUser).request(sourcePath('github:7:issue:404')))).toEqual([]);
+    });
+  });
+
+  describe('the cards named by their ids (?workItemId=)', () => {
+    const idPath = (...ids: string[]) => `${boardPath()}?${ids.map(id => `workItemId=${id}`).join('&')}`;
+
+    it('lists only the named cards, in board order, whatever sessions they hold and without their relatives', async () => {
+      const parent = await createCard('github:7:issue:12');
+      const child = await createCard('github:7:issue:13', { parentWorkItemId: parent.id });
+      const started = await createCard('github:7:pull-request:14');
+      await json('PATCH', `/web/factory/work-items/${started.id}`, {
+        sessions: { review: { sessionId: 'session-review', branch: 'factory/pr-14', threadId: 'thread-review' } },
+      });
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+
+      const res = await buildApp(orgUser).request(idPath(started.id, child.id));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
+        board.filter(id => id === started.id || id === child.id),
+      );
+      expect(body).not.toHaveProperty('total');
+    });
+
+    it('lists nothing, without an error, when no card has the id', async () => {
+      await createCard('github:7:issue:12');
+
+      const res = await buildApp(orgUser).request(idPath('11111111-2222-4333-8444-555555555555'));
+
+      expect(res.status).toBe(200);
+      expect(await listedIds(res)).toEqual([]);
+    });
+  });
+
+  it.each([
+    ['a wish for the started cards', '?started=true', 'invalid_started'],
+    ['unstarted cards combined with a scope', '?started=false&scope=sessions', 'invalid_started'],
+    ['unstarted cards combined with session ids', '?started=false&sessionId=session-mine', 'invalid_started'],
+    ['typed text without started=false', '?q=login', 'invalid_search'],
+    ['typed text with a scope', '?scope=sessions&q=login', 'invalid_search'],
+    ['typed text longer than 200 characters', `?started=false&q=${'a'.repeat(201)}`, 'invalid_search'],
+    ['a blank source', '?source=', 'invalid_source'],
+    ['a source longer than 512 characters', `?source=${'a'.repeat(513)}`, 'invalid_source'],
+    ['more than 100 sources', `?${Array.from({ length: 101 }, (_, i) => `source=s${i}`).join('&')}`, 'invalid_source'],
+    ['sources combined with a scope', '?source=github-issue:1&scope=sessions', 'invalid_source'],
+    ['sources combined with unstarted cards', '?source=github-issue:1&started=false', 'invalid_source'],
+    ['sources combined with session ids', '?source=github-issue:1&sessionId=session-mine', 'invalid_source'],
+    ['an id that is not a card id', '?workItemId=backlog-1', 'invalid_work_item_id'],
+    [
+      'more than 100 ids',
+      `?${Array.from({ length: 101 }, () => `workItemId=${PROJECT_ID}`).join('&')}`,
+      'invalid_work_item_id',
+    ],
+    ['ids combined with sources', `?workItemId=${PROJECT_ID}&source=github-issue:1`, 'invalid_work_item_id'],
+    ['ids combined with a scope', `?workItemId=${PROJECT_ID}&scope=sessions`, 'invalid_work_item_id'],
+    ['ids combined with unstarted cards', `?workItemId=${PROJECT_ID}&started=false`, 'invalid_work_item_id'],
+    ['ids combined with session ids', `?workItemId=${PROJECT_ID}&sessionId=session-mine`, 'invalid_work_item_id'],
+  ])('refuses %s rather than sending the whole board', async (_case, query, error) => {
+    await createCard('github-issue:1');
+
+    const res = await buildApp(orgUser).request(`${boardPath()}${query}`);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error });
   });
 });
 

@@ -1,5 +1,70 @@
 # @mastra/pg
 
+## 1.36.0-alpha.5
+
+### Patch Changes
+
+- Discard PostgreSQL pool connections when starting or rolling back a transaction fails, preventing an unknown transaction state from leaking into the next checkout. Preserve the original transaction error and report rollback failures through the configured logger. ([#30144](https://github.com/mastra-ai/mastra/pull/30144))
+
+- Await asynchronous rollback diagnostics so reporter failures cannot escape transaction cleanup or mask the original transaction error. ([#30157](https://github.com/mastra-ai/mastra/pull/30157))
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83)]:
+  - @mastra/core@1.83.0-alpha.10
+
+## 1.36.0-alpha.4
+
+### Minor Changes
+
+- Added duration ordering for completed span queries. Use `orderBy: [{ field: "durationMs", direction: "desc" }]` to find the slowest spans. ([#30085](https://github.com/mastra-ai/mastra/pull/30085))
+
+- Added one-off and bounded schedules for agents and workflows. Pass `runAt` instead of `cron` to fire a schedule once, or pass `endAt` with `cron` to stop a recurring schedule after a given time. Finished schedules use the existing `completed` status when they have no automatic fires remaining. Declarative workflow schedules (`createWorkflow({ schedule })`) accept `runAt` and `endAt` too, and schedule hooks receive `trigger.kind: 'once'` for a scheduled fire of a one-off agent schedule. ([#25131](https://github.com/mastra-ai/mastra/pull/25131))
+
+  **TypeScript compatibility:** `cron` is now optional on schedule records and create/update inputs because one-off schedules use `runAt` instead. Strict consumers that read `schedule.cron` must first check that it is defined.
+
+  ```typescript
+  await mastra.schedules.create({ workflowId: 'send-report', runAt: new Date(Date.now() + 60 * 60 * 1000) });
+  await mastra.schedules.create({ workflowId: 'digest', cron: '0 9 * * *', endAt: new Date('2027-01-01') });
+  ```
+
+### Patch Changes
+
+- Fix scalar element comparisons, nested negation, wildcard escaping, and recursive value bindings in PostgreSQL vector `$elemMatch` filters. ([#30095](https://github.com/mastra-ai/mastra/pull/30095))
+
+- Apply every nested `$elemMatch` operator when filtering PostgreSQL vectors, so searches and deletions honor all bounds on the same array element. ([#30091](https://github.com/mastra-ai/mastra/pull/30091))
+
+- Listing and counting threads filtered by metadata is now much faster on large thread tables, because `mastra_threads.metadata` gets an index by default. Existing databases build it on startup without blocking writes. ([#30086](https://github.com/mastra-ai/mastra/pull/30086))
+
+- Updated dependencies [[`1689ce3`](https://github.com/mastra-ai/mastra/commit/1689ce38e1d66df6f474acd5db65f46315a02c23), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`38327de`](https://github.com/mastra-ai/mastra/commit/38327de07a169a6d5ce8ab8fc2075caec112d6f3), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`2053c88`](https://github.com/mastra-ai/mastra/commit/2053c881ed7a13c43d3932e1938e2f94ef226b4f), [`4884ee0`](https://github.com/mastra-ai/mastra/commit/4884ee08a067dd82176c57ca54bdfec02eda97ea), [`49e7108`](https://github.com/mastra-ai/mastra/commit/49e71082bd2c36cd20d7f4ba62bb3666e108968b), [`4cfa256`](https://github.com/mastra-ai/mastra/commit/4cfa256801f6b7e909daa5ed5d14c77b9fb24197), [`7f0d2fd`](https://github.com/mastra-ai/mastra/commit/7f0d2fd4b6c304ad851232b5969d96fdb20aa06a), [`b0ef22e`](https://github.com/mastra-ai/mastra/commit/b0ef22e7bfeb309c456d5c54528d579c4ac9e863), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`eb683b4`](https://github.com/mastra-ai/mastra/commit/eb683b45fe2ad645ae81c419d405aa2327a053e3)]:
+  - @mastra/core@1.83.0-alpha.9
+
+## 1.36.0-alpha.3
+
+### Minor Changes
+
+- Support full feedback replacement and protected creates: ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```typescript
+  await store.createFeedback({ feedback, onConflict: 'ignore' });
+  await store.replaceFeedback({ feedback: { ...feedback, value: -1 } });
+  ```
+
+  Keep the original ID, trace ID, timestamp, and tenant when replacing feedback. ClickHouse uses its existing schema; overlapping writes from separate processes are not ordered reliably.
+
+### Patch Changes
+
+- Fixed `saveThread` so that saving an existing thread id no longer moves the thread to another resource or overwrites its creation date. Its messages could previously be left on the old resource. ([#29149](https://github.com/mastra-ai/mastra/pull/29149))
+
+  Re-saving a thread with the same `resourceId` still updates its title, metadata and `updatedAt`. It keeps the original `createdAt` and returns the stored row. Re-saving with a different `resourceId` now throws a `MastraError` with category `USER`. To move a thread and its messages to another resource, use `updateThreadResourceId`:
+
+  ```ts
+  await memory.updateThreadResourceId({ threadId: 'thread-1', resourceId: 'user-2' });
+  ```
+
+- Fixed thread metadata updates being lost when several processes share one Postgres database. Concurrent `updateThread` and `updateThreadMetadata` calls on the same thread now keep every metadata key. ([#29150](https://github.com/mastra-ai/mastra/pull/29150))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
 ## 1.36.0-alpha.2
 
 ### Patch Changes

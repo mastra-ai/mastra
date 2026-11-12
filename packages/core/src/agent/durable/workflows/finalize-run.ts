@@ -1,6 +1,8 @@
 import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
+import { commitToolResult } from '../../../loop/shared/steps/tool-result-commit-core';
+import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { createObservabilityContext } from '../../../observability';
@@ -10,12 +12,17 @@ import { StructuredOutputProcessor } from '../../../processors/processors/struct
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
-import { persistProcessorDataChunk, resolveOutputMessageSkippingCompletionChecks } from '../../../stream/base/output';
+import {
+  persistProcessorDataChunk,
+  resolveOutputMessageSkippingCompletionChecks,
+  resolveProcessorWriterMessageId,
+} from '../../../stream/base/output';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
 import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
@@ -24,8 +31,10 @@ import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
+import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
+import { hydrateMessageListState } from './shared/message-list-state';
 
 type GenerateThreadTitleArgs = Parameters<NonNullable<RunRegistryEntry['generateThreadTitle']>>[0];
 type AnyAgent = Agent<any, any, any, any>;
@@ -199,7 +208,11 @@ export async function runDurableFinishSideEffects({
   const structuredOutput = initData.options?.structuredOutput;
   const structuredOutputText = resolveOutputText(messageList);
   const liveStructuredOutput = registryEntry?.structuredOutput;
-  const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
+  const structuredOutputSchema =
+    liveStructuredOutput?.schema ??
+    (structuredOutput?.schema
+      ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
+      : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
@@ -468,6 +481,275 @@ export async function runDurableFinishSideEffects({
     structuredOutputChunks,
     outputResultChunks,
   };
+}
+
+/**
+ * What a total deadline saves: the steps that completed in time, plus the step in flight. A step cut off
+ * mid-stream contributes the text it already streamed, which never reached the step processors. A step cut off
+ * while its tools ran is kept whole, with the tool results that came back in time or during the deadline's grace
+ * window and any call still running saved as aborted.
+ */
+export function deadlineMessageListState(
+  entry: RunRegistryEntry,
+  fallback: SerializedMessageListState,
+): { messageListState: SerializedMessageListState; cutOffText?: string } {
+  if (entry.streamedStepText) {
+    return { messageListState: entry.completedStepsState ?? fallback, cutOffText: entry.streamedStepText.join('') };
+  }
+  const settled = entry.settledToolResults;
+  if (settled?.length && entry.messageList) {
+    // JSON round-trip: the live list keeps mutating, and its metadata can hold functions.
+    const inFlight = new MessageList().deserialize(JSON.parse(JSON.stringify(entry.messageList.serialize())));
+    for (const result of settled) {
+      commitToolResult({
+        messageList: inFlight,
+        outcome: result.outcome,
+        toolCallId: result.toolCallId,
+        toolName: result.toolName,
+        toolArgs: result.args,
+        approval: result.approval,
+        providerMetadata: result.providerMetadata,
+      });
+    }
+    // A sibling call still running past the grace window is saved as aborted, so the results
+    // that did come back are not dropped with it.
+    const unsettled = inFlight.get.response
+      .db()
+      .flatMap(message => message.content.parts ?? [])
+      .filter(part => part.type === 'tool-invocation' && !isTerminalToolInvocationState(part.toolInvocation.state));
+    for (const part of unsettled) {
+      if (part.type !== 'tool-invocation') continue;
+      commitToolResult({
+        messageList: inFlight,
+        outcome: { kind: 'result', result: TOOL_ABORT_NOTICE },
+        toolCallId: part.toolInvocation.toolCallId,
+        toolName: part.toolInvocation.toolName,
+        toolArgs: part.toolInvocation.args,
+      });
+    }
+    return { messageListState: inFlight.serialize() };
+  }
+  return { messageListState: entry.completedStepsState ?? fallback };
+}
+
+/**
+ * Give the output processors (and with them memory) their one pass when a total deadline ends a
+ * durable run. The run never reaches its finish step, so this runs over what the deadline saves
+ * (see `deadlineMessageListState`), as the default loop's deadline pass does.
+ */
+export async function runDurableDeadlineOutputPass({
+  runId,
+  initData,
+  messageListState,
+  cutOffText,
+  entry,
+  mastra,
+  tracingContext,
+  logger,
+}: {
+  runId: string;
+  initData: Pick<
+    DurableAgenticWorkflowInput,
+    'runId' | 'agentId' | 'agentName' | 'messageId' | 'state' | 'options' | 'requestContextEntries'
+  >;
+  messageListState: SerializedMessageListState;
+  cutOffText?: string;
+  entry: RunRegistryEntry;
+  mastra?: Mastra;
+  /** The run's agent span, so the deadline pass shows in the run's trace as the finish pass does. */
+  tracingContext?: TracingContext;
+  logger: IMastraLogger;
+}): Promise<void> {
+  const durableState = initData.state;
+  const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
+  if (!requestContext.has('MastraMemory') && durableState?.threadId) {
+    requestContext.set('MastraMemory', {
+      thread: { id: durableState.threadId },
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
+  const memoryContext = requestContext.get('MastraMemory') as
+    | { thread?: { id?: string }; resourceId?: string; memoryConfig?: { readOnly?: boolean } }
+    | undefined;
+  // A read-only run writes nothing to memory, at the deadline either.
+  if (durableState?.memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly) return;
+
+  // The output processors save the turn (MessageHistory) to the thread the run or its request context
+  // names, so the caller needs write access to each first. A denial skips the whole save.
+  const resourceId = durableState?.resourceId ?? memoryContext?.resourceId;
+  if (entry.memory && resourceId) {
+    const threadIds = new Set([durableState?.threadId, memoryContext?.thread?.id].filter(Boolean) as string[]);
+    try {
+      for (const threadId of threadIds) {
+        // The run's cached grant covers only its own thread; a thread the request context points at is checked anew.
+        const checks = threadId === durableState?.threadId ? getDurableMemoryAuthorizationChecks(entry) : new Map();
+        await authorizeDurableMemory(checks, {
+          mastra,
+          user: requestContext.get('user'),
+          threadId,
+          resourceId,
+          agentId: initData.agentId,
+          requestContext,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+          actor: initData.options?.actor,
+        });
+      }
+    } catch (authError) {
+      logger.warn('[DurableAgent] Memory write denied at the total deadline, the turn is not saved', {
+        runId,
+        error: authError,
+      });
+      return;
+    }
+  }
+
+  const messageList = new MessageList({
+    threadId: durableState?.threadId,
+    resourceId: durableState?.resourceId,
+  }).deserialize(
+    // A resumed run's persisted input keeps messages memory already stores as refs (a recovered run's
+    // crash-time transcript is hydrated already). Defensive: refs only reach here when a resumed run's
+    // deadline fires before its first step snapshot with no settled tool results, which no test drives.
+    await hydrateMessageListState(
+      { state: undefined, getInitData: () => initData, mastra, requestContext },
+      messageListState,
+    ),
+  );
+  // Untargeted processor data lands on the reply, as at finish; resolved before the cut-off text is added.
+  const replyMessageId = resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? initData.messageId;
+  let inFlightMessageId: string | undefined;
+  if (cutOffText?.trim()) {
+    messageList.add({ role: 'assistant', content: [{ type: 'text', text: cutOffText }] }, 'response', {
+      merge: false,
+    });
+    inFlightMessageId = messageList.get.response.db().at(-1)!.id;
+  }
+
+  if (entry.outputProcessors?.length) {
+    const runner = new ProcessorRunner({
+      inputProcessors: entry.inputProcessors ?? [],
+      outputProcessors: entry.outputProcessors,
+      errorProcessors: entry.errorProcessors ?? [],
+      logger,
+      agentName: initData.agentName ?? initData.agentId,
+      agent: entry.agent,
+      processorStates: entry.processorStates,
+    });
+    // Data parts a step processor writes for the cut-off text, whether it names that message or not, are
+    // held until the message is written back: the write-back replaces it, and would drop parts merged into it.
+    let heldDataChunks:
+      | { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[]
+      | undefined;
+    const writer = {
+      custom: async (
+        data: { type: string; data?: unknown; transient?: boolean },
+        writerOptions?: { messageId?: string },
+      ) => {
+        if (heldDataChunks && (!writerOptions?.messageId || writerOptions.messageId === inFlightMessageId)) {
+          heldDataChunks.push({ data, messageId: writerOptions?.messageId });
+        } else {
+          persistProcessorDataChunk(
+            messageList,
+            resolveProcessorWriterMessageId(messageList, replyMessageId, writerOptions?.messageId),
+            data,
+          );
+        }
+      },
+    };
+    if (inFlightMessageId) {
+      heldDataChunks = [];
+      // The cut-off text never reached the step processors (redaction, refusal handling...).
+      // Run them over that message alone: the rest of the turn already went through them.
+      try {
+        const stepList = messageList.clone();
+        stepList.removeByIds(
+          stepList.get.all
+            .db()
+            .map(message => message.id)
+            .filter(id => id !== inFlightMessageId),
+        );
+        await runner.runProcessOutputStep({
+          steps: [],
+          messages: stepList.get.all.db(),
+          messageList: stepList,
+          stepNumber: 0,
+          finishReason: 'error',
+          text: cutOffText,
+          ...createObservabilityContext(tracingContext),
+          requestContext,
+          writer,
+        });
+        messageList.removeByIds([inFlightMessageId]);
+        for (const message of stepList.get.all.db()) messageList.add(message, 'response', { merge: false });
+      } catch (stepError) {
+        // Fail closed: keep the completed steps rather than save unprocessed text. The result processors
+        // then read the text of the completed steps only.
+        messageList.removeByIds([inFlightMessageId]);
+        logger.warn('[DurableAgent] Output step processors failed on the text cut off at the total deadline', {
+          runId,
+          error: stepError,
+        });
+      }
+      for (const { data, messageId } of heldDataChunks) {
+        // A part aimed at the cut-off message lands on it if it survived the write-back,
+        // otherwise on the message an untargeted write would reach.
+        const target =
+          messageId && messageList.get.all.db().some(message => message.id === messageId)
+            ? messageId
+            : resolveProcessorWriterMessageId(messageList, replyMessageId);
+        persistProcessorDataChunk(messageList, target, data);
+      }
+      heldDataChunks = undefined;
+    }
+    try {
+      await runner.runOutputProcessors(
+        messageList,
+        createObservabilityContext(tracingContext),
+        requestContext,
+        0,
+        writer,
+        {
+          text: resolveOutputText(messageList),
+          usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+          finishReason: 'error',
+          steps: [],
+        },
+      );
+    } catch (processorError) {
+      // A tripwire rejects the turn, as it does at finish: remove response messages already saved.
+      if (processorError instanceof TripWire) {
+        await undoSavedResponseMessages({
+          memory: entry.memory,
+          threadId: durableState?.threadId,
+          memoryConfig: durableState?.memoryConfig,
+          messageList,
+          saveQueueManager: entry.saveQueueManager,
+          logger,
+          runId,
+        });
+        return;
+      }
+      logger.warn('[DurableAgent] Error running output processors at the total deadline', {
+        runId,
+        error: processorError,
+      });
+      if (durableState?.observationalMemory) return;
+    }
+  }
+
+  if (
+    !entry.saveQueueManager ||
+    !entry.memory ||
+    !durableState?.threadId ||
+    !durableState.resourceId ||
+    durableState.observationalMemory
+  ) {
+    return;
+  }
+  await entry.saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
+    throwOnError: true,
+  });
 }
 
 class StructuringPassError extends Error {

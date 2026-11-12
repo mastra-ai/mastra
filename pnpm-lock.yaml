@@ -154,6 +154,7 @@ overrides:
   browserslist@<=4.28.6: 4.28.7
   deepmerge-ts@<8.0.0: 8.0.0
   toml@<5.0.1: 5.0.1
+  '@opencode-ai/plugin>effect': 4.0.0-beta.103
   postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   '@tailwindcss/typography>postcss-selector-parser': 7.1.6
@@ -6443,6 +6444,9 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
       arktype:
         specifier: ^2.2.9
         version: 2.2.9
@@ -6672,8 +6676,8 @@ importers:
   pubsub/valkey-streams:
     dependencies:
       '@valkey/valkey-glide':
-        specifier: 2.5.1
-        version: 2.5.1
+        specifier: 2.5.2
+        version: 2.5.2
     devDependencies:
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.139
@@ -7261,6 +7265,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -8635,8 +8642,8 @@ importers:
   stores/valkey:
     dependencies:
       '@valkey/valkey-glide':
-        specifier: 2.5.1
-        version: 2.5.1
+        specifier: 2.5.2
+        version: 2.5.2
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10052,6 +10059,9 @@ importers:
 
   workspaces/docker:
     dependencies:
+      '@docker/sandboxes':
+        specifier: 0.53.0
+        version: 0.53.0(bufferutil@4.1.0)
       '@grpc/grpc-js':
         specifier: ^1.14.5
         version: 1.14.7
@@ -13598,6 +13608,10 @@ packages:
 
   '@dmsnell/diff-match-patch@1.1.0':
     resolution: {integrity: sha512-yejLPmM5pjsGvxS9gXablUSbInW7H976c/FJ4iQxWIm7/38xBySRemTPDe34lhg1gVLbJntX0+sH0jYfU+PN9A==}
+
+  '@docker/sandboxes@0.53.0':
+    resolution: {integrity: sha512-copLxQxHrUAmMdyolkGHr5t5nzOe4+fHdsizT4KpyjRp+pauiwzFlLYRQEqsvigte9kJiCNyIS7dqqxTm5x0Ng==}
+    engines: {node: '>=20'}
 
   '@docsearch/core@4.7.0':
     resolution: {integrity: sha512-p/9xVKmPDj3FPvMfPf5naVO3Ej8SCbcUugGvx1+8GgkuBNbqxqN2Irx3WLBv8VY0jH7XpRwKWdlmjXLZsmTLsg==}
@@ -21425,6 +21439,9 @@ packages:
   '@types/express@5.0.6':
     resolution: {integrity: sha512-sKYVuV7Sv9fbPIt/442koC7+IIwK5olP1KWeD88e/idgoJqDm3JV/YUiPwkoKK92ylff2MGxSz1CSjsXelx0YA==}
 
+  '@types/formidable@3.4.6':
+    resolution: {integrity: sha512-LI4Hk+KNsM5q7br4oMVoaWeb+gUqJpz1N8+Y2Q6Cz9cVH33ybahRKUWaRmMboVlkwSbOUGgwc/pEkS7yMSzoWg==}
+
   '@types/fs-extra@11.0.4':
     resolution: {integrity: sha512-yTbItCNreRooED33qjunPthRcSjERP1r4MqCZc7wv0u2sUkzTFp45tgUfS5+r7FrZPdmCCNflLhVSP/o+SemsQ==}
 
@@ -21900,42 +21917,42 @@ packages:
     peerDependencies:
       valibot: ^1.5.0
 
-  '@valkey/valkey-glide-darwin-arm64@2.5.1':
-    resolution: {integrity: sha512-DC6T0oYkyFnVIMABnmdtB2ZViJXMNMT8VtPQi4dniLBMbQJVS0BFO735bzDLkONZqnOf4lSRQMk+UYhUSE2n8Q==}
+  '@valkey/valkey-glide-darwin-arm64@2.5.2':
+    resolution: {integrity: sha512-6kmFsyBrMj8kRF72ZiKpLsT0WZrRQdM3P2p9vJskRaXbRiMGmLVoqj8vv1tYcu/xRr7bI6aEONOlwKbHojRLkQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@valkey/valkey-glide-darwin-x64@2.5.1':
-    resolution: {integrity: sha512-3XNRg2gwHpDGfpLm7og4cBCR9vvldd3z1OgqK4EBB75XSkx9gFXgcmIR8JYHiz9pnjv4FkeTCU6/WIPDCW7iTw==}
+  '@valkey/valkey-glide-darwin-x64@2.5.2':
+    resolution: {integrity: sha512-2RgllAJlYvoKirMKDIseYfX7LNFOF06UohqRB4LM2U3Y9mjE/ssNrPy+netFYdqz0aWcgYajzCMr2jXeckmoEg==}
     cpu: [x64]
     os: [darwin]
 
-  '@valkey/valkey-glide-linux-arm64-gnu@2.5.1':
-    resolution: {integrity: sha512-D3AnYqMefXaaZJLPa4Q5A506On0/zg2ikI+YKWQsVXSgegf+YRXMrjfYqXa+LQD8s8jMMlZB/FAmSr4g+iv3CQ==}
+  '@valkey/valkey-glide-linux-arm64-gnu@2.5.2':
+    resolution: {integrity: sha512-EVWT7VT9porB670AxjQ+b/g/Dx5Nm/GaMy9irCzdDdnnTOwPyHvK1kPFzMATNuyDgXd5L504i99u8iHL1GpDEw==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@valkey/valkey-glide-linux-arm64-musl@2.5.1':
-    resolution: {integrity: sha512-LIzxQhWhoPPIbYAy86moO1RA+SyFkNTxDPfR67MnGIZ7eaiFG9dfPfSdLC/LUN53D+/tbtaQYeyFxK3mNr3lcQ==}
+  '@valkey/valkey-glide-linux-arm64-musl@2.5.2':
+    resolution: {integrity: sha512-CFTrYPWIrh+k66eqH3/FvUlMZ4S7p328iFTK+qsHxyYH3CnhAmKMaOHcptFKz5n7ypT8L/XuOBl+NIQgUrJGQA==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@valkey/valkey-glide-linux-x64-gnu@2.5.1':
-    resolution: {integrity: sha512-VUXP852lmBp09WSG1/Yd9SFoATUW+MRRVaXhFabQkRlHm/7sm/0X9K2xyU5j41OeoHYK6Zne7YyGIyE1zgkV4Q==}
+  '@valkey/valkey-glide-linux-x64-gnu@2.5.2':
+    resolution: {integrity: sha512-osWsmJ+cg2iZjjNZ5IHQUMg/Xb/TQVyBvDxKA11vpLuEFMulQYfUfw+LWo0PwnG2mGJGKHhDnZ8KZAJpd03LWQ==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@valkey/valkey-glide-linux-x64-musl@2.5.1':
-    resolution: {integrity: sha512-KVRvCMBEFiyOkxgOy6KDC3M4QmpSOnRZa39mkOx/nZwP/9fFzuJ3g0RTGVcLQ75RqRSexqitE4MuG8IpUKjn5w==}
+  '@valkey/valkey-glide-linux-x64-musl@2.5.2':
+    resolution: {integrity: sha512-gJCma4s3j3AUQk3k2Kcxe3ImWpla4e9jr41f1w9VwZd6CkWuZQdk1PsLpdROvtaBxUiRiq+RZvvLKvGf0md1Kg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@valkey/valkey-glide@2.5.1':
-    resolution: {integrity: sha512-vtYyMJ2L42RH5CgBNtG2ffupNxu8c6KTzWvhXsUI2zChIFJQwUcuHuEdqXeOjTJZ9XfWs1E4w1TMiwnZSqGlkw==}
+  '@valkey/valkey-glide@2.5.2':
+    resolution: {integrity: sha512-8d3m2NyveQ2Ws4OUd7Zz3zsPP835Nqi4Rm3ZMoLdUjTfnEJejIMPJGR8b09foiPEG4GXV9j+QWyDRuM9VHOuVw==}
     engines: {node: '>=16'}
 
   '@vercel/analytics@1.6.1':
@@ -24550,8 +24567,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  effect@4.0.0-beta.59:
-    resolution: {integrity: sha512-xyUDLeHSe8d6lWGOvR6Fgn2HL6gYeTZ/S4Jzk9uc4ZUxMPPsNZlNXrvk0C7/utQFzeX7uAWcVnG2BjbA0SRoAA==}
+  effect@4.0.0-beta.103:
+    resolution: {integrity: sha512-pE8TxF4m2tQzVI+77dIlm3s+81TACV1AiX1JEkvY+zVuxgQQ8aGSkqXNJF6b/ST+coCSk5cUdbULpQ7sm4oHyw==}
 
   efrt@2.9.0:
     resolution: {integrity: sha512-ZMAvlcu4AfmtJ4K/0hs0uofVUZPSeLG/w4yOyZawQLl9YEy8iDKIxIIPsUAlS907clC7bgD17e73vi5unwNE/g==}
@@ -26062,6 +26079,10 @@ packages:
   ini@6.0.0:
     resolution: {integrity: sha512-IBTdIkzZNOpqm7q3dRqJvMaldXjDHWkEDfrwGEQTs5eaQMWV+djAhR+wahyNNMAa+qpbDUhBMVt4ZKNwpPm7xQ==}
     engines: {node: ^20.17.0 || >=22.9.0}
+
+  ini@7.0.0:
+    resolution: {integrity: sha512-ifK0CgjALofS5bkrcTy4RaQ9Vx2Knf/eLeIO+NaswQEpH1UblrtTSCIvN71qQDMq0PeQ/SSPojvEJp9vvvfr+w==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
   inline-style-parser@0.2.9:
     resolution: {integrity: sha512-IttN8BqKLxzUrnTqHI+/hwAJQItBAUjdoHERCDv+oOuX48VP6bzW8+QjOXSfoevzq3YrYAwX1uLHp8TqO9yIeg==}
@@ -27669,8 +27690,8 @@ packages:
     resolution: {integrity: sha512-prUB8+Gc/1rEzaNo+3Rjo0Hdi6gFjQ9Td0mDsvAIkSGUyp6EADdEBiU71ZP5Mj4jCG+vai0qSNV+yisQAMYuSQ==}
     hasBin: true
 
-  msgpackr@1.12.1:
-    resolution: {integrity: sha512-4EUH9tQHnMmEgzW/MdAP0KIfa1T9AF+htl0ffe2n5vb2EKn9y2co8ccpgWko6S52Jy1PQZKwRnx5/KkYjtd9MQ==}
+  msgpackr@2.1.4:
+    resolution: {integrity: sha512-TvP18sX5U3MXoHHSUZen/FagaNTEJObyb8OlnJcNbqN6Ux/oCwYJrHhCOzi31bItyW/Efz1IDnRDKQ23j4ZuvA==}
 
   mssql@12.7.13:
     resolution: {integrity: sha512-RwNhOEU1A7vCbKmkZapbfLk31fKFByrEnK2eDPIw/rlloLUxNhuCcWj4CmXvyHiyjIjI0TMZWid20PAGoRX4xA==}
@@ -28301,6 +28322,10 @@ packages:
   p-retry@6.2.1:
     resolution: {integrity: sha512-hEt02O4hUct5wtwg4H4KcWgDdm+l1bOaEy/hWzd8xtXB9BqxTWBBhb+2ImAtH4Cv4rPjV76xN3Zumqk3k3AhhQ==}
     engines: {node: '>=16.17'}
+
+  p-retry@7.1.0:
+    resolution: {integrity: sha512-xL4PiFRQa/f9L9ZvR4/gUCRNus4N8YX80ku8kv9Jqz+ZokkiZLM0bcvX0gm1F3PDi9SPRsww1BDsTWgE6Y1GLQ==}
+    engines: {node: '>=20'}
 
   p-retry@7.1.1:
     resolution: {integrity: sha512-J5ApzjyRkkf601HpEeykoiCvzHQjWxPAHhyjFcEUP2SWq0+35NKh8TLhpLw+Dkq5TZBFvUM6UigdE9hIVYTl5w==}
@@ -31023,6 +31048,7 @@ packages:
 
   tldts-core@7.4.20:
     resolution: {integrity: sha512-C630TWXZCZmLq0F2bW4QqwnaaxCQ/svpAqvJwnC4JvgEM5ohhBnGsEzTLSOXcN+xjz+kEaHS5uoWIw2klnqd0A==}
+    deprecated: Partial release, see https://github.com/remusao/tldts/issues/2735. Use >=7.4.22.
 
   tldts@6.1.86:
     resolution: {integrity: sha512-WMi/OQ2axVTf/ykqCQgXiIct+mSQDFdH2fkwhPwgEwvJ1kSzZRiinb0zF2Xb8u4+OqPChmyI6MEu4EezNJz+FQ==}
@@ -36215,6 +36241,21 @@ snapshots:
 
   '@dmsnell/diff-match-patch@1.1.0': {}
 
+  '@docker/sandboxes@0.53.0(bufferutil@4.1.0)':
+    dependencies:
+      '@bufbuild/protobuf': 2.13.0
+      '@types/formidable': 3.4.6
+      '@types/ws': 8.18.2
+      formidable: 3.5.4
+      jose: 6.2.12
+      openapi-fetch: 0.17.0
+      p-retry: 7.1.0
+      undici: 8.12.2
+      ws: 8.22.0(bufferutil@4.1.0)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@docsearch/core@4.7.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     optionalDependencies:
       '@types/react': 19.3.0
@@ -40538,7 +40579,7 @@ snapshots:
   '@opencode-ai/plugin@1.14.48':
     dependencies:
       '@opencode-ai/sdk': 1.14.48
-      effect: 4.0.0-beta.59
+      effect: 4.0.0-beta.103
       zod: 4.6.7
 
   '@opencode-ai/sdk@1.14.48':
@@ -44922,6 +44963,10 @@ snapshots:
       '@types/express-serve-static-core': 5.1.3
       '@types/serve-static': 2.2.0
 
+  '@types/formidable@3.4.6':
+    dependencies:
+      '@types/node': 22.19.15
+
   '@types/fs-extra@11.0.4':
     dependencies:
       '@types/jsonfile': 6.1.4
@@ -45446,35 +45491,35 @@ snapshots:
       valibot: 1.5.0(typescript@7.0.2)
     optional: true
 
-  '@valkey/valkey-glide-darwin-arm64@2.5.1':
+  '@valkey/valkey-glide-darwin-arm64@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-darwin-x64@2.5.1':
+  '@valkey/valkey-glide-darwin-x64@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-arm64-gnu@2.5.1':
+  '@valkey/valkey-glide-linux-arm64-gnu@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-arm64-musl@2.5.1':
+  '@valkey/valkey-glide-linux-arm64-musl@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-x64-gnu@2.5.1':
+  '@valkey/valkey-glide-linux-x64-gnu@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-x64-musl@2.5.1':
+  '@valkey/valkey-glide-linux-x64-musl@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide@2.5.1':
+  '@valkey/valkey-glide@2.5.2':
     dependencies:
       long: 5.3.2
       protobufjs: 8.8.0
     optionalDependencies:
-      '@valkey/valkey-glide-darwin-arm64': 2.5.1
-      '@valkey/valkey-glide-darwin-x64': 2.5.1
-      '@valkey/valkey-glide-linux-arm64-gnu': 2.5.1
-      '@valkey/valkey-glide-linux-arm64-musl': 2.5.1
-      '@valkey/valkey-glide-linux-x64-gnu': 2.5.1
-      '@valkey/valkey-glide-linux-x64-musl': 2.5.1
+      '@valkey/valkey-glide-darwin-arm64': 2.5.2
+      '@valkey/valkey-glide-darwin-x64': 2.5.2
+      '@valkey/valkey-glide-linux-arm64-gnu': 2.5.2
+      '@valkey/valkey-glide-linux-arm64-musl': 2.5.2
+      '@valkey/valkey-glide-linux-x64-gnu': 2.5.2
+      '@valkey/valkey-glide-linux-x64-musl': 2.5.2
 
   '@vercel/analytics@1.6.1(react@19.3.1)':
     optionalDependencies:
@@ -48473,17 +48518,17 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.0.0-beta.59:
+  effect@4.0.0-beta.103:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.10.2
       find-my-way-ts: 0.1.6
-      ini: 6.0.0
+      ini: 7.0.0
       kubernetes-types: 1.30.0
-      msgpackr: 1.12.1
+      msgpackr: 2.1.4
       multipasta: 0.2.9
       toml: 5.0.1
-      uuid: 13.0.1
+      uuid: 14.0.3
       yaml: 2.9.1
 
   efrt@2.9.0: {}
@@ -50461,6 +50506,8 @@ snapshots:
 
   ini@6.0.0: {}
 
+  ini@7.0.0: {}
+
   inline-style-parser@0.2.9: {}
 
   inngest-cli@1.49.0(encoding@0.1.14)(supports-color@10.2.2):
@@ -52336,7 +52383,7 @@ snapshots:
       '@msgpackr-extract/msgpackr-extract-win32-x64': 3.0.6
     optional: true
 
-  msgpackr@1.12.1:
+  msgpackr@2.1.4:
     optionalDependencies:
       msgpackr-extract: 3.0.6
 
@@ -53161,6 +53208,10 @@ snapshots:
       '@types/retry': 0.12.2
       is-network-error: 1.3.2
       retry: 0.13.1
+
+  p-retry@7.1.0:
+    dependencies:
+      is-network-error: 1.3.2
 
   p-retry@7.1.1:
     dependencies:

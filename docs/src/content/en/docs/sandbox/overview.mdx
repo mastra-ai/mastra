@@ -129,6 +129,8 @@ export const startServerTool = createTool({
 
 [`LocalSandbox`](/reference/workspace/local-sandbox) executes commands on the same machine as your Mastra application. By default, commands run directly on the host with the permissions of the application process.
 
+`workingDirectory` only sets where commands run. Mastra doesn't copy your project into it. To give an agent its own checkout, run `git clone` or `git worktree add` into a directory outside the source repository.
+
 ```typescript
 const sandbox = new LocalSandbox({
   workingDirectory: './workspace',
