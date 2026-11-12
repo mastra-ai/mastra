@@ -77,7 +77,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { RequestContext, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import { matchesRunFence } from '@mastra/core/storage';
 import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -1778,9 +1778,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // defaults pick the same callbacks they did for the original run. A resume
       // in a fresh process has no registry entry, so use the suspended snapshot
       // that dispatch resumes from.
-      const savedRequestContext: Iterable<readonly [string, unknown]> =
-        existingRegistryEntry?.requestContext?.entries() ??
-        Object.entries((await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext ?? {});
+      // The run's user and token are left out, so they come only from this resume.
+      const savedRequestContext = Object.entries(
+        withoutLiveRequestKeys(
+          existingRegistryEntry?.requestContext
+            ? Object.fromEntries(existingRegistryEntry.requestContext.entries())
+            : (await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext,
+        ),
+      );
       const callbackOptions = await withDefaultOptions(agent, {
         ...resumeOptions,
         requestContext: new RequestContext([
