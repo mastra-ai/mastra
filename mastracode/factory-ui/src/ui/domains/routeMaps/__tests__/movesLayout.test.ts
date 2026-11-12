@@ -36,4 +36,41 @@ describe('movesLayout', () => {
       expect(edges[transition.id]).toBe(transition.from === 'planning' ? 'active' : 'hidden');
     }
   });
+
+  it('keeps a switched-off move dim, even when its phase is traced', () => {
+    const off = routes.map(route => (route.id === 'closed-completed' ? { ...route, enabled: false } : route));
+    const withOff = movesMap(workBoardInfo, off);
+    const id = 'event:closed-completed->done';
+
+    expect(emphasisByEdge(movesLayout(withOff, undefined).edges)[id]).toBe('dimmed');
+    expect(emphasisByEdge(movesLayout(withOff, { kind: 'phase', id: 'done' }).edges)[id]).toBe('dimmed');
+    expect(emphasisByEdge(movesLayout(withOff, { kind: 'event', id: 'closed-completed' }).edges)[id]).toBe('dimmed');
+  });
+
+  it('numbers event moves in the order they are tried, though they sit beside the phase they lead to', () => {
+    const nodes = movesLayout(map, undefined).nodes.flatMap(node => ('move' in node.data ? [node.data.move] : []));
+
+    expect([...nodes].sort((a, b) => a.position - b.position).map(move => move.route.id)).toEqual(
+      map.eventMoves.map(move => move.route.id),
+    );
+    expect(map.eventMoves.map(move => move.position)).toEqual(map.eventMoves.map((_, index) => index + 1));
+  });
+
+  it('starts each card below the measured height of the one above, so tall cards never overlap', () => {
+    const tops = (heights?: Map<string, number>) =>
+      Object.fromEntries(movesLayout(map, undefined, heights).nodes.map(node => [node.id, node.position.y]));
+    const fixed = tops();
+    const tall = tops(new Map([['intake', 400]]));
+
+    // Unmeasured, phases sit a row apart; a taller Intake pushes every phase below it down.
+    expect(fixed.triage - fixed.intake).toBe(168);
+    expect(tall.triage - tall.intake).toBe(448);
+    expect(tall.planning - tall.triage).toBe(168);
+
+    const events = map.eventMoves.map(move => `event:${move.route.id}`);
+    const sameRow = events.filter(id => fixed[id] !== undefined).sort((a, b) => fixed[a] - fixed[b]);
+    const [first, second] = sameRow;
+    const tallEvent = tops(new Map([[first, 300]]));
+    expect(tallEvent[second] - tallEvent[first]).toBeGreaterThanOrEqual(316);
+  });
 });

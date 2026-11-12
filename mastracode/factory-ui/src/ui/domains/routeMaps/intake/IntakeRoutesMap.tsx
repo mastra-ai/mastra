@@ -7,7 +7,7 @@ import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { Connector, ConnectorLayer, useConnectorAnchors } from '../connectors';
 import type { AnchorBox } from '../connectors';
 import { DestinationBoardCard } from './DestinationBoardCard';
-import { ARRIVAL_EVENTS, intakeMap, routeTakesFrom } from './intakeMap';
+import { ARRIVAL_EVENTS, destinationKey, intakeMap, routeTakesFrom } from './intakeMap';
 import type { IntakeSource } from './intakeMap';
 import { ArrivalLane } from './ArrivalLane';
 import { RouteNode } from './RouteNode';
@@ -48,7 +48,11 @@ function IntakeFlow({
   boardIds: string[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const layoutKey = map.routes.map(entry => `${entry.route.id}:${entry.destination}`).join('|');
+  // Anything that moves a route or a destination row moves the connectors, even when nothing resizes.
+  const layoutKey = [
+    ...map.routes.map(entry => `${entry.route.id}:${entry.destination}`),
+    ...map.boards.flatMap(entry => entry.phases.map(phase => destinationKey(entry.board.id, phase.id))),
+  ].join('|');
   const anchors = useConnectorAnchors(containerRef, layoutKey);
   const [activeRoute, setActiveRoute] = useState<string>();
   const [source, setSource] = useState<IntakeSource>();
@@ -57,8 +61,8 @@ function IntakeFlow({
     const entry = map.routes.find(candidate => candidate.route.id === id);
     if (!entry) return false;
     if (activeRoute) return activeRoute !== id;
-    if (source) return !routeTakesFrom(entry.route, source);
-    return !entry.route.enabled || entry.unreachable;
+    if (!entry.route.enabled || entry.unreachable) return true;
+    return source !== undefined && !routeTakesFrom(entry.route, source);
   };
   const activeDestination = activeRoute
     ? map.routes.find(entry => entry.route.id === activeRoute)?.destination

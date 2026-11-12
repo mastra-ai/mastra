@@ -1,5 +1,5 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import type { RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo, IntakeRouteInfo } from '../../../../api/types';
 import { catchesEveryArrival } from '../../settings/components/intakeRoutes';
@@ -31,26 +31,35 @@ function isIntakeSource(value: unknown): value is IntakeSource {
   return typeof value === 'string' && (INTAKE_SOURCES as readonly string[]).includes(value);
 }
 
+/** The sources one condition lets through, or undefined when it doesn't limit the source. */
+function conditionSources(condition: RuleCondition): IntakeSource[] | undefined {
+  if (!SOURCE_FIELDS.has(condition.field)) return undefined;
+  const values = Array.isArray(condition.value) ? condition.value : [condition.value];
+  const named = values.filter(isIntakeSource);
+  if (condition.operator === 'equals' || condition.operator === 'in') return named;
+  if (condition.operator === 'not_equals' || condition.operator === 'not_in') {
+    return INTAKE_SOURCES.filter(source => !named.includes(source));
+  }
+  return undefined;
+}
+
 /**
- * The sources a route takes cards from, read from its top-level `source.integration`/`source.provider`
- * conditions; undefined when it takes cards from any source. A route that only names other facts, or names
- * sources inside an OR, can match any source.
+ * The sources a route takes cards from, read from its `source.integration`/`source.provider` conditions;
+ * undefined when it takes cards from any source. Every member of an AND must let a source through, and any
+ * member of an OR may, so an OR limits the source only when each of its members does.
  */
 export function routeSources(when: RuleGroup | null): IntakeSource[] | undefined {
-  if (!when || when.operator !== 'AND') return undefined;
+  if (!when) return undefined;
+  const members = when.conditions.map(member =>
+    'conditions' in member ? routeSources(member) : conditionSources(member),
+  );
+  if (when.operator === 'OR') {
+    if (members.length === 0 || members.some(sources => sources === undefined)) return undefined;
+    return INTAKE_SOURCES.filter(source => members.some(sources => sources?.includes(source)));
+  }
   let allowed: IntakeSource[] | undefined;
-  for (const condition of when.conditions) {
-    if ('conditions' in condition || !SOURCE_FIELDS.has(condition.field)) continue;
-    const values = Array.isArray(condition.value) ? condition.value : [condition.value];
-    const named = values.filter(isIntakeSource);
-    const matching =
-      condition.operator === 'equals' || condition.operator === 'in'
-        ? named
-        : condition.operator === 'not_equals' || condition.operator === 'not_in'
-          ? INTAKE_SOURCES.filter(source => !named.includes(source))
-          : undefined;
-    if (!matching) continue;
-    allowed = allowed ? allowed.filter(source => matching.includes(source)) : matching;
+  for (const sources of members) {
+    if (sources) allowed = allowed ? allowed.filter(source => sources.includes(source)) : sources;
   }
   return allowed;
 }

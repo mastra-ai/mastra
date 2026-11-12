@@ -148,7 +148,8 @@ function MovesFlow({
   const [focus, setFocus] = useState<MapFocus>();
   // The canvas only fits the map once every card is measured, and it reports sizes back as node changes.
   const [sizes, setSizes] = useState<ReadonlyMap<string, Dimensions>>(new Map());
-  const layout = movesLayout(map, focus);
+  const heights = new Map([...sizes].map(([id, size]) => [id, size.height]));
+  const layout = movesLayout(map, focus, heights);
   const nodes = layout.nodes.map(node => ({ ...node, measured: sizes.get(node.id) }));
   const edges = layout.edges;
   const measure = (changes: NodeChange[]) => {

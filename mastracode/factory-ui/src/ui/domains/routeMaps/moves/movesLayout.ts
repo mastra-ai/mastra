@@ -8,11 +8,15 @@ export const MOVE_EDGE = 'move-map-edge';
 export const GUTTER_NODE = 'move-map-gutter';
 
 const PHASE_WIDTH = 280;
+/** Where a phase starts below the one above, unless that one's card is taller. */
 const ROW = 168;
+/** Space kept below a phase card, for the moves leaving and arriving at its middle. */
+const PHASE_SPACING = 48;
 const EVENT_WIDTH = 240;
 /** Room between the event column and the phases for the curves joining them. */
 const EVENT_GAP = 140;
 const EVENT_ROW = 148;
+const EVENT_SPACING = 16;
 
 /** How far right of the phases a move between phases `distance` apart bows. */
 export function moveBow(distance: number): number {
@@ -38,8 +42,14 @@ export type MoveEdgeModel = Edge<MoveEdgeData, typeof MOVE_EDGE>;
  * a column on their left beside the phase it moves cards to. Board order is the story, so it's placed by hand rather
  * than by a layout engine that would reorder it around the cycles.
  */
-export function movesLayout(map: MovesMap, focus: MapFocus) {
-  const row = new Map(map.phases.map((entry, index) => [entry.phase.id, index]));
+export function movesLayout(map: MovesMap, focus: MapFocus, heights: ReadonlyMap<string, number> = new Map()) {
+  // Cards are placed by their measured height once the canvas has measured them, so a tall one never overlaps the next.
+  const top = new Map<string, number>();
+  let phaseY = 0;
+  for (const entry of map.phases) {
+    top.set(entry.phase.id, phaseY);
+    phaseY += Math.max(ROW, (heights.get(entry.phase.id) ?? 0) + PHASE_SPACING);
+  }
   const tracedPhase = focus?.kind === 'phase' ? focus.id : undefined;
   const tracedEvent = focus?.kind === 'event' ? map.eventMoves.find(move => move.route.id === focus.id) : undefined;
   const phaseLit = (id: string) =>
@@ -50,22 +60,23 @@ export function movesLayout(map: MovesMap, focus: MapFocus) {
     (map.phases.find(entry => entry.phase.id === tracedPhase)?.anyPhase ?? false);
 
   const phaseNodes = map.phases.map(
-    (entry, index): PhaseNodeModel => ({
+    (entry): PhaseNodeModel => ({
       id: entry.phase.id,
       type: PHASE_NODE,
-      position: { x: 0, y: index * ROW },
+      position: { x: 0, y: top.get(entry.phase.id) ?? 0 },
       width: PHASE_WIDTH,
       data: { entry, dimmed: !phaseLit(entry.phase.id) },
     }),
   );
   let nextFree = 0;
   const eventNodes = [...map.eventMoves]
-    .sort((a, b) => (row.get(a.to) ?? 0) - (row.get(b.to) ?? 0))
+    .sort((a, b) => (top.get(a.to) ?? 0) - (top.get(b.to) ?? 0))
     .map((move): EventNodeModel => {
-      const y = Math.max((row.get(move.to) ?? 0) * ROW, nextFree);
-      nextFree = y + EVENT_ROW;
+      const id = `event:${move.route.id}`;
+      const y = Math.max(top.get(move.to) ?? 0, nextFree);
+      nextFree = y + Math.max(EVENT_ROW, (heights.get(id) ?? 0) + EVENT_SPACING);
       return {
-        id: `event:${move.route.id}`,
+        id,
         type: EVENT_NODE,
         position: { x: -(EVENT_WIDTH + EVENT_GAP), y },
         width: EVENT_WIDTH,
@@ -87,16 +98,19 @@ export function movesLayout(map: MovesMap, focus: MapFocus) {
       },
     }),
   );
+  const eventEmphasis = (move: MapEventMove): Emphasis => {
+    // A switched-off move never runs, so its link stays dim like its card.
+    if (!move.route.enabled) return 'dimmed';
+    if (!focus) return 'idle';
+    return tracedEvent === move || tracedPhase === move.to ? 'active' : 'dimmed';
+  };
   const eventEdges = map.eventMoves.map(
     (move): MoveEdgeModel => ({
       id: `event:${move.route.id}->${move.to}`,
       type: MOVE_EDGE,
       source: `event:${move.route.id}`,
       target: move.to,
-      data: {
-        kind: 'event',
-        emphasis: !focus ? 'idle' : tracedEvent === move || tracedPhase === move.to ? 'active' : 'dimmed',
-      },
+      data: { kind: 'event', emphasis: eventEmphasis(move) },
     }),
   );
   // The curves bow past the phases, which fitting the view to the nodes alone would cut off.

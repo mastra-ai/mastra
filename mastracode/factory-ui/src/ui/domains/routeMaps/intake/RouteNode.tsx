@@ -9,6 +9,7 @@ import { phaseOptions } from '../../settings/components/intakeRoutes';
 import { intakeRouteAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import { INTAKE_SOURCE_LABELS, routeSources } from './intakeMap';
 import type { MapDestinationBoard, MapRoute } from './intakeMap';
+import { ConditionBadges } from '../ConditionBadges';
 import { SourceIcon } from './SourceIcon';
 
 /** Where a route lands its cards, in words, so the map reads without its connectors. */
@@ -19,6 +20,19 @@ function landsOn(entry: MapRoute, boards: readonly MapDestinationBoard[]): strin
   const phase = destination.phases.find(candidate => candidate.id === phaseKey);
   const where = `${destination.board.name ?? destination.board.title} › ${phase?.name ?? phase?.title ?? phaseKey}`;
   return entry.route.target.joinClosedIssue ? `Joins the issue’s card, moves it to ${where}` : where;
+}
+
+/** The route as one sentence for screen readers, which would otherwise run the card's pieces together. */
+function routeLabel(entry: MapRoute, conditions: ReturnType<typeof describeConditions>, lands: string): string {
+  const status = [!entry.route.enabled && 'off', entry.isCatchAll && 'catch-all'].filter(Boolean);
+  return [
+    `${entry.route.name}${status.length > 0 ? ` (${status.join(', ')})` : ''}`,
+    conditions && `When ${conditions.parts.join(` ${conditions.join} `)}`,
+    lands,
+    entry.unreachable && 'Never runs: a route above takes every new card',
+  ]
+    .filter(Boolean)
+    .join('. ');
 }
 
 export function RouteNode({
@@ -48,7 +62,7 @@ export function RouteNode({
       <Link
         ref={anchorRef}
         to={settingsSectionPath(factoryId, 'intake', intakeRouteAnchor(route.id))}
-        aria-label={`${route.name}: ${landsOn(entry, boards)}`}
+        aria-label={routeLabel(entry, conditions, landsOn(entry, boards))}
         onPointerEnter={() => onActive(true)}
         onPointerLeave={() => onActive(false)}
         onFocus={() => onActive(true)}
@@ -82,20 +96,18 @@ export function RouteNode({
         </span>
         {(conditions || sources) && (
           <span className="flex flex-wrap items-center gap-1.5">
+            {/* The conditions already name the sources in words; the icons are for the eye. */}
             {sources?.map(source => (
               <span
                 key={source}
                 title={INTAKE_SOURCE_LABELS[source]}
+                aria-hidden="true"
                 className="text-muted-foreground flex [&_svg]:size-3.5"
               >
                 <SourceIcon source={source} />
               </span>
             ))}
-            {conditions?.parts.map((part, index) => (
-              <Badge key={index} size="sm" emphasis="subtle">
-                {part}
-              </Badge>
-            ))}
+            {conditions && <ConditionBadges conditions={conditions} />}
           </span>
         )}
         <Txt as="span" variant="caption" tone="muted">

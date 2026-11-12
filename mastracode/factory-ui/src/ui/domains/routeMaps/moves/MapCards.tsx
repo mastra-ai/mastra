@@ -7,6 +7,7 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { describeConditions } from '../../settings/components/conditionFields';
 import { phaseName, phaseOptions } from '../../settings/components/intakeRoutes';
+import { ConditionBadges } from '../ConditionBadges';
 import type { MapEventMove, MapPhase } from './movesMap';
 
 function lowerFirst(text: string): string {
@@ -95,6 +96,10 @@ export function EventMoveCard({
     >
       <div className="flex items-center gap-2">
         <Zap className="text-chart-purple size-3.5 shrink-0" aria-hidden="true" />
+        {/* Cards beside one phase sit by where they lead, so the number keeps the order they're tried in. */}
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+          {move.position}
+        </Txt>
         <Txt as="h3" variant="label" className="min-w-0 flex-1">
           {move.route.name}
         </Txt>
@@ -108,12 +113,8 @@ export function EventMoveCard({
         When {lowerFirst(move.trigger)}
       </Txt>
       {conditions && (
-        <div className="flex flex-wrap gap-1">
-          {conditions.parts.map((part, index) => (
-            <Badge key={index} size="sm" emphasis="subtle">
-              {part}
-            </Badge>
-          ))}
+        <div className="flex flex-wrap items-center gap-1">
+          <ConditionBadges conditions={conditions} />
         </div>
       )}
       <div className="flex items-center gap-1.5">

@@ -27,7 +27,8 @@ export function RouteViewTabs({ label, editor, map }: { label: string; editor: R
         <Tab value="editor">Edit</Tab>
         <Tab value="map">Map</Tab>
       </TabList>
-      <TabContent value="editor" flush className="overflow-visible pt-5">
+      {/* The editor queues its saves in order; unmounting it mid-save would let its next save race the last one. */}
+      <TabContent value="editor" flush keepMounted className="overflow-visible pt-5">
         {editor}
       </TabContent>
       <TabContent value="map" flush className="overflow-visible pt-5">

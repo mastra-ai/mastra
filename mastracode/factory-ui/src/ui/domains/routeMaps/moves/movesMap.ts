@@ -30,6 +30,8 @@ export type MapEventMove = {
   trigger: string;
   /** The phase it moves cards to. */
   to: string;
+  /** Where it sits among the board's moves, from 1; the first that matches wins. */
+  position: number;
 };
 
 export type MovesMap = { phases: MapPhase[]; transitions: MapTransition[]; eventMoves: MapEventMove[] };
@@ -68,6 +70,11 @@ export function movesMap(board: InstalledBoardInfo, routes: readonly IntakeRoute
   });
   const eventMoves = routes
     .filter(route => !placesNewCards(route) && route.target.boardKey === board.id)
-    .map(route => ({ route, trigger: triggerLabel(route.on), to: route.target.phaseKey ?? board.initialPhase }));
+    .map((route, index) => ({
+      route,
+      trigger: triggerLabel(route.on),
+      to: route.target.phaseKey ?? board.initialPhase,
+      position: index + 1,
+    }));
   return { phases, transitions, eventMoves };
 }

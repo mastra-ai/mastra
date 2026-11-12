@@ -52,7 +52,7 @@ export function MoveEdge({ id, source, target, data }: EdgeProps<MoveEdgeModel>)
     <>
       <defs>
         <marker id={arrowId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-          <path d="M1 1 L9 5 L1 9 Z" fill={color} />
+          <path d="M1 1 L9 5 L1 9 Z" fill={color} fillOpacity={OPACITY[data.emphasis]} />
         </marker>
       </defs>
       <BaseEdge

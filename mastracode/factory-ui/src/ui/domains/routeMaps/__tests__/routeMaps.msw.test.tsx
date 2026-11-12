@@ -51,12 +51,15 @@ describe('intake routes map', () => {
     renderIntake();
 
     const routes = within(await mapRoutes()).getAllByRole('link');
+    // Each link reads as one sentence: the route, when it matches, and where its cards land.
     expect(routes.map(route => route.getAttribute('aria-label'))).toEqual([
-      'Pull requests that close a waiting issue join its card: Joins the issue’s card, moves it to Work › PR review',
-      'Outside authors wait in Intake: Work › Intake',
-      'Pull requests go to Review: Work › PR review',
-      'Everything else goes to Work › Intake: Work › Intake',
+      'Pull requests that close a waiting issue join its card. When Source kind is pull request and Author is trusted and Pull request closes an issue and Closed issue phase is Intake and Closed issue has no pull request. Joins the issue’s card, moves it to Work › PR review',
+      'Outside authors wait in Intake. When Integration is GitHub or GitLab and Author is not trusted. Work › Intake',
+      'Pull requests go to Review. When Source kind is pull request. Work › PR review',
+      'Everything else goes to Work › Intake (catch-all). Work › Intake',
     ]);
+    // Both conditions must hold, and the card says so between them.
+    expect(within(routes[1]).getByText('and')).toBeInTheDocument();
     // Only the last one takes every new card, and the map says so.
     expect(within(routes[3]).getByText('Catch-all')).toBeInTheDocument();
     expect(within(routes[0]).queryByText('Catch-all')).not.toBeInTheDocument();
@@ -78,6 +81,7 @@ describe('intake routes map', () => {
 
     const off = within(await mapRoutes()).getByRole('link', { name: /^Pull requests go to Review/ });
     expect(within(off).getByText('Off')).toBeInTheDocument();
+    expect(off).toHaveAccessibleName(/^Pull requests go to Review \(off\)\./);
     expect(off).toHaveAttribute('data-dimmed');
     const on = screen.getByRole('link', { name: /^Outside authors wait in Intake/ });
     expect(on).not.toHaveAttribute('data-dimmed');
@@ -92,6 +96,7 @@ describe('intake routes map', () => {
 
     const link = within(await mapRoutes()).getByRole('link', { name: /^Late route/ });
     expect(within(link).getByText('Never runs: a route above takes every new card.')).toBeInTheDocument();
+    expect(link).toHaveAccessibleName(/Never runs: a route above takes every new card$/);
   });
 
   it('traces one source: routes that only take other sources fade', async () => {
@@ -104,6 +109,24 @@ describe('intake routes map', () => {
     expect(screen.getByRole('button', { name: 'Linear' })).toHaveAttribute('aria-pressed', 'true');
     // Outside authors only names GitHub and GitLab, so Linear cards never take it.
     expect(screen.getByRole('link', { name: /^Outside authors wait in Intake/ })).toHaveAttribute('data-dimmed');
+    expect(screen.getByRole('link', { name: /^Pull requests go to Review/ })).not.toHaveAttribute('data-dimmed');
+  });
+
+  it('keeps a switched-off route and one below the catch-all faded while tracing a source they name', async () => {
+    const routes = seededRoutes();
+    const catchAll = routes.findIndex(route => route.id === 'everything-else');
+    const late = { ...routes[1], id: 'late', name: 'Late route', position: catchAll + 1 };
+    serve({
+      routes: [...routes.map(route => (route.id === 'outside-authors' ? { ...route, enabled: false } : route)), late],
+    });
+    renderIntake();
+    await mapRoutes();
+
+    await userEvent.click(screen.getByRole('button', { name: 'GitHub' }));
+
+    // Both name GitHub, but neither can take a card.
+    expect(screen.getByRole('link', { name: /^Outside authors wait in Intake/ })).toHaveAttribute('data-dimmed');
+    expect(screen.getByRole('link', { name: /^Late route/ })).toHaveAttribute('data-dimmed');
     expect(screen.getByRole('link', { name: /^Pull requests go to Review/ })).not.toHaveAttribute('data-dimmed');
   });
 
