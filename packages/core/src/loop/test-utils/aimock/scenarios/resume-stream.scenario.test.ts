@@ -1,8 +1,171 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { createDurableAgent, createEventedAgent, DurableAgent } from '../../../../agent/durable';
+import { DurableStepIds } from '../../../../agent/durable/constants';
+import { globalRunRegistry } from '../../../../agent/durable/run-registry';
+import { EventEmitterPubSub } from '../../../../events';
+import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
+
+const TIMEOUT_MESSAGE = '`modelSettings.timeout.stepMs` must be a positive, finite number of milliseconds.';
+
+describeForAllEngines('AIMock scenario: resume timeout validation (COR-1426)', engine => {
+  const getMock = useLoopScenarioAimock();
+  const modes =
+    engine === 'durable' || engine === 'evented'
+      ? (['per-call', 'default', 'untilIdle', 'cold', 'cold-default'] as const)
+      : (['per-call', 'default', 'untilIdle'] as const);
+
+  describe.each(['resumeStream', 'resumeGenerate'] as const)('%s', method => {
+    it.each(modes.filter(mode => method === 'resumeStream' || mode !== 'untilIdle'))(
+      'rejects invalid %s settings without consuming the suspended run',
+      async mode => {
+        let toolCalls = 0;
+        let defaultStepMs = 30_000;
+        const defaultOptions = {
+          autoResumeSuspendedTools: false,
+          get modelSettings() {
+            return { timeout: { stepMs: defaultStepMs } };
+          },
+        };
+        const memory = new MockMemory();
+        const shared = await createSharedAgent(getMock(), {
+          engine,
+          memory,
+          defaultOptions,
+          tools: {
+            ask: createTool({
+              id: 'ask',
+              inputSchema: z.object({}),
+              suspendSchema: z.object({}),
+              resumeSchema: z.object({ answer: z.string() }),
+              execute: async (_, context) => {
+                toolCalls++;
+                if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+                return { answer: context.agent.resumeData.answer };
+              },
+            }),
+          },
+        });
+        const { output, chunks } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          sharedAgent: shared,
+          prompt: 'Ask for an answer.',
+          memory,
+          threadId: `timeout-${engine}-${method}-${mode}`,
+          resourceId: 'timeout-resource',
+          maxSteps: 3,
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              {
+                toolCalls: [{ id: 'timeout-call', name: 'ask', arguments: {} }],
+              },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Answer accepted.' });
+          },
+        });
+        expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+        expect(toolCalls).toBe(1);
+        expect(getMock().getRequests()).toHaveLength(1);
+
+        let agent = shared.agent;
+        if (mode === 'cold' || mode === 'cold-default') {
+          if (!(agent instanceof DurableAgent)) throw new Error('Cold setup requires a durable wrapper');
+          const entry = globalRunRegistry.get(output.runId);
+          await entry?.workflowExecution;
+          const workflows = await shared.mastra.getStorage()!.getStore('workflows');
+          await vi.waitFor(async () => {
+            const persisted = await workflows!.getWorkflowRunById({
+              runId: output.runId,
+              workflowName: DurableStepIds.AGENTIC_LOOP,
+            });
+            expect(persisted?.snapshot.status).toBe('suspended');
+          });
+          const baseAgent = agent.agent;
+          entry?.cleanup?.();
+          globalRunRegistry.delete(output.runId);
+          const oldPubsub = agent.getPubSub();
+          if (oldPubsub instanceof EventEmitterPubSub) oldPubsub.close();
+          const pubsub = new EventEmitterPubSub();
+          const wrapped =
+            engine === 'evented'
+              ? createEventedAgent({ agent: baseAgent, pubsub })
+              : createDurableAgent({ agent: baseAgent, pubsub });
+          const mastra = new Mastra({
+            agents: { wrapped },
+            storage: shared.mastra.getStorage(),
+            pubsub,
+            logger: false,
+          });
+          agent = mastra.getAgent('wrapped');
+          expect(globalRunRegistry.has(output.runId)).toBe(false);
+        }
+        const invalidDefault = mode === 'default' || mode === 'cold-default';
+        if (invalidDefault) defaultStepMs = -1;
+        const options = {
+          runId: output.runId,
+          toolCallId: 'timeout-call',
+          maxSteps: 3,
+          ...(invalidDefault ? {} : { modelSettings: { timeout: { stepMs: -1 } } }),
+        };
+        const invalidResume =
+          method === 'resumeStream'
+            ? agent.resumeStream(
+                { answer: 'yes' },
+                { ...options, ...(mode === 'untilIdle' ? { untilIdle: true } : {}) },
+              )
+            : agent.resumeGenerate({ answer: 'yes' }, options);
+        await expect(invalidResume).rejects.toThrow(TypeError);
+        await expect(invalidResume).rejects.toThrow(TIMEOUT_MESSAGE);
+        expect(toolCalls).toBe(1);
+        expect(getMock().getRequests()).toHaveLength(1);
+
+        const validOptions = { ...options, modelSettings: { timeout: { stepMs: 30_000 } } };
+        const result =
+          method === 'resumeStream'
+            ? await (async () => {
+                const resumed = await agent.resumeStream({ answer: 'yes' }, validOptions);
+                for await (const _chunk of resumed.fullStream) {
+                  /* drain */
+                }
+                return resumed.getFullOutput();
+              })()
+            : await agent.resumeGenerate({ answer: 'yes' }, validOptions);
+        expect(result.text).toBe('Answer accepted.');
+        expect(JSON.stringify(result.toolResults)).toContain('yes');
+        expect(toolCalls).toBe(2);
+        expect(getMock().getRequests()).toHaveLength(2);
+      },
+    );
+
+    if (engine === 'normal' || engine === 'fs') {
+      it('validates timeout before looking up a missing snapshot', async () => {
+        const { agent } = await createSharedAgent(getMock(), { engine });
+        await expect(
+          agent[method](
+            {},
+            {
+              runId: 'missing-run',
+              modelSettings: { timeout: { stepMs: -1 } },
+            },
+          ),
+        ).rejects.toThrow(new TypeError(TIMEOUT_MESSAGE));
+        expect(getMock().getRequests()).toHaveLength(0);
+      });
+    }
+  });
+});
 
 /**
  * Manual tool resumption with `resumeStream()`.
@@ -94,9 +257,15 @@ describeForAllEngines(
       // Resume: call agent.resumeStream with the runId and resume data
       const resumeOutput = await shared.agent.resumeStream({ name: 'Dero Israel' }, { runId: output.runId });
 
-      // Consume the resume stream
-      for await (const _chunk of resumeOutput.fullStream) {
-        // drain
+      // A durable resume continues the existing message, rather than opening another.
+      const resumedTypes: string[] = [];
+      for await (const chunk of resumeOutput.fullStream) {
+        resumedTypes.push(chunk.type);
+      }
+      if (isDurableEngineVariant(engine)) {
+        expect(chunks![0]?.type).toBe('start');
+        expect(chunks!.filter(c => c.type === 'start')).toHaveLength(1);
+        expect(resumedTypes).not.toContain('start');
       }
 
       // Assert: tool received the resume data

@@ -1,4 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { toPersistedErrorIdentity } from '@mastra/core/error';
 
 import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun } from '../session/run-audit.js';
 import type { RunEndCaptureSession } from '../session/run-audit.js';
@@ -59,7 +60,7 @@ export function observeSessionRunReports(
       return;
     }
     if (event.type === 'error') {
-      lastError = event.error?.message;
+      lastError = toPersistedErrorIdentity(event.error).reason ?? event.error?.message;
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
@@ -113,7 +114,7 @@ export function heartbeatOpenRunUntilEnd(
 /** `null` for an aborted run: someone stopped or steered it, which is not an outcome. */
 export function runOutcome(
   reason: RunEndReason,
-  parked: Pick<ParkedTool, 'toolName' | 'approval'> | undefined,
+  parked: Pick<ParkedTool, 'toolName' | 'toolCallId' | 'approval'> | undefined,
   errorMessage?: string,
 ): FactoryRunOutcome | null {
   switch (reason) {
@@ -131,7 +132,13 @@ export function runOutcome(
     case 'suspended':
       return {
         status: 'blocked',
-        ...(parked ? { toolName: parked.toolName, ...(parked.approval ? { approval: true } : {}) } : {}),
+        ...(parked
+          ? {
+              toolName: parked.toolName,
+              toolCallId: parked.toolCallId,
+              ...(parked.approval ? { approval: true } : {}),
+            }
+          : {}),
       };
     default:
       return { status: 'done' };

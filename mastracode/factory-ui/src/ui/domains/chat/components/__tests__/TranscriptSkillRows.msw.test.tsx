@@ -35,6 +35,28 @@ function userSignalDBMessage(id: string, text: string): MastraDBMessage {
   };
 }
 
+/** A typed `skill` signal — how Factory starts a skill run. The name is an attribute, not an envelope. */
+function skillSignalDBMessage(id: string, name: string, text: string): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    createdAt: CREATED_AT,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: {
+        signal: {
+          id,
+          type: 'reactive',
+          tagName: 'skill',
+          createdAt: CREATED_AT.toISOString(),
+          attributes: { name },
+        },
+      },
+    },
+  };
+}
+
 function notificationSignalDBMessage(id: string, text: string): MastraDBMessage {
   return {
     id,
@@ -158,19 +180,26 @@ describe('TranscriptEntries skill rows', () => {
     expect(screen.queryByText(/&lt;\/skill&gt;/)).not.toBeInTheDocument();
   });
 
-  it('renders a kickoff with the appended work-item feed as a skill row plus a feed row', async () => {
-    const feed = '[Ada · 2026-08-28T10:00:00.000Z]\nLooks off to me';
-    renderEntries([userMessageEntry('msg-1', `${SKILL_WITH_ARGS}\n\n<work-item-feed>\n${feed}\n</work-item-feed>`)]);
+  it('renders a kickoff with the appended work-item description as a skill row plus a description row', async () => {
+    const description = 'Users land on /404 after signing in.\n\nRepro: sign in twice.';
+    renderEntries([
+      userMessageEntry(
+        'msg-1',
+        `${SKILL_WITH_ARGS}\n\n<work-item-description>\n${description}\n</work-item-description>`,
+      ),
+    ]);
 
     expect(screen.getByRole('group', { name: 'Skill: triage-issue' })).toBeInTheDocument();
-    const feedRow = screen.getByRole('group', { name: 'Signal: Work item feed' });
+    const descriptionRow = screen.getByRole('group', { name: 'Signal: Work item description' });
 
-    await userEvent.click(within(feedRow).getByRole('button'));
-    expect(within(feedRow).getByText(/Looks off to me/, { selector: 'p' })).toBeInTheDocument();
+    await userEvent.click(within(descriptionRow).getByRole('button'));
+    expect(
+      within(descriptionRow).getByText(/Users land on \/404 after signing in/, { selector: 'p' }),
+    ).toBeInTheDocument();
 
     // Neither envelope leaks as raw text.
     expect(screen.queryByText(/<skill name=/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/<work-item-feed>/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/<work-item-description>/)).not.toBeInTheDocument();
   });
 
   it('renders the agent activating a skill itself as the same row, not a raw tool card', async () => {
@@ -246,6 +275,34 @@ describe('TranscriptEntries skill rows', () => {
 
     // The skill row should render correctly.
     expect(screen.getByRole('group', { name: 'Skill: understand-issue' })).toBeInTheDocument();
+  });
+
+  it('renders a typed skill signal as the skill row, with arguments and description', async () => {
+    const description = 'Users land on /404 after signing in.\n\nRepro: sign in twice.';
+    renderEntries([
+      entryViaReducer(
+        skillSignalDBMessage(
+          'sig-typed-skill',
+          'triage-issue',
+          `Look at the issue.\n\nARGUMENTS: https://github.com/org/repo/issues/42\n\n<work-item-description>\n${description}\n</work-item-description>`,
+        ),
+      ),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Skill: triage-issue' });
+    expect(row).toHaveAttribute('data-skill-name', 'triage-issue');
+    expect(screen.getByText(/github\.com\/org\/repo\/issues\/42/)).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /^Signal: skill$/i })).not.toBeInTheDocument();
+
+    const descriptionRow = screen.getByRole('group', { name: 'Signal: Work item description' });
+    await userEvent.click(within(descriptionRow).getByRole('button'));
+    expect(
+      within(descriptionRow).getByText(/Users land on \/404 after signing in/, { selector: 'p' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/<work-item-description>/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole('button', { name: /Skill/ }));
+    expect(within(row).getByText(/Look at the issue/)).toBeInTheDocument();
   });
 
   it('suppresses a notification signal that echoes a skill envelope', () => {

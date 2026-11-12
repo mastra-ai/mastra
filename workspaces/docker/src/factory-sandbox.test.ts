@@ -141,6 +141,21 @@ describe('DockerFactorySandbox', () => {
     expect(tuned.dockerfile).toBe(direct.dockerfile);
   });
 
+  it('keeps Factory build env out of the image and its identity', async () => {
+    const withBuild = { ...context(), buildEnv: { NPM_TOKEN: 'sentinel-docker' }, buildEnvRevision: 'rev-a' };
+    for (const sandbox of [
+      new DockerFactorySandbox(),
+      new DockerFactorySandbox({ template: { buildEnv: { TURBO_TOKEN: 't' } } }),
+    ]) {
+      const plain = await sandbox.template(context(), {})!();
+      const built = await sandbox.template(withBuild, {})!();
+      expect(built.templateId).toBe(plain.templateId);
+      expect(built.dockerfile).toBe(plain.dockerfile);
+      expect(built.dockerfile).not.toContain('sentinel-docker');
+      expect(built.dockerfile).not.toContain('rev-a');
+    }
+  });
+
   it('returns no template for a session without repositories', () => {
     expect(new DockerFactorySandbox().template({ sessionId: 's', getRepositoryAccess: undefined }, {})).toBeUndefined();
   });
@@ -155,6 +170,14 @@ describe('DockerFactorySandbox', () => {
     expect(created.id).toBe('sess_1');
     expect((created as any)._templateSpec).toBeTypeOf('function');
     expect((created as any)._env).toEqual({ CI: '1' });
+  });
+
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new DockerFactorySandbox({
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    expect((sandbox.create({ ...context(), factoryId: 'fac-platform' }, {}) as any)._env).toEqual({ TOKEN: 't' });
+    expect((sandbox.create({ ...context(), factoryId: 'fac-mastra' }, {}) as any)._env).toEqual({});
   });
 
   it('runs the template under the configured working directory when the context names none', async () => {

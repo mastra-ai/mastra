@@ -1,6 +1,10 @@
 import type { FactorySandbox, WorkspaceSandbox } from '@mastra/core/workspace';
 
-import { destroyDetachedSessionSandbox, releaseSessionSandbox } from '../integrations/github/sandbox-release.js';
+import {
+  destroyDetachedSessionSandbox,
+  releaseSessionSandbox,
+  stopDetachedSessionSandbox,
+} from '../integrations/github/sandbox-release.js';
 import { DEFAULT_COMMAND_TIMEOUT_MS, runTeardownCommand } from '../integrations/github/sandbox.js';
 import { peekSessionEnvironmentTeardown } from '../session/environment-state-processor.js';
 import type {
@@ -10,7 +14,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { requireExec } from './materialization.js';
-import { evictSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
+import { clearFailedSetupCommands, evictSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
 
@@ -70,10 +74,9 @@ function boundedError(error: unknown): string {
  * Sandbox identity is the session id: retirement stops (or, for deleted
  * sessions, destroys) the sandbox this process holds in the session memo.
  * Sessions opened on another replica (or before a restart) have no memo entry
- * here: stopping them is left to the provider's idle lifecycle, but deleting a
- * materialized session destroys its VM by identity through the configured
- * sandbox. Providers such as E2B keep paused VMs forever, so the row's
- * deletion must never orphan one.
+ * here: a materialized one is stopped (or, when deleted, destroyed) by
+ * identity through the configured sandbox. Providers such as E2B keep paused
+ * VMs forever, so the row's deletion must never orphan one.
  */
 export class SessionRetirementCoordinator {
   readonly #invalidateSession: NonNullable<SessionRetirementCoordinatorOptions['invalidateSession']>;
@@ -102,6 +105,40 @@ export class SessionRetirementCoordinator {
    */
   async recreateSessionSandbox(input: RecreateSessionSandboxInput): Promise<'recreated' | 'not-found'> {
     return this.#withSessionLock(input.sessionId, () => this.#recreateSessionSandbox(input));
+  }
+
+  /**
+   * Replace the session's VM while keeping its sandbox instance, for the
+   * session's own agent. A run holds the instance it started with until the
+   * run ends, so recreate (which destroys the instance) would leave every
+   * later command in that run failing. Here the VM is destroyed and the
+   * instance is left `stopped` with no VM id, so the run's next command starts
+   * a fresh VM and the start hook sets it up again.
+   *
+   * `not-here` means this process holds no instance for the session.
+   */
+  async resetSessionSandbox(input: RecreateSessionSandboxInput): Promise<'reset' | 'not-found' | 'not-here'> {
+    return this.#withSessionLock(input.sessionId, () => this.#resetSessionSandbox(input));
+  }
+
+  /**
+   * Stop a session's sandbox and keep everything else: the row, its files and
+   * its work-item refs, so the session's next start resumes the same sandbox.
+   * Unlike retirement no teardown command runs, because a resume does not
+   * run setup again. Reaches the VM by identity when this process never
+   * attached to it.
+   */
+  async stopSessionSandbox(input: Omit<RetireSessionInput, 'deleteSession' | 'workItems'>): Promise<void> {
+    await this.#withSessionLock(input.sessionId, async () => {
+      const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
+      if (!session || session.orgId !== input.orgId) return;
+      try {
+        if (peekSessionSandbox(session.id)) await releaseSessionSandbox({ sessionId: session.id });
+        else await this.#releaseDetachedSandbox({ ...input, deleteSession: false }, session);
+      } finally {
+        await this.#invalidate(session);
+      }
+    });
   }
 
   async #withSessionLock<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
@@ -178,7 +215,7 @@ export class SessionRetirementCoordinator {
   async #teardownSessionSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
     const entry = peekSessionSandbox(session.id);
     if (!entry) {
-      await this.#destroyDetachedSandbox(input, session);
+      await this.#releaseDetachedSandbox(input, session);
       return;
     }
 
@@ -241,16 +278,18 @@ export class SessionRetirementCoordinator {
   }
 
   /**
-   * Destroy a deleted session's VM that this process never attached to. Only
-   * for sessions that materialized (a persisted `sandboxId`): nothing is
-   * started, no teardown command runs — the provider kills by identity.
+   * Stop (or, for a deleted session, destroy) a session's VM that this
+   * process never attached to. Only for sessions that materialized (a
+   * persisted `sandboxId`): nothing is started, no teardown command runs —
+   * the provider pauses or kills by identity.
    */
-  async #destroyDetachedSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
-    if (!input.deleteSession || !session.sandboxId || !this.#sandbox) return;
+  async #releaseDetachedSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
+    if (!session.sandboxId || !this.#sandbox) return;
     try {
-      await destroyDetachedSessionSandbox({ sandbox: this.#sandbox, session });
+      if (input.deleteSession) await destroyDetachedSessionSandbox({ sandbox: this.#sandbox, session });
+      else await stopDetachedSessionSandbox({ sandbox: this.#sandbox, session });
     } catch (error) {
-      this.#warn('Factory detached session sandbox destroy failed', {
+      this.#warn(`Factory detached session sandbox ${input.deleteSession ? 'destroy' : 'stop'} failed`, {
         orgId: session.orgId,
         sessionId: session.sessionId,
         projectRepositoryId: session.projectRepositoryId,
@@ -291,6 +330,49 @@ export class SessionRetirementCoordinator {
     evictSessionSandbox(session.id);
     await this.#invalidate(session);
     return 'recreated';
+  }
+
+  async #resetSessionSandbox(input: RecreateSessionSandboxInput): Promise<'reset' | 'not-found' | 'not-here'> {
+    const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
+    if (!session || session.orgId !== input.orgId) return 'not-found';
+    const sandbox = peekSessionSandbox(session.id)?.sandbox;
+    if (!sandbox) return 'not-here';
+
+    // The provider's own destroy, not the lifecycle wrapper: the wrapper marks
+    // the instance destroyed for good. Bounded, so a VM that won't answer
+    // can't hold the session lock.
+    const destroy = async () => {
+      if (!(await this.#settledWithin(this.#destroyDirectly(sandbox)))) {
+        throw new Error('Timed out destroying the sandbox. Try again.');
+      }
+    };
+    // Destroyed before waiting on a start in flight, so a start hung on the
+    // dead VM can't block recovery; its commands fail fast once the VM is gone.
+    await destroy();
+    const starting = (sandbox as { _startPromise?: Promise<unknown> })._startPromise;
+    if (starting) {
+      const settled = await this.#settledWithin(
+        starting.then(
+          () => {},
+          () => {},
+        ),
+      );
+      if (!settled) throw new Error('The old sandbox is still starting. Try again.');
+      // That start may have found the old VM gone and provisioned another.
+      await destroy();
+    }
+
+    sandbox.status = 'stopped';
+    // The new VM runs setup from scratch, including commands that failed on the old one.
+    clearFailedSetupCommands(session.id);
+    // Re-read: a start that settled while this reset waited may have stored a newer workdir.
+    const latest = await input.sourceControl.sessions.getBySessionId(input.sessionId);
+    await input.sourceControl.sessions.setSandbox({
+      id: session.id,
+      sandboxId: null,
+      sandboxWorkdir: latest?.sandboxWorkdir ?? session.sandboxWorkdir ?? '',
+    });
+    return 'reset';
   }
 
   /**

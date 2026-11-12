@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { agentNoFinalTextResult, agentToolCallsResult } from '../../__tests__/fixtures/experiment-results';
 import type { ComparisonColumn } from '../build-comparison-rows';
 import { ComparisonSideCell } from '../comparison-side-cell';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -30,6 +31,7 @@ const renderCell = (column: ComparisonColumn, { showUsage = false }: { showUsage
 
 const outputRegion = () => screen.getByRole('region', { name: 'Output' });
 const metricsRegion = () => screen.getByRole('region', { name: 'Metrics' });
+const toolCallsRegion = () => screen.getByRole('region', { name: /^Tool calls/ });
 const metricTerms = () =>
   within(metricsRegion())
     .getAllByRole('term')
@@ -64,11 +66,44 @@ describe('ComparisonSideCell', () => {
     });
   });
 
+  describe('when the agent called tools', () => {
+    const toolCallsColumn = () =>
+      makeColumn({ targetType: agentToolCallsResult.targetType, output: agentToolCallsResult.output });
+
+    it('lists each tool the agent called', () => {
+      renderCell(toolCallsColumn());
+
+      expect(within(toolCallsRegion()).getByText('SearchDocs')).toBeTruthy();
+    });
+
+    it('shows the result paired with its call', () => {
+      renderCell(toolCallsColumn());
+
+      fireEvent.click(within(toolCallsRegion()).getByRole('button', { name: /SearchDocs/ }));
+
+      expect(within(toolCallsRegion()).getByText('Result')).toBeTruthy();
+      expect(toolCallsRegion().textContent).toContain('"hits": 3');
+    });
+  });
+
+  describe('when the agent called tools but produced no final text', () => {
+    const noTextColumn = () =>
+      makeColumn({ targetType: agentNoFinalTextResult.targetType, output: agentNoFinalTextResult.output });
+
+    it('explains the missing text instead of dumping the raw output', () => {
+      renderCell(noTextColumn());
+
+      expect(within(outputRegion()).getByText('No final text response after 2 tool calls')).toBeTruthy();
+      expect(outputRegion().querySelector('pre')).toBeNull();
+    });
+  });
+
   describe('when the experiment targets a workflow', () => {
     it('renders the raw output as JSON', () => {
       renderCell(makeColumn({ targetType: 'workflow', output: { text: 'not an agent response' } }));
 
-      expect(outputRegion().querySelector('pre')?.textContent).toContain('"text": "not an agent response"');
+      const lines = Array.from(outputRegion().querySelectorAll('.cm-line'), line => line.textContent);
+      expect(lines).toContain('  "text": "not an agent response"');
     });
   });
 

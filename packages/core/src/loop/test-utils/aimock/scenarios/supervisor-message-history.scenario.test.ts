@@ -226,9 +226,7 @@ describeForAllEngines('AIMock loop scenario: supervisor message history', engine
     expect(mentions(body(workerRequest!), 'SECRET')).toBe(false);
   });
 
-  // Inngest's agentic loop has no isTaskComplete step yet.
-  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
-  itFailsOnInngest('shows isTaskComplete feedback to the supervisor and to the next delegation', async () => {
+  it('shows isTaskComplete feedback to the supervisor and to the next delegation', async () => {
     let scored = 0;
     const scorer = {
       id: 'fail-then-pass-scorer',

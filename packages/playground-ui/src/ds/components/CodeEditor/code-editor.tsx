@@ -8,16 +8,21 @@ import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
+import { codeFoldGutter } from './fold-gutter-extension';
 import { syntaxHighlighter } from './highlight';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
+import { Button } from '@/ds/components/Button';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { formatJSON } from '@/lib/formatting';
 import type { JsonSchema } from '@/lib/json-schema';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
@@ -120,6 +125,8 @@ const codeEditorVariants = cva(
       variant: {
         default: cn(inputSurfaceAndFocusWithinStyle, 'rounded-md p-1', fieldErrorRimWithin),
         embedded: 'rounded-none border-none bg-transparent p-0',
+        /** Prose edited in place: no frame, no gutter, text flush with the label above it. */
+        inline: 'rounded-none border-none bg-transparent p-0',
       },
     },
     defaultVariants: {
@@ -156,8 +163,15 @@ const editorFocusTheme = Prec.highest(
 
 const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
 
+/** Drops the line inset so text lines up with surrounding copy, and keeps three lines to click into while empty. */
+const inlineTheme = EditorView.theme({
+  '.cm-content': { padding: '0', minHeight: '3lh' },
+  '.cm-line': { padding: '0' },
+});
+
 type CodeEditorContentAttributes = {
   'aria-label': string;
+  class: string;
   id?: string;
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
@@ -171,6 +185,8 @@ export type CodeEditorProps = {
   value?: string;
   onChange?: (value: string) => void;
   showCopyButton?: boolean;
+  /** Offers a button that rewrites the JSON with Prettier. Needs `onChange`; ignored for markdown or read-only editors. */
+  showFormatButton?: boolean;
   className?: string;
   highlightVariables?: boolean;
   language?: CodeEditorLanguage;
@@ -184,6 +200,8 @@ export type CodeEditorProps = {
   lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
+  /** Extra CodeMirror extensions, added after the built-in ones. Memoize them to avoid reconfiguring on every render. */
+  extensions?: Extension[];
 } & VariantProps<typeof codeEditorVariants> &
   Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
@@ -194,6 +212,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       value,
       onChange,
       showCopyButton = true,
+      showFormatButton = false,
       className,
       language = 'json',
       font = 'mono',
@@ -204,6 +223,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       lineNumbers = true,
       lineWrapping = true,
       editable,
+      extensions: extraExtensions,
       variant,
       id,
       'aria-label': ariaLabelProp,
@@ -222,15 +242,28 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
     const theme = useCodemirrorTheme(font);
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
+    const canFormat = showFormatButton && language === 'json' && editable !== false && Boolean(onChange);
+
+    const handleFormat = async () => {
+      try {
+        onChange?.((await formatJSON(formattedCode)).trimEnd());
+      } catch {
+        toast.error('Can’t format: the JSON is invalid');
+      }
+    };
 
     const extensions = useMemo(() => {
-      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
+      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel, class: 'zoom-safe-text' };
       if (controlId) contentAttributes.id = controlId;
       if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
 
-      const exts: Extension[] = [...editorFocusExtensions, EditorView.contentAttributes.of(contentAttributes)];
+      const exts: Extension[] = [
+        ...editorFocusExtensions,
+        EditorView.contentAttributes.of(contentAttributes),
+        variant === 'inline' ? inlineTheme : codeFoldGutter,
+      ];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
@@ -254,8 +287,14 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         exts.push(EditorState.readOnly.of(true));
       }
 
+      if (extraExtensions) {
+        exts.push(...extraExtensions);
+      }
+
       return exts;
     }, [
+      extraExtensions,
+      variant,
       language,
       highlightVariables,
       schema,
@@ -270,7 +309,22 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
-        {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
+        {(showCopyButton || canFormat) && (
+          <div className="absolute top-2 right-2 z-20 flex gap-1">
+            {canFormat && (
+              <Button
+                type="button"
+                size="icon-sm"
+                tooltip="Format JSON"
+                aria-label="Format JSON"
+                onClick={handleFormat}
+              >
+                <Braces />
+              </Button>
+            )}
+            {showCopyButton && <CopyButton content={formattedCode} />}
+          </div>
+        )}
         <CodeMirror
           ref={ref}
           value={formattedCode}
@@ -283,7 +337,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           height="100%"
           style={{ height: '100%' }}
           autoFocus={autoFocus}
-          basicSetup={{ lineNumbers }}
+          basicSetup={{ lineNumbers, foldGutter: false }}
         />
       </div>
     );

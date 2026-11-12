@@ -1,4 +1,5 @@
 export { E2BSandbox, type E2BSandboxOptions } from './sandbox';
+export { E2BSandboxFilesystem } from './sandbox/filesystem';
 export { E2BProcessManager } from './sandbox/process-manager';
 export {
   createDefaultMountableTemplate,

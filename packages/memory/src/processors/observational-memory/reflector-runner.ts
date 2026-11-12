@@ -40,6 +40,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
+import { alignLineCutToObservationGroups } from './observation-groups';
 import { describeDegenerateOutput } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
@@ -64,11 +65,11 @@ import type {
   ObserveHooks,
   ObserveTransformHooks,
   ObserveTrigger,
-  ReflectionCommittedContext,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
 } from './types';
+import { waitWithAbort } from './wait-with-abort';
 
 async function getThreadExtractedValues(
   storage: MemoryStorage,
@@ -88,6 +89,7 @@ async function persistThreadExtractedValues(
   extractors: readonly Extractor<any>[],
   threadId: string | undefined,
   values: Record<string, unknown> | undefined,
+  abortSignal?: AbortSignal,
 ): Promise<void> {
   if (!threadId || !values) {
     return;
@@ -106,6 +108,7 @@ async function persistThreadExtractedValues(
     threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
     extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
   });
+  abortSignal?.throwIfAborted();
   await storage.patchThread({
     id: threadId,
     metadata: newMetadata,
@@ -239,16 +242,17 @@ export class ReflectorRunner {
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
+    abortSignal?: AbortSignal,
   ) => Promise<void>;
   private readonly persistMarkerToMessage: (
     marker: { type: string; data: unknown },
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
+    abortSignal?: AbortSignal,
   ) => Promise<boolean>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
   private readonly memory?: Memory;
-  private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   private readonly hooks?: ObserveTransformHooks;
   private mastra?: Mastra;
 
@@ -282,18 +286,19 @@ export class ReflectorRunner {
       marker: { type: string; data: unknown },
       threadId: string,
       resourceId?: string,
+      abortSignal?: AbortSignal,
     ) => Promise<void>;
     persistMarkerToMessage: (
       marker: { type: string; data: unknown },
       messageList: MessageList | undefined,
       threadId: string,
       resourceId?: string,
+      abortSignal?: AbortSignal,
     ) => Promise<boolean>;
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
     mastra?: Mastra;
     memory?: Memory;
-    onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
     hooks?: ObserveTransformHooks;
     /** Registers background work so `settled()` can join it. */
     trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
@@ -311,7 +316,6 @@ export class ReflectorRunner {
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
     this.mastra = opts.mastra;
     this.memory = opts.memory;
-    this.onReflectionCommitted = opts.onReflectionCommitted;
     this.hooks = opts.hooks;
     this.trackBackgroundWork = opts.trackBackgroundWork;
   }
@@ -547,7 +551,11 @@ export class ReflectorRunner {
                   return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM reflector');
                 } catch (error) {
                   if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
-                  throw new OmModelExecutionError('reflector-model', error);
+                  throw new OmModelExecutionError(
+                    'reflector-model',
+                    error,
+                    childObservabilityContext.tracingContext?.currentSpan,
+                  );
                 }
               }, abortSignal),
           }),
@@ -623,7 +631,7 @@ export class ReflectorRunner {
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await streamContext.writer.custom({ ...failedMarker, transient: true }).catch(() => {});
-        await this.persistMarkerToStorage(failedMarker, streamContext.threadId, streamContext.resourceId);
+        await this.persistMarkerToStorage(failedMarker, streamContext.threadId, streamContext.resourceId, abortSignal);
 
         const retryCycleId = crypto.randomUUID();
         streamContext.cycleId = retryCycleId;
@@ -640,7 +648,7 @@ export class ReflectorRunner {
         streamContext.startedAt = startMarker.data.startedAt;
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await streamContext.writer.custom({ ...startMarker, transient: true }).catch(() => {});
-        await this.persistMarkerToStorage(startMarker, streamContext.threadId, streamContext.resourceId);
+        await this.persistMarkerToStorage(startMarker, streamContext.threadId, streamContext.resourceId, abortSignal);
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
@@ -841,8 +849,12 @@ export class ReflectorRunner {
 
     const avgTokensPerLine = totalLines > 0 ? observationTokens / totalLines : 0;
     const activationPointTokens = reflectThreshold * bufferActivation;
-    const linesToReflect =
-      avgTokensPerLine > 0 ? Math.min(Math.floor(activationPointTokens / avgTokensPerLine), totalLines) : totalLines;
+    // Activation keeps the lines after this cut verbatim, so a cut inside an <observation-group>
+    // would leave its bullets and closing tag without an opening tag (#28445).
+    const linesToReflect = alignLineCutToObservationGroups(
+      allLines,
+      avgTokensPerLine > 0 ? Math.min(Math.floor(activationPointTokens / avgTokensPerLine), totalLines) : totalLines,
+    );
 
     const hookContext = {
       threadId: currentRecord.threadId ?? undefined,
@@ -912,13 +924,6 @@ export class ReflectorRunner {
       hookContext,
     );
 
-    await persistThreadExtractedValues(
-      this.storage,
-      this.reflectionConfig.extractors,
-      currentRecord.threadId ?? undefined,
-      reflectResult.extractedValues,
-    );
-
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${currentRecord.id}`,
@@ -950,6 +955,13 @@ export class ReflectorRunner {
     }
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
+    );
+    // Only a stored buffered reflection's extracted values belong to the thread.
+    await persistThreadExtractedValues(
+      this.storage,
+      this.reflectionConfig.extractors,
+      currentRecord.threadId ?? undefined,
+      reflectResult.extractedValues,
     );
 
     if (writer) {
@@ -992,7 +1004,7 @@ export class ReflectorRunner {
       previousModel?: string;
       currentModel?: string;
     },
-    committedContext?: Omit<ReflectionCommittedContext, 'observations'>,
+    abortSignal?: AbortSignal,
   ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -1008,11 +1020,12 @@ export class ReflectorRunner {
       } else {
         omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
         try {
-          await Promise.race([
-            asyncOp,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000)),
-          ]);
+          await waitWithAbort(
+            Promise.race([asyncOp, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000))]),
+            abortSignal,
+          );
         } catch {
+          abortSignal?.throwIfAborted();
           // Timeout or error - proceed with what we have
         }
       }
@@ -1095,13 +1108,15 @@ export class ReflectorRunner {
     const newRecordId = crypto.randomUUID();
     const swapped = await runOMCommit(
       lockKey,
-      () =>
-        this.storage.swapBufferedReflectionToActive({
+      () => {
+        abortSignal?.throwIfAborted();
+        return this.storage.swapBufferedReflectionToActive({
           currentRecord: freshRecord,
           tokenCount: combinedTokenCount,
           newRecordId,
-        }),
-      { priority: 'reflection' },
+        });
+      },
+      { priority: 'reflection', abortSignal },
     );
     if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
       // The record was retired by another reflection, or its observations were rewritten
@@ -1111,14 +1126,6 @@ export class ReflectorRunner {
       );
       return { status: 'not-applied' };
     }
-    if (committedContext) {
-      await this.notifyReflectionCommitted({
-        ...committedContext,
-        observations: allLines.slice(0, reflectedLineCount).join('\n').trim(),
-        writer,
-      });
-    }
-
     BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
 
     const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
@@ -1158,21 +1165,13 @@ export class ReflectorRunner {
         messageList,
         freshRecord.threadId ?? '',
         freshRecord.resourceId ?? undefined,
+        abortSignal,
       );
     }
 
     BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
 
     return { status: 'activated' };
-  }
-
-  private async notifyReflectionCommitted(context: ReflectionCommittedContext): Promise<void> {
-    if (!this.onReflectionCommitted || !context.parentThreadId || !context.resourceId) return;
-    try {
-      await this.onReflectionCommitted(context);
-    } catch (error) {
-      omDebug(`[OM:reflect] post-commit reflection agent failed: ${error}`);
-    }
   }
 
   /**
@@ -1198,6 +1197,7 @@ export class ReflectorRunner {
     observabilityContext?: ObservabilityContext;
     lastActivityAt?: number;
   }): Promise<void> {
+    opts.abortSignal?.throwIfAborted();
     const {
       record: callerRecord,
       observationTokens,
@@ -1225,6 +1225,7 @@ export class ReflectorRunner {
       this.reflectionConfig.extractors,
       requestedThreadId ?? record.threadId,
     );
+    abortSignal?.throwIfAborted();
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
@@ -1313,15 +1314,7 @@ export class ReflectorRunner {
         writer,
         messageList,
         activationMetadata,
-        {
-          parentThreadId: requestedThreadId ?? record.threadId ?? '',
-          resourceId: record.resourceId ?? '',
-          requestContext,
-          mainAgent,
-          sendStateSignal,
-          abortSignal,
-          observabilityContext,
-        },
+        abortSignal,
       );
       if (activationResult.status === 'activated' || activationResult.status === 'not-applied') {
         return;
@@ -1411,7 +1404,7 @@ export class ReflectorRunner {
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       await writer.custom({ ...startMarker, transient: true }).catch(() => {});
-      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
+      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined, abortSignal);
     }
 
     this.emitDebugEvent({
@@ -1475,6 +1468,7 @@ export class ReflectorRunner {
         reflectResult.observations,
         hookContext,
       );
+      abortSignal?.throwIfAborted();
       reflectionUsage = reflectResult.usage;
       reflectionProviderMetadata = reflectResult.providerMetadata;
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
@@ -1482,14 +1476,16 @@ export class ReflectorRunner {
       const newRecordId = crypto.randomUUID();
       const committedRecord = await runOMCommit(
         this.buffering.getLockKey(record.threadId, record.resourceId),
-        () =>
-          this.storage.createReflectionGeneration({
+        () => {
+          abortSignal?.throwIfAborted();
+          return this.storage.createReflectionGeneration({
             currentRecord: record,
             reflection: reflectResult.observations,
             tokenCount: reflectionTokenCount,
             newRecordId,
-          }),
-        { priority: 'reflection' },
+          });
+        },
+        { priority: 'reflection', abortSignal },
       );
       if (!isReflectionApplied(committedRecord, newRecordId, record.id)) {
         // Another reflection retired this record, or its observations were rewritten while the
@@ -1498,12 +1494,14 @@ export class ReflectorRunner {
         omDebug(`[OM:reflect] reflection of ${record.id} not applied (head is ${committedRecord.id})`);
         throw new ReflectionNotAppliedError(record.id, committedRecord.id);
       }
+      abortSignal?.throwIfAborted();
       // Only an applied reflection's extracted values belong to the thread.
       await persistThreadExtractedValues(
         this.storage,
         this.reflectionConfig.extractors,
         record.threadId ?? undefined,
         reflectResult.extractedValues,
+        abortSignal,
       );
 
       // Best-effort results still over threshold are committed (they usually
@@ -1517,18 +1515,6 @@ export class ReflectorRunner {
       } else {
         this.syncReflectionSuppression.delete(lockKey);
       }
-      await this.notifyReflectionCommitted({
-        parentThreadId: requestedThreadId ?? record.threadId ?? '',
-        resourceId: record.resourceId ?? '',
-        observations: record.activeObservations ?? '',
-        requestContext,
-        mainAgent,
-        sendStateSignal,
-        writer,
-        abortSignal,
-        observabilityContext,
-      });
-
       if (writer && streamContext) {
         const endMarker = createObservationEndMarker({
           cycleId: streamContext.cycleId,
@@ -1544,7 +1530,7 @@ export class ReflectorRunner {
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await writer.custom({ ...endMarker, transient: true }).catch(() => {});
-        await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
+        await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined, abortSignal);
       }
 
       this.emitDebugEvent({
@@ -1559,6 +1545,7 @@ export class ReflectorRunner {
       });
     } catch (error) {
       reflectionError = error instanceof Error ? error : new Error(String(error));
+      if (abortSignal?.aborted) throw error;
       const failedMarker = createObservationFailedMarker({
         cycleId: streamContext?.cycleId ?? cycleId,
         operationType: 'reflection',
@@ -1583,6 +1570,7 @@ export class ReflectorRunner {
           messageList,
           threadId,
           record.resourceId ?? undefined,
+          abortSignal,
         );
       } catch {
         persistedToList = false;
@@ -1590,7 +1578,7 @@ export class ReflectorRunner {
       if (!persistedToList) {
         // Best-effort: a marker storage failure must not replace the reflector error.
         try {
-          await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
+          await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined, abortSignal);
         } catch (markerError) {
           omError('[OM] Failed to persist reflection-failed marker', markerError);
         }

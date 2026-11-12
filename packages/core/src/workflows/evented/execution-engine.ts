@@ -1,10 +1,14 @@
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
+import { getErrorFromUnknown } from '../../error/utils.js';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { Mastra } from '../../mastra';
+import type { Span, SpanType } from '../../observability';
+import { executionFailureTermination } from '../../observability/execution-outcome';
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
+import { workflowTermination } from '../execution-outcome';
 import type {
   SerializedStepFlowEntry,
   StepResult,
@@ -12,9 +16,10 @@ import type {
   RestartExecutionParams,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  NestedWorkflowParent,
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
-import type { WorkflowEventProcessor } from './workflow-event-processor';
+import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
 import { getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
@@ -53,6 +58,47 @@ export class EventedExecutionEngine extends ExecutionEngine {
   }
 
   /**
+   * `Run.restart()` and `Run.timeTravel()` hand the engine a WORKFLOW_RUN span to own. Evented
+   * steps only find a span registered on Mastra for their run, so hold it there while the run
+   * executes, then end it with the run's result as the default engine does.
+   */
+  private async executeInRunSpan<TOutput>(
+    runId: string,
+    workflowSpan: Span<SpanType.WORKFLOW_RUN>,
+    execute: () => Promise<TOutput>,
+  ): Promise<TOutput> {
+    this.mastra?.__registerRunTracingContext(runId, { currentSpan: workflowSpan });
+    try {
+      const result = await execute();
+      const settled = result as {
+        status: WorkflowRunStatus;
+        result?: unknown;
+        error?: unknown;
+        tripwire?: StepTripwireInfo;
+      };
+      const termination = workflowTermination(settled);
+      if (settled.error) {
+        workflowSpan.error({
+          ...termination,
+          error: getErrorFromUnknown(settled.error),
+          attributes: { status: settled.status },
+        });
+      } else {
+        workflowSpan.end({ ...termination, output: settled.result, attributes: { status: settled.status } });
+      }
+      return result;
+    } catch (error) {
+      workflowSpan.error({ ...executionFailureTermination(error), error: getErrorFromUnknown(error) });
+      throw error;
+    } finally {
+      // Another execution of this run may have registered its own span since.
+      if (this.mastra?.__getRunTracingContext(runId)?.currentSpan === workflowSpan) {
+        this.mastra.__unregisterRunTracingContext(runId);
+      }
+    }
+  }
+
+  /**
    * Executes a workflow run with the provided execution graph and input
    * @param graph The execution graph to execute
    * @param input The input data for the workflow
@@ -61,6 +107,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
   async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -89,7 +136,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
   }): Promise<TOutput> {
+    const { workflowSpan, ...executeParams } = params;
+    if (workflowSpan) {
+      return this.executeInRunSpan(params.runId, workflowSpan, () =>
+        this.execute<TState, TInput, TOutput>(executeParams),
+      );
+    }
+
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
       throw new Error('No Pubsub adapter configured on the Mastra instance');
@@ -116,6 +171,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
       isForeignExecution = undefined;
     }
 
+    let watchExecutionLoss:
+      | ((requestContext: RequestContext, runId: string, onLost: (error: Error) => void) => () => void)
+      | undefined;
+    try {
+      watchExecutionLoss = this.resolveWorkflow(params.workflowId, params.runId)?.options?.watchExecutionLoss;
+    } catch {
+      watchExecutionLoss = undefined;
+    }
+
+    let pendingCleanupFinish: Event | undefined;
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
       // Another execution of this run (one that lost it to recover(), say) still
       // publishes its finish under the same runId; it isn't this caller's result.
@@ -124,9 +189,34 @@ export class EventedExecutionEngine extends ExecutionEngine {
         return;
       }
 
-      if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
+      if (
+        [
+          'workflow.end',
+          'workflow.fail',
+          'workflow.suspend',
+          'workflow.publish-failed',
+          'workflow.finish-cleanup-complete',
+        ].includes(event.type)
+      ) {
         await ack?.();
+        if (
+          (event.type === 'workflow.end' ||
+            event.type === 'workflow.fail' ||
+            event.type === 'workflow.publish-failed') &&
+          event.data.finishPendingCleanup
+        ) {
+          pendingCleanupFinish = event;
+          return;
+        }
+        if (event.type === 'workflow.finish-cleanup-complete') {
+          if (!pendingCleanupFinish) return;
+          event = pendingCleanupFinish;
+        }
         await pubsub.unsubscribe('workflows-finish', finishCb);
+        if (event.type === 'workflow.publish-failed') {
+          rejectResult(new Error(event.data.message));
+          return;
+        }
         // Re-hydrate serialized errors back to Error instances when workflow fails
         if (event.type === 'workflow.fail' && event.data.stepResults) {
           event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
@@ -150,6 +240,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
       throw err;
     }
 
+    // A caller whose execution lost the run would otherwise wait forever: a successor's finish is foreign to it,
+    // and a run released with nobody left to finish it publishes none. Stop waiting, without writing anything.
+    const stopWatchingLoss = watchExecutionLoss?.(params.requestContext, params.runId, error => {
+      void pubsub
+        .unsubscribe('workflows-finish', finishCb)
+        .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err))
+        .finally(() => rejectResult(error));
+    });
+    if (stopWatchingLoss) void resultPromise.then(stopWatchingLoss, stopWatchingLoss);
+
     // NOW safe to publish - listener is guaranteed to be registered
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
     try {
@@ -165,6 +265,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
           data: {
             workflowId: params.workflowId,
             runId: params.runId,
+            parentWorkflow: params.parentWorkflow
+              ? await this.eventProcessor.restoreParentWorkflow(params.parentWorkflow)
+              : undefined,
             executionPath: params.resume.resumePath,
             stepResults: params.resume.stepResults,
             resumeSteps: params.resume.steps,
@@ -365,7 +468,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     if (resultData.prevResult.status === 'suspended') {
       const suspendedSteps = Object.entries(resultData.stepResults)
         .map(([stepId, stepResult]: [string, any]) => {
-          if (stepResult.status === 'suspended') {
+          if (stepResult?.status === 'suspended') {
             const existingPath = stepResult.suspendPayload?.__workflow_meta?.path ?? [];
             // Prepend stepId to match default engine's suspended array format
             return [stepId, ...existingPath];

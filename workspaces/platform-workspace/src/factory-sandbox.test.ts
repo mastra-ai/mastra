@@ -59,7 +59,7 @@ describe('PlatformFactorySandbox', () => {
   beforeEach(() => vi.stubEnv('SANDBOX_PROVIDER', 'e2b'));
   afterEach(() => vi.unstubAllEnvs());
 
-  it('is a branded FactorySandbox describing cpu, memory and idle timeout', () => {
+  it('is a branded FactorySandbox describing cpu, memory, docker, idle timeout and public ports', () => {
     const sandbox = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1' });
     expect(isFactorySandbox(sandbox)).toBe(true);
     const description = describeFactorySandbox(sandbox);
@@ -67,7 +67,9 @@ describe('PlatformFactorySandbox', () => {
     expect(Object.keys(description.settingsSchema.properties ?? {})).toEqual([
       'cpuCount',
       'memoryMb',
+      'docker',
       'idleTimeoutMinutes',
+      'publicPorts',
     ]);
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: false } });
   });
@@ -96,11 +98,19 @@ describe('PlatformFactorySandbox', () => {
           (schema as { default?: unknown }).default,
         ]),
       );
-    expect(defaults(new PlatformFactorySandbox())).toEqual({ cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 });
+    expect(defaults(new PlatformFactorySandbox())).toEqual({
+      cpuCount: 2,
+      memoryMb: 1024,
+      docker: false,
+      idleTimeoutMinutes: 5,
+      publicPorts: false,
+    });
     expect(defaults(new PlatformFactorySandbox({ defaults: { cpuCount: 4 } }))).toEqual({
       cpuCount: 4,
       memoryMb: 1024,
+      docker: false,
       idleTimeoutMinutes: 5,
+      publicPorts: false,
     });
   });
 
@@ -128,6 +138,35 @@ describe('PlatformFactorySandbox', () => {
     expect(viaClass.buildEnvs).toMatchObject(buildEnv);
   });
 
+  describe('Factory build env from the context', () => {
+    const host = { TURBO_TOKEN: 'host-tok', SHARED: 'host' };
+
+    it('merges ctx.buildEnv over the host buildEnv as transient build envs only', async () => {
+      const ctx = { ...singleContext(), buildEnv: { SHARED: 'sentinel-factory', NPM_TOKEN: 'sentinel-npm' } };
+      const result = await identity(new PlatformFactorySandbox({ template: { buildEnv: host } }).template(ctx, {}));
+      expect(result.buildEnvs).toMatchObject({
+        TURBO_TOKEN: 'host-tok',
+        SHARED: 'sentinel-factory',
+        NPM_TOKEN: 'sentinel-npm',
+      });
+      expect(JSON.stringify(result.definition)).not.toContain('sentinel-');
+    });
+
+    it('template identity follows the revision, never the values', async () => {
+      const sandbox = new PlatformFactorySandbox({ template: { buildEnv: host } });
+      const of = (buildEnv: Record<string, string> | undefined, buildEnvRevision: string | undefined) =>
+        identity(sandbox.template({ ...singleContext(), buildEnv, buildEnvRevision }, {}));
+      const plain = await of(undefined, undefined);
+      const a = await of({ NPM_TOKEN: 'one' }, 'rev-a');
+      const aOtherValue = await of({ NPM_TOKEN: 'two' }, 'rev-a');
+      const b = await of({ NPM_TOKEN: 'one' }, 'rev-b');
+      expect(aOtherValue.definition).toEqual(a.definition);
+      expect(b.definition).not.toEqual(a.definition);
+      expect(a.definition).not.toEqual(plain.definition);
+      expect((await of({ NPM_TOKEN: 'one' }, undefined)).definition).toEqual(plain.definition);
+    });
+  });
+
   it('a setting wins over the provider default and changes the template', async () => {
     const ctx = listContext();
     const sandbox = new PlatformFactorySandbox({ defaults: { cpuCount: 4, memoryMb: 8192 } });
@@ -136,6 +175,25 @@ describe('PlatformFactorySandbox', () => {
     const explicit = await identity(createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 8192 }));
     expect(withSetting.definition).toEqual(explicit.definition);
     expect(withSetting.definition).not.toEqual(withDefaults.definition);
+  });
+
+  it('adds a docker operation only when the docker setting is on', async () => {
+    const sandbox = new PlatformFactorySandbox({});
+    for (const ctx of [listContext(), singleContext(), { sessionId: 's', getRepositoryAccess: undefined }]) {
+      const off = await identity(sandbox.template(ctx, {}));
+      const explicitOff = await identity(sandbox.template(ctx, { docker: false }));
+      const on = await identity(sandbox.template(ctx, { docker: true }));
+      expect(explicitOff.definition).toEqual(off.definition);
+      expect(off.definition.operations.map(operation => operation.method)).not.toContain('docker');
+      expect(on.definition.operations).toContainEqual({ method: 'docker', args: [true] });
+      expect(on.definition.operations.filter(operation => operation.method !== 'docker')).toEqual(
+        off.definition.operations,
+      );
+    }
+    const viaDefault = await identity(
+      new PlatformFactorySandbox({ defaults: { docker: true } }).template(listContext(), {}),
+    );
+    expect(viaDefault.definition.operations).toContainEqual({ method: 'docker', args: [true] });
   });
 
   it('returns a resources-only template for a session without repositories', async () => {
@@ -171,6 +229,17 @@ describe('PlatformFactorySandbox', () => {
     expect((bare as any)._idleTimeoutMinutes).toBe(5);
   });
 
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new PlatformFactorySandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_1',
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    expect((sandbox.create({ ...listContext(), factoryId: 'fac-platform' }, {}) as any)._env).toEqual({ TOKEN: 't' });
+    expect((sandbox.create({ ...listContext(), factoryId: 'fac-mastra' }, {}) as any)._env).toEqual({});
+    expect((sandbox.create(listContext(), {}) as any)._env).toEqual({});
+  });
+
   it('resolves the idle timeout as setting, then provider default, then host option, then built-in', () => {
     const ctx = listContext();
     const client = { accessToken: 'sk_test', projectId: 'proj_1' };
@@ -193,6 +262,54 @@ describe('PlatformFactorySandbox', () => {
     expect(idle(hostAndDefaults, { idleTimeoutMinutes: 10 })).toBe(10);
 
     expect(idle(new PlatformFactorySandbox(client))).toBe(5);
+  });
+
+  it('keeps ports private unless the setting, provider default or host option opens them', () => {
+    const ctx = listContext();
+    const client = { accessToken: 'sk_test', projectId: 'proj_1' };
+    const open = (sandbox: PlatformFactorySandbox, settings = {}) =>
+      (sandbox.create(ctx, settings) as any)._publicPorts;
+    const advertised = (sandbox: PlatformFactorySandbox) =>
+      (describeFactorySandbox(sandbox).settingsSchema.properties?.publicPorts as { default?: unknown }).default;
+
+    const bare = new PlatformFactorySandbox(client);
+    expect(open(bare)).toBe(false);
+    expect(advertised(bare)).toBe(false);
+    expect(open(bare, { publicPorts: true })).toBe(true);
+
+    const host = new PlatformFactorySandbox({ ...client, publicPorts: true });
+    expect(open(host)).toBe(true);
+    expect(advertised(host)).toBe(true);
+    expect(open(host, { publicPorts: false })).toBe(false);
+
+    const hostAndDefaults = new PlatformFactorySandbox({
+      ...client,
+      publicPorts: true,
+      defaults: { publicPorts: false },
+    });
+    expect(open(hostAndDefaults)).toBe(false);
+    expect(advertised(hostAndDefaults)).toBe(false);
+  });
+
+  it('sends the public ports setting when the session sandbox is created', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const sandbox = new PlatformFactorySandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_1',
+      environmentId: 'env_1',
+      fetch: fetchMock,
+    });
+    const created = sandbox.create({ sessionId: 'sess_3', getRepositoryAccess: undefined }, { publicPorts: true });
+    await created._start();
+
+    const create = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!;
+    expect(JSON.parse(create[1].body as string).publicPorts).toBe(true);
   });
 
   describe('builds', () => {

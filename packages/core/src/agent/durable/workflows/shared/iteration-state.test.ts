@@ -142,6 +142,30 @@ describe('calculateAccumulatedUsage', () => {
 });
 
 describe('createBaseIterationStateUpdate', () => {
+  it.each([10, 20, 40])('does not replicate model input in %i accumulated tool-result steps', count => {
+    const prompt = 'unique-model-input-'.repeat(1000);
+    let state = iterationState();
+    for (let index = 0; index < count; index++) {
+      const output = executionOutput();
+      output.toolResults = [
+        {
+          toolCallId: `call-${index}`,
+          toolName: 'lookup',
+          args: { index },
+          result: { value: `result-${index}` },
+          stepSpanData: { input: { system: prompt, messages: [prompt] } },
+        },
+      ];
+      state = createBaseIterationStateUpdate({ currentState: state, executionOutput: output });
+    }
+    const serialized = JSON.stringify(state);
+    expect(serialized.split('unique-model-input-').length - 1).toBe(0);
+    expect(state.accumulatedSteps).toHaveLength(count);
+    expect(state.accumulatedSteps[count - 1].toolResults).toMatchObject([
+      { toolCallId: `call-${count - 1}`, toolName: 'lookup', result: { value: `result-${count - 1}` } },
+    ]);
+  });
+
   it('preserves a cold input rejection across preemption and clears it after the terminal step (COR-1481)', () => {
     const runId = 'cold-input-tripwire';
     const inputTripwire = {
@@ -192,6 +216,23 @@ describe('createBaseIterationStateUpdate', () => {
       totalUsage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
     });
     expect(JSON.stringify(update)).not.toContain('tool-19');
+  });
+
+  it('saves the tracing facts for the next worker and keeps them off the public step records', () => {
+    const tracingTermination = { outcome: 'interrupted', stopReason: 'observer_failed' };
+    const tracingDelegationFailure = { outcome: 'error', stopReason: 'model_error' };
+    const output = {
+      ...executionOutput(),
+      tracingTermination,
+      tracingDelegationFailure,
+      toolResults: [{ toolCallId: 'call', toolName: 'agent-worker', result: 'failed', tracingDelegationFailure }],
+    };
+
+    const update = createBaseIterationStateUpdate({ currentState: iterationState(), executionOutput: output as any });
+
+    expect(update.tracingTermination).toEqual(tracingTermination);
+    expect(update.tracingDelegationFailure).toEqual(tracingDelegationFailure);
+    expect(JSON.stringify(update.accumulatedSteps)).not.toContain('tracingDelegationFailure');
   });
 
   it('carries preemption through cold schemas, actual mapping and snapshots, then clears it on acceptance', async () => {

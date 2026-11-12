@@ -88,7 +88,7 @@ function metadataMetrics(item: DatasetItem): ComparisonMetric[] {
           <span className="font-mono" title={item.id}>
             {getShortId(item.id)}
           </span>
-          <CopyButton content={item.id} tooltip="Copy Item Id to clipboard" variant="link" />
+          <CopyButton content={item.id} tooltip="Copy item ID to clipboard" variant="link" />
         </span>
       ),
       delta: null,

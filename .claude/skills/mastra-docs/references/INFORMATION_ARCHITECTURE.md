@@ -35,6 +35,19 @@ Before adding a page:
 
 Do not create a second page merely because a sidebar has another plausible category. One page can be linked from several places.
 
+## Admission to Guides
+
+Treat the Guides section within `/docs` as curated, not the default home for task-oriented documentation. New pages belong in the relevant product section unless there's a clear reason otherwise.
+
+Before adding a Guide:
+
+1. Identify the reader's problem and the outcome the page delivers.
+2. Explain what it contributes beyond the canonical feature documentation. A Guide should walk through an applied scenario or develop a coherent explanation of a broader problem, not simply introduce a feature and list its capabilities.
+3. Check whether the material fits better in an existing product page or a focused page alongside it. Code examples, numbered steps, and a "When to use" section don't by themselves justify placement in Guides.
+4. Propose the placement and get the user's approval before adding the page to Guides. Include the best alternative location and why Guides is preferable. An AI review doesn't replace this approval.
+
+Feature maturity labels belong with the feature documentation, not on the Guide's navigation entry. Mention relevant beta limitations within the Guide.
+
 ## Sidebars and navigation
 
 - `docs/src/content/en/docs/sidebars.js` owns the main docs navigation and contextual categories.

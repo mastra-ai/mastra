@@ -1,5 +1,5 @@
 import { pathToFileURL } from 'node:url';
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
@@ -64,6 +64,7 @@ function getInputPlugins(
     externalsPreset,
     alias,
     platform,
+    configEntryFile,
   }: {
     sourcemapEnabled: boolean;
     env: Record<string, string>;
@@ -72,6 +73,7 @@ function getInputPlugins(
     externalsPreset: boolean;
     alias: Record<string, string>;
     platform: BundlerPlatform;
+    configEntryFile: string;
   },
 ): Plugin[] {
   let virtualPlugin = null;
@@ -104,7 +106,7 @@ function getInputPlugins(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeDeployer(mastraEntry, {
+      removeDeployer(configEntryFile, {
         sourcemap: sourcemapEnabled,
       }),
       esbuild(),
@@ -134,9 +136,11 @@ async function captureDependenciesToOptimize(
     externalsPreset,
     alias,
     platform,
+    configEntryFile,
   }: {
     logger: IMastraLogger;
     mastraEntry: string;
+    configEntryFile: string;
     shouldCheckTransitiveDependencies: boolean;
     env: Record<string, string>;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
@@ -242,6 +246,7 @@ async function captureDependenciesToOptimize(
         externalsPreset,
         alias,
         platform,
+        configEntryFile,
       });
 
       if (!analysis?.dependencies) {
@@ -353,6 +358,7 @@ export async function analyzeEntry(
     externalsPreset = false,
     alias = {},
     platform = 'node',
+    configEntryFile = mastraEntry,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -371,6 +377,8 @@ export async function analyzeEntry(
     /** Exact module specifier aliases applied before externalization */
     alias?: Record<string, string>;
     platform?: BundlerPlatform;
+    /** File holding `new Mastra({...})`, when `mastraEntry` is a generated wrapper that imports it */
+    configEntryFile?: string;
   },
 ): Promise<AnalyzeEntryResult> {
   const resolvedEntry = isVirtualFile ? undefined : slash(entry);
@@ -404,6 +412,7 @@ export async function analyzeEntry(
         externalsPreset,
         alias,
         platform,
+        configEntryFile,
       }),
       external: id => DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep)),
     });
@@ -422,6 +431,7 @@ export async function analyzeEntry(
     const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
       logger,
       mastraEntry,
+      configEntryFile,
       shouldCheckTransitiveDependencies,
       env,
       analyzeCache: effectiveAnalyzeCache,

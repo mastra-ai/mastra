@@ -42,7 +42,7 @@ function StubCreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDatase
         onSuccess(dataset.id);
       }}
     >
-      Create Dataset
+      Create dataset
     </button>
   );
 }
@@ -87,11 +87,11 @@ describe('SaveAsDatasetItemDialog with the real Select', () => {
       fireEvent.click(trigger);
       await screen.findByRole('option', { name: 'Dataset 1' });
       pressOption('Create dataset');
-      fireEvent.click(await screen.findByRole('button', { name: 'Create Dataset' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Create dataset' }));
 
       await waitFor(() => expect(trigger.textContent).toContain('Fresh dataset'));
       await waitFor(() =>
-        expect((screen.getByRole('button', { name: 'Save Item' }) as HTMLButtonElement).disabled).toBe(false),
+        expect((screen.getByRole('button', { name: 'Save item' }) as HTMLButtonElement).disabled).toBe(false),
       );
     });
   });

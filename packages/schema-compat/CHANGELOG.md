@@ -1,5 +1,79 @@
 # @mastra/schema-compat
 
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- JSON Schema `format` keywords are now enforced when validating a plain JSON Schema ([#30113](https://github.com/mastra-ai/mastra/pull/30113))
+
+  Previously a `format` (`email`, `uri`, `date-time`, ...) declared in a plain JSON Schema was ignored: the
+  value passed validation and Ajv logged `unknown format "..." ignored in schema at path "..."`. The formats
+  from `ajv-formats` are now registered on the Ajv instance used by `toStandardSchema()`, so invalid values
+  are rejected instead.
+
+  This affects every plain JSON Schema validated through `toStandardSchema()` — MCP tool inputs, core tool
+  schemas and structured output. Schemas written with Zod or another Standard Schema library are unaffected.
+
+  Two related changes come with it:
+
+  - `format` is now checked, so values that used to be accepted are rejected. For `date-time`, replace values
+    without a timezone (before: `2026-11-05T10:00:00`) with timezone-qualified values (after:
+    `2026-11-05T10:00:00Z` or `2026-11-05T10:00:00+00:00`).
+  - `formatMinimum` / `formatMaximum` on `date` / `date-time` now take effect.
+
+  For direct `@mastra/schema-compat` callers, validate a timezone-qualified value:
+
+  ```ts
+  import { toStandardSchema } from '@mastra/schema-compat/adapters/json-schema';
+
+  const schema = { type: 'string', format: 'date-time' } as const;
+  const result = toStandardSchema(schema)['~standard'].validate('2026-11-05T10:00:00Z');
+  ```
+
+  If direct callers need the previous behavior, use
+  `toStandardSchema(schema, { ajvOptions: { validateFormats: false } })`. MCP tool inputs, core tool schemas,
+  and structured output do not expose this opt-out; supply format-valid values for those paths instead.
+
+  Fixes [#29385](https://github.com/mastra-ai/mastra/issues/29385)
+
+## 1.3.18-alpha.0
+
+### Patch Changes
+
+- Fixed Gemini rejecting tools whose input schema has a numeric, boolean or empty-string literal, such as `z.literal(1)`, `z.literal(true)` or `z.union([z.string(), z.literal('')])`. Gemini only accepts non-empty string enums, so one such field made every request to the agent fail with HTTP 400. These fields are now sent as their plain type with the allowed values in the description. String enums from external JSON Schema that omit `type` now get `type: "string"`. Tool arguments are still validated against your original schema. Fixes #29167. ([#29416](https://github.com/mastra-ai/mastra/pull/29416))
+
+## 1.3.17
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`json-schema-to-zod@^2.8.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.8.1) (from `^2.7.0`, in `dependencies`)
+  - Updated dependency [`zod-from-json-schema@0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.135` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.135) (from `^3.0.133`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/google@^3.0.138` ↗︎](https://www.npmjs.com/package/@ai-sdk/google/v/3.0.138) (from `^3.0.135`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.131` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.131) (from `^3.0.130`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+
+## 1.3.17-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`json-schema-to-zod@^2.8.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.8.1) (from `^2.7.0`, in `dependencies`)
+  - Updated dependency [`zod-from-json-schema@0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.135` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.135) (from `^3.0.133`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/google@^3.0.138` ↗︎](https://www.npmjs.com/package/@ai-sdk/google/v/3.0.138) (from `^3.0.135`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.131` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.131) (from `^3.0.130`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+
+## 1.3.16
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.3.16-alpha.0
 
 ### Patch Changes

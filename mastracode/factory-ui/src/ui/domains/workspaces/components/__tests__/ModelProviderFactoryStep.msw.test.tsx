@@ -5,10 +5,12 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
+import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
 import { CreateFactoryModelStep } from '../create-factory/CreateFactoryModelStep';
 import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
+import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
 
 function registerAuthHandler() {
   server.use(
@@ -82,6 +84,252 @@ describe('Model provider onboarding', () => {
     });
   });
 
+  describe('when Factory is signed in with a Mastra account', () => {
+    function registerGatewayHandlers({
+      remainingCredits,
+      canAddCredits = true,
+    }: {
+      remainingCredits?: number;
+      canAddCredits?: boolean;
+    }) {
+      let connected = false;
+      const connectBodies: unknown[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: [
+              { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: [] } },
+              connected
+                ? {
+                    provider: 'mastra',
+                    source: 'stored-org',
+                    orgKey: true,
+                    orgCredential: 'api_key',
+                    connectWithMastraAccount: true,
+                  }
+                : { provider: 'mastra', source: 'none', orgKey: false, connectWithMastraAccount: true },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: connected
+              ? ['anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-5.5'].map(modelName => ({
+                  id: `mastra/${modelName}`,
+                  provider: 'mastra',
+                  modelName,
+                  hasApiKey: true,
+                }))
+              : [],
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, async ({ request }) => {
+          connectBodies.push(await request.json());
+          connected = true;
+          return HttpResponse.json({ ok: true });
+        }),
+        http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
+          HttpResponse.json({
+            remaining: remainingCredits,
+            unlimited: false,
+            canAddCredits,
+            addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+          }),
+        ),
+      );
+      return { connectBodies };
+    }
+
+    it('connects the Mastra Gateway in one click and starts on its default model', async () => {
+      registerAuthHandler();
+      const { connectBodies } = registerGatewayHandlers({ remainingCredits: 12.4 });
+      const onComplete = vi.fn();
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
+
+      const useGateway = await screen.findByRole('button', { name: 'Connect Mastra Gateway' });
+      expect(await screen.findByText('Pay with your organization’s Mastra credits ($12.40 left)')).toBeVisible();
+      expect(screen.queryByRole('button', { name: 'Mastra Gateway' })).not.toBeInTheDocument();
+      await user.click(useGateway);
+
+      await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      expect(connectBodies).toEqual([{ scope: 'org' }]);
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'mastra',
+        method: 'api_key',
+        modelId: 'mastra/anthropic/claude-opus-5.5',
+      });
+      expect(screen.queryByText('No gateway credits left')).not.toBeInTheDocument();
+    });
+
+    it('sends the organization to add credits on Mastra in a new tab when it has none left', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 0 });
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      await user.click(await screen.findByRole('button', { name: 'Connect Mastra Gateway' }));
+
+      expect(await screen.findByText('No gateway credits left')).toBeVisible();
+      const addCredits = screen.getByRole('link', { name: 'Add credits' });
+      expect(addCredits).toHaveAttribute('href', 'https://projects.mastra.ai/add-credits/org-1');
+      expect(addCredits).toHaveAttribute('target', '_blank');
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+    });
+
+    it('asks a member who is not a Mastra admin to get an admin to add credits', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 0, canAddCredits: false });
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      await user.click(await screen.findByRole('button', { name: 'Connect Mastra Gateway' }));
+
+      expect(await screen.findByText('Ask an admin of your Mastra organization to add credits.')).toBeVisible();
+      expect(screen.queryByRole('link', { name: 'Add credits' })).not.toBeInTheDocument();
+    });
+
+    it('does not warn about credits while the platform reports no balance', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({});
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      await user.click(await screen.findByRole('button', { name: 'Connect Mastra Gateway' }));
+
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
+      expect(screen.queryByText('No gateway credits left')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when Factory auth cannot create Mastra Gateway keys', () => {
+    it('offers the Mastra Gateway as an API-key provider instead of the one-click card', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: [
+              { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: [] } },
+              { provider: 'mastra', source: 'none', orgKey: false },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
+      );
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+
+      expect(await screen.findByRole('button', { name: 'Mastra Gateway' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when creating a custom provider', () => {
+    function registerCustomProviderHandlers() {
+      let created = false;
+      const provider = {
+        id: 'my-llm',
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        hasApiKey: true,
+        models: ['model-a'],
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: created ? [{ provider: 'my-llm', source: 'stored-org', custom: true }] : [],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: created
+              ? [{ id: 'my-llm/model-a', provider: 'my-llm', modelName: 'model-a', hasApiKey: true }]
+              : [],
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/custom-providers`, async ({ request }) => {
+          expect(await request.json()).toEqual({
+            name: 'my-llm',
+            url: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            models: ['model-a'],
+          });
+          created = true;
+          return HttpResponse.json({ ok: true, provider });
+        }),
+      );
+    }
+
+    async function createCustomProvider() {
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
+      await user.type(screen.getByPlaceholderText('model-a, model-b'), 'model-a');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+      return user;
+    }
+
+    it('requires a model before creating a provider during setup', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+
+      expect(await screen.findByText('At least one model is required.')).toBeVisible();
+    });
+
+    it('refreshes the catalogs and continues to organization model selection', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      const onComplete = vi.fn<() => void>();
+      const { client } = renderWithProviders(
+        <ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />,
+      );
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
+    });
+
+    it('continues to personal model selection with the stored custom provider', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        ),
+      );
+      const onContinue = vi.fn<() => void>();
+      const { client } = renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Review setup' }));
+      expect(onContinue).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
+    });
+  });
+
   describe('when a provider supports browser sign-in', () => {
     it('starts the OAuth flow directly from its sign-in button', async () => {
       const providers: ProviderInfo[] = [
@@ -151,7 +399,7 @@ describe('Model provider onboarding', () => {
       expect(screen.getByText('OpenAI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
+      expect(screen.getByRole('combobox')).toHaveValue('GPT-5.6 Sol');
       await user.click(screen.getByRole('button', { name: 'Continue' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
@@ -261,7 +509,7 @@ describe('Model provider onboarding', () => {
       await user.click(bedrock);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveTextContent('Claude Sonnet 4.5');
+      expect(screen.getByRole('combobox')).toHaveValue('Claude Sonnet 4.5');
     });
   });
 
@@ -350,6 +598,36 @@ describe('Model provider onboarding', () => {
 
       expect(await screen.findByText('openai/gpt-5.6-sol')).toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: 'Connect OpenAI' })).not.toBeInTheDocument();
+    });
+
+    it('offers newer models first', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: datedModels })),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(
+        <Command>
+          <CreateFactoryModelStep query="" onPick={vi.fn()} />
+        </Command>,
+      );
+
+      await user.click(await screen.findByText('OpenAI'));
+      await screen.findByText('openai/gpt-5');
+
+      expect(screen.getAllByRole('option').map(option => option.getAttribute('data-value'))).toEqual([
+        'openai/gpt-5',
+        'openai/gpt-4.1',
+        'openai/gpt-4o',
+        'change-provider',
+      ]);
     });
   });
 

@@ -7,12 +7,12 @@ import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
-import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { Knowledge } from '../knowledge';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -44,7 +44,14 @@ import type {
   NotificationRecord,
   SendNotificationSignalInput,
 } from '../notifications/types';
-import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
+import type {
+  Span,
+  SpanType,
+  TracingOptions,
+  TracingPolicy,
+  ObservabilityContext,
+  SpanTermination,
+} from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -58,6 +65,7 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
   ThreadHistoryChunk,
+  ThreadRunStatusChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -66,16 +74,17 @@ import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import type { MastraVoice } from '../voice';
+import type { IMastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
-import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions, PublicAgentExecutionOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
+import type { AgentScopesConfig } from './scopes';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
+import type { AgentStreamsConfig } from './streams/types';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -261,7 +270,14 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'deliver'; runId: string }
   | { action: 'persist' }
   | { action: 'discard' }
-  | { action: 'blocked'; reason: 'thread-blocked'; runId: string };
+  | { action: 'blocked'; reason: 'thread-blocked'; runId: string }
+  /**
+   * The signal named `scopes` that differ from those of the run active on the thread
+   * (or of a run whose scopes this process can't see). A run's scopes are fixed when it
+   * starts, so the signal did not join it: wait for `runId` to end and send it again to
+   * start its own run.
+   */
+  | { action: 'blocked'; reason: 'scope-mismatch'; runId: string };
 
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
@@ -424,13 +440,23 @@ export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOption
    * chunks are always emitted.
    */
   withInitialHistory?: boolean | { perPage?: number };
+  /** Emit ordered thread-run-status chunks, including retained outcomes. Defaults to false. */
+  withRunStatus?: boolean;
   /** Request context used to resolve the agent's memory when loading initial history. */
   requestContext?: RequestContext;
 }
 
-export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+export interface AgentThreadSubscription<
+  OUTPUT = unknown,
+  WITH_HISTORY extends boolean = false,
+  WITH_RUN_STATUS extends boolean = false,
+> {
   /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
-  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
+  stream: AsyncIterable<
+    | AgentChunkType<OUTPUT>
+    | (WITH_RUN_STATUS extends true ? ThreadRunStatusChunk : never)
+    | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)
+  >;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
@@ -540,6 +566,7 @@ export type AgentEditorConfig =
   | {
       instructions?: boolean;
       tools?: boolean | { description?: boolean };
+      model?: boolean;
     };
 
 /**
@@ -590,41 +617,8 @@ export interface GoalConfig {
   scorer?: MastraScorer | string;
 }
 
-/**
- * Options for opting an {@link Agent} into durable execution via
- * {@link AgentConfigBase.durable}.
- *
- * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
- * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
- *
- * See `packages/core/src/agent/durable/create-durable-agent.ts`.
- */
-export type AgentDurableOption =
-  | boolean
-  | {
-      /** See createDurableAgent options: cache backend for resumable streams. */
-      cache?: MastraServerCache | false;
-      /** See createDurableAgent options: pubsub instance for streaming events. */
-      pubsub?: PubSub;
-      /** See createDurableAgent options: maximum steps for the agentic loop. */
-      maxSteps?: number;
-      /** Auto-cleanup timer for durable stream state (ms). */
-      cleanupTimeoutMs?: number;
-      /** See createDurableAgent options: per-topic opt-out of the replay cache. */
-      shouldCache?: (topic: string) => boolean;
-      /**
-       * See createDurableAgent options: overrides the snapshot-persistence
-       * policy. By default `pending | paused | suspended` are always
-       * persisted and `running` checkpoints only when the Mastra instance
-       * sets `recovery: { durableAgents: 'auto' }`.
-       */
-      shouldPersistSnapshot?: ShouldPersistSnapshotFn;
-      /** Optional id override (defaults to agent.id). */
-      id?: string;
-      /** Optional name override (defaults to agent.name). */
-      name?: string;
-    };
+/** Resumable stream configuration. Durable execution requires createDurableAgent(). */
+export type AgentDurableOption = boolean | AgentStreamsConfig;
 
 interface AgentConfigBase<
   TAgentId extends string = string,
@@ -757,21 +751,15 @@ interface AgentConfigBase<
    */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
   /**
-   * Opt this agent into durable execution.
+   * Resumable streams: publish run events so observe() and reconnecting clients
+   * can follow a run. This does not enable durable execution or checkpoints.
+   * Use createDurableAgent() for durable execution.
    *
-   * - `true` → wraps with `createDurableAgent` using defaults when the agent is
-   *   registered on a `Mastra` instance.
-   * - object → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
-   *   cleanupTimeoutMs, id, name).
-   *
-   * Ignored when the agent is used standalone (not attached to a `Mastra`
-   * instance). See {@link AgentDurableOption}.
-   *
-   * @example
-   * ```typescript
-   * new Agent({ id: 'my-agent', instructions: '…', model, durable: true });
-   * new Agent({ id: 'my-agent', instructions: '…', model, durable: { maxSteps: 10 } });
-   * ```
+   * - Omitted: on when registered on Mastra, off standalone.
+   * - true: on, using the Mastra pubsub and server cache when registered.
+   * - false: off; HTTP disconnects abort the run.
+   * - An object: on, with custom pubsub, cache, shouldCache or cleanupTimeoutMs.
+   *   cache: false keeps publishing but disables replay.
    */
   durable?: AgentDurableOption;
   /**
@@ -785,7 +773,7 @@ interface AgentConfigBase<
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  defaultOptions?: DynamicArgument<PublicAgentExecutionOptions<TOutput>, TRequestContext>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.
@@ -835,10 +823,15 @@ interface AgentConfigBase<
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
    * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
-   * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
-   * A resolver function runs once per call with the request context.
+   * Scopes say who the run is; what it may do with them is decided by whatever reads them, such as
+   * Knowledge's scope declarations.
+   * A run's incoming scopes are the call's `scopes`, `defaultOptions.scopes` and the reserved
+   * `mastra__scopes` request-context key. A static list is added to them. A function receives
+   * them as `scopes` (with the request context) and returns the run's final set, so it can narrow
+   * or replace them; it must keep any `resource:`/`thread:` scope it was given. It runs once per
+   * call and is not called on resume.
    */
-  scopes?: DynamicArgument<string[], TRequestContext>;
+  scopes?: AgentScopesConfig<TRequestContext>;
   /**
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *
@@ -897,9 +890,9 @@ interface AgentConfigBase<
    * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
    * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
    *
-   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
+   * A static voice instance remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: DynamicArgument<MastraVoice, TRequestContext>;
+  voice?: DynamicArgument<IMastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *
@@ -930,6 +923,12 @@ interface AgentConfigBase<
    * When configured, workspace tools are automatically injected into the agent.
    */
   workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  /**
+   * Knowledge attached to this agent: a Knowledge instance or the key it is registered under on Mastra.
+   * The agent gets its tools, usage instructions and pins without needing Memory.
+   * @experimental
+   */
+  knowledge?: Knowledge | string;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
@@ -1265,6 +1264,8 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
+  /** Runtime terminal cause, applied only once finish-time work has completed. */
+  termination?: SpanTermination;
   runId: string;
   result: MastraOnFinishCallbackArgs & { object?: unknown };
   thread: StorageThreadType | null | undefined;
@@ -1346,6 +1347,13 @@ export interface DurableAgentLike {
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
   /**
+   * Abort `runId` and resolve whether the abort was confirmed: by a local close
+   * in this process, or by the process executing the run answering over
+   * `pubsub`. Used by the server's run abort route.
+   * @internal
+   */
+  __abortRunAcknowledged?(runId: string): Promise<boolean>;
+  /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.
    */
@@ -1395,4 +1403,15 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
     typeof obj.recover === 'function' &&
     typeof obj.recoverActiveRuns === 'function'
   );
+}
+
+/**
+ * Whether runs of `agent` publish on their stream topic, so another reader can
+ * follow them with `observe()`. True for durable wrappers and for agents with
+ * streams on.
+ */
+export function hasResumableStreams(agent: any): boolean {
+  if (!agent) return false;
+  if (typeof agent.hasResumableStreams === 'function') return agent.hasResumableStreams();
+  return isDurableAgentLike(agent);
 }

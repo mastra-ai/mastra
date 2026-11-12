@@ -34,7 +34,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
                 <Badge icon={<CopyIcon />}>{workflowId}</Badge>
               </button>
             </TooltipTrigger>
-            <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
+            <TooltipContent>Copy workflow ID for use in code</TooltipContent>
           </Tooltip>
 
           <Badge>
@@ -60,7 +60,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
                   Dynamic
                 </Badge>
               </TooltipTrigger>
-              <TooltipContent>Registered via the dynamic-workflows API — lives in storage</TooltipContent>
+              <TooltipContent>Registered via the dynamic-workflows API and saved in storage</TooltipContent>
             </Tooltip>
           )}
         </div>

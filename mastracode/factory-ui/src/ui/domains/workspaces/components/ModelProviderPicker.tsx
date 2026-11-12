@@ -2,13 +2,18 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, KeyRound, LogIn } from 'lucide-react';
+import { Check, KeyRound, LogIn, ServerCog } from 'lucide-react';
 import { useId, useState } from 'react';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { CustomProviderForm } from '../../settings/components/CustomProviderForm';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
+import { MastraGatewayOption } from './MastraGatewayOption';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
+
+type ProviderPickerTab = ProviderConnectionMethod | 'custom';
 
 export function ModelProviderPicker({
   connection,
@@ -18,9 +23,24 @@ export function ModelProviderPicker({
   onPreviewProvider?: PreviewProvider;
 }) {
   const [search, setSearch] = useState('');
-  const [method, setMethod] = useState<ProviderConnectionMethod>(connection.method ?? 'api_key');
+  const [tab, setTab] = useState<ProviderPickerTab>(connection.method ?? 'api_key');
   const connectedDescriptionId = useId();
-  if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
+  if (connection.isPending)
+    return (
+      <div role="status" aria-label="Loading model providers">
+        <div aria-hidden>
+          <Skeleton className="h-control-sm w-56 max-w-full rounded-full motion-reduce:before:animate-none" />
+          <div className="flex h-36 flex-col gap-3 pt-2">
+            <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
+            <div className="flex flex-wrap gap-2">
+              <Skeleton className="h-control-md w-28 rounded-full motion-reduce:before:animate-none" />
+              <Skeleton className="h-control-md w-32 rounded-full motion-reduce:before:animate-none" />
+              <Skeleton className="h-control-md w-24 rounded-full motion-reduce:before:animate-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   if (connection.catalogError)
     return (
       <div className="flex flex-col items-start gap-3">
@@ -33,19 +53,35 @@ export function ModelProviderPicker({
 
   const visible = connection.keyProviders.filter(provider => matchesProviderQuery(provider, search));
   const restore = () => onPreviewProvider?.(connection.provider?.provider, connection.method);
+  const gateway = connection.gatewayProvider;
   return (
     <div
+      className="flex flex-col gap-5"
       onMouseLeave={restore}
       onBlur={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) restore();
       }}
     >
+      {gateway && (
+        <>
+          <MastraGatewayOption
+            provider={gateway.provider}
+            disabled={connection.pending || !connection.canConfigure(gateway, 'api_key')}
+            connecting={connection.connectingGateway}
+            onConnect={connection.chooseGateway}
+            onPreview={() => onPreviewProvider?.(gateway.provider, 'api_key')}
+          />
+          <Txt as="h2" variant="meta" tone="muted" className="m-0">
+            Or bring your own provider
+          </Txt>
+        </>
+      )}
       <Tabs
         defaultTab="api_key"
-        value={method}
+        value={tab}
         onValueChange={next => {
-          setMethod(next);
-          onPreviewProvider?.(undefined, next);
+          setTab(next);
+          onPreviewProvider?.(undefined, next === 'custom' ? undefined : next);
         }}
       >
         <TabList variant="pill-ghost" size="sm">
@@ -57,12 +93,16 @@ export function ModelProviderPicker({
             <LogIn aria-hidden="true" />
             {CONNECTION_METHOD_LABEL.oauth}
           </Tab>
+          <Tab value="custom">
+            <ServerCog aria-hidden="true" />
+            Custom provider
+          </Tab>
         </TabList>
         <TabContent value="api_key">
           <div className="flex h-36 flex-col gap-3 pt-2">
             <SearchInput
               label="Search model providers"
-              placeholder="Search providers…"
+              placeholder="Search providers"
               value={search}
               onValueChange={setSearch}
             />
@@ -125,6 +165,18 @@ export function ModelProviderPicker({
                 Provider sign-in isn’t available on this deployment. Use an API key.
               </Txt>
             )}
+          </div>
+        </TabContent>
+        <TabContent value="custom">
+          {/* The form has no frame of its own: in settings it is a row of the providers card. */}
+          <div className="border-border mt-2 rounded-lg border p-3">
+            <CustomProviderForm
+              requireModels
+              onSaved={provider => {
+                connection.chooseCustomProvider(provider.id);
+                onPreviewProvider?.(provider.id, 'api_key');
+              }}
+            />
           </div>
         </TabContent>
       </Tabs>

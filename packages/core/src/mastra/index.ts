@@ -1,20 +1,23 @@
 import type { Agent } from '../agent';
-import { createDurableAgent } from '../agent/durable/create-durable-agent';
-import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
+import {
+  abandonDurableAgentExecutions,
+  getActiveDurableAgentWorkflowExecutions,
+  isDurableAgentExecutionDetached,
+} from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import type { AgentController } from '../agent-controller';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
-import type { BundlerConfig } from '../bundler/types';
+import type { BundlerConfig } from '../bundler';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
 import type { ChannelProvider, ChannelsResolver } from '../channels';
 import type { Classifier, ClassifierQuestions } from '../classifier';
 import { DatasetsManager } from '../datasets/manager.js';
-import type { MastraDeployer } from '../deployer';
+import type { IDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
@@ -46,6 +49,7 @@ import type { NotificationDispatchConfig } from '../notifications/workflow';
 import {
   buildNotificationDispatchSchedule,
   createNotificationDispatchWorkflow,
+  hasPendingDeferredNotifications,
   NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
 } from '../notifications/workflow';
 import type {
@@ -66,7 +70,8 @@ import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, ServerConfigInput, StudioConfig } from '../server/types';
+import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
@@ -99,9 +104,16 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import {
+  cancelNestedRun,
+  createNestedRunParentStatusLookup,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from '../workflows/nested-run-recovery';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import { computeNextFire } from '../workflows/scheduler/cron';
+import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -115,6 +127,14 @@ import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
+
+function normalizeApiRoutes(routes: NonNullable<ServerConfigInput['apiRoutes']>): ApiRoute[] {
+  return routes.flatMap(route => (Array.isArray(route) ? route : [route]));
+}
+
+function normalizeServerConfig({ apiRoutes, ...server }: ServerConfigInput): ServerConfig {
+  return apiRoutes ? { ...server, apiRoutes: normalizeApiRoutes(apiRoutes) } : server;
+}
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -402,12 +422,12 @@ export interface Config<
   /**
    * Deployment provider for publishing applications to cloud platforms.
    */
-  deployer?: MastraDeployer;
+  deployer?: IDeployer;
 
   /**
    * Server configuration for HTTP endpoints and middleware.
    */
-  server?: ServerConfig;
+  server?: ServerConfigInput;
 
   /**
    * Studio-specific authentication and authorization configuration.
@@ -797,6 +817,9 @@ const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Mirrors BackgroundTaskManager's grace period and the deployer's
 // `server.drainTimeout` default.
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
+// A thread run still executing at shutdown is aborted and gets at least this long to wind down before its thread is
+// handed back, even when the drain budget is already spent. A tool call already executing may still finish after.
+const SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS = 500;
 // Spreads re-checks of durable-agent runs other instances still drove at boot,
 // so replicas that skipped the same run don't all try it at the same instant.
 const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
@@ -848,6 +871,7 @@ export class Mastra<
 > {
   #vectors?: TVectors;
   #agents: TAgents;
+  #toolLoopRegistrations = new WeakMap<ToolLoopAgentLike, Map<string, Agent<any>>>();
   #logger: TLogger;
   #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
   #wiredLoggers = new WeakSet<IMastraLogger>();
@@ -860,7 +884,7 @@ export class Mastra<
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
-  #deployer?: MastraDeployer;
+  #deployer?: IDeployer;
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
@@ -890,6 +914,7 @@ export class Mastra<
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
   #serverExplicit = false;
+  #signalProviderRouteOwners = new WeakMap<ApiRoute, SignalProvider>();
   #studio?: StudioConfig;
   #studioExplicit = false;
   #serverAdapter?: MastraServerBase;
@@ -964,9 +989,8 @@ export class Mastra<
    */
   #schedulerRequested = false;
   /**
-   * Set once `__ensureNotificationDispatchReady()` has upserted the dispatcher
-   * schedule row and requested the scheduler. Makes repeated deferred
-   * notification creates free after the first one.
+   * Set once `__ensureNotificationDispatchReady()` has requested the
+   * scheduler in this process, so later deferrals only verify the row.
    */
   #notificationDispatchReady = false;
   /**
@@ -1099,8 +1123,8 @@ export class Mastra<
                 // for workflow ids only known to this instance's public registry
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
-                const isOwnedHere = (() => {
-                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic)) return true;
+                const isOwnedHere = (guarded = false) => {
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic, guarded)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
@@ -1108,7 +1132,7 @@ export class Mastra<
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
                     const prId = parent.runId;
-                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic)) return true;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic, guarded)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -1121,8 +1145,13 @@ export class Mastra<
                   if (rId && rId.startsWith('sched_wf_')) return true;
                   if (rId && rId.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
                   return false;
-                })();
-                if (isOwnedHere) {
+                };
+                if (isOwnedHere()) {
+                  if (topic === 'workflows' && !isOwnedHere(true)) {
+                    return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
+                      target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
+                    );
+                  }
                   // A local-only start in a process that consumes no workflow
                   // events (e.g. `MASTRA_WORKERS=false`) is dropped by the
                   // transport. Say so instead of hanging silently.
@@ -1497,8 +1526,8 @@ export class Mastra<
    * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
    * ```
    */
-  public setServer(server: ServerConfig): void {
-    this.#server = server;
+  public setServer(server: ServerConfigInput): void {
+    this.#server = normalizeServerConfig(server);
   }
 
   /**
@@ -1712,16 +1741,15 @@ export class Mastra<
     if (config?.logger === false) {
       logger = noopLogger as unknown as TLogger;
       this.#loggerExplicit = true;
+    } else if (config?.logger) {
+      logger = config.logger;
+      this.#loggerExplicit = true;
     } else {
-      if (config?.logger) {
-        logger = config.logger;
-        this.#loggerExplicit = true;
-      } else {
-        const levelOnEnv =
-          process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
-        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
-      }
+      const levelOnEnv =
+        process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
+      logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
     }
+
     this.#logger = logger;
 
     this.#idGenerator = config?.idGenerator;
@@ -1982,7 +2010,7 @@ export class Mastra<
     }
 
     if (config?.server) {
-      this.#server = config.server;
+      this.#server = normalizeServerConfig(config.server);
       this.#serverExplicit = true;
     }
 
@@ -2324,14 +2352,19 @@ export class Mastra<
         const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
-        // A declarative cadence can outlive its final occurrence (e.g. a
-        // year-pinned cron that has already passed). Compute the timing before
-        // writing: the row is registered as `completed` rather than skipped, so
-        // the deployment stays self-consistent instead of retrying a doomed
-        // write on every boot.
-        const computeTiming = () => {
-          const next = computeNextFire({ cron: cfg.cron, timezone: cfg.timezone, nextFireAt: now }, now);
-          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' } as const;
+        const runAt = cfg.runAt !== undefined ? toEpochMs(cfg.runAt) : undefined;
+        const endAt = cfg.endAt !== undefined ? toEpochMs(cfg.endAt) : undefined;
+        const cron = cfg.cron ?? '';
+        // A one-off whose `runAt` has already passed is recorded as completed
+        // rather than fired, so a fresh deploy never runs a stale one-off. A
+        // declarative cadence can outlive its final occurrence (e.g. a
+        // year-pinned cron that has already passed): that row is registered as
+        // `completed` rather than skipped, so the deployment stays
+        // self-consistent instead of retrying a doomed write on every boot.
+        const computeTiming = (): { nextFireAt: number; status: 'active' | 'completed' } => {
+          if (runAt !== undefined) return { nextFireAt: runAt, status: runAt > now ? 'active' : 'completed' };
+          const next = computeNextFire({ cron, timezone: cfg.timezone, endAt, nextFireAt: now }, now);
+          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' };
         };
 
         if (!existing) {
@@ -2339,8 +2372,10 @@ export class Mastra<
           await schedulesStore.createSchedule({
             id: scheduleId,
             target,
-            cron: cfg.cron,
+            cron,
             timezone: cfg.timezone,
+            ...(runAt !== undefined ? { runAt } : {}),
+            ...(endAt !== undefined ? { endAt } : {}),
             status: timing.status,
             nextFireAt: timing.nextFireAt,
             createdAt: now,
@@ -2356,17 +2391,23 @@ export class Mastra<
         // recomputed cadence is the exception: it re-arms a completed row when
         // it has future occurrences, and completes it when it does not.
         const patch: ScheduleUpdate = {};
-        const cronChanged = existing.cron !== cfg.cron;
+        const cronChanged = existing.cron !== cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
+        const runAtChanged = (existing.runAt ?? undefined) !== runAt;
+        const endAtChanged = (existing.endAt ?? undefined) !== endAt;
 
-        if (cronChanged) patch.cron = cfg.cron;
+        if (cronChanged) patch.cron = cron;
         if (timezoneChanged) patch.timezone = cfg.timezone;
+        // Adapters clear the column when the key is present but undefined.
+        if (runAtChanged) patch.runAt = runAt;
+        if (endAtChanged) patch.endAt = endAt;
         if (!targetsEqual(existing.target, target)) patch.target = target;
         if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
 
-        // Cron or timezone change invalidates the stored nextFireAt — recompute
-        // from now so we don't fire on the old schedule.
-        if (cronChanged || timezoneChanged) {
+        // Any timing change invalidates the stored nextFireAt — recompute from
+        // now so we don't fire on the old schedule, and re-arm or complete the
+        // row per the recomputed cadence.
+        if (cronChanged || timezoneChanged || runAtChanged || endAtChanged) {
           const timing = computeTiming();
           patch.nextFireAt = timing.nextFireAt;
           if (timing.status === 'completed') patch.status = 'completed';
@@ -2427,6 +2468,10 @@ export class Mastra<
     }
 
     await this.#registerFsAgentSchedules(schedulesStore, allRows);
+
+    // A running scheduler sleeps until its earliest fire; re-arm it for rows
+    // registered after it started. No-op before it starts.
+    this.#findSchedulerWorker()?.scheduler?.wake();
   }
 
   /**
@@ -2790,8 +2835,12 @@ export class Mastra<
    *
    * This method allows dynamic registration of agents after the Mastra instance
    * has been created. The agent will be initialized with the current logger.
+   * Re-registering the same instance under the same key is a no-op. Rehydrating
+   * a stored agent under an existing stored-agent key also leaves the original
+   * registration unchanged.
    *
-   * @throws {MastraError} When an agent with the same key already exists
+   * @throws {MastraError} When a different agent with the same key already exists,
+   *   except when both registrations have source 'stored'
    *
    * @example
    * ```typescript
@@ -2819,26 +2868,6 @@ export class Mastra<
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
 
-    // Auto-wrap regular Agents that opted in via AgentConfig.durable.
-    // The wrapped agent then flows into the isDurableAgentLike branch below,
-    // which handles __setMastra, workflow registration, and channel routes.
-    //
-    // Statically importing `createDurableAgent` here is safe because `agent.ts`
-    // imports `Mastra` type-only, so there is no `agent → mastra` runtime edge
-    // to close the init cycle. See the import note in `agent/agent.ts`.
-    //
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter (see `Agent#agent`), so we must
-    // discriminate against a real wrapper by checking `agent.agent !== agent`.
-    // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
-    // distinct inner `Agent`; the standalone placeholder points at itself.
-    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
-    if (!isRealDurableWrapper && (agent as Agent).durable) {
-      const durableOption = (agent as Agent).durable;
-      const opts = durableOption === true ? {} : { ...(durableOption as object) };
-      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
-    }
-
     // Handle durable agent wrappers (e.g., InngestAgent)
     // These wrap a regular Agent with execution engine-specific capabilities
     if (isDurableAgentLike(agent)) {
@@ -2846,12 +2875,19 @@ export class Mastra<
       const underlyingAgent = durableAgent.agent;
       const agentKey = key || durableAgent.id;
 
-      // Check if already registered
+      // Only re-registering the same wrapper is idempotent.
       const agents = this.#agents as Record<string, Agent<any>>;
       if (agents[agentKey]) {
-        const logger = this.getLogger();
-        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
-        return;
+        if (Object.is(agents[agentKey], durableAgent)) {
+          return;
+        }
+        throw new MastraError({
+          id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Agent with key ${agentKey} already exists`,
+          details: { status: 409, key: agentKey },
+        });
       }
 
       // Set the Mastra instance on the durable agent for observability
@@ -2982,22 +3018,37 @@ export class Mastra<
         });
       }
 
+      this.#registerSignalProviderRoutes(underlyingAgent);
       this.#syncLateRegisteredAgentSchedules(underlyingAgent);
 
       return;
     }
 
     let mastraAgent: Agent<any, any, any>;
-    if (isToolLoopAgentLike(agent)) {
+    const toolLoopInput = isToolLoopAgentLike(agent) ? agent : undefined;
+    if (toolLoopInput) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
-      mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
+      mastraAgent = toolLoopAgentToMastraAgent(toolLoopInput, { fallbackName: key });
     } else {
       mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      return;
+      if (
+        agents[agentKey] === mastraAgent ||
+        (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
+        (agents[agentKey].source === 'stored' && options?.source === 'stored')
+      ) {
+        return;
+      }
+      throw new MastraError({
+        id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with key ${agentKey} already exists`,
+        details: { status: 409, key: agentKey },
+      });
     }
 
     // Initialize the agent
@@ -3017,6 +3068,14 @@ export class Mastra<
     }
 
     agents[agentKey] = mastraAgent;
+    if (toolLoopInput) {
+      let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
+      if (!registrations) {
+        registrations = new Map();
+        this.#toolLoopRegistrations.set(toolLoopInput, registrations);
+      }
+      registrations.set(agentKey, mastraAgent);
+    }
 
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor
@@ -3102,7 +3161,71 @@ export class Mastra<
       });
     }
 
+    this.#registerSignalProviderRoutes(mastraAgent);
     this.#syncLateRegisteredAgentSchedules(mastraAgent);
+  }
+
+  /**
+   * Merge routes from the agent's signal providers into `server.apiRoutes`.
+   * Skips routes whose method and path are already registered, so a provider
+   * shared by several agents only mounts its routes once and existing routes
+   * win. Logs a warning when a route is skipped because something other than
+   * the same provider already holds that method and path.
+   */
+  #registerSignalProviderRoutes(agent: Agent<any, any, any>): void {
+    const existingRoutes = this.#server?.apiRoutes ?? [];
+    const newRoutes: ApiRoute[] = [];
+
+    for (const provider of agent.listSignalProviders?.() ?? []) {
+      for (const route of provider.getRoutes?.() ?? []) {
+        const registered = [...existingRoutes, ...newRoutes].find(
+          existing => existing.path === route.path && existing.method === route.method,
+        );
+        if (!registered) {
+          newRoutes.push(route);
+          this.#signalProviderRouteOwners.set(route, provider);
+          continue;
+        }
+        if (this.#signalProviderRouteOwners.get(registered) !== provider) {
+          this.getLogger().warn(
+            `Signal provider "${provider.id}" on agent "${agent.id}" declares ${route.method} ${route.path}, but that route is already registered. Skipping the provider route.`,
+          );
+        }
+      }
+    }
+
+    if (newRoutes.length > 0) {
+      this.#server = { ...this.#server, apiRoutes: [...existingRoutes, ...newRoutes] };
+    }
+  }
+
+  /**
+   * Remove routes added by a removed agent's signal providers, unless another
+   * registered agent still uses the same provider instance.
+   */
+  #unregisterSignalProviderRoutes(removedAgent: Agent<any, any, any> | undefined): void {
+    const routes = this.#server?.apiRoutes;
+    const removedProviders = new Set(this.#listAgentSignalProviders(removedAgent));
+    if (!routes || removedProviders.size === 0) return;
+
+    const providersInUse = new Set(
+      Object.values(this.#agents as Record<string, Agent<any, any, any>>).flatMap(agent =>
+        this.#listAgentSignalProviders(agent),
+      ),
+    );
+    const keptRoutes = routes.filter(route => {
+      const provider = this.#signalProviderRouteOwners.get(route);
+      return !provider || !removedProviders.has(provider) || providersInUse.has(provider);
+    });
+
+    if (keptRoutes.length !== routes.length) {
+      this.#server = { ...this.#server, apiRoutes: keptRoutes };
+    }
+  }
+
+  #listAgentSignalProviders(agent: Agent<any, any, any> | undefined): SignalProvider[] {
+    const target = agent && isDurableAgentLike(agent) ? (agent as DurableAgentLike).agent : agent;
+    return target?.listSignalProviders?.() ?? [];
   }
 
   /**
@@ -3345,8 +3468,19 @@ export class Mastra<
     // Preserve apiRoutes accumulated during construction (e.g. channel
     // webhook routes) — they live on #server even when the user never
     // passed a server config explicitly.
-    const existingRoutes = this.#server?.apiRoutes ?? [];
+    // File-system routes win over signal provider routes on the same method and path.
     const fsRoutes = fsServer.apiRoutes ?? [];
+    const existingRoutes = (this.#server?.apiRoutes ?? []).filter(route => {
+      const provider = this.#signalProviderRouteOwners.get(route);
+      if (!provider) return true;
+      const overridden = fsRoutes.some(fsRoute => fsRoute.path === route.path && fsRoute.method === route.method);
+      if (overridden) {
+        this.getLogger().warn(
+          `Signal provider "${provider.id}" route ${route.method} ${route.path} is overridden by a file-system route.`,
+        );
+      }
+      return !overridden;
+    });
     const mergedRoutes = [...existingRoutes, ...fsRoutes];
     this.setServer({
       ...fsServer,
@@ -3398,8 +3532,10 @@ export class Mastra<
 
     // Try direct key lookup first
     if (agents[keyOrId]) {
-      const agentId = agents[keyOrId]?.id;
+      const removedAgent = agents[keyOrId];
+      const agentId = removedAgent?.id;
       delete agents[keyOrId];
+      this.#unregisterSignalProviderRoutes(removedAgent);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
@@ -3410,8 +3546,10 @@ export class Mastra<
     // Try finding by ID
     const key = Object.keys(agents).find(k => agents[k]?.id === keyOrId);
     if (key) {
-      const agentId = agents[key]?.id;
+      const removedAgent = agents[key];
+      const agentId = removedAgent?.id;
       delete agents[key];
+      this.#unregisterSignalProviderRoutes(removedAgent);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
@@ -3987,16 +4125,16 @@ export class Mastra<
    * Whether this internal workflow event must stay in this process. A
    * run-scoped registration always qualifies; an unscoped one does unless it
    * was registered `distributed`. A distributed workflow's `workflows` events
-   * stay local while this process runs workflow workers (so runs stay pinned
-   * to the process that started them) and only cross processes when it
-   * can't run them itself. Its `workflows-finish` events always cross, since
+   * stay local on stores without atomic occurrence guards. Guarded stores
+   * allow workers to publish reclaimable continuations through the broker.
+   * Its `workflows-finish` events always cross, since
    * the process waiting for the result may not be the one that ran it.
    */
-  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string): boolean {
+  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string, guarded: boolean): boolean {
     if (!this.__hasInternalWorkflow(id, runId)) return false;
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     if (!this.#distributedInternalWorkflowIds.has(id)) return true;
-    return topic === 'workflows' && this.__hasLocalWorkflowExecution();
+    return topic === 'workflows' && !guarded && this.__hasLocalWorkflowExecution();
   }
 
   /**
@@ -4233,7 +4371,54 @@ export class Mastra<
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    const runs = activeRuns.runs;
+    const workflowsStore = await this.#storage?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
+    const runs: WorkflowRuns['runs'] = [];
+    for (const run of activeRuns.runs) {
+      const parent = nestedRunParentOf(run.snapshot);
+      if (!parent) {
+        runs.push(run);
+        continue;
+      }
+      // A nested run is collected by its parent's step, so the parent's stored status decides what
+      // restarting it standalone would do: run it twice while the parent drives it, or re-run the
+      // item after the parent already finished it.
+      try {
+        const parentStatus = await parentStatusOf(parent);
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(run);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: run.workflowName,
+            runId: run.runId,
+            expectedStatus: nestedRunStatusOf(run.snapshot),
+            logger: this.#logger,
+          });
+        } else if (recovery === 'skip') {
+          // Nothing is wrong here: the parent can still drive this run. Logged because a nested
+          // run left waiting on a parent that never restarts is otherwise only visible in the
+          // nested workflow's own active runs.
+          this.#logger.debug('Left a nested workflow run for its parent to drive', {
+            workflow: run.workflowName,
+            runId: run.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.#logger.error('Failed to recover nested workflow run', {
+          workflow: run.workflowName,
+          runId: run.runId,
+          error,
+        });
+      }
+    }
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
@@ -4376,8 +4561,8 @@ export class Mastra<
         let failed = 0;
         let skipped = 0;
 
-        for (const agent of durableAgents) {
-          if (this.#shuttingDown) break;
+        await runWithConcurrency(durableAgents, DEFAULT_RESTART_CONCURRENCY, async agent => {
+          if (this.#shuttingDown) return;
           try {
             const result = await agent.recoverActiveRuns();
             for (const run of result.recovered) {
@@ -4396,7 +4581,7 @@ export class Mastra<
               error,
             });
           }
-        }
+        });
 
         return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
       })(),
@@ -4421,10 +4606,11 @@ export class Mastra<
   }
 
   /**
-   * Re-check a run another execution drove when it was skipped, once that
-   * execution's claim could have lapsed. Runs this process drives carry no
-   * `retryAt` and are not re-checked. A re-check that throws is retried with
-   * backoff; `failures` counts the consecutive ones.
+   * Re-check skipped runs after a foreign claim could have lapsed or a
+   * recovery wait timed out. Timed-out originals keep their ownership and
+   * defer rechecks until settlement without starting duplicate executions.
+   * A re-check that throws is retried with backoff; `failures` counts the
+   * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
     agent: DurableAgentLike,
@@ -6056,7 +6242,7 @@ export class Mastra<
     }
   }
 
-  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  /** Subscribe for cross-process scheduler wakes. Idempotent. */
   async #wireSchedulerWakeSubscription(): Promise<void> {
     if (this.#schedulerWakeSubscription) return;
     const cb: EventCallback = async (event, ack, nack) => {
@@ -6073,6 +6259,9 @@ export class Mastra<
         // here would race that loop and start the scheduler twice.
         if (this.#workersStarted) {
           await this.#ensureSchedulingWorkersStarted();
+          // A running scheduler sleeps until its earliest fire; the new or
+          // changed schedule may be due sooner.
+          this.#findSchedulerWorker()?.scheduler?.wake();
         }
         await ack?.();
       } catch (err) {
@@ -6086,7 +6275,8 @@ export class Mastra<
     try {
       // Wake events are transient hints; the awaited boot probe below is the
       // durable recovery path. Starting from latest avoids replaying retained
-      // wakes and starting the scheduler when no schedule rows remain.
+      // wakes and starting the scheduler when no schedule rows remain. The
+      // subscription stays wired while the scheduler runs, to re-arm it.
       await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
     } catch (err) {
       // Allow a later startWorkers() call to retry a transient subscribe error.
@@ -6115,10 +6305,16 @@ export class Mastra<
       if (!schedulesStore) return;
 
       const rows = await schedulesStore.listSchedules();
-      // A leftover dispatcher row must not wake the scheduler when dispatch
-      // has since been disabled — nothing would consume it.
-      const dispatchDisabled = this.#notificationDispatchConfig?.enabled === false;
-      const hasWork = rows.some(row => !dispatchDisabled || row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      let hasWork = rows.some(row => row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      // A leftover dispatcher row is only work while deferred notifications
+      // are pending. Otherwise its once-a-minute cron would keep the scheduler
+      // polling storage forever, and nothing would consume it when dispatch
+      // has since been disabled.
+      const dispatchEnabled = this.#notificationDispatchConfig?.enabled !== false;
+      if (!hasWork && dispatchEnabled && rows.some(row => row.id === NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)) {
+        const notifications = await this.#storage.getStore('notifications');
+        hasWork = notifications ? await hasPendingDeferredNotifications(notifications) : false;
+      }
       if (hasWork) this.#schedulerRequested = true;
     } catch (err) {
       this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
@@ -6132,13 +6328,17 @@ export class Mastra<
    * scheduler — mirroring `__ensureScheduleRuntimeReady()`. This also supports
    * processes that publish notifications without running workers locally.
    *
+   * The row is read on every call rather than memoized: the dispatcher deletes
+   * it once nothing is pending (`__releaseNotificationDispatchIfIdle()`),
+   * possibly from another process, and the next deferral must re-arm it.
+   *
    * @internal
    */
   async __ensureNotificationDispatchReady(): Promise<void> {
-    if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
     if (!this.#storage) return;
 
+    let created = false;
     try {
       const schedulesStore = await this.#storage.getStore('schedules');
       if (!schedulesStore) return;
@@ -6148,6 +6348,7 @@ export class Mastra<
       if (!existing) {
         try {
           await schedulesStore.createSchedule(desired);
+          created = true;
         } catch (err) {
           // Another instance may have created the row concurrently — only
           // rethrow if it's still missing.
@@ -6167,18 +6368,52 @@ export class Mastra<
         }
       }
     } catch (err) {
-      // Leave #notificationDispatchReady unset so the next deferred
-      // notification retries the upsert.
+      // The next deferred notification retries the upsert.
       this.#logger?.warn?.('Failed to ensure notification dispatch schedule', err as any);
       return;
     }
 
+    // Request the scheduler once per process, and wake schedulers everywhere
+    // whenever the row is (re)created.
+    if (this.#notificationDispatchReady && !created) return;
     this.#notificationDispatchReady = true;
     this.#schedulerRequested = true;
     if (this.#workersStarted) {
       await this.#ensureSchedulingWorkersStarted();
     }
     await this.__publishSchedulerWake(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+  }
+
+  /**
+   * Called by the dispatcher after each pass. When no deferred notification is
+   * pending, deletes the dispatcher schedule row so its cron stops firing and
+   * an idle app stops polling storage. The next deferral re-creates it.
+   *
+   * @internal
+   */
+  async __releaseNotificationDispatchIfIdle(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const [schedulesStore, notifications] = await Promise.all([
+        this.#storage.getStore('schedules'),
+        this.#storage.getStore('notifications'),
+      ]);
+      if (!schedulesStore || !notifications) return;
+      if (await hasPendingDeferredNotifications(notifications)) return;
+
+      await schedulesStore.deleteSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      this.#notificationDispatchReady = false;
+
+      // A deferral elsewhere may have written its record and seen the row
+      // just before the delete. It won't re-create the row, so re-check after
+      // deleting and re-arm on its behalf.
+      if (await hasPendingDeferredNotifications(notifications)) {
+        await this.__ensureNotificationDispatchReady();
+      }
+    } catch (err) {
+      // Leaving the row in place only costs extra dispatch passes.
+      this.#logger?.warn?.('Failed to release idle notification dispatch schedule', err as any);
+    }
   }
 
   /**
@@ -6239,9 +6474,6 @@ export class Mastra<
         await agentScheduleWorker.start();
       }
     }
-
-    // Startup is complete; further wake events have nothing to do.
-    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -6403,8 +6635,11 @@ export class Mastra<
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
+        this.#agents?.[key]?.getChannels()?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#harnesses ?? {}).forEach(controller => controller.getChannels()?.__setLogger(this.#logger));
 
     if (this.#deployer) {
       this.#deployer.__setLogger(this.#logger);
@@ -6959,41 +7194,40 @@ export class Mastra<
         this.#logger?.debug(`MCP server with logical ID '${serverId}' found, but not version '${version}'.`);
       }
       return specificVersionServer as TMCPServers[TMCPServerName] | undefined;
-    } else {
-      // No version specified, find the one with the most recent releaseDate
-      if (matchingLogicalIdServers.length === 1) {
-        return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
-      }
-
-      matchingLogicalIdServers.sort((a, b) => {
-        // Ensure releaseDate exists and is a string before creating a Date object
-        const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
-        const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
-
-        if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
-        if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
-        if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
-
-        return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
-      });
-
-      // After sorting, the first element should be the latest if its date is valid
-      if (matchingLogicalIdServers.length > 0) {
-        const latestServer = matchingLogicalIdServers[0];
-        if (
-          latestServer &&
-          latestServer.releaseDate &&
-          typeof latestServer.releaseDate === 'string' &&
-          !isNaN(new Date(latestServer.releaseDate).getTime())
-        ) {
-          return latestServer as TMCPServers[TMCPServerName];
-        }
-      }
-      this.#logger?.warn(
-        `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
-      );
-      return undefined;
     }
+    // No version specified, find the one with the most recent releaseDate
+    if (matchingLogicalIdServers.length === 1) {
+      return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
+    }
+
+    matchingLogicalIdServers.sort((a, b) => {
+      // Ensure releaseDate exists and is a string before creating a Date object
+      const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
+      const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
+
+      if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
+      if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
+      if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
+
+      return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
+    });
+
+    // After sorting, the first element should be the latest if its date is valid
+    if (matchingLogicalIdServers.length > 0) {
+      const latestServer = matchingLogicalIdServers[0];
+      if (
+        latestServer &&
+        latestServer.releaseDate &&
+        typeof latestServer.releaseDate === 'string' &&
+        !isNaN(new Date(latestServer.releaseDate).getTime())
+      ) {
+        return latestServer as TMCPServers[TMCPServerName];
+      }
+    }
+    this.#logger?.warn(
+      `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
+    );
+    return undefined;
   }
 
   /**
@@ -7101,7 +7335,11 @@ export class Mastra<
     // dedicated scheduler processes.
     if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
-        const sw = new SchedulerWorker(this.#schedulerConfig);
+        // A filter-selected scheduler is dedicated: keep it polling like an
+        // explicitly enabled one, since it may share no pubsub with producers.
+        const sw = new SchedulerWorker(
+          schedulerForcedByFilter ? { ...this.#schedulerConfig, enabled: true } : this.#schedulerConfig,
+        );
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }
@@ -7200,11 +7438,6 @@ export class Mastra<
     // workers mid-boot would race the start loop above. Honor it now.
     if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
       await this.#ensureSchedulingWorkersStarted();
-    }
-
-    // The wake subscription is only needed while the scheduler is stopped.
-    if (this.#findSchedulerWorker()?.isRunning) {
-      await this.#unwireSchedulerWakeSubscription();
     }
   }
 
@@ -7421,6 +7654,34 @@ export class Mastra<
     this.#executionWorkersStarted = false;
     // Workers are gone again, so a stranded workflow event should warn again.
     this.#warnedStrandedLocalWorkflowIds.clear();
+  }
+
+  /**
+   * Hand back the thread runs this Mastra still holds once its durable executions are abandoned: announce each run's
+   * end, stop its lease renewal and release its thread lease, so another process can take the thread right away.
+   */
+  async #shutdownThreadRuns(deadline: number): Promise<void> {
+    // Agents can carry their own pubsub; thread runs live in a separate runtime state per pubsub.
+    const pubsubs = new Set<PubSub | undefined>([this.pubsub]);
+    for (const agent of Object.values(this.#agents as Record<string, Agent<any>>)) {
+      if (typeof agent?.getPubSub === 'function') pubsubs.add(agent.getPubSub());
+    }
+    const abortGraceMs = Math.max(SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS, deadline - Date.now());
+    const executesElsewhere = (runId: string) => isDurableAgentExecutionDetached(this, runId);
+    const results = await this.#awaitBounded(
+      Promise.allSettled(
+        [...pubsubs].map(pubsub =>
+          agentThreadStreamRuntime.shutdown(pubsub, this, { abortGraceMs, executesElsewhere }),
+        ),
+      ),
+      abortGraceMs + 1_000,
+      'thread run handback',
+    );
+    results?.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Handing back thread runs failed during shutdown', { error: result.reason });
+      }
+    });
   }
 
   /**
@@ -7761,6 +8022,17 @@ export class Mastra<
    * reach during the drain. An abandoned durable agent run then stops without
    * writing and is released. It can be recovered only if a checkpoint was
    * persisted.
+   *
+   * Agent thread runs this instance still holds are then handed back. A run
+   * still executing is aborted so it starts no further steps, and other
+   * processes watching its thread see it end; its partial response is not
+   * saved. A run parked on a tool approval or suspension stays parked and
+   * resumable. Either way the thread lease is released right away instead of
+   * at expiry, so another process can use the thread immediately. Release is
+   * best-effort: if an aborted run doesn't stop in time (for example, a tool
+   * call that ignores the abort), or the lease backend doesn't answer or
+   * fails the release, the lease is kept until it expires. Handing runs back can take up to about 1.5 seconds past
+   * `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
@@ -7825,6 +8097,10 @@ export class Mastra<
     // the next boot recovers it right away. Storage must still be open.
     await abandonDurableAgentExecutions(this);
 
+    // Hand back the thread runs this instance still holds: announce each run's end to observers in other
+    // processes and release its thread lease, so the thread is free right away instead of after the lease
+    // lapses. Pubsub must still be open.
+    await this.#shutdownThreadRuns(deadline);
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still
     // available so it can abort active tasks, preserve retry recovery, and
@@ -7883,13 +8159,14 @@ export class Mastra<
       }
     }
 
+    // Flush observability exporters while their storage is still open.
+    await this.#observability.shutdown();
+
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
     if (this.#storage?.close) {
       await this.#storage.close();
     }
-    // Shutdown observability registry, exporters, etc...
-    await this.#observability.shutdown();
 
     this.#logger?.info('Mastra shutdown completed');
   }

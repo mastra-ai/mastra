@@ -9,6 +9,7 @@ type TimelineSpan = {
   endedAt?: Date | string | null;
   parentSpanId?: string | null;
   matchedInPayloadOnly?: boolean;
+  signalLabel?: string;
 };
 
 /**
@@ -39,6 +40,7 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
       spans: [],
       parentSpanId: spanRecord.parentSpanId,
       matchedInPayloadOnly: spanRecord.matchedInPayloadOnly,
+      signalLabel: spanRecord.signalLabel,
     };
 
     spanMap.set(spanRecord.spanId, uiSpan);

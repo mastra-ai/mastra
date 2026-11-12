@@ -29,7 +29,9 @@ const AGGREGATE_STORE_FEATURES = [
   'trace-query-context-ids',
   'trace-query-time-to-first-chunk',
   'trace-query-root-span-fields',
+  'trace-query-root-entity-id',
   'trace-query-tenant-scope',
+  'aggregate-time-to-first-measures',
 ];
 
 // `organizationId` is a reserved request-context key, so clients cannot self-assert it. Server

@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../test/msw-server';
 import { makeWrapper } from '../../../test/render';
 import { useDatasetItem, useDatasetItems } from '../use-dataset-items';
-import { useDataset, useDatasets } from '../use-datasets';
+import { useDataset, useDatasets, useDatasetsByIds } from '../use-datasets';
 
-type DatasetRecord = Awaited<ReturnType<MastraClient['getDataset']>>;
+type DatasetRecord = Awaited<ReturnType<MastraClient['listDatasets']>>['datasets'][number];
 type DatasetItemRecord = Awaited<ReturnType<MastraClient['getDatasetItem']>>;
 type ListDatasetsResponse = Awaited<ReturnType<MastraClient['listDatasets']>>;
 type ListDatasetItemsResponse = Awaited<ReturnType<MastraClient['listDatasetItems']>>;
@@ -52,6 +52,66 @@ describe('useDatasets', () => {
       const { result } = renderHook(() => useDatasets(), { wrapper });
 
       await waitFor(() => expect(result.current.data?.datasets.map(d => d.id)).toEqual(['ds-1']));
+    });
+  });
+});
+
+describe('useDatasetsByIds', () => {
+  const buildDataset = (id: string): DatasetRecord => ({ ...dataset, id, name: `Dataset ${id}` });
+
+  const useDatasetsByIdsHandler = (requestedIds: string[][]) =>
+    server.use(
+      http.get('*/api/datasets', ({ request }) => {
+        const ids = new URL(request.url).searchParams.getAll('datasetIds');
+        requestedIds.push(ids);
+        const page: ListDatasetsResponse = {
+          datasets: ids.filter(id => id !== 'ds-missing').map(buildDataset),
+          pagination: { total: ids.length, page: 0, perPage: ids.length, hasMore: false },
+        };
+        return HttpResponse.json(page);
+      }),
+    );
+
+  describe('when given dataset ids', () => {
+    it('fetches only those datasets, once per unique id, and omits ids without a dataset', async () => {
+      const requestedIds: string[][] = [];
+      useDatasetsByIdsHandler(requestedIds);
+
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useDatasetsByIds({ datasetIds: ['ds-2', 'ds-1', 'ds-2', 'ds-missing'] }), {
+        wrapper,
+      });
+
+      await waitFor(() => expect(result.current.data?.map(d => d.name)).toEqual(['Dataset ds-1', 'Dataset ds-2']));
+      expect(requestedIds).toEqual([['ds-1', 'ds-2', 'ds-missing']]);
+    });
+  });
+
+  describe('when given more than 100 dataset ids', () => {
+    it('splits them into requests of at most 100 ids and merges the datasets', async () => {
+      const requestedIds: string[][] = [];
+      useDatasetsByIdsHandler(requestedIds);
+      const ids = Array.from({ length: 150 }, (_, index) => `ds-${String(index).padStart(3, '0')}`);
+
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useDatasetsByIds({ datasetIds: ids }), { wrapper });
+
+      await waitFor(() => expect(result.current.data).toHaveLength(150));
+      expect(requestedIds.map(batch => batch.length).toSorted((a, b) => b - a)).toEqual([100, 50]);
+    });
+  });
+
+  describe('when given no dataset ids', () => {
+    it('does not send a request', async () => {
+      const requestedIds: string[][] = [];
+      useDatasetsByIdsHandler(requestedIds);
+
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useDatasetsByIds({ datasetIds: [] }), { wrapper });
+
+      expect(result.current.fetchStatus).toBe('idle');
+      expect(result.current.data).toBeUndefined();
+      expect(requestedIds).toEqual([]);
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   Controller,
   Inject,
   NotFoundException,
+  PayloadTooLargeException,
   Req,
   Res,
   UseGuards,
@@ -22,6 +23,7 @@ import { TracingInterceptor } from '../interceptors/tracing.interceptor';
 import type { MastraModuleOptions } from '../mastra.module';
 import { AuthService } from '../services/auth.service';
 import { CustomRouteService } from '../services/custom-route.service';
+import type { CustomRouteAuthenticate } from '../services/custom-route.service';
 import { RequestContextService } from '../services/request-context.service';
 import { RouteHandlerService } from '../services/route-handler.service';
 import { parseMultipartFormData } from '../utils/parse-multipart';
@@ -60,15 +62,39 @@ export class MastraController {
 
     if (!routePath || !this.routeHandler.matchRoute(method, routePath)) {
       const requestContext = this.requestContext.requestContext;
-      const authenticate = async (requiresAuth: boolean) => {
-        if (!this.authService.isEnabled()) return;
-        const user = await this.authService.authenticate(req, {
-          requestContext,
-          response: res,
+      const authenticate: CustomRouteAuthenticate = async (customRoute, requiresAuth, pathParams) => {
+        if (this.authService.isEnabled()) {
+          const user = await this.authService.authenticate(req, {
+            requestContext,
+            response: res,
+            requiresAuth,
+            customRoute: true,
+          });
+          if (user !== undefined) this.requestContext.setUser(user);
+        }
+
+        // Same RBAC/FGA rules the other adapters apply to custom routes.
+        const serverRoute = {
+          method: customRoute.method,
+          path: customRoute.path,
+          responseType: 'json',
+          handler: async () => {},
           requiresAuth,
-          customRoute: true,
-        });
-        if (user !== undefined) this.requestContext.setUser(user);
+          requiresPermission: customRoute.requiresPermission,
+          fga: customRoute.fga,
+        } as ServerRoute;
+        if (requiresAuth) {
+          await this.routeHandler.enforceRoutePermission(serverRoute, requestContext);
+        }
+        if (customRoute.fga) {
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
+          await this.routeHandler.enforceRouteFGA(serverRoute, requestContext, {
+            ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
+            ...(req.query as Record<string, unknown>),
+            ...pathParams,
+          });
+        }
       };
       if (await this.customRoutes.handle(req, res, requestContext, authenticate)) {
         return undefined;
@@ -155,6 +181,25 @@ export class MastraController {
         maxFileSize,
         allowedMimeTypes,
       });
+    }
+
+    // JsonBodyMiddleware only applies the global limit, so enforce the route's own
+    // (usually smaller) limit here. Prefer the raw byte count recorded during parsing so
+    // chunked whitespace padding cannot shrink past the check after JSON.stringify.
+    if (route.maxBodySize !== undefined) {
+      const rawBodySize = (req as Request & { mastraRawBodySize?: number }).mastraRawBodySize;
+      const contentLength = parseInt(req.headers['content-length'] ?? '', 10);
+      const size =
+        rawBodySize !== undefined
+          ? rawBodySize
+          : Number.isNaN(contentLength)
+            ? req.body === undefined
+              ? 0
+              : Buffer.byteLength(JSON.stringify(req.body), 'utf8')
+            : contentLength;
+      if (size > route.maxBodySize) {
+        throw new PayloadTooLargeException('Request body too large');
+      }
     }
 
     // JSON body is already parsed by JsonBodyMiddleware

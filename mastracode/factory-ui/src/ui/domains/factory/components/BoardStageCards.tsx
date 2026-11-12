@@ -1,25 +1,23 @@
 import type { ReactNode } from 'react';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { IntakeFeed, IntakeSource } from '../boardCandidates';
-import { SKELETON_ROW_CLASS } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
-import type { BoardKind } from '../boardStages';
 import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
+import type { IntakeSetup } from './BoardColumnEmptyState';
 import { IntakeColumnExtras } from './IntakeColumnExtras';
 import { IntakeFeedNotice } from './IntakeFeedNotice';
+import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 
 export function BoardStageCards({
   stage,
   isInitialPhase,
   layout,
-  kind,
   loading,
   taskCount,
   feed,
   intakeSource,
-  hasIntakeSource,
+  intakeSetup,
   filtersExcludeAll,
   alreadyMaterialized,
   composer,
@@ -29,12 +27,11 @@ export function BoardStageCards({
   stage: { id: BoardStageId; label: string };
   isInitialPhase: boolean;
   layout: BoardLayout;
-  kind: BoardKind;
   loading: boolean;
   taskCount: number;
   feed?: IntakeFeed;
   intakeSource?: IntakeSource;
-  hasIntakeSource: boolean;
+  intakeSetup?: IntakeSetup;
   filtersExcludeAll: boolean;
   alreadyMaterialized: number;
   composer?: ReactNode;
@@ -46,15 +43,12 @@ export function BoardStageCards({
     <>
       {composer}
       {children}
-      {loading && (
-        <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName={SKELETON_ROW_CLASS[layout]} />
-      )}
+      {loading && <BoardItemsSkeleton label={`Loading ${stage.label} column`} layout={layout} />}
       {showEmptyState && (
         <BoardColumnEmptyState
           stage={stage.id}
           isInitialPhase={isInitialPhase}
-          kind={kind}
-          hasIntakeSource={hasIntakeSource}
+          intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={alreadyMaterialized}
           layout={layout}

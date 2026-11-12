@@ -15,15 +15,16 @@ Start a goal with the `/goal` slash command:
 /goal Review every open PR, categorize each one, and stop only after all PRs have a concise TL;DR.
 ```
 
-Mastra Code saves the objective on the current thread, runs the normal assistant turn, then asks a separate judge model what should happen next.
+Mastra Code saves the objective on the current thread and starts a run. Goal judging happens inside the agent loop: when the assistant stops to respond, the judge model evaluates progress and decides within the same run what happens next. The judge doesn't run while the assistant is still working through tool calls, waiting on background tasks, or only updating working memory.
 
 | Decision | Behavior |
 | - | - |
 | `done` | The goal is complete. Mastra Code records the result and exits goal mode. |
-| `continue` | The goal is not complete. Mastra Code adds the judge feedback as a system reminder and starts another turn. |
+| `continue` | The goal is not complete. Mastra Code adds the judge feedback as a system reminder and the loop continues within the same run. |
 | `waiting` | The goal requires user input or a checkpoint. Mastra Code stays in goal mode and waits for you. |
+| `paused` | The goal reached its attempt limit without completing or waiting, or the judge failed. Mastra Code pauses the goal until you run `/goal resume`. |
 
-The status line shows goal progress as `goal attempt N/M`. On narrow terminals, it shortens to `attempt N/M`.
+While a goal is active and the judge isn't evaluating it, the status line shows `goal` followed by the time spent working on it, such as `goal 12m`. When the goal started with the current run, it shows only `goal`.
 
 ## Configure the judge
 
@@ -66,9 +67,9 @@ Mastra Code treats the full multiline body as the goal objective.
 
 ## Use an approved plan as a goal
 
-When Mastra Code submits a plan, the inline approval UI includes **Use as /goal**. Select it to start a goal from the plan content instead of approving the plan for one implementation pass.
+When you approve a plan in the inline approval UI, Mastra Code switches to Build mode and starts a goal from the plan content. It keeps executing and checking the plan until the judge marks it complete.
 
-Use this when you want Mastra Code to continue executing and checking the plan until the judge marks it complete.
+If you haven't set a goal judge with `/goal judge`, the current model judges the plan goal.
 
 ## Goal-enabled slash commands
 
@@ -116,6 +117,6 @@ Mastra Code uses the skill instructions as the goal objective and appends any ar
 
 ## Persistence
 
-Goals are saved in thread metadata. If you switch threads or restart Mastra Code, the current thread restores its goal state, including the objective, judge model, status, attempt count, and attempt limit.
+Goals are saved in the thread state. If you switch threads or restart Mastra Code, the current thread restores its goal state, including the objective, judge model, status, attempt count, and attempt limit.
 
 Goal setup messages and final judge results are stored as system reminders in the conversation so resumed threads keep the goal context visible.

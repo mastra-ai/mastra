@@ -16,38 +16,78 @@ import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
 import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
-import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
+import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../shared/tool-abort-grace';
+import { createTimeoutAbortSignal, isMastraTimeoutError, settledOrElapsed } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
-  resumeContext,
-  requireToolApproval,
-  models,
-  toolChoice,
-  modelSettings,
-  _internal,
-  messageId,
-  runId,
-  messageList,
-  startTimestamp,
-  streamState,
-  agentId,
-  toolCallId,
-  toolCallConcurrency,
-  ...rest
-}: LoopRun<Tools, OUTPUT>) {
-  return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async streamController => {
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
+  {
+    resumeContext,
+    requireToolApproval,
+    models,
+    toolChoice,
+    modelSettings,
+    _internal,
+    messageId,
+    runId,
+    messageList,
+    startTimestamp,
+    streamState,
+    agentId,
+    toolCallId,
+    toolCallConcurrency,
+    streamPublisher,
+    ...rest
+  }: LoopRun<Tools, OUTPUT>,
+  finalization?: { register: (cleanup: () => Promise<void>) => void },
+) {
+  let finishQueued = false;
+  let terminalErrorReported = false;
+  const reportTerminalTracingError = (error: unknown) => {
+    if (finishQueued || terminalErrorReported) return;
+    terminalErrorReported = true;
+    try {
+      rest.onTracingTerminalError?.(getErrorFromUnknown(error));
+    } catch {
+      // Optional tracing must not replace the stream's original failure.
+    }
+  };
+  const loopSource = {
+    start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
+      let totalTimeoutSignal: AbortSignal | undefined;
       // Stamp chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
+          // The total deadline ends the run with a timeout error after the tool grace window.
+          // Steps that notice the abort inside that window must not end it as a caller abort first.
+          // A timeout carried in from the caller's signal (a parent run's deadline) is a caller abort.
+          if (
+            chunk.type === 'abort' &&
+            isMastraTimeoutError(totalTimeoutSignal?.reason) &&
+            totalTimeoutSignal?.reason !== rest.options?.abortSignal?.reason
+          ) {
+            return;
+          }
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
           streamController.enqueue(chunk);
+          streamPublisher?.publish(chunk, messageList);
         },
-        close: () => streamController.close(),
-        error: reason => streamController.error(reason),
+        close: () => {
+          try {
+            streamController.close();
+          } finally {
+            void streamPublisher?.close();
+          }
+        },
+        error: reason => {
+          try {
+            streamController.error(reason);
+          } finally {
+            void streamPublisher?.fail(reason);
+          }
+        },
         get desiredSize() {
           return streamController.desiredSize;
         },
@@ -69,6 +109,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent: rest.agent,
             processorStates: dataChunkProcessorStates,
           })
         : undefined;
@@ -270,7 +311,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       // reads `options.abortSignal`, so injecting here covers the entire agentic loop.
       const timeout = validateModelTimeoutSettings(modelSettings?.timeout);
       const {
-        signal: totalTimeoutSignal,
+        signal: timeoutSignal,
         timeoutPromise: totalTimeoutPromise,
         cleanup: cleanupTotalTimeout,
       } = createTimeoutAbortSignal({
@@ -278,6 +319,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         timeoutMs: timeout?.totalMs,
         timeoutType: 'total',
       });
+      totalTimeoutSignal = timeoutSignal;
 
       // A run-owned signal linked to the caller's. Callers often reuse one long-lived signal
       // across many runs, so run internals listen here rather than on the caller's signal;
@@ -484,6 +526,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           const error = getErrorFromUnknown(err, {
             fallbackMessage: 'Agent execution timed out',
           });
+          // A tool still running when the deadline aborted it records its result (or the abort notice)
+          // within the grace window. Wait that long, no longer, so memory saves the step it finishes.
+          await settledOrElapsed(executionPromise, TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_MS);
 
           safeEnqueue(controller, {
             type: 'error',
@@ -492,7 +537,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             payload: { error },
           });
 
-          await rest.options?.onError?.({ error });
+          try {
+            await rest.options?.onError?.({ error });
+          } finally {
+            reportTerminalTracingError(error);
+          }
           await deleteRunSnapshots();
           safeClose(controller);
           return;
@@ -511,8 +560,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               payload: { error },
             });
 
-            if (rest.options?.onError) {
+            try {
               await rest.options?.onError?.({ error });
+            } finally {
+              reportTerminalTracingError(error);
             }
           }
 
@@ -526,12 +577,18 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           return;
         }
 
-        await deleteRunSnapshots();
+        // Enqueuing finish does not await the agent's final memory save. Hand successful
+        // cleanup to the output's awaited finish lifecycle; bails retain immediate cleanup.
+        if (finalization && executionResult.result.stepResult.reason !== 'tripwire' && !upstreamAbortSignal?.aborted) {
+          finalization.register(deleteRunSnapshots);
+        } else {
+          await deleteRunSnapshots();
+        }
 
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
         // The tripwire/abort status is communicated through the stepResult.reason
-        safeEnqueue(controller, {
+        finishQueued = safeEnqueue(controller, {
           type: 'finish',
           runId,
           from: ChunkFrom.AGENT,
@@ -558,6 +615,27 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }
       }
+    },
+  };
+
+  // A rejected `start` would error the stream at once, and erroring a ReadableStream discards every
+  // chunk still queued for a reader that has not caught up (e.g. one that began reading late). Hold
+  // the failure until `pull` runs, which only happens once the queue is empty.
+  let failure: { error: unknown } | undefined;
+  return new ReadableStream<ChunkType<OUTPUT>>({
+    start: async streamController => {
+      try {
+        await loopSource.start(streamController);
+      } catch (error) {
+        // Also cover throws before the workflow returns a result. If finish was
+        // queued, its consumer still owns finalization after draining the queue.
+        reportTerminalTracingError(error);
+        failure = { error };
+        void streamPublisher?.fail(error);
+      }
+    },
+    pull: streamController => {
+      if (failure) streamController.error(failure.error);
     },
   });
 }

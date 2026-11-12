@@ -82,6 +82,16 @@ export function formatProviderName(provider: string): string {
   return PROVIDER_NAMES.get(provider) ?? provider.split(/[-_]/).filter(Boolean).map(titleCase).join(' ');
 }
 
+/** Compare catalog release dates newest first; unknown or invalid dates follow known dates. */
+export function compareModelReleaseDates(a?: string, b?: string): number {
+  const aTime = Date.parse(a ?? '');
+  const bTime = Date.parse(b ?? '');
+  const aKnown = Number.isFinite(aTime);
+  const bKnown = Number.isFinite(bTime);
+  if (aKnown && bKnown) return bTime - aTime;
+  return Number(bKnown) - Number(aKnown);
+}
+
 export function resolveModel(value: string): ResolvedModel {
   const trimmed = value.trim();
   const slash = trimmed.indexOf('/');

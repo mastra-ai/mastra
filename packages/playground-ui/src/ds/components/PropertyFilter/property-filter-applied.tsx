@@ -137,6 +137,7 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
         }}
       />
       <Button
+        size="icon-md"
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
@@ -175,7 +176,13 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
           <PickMultiPanel field={field} tokens={tokens} onChange={onChange} />
         </PopoverContent>
       </Popover>
-      <Button type="button" disabled={disabled} aria-label={`Remove ${field.label} filter`} onClick={onRemove}>
+      <Button
+        size="icon-md"
+        type="button"
+        disabled={disabled}
+        aria-label={`Remove ${field.label} filter`}
+        onClick={onRemove}
+      >
         <XIcon />
       </Button>
     </ButtonsGroup>
@@ -267,6 +274,7 @@ export function PropertyFilterApplied({
             <ButtonsGroupText>is</ButtonsGroupText>
             <ButtonsGroupText>{stringifyTokenValue(token.value)}</ButtonsGroupText>
             <Button
+              size="icon-md"
               type="button"
               disabled={disabled}
               aria-label={`Remove ${field.label} filter`}

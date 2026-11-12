@@ -102,17 +102,17 @@ const renderSettingsPage = async () => {
     </QueryClientProvider>,
   );
 
-  await waitFor(() => expect(screen.getByRole('button', { name: /save configuration/i })).toBeDefined());
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Mastra instance URL' })).toBeDefined());
   await act(async () => {});
 
   return { capabilityRequests, queryClient };
 };
 
 const saveAuthorizationHeader = (value: string) => {
-  fireEvent.click(screen.getByRole('button', { name: 'Add Header' }));
-  fireEvent.change(screen.getByPlaceholderText('e.g. Authorization'), { target: { value: 'Authorization' } });
-  fireEvent.change(screen.getByPlaceholderText('e.g. Bearer <token>'), { target: { value } });
-  fireEvent.submit(screen.getByRole('button', { name: /save configuration/i }).closest('form')!);
+  fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Header name' }), { target: { value: 'Authorization' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Value of Authorization' }), { target: { value } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 };
 
 afterEach(() => {

@@ -110,9 +110,9 @@ describeForAllEngines('Support agent processors packaged as workflows', engine =
   });
 
   // Technical: processOutputResult inside an output workflow step rewrites the assistant message
-  // in the final response messages. COR-1414: durable and evented save the rewrite but return
+  // in the final response messages. COR-1414: durable, evented and inngest save the rewrite but return
   // the raw model text in response.messages, so the final assertion is pinned as it.fails there.
-  const wrapped = engine === 'durable' || engine === 'evented';
+  const wrapped = engine === 'durable' || engine === 'evented' || engine === 'inngest';
   (wrapped ? it.fails : it)('applies an output processor workflow to the final assistant message', async () => {
     const tagReply = {
       id: 'reply-tagger',

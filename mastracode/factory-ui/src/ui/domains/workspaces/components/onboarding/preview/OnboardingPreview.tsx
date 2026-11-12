@@ -25,7 +25,7 @@ export interface OnboardingPreviewProps {
   personalConnectionMethod?: ProviderConnectionMethod;
 }
 
-const ACCOUNT_MODES: Record<OnboardingModelScope, AccountsMode> = {
+export const ACCOUNT_MODES: Record<OnboardingModelScope, AccountsMode> = {
   factory: 'shared',
   user: 'individual',
   hybrid: 'hybrid',

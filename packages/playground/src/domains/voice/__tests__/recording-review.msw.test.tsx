@@ -52,13 +52,13 @@ describe('LiveKitRecordingReview', () => {
         </TestLinkProvider>,
         { router: true },
       );
-      fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Review audio' }));
       expect((await screen.findByLabelText<HTMLAudioElement>('Call recording')).src).toBe(readyRecording.url);
     });
   });
 
   describe('when the recording route is configured for a voice call trace', () => {
-    it('loads the recording only after Review Audio is clicked, using the trace ID and Studio authentication', async () => {
+    it('loads the recording only after Review audio is clicked, using the trace ID and Studio authentication', async () => {
       server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(recordingEnabledPackages)));
       const requested = vi.fn();
       server.use(
@@ -68,7 +68,7 @@ describe('LiveKitRecordingReview', () => {
         }),
       );
       renderReview();
-      const button = await screen.findByRole('button', { name: 'Review Audio' });
+      const button = await screen.findByRole('button', { name: 'Review audio' });
       expect(requested).not.toHaveBeenCalled();
       fireEvent.click(button);
       const player = await screen.findByLabelText<HTMLAudioElement>('Call recording');
@@ -84,7 +84,7 @@ describe('LiveKitRecordingReview', () => {
         http.get(`${BASE_URL}/voice/livekit/recordings/:traceId`, () => HttpResponse.json(readyRecording)),
       );
       renderReview();
-      fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Review audio' }));
       await screen.findByLabelText('Call recording');
       fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
       await waitFor(() => expect(screen.queryByLabelText('Call recording')).toBeNull());
@@ -100,11 +100,11 @@ describe('LiveKitRecordingReview', () => {
         }),
       );
       renderReview();
-      fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Review audio' }));
       await screen.findByLabelText('Call recording');
       fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
       await waitFor(() => expect(screen.queryByLabelText('Call recording')).toBeNull());
-      fireEvent.click(screen.getByRole('button', { name: 'Review Audio' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Review audio' }));
       await screen.findByLabelText('Call recording');
       expect(requested).toHaveBeenCalledTimes(2);
     });
@@ -115,7 +115,7 @@ describe('LiveKitRecordingReview', () => {
       server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(defaultSystemPackages)));
       const { queryClient } = renderReview();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('button', { name: 'Review Audio' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Review audio' })).toBeNull();
     });
   });
 
@@ -124,7 +124,7 @@ describe('LiveKitRecordingReview', () => {
       server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(recordingEnabledPackages)));
       const { queryClient } = renderReview('text-trace', [{ ...recordedTrace.spans[0], name: 'agent run' }]);
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('button', { name: 'Review Audio' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Review audio' })).toBeNull();
     });
   });
 
@@ -135,7 +135,7 @@ describe('LiveKitRecordingReview', () => {
         http.get(`${BASE_URL}/voice/livekit/recordings/:traceId`, () => HttpResponse.json(unavailableRecording)),
       );
       renderReview();
-      fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Review audio' }));
       expect(await screen.findByText(/No recording is available yet/)).not.toBeNull();
       server.use(http.get(`${BASE_URL}/voice/livekit/recordings/:traceId`, () => HttpResponse.json(readyRecording)));
       fireEvent.click(screen.getByRole('button', { name: 'Refresh recording' }));
@@ -152,7 +152,7 @@ describe('LiveKitRecordingReview', () => {
         ),
       );
       renderReview();
-      fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Review audio' }));
       expect(await screen.findByText('Unable to load the call recording.')).not.toBeNull();
       expect(screen.queryByLabelText('Call recording')).toBeNull();
     });
@@ -165,7 +165,7 @@ describe('LiveKitRecordingReview', () => {
         http.get(`${BASE_URL}/voice/livekit/recordings/:traceId`, () => HttpResponse.json(readyRecording)),
       );
       renderReview();
-      fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Review audio' }));
       fireEvent.error(await screen.findByLabelText('Call recording'));
       expect(await screen.findByText(/The audio could not be played/)).not.toBeNull();
       const freshUrl = 'https://audio.example/call-room.ogg?signature=fresh';

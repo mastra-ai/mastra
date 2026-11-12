@@ -107,7 +107,10 @@ function truncateQuery(query: string, maxLength = 100): string {
  * Adapter that wraps a pg.Pool to implement DbClient.
  */
 export class PoolAdapter implements DbClient {
-  constructor(public readonly $pool: Pool) {}
+  constructor(
+    public readonly $pool: Pool,
+    private readonly onRollbackError?: (error: unknown) => void | Promise<void>,
+  ) {}
 
   connect(): Promise<PoolClient> {
     return this.$pool.connect();
@@ -163,8 +166,14 @@ export class PoolAdapter implements DbClient {
 
   async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
     const client = await this.$pool.connect();
+    let destroyClient = false;
     try {
-      await client.query('BEGIN');
+      try {
+        await client.query('BEGIN');
+      } catch (error) {
+        destroyClient = true;
+        throw error;
+      }
       const txClient = new TransactionClient(client);
       try {
         const result = await callback(txClient);
@@ -180,13 +189,18 @@ export class PoolAdapter implements DbClient {
         try {
           await client.query('ROLLBACK');
         } catch (rollbackError) {
-          // Log rollback failure but throw original error
-          console.error('Transaction rollback failed:', rollbackError);
+          destroyClient = true;
+          try {
+            if (this.onRollbackError) await this.onRollbackError(rollbackError);
+            else console.error('Failed to rollback transaction:', rollbackError);
+          } catch {
+            // A diagnostic callback must not replace the transaction failure.
+          }
         }
         throw error;
       }
     } finally {
-      client.release();
+      client.release(destroyClient || undefined);
     }
   }
 }
@@ -327,11 +341,17 @@ export class PinnedClientAdapter implements DbClient {
    * the reliance on pg's internal queue.
    */
   #tail: Promise<unknown> = Promise.resolve();
+  #rollbackError: unknown;
 
   constructor(
     public readonly $pool: Pool,
     private readonly pinnedClient: PoolClient,
+    private readonly onRollbackError?: (error: unknown) => void | Promise<void>,
   ) {}
+
+  get shouldDestroyClient(): boolean {
+    return this.#rollbackError !== undefined;
+  }
 
   /**
    * Run `fn` after any previously enqueued work on this pinned client has
@@ -339,11 +359,19 @@ export class PinnedClientAdapter implements DbClient {
    * resume on the next caller's turn.
    */
   #enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const next = this.#tail.then(fn, fn);
+    const run = async () => {
+      if (this.shouldDestroyClient) throw this.#rollbackError;
+      return fn();
+    };
+    const next = this.#tail.then(run, run);
     // Swallow rejection on the chained tail so a failing call doesn't
     // leave an unhandled rejection on later enqueues.
     this.#tail = next.catch(() => undefined);
     return next;
+  }
+
+  async drain(): Promise<void> {
+    await this.#tail;
   }
 
   connect(): Promise<PoolClient> {
@@ -419,7 +447,12 @@ export class PinnedClientAdapter implements DbClient {
     // Enqueue the entire BEGIN/work/COMMIT block so concurrent callers
     // can't interleave statements inside someone else's transaction.
     return this.#enqueue(async () => {
-      await this.pinnedClient.query('BEGIN');
+      try {
+        await this.pinnedClient.query('BEGIN');
+      } catch (error) {
+        this.#rollbackError = error;
+        throw error;
+      }
       const txClient = new TransactionClient(this.pinnedClient);
       try {
         const result = await callback(txClient);
@@ -431,7 +464,13 @@ export class PinnedClientAdapter implements DbClient {
         try {
           await this.pinnedClient.query('ROLLBACK');
         } catch (rollbackError) {
-          console.error('Transaction rollback failed:', rollbackError);
+          this.#rollbackError = rollbackError;
+          try {
+            if (this.onRollbackError) await this.onRollbackError(rollbackError);
+            else console.error('Failed to rollback transaction:', rollbackError);
+          } catch {
+            // A diagnostic callback must not replace the transaction failure.
+          }
         }
         throw error;
       }

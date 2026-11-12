@@ -19,7 +19,7 @@ import type {
   SendAgentSignalAccepted,
   ToolsetsInput,
 } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -65,6 +65,12 @@ export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controlle
 export const SOURCE_APPROVAL_CALLS_KEY = createRunScopeKey<Set<string>>('agent-controller.sourceApprovalCalls');
 export const THREAD_OWNER_ID_RUN_SCOPE_KEY = createRunScopeKey<string>('agent-controller.threadOwnerId');
 export const THREAD_OWNER_ID_CONTEXT_KEY = 'mastra__agentControllerThreadOwnerId';
+/**
+ * The mode a run was started (or explicitly transitioned) in. Stored as a raw
+ * request-context value so the suspend snapshot persists it, and a resume can
+ * apply that mode's tool allowlist even after the session switched modes.
+ */
+export const RUN_MODE_ID_CONTEXT_KEY = 'mastra__agentControllerRunModeId';
 
 /**
  * Bucket key for grants that apply to every thread. Grant calls that name no
@@ -115,6 +121,11 @@ export type SessionSendNotificationSignalOptions = {
   tracingContext?: TracingContext;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
+  /**
+   * Scopes for the run the notification starts. A run's scopes are fixed when it starts:
+   * a notification naming other scopes than the active run's starts its own run after it.
+   */
+  scopes?: string[];
 };
 
 /** Usage fields that are summed across steps when present on a step's usage. */
@@ -147,7 +158,7 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * preferences that must survive a host restart (sessions themselves are
  * in-memory only).
  */
-const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
+const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications', 'permissionRules'] as const;
 const OM_STATE_KEYS = [
   'observerModelId',
   'reflectorModelId',
@@ -285,7 +296,7 @@ export function isReservedThreadMetadataKey(key: string): boolean {
 
 /**
  * Identifies an in-memory session host. A session is not a durable conversation:
- * it is the process-local handle for `{ id, resourceId, scope, tags, active threadId }`.
+ * it is the process-local handle for `{ id, resourceId, tags, active threadId }`.
  * Conversation settings and run state belong to the active thread and are
  * re-derived whenever the host creates or switches threads.
  *
@@ -454,6 +465,13 @@ export interface SessionMachinery {
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(requestContext?: RequestContext): SharedRunOptions;
+  /**
+   * The `activeTools` allowlist of `modeId` (the session's current mode when
+   * omitted or unknown), or `undefined` when the mode does not restrict tools.
+   * Resumes pass the suspended run's mode so the continuation sees the same
+   * tools as the initial stream.
+   */
+  resolveModeActiveTools(modeId?: string): string[] | undefined;
   onSessionDeleted?(listener: () => void): () => void;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
@@ -1997,6 +2015,21 @@ export interface ApprovalResponse {
   declineContext?: { reason?: string; message?: string };
 }
 
+/** Tool-call answers that armed an idle run and have not settled yet. */
+interface AnswerArms {
+  /** {@link SessionRun.armCount} right after the latest of these answers armed the run. */
+  armCount: number;
+  /** Answers still in flight. */
+  pending: number;
+  /** Set once any of these answers dispatched without failing. */
+  dispatched: boolean;
+}
+
+/** Set only when a tool-call answer armed an idle run, or joined answers that did. */
+interface ArmedRun {
+  arms?: AnswerArms;
+}
+
 /** A single parked interactive approval gate, scoped to the call that opened it. */
 interface ApprovalGate {
   toolCallId: string;
@@ -2086,6 +2119,16 @@ export class SessionApproval {
     return this.#matching(filter).length > 0;
   }
 
+  /** The parked gates' tool and owner, without their resolvers. */
+  list(): Array<{ toolCallId: string; toolName: string; threadId?: string; runId?: string }> {
+    return [...this.#gates].map(({ toolCallId, toolName, threadId, runId }) => ({
+      toolCallId,
+      toolName,
+      threadId,
+      runId,
+    }));
+  }
+
   /** Ids of the parked gates that match `filter` (or every gate when omitted). */
   getToolCallIds(filter?: ApprovalGateFilter): string[] {
     return (filter ? this.#matching(filter) : [...this.#gates.values()]).map(gate => gate.toolCallId);
@@ -2103,14 +2146,23 @@ export class SessionApproval {
   respond({
     decision,
     toolCallId,
+    threadId,
+    runId,
     requestContext,
     declineContext,
     onAlwaysAllow,
   }: ApprovalResponse & {
     toolCallId: string;
+    /** Narrow to one owner when the same call id is parked on several threads or runs. */
+    threadId?: string;
+    runId?: string;
     onAlwaysAllow?: (toolName: string, threadId?: string) => void;
   }): SessionCommandResult {
-    const matches = this.#matching({ toolCallId });
+    const matches = this.#matching({
+      toolCallId,
+      ...(threadId !== undefined && { threadId }),
+      ...(runId !== undefined && { runId }),
+    });
     if (matches.length !== 1) {
       return { accepted: false, reason: this.#gates.size > 0 ? 'stale_tool_call' : 'not_pending' };
     }
@@ -2139,11 +2191,20 @@ export class SessionApproval {
    * every gate. With no filter every gate is released. Returns the ids that were
    * released.
    */
-  cancel(options: ApprovalGateFilter & { declineContext?: { reason?: string; message?: string } } = {}): string[] {
+  cancel(
+    options: ApprovalGateFilter & {
+      declineContext?: { reason?: string; message?: string };
+      requestContext?: RequestContext;
+    } = {},
+  ): string[] {
     const gates = this.#matching(options);
     for (const gate of gates) {
       this.#gates.delete(gate);
-      gate.resolve({ decision: 'decline', declineContext: options.declineContext });
+      gate.resolve({
+        decision: 'decline',
+        requestContext: options.requestContext,
+        declineContext: options.declineContext,
+      });
     }
     return gates.map(gate => gate.toolCallId);
   }
@@ -2211,6 +2272,8 @@ export class SessionRun {
   #bindingGeneration = 0;
   /** Controller whose signal cancels the active run; null when no run is armed. */
   #abortController: AbortController | null = null;
+  /** Bumped every time the run is armed; see {@link armCount}. */
+  #armCount = 0;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
   /** Incremented on every abort request, so waiters can ignore earlier ones. */
@@ -2330,8 +2393,17 @@ export class SessionRun {
    * run. Callers pass its `.signal` into the underlying stream.
    */
   ensureAbortController(): AbortController {
+    this.#armCount += 1;
     this.#abortController ??= new AbortController();
     return this.#abortController;
+  }
+
+  /**
+   * How many times the run has been armed via {@link ensureAbortController}.
+   * Lets a caller tell whether anyone else joined the run it armed.
+   */
+  armCount(): number {
+    return this.#armCount;
   }
 
   /** Signal for the current run's AbortController, or undefined when none is armed. */
@@ -2863,14 +2935,18 @@ class SessionOM {
 class SessionPermissions {
   #getState: (() => Record<string, unknown>) | undefined;
   #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
+  #onChange: (() => Promise<void>) | undefined;
 
   /** Attach the session-state read/write. The AgentController injects these once. */
   setResolver(options: {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => Promise<void>;
+    /** Runs after a rule change is persisted, so parked approvals follow the new policy. */
+    onChange?: () => Promise<void>;
   }): void {
     this.#getState = options.getState;
     this.#setState = options.setState;
+    this.#onChange = options.onChange;
   }
 
   /** The current permission rules, or empty rules when none are set. */
@@ -2881,16 +2957,25 @@ class SessionPermissions {
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
   setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.categories[category] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#write(rules => ({ ...rules, categories: { ...rules.categories, [category]: policy } }));
   }
 
   /** Set the approval policy for an individual tool. Resolves once persisted. */
   setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.tools[toolName] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#write(rules => ({ ...rules, tools: { ...rules.tools, [toolName]: policy } }));
+  }
+
+  #writes: Promise<void> = Promise.resolve();
+
+  // Writes are serialized and read the rules inside the queue, so two setters
+  // called back to back both land. `edit` returns a fresh object, so state
+  // persistence sees the change instead of the same reference.
+  #write(edit: (rules: PermissionRules) => PermissionRules): Promise<void> {
+    const write = this.#writes.then(async () => {
+      await this.#setState?.({ permissionRules: edit(this.getRules()) });
+    });
+    this.#writes = write.catch(() => {});
+    return write.then(() => this.#onChange?.());
   }
 }
 
@@ -3711,7 +3796,15 @@ export class SessionDisplayState {
       case 'shell_output': {
         const shellTool = ds.activeTools.get(event.toolCallId);
         if (shellTool) {
-          shellTool.shellOutput = (shellTool.shellOutput ?? '') + event.output;
+          // Keep a bounded display tail. Slice before concatenating so a single
+          // oversized chunk never creates an even larger intermediate string, and
+          // copy that chunk's tail: a plain `slice` can share, and so retain, the
+          // whole chunk.
+          const limit = 1024 * 1024;
+          shellTool.shellOutput =
+            event.output.length >= limit
+              ? (JSON.parse(JSON.stringify(event.output.slice(-limit))) as string)
+              : (shellTool.shellOutput ?? '').slice(-(limit - event.output.length)) + event.output;
         }
         break;
       }
@@ -4122,7 +4215,7 @@ export class SessionBus {
 }
 
 /**
- * A process-local host for `{ id, resourceId, scope, tags, active threadId }`.
+ * A process-local host for `{ id, resourceId, tags, active threadId }`.
  * It is not the durable conversation record: mode, model, persisted state,
  * token usage, pending runs, and display projections are re-derived from the
  * active thread whenever one is created or selected. Custom `TState` fields
@@ -4144,6 +4237,8 @@ export class Session<TState = unknown> {
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
   /** Whether the in-flight abort teardown must stay local to this process. */
   #localOnlyAbort = false;
+  /** Settles once the previous `sendMessage` carrying scopes is admitted, so scoped messages start in send order. */
+  #scopedSendTail: Promise<void> = Promise.resolve();
   #deferredAbortOrigin: { bindingGeneration: number; localOnly: boolean } | undefined;
   /** Thread-settings persistence handle, injected by the AgentController via {@link setStore}. */
   #store: ThreadSettingsStore | undefined;
@@ -4167,6 +4262,8 @@ export class Session<TState = unknown> {
   readonly subagents = new SessionSubagents(this.#bus);
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
+  /** Tool-call answers currently holding {@link run} armed; see `#armRun`. */
+  #answerArms: AnswerArms | undefined;
   /** Live subscription to the active thread's agent event stream. */
   readonly stream = new SessionStream(() => ({
     sessionId: this.identity.getId(),
@@ -4349,8 +4446,9 @@ export class Session<TState = unknown> {
   /** Await terminal hooks, then emit the terminal event to subscribers. */
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
+    { abortReason }: { abortReason?: string } = {},
   ): Promise<void> {
-    const event = { type: 'agent_end', reason } as const;
+    const event = { type: 'agent_end', reason, ...(abortReason ? { abortReason } : {}) } as const;
     const runId = this.run.getRunId();
     for (const listener of this.#beforeAgentEndListeners) {
       try {
@@ -4788,6 +4886,7 @@ export class Session<TState = unknown> {
       threadId?: string;
       runId?: string;
       declineContext?: { reason?: string; message?: string };
+      requestContext?: RequestContext;
     } = {},
   ): void {
     this.displayState.clearPendingApprovals(this.approval.cancel(filter));
@@ -4839,6 +4938,99 @@ export class Session<TState = unknown> {
     }
     if (approved) await this.approveToolCall(identity);
     else await this.declineToolCall(identity);
+  }
+
+  /**
+   * Answer parked approvals whose tool the current rules now allow or deny.
+   * The policy is otherwise read once, when the approval chunk streams past, so
+   * a rule set afterwards (a later `setForTool`, or a session-created hook on a
+   * process reopening a run parked elsewhere) would leave the call waiting for
+   * a click. Covers gates parked on this session and approvals stored with the
+   * current thread's suspended runs. Calls still resolving to `ask` stay parked.
+   */
+  #parkedApprovalsCheck: Promise<void> = Promise.resolve();
+  // Persisted calls this session already answered, so a later re-check (another
+  // rule write, or the post-create pass) does not resume the same call again
+  // while storage still lists its run as suspended.
+  readonly #answeredParkedApprovals = new Set<string>();
+  // The host-built context of the request that opened this session. A stored
+  // run resumes from its snapshot, which carries no authenticated user, so
+  // releasing it with no context leaves host credential gates nothing to check.
+  #parkedApprovalsRequestContext: RequestContext | undefined;
+
+  /** Resume calls released by a policy re-check under the context of the request that opened this session. */
+  setParkedApprovalsRequestContext(requestContext: RequestContext | undefined): void {
+    this.#parkedApprovalsRequestContext = requestContext;
+  }
+
+  applyToolPolicyToParkedApprovals(): Promise<void> {
+    const check = this.#parkedApprovalsCheck.then(() => this.#applyToolPolicyToParkedApprovalsSafely());
+    this.#parkedApprovalsCheck = check;
+    return check;
+  }
+
+  async #applyToolPolicyToParkedApprovalsSafely(): Promise<void> {
+    try {
+      await this.#applyToolPolicyToParkedApprovals();
+    } catch (error) {
+      // Best-effort: a parked call left waiting is no worse than before, and
+      // must not fail session creation or a rule write that already landed.
+      console.error('Re-checking parked tool approvals against the current policy failed:', error);
+    }
+  }
+
+  async #applyToolPolicyToParkedApprovals(): Promise<void> {
+    // Rules live on the active thread's state, so only that thread's calls
+    // can be judged against them.
+    const threadId = this.thread.getId();
+    if (!threadId) return;
+    const address = (runId: string | undefined, toolCallId: string) => `${runId ?? ''}:${toolCallId}`;
+    const handled = new Set<string>();
+    for (const gate of this.approval.list()) {
+      if (gate.threadId !== undefined && gate.threadId !== threadId) continue;
+      handled.add(address(gate.runId, gate.toolCallId));
+      const policy = this.resolveToolApproval(gate.toolName, threadId);
+      if (policy === 'ask') continue;
+      if (this.run.isAbortRequested()) continue;
+      this.approval.respond({
+        decision: policy === 'allow' ? 'approve' : 'decline',
+        toolCallId: gate.toolCallId,
+        threadId: gate.threadId,
+        runId: gate.runId,
+      });
+      this.displayState.clearPendingApprovals([gate.toolCallId]);
+    }
+
+    const agent = this.machinery.getAgent();
+    if (typeof agent.listSuspendedRuns !== 'function') return;
+    let runs: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'];
+    try {
+      ({ runs } = await agent.listSuspendedRuns({ threadId, resourceId: this.identity.getResourceId() }));
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') return;
+      throw error;
+    }
+    for (const run of runs) {
+      for (const call of run.toolCalls) {
+        const { toolCallId, toolName } = call;
+        if (!call.requiresApproval || !toolCallId || !toolName) continue;
+        const key = address(run.runId, toolCallId);
+        if (handled.has(key) || this.#answeredParkedApprovals.has(key)) continue;
+        const policy = this.resolveToolApproval(toolName, threadId);
+        if (policy === 'ask') continue;
+        handled.add(key);
+        this.#answeredParkedApprovals.add(key);
+        const identity = {
+          toolCallId,
+          runId: run.runId,
+          threadId,
+          resourceId: this.identity.getResourceId(),
+          requestContext: this.#parkedApprovalsRequestContext,
+        };
+        if (policy === 'allow') await this.approveToolCall(identity);
+        else await this.declineToolCall(identity);
+      }
+    }
   }
 
   // ===========================================================================
@@ -5012,6 +5204,11 @@ export class Session<TState = unknown> {
           untilIdle?: boolean | { maxIdleMs?: number };
           author?: MessageAuthor;
           /**
+           * Scopes for this message. A run's scopes are fixed when it starts, so a message
+           * whose scopes differ from the active run's does not join it (`scope-mismatch`).
+           */
+          scopes?: string[];
+          /**
            * Provider options attached to the resulting prompt turn. Surfaces as
            * `providerOptions` on the `UserModelMessage` sent to the model and as
            * `content.providerMetadata` on the persisted DB message (see
@@ -5039,7 +5236,13 @@ export class Session<TState = unknown> {
   ): {
     id: string;
     type: AgentSignalInput['type'];
-    accepted: Promise<{ accepted: true; runId?: string; action?: SendAgentSignalAccepted['action'] }>;
+    accepted: Promise<{
+      accepted: true;
+      runId?: string;
+      action?: SendAgentSignalAccepted['action'];
+      /** Why the thread refused it, when `action` is `blocked`. */
+      reason?: 'thread-blocked' | 'scope-mismatch';
+    }>;
   } {
     const settleRunId = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
@@ -5063,6 +5266,7 @@ export class Session<TState = unknown> {
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
     const untilIdle = options?.untilIdle ?? contentOptions?.untilIdle;
+    const scopes = contentOptions?.scopes;
     const requireDelivery = options?.requireDelivery ?? false;
     const ifActive = options?.ifActive ?? ('content' in input ? input.ifActive : undefined);
     const ifIdle = options?.ifIdle ?? ('content' in input ? input.ifIdle : undefined);
@@ -5111,40 +5315,73 @@ export class Session<TState = unknown> {
       // the message to a run that `completeDeferredAbort()` then terminates.
       if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
         if (signal.type === 'user') {
+          // Decline as the sender: a gate re-armed on a reattached run has no
+          // request context of its own, so without this the continuation runs
+          // with no authenticated user and cannot resolve tenant credentials.
           this.#releaseApprovalGates({
             threadId,
+            requestContext: requestContextInput,
             declineContext: {
               reason: 'interrupted_by_user_message',
               message: 'The pending tool approval was declined because the user sent a new message.',
             },
           });
         }
+        // The run can end between the check above and delivery. The agent would
+        // then wake the thread with this call's `ifIdle`, which carries no stream
+        // options: that run has no request context, so it cannot resolve the
+        // session's model. Building stream options here is too costly for the
+        // common active delivery, so probe with an idle `discard` instead and,
+        // when the run is already gone, fall through to the idle path below,
+        // which builds them.
+        const fallBackWhenIdle = (ifActive?.behavior ?? 'deliver') === 'deliver' && ifIdle?.behavior !== 'discard';
         const result = agent.sendSignal(signal, {
           resourceId: this.identity.getResourceId(),
           threadId,
           ifActive,
-          ifIdle,
+          ifIdle: fallBackWhenIdle ? { ...ifIdle, behavior: 'discard' } : ifIdle,
+          ...(scopes ? { scopes } : {}),
         });
         const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
-        const settled = shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
-        if (settled?.action === 'persist') {
-          await result.persisted;
-          const message = signal.toDBMessage({
-            resourceId: this.identity.getResourceId(),
-            threadId,
-          });
-          this.emit({ type: 'message_start', message });
-          this.emit({ type: 'message_end', id: message.id });
+        // Only callers that observe the outcome may see `accepted` reject; a plain
+        // send keeps the best-effort contract `settleRunId` documents.
+        const settled =
+          shouldObservePersistence || requireDelivery
+            ? await result.accepted
+            : fallBackWhenIdle
+              ? await result.accepted.catch(() => undefined)
+              : undefined;
+        if (!(fallBackWhenIdle && settled?.action === 'discard')) {
+          if (settled?.action === 'persist') {
+            await result.persisted;
+            const message = signal.toDBMessage({
+              resourceId: this.identity.getResourceId(),
+              threadId,
+            });
+            this.emit({ type: 'message_start', message });
+            this.emit({ type: 'message_end', id: message.id });
+          }
+          if (requireDelivery) {
+            const acceptedResult = settled ?? (await result.accepted);
+            return {
+              accepted: true as const,
+              runId: 'runId' in acceptedResult ? acceptedResult.runId : undefined,
+              action: acceptedResult.action,
+              ...('reason' in acceptedResult ? { reason: acceptedResult.reason } : {}),
+            };
+          }
+          return { accepted: true as const, runId: await settleRunId(result) };
         }
-        if (requireDelivery) {
-          const acceptedResult = settled ?? (await result.accepted);
-          return {
-            accepted: true as const,
-            runId: 'runId' in acceptedResult ? acceptedResult.runId : undefined,
-            action: acceptedResult.action,
-          };
+
+        // The agent has no blocking run for this thread any more, but this
+        // session may not have seen that run end yet. Start the new run on a
+        // fresh subscription once the old one has torn down.
+        if (!(await this.waitForStreamIdle())) {
+          this.thread.cleanupSubscription();
         }
-        return { accepted: true as const, runId: await settleRunId(result) };
+        assertNotCancelled();
+        await this.thread.ensureSubscription(threadId, agent, requestContextInput);
+        assertNotCancelled();
       }
 
       // Post-abort lingering state: the AbortController was cleared (so
@@ -5241,12 +5478,23 @@ export class Session<TState = unknown> {
         threadId,
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+        ...(scopes ? { scopes } : {}),
       });
       void result.accepted.then(
         settled => {
           if (settled.action !== 'wake') return;
           const runId = settled.runId;
-          const abort = () => agent.abortRunStream(runId);
+          // A local teardown (detach, thread switch) must leave a parked suspension
+          // answerable, so it aborts locally instead of cancelling the run.
+          const abort = () =>
+            this.#localOnlyAbort
+              ? agent.abortThreadStream({
+                  resourceId: this.identity.getResourceId(),
+                  threadId,
+                  expectedRunId: runId,
+                  localOnly: true,
+                })
+              : agent.abortRunStream(runId);
           // Navigation can precede the first observed chunk. Release the accepted
           // action as well as its model IO, never a run this signal merely joined.
           if (startupSignal.aborted) abort();
@@ -5262,16 +5510,10 @@ export class Session<TState = unknown> {
           accepted: true as const,
           runId: 'runId' in settled ? settled.runId : undefined,
           action: settled.action,
+          ...('reason' in settled ? { reason: settled.reason } : {}),
         };
       }
-      try {
-        await Promise.race([
-          result.accepted.then(() => undefined),
-          new Promise<void>(resolve => setTimeout(resolve, 0)),
-        ]);
-      } catch (error) {
-        throw error;
-      }
+      await Promise.race([result.accepted.then(() => undefined), new Promise<void>(resolve => setTimeout(resolve, 0))]);
       void result.accepted.catch(() => {});
       if (ifIdle?.behavior === 'persist') {
         await result.persisted;
@@ -5289,22 +5531,19 @@ export class Session<TState = unknown> {
     input: SendNotificationSignalInput,
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
-    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions, scopes } = options;
+    const scoped = scopes?.length ? { scopes } : {};
     await this.machinery.authorizeExecute?.(requestContextInput);
     const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
     const agent = this.machinery.getAgent();
     await this.thread.ensureSubscription(threadId, agent, requestContextInput);
 
-    if (this.run.getRunId() && this.stream.activeRunId()) {
-      return agent.sendNotificationSignal(input, {
-        resourceId: this.identity.getResourceId(),
-        threadId,
-        ifActive,
-        ifIdle,
-      });
-    }
-
+    // Always attach the session's stream options, even while a run is active.
+    // The agent stores the notification and resolves its delivery policy before
+    // routing it, so the run can end first and the notification wakes the thread
+    // (a summary wakes it even when the caller asked to persist). Without these
+    // options that wake run has no controller request context.
     const streamOptions = await this.machinery.buildStreamOptions({
       requestContext: requestContextInput,
       tracingContext,
@@ -5316,6 +5555,7 @@ export class Session<TState = unknown> {
       threadId,
       ifActive,
       ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+      ...scoped,
     });
   }
 
@@ -5359,6 +5599,11 @@ export class Session<TState = unknown> {
   /**
    * Send a message to this session's current agent and await the run. Streams
    * the response and emits events.
+   *
+   * `scopes` are the scopes the message's run holds. A run's scopes are fixed when it
+   * starts: a message whose scopes match the active run's joins it, and one whose scopes
+   * differ waits for that run to end and then starts its own run on the same thread.
+   * Messages carrying scopes start in the order they were sent.
    */
   async sendMessage({
     content,
@@ -5368,6 +5613,7 @@ export class Session<TState = unknown> {
     requestContext: requestContextInput,
     untilIdle,
     author,
+    scopes,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
@@ -5376,28 +5622,75 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
+    scopes?: string[];
   }): Promise<void> {
+    let admitted = () => {};
+    if (scopes) {
+      const previous = this.#scopedSendTail;
+      this.#scopedSendTail = new Promise(resolve => {
+        admitted = resolve;
+      });
+      await previous;
+    }
+    try {
+      await this.#sendMessageUntilAdmitted(
+        {
+          content,
+          files,
+          tracingContext,
+          tracingOptions,
+          requestContext: requestContextInput,
+          untilIdle,
+          author,
+          scopes,
+        },
+        () => admitted(),
+      );
+    } finally {
+      admitted();
+    }
+  }
+
+  async #sendMessageUntilAdmitted(
+    input: {
+      content: string;
+      files?: Array<{ data: string; mediaType: string; filename?: string }>;
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      requestContext?: RequestContext;
+      untilIdle?: boolean | { maxIdleMs?: number };
+      author?: MessageAuthor;
+      scopes?: string[];
+    },
+    onAdmitted: () => void,
+  ): Promise<void> {
+    const { content, files, scopes } = input;
     let lastBlockingRunId: string | undefined;
     while (true) {
       const wasActive = this.stream.isActive();
       const signal = this.sendSignal(
         {
           content: this.createMessageInput({ content, files }),
-          tracingContext,
-          tracingOptions,
-          requestContext: requestContextInput,
-          untilIdle,
-          author,
+          tracingContext: input.tracingContext,
+          tracingOptions: input.tracingOptions,
+          requestContext: input.requestContext,
+          untilIdle: input.untilIdle,
+          author: input.author,
+          ...(scopes ? { scopes } : {}),
         },
         { requireDelivery: true },
       );
-      // Another agent's run on the thread can't take this message, so the
-      // thread reports itself blocked. Wait for that run to end and send again,
-      // as a message sent just before that run started would have waited.
-      let blockingRunId: string | undefined;
+      // The thread reports itself blocked when the run holding it can't take this
+      // message: another agent's run (`thread-blocked`), or a run started with other
+      // scopes (`scope-mismatch`). Either way, wait for that run to end and send again,
+      // so the message starts its own run.
+      let blocked: { reason: 'thread-blocked' | 'scope-mismatch'; runId: string } | undefined;
       const accepted = signal.accepted.then(settled => {
-        if (settled.action !== 'blocked') return settled;
-        blockingRunId = settled.runId;
+        if (settled.action !== 'blocked') {
+          onAdmitted();
+          return settled;
+        }
+        blocked = { reason: settled.reason ?? 'thread-blocked', runId: settled.runId! };
         return { action: settled.action };
       });
 
@@ -5406,17 +5699,17 @@ export class Session<TState = unknown> {
       } else {
         await this.waitForAcceptedRunCompletion(accepted);
       }
-      if (blockingRunId === undefined) return;
+      if (blocked === undefined) return;
       // Blocked again by the run already waited out: the wait saw nothing it
       // could wait for, so don't spin on resending.
-      if (blockingRunId === lastBlockingRunId) {
+      if (blocked.runId === lastBlockingRunId) {
         this.emit({
           type: 'error',
           error: new Error("Your message wasn't sent: another run still holds this thread. Try again shortly."),
         });
         return;
       }
-      lastBlockingRunId = blockingRunId;
+      lastBlockingRunId = blocked.runId;
       const waited = await this.#waitForOtherAgentRun();
       if (waited === 'stopped') return;
       // A parked run waits on its own prompt, so waiting can't free the thread.
@@ -5424,7 +5717,9 @@ export class Session<TState = unknown> {
         this.emit({
           type: 'error',
           error: new Error(
-            "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+            blocked.reason === 'scope-mismatch'
+              ? "Your message wasn't sent: the run on this thread, started with other scopes, is waiting for an answer to its own prompt."
+              : "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
           ),
         });
         return;
@@ -5477,6 +5772,7 @@ export class Session<TState = unknown> {
     tracingOptions,
     requestContext: requestContextInput,
     author,
+    scopes,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
@@ -5484,6 +5780,8 @@ export class Session<TState = unknown> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
     author?: MessageAuthor;
+    /** Scopes for the run the queued message starts. */
+    scopes?: string[];
   }): Promise<void> {
     await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
@@ -5505,7 +5803,7 @@ export class Session<TState = unknown> {
         messageAuthor || providerOptions
           ? { contents: messageInput, ...(messageAuthor ? { author: messageAuthor } : {}), providerOptions }
           : messageInput,
-        target,
+        scopes?.length ? { ...target, scopes } : target,
       );
 
     if (wasActive) {
@@ -5527,10 +5825,13 @@ export class Session<TState = unknown> {
       tracingContext,
       tracingOptions,
       requestContext: requestContextInput,
+      scopes,
     }: {
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      /** Scopes for the run the queued signal starts. */
+      scopes?: string[];
     } = {},
   ): Promise<void> {
     await this.machinery.authorizeExecute?.(requestContextInput);
@@ -5542,7 +5843,7 @@ export class Session<TState = unknown> {
       // See queueMessage: a queued run must not inherit the active run's abort signal.
       abortSignal: wasActive ? new AbortController().signal : undefined,
     });
-    const result = this.machinery.getAgent().queueSignal(signal, target);
+    const result = this.machinery.getAgent().queueSignal(signal, scopes?.length ? { ...target, scopes } : target);
 
     if (wasActive) {
       await result.accepted;
@@ -5557,14 +5858,17 @@ export class Session<TState = unknown> {
     files,
     requestContext,
     author,
+    scopes,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     requestContext?: RequestContext;
     author?: MessageAuthor;
+    /** Scopes for the run the steering message starts; see `sendMessage`. */
+    scopes?: string[];
   }): Promise<void> {
     this.abort();
-    await this.sendMessage({ content, files, requestContext, author });
+    await this.sendMessage({ content, files, requestContext, author, ...(scopes?.length ? { scopes } : {}) });
   }
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
@@ -5698,6 +6002,37 @@ export class Session<TState = unknown> {
     }
   }
 
+  /**
+   * The mode the suspended run executed in, read from its persisted request
+   * context, so a mode switch during the suspension does not change the tools
+   * the continuation sees. Runs suspended before the mode was recorded fall back
+   * to the mode of the run's source thread as `requestContext` resolves it.
+   */
+  private isConfiguredMode(modeId: string): boolean {
+    try {
+      this.mode.resolveId(modeId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async resolveSuspendedRunModeId(
+    agent: Agent,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    const persisted = await agent.__getSuspendedRunRequestContextValue({ runId, key: RUN_MODE_ID_CONTEXT_KEY });
+    // A mode removed from config after the run paused falls back to the source thread's mode, like pre-fix snapshots.
+    const modeId =
+      typeof persisted === 'string' && this.isConfiguredMode(persisted)
+        ? persisted
+        : (requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined)?.session.modeId;
+    // Carry the mode into the continuation so a second suspension keeps it.
+    if (modeId) requestContext.setRaw(RUN_MODE_ID_CONTEXT_KEY, modeId);
+    return modeId;
+  }
+
   private async resolveSuspendedThreadOwnerId(
     agent: Agent,
     { runId, threadId, resourceId }: Pick<SuspensionAddress, 'runId' | 'threadId' | 'resourceId'>,
@@ -5777,6 +6112,52 @@ export class Session<TState = unknown> {
   /** Release a claim taken with {@link claimToolResponse}. */
   releaseToolResponse(toolCallId: string): void {
     this.#claimedToolResponses.delete(toolCallId);
+  }
+
+  /**
+   * Register a suspension that lives only in storage, so {@link claimToolSuspension}
+   * can find it. A run parked by a process that has since gone away stays
+   * suspended in storage, but this session never saw it park. Only an exact
+   * `toolCallId` on the active thread is looked up, and only when exactly one
+   * stored, non-approval suspension matches. The scan is bounded so an unknown
+   * id can't make a reply read every stored run on the thread.
+   */
+  async restoreStoredToolSuspension(toolCallId?: string, runId?: string): Promise<void> {
+    if (!toolCallId || this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const threadId = this.thread.getId();
+    if (!threadId) return;
+    const resourceId = this.identity.getResourceId();
+    const matches: Array<{ agent: Agent; runId: string; toolName: string }> = [];
+    const perPage = 100;
+    const maxPages = 10;
+    scan: for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
+      if (typeof agent.listSuspendedRuns !== 'function') continue;
+      for (let page = 0; page < maxPages; page++) {
+        let result: Awaited<ReturnType<typeof agent.listSuspendedRuns>>;
+        try {
+          result = await agent.listSuspendedRuns({ threadId, resourceId, page, perPage });
+        } catch (error) {
+          if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') break;
+          throw error;
+        }
+        for (const run of result.runs) {
+          if (runId !== undefined && run.runId !== runId) continue;
+          for (const call of run.toolCalls) {
+            if (call.toolCallId !== toolCallId || !call.toolName || call.requiresApproval) continue;
+            matches.push({ agent, runId: run.runId, toolName: call.toolName });
+            if (matches.length > 1) break scan;
+          }
+        }
+        if ((page + 1) * perPage >= result.total) break;
+      }
+    }
+    if (matches.length !== 1) return;
+    // Another request may have restored it while this one was reading storage.
+    if (this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const match = matches[0]!;
+    const address = { threadId, resourceId, runId: match.runId, toolCallId };
+    this.suspensions.register({ ...address, toolName: match.toolName });
+    this.#suspensionAgents.set(this.suspensions.get(address)!, match.agent);
   }
 
   /**
@@ -5880,7 +6261,10 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const context = sourceRequestContext.get('controller') as AgentControllerRequestContext<TState>;
-    const sourceModeId = context.session.modeId;
+    // Transition from the mode the plan was submitted in, not a mode switched to while it waited.
+    const sourceModeId =
+      (await this.resolveSuspendedRunModeId(agent, address.runId, sourceRequestContext)) ?? context.session.modeId;
+    let runModeId = sourceModeId;
     const transitionModeId = this.machinery.resolveTransitionModeId(sourceModeId);
     if (transitionModeId && transitionModeId !== sourceModeId) {
       if (context.isThreadActive?.()) {
@@ -5893,9 +6277,15 @@ export class Session<TState = unknown> {
         modeId: transitionModeId,
         execution: true,
       });
+      runModeId = transitionModeId;
     }
 
-    await this.resumeToolCall({ resumeData: response, address, requestContext: sourceRequestContext });
+    await this.resumeToolCall({
+      resumeData: response,
+      address,
+      requestContext: sourceRequestContext,
+      modeId: runModeId,
+    });
   }
 
   /**
@@ -5928,7 +6318,68 @@ export class Session<TState = unknown> {
     },
     onDispatch?: () => void,
   ): Promise<void> {
-    await this.#approveToolCall(input, onDispatch);
+    await this.#disarmRunOnFailedStart(armed => this.#approveToolCall(input, onDispatch, armed));
+  }
+
+  /**
+   * Arm the session run for an answer to a parked tool call. Records the arm in
+   * `armed` only when this call armed an idle run, or joined other answers that
+   * did, so a failed start can disarm it without touching a run another caller
+   * armed.
+   */
+  #armRun(armed?: ArmedRun): AbortSignal {
+    const wasRunning = this.run.isRunning();
+    const armCountBefore = this.run.armCount();
+    const signal = this.run.ensureAbortController().signal;
+    if (!armed) return signal;
+    // Answers in flight together share one record, as long as nothing else
+    // armed the run between them.
+    const arms = !wasRunning
+      ? { armCount: 0, pending: 0, dispatched: false }
+      : this.#answerArms?.armCount === armCountBefore
+        ? this.#answerArms
+        : undefined;
+    if (arms) {
+      arms.armCount = this.run.armCount();
+      arms.pending += 1;
+      this.#answerArms = arms;
+      armed.arms = arms;
+    }
+    return signal;
+  }
+
+  /**
+   * Run an answer to a parked tool call, resetting the run it armed when the
+   * answer fails before any run started (mirrors the `sendSignal` startup
+   * failure reset). Otherwise the session reports running with no run id.
+   */
+  async #disarmRunOnFailedStart(answer: (armed: ArmedRun) => Promise<void>): Promise<void> {
+    const armed: ArmedRun = {};
+    try {
+      await answer(armed);
+      if (armed.arms) {
+        armed.arms.pending -= 1;
+        armed.arms.dispatched = true;
+      }
+    } catch (error) {
+      const arms = armed.arms;
+      if (arms) {
+        arms.pending -= 1;
+        // Anyone else holding the run armed it again: the subscription arms the
+        // run as it starts, and so does a message or signal joining it. Only the
+        // last failed answer of a run nobody else armed resets it.
+        if (
+          arms.pending === 0 &&
+          !arms.dispatched &&
+          this.#answerArms === arms &&
+          this.run.armCount() === arms.armCount
+        ) {
+          this.#answerArms = undefined;
+          this.run.reset();
+        }
+      }
+      throw error;
+    }
   }
 
   /**
@@ -5952,6 +6403,7 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal,
     }: Parameters<Session<TState>['approveToolCall']>[0],
     onDispatch?: () => void,
+    armed?: ArmedRun,
   ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
@@ -5968,7 +6420,7 @@ export class Session<TState = unknown> {
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
+        ? this.#armRun(armed)
         : new AbortController().signal);
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
@@ -5979,7 +6431,9 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -5997,6 +6451,8 @@ export class Session<TState = unknown> {
       streamOptions: {
         ...this.machinery.buildSharedRunOptions(requestContext),
         onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        // Without it the continuation sees every agent tool, not the mode's subset.
+        ...(activeTools !== undefined && { activeTools }),
       },
     });
   }
@@ -6023,7 +6479,7 @@ export class Session<TState = unknown> {
     },
     onDispatch?: () => void,
   ): Promise<void> {
-    await this.#declineToolCall(input, onDispatch);
+    await this.#disarmRunOnFailedStart(armed => this.#declineToolCall(input, onDispatch, armed));
   }
 
   async #declineToolCall(
@@ -6038,6 +6494,7 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal,
     }: Parameters<Session<TState>['declineToolCall']>[0],
     onDispatch?: () => void,
+    armed?: ArmedRun,
   ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
@@ -6054,7 +6511,7 @@ export class Session<TState = unknown> {
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
+        ? this.#armRun(armed)
         : new AbortController().signal);
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
@@ -6065,7 +6522,9 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -6084,6 +6543,8 @@ export class Session<TState = unknown> {
       streamOptions: {
         ...this.machinery.buildSharedRunOptions(requestContext),
         onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        // Without it the continuation sees every agent tool, not the mode's subset.
+        ...(activeTools !== undefined && { activeTools }),
       },
     });
   }
@@ -6329,17 +6790,27 @@ export class Session<TState = unknown> {
    * reject the answer. The caller already handled approval (setForTool policy,
    * yolo mode, or a prior explicit approval gate).
    */
-  async resumeToolCall({
-    resumeData,
-    address,
-    requestContext: requestContextInput,
-    resolveOnToolEnd = false,
-  }: {
+  async resumeToolCall(input: {
     resumeData: any;
     address: SuspensionAddress;
     requestContext?: RequestContext;
     resolveOnToolEnd?: boolean;
+    /** The mode the continuation runs in; defaults to the suspended run's mode. */
+    modeId?: string;
   }): Promise<void> {
+    await this.#disarmRunOnFailedStart(armed => this.#resumeToolCall(input, armed));
+  }
+
+  async #resumeToolCall(
+    {
+      resumeData,
+      address,
+      requestContext: requestContextInput,
+      resolveOnToolEnd = false,
+      modeId: inputModeId,
+    }: Parameters<Session<TState>['resumeToolCall']>[0],
+    armed: ArmedRun,
+  ): Promise<void> {
     const suspension = this.suspensions.get(address);
     if (!suspension) {
       throw new Error('No active suspension to resume');
@@ -6349,7 +6820,7 @@ export class Session<TState = unknown> {
     const agent = await this.resolveSuspensionAgent(address);
     const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address);
     const sourceIsActive = () => threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
-    const abortSignal = sourceIsActive() ? this.run.ensureAbortController().signal : new AbortController().signal;
+    const abortSignal = sourceIsActive() ? this.#armRun(armed) : new AbortController().signal;
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
       resourceId,
@@ -6358,6 +6829,8 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
+    if (inputModeId) requestContext.setRaw(RUN_MODE_ID_CONTEXT_KEY, inputModeId);
+    const modeId = inputModeId ?? (await this.resolveSuspendedRunModeId(agent, address.runId, requestContext));
     const toolsets = await this.machinery.buildToolsets(requestContext);
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
     let restoreAbortedRun: (() => void) | undefined;
@@ -6391,6 +6864,7 @@ export class Session<TState = unknown> {
         sharedOptions.requireToolApproval = false;
       }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
+      const activeTools = this.machinery.resolveModeActiveTools(modeId);
       await agent.sendStreamResume({
         threadId,
         resourceId,
@@ -6403,6 +6877,8 @@ export class Session<TState = unknown> {
           abortSignal,
           requestContext,
           toolsets,
+          // Without it the continuation sees every agent tool, not the mode's subset.
+          ...(activeTools !== undefined && { activeTools }),
         },
       });
       restoreAbortedRun = undefined;

@@ -29,7 +29,7 @@ export const NoPromptBlocksInfo = () => {
         <div className="flex flex-col items-center gap-2">
           {canCreate && (
             <Button render={<Link href={paths.cmsPromptBlockCreateLink()} />} variant="primary" icon={<Plus />}>
-              Create Prompt
+              Create prompt
             </Button>
           )}
           <Button
@@ -44,7 +44,7 @@ export const NoPromptBlocksInfo = () => {
 
             icon={<ExternalLinkIcon />}
           >
-            Prompts Documentation
+            Prompts documentation
           </Button>
         </div>
       }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -111,11 +111,17 @@ describe('DatasetItemVersionsComparePage', () => {
       expect(container.querySelector('.cm-mergeView')).toBeNull();
       expect(screen.getByRole('combobox', { name: 'Version' })).toBeDefined();
       expect(screen.getByRole('combobox', { name: 'Compare version' })).toBeDefined();
-      expect(screen.getByRole('button', { name: /Default View/ })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Default view/ })).toBeDefined();
       expect(screen.getAllByText('Input')).toHaveLength(2);
       expect(screen.getAllByText('Tool Mocks')).toHaveLength(2);
-      expect(screen.getAllByText('Request Context')).toHaveLength(2);
-      expect(screen.getAllByText('Not set in this version')).toHaveLength(2);
+      // Left = v2, which sets Tool Mocks and Request Context; right = v1, which sets neither.
+      const [newerCard, olderCard] = Array.from(
+        container.querySelector('.md\\:grid-cols-2')!.children,
+      ) as HTMLElement[];
+      expect(within(newerCard).getByText('Request Context')).toBeDefined();
+      expect(within(newerCard).queryByText('Not set in this version')).toBeNull();
+      expect(within(olderCard).getByText('Request Context')).toBeDefined();
+      expect(within(olderCard).getAllByText('Not set in this version')).toHaveLength(2);
       expect(screen.queryByText('No version selected')).toBeNull();
     });
 
@@ -133,12 +139,12 @@ describe('DatasetItemVersionsComparePage', () => {
     });
   });
 
-  describe('when the Diff View button is clicked', () => {
+  describe('when the Diff view button is clicked', () => {
     it('stores ?view=diff in the URL and highlights the changes', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1');
       expect(container.querySelector('.code-diff-removed')).toBeNull();
 
-      fireEvent.click(await screen.findByRole('button', { name: /Diff View/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /Diff view/ }));
 
       await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
       expect(container.querySelector('.code-diff-added')).not.toBeNull();

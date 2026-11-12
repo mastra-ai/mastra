@@ -1,0 +1,26 @@
+diff --git a/build/auth-utils.js b/build/auth-utils.js
+index 25624e3..344f654 100644
+--- a/build/auth-utils.js
++++ b/build/auth-utils.js
+@@ -21,7 +21,7 @@ function buildToken(type, token) {
+ 	return `${capitalize(type)} ${token}`;
+ }
+ function getMatchedPackagesSpec(pkgName, packages) {
+-	for (const i in packages) if (minimatch.minimatch.makeRe(i, { nocase: true }).exec(pkgName)) return packages[i];
++	for (const i in packages) if ((0, minimatch.minimatch)(pkgName, i, { nocase: true })) return packages[i];
+ }
+ function capitalize(str) {
+ 	return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+diff --git a/build/auth-utils.mjs b/build/auth-utils.mjs
+index bffbe72..670ba75 100644
+--- a/build/auth-utils.mjs
++++ b/build/auth-utils.mjs
+@@ -21,7 +21,7 @@ function buildToken(type, token) {
+ 	return `${capitalize(type)} ${token}`;
+ }
+ function getMatchedPackagesSpec(pkgName, packages) {
+-	for (const i in packages) if (minimatch.makeRe(i, { nocase: true }).exec(pkgName)) return packages[i];
++	for (const i in packages) if (minimatch(pkgName, i, { nocase: true })) return packages[i];
+ }
+ function capitalize(str) {
+ 	return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();

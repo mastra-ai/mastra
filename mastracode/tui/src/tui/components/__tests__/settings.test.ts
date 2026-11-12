@@ -100,6 +100,7 @@ function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
     thinkingLevel: 'off',
     currentModelId: 'openai/gpt-5.4-mini',
     escapeAsCancel: false,
+    mouse: { dialogs: false, input: false },
     previewLines: 2,
     storageBackend: 'libsql',
     pgConnectionString: '',
@@ -122,6 +123,7 @@ function createCallbacks(overrides: Partial<SettingsCallbacks> = {}): SettingsCa
     onYoloChange: vi.fn(),
     onThinkingLevelChange: vi.fn(),
     onEscapeAsCancelChange: vi.fn(),
+    onMouseChange: vi.fn(),
     onPreviewLinesChange: vi.fn(),
     onStorageBackendChange: vi.fn(),
     onExperimentalGithubSignalsChange: vi.fn(),
@@ -274,6 +276,56 @@ describe('SettingsComponent background tools submenu', () => {
     item.submenu('', done);
     mocks.selectLists.at(-1).onCancel();
     expect(callbacks.onBackgroundToolsChange).not.toHaveBeenCalled();
+    expect(done).toHaveBeenCalledWith();
+  });
+});
+
+describe('SettingsComponent mouse submenu', () => {
+  const choices = [
+    { value: 'off', label: 'Off', mouse: { dialogs: false, input: false } },
+    { value: 'dialogs', label: 'Dialogs only', mouse: { dialogs: true, input: false } },
+    { value: 'input', label: 'Input box only', mouse: { dialogs: false, input: true } },
+    { value: 'all', label: 'Dialogs + input box', mouse: { dialogs: true, input: true } },
+  ];
+
+  function openMouseSubmenu(mouse: { dialogs: boolean; input: boolean }) {
+    const config = createConfig({ mouse });
+    const callbacks = createCallbacks();
+    new SettingsComponent(config, callbacks);
+    const item = mocks.lastSettingsList.items.find((setting: { id: string }) => setting.id === 'mouse');
+    const done = vi.fn();
+    item.submenu('', done);
+    return { config, callbacks, item, done, select: mocks.selectLists.at(-1) };
+  }
+
+  it('shows Off for mouse preferences missing from older settings', () => {
+    const config = createConfig({ mouse: {} as SettingsConfig['mouse'] });
+    new SettingsComponent(config, createCallbacks());
+    const item = mocks.lastSettingsList.items.find((setting: { id: string }) => setting.id === 'mouse');
+    expect(item.currentValue).toBe('Off');
+    item.submenu('', vi.fn());
+    expect(mocks.selectLists.at(-1).items[mocks.selectLists.at(-1).selectedIndex].value).toBe('off');
+  });
+
+  it.each(choices)('shows "$label" for the saved preferences and highlights it', ({ value, label, mouse }) => {
+    const { item, select } = openMouseSubmenu(mouse);
+    expect(item.currentValue).toBe(label);
+    expect(select.items[select.selectedIndex].value).toBe(value);
+  });
+
+  it.each(choices)('saves "$label" as the matching dialogs and input preferences', async ({ value, label, mouse }) => {
+    const { config, callbacks, done, select } = openMouseSubmenu({ dialogs: false, input: false });
+    await select.onSelect({ value });
+    expect(config.mouse).toEqual(mouse);
+    expect(callbacks.onMouseChange).toHaveBeenCalledWith(mouse);
+    expect(done).toHaveBeenCalledWith(label);
+  });
+
+  it('does not change the setting when the submenu is cancelled', () => {
+    const { config, callbacks, done, select } = openMouseSubmenu({ dialogs: true, input: false });
+    select.onCancel();
+    expect(callbacks.onMouseChange).not.toHaveBeenCalled();
+    expect(config.mouse).toEqual({ dialogs: true, input: false });
     expect(done).toHaveBeenCalledWith();
   });
 });

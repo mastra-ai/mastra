@@ -1,7 +1,12 @@
 {
-  "temperature": ["LongCat-2.0"],
+  "attachment": ["LongCat-2.5-Preview"],
   "reasoning": {
     "LongCat-2.0": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "LongCat-2.5-Preview": [
       {
         "type": "toggle"
       }

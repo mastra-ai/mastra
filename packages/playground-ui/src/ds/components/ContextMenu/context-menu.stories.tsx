@@ -23,6 +23,12 @@ const meta: Meta<typeof ContextMenu> = {
   component: ContextMenu,
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component:
+          'Right-click or long-press to open the app menu. Right-click again while it is open to dismiss it and use the browser’s native context menu.',
+      },
+    },
   },
 };
 
@@ -121,10 +127,10 @@ export const WithCheckboxItems: Story = {
           <ContextMenu.Label>Appearance</ContextMenu.Label>
           <ContextMenu.Separator />
           <ContextMenu.CheckboxItem checked={showStatusBar} onCheckedChange={setShowStatusBar}>
-            Status Bar
+            Status bar
           </ContextMenu.CheckboxItem>
           <ContextMenu.CheckboxItem checked={showActivityBar} onCheckedChange={setShowActivityBar}>
-            Activity Bar
+            Activity bar
           </ContextMenu.CheckboxItem>
           <ContextMenu.CheckboxItem checked={showPanel} onCheckedChange={setShowPanel}>
             Panel

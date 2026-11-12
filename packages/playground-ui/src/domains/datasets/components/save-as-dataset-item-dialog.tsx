@@ -331,7 +331,7 @@ export function SaveAsDatasetItemDialog({
               variant="default"
               disabled={addItem.isPending || trajectoryLoading || !isSelectedDatasetListed}
             >
-              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save Item'}
+              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save item'}
             </Button>
           </div>
         </Form>

@@ -4,24 +4,28 @@ import { useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { TakeOwnershipDialog } from './TakeOwnershipDialog';
 
 export function TeammateSessionLine() {
-  const { sessionId, threadId } = useParams<{ sessionId?: string; threadId?: string }>();
+  const { factoryId, sessionId, threadId } = useParams<{ factoryId?: string; sessionId?: string; threadId?: string }>();
   const session = useUserSessionQuery(sessionId ?? threadId).data;
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   if (!session || !viewerUserId || session.userId === viewerUserId) return null;
 
   const owner = session.owner;
+  const canTakeOwnership = session.capabilities?.takeOwnership === true && factoryId !== undefined;
+
   return (
-    <div className="flex min-w-0 items-center gap-2 px-3">
+    <div className="flex min-w-0 items-center gap-1.5">
       {owner && (
         <div aria-hidden="true">
           <Avatar name={owner.name} src={owner.avatarUrl} size="xs" />
         </div>
       )}
       <Txt as="p" variant="caption" tone="muted" className="truncate">
-        You’re steering {owner ? `${owner.name}’s` : 'a teammate’s'} session
+        You’re steering {owner?.name ?? 'a teammate'}’s session
       </Txt>
+      {canTakeOwnership && <TakeOwnershipDialog factoryId={factoryId} session={session} />}
     </div>
   );
 }

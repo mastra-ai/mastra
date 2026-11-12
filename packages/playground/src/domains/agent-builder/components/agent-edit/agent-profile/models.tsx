@@ -3,6 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -143,7 +144,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
             size="md"
             className="max-w-[30ch] shrink-0"
             data-testid="model-card-picker-search"
-            placeholder="Search models or providers..."
+            placeholder="Search models or providers"
             value={search}
             onValueChange={setSearch}
           />
@@ -306,7 +307,9 @@ function groupModelsByProvider(
   }
 
   for (const group of groupsById.values()) {
-    group.models.sort((a, b) => a.model.localeCompare(b.model));
+    group.models.sort(
+      (a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model),
+    );
   }
 
   return Array.from(groupsById.values()).sort((a, b) => {

@@ -1,3 +1,5 @@
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
@@ -5,6 +7,7 @@ export interface ModelDefaultRecord {
   orgId: string;
   userId: string;
   modelId: string;
+  thinkingLevel: ThinkingLevelSetting | null;
   updatedAt: Date;
 }
 
@@ -15,6 +18,7 @@ export const USER_DEFAULT_MODELS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     user_id: { type: 'text' },
     model_id: { type: 'text' },
+    thinking_level: { type: 'text', nullable: true },
     updated_at: { type: 'timestamp' },
   },
   uniqueIndexes: [{ name: 'user_default_models_org_user_key', columns: ['org_id', 'user_id'] }],
@@ -25,6 +29,7 @@ interface ModelDefaultDbRow extends Record<string, unknown> {
   org_id: string;
   user_id: string;
   model_id: string;
+  thinking_level: string | null;
   updated_at: Date;
 }
 
@@ -33,6 +38,7 @@ function toRecord(row: ModelDefaultDbRow): ModelDefaultRecord {
     orgId: row.org_id,
     userId: row.user_id,
     modelId: row.model_id,
+    thinkingLevel: isThinkingLevelSetting(row.thinking_level) ? row.thinking_level : null,
     updatedAt: row.updated_at,
   };
 }
@@ -84,6 +90,7 @@ export class ModelDefaultsStorage extends FactoryStorageDomain {
         await this.#db.insertOne<ModelDefaultDbRow>('user_default_models', {
           org_id: orgId,
           user_id: userId,
+          thinking_level: null,
           ...values,
         }),
       );
@@ -93,6 +100,24 @@ export class ModelDefaultsStorage extends FactoryStorageDomain {
       if (!row) throw error;
       return toRecord(row);
     }
+  }
+
+  /** Null when the user has no personal model: a personal thinking level never exists without one. */
+  async setThinkingLevel({
+    orgId,
+    userId,
+    thinkingLevel,
+  }: {
+    orgId: string;
+    userId: string;
+    thinkingLevel: ThinkingLevelSetting | null;
+  }): Promise<ModelDefaultRecord | null> {
+    const updated = await this.#db.updateAtomic<ModelDefaultDbRow>(
+      'user_default_models',
+      { org_id: orgId, user_id: userId },
+      () => ({ thinking_level: thinkingLevel, updated_at: new Date() }),
+    );
+    return updated ? toRecord(updated) : null;
   }
 
   async clear({ orgId, userId }: { orgId: string; userId: string }): Promise<boolean> {

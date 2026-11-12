@@ -72,7 +72,7 @@ async function waitForTrace(traceId: string, timeoutMs = 10000): Promise<any[]> 
           return trace.spans;
         }
       }
-    } catch (error) {
+    } catch {
       // Trace not found yet, continue waiting
     }
 

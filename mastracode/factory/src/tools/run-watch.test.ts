@@ -2,6 +2,7 @@ import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { createSessionApprovalNotifier, createSessionRunEndReporter } from './reports.js';
 import { observeSessionRunReports } from './run-watch.js';
 
@@ -48,7 +49,7 @@ describe('observeSessionRunReports', () => {
     session.emit(end('suspended'));
 
     expect(report).toHaveBeenCalledWith(
-      { status: 'blocked', toolName: 'factory_transition_work_item', approval: true },
+      { status: 'blocked', toolName: 'factory_transition_work_item', toolCallId: 'call-1', approval: true },
       expect.any(Date),
     );
   });
@@ -115,6 +116,54 @@ describe('observeSessionRunReports', () => {
     ]);
   });
 
+  function failedReport(error: Error) {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+    return report.mock.calls.map(([outcome]) => outcome)[0];
+  }
+
+  function badRequest(body: unknown) {
+    return Object.assign(new Error('Bad Request'), { statusCode: 400, responseBody: JSON.stringify(body) });
+  }
+
+  it.each([
+    {
+      name: 'a usage-limit sentence in the provider body',
+      error: badRequest({ error: { message: 'You have exceeded your current quota, please check your plan.' } }),
+      reason: 'You have exceeded your current quota, please check your plan.',
+    },
+    {
+      name: 'any other sentence in the provider body',
+      error: badRequest({ error: { message: 'Invalid model id' } }),
+      reason: 'Invalid model id',
+    },
+    {
+      name: 'a Codex detail sentence',
+      error: badRequest({ detail: 'You have exceeded your usage limit for Codex' }),
+      reason: 'You have exceeded your usage limit for Codex',
+    },
+    {
+      name: 'a provider sentence behind a wrapping cause',
+      error: new Error('Agent stream failed', {
+        cause: badRequest({ error: { message: 'prompt is too long: 210345 tokens > 200000 maximum' } }),
+      }),
+      reason: 'prompt is too long: 210345 tokens > 200000 maximum',
+    },
+  ])('quotes $name instead of Bad Request', ({ error, reason }) => {
+    expect(failedReport(error)).toEqual({ status: 'failed', reason: `the run ended in error: ${reason}` });
+  });
+
+  it('quotes at most 400 characters of the provider sentence', () => {
+    const sentence = `Your weekly usage limit is reached. ${'x'.repeat(500)}`;
+    expect(failedReport(badRequest({ error: { message: sentence } }))).toEqual({
+      status: 'failed',
+      reason: `the run ended in error: ${sentence.slice(0, 400)}`,
+    });
+  });
+
   it('keeps listening when a report fails', async () => {
     const session = fakeSession();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -159,6 +208,50 @@ describe('createSessionRunEndReporter', () => {
     await reporter({ sessionId: 'mine', threadId: 'thread', outcome: { status: 'done' }, since: new Date() });
 
     expect(reporting).not.toHaveBeenCalled();
+  });
+
+  it("reports a finished run kept on its own resource to its item's followers", async () => {
+    const since = new Date('2026-10-01T00:00:00.000Z');
+    // A run on untrusted content records its own session id as the binding's resource.
+    const findRunBindingBySession = vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      resourceId === 'run'
+        ? {
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            workItemId: 'item-1',
+            role: 'reviewer',
+            threadId: 'run',
+            revokedAt: new Date('2026-10-01T00:05:00.000Z'),
+          }
+        : null,
+    );
+    const listWorkItemSubscribers = vi.fn(async () => []);
+    const reporter = createSessionRunEndReporter({
+      sessions: {
+        getBySessionId: async () =>
+          ({
+            sessionId: 'run',
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            userId: 'user-1',
+            originSessionId: null,
+            originThreadId: null,
+            title: null,
+          }) as never,
+      },
+      workItems: {
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession,
+        listWorkItemSubscribers,
+        getForProject: vi.fn(),
+      } as never,
+      reporting: async () => ({ deliver: vi.fn(), notifications: new InMemoryNotificationsStorage() }),
+    });
+
+    await reporter({ sessionId: 'run', threadId: 'run', outcome: { status: 'done' }, since });
+
+    expect(findRunBindingBySession).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'run' }));
+    expect(listWorkItemSubscribers).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'item-1' }));
   });
 
   function sideReporter(originMutedAt: Date | null) {
@@ -252,7 +345,13 @@ describe('createSessionRunEndReporter for the run that finishes its card', () =>
             revokedAt,
           }) as never,
         listWorkItemSubscribers: async () => [{ sessionId: 'follower', threadId: 'follower-thread' }] as never,
-        getForProject: async () => ({ title: 'Fix it', externalSource: null, metadata: {} }) as never,
+        getForProject: async () =>
+          ({
+            title: 'Fix it',
+            externalSource: null,
+            metadata: {},
+            workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix it', source: null, metadata: null }),
+          }) as never,
       },
       reporting: async () => ({ deliver, notifications: { listNotifications: async () => [] } as never }),
     });
@@ -308,7 +407,13 @@ describe('createSessionApprovalNotifier', () => {
             { sessionId: 'follower', threadId: 'follower-thread' },
             { sessionId: 'worker', threadId: 'worker-thread' },
           ] as never,
-        getForProject: async () => ({ title: 'Fix it', externalSource: null, metadata: {} }) as never,
+        getForProject: async () =>
+          ({
+            title: 'Fix it',
+            externalSource: null,
+            metadata: {},
+            workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix it', source: null, metadata: null }),
+          }) as never,
       },
       reporting: async () => ({ deliver, notifications: {} as never }),
     });

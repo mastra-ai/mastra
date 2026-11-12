@@ -98,7 +98,7 @@ describe('Agent signals: message formats', () => {
     expect(reminderSignal.toLLMMessage()).toEqual({
       role: 'user',
       content:
-        '<system-reminder enabled="true" path="/tmp/AGENTS.md" type="dynamic-agents-md">Use &lt;safe&gt; content &amp; continue</system-reminder>',
+        '<system-reminder enabled="true" path="/tmp/AGENTS.md" type="dynamic-agents-md">Use <safe> content & continue</system-reminder>',
     });
     expect(reminderSignal.toDataPart().data.attributes).toEqual({
       type: 'dynamic-agents-md',

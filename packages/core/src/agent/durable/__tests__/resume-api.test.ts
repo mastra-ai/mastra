@@ -399,9 +399,10 @@ describe('Resume API', () => {
         logger: false,
       });
 
-      await expect(durableAgent.resume('missing-cold-run', { approved: true })).rejects.toThrow(
-        'No registry entry found for run missing-cold-run. Cannot resume.',
-      );
+      await expect(durableAgent.resume('missing-cold-run', { approved: true })).rejects.toMatchObject({
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+        message: 'No registry entry found for run missing-cold-run. Cannot resume.',
+      });
     });
 
     it('does not rehydrate a persisted run owned by another agent', async () => {
@@ -992,6 +993,19 @@ describe('Resume with CachingPubSub Event Replay', () => {
       }
       return originalPersist(args);
     });
+    // Storage v2 stores a status in the run's header.
+    for (const method of [
+      'appendWorkflowRunEntries',
+      'writeWorkflowRunCheckpoint',
+      'updateWorkflowRunHeader',
+    ] as const) {
+      const write = (workflows[method] as (args: any) => Promise<unknown>).bind(workflows);
+      (workflows[method] as (args: any) => Promise<unknown>) = async args => {
+        const status = method === 'updateWorkflowRunHeader' ? args.opts?.status : args.header?.status;
+        if (status === 'suspended') await new Promise(resolve => setTimeout(resolve, 300));
+        return write(args);
+      };
+    }
 
     const tool = createTool({
       id: 'approvalTool',
@@ -1335,7 +1349,7 @@ describe('Observe API', () => {
         try {
           expect(subscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
           const fullOutput = ownerResult.output.getFullOutput();
-          await emitFinishEvent(cachingPubsub, runId, {
+          await emitFinishEvent(producer.pubsub, runId, {
             output: {
               text: 'Private producer answer',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -1395,13 +1409,13 @@ describe('Observe API', () => {
         const fullOutput = result.output.getFullOutput();
 
         try {
-          await emitChunkEvent(cachingPubsub, runId, {
+          await emitChunkEvent(producer.pubsub, runId, {
             type: 'text-delta',
             runId,
             from: 'AGENT',
             payload: { id: 'observed-text', text: 'Live observer answer' },
           });
-          await emitFinishEvent(cachingPubsub, runId, {
+          await emitFinishEvent(producer.pubsub, runId, {
             output: {
               text: 'Live observer answer',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -1474,7 +1488,7 @@ describe('Observe API', () => {
         });
         result = await owner.observe(runId);
         const fullOutput = result.output.getFullOutput();
-        await emitFinishEvent(cachingPubsub, runId, {
+        await emitFinishEvent(owner.pubsub, runId, {
           output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
           stepResult: { reason: 'stop', warnings: [], isContinued: false },
         });

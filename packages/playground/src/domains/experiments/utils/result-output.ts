@@ -45,3 +45,43 @@ export function getResultErrorMessage(result: ResultOutputSource): string | unde
   if (result.targetType !== 'agent' || !result.output || typeof result.output !== 'object') return undefined;
   return readString((result.output as Record<string, unknown>).error, 'message');
 }
+
+export type ResultToolCall = { toolName: string; args?: unknown; result?: unknown; isError?: boolean };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Stream chunks keep the call details in `payload`; read them from there. */
+function chunkPayloads(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(chunk => (isRecord(chunk) && isRecord(chunk.payload) ? [chunk.payload] : []));
+}
+
+/** Agent tool calls in call order, each joined with its result by `toolCallId`. */
+export function getResultToolCalls(result: ResultOutputSource): ResultToolCall[] {
+  if (result.targetType !== 'agent' || !isRecord(result.output)) return [];
+  const results = new Map(chunkPayloads(result.output.toolResults).map(payload => [payload.toolCallId, payload]));
+  return chunkPayloads(result.output.toolCalls).flatMap(call => {
+    if (typeof call.toolName !== 'string') return [];
+    const toolResult = results.get(call.toolCallId);
+    return [
+      {
+        toolName: call.toolName,
+        args: call.args,
+        ...(toolResult && { result: toolResult.result, isError: toolResult.isError === true }),
+      },
+    ];
+  });
+}
+
+/**
+ * Explains an agent result that called tools but never wrote a final text, typically because it
+ * hit its step limit. Undefined when there is text, an error, or no tool calls.
+ */
+export function getMissingTextNotice(result: ResultOutputSource): string | undefined {
+  if (getResultOutputText(result) || getResultErrorMessage(result)) return undefined;
+  const count = getResultToolCalls(result).length;
+  if (count === 0) return undefined;
+  return `No final text response after ${count} tool ${count === 1 ? 'call' : 'calls'}`;
+}

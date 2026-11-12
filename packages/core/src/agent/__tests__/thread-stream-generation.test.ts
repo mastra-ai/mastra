@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+vi.hoisted(() => {
+  process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS = '300';
+});
+
 import type { Agent } from '../agent';
+import { createDurableAgentStream, emitChunkEvent, emitFinishEvent } from '../durable/stream-adapter';
+import { verifyRunLease } from '../run-lease-fence';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
@@ -36,7 +42,9 @@ const text = (t: string) => ({ type: 'text-delta', payload: { id: 't', text: t }
 const start = { type: 'start', payload: {} };
 const finish = { type: 'finish', payload: {} };
 const summarize = (parts: any[]) =>
-  parts.map(part => (part.type === 'text-delta' ? `text:${part.payload.text}` : part.type));
+  parts
+    .filter(part => part.type !== 'thread-run-status')
+    .map(part => (part.type === 'text-delta' ? `text:${part.payload.text}` : part.type));
 
 /** Processes on one bus: two that drive the run in turn, and observers whose subscribers read the thread. */
 async function setup({ read: startReading = true } = {}) {
@@ -61,6 +69,64 @@ async function setup({ read: startReading = true } = {}) {
 }
 
 describe('thread stream: runs taken over by a later claim generation', () => {
+  it.each([
+    'custom\u0000retake\u000042',
+    'custom\u0000retake',
+    'mastra:thread-lease:{"runId":"other","generation":99}',
+    'mastra:thread-lease:["other","retake","token"]',
+    'mastra:thread-lease:["other","generation",99]',
+    '雪["quoted",42]\\tail',
+  ])('routes and fences recovered executions without restricting run ID %j', async runId => {
+    const { pubsub, original, recovering, subscription, read } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+    const a = controlledOutput(runId);
+    const b = controlledOutput(runId);
+    try {
+      await original.registerRun(agent, a.output, options, pubsub, { strict: true, generation: 1 });
+      expect(await original.isRunHoldingThreadLease(pubsub, runId, 'generation-thread', 'generation-user')).toBe(true);
+      await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+      const successorOwner = await pubsub.getLeaseOwner(key);
+      expect(successorOwner).toBe(`mastra:thread-lease:${JSON.stringify([runId, 'generation', 2])}`);
+      await original.releaseDurableThreadLease(pubsub, runId, 'generation-thread', 'generation-user', 1);
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await recovering.renewDurableThreadLease(pubsub, runId, 'generation-thread', 'generation-user', 2)).toBe(
+        true,
+      );
+      b.push(start);
+      b.push(text('Recovered answer'));
+      await vi.waitFor(() => expect(read.some(part => part.type === 'text-delta')).toBe(true));
+      expect(subscription.activeRunId()).toBe(runId);
+      expect(summarize(read)).toEqual(['start', 'text:Recovered answer']);
+    } finally {
+      a.end('failed');
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
+  it.each(['run', 'retake', 'generation', 'execution'] as const)(
+    'routes an unqualified run whose literal ID resembles a %s token',
+    async kind => {
+      const runId = `mastra:thread-lease:${JSON.stringify(['other', kind, kind === 'run' ? null : kind === 'generation' ? 99 : 'token'])}`;
+      const { pubsub, original, subscription, read } = await setup();
+      const run = controlledOutput(runId);
+      try {
+        await original.registerRun(agent, run.output, options, pubsub, { strict: true });
+        expect(await original.isRunHoldingThreadLease(pubsub, runId, 'generation-thread', 'generation-user')).toBe(
+          true,
+        );
+        run.push(start);
+        run.push(text('Literal run ID preserved'));
+        await vi.waitFor(() => expect(read.some(part => part.type === 'text-delta')).toBe(true));
+        expect(subscription.activeRunId()).toBe(runId);
+        expect(summarize(read)).toEqual(['start', 'text:Literal run ID preserved']);
+      } finally {
+        run.end();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
   it('ends the superseded execution for thread readers and drops what it still forwards', async () => {
     const { pubsub, original, recovering, subscription, read } = await setup();
 
@@ -109,6 +175,173 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     await vi.waitFor(() => expect(read.some(part => part.type === 'finish')).toBe(true));
     expect(summarize(read)).toEqual(['start', 'text:A-partial ', 'start', 'text:B-answer', 'finish']);
     subscription.unsubscribe();
+  });
+
+  it("keeps the recovered execution's thread lease when the superseded execution finishes", async () => {
+    const { pubsub, original, recovering, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { generation: 1 });
+    const b = controlledOutput('run-1');
+    await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    const successorOwner = await pubsub.getLeaseOwner(key);
+
+    a.end('failed');
+    await nextTicks(30);
+
+    try {
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await recovering.isRunHoldingThreadLease(pubsub, 'run-1', 'generation-thread', 'generation-user')).toBe(
+        true,
+      );
+    } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
+  it.each(['after', 'before'] as const)(
+    'drains a follow-up queued %s the recovery finished through an older execution that registered after it',
+    async when => {
+      const { pubsub, original, subscription } = await setup();
+      const stream = vi.fn(async () => controlledOutput('drained').output);
+      const streamingAgent = { ...agent, stream } as unknown as Agent<any, any, any, any>;
+      const followUp = () =>
+        original.sendSignal(
+          streamingAgent,
+          { type: 'user-message', contents: 'follow-up' },
+          { runId: 'run-1', resourceId: 'generation-user', threadId: 'generation-thread' },
+          pubsub,
+        ).accepted;
+
+      const b = controlledOutput('run-1');
+      await original.registerRun(streamingAgent, b.output, options, pubsub, { strict: true, generation: 2 });
+      const a = controlledOutput('run-1');
+      await original.registerRun(streamingAgent, a.output, options, pubsub, { generation: 1 });
+      if (when === 'before') await followUp();
+      b.end();
+      await nextTicks(30);
+      if (when === 'after') await followUp();
+
+      a.end('failed');
+      await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1));
+      subscription.unsubscribe();
+    },
+  );
+
+  it("keeps a recovery's thread lease when the superseded execution in the same process finishes", async () => {
+    const { pubsub, original, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { strict: true, generation: 1 });
+    const b = controlledOutput('run-1');
+    await original.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    const successorOwner = await pubsub.getLeaseOwner(key);
+
+    a.end('failed');
+    await nextTicks(30);
+
+    try {
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await original.isRunHoldingThreadLease(pubsub, 'run-1', 'generation-thread', 'generation-user')).toBe(
+        true,
+      );
+    } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
+  it("keeps a recovery's thread lease when an older execution that registers after it in the same process finishes", async () => {
+    const { pubsub, original, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const b = controlledOutput('run-1');
+    await original.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    const successorOwner = await pubsub.getLeaseOwner(key);
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { generation: 1 });
+
+    a.end('failed');
+    await nextTicks(30);
+
+    try {
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await original.isRunHoldingThreadLease(pubsub, 'run-1', 'generation-thread', 'generation-user')).toBe(
+        true,
+      );
+    } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
+  it("keeps a recovery's thread lease when an older execution that registers after it finishes with a follow-up queued", async () => {
+    const { pubsub, original, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+    const stream = vi.fn();
+    const streamingAgent = { ...agent, stream } as unknown as Agent<any, any, any, any>;
+
+    const b = controlledOutput('run-1');
+    await original.registerRun(streamingAgent, b.output, options, pubsub, { strict: true, generation: 2 });
+    const successorOwner = await pubsub.getLeaseOwner(key);
+    const a = controlledOutput('run-1');
+    await original.registerRun(streamingAgent, a.output, options, pubsub, { generation: 1 });
+    await original.sendSignal(
+      streamingAgent,
+      { type: 'user-message', contents: 'follow-up' },
+      { runId: 'run-1', resourceId: 'generation-user', threadId: 'generation-thread' },
+      pubsub,
+    ).accepted;
+
+    a.end('failed');
+    await nextTicks(30);
+
+    try {
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await original.isRunHoldingThreadLease(pubsub, 'run-1', 'generation-thread', 'generation-user')).toBe(
+        true,
+      );
+      expect(stream).not.toHaveBeenCalled();
+    } finally {
+      b.end();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps a tool call in flight when the run moves its lease onto the generation it learned', async () => {
+    const { pubsub, original, subscription } = await setup();
+    const key = 'generation-user\u0000generation-thread';
+
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { strict: true });
+    expect(await pubsub.getLeaseOwner(key)).toBe('run-1');
+
+    // Hold the next owner read, as a slow backend would, so the tool call's fence check spans the move.
+    const read = Promise.withResolvers<void>();
+    const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
+    const held = vi.spyOn(pubsub, 'getLeaseOwner').mockImplementationOnce(async k => {
+      await read.promise;
+      return getLeaseOwner(k);
+    });
+    const toolCall = verifyRunLease('run-1');
+    await vi.waitFor(() => expect(held).toHaveBeenCalled());
+    held.mockRestore();
+
+    const b = controlledOutput('run-1');
+    await original.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 1 });
+    expect(await pubsub.getLeaseOwner(key)).toBe(`mastra:thread-lease:${JSON.stringify(['run-1', 'generation', 1])}`);
+    read.resolve();
+
+    try {
+      await expect(toolCall).resolves.toBeUndefined();
+    } finally {
+      a.end();
+      b.end();
+      subscription.unsubscribe();
+    }
   });
 
   it("ignores a registration and parts from an older generation that arrive after a recovery's", async () => {
@@ -263,7 +496,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     await nextTicks(40);
 
     // The recovery still holds the thread, and gets the follow-up exactly once.
-    expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+    expect(await pubsub.getLeaseOwner(threadKey)).toBe('mastra:thread-lease:["run-1","generation",2]');
     const other = controlledOutput('run-2');
     await expect(
       new AgentThreadStreamRuntime().registerRun(agent, other.output, options, pubsub, { strict: true }),
@@ -326,7 +559,11 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       async (successor, registers) => {
         const { pubsub, successorRuntime, b, subscription } = await takeOver(successor, registers);
 
-        expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+        expect(await pubsub.getLeaseOwner(threadKey)).toBe(
+          generation(2) === undefined
+            ? 'run-1'
+            : `mastra:thread-lease:${JSON.stringify(['run-1', 'generation', generation(2)])}`,
+        );
         expect(successorRuntime.drainPendingSignals('run-1', pubsub).map(signal => signal.contents)).toEqual([
           'follow-up',
         ]);
@@ -392,7 +629,13 @@ describe('thread stream: runs taken over by a later claim generation', () => {
           const renewLease = vi.spyOn(pubsub, 'renewLease');
 
           vi.advanceTimersByTime(15_000);
-          expect(renewLease).toHaveBeenCalledWith(threadKey, 'run-1', expect.any(Number));
+          expect(renewLease).toHaveBeenCalledWith(
+            threadKey,
+            generation(2) === undefined
+              ? 'run-1'
+              : `mastra:thread-lease:${JSON.stringify(['run-1', 'generation', generation(2)])}`,
+            expect.any(Number),
+          );
 
           b.push(finish);
           b.end();
@@ -468,7 +711,11 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       await nextTicks(40);
 
       // The execution that took the run over died before registering it; its thread lease lapses.
-      expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+      expect(await pubsub.getLeaseOwner(threadKey)).toBe(
+        generation(1) === undefined
+          ? 'run-1'
+          : `mastra:thread-lease:${JSON.stringify(['run-1', 'generation', generation(1)])}`,
+      );
       pubsub.owners.delete(threadKey);
 
       const next = controlledOutput('run-2');
@@ -544,5 +791,78 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     await vi.waitFor(() => expect(read.some(part => part.type === 'finish')).toBe(true));
     expect(summarize(read)).toEqual(['start', 'text:A-before-suspend', 'start', 'text:B-resumed', 'finish']);
     subscription.unsubscribe();
+  });
+});
+
+/** Once cut, the run's renewals hang, as they do while a process stalls, so its lease lapses here. */
+class StallingLeasePubSub extends LeasePubSub {
+  cut = false;
+  override async renewLease(key: string, owner: string): Promise<boolean> {
+    if (this.cut) await new Promise(() => {});
+    return super.renewLease(key, owner);
+  }
+}
+
+const lateAgent = { id: 'late-generation-agent', getMemory: async () => undefined } as unknown as Agent<
+  any,
+  any,
+  any,
+  any
+>;
+const lateOptions = { memory: { thread: 'late-generation-thread', resource: 'late-generation-user' } } as any;
+const lateKey = 'late-generation-user\u0000late-generation-thread';
+
+describe('thread stream: a durable run whose claim generation arrives after it took the thread lease', () => {
+  it('keeps the owner it took the lease with through renewal, fence and retake', async () => {
+    const pubsub = new StallingLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const runId = 'late-generation-run';
+    const makeStream = () =>
+      createDurableAgentStream({
+        pubsub,
+        runId,
+        messageId: crypto.randomUUID(),
+        model: { modelId: 'mock', provider: 'mock', version: 'v3' },
+      });
+
+    const first = makeStream();
+    await first.ready;
+    await runtime.registerRun(lateAgent, first.output, lateOptions, pubsub, { continuation: 'across-suspension' });
+    expect(await pubsub.getLeaseOwner(lateKey)).toBe(runId);
+
+    await emitChunkEvent(pubsub, runId, {
+      type: 'tool-call-approval',
+      payload: { toolCallId: 'call-1', toolName: 'one', args: {} },
+      runId,
+      from: 'AGENT',
+    } as any);
+    await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+
+    // The resume learns the claim's generation only now, after the lease was taken under the bare run id.
+    const resumed = makeStream();
+    await resumed.ready;
+    expect(
+      runtime.continueRun(lateAgent, resumed.output, { ...lateOptions, toolCallId: 'call-1' } as any, pubsub, {
+        generation: 1,
+      }),
+    ).toBe(true);
+
+    // The run's renewals stall past the lease deadline, so it takes the thread back. Nobody else holds it.
+    pubsub.cut = true;
+    await new Promise(resolve => setTimeout(resolve, 600));
+    pubsub.cut = false;
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    await expect(verifyRunLease(runId)).resolves.toBeUndefined();
+    expect(await pubsub.getLeaseOwner(lateKey)).toBe(runId);
+    expect(
+      await runtime.isRunHoldingThreadLease(pubsub, runId, lateOptions.memory.thread, lateOptions.memory.resource),
+    ).toBe(true);
+
+    await emitFinishEvent(pubsub, runId, {
+      output: { text: 'answer', steps: [] },
+      stepResult: { reason: 'stop' },
+    } as any);
+    await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(lateKey)).toBeUndefined());
   });
 });

@@ -103,7 +103,7 @@ export const WithIconSizes: Story = {
       <div className="flex items-center gap-4">
         {(['sm', 'md', 'lg'] as const).map(size => (
           <Button key={size} size={size} icon={<Plus />}>
-            Add Item
+            Add item
           </Button>
         ))}
       </div>
@@ -125,13 +125,23 @@ export const WithTooltip: Story = {
   },
 };
 
-export const IconAutoDetect: Story = {
+// A button with only an icon takes the icon size of the same rung: same height as the
+// labelled button beside it, but square, so it renders as a circle instead of a pill.
+export const IconBesideText: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-col gap-4">
       {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size}>
-          <Settings />
-        </Button>
+        <div key={size} className="flex items-center gap-2">
+          <Button size={size} icon={<Plus />}>
+            Add item
+          </Button>
+          <Button size={`icon-${size}`} tooltip="Settings">
+            <Settings />
+          </Button>
+          <Button size={`icon-${size}`} variant="ghost" tooltip="Delete">
+            <Trash />
+          </Button>
+        </div>
       ))}
     </div>
   ),

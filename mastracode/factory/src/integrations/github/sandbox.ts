@@ -18,6 +18,7 @@
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
 
@@ -88,7 +89,7 @@ const SH_RETRY_DELAY_MS = 2000;
 export async function sh(
   sandbox: ExecutableSandbox,
   script: string,
-  options: ShOptions = {},
+  options: ShOptions & Pick<CommandOptions, 'env'> = {},
 ): Promise<SandboxCommandResult> {
   return execute(sandbox, 'sh', ['-c', script], options);
 }
@@ -224,6 +225,7 @@ export class MaterializeError extends Error {
     message: string,
     readonly code:
       | 'git-missing'
+      | 'sandbox-unresponsive'
       | 'egress-blocked'
       | 'clone-failed'
       | 'pull-failed'
@@ -374,11 +376,20 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     );
   }
 
-  // 1. Preflight: git must be installed in the sandbox template.
+  // 1. Preflight: git must be installed in the sandbox template. Exit 124 is
+  // the provider's timeout code: the VM stopped answering, which says nothing
+  // about git, so it must not be reported as a missing binary.
   const gitVersion = await execute(sandbox, 'git', ['--version']);
-  if (gitVersion.exitCode !== 0) {
+  if (gitVersion.exitCode === 124) {
     throw new MaterializeError(
-      'git is not installed in the sandbox. The sandbox template must include git.',
+      'The sandbox stopped responding: `git --version` timed out (exit 124). Recreate the sandbox.',
+      'sandbox-unresponsive',
+    );
+  }
+  if (gitVersion.exitCode !== 0) {
+    const detail = (gitVersion.stderr || gitVersion.stdout).trim().slice(-500) || '(no output)';
+    throw new MaterializeError(
+      `git is not installed in the sandbox: \`git --version\` exited ${gitVersion.exitCode}: ${detail}. The sandbox template must include git.`,
       'git-missing',
     );
   }
@@ -441,6 +452,8 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 }
 
 export interface SessionBranchOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
   branch: string;
   baseBranch: string;
   token: string;
@@ -519,6 +532,8 @@ export async function checkoutSessionBranch(
 }
 
 export interface SyncEnvironmentRepositoryOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
   /** The session branch to resume when the remote already carries it. */
   branch: string;
   /** The repository's default branch; new session branches start at its remote tip. */
@@ -555,6 +570,8 @@ export async function syncEnvironmentRepository(
   }
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
   const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode !== 0) throw classifyGitFailure(current, 'pull-failed');
@@ -737,6 +754,8 @@ async function checkoutSessionBranchImpl(
     const configured = await execute(sandbox, 'git', ['-C', workdir, 'config', credentialKey, GH_CREDENTIAL_HELPER]);
     if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
   }
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
   const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;
@@ -1136,14 +1155,27 @@ async function runLifecycleCommand(
   sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
-  options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
+  options: {
+    phase: 'setup' | 'teardown';
+    timeoutMs?: number;
+    env?: Record<string, string>;
+    /** Values to mask in a failure message, beyond `env`; a function is read once the command has run. */
+    mask?: Record<string, string> | (() => Record<string, string>);
+  },
 ): Promise<void> {
   const result = await sh(sandbox, `cd ${shellQuote(workdir)} && { ${command}\n}`, {
     phase: `${options.phase} command`,
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    // Per-call only: build values must never enter the sandbox's runtime env.
+    ...(options.env && Object.keys(options.env).length > 0 ? { env: options.env } : {}),
   });
   if (result.exitCode !== 0) {
-    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
+    // The message is stored as build status and shown in the UI, so mask any
+    // Factory value (Build or Runtime) the command printed.
+    // Mask before trimming: a value with an edge newline or space would no longer match once trimmed.
+    const output = result.stderr.trim() ? result.stderr : result.stdout;
+    const mask = typeof options.mask === 'function' ? options.mask() : options.mask;
+    const detail = maskSandboxEnvValues(output, { ...mask, ...options.env }).trim().slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
@@ -1152,8 +1184,22 @@ async function runLifecycleCommand(
   }
 }
 
-export async function runSetupCommand(sandbox: ExecutableSandbox, workdir: string, command: string): Promise<void> {
-  return runLifecycleCommand(sandbox, workdir, command, { phase: 'setup' });
+/**
+ * @param buildEnv the Factory's Build variables, passed to this command only
+ * @param runtimeEnv the Factory's Runtime variables the command can also see; masked in a failure message
+ */
+export async function runSetupCommand(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  command: string,
+  buildEnv?: Record<string, string>,
+  runtimeEnv?: Record<string, string>,
+): Promise<void> {
+  return runLifecycleCommand(sandbox, workdir, command, {
+    phase: 'setup',
+    ...(buildEnv ? { env: buildEnv } : {}),
+    ...(runtimeEnv ? { mask: runtimeEnv } : {}),
+  });
 }
 
 /**
@@ -1170,6 +1216,8 @@ export async function runTeardownCommand(
 ): Promise<void> {
   return runLifecycleCommand(sandbox, workdir, command, {
     phase: 'teardown',
+    // The command sees the Factory runtime values applied to this sandbox, so a failure is masked with them.
+    mask: () => appliedSandboxEnv(sandbox),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
 }

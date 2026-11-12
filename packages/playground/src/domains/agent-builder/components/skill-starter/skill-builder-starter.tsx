@@ -127,7 +127,7 @@ export const SkillBuilderStarter = () => {
               testId="skill-builder-starter-input"
               size="md"
               variant="unstyled"
-              placeholder="Describe the skill you want to build…"
+              placeholder="Describe the skill you want to build"
               value={message}
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -143,7 +143,6 @@ export const SkillBuilderStarter = () => {
                 tooltip="Start building"
                 disabled={trimmed.length === 0 || isCreating}
                 data-testid="skill-builder-starter-submit"
-                className="rounded-full"
               >
                 {isCreating ? (
                   <span data-testid="skill-builder-starter-submit-spinner">

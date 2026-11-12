@@ -6,6 +6,7 @@ import { RegisteredLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
+import type { StateBase } from './run-journal';
 import type {
   NestedWorkflowParent,
   OutputWriter,
@@ -48,6 +49,12 @@ export interface ExecutionEngineOptions {
   allowUnclaimedResumes?: boolean;
 
   /**
+   * Writes the resume claim even when `shouldPersistSnapshot` excludes `running`.
+   * See `WorkflowOptions.persistResumeClaim`.
+   */
+  persistResumeClaim?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
@@ -63,13 +70,13 @@ export interface ExecutionEngineOptions {
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+  onFinish?(result: WorkflowFinishCallbackResult<1 | 2>): Promise<void> | void;
 
   /**
    * Called only when workflow execution fails (failed or tripwire status).
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
+  onError?(errorInfo: WorkflowErrorCallbackInfo<1 | 2>): Promise<void> | void;
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs
@@ -253,5 +260,11 @@ export abstract class ExecutionEngine extends MastraBase {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    /** How the run is stored. Engines that don't support version 2 ignore it. @experimental */
+    storageVersion?: 1 | 2;
+    /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
+    storedState?: { seq: number; patchBytes: number };
+    /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
+    inheritedState?: StateBase;
   }): Promise<TOutput>;
 }

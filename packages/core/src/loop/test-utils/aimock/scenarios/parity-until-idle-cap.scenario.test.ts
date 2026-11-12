@@ -58,7 +58,7 @@ const MEMORY = { thread: 't30-thread', resource: 't30-resource' };
 const COR_1390_BACKGROUND = {
   reason:
     'COR-1390: wrapped engines stream background-task-progress and flush the completed result after step-finish where plain keeps the placeholder; taskId is a per-engine stubbed UUID.',
-  ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'toolResults', 'requests'],
+  ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'finishChunk', 'toolResults', 'requests'],
 } satisfies EngineDifference;
 
 type ToolLogEntry = { tool: string; event: string; name: string };

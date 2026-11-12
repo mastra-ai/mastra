@@ -1,6 +1,7 @@
 import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { LeaseProvider } from '@mastra/core/events';
 
+import { findSessionForThread } from '../agents/background-completion.js';
 import { notificationDispatchLeaseKey } from './signals-pubsub.js';
 
 /** A session here serves the thread's resource, but the thread belongs to another project. */
@@ -42,12 +43,15 @@ export function threadScopeKey(scope: Record<string, string>): string | undefine
  * project's other threads stay with the project.
  */
 export async function findWakeSession<TState>(
-  controller: Pick<AgentController<TState>, 'getSessionByResource'>,
+  controller: Pick<AgentController<TState>, 'getSession'>,
   liveSessions: Iterable<Session<TState>>,
   { resourceId, threadId }: { resourceId: string; threadId: string },
   leases?: Pick<LeaseProvider, 'getLeaseOwner'>,
 ): Promise<WakeSession<TState> | typeof FOREIGN_THREAD | undefined> {
-  const first = await controller.getSessionByResource(resourceId);
+  const first = await findSessionForThread(
+    { getSession: sessionId => controller.getSession(sessionId), listLiveSessions: () => liveSessions },
+    { resourceId, threadId },
+  );
   if (!first) return undefined;
   const thread = await first.thread.getById({ threadId });
   if (!thread || thread.resourceId !== resourceId) return { session: first };

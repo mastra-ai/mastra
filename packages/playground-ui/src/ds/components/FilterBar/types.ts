@@ -66,6 +66,8 @@ export type FilterBarField = {
   type?: FilterBarFieldType;
   /** Operator ids allowed for this field. Defaults to every root operator. */
   operators?: string[];
+  /** Field-specific labels for operators, keyed by operator id (e.g. `notExists` → `is not recorded`). */
+  operatorLabels?: Record<string, string>;
   /**
    * Optional value suggestions. Absent → free text.
    * - array: static list, filtered locally by the query.

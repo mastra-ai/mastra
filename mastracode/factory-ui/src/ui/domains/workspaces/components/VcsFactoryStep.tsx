@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -152,7 +153,7 @@ export function VcsFactoryStep({
           </div>
           <SearchInput
             label="Search repositories"
-            placeholder="Find a repository…"
+            placeholder="Find a repository"
             value={query}
             onValueChange={value => {
               setQuery(value);
@@ -404,8 +405,10 @@ function RepositoryRows({
               {repo.fullName}
             </Txt>
             <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
-              {repo.defaultBranch}
-              {repo.private ? ' · Private' : ''}
+              <Metadata>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+                {repo.private && <Metadata.Item>Private</Metadata.Item>}
+              </Metadata>
             </Txt>
           </span>
         </label>

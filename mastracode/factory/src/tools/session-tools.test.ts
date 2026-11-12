@@ -92,12 +92,13 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
 function fakeController(calls: string[], onSessionCreated: (session: FakeSession) => void = () => {}) {
   const created: Array<{ options: Record<string, unknown>; session: ReturnType<typeof fakeSession> }> = [];
   const storedThreads = new Map<string, { resourceId: string; metadata: Record<string, unknown>; updatedAt: Date }>();
+  const liveModels = new Map<string, string>();
   function fakeSession(id: string) {
     let state: Record<string, unknown> = {};
     const settings = new Map<string, unknown>();
     const listeners = new Set<(event: AgentControllerEvent) => void>();
     return {
-      identity: { getResourceId: () => id },
+      identity: { getId: () => id, getResourceId: () => id },
       emit: (event: AgentControllerEvent) => listeners.forEach(listener => listener(event)),
       listenerCount: () => listeners.size,
       subscribe: (listener: (event: AgentControllerEvent) => void) => {
@@ -112,7 +113,12 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
         }),
       },
       mode: { resolve: () => ({ defaultModelId: 'openai/gpt-5.5' }) },
-      model: { switch: vi.fn(async () => undefined) },
+      model: {
+        get: () => liveModels.get(id),
+        switch: vi.fn(async (modelId: string) => {
+          liveModels.set(id, modelId);
+        }),
+      },
       stream: { isActive: vi.fn(() => true) },
       subagents: { model: { set: vi.fn(async () => undefined) } },
       thread: {
@@ -133,6 +139,10 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     };
   }
   const controller = {
+    queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => {
+      const thread = storedThreads.get(threadId);
+      return thread ? { id: threadId, ...thread } : null;
+    }),
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });
@@ -144,9 +154,16 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
       onSessionCreated(session);
       return session;
     }),
-    getSessionByResource: vi.fn(
-      async (resourceId: string) => created.find(entry => entry.options.resourceId === resourceId)?.session ?? null,
-    ),
+    getSession: vi.fn(async (resourceId: string) => {
+      if (resourceId === 'parent-session') {
+        return {
+          model: { get: () => liveModels.get('parent-session') },
+          thread: { getId: () => 'parent-thread' },
+          stream: { isActive: () => false },
+        };
+      }
+      return created.find(entry => (entry.options.id ?? entry.options.resourceId) === resourceId)?.session ?? null;
+    }),
     queryThreads: vi.fn(async ({ resourceId }: { resourceId: string }) =>
       [...storedThreads.entries()]
         .filter(([, thread]) => thread.resourceId === resourceId)
@@ -161,8 +178,12 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
       async ({ resourceId, threadId, modelId }: { resourceId: string; threadId: string; modelId: string }) => {
         const thread = storedThreads.get(threadId);
         if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
-        const live = (await controller.getSessionByResource(resourceId)) as FakeSession | null;
-        if (live?.thread.getId() === threadId) {
+        // Like the controller: the live session on this resource that has this thread open.
+        const entry = created.find(
+          candidate => candidate.options.resourceId === resourceId && candidate.session.thread.getId() === threadId,
+        );
+        const live = entry ? ((await controller.getSession(entry.options.id as string)) as FakeSession | null) : null;
+        if (live) {
           await live.model.switch(modelId);
           return { live: true };
         }
@@ -171,7 +192,7 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
       },
     ),
   };
-  return { controller, created };
+  return { controller, created, liveModels };
 }
 
 type FakeSession = Awaited<ReturnType<ReturnType<typeof fakeController>['controller']['createSession']>>;
@@ -199,7 +220,7 @@ async function setup(
   const calls: string[] = [];
   prime.mockImplementation(async () => void calls.push('prime'));
   // Every session gets the run-report listener, as the Factory's session-created hook attaches it.
-  const { controller, created } = fakeController(calls, session =>
+  const { controller, created, liveModels } = fakeController(calls, session =>
     observeSessionRunReports(session, (outcome, since) =>
       reportSessionRunEnd({
         sessionId: session.identity.getResourceId(),
@@ -229,14 +250,15 @@ async function setup(
   const threadOwner = (threadId: string) => (threadId === seeded.scope.threadId ? seeded.scope.sessionId : threadId);
   const deliveryController = {
     ...controller,
-    queryThreadById: async ({ threadId }: { threadId: string }) => ({
-      id: threadId,
-      resourceId: threadOwner(threadId),
-    }),
+    queryThreadById: async ({ threadId }: { threadId: string }) =>
+      (await controller.queryThreadById({ threadId })) ?? { id: threadId, resourceId: threadOwner(threadId) },
     // Sessions this test created are themselves; anything else (the parent) is a live stub.
-    getSessionByResource: async (resourceId: string) =>
-      (await controller.getSessionByResource(resourceId)) ?? {
+    // The stub still reports the parent model the test set, so inheritance can see it.
+    getSession: async (resourceId: string) =>
+      (await controller.getSession(resourceId)) ?? {
+        model: { get: () => liveModels.get(resourceId) },
         thread: { getId: () => (resourceId === seeded.scope.sessionId ? seeded.scope.threadId : resourceId) },
+        stream: { isActive: () => false },
       },
     getCurrentAgent: () => ({
       sendNotificationSignal: async (
@@ -258,6 +280,7 @@ async function setup(
         deliverFactorySessionNotification({
           controller: deliveryController as never,
           sessions: seeded.sessions,
+          runs: seeded.seed.workItems,
           target,
           notification,
           ...options,
@@ -308,6 +331,7 @@ async function setup(
     calls,
     controller,
     created,
+    liveModels,
     start,
     switchModel,
     tool,
@@ -323,6 +347,24 @@ beforeEach(() => {
 });
 
 describe('factory_switch_session_model', () => {
+  it('lets an agent inspect the available models before choosing an exact ID from the user’s intent', async () => {
+    const env = await setup();
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+
+    await expect(env.switchModel({ sessionId: started.sessionId })).resolves.toEqual({
+      sessionId: started.sessionId,
+      models: ['openai/gpt-5.6', 'openai/gpt-6.1-sol'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
+
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' }),
+    ).resolves.toMatchObject({
+      modelId: 'openai/gpt-6.1-sol',
+      live: true,
+    });
+  });
+
   it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {
     const env = await setup();
     const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
@@ -338,7 +380,7 @@ describe('factory_switch_session_model', () => {
     expect(live.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
     expect(env.created).toHaveLength(1);
 
-    env.controller.getSessionByResource.mockResolvedValue(null);
+    env.controller.getSession.mockResolvedValue(null);
     await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' })).resolves.toEqual({
       sessionId: started.sessionId,
       threadId: started.sessionId,
@@ -368,10 +410,11 @@ describe('factory_switch_session_model', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
-      'not owned by you',
-    );
-    await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.switchModel({ sessionId: 'other-user-session' })).rejects.toThrow('not owned by you');
+    await expect(env.switchModel({ sessionId: 'missing' })).rejects.toThrow('not found');
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -399,6 +442,12 @@ describe('factory_switch_session_model with stored credentials', () => {
 
   it('lets a user-scoped session switch to a model its owner holds a credential for, and nothing else', async () => {
     const env = await tenantSetup('user');
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['anthropic/claude-opus-5-5'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).resolves.toEqual({
       sessionId: env.sessionId,
@@ -429,7 +478,13 @@ describe('factory_switch_session_model with stored credentials', () => {
       userId: 'owner',
       input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
     });
-    env.controller.getSessionByResource.mockResolvedValue(null);
+    env.controller.getSession.mockResolvedValue(null);
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['acme/acme-1', 'deepseek/deepseek-flash'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(
       env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' }),
@@ -509,7 +564,8 @@ describe('factory_start_session in side mode', () => {
     expect(created[0]!.options).toMatchObject({
       id: result.sessionId,
       ownerId: 'user-1',
-      resourceId: result.sessionId,
+      // A side session shares its Factory's memory resource.
+      resourceId: scope.factoryProjectId,
       threadId: result.sessionId,
     });
     const session = created[0]!.session;
@@ -531,6 +587,13 @@ describe('factory_start_session in side mode', () => {
     };
     expect(result.title).toBe('Investigation');
     await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ visibility: 'private' });
+  });
+
+  it("runs a private side session on its owner's memory resource, not the Factory's", async () => {
+    const { start, created, scope } = await setup('private');
+    await start({ prompt: 'Look into it.' });
+    expect(created[0]!.options).toMatchObject({ resourceId: scope.userId });
+    expect(created[0]!.options.resourceId).not.toBe(scope.factoryProjectId);
   });
 
   it("gives the kickoff a fresh request context carrying only the caller, so the child's first turn is not interactive", async () => {
@@ -567,7 +630,7 @@ describe('factory_start_session in side mode', () => {
     const tenantFor = (resourceId: string, threadId: string) => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-      requestContext.set('controller', { resourceId, threadId });
+      requestContext.set('controller', { sessionId: resourceId, resourceId, threadId });
       return resolveFactoryCredentialTenant(requestContext, {
         projects: seed.projects,
         sourceControl: sessions,
@@ -602,6 +665,43 @@ describe('factory_start_session in side mode', () => {
     expect((tool as { requireApproval?: boolean }).requireApproval).toBeFalsy();
     expect(FACTORY_TOOLS_WITHOUT_APPROVAL).toContain('factory_start_session');
   });
+
+  it('starts a side session on the model it was given', async () => {
+    const { start, created } = await setup();
+
+    await start({ prompt: 'Go.', model: 'openai/gpt-6.1-sol' });
+
+    expect(created[0]!.session.model.switch).toHaveBeenCalledWith('openai/gpt-6.1-sol');
+  });
+
+  it('inherits the model of the session that started it when none is given', async () => {
+    const { start, created, liveModels } = await setup();
+    liveModels.set('parent-session', 'openai/gpt-6.1-sol');
+
+    await start({ prompt: 'Go.' });
+
+    expect(created[0]!.session.model.switch).toHaveBeenCalledWith('openai/gpt-6.1-sol');
+  });
+
+  it('keeps the scoped default when the parent has no model set', async () => {
+    const { start, created } = await setup();
+
+    await start({ prompt: 'Go.' });
+
+    expect(created[0]!.session.model.switch).toHaveBeenCalledWith('openai/gpt-5.5');
+  });
+
+  it('rejects an unrunnable model before creating the session', async () => {
+    const { start, sourceControl, projectRepository } = await setup();
+
+    await expect(start({ prompt: 'Go.', model: 'anthropic/claude-opus-4-1' })).rejects.toThrow(
+      "this session's credential scope (server) has no credential for its provider",
+    );
+    await expect(start({ prompt: 'Go.', model: 'no-such/model' })).rejects.toThrow('Unknown model no-such/model');
+    await expect(
+      sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-1' }),
+    ).resolves.toHaveLength(1);
+  });
 });
 
 describe('the side session run-end backstop', () => {
@@ -627,10 +727,15 @@ describe('the side session run-end backstop', () => {
       attributes: { backstop: 'true', 'from-session': result.sessionId, 'from-user': 'user-1' },
     });
 
-    // A later run nobody started from here (a typed message, a wake) reports too.
+    // A later run (a typed message, a wake) that ends with nothing new doesn't say "finished" again.
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(1);
+
+    // But a failure after it still goes out.
+    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(2));
-    expect(reports[1]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
+    expect(reports[1]!.input).toMatchObject({ kind: 'failed' });
   });
 
   it('stays quiet when the agent already sent its own final report', async () => {
@@ -788,7 +893,7 @@ describe('the side session it starts', () => {
     const { childId, sessions, seed, scope } = await started();
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-    requestContext.set('controller', { resourceId: childId, threadId: childId });
+    requestContext.set('controller', { sessionId: childId, resourceId: childId, threadId: childId });
 
     const childScope = await resolveFactoryToolScope({
       requestContext,
@@ -814,7 +919,7 @@ describe('the side session it starts', () => {
     const { childId, sessions } = await started();
     let rules: PermissionRules = { categories: {}, tools: {} };
     const childSession = {
-      identity: { getResourceId: () => childId },
+      identity: { getId: () => childId, getResourceId: () => childId },
       permissions: {
         getRules: () => structuredClone(rules),
         setForTool: async ({ toolName, policy }: { toolName: string; policy: 'allow' | 'ask' | 'deny' }) => {
@@ -883,7 +988,7 @@ describe('factory_start_session in work-item mode', () => {
       originSessionId: null,
       factoryProjectId: scope.factoryProjectId,
     });
-    const session = created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+    const session = created.find(entry => entry.options.id === result.sessionId)!.session;
     expect(session.state.get()).toMatchObject({ factoryOwnerUserId: 'user-1' });
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ type: 'user', contents: 'Profile the build.' });
@@ -899,6 +1004,32 @@ describe('factory_start_session in work-item mode', () => {
     expect(after.stages).toEqual(item.stages);
     expect(after.autonomyArmedAt).toEqual(item.autonomyArmedAt);
     expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId });
+  });
+
+  it("still starts Work's old plan role, which no phase names as its context any more", async () => {
+    const { start, item, seed } = await withItem();
+
+    const result = (await start({ prompt: 'Plan it.', workItem: item.id, role: 'plan' })) as Started;
+
+    expect(result).toMatchObject({ mode: 'work-item', role: 'plan' });
+    const after = (await seed.workItems.get({ orgId: 'org-1', id: item.id }))!;
+    expect(after.sessions.plan).toMatchObject({ sessionId: result.sessionId });
+    await expect(start({ prompt: 'Go.', workItem: item.id, role: 'spectator' })).rejects.toThrow(
+      'board has no spectator role.',
+    );
+  });
+
+  it('starts a work-item run shared with the org even from a private session', async () => {
+    const { start, item, sessions, sourceControl } = await withItem('private');
+
+    const result = (await start({ prompt: 'Profile the build.', workItem: item.id, role: 'work' })) as Started;
+
+    await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ visibility: 'org' });
+    const teammateSees = await sourceControl.sessions.list({
+      projectRepositoryId: (await sessions.getBySessionId(result.sessionId))!.projectRepositoryId,
+      viewerUserId: 'user-2',
+    });
+    expect(teammateSees.map(row => row.sessionId)).toContain(result.sessionId);
   });
 
   it("calls the coordinator with no destination stage and the project's model scope", async () => {
@@ -935,7 +1066,7 @@ describe('factory_start_session in work-item mode', () => {
     const tenantFor = (resourceId: string, threadId: string) => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-      requestContext.set('controller', { resourceId, threadId });
+      requestContext.set('controller', { sessionId: resourceId, resourceId, threadId });
       return resolveFactoryCredentialTenant(requestContext, {
         projects: seed.projects,
         sourceControl: sessions,
@@ -971,7 +1102,7 @@ describe('factory_start_session in work-item mode', () => {
       vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
       const { start, item, seed, created, scope } = await withItem();
       const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-      const session = created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+      const session = created.find(entry => entry.options.id === result.sessionId)!.session;
 
       const page = await seed.audit.list({ orgId: 'org-1', factoryProjectId: scope.factoryProjectId });
       const started = page.events.filter(event => event.action === 'factory.run.started');
@@ -1139,7 +1270,7 @@ describe('factory_start_session in work-item mode', () => {
   it('tells everyone following the item when the run finishes without a report', async () => {
     const { start, item, created, reports, scope } = await withItem();
     const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-    const session = created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+    const session = created.find(entry => entry.options.id === result.sessionId)!.session;
 
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
 
@@ -1177,7 +1308,7 @@ describe('factory_start_session in work-item mode', () => {
       resourceId: 'reviewer',
       attributes: { 'from-session': result.sessionId },
     });
-    const session = env.created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+    const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
 
     session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
 
@@ -1194,7 +1325,7 @@ describe('factory_start_session in work-item mode', () => {
     let rules: PermissionRules = { categories: {}, tools: {} };
     await applyFactoryToolPermissions(
       {
-        identity: { getResourceId: () => result.sessionId },
+        identity: { getId: () => result.sessionId, getResourceId: () => result.sessionId },
         permissions: {
           getRules: () => structuredClone(rules),
           setForTool: async ({ toolName, policy }: { toolName: string; policy: 'allow' | 'ask' | 'deny' }) => {
@@ -1240,9 +1371,11 @@ describe('session tools on a turn nobody signed in started', () => {
     });
     const other = { ...env.scope, sessionId: 'other-session', resourceId: 'other-session', threadId: 'other-thread' };
 
-    await expect(
-      env.toolsFor(other).switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
-    ).rejects.toThrow('only this session and the side sessions it started can switch models');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.toolsFor(other).switchModel({ sessionId: started.sessionId })).rejects.toThrow(
+      'only this session and the side sessions it started can switch models',
+    );
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
     expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(
@@ -1280,7 +1413,7 @@ describe('session tools on a turn nobody signed in started', () => {
 
   it('mounts every user tool but refuses to answer an approval', async () => {
     const env = await setup('org', wake);
-    const deps = { ...env.deps, comments: {} } as unknown as FactoryToolDependencies;
+    const deps = env.deps as unknown as FactoryToolDependencies;
     const answer = (scope: FactoryToolScope) =>
       (
         createFactoryTools({ scope, deps }).factory_answer_approval as unknown as {

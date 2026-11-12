@@ -17,7 +17,7 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
-import { registerApiCommand } from './commands/api/index';
+import { collect, registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
@@ -399,7 +399,11 @@ authOrgs.command('switch').description('Switch current organization').action(wra
 
 const authTokens = authCommand.command('tokens').description('Manage API tokens').action(wrapAction(listTokensAction));
 
-authTokens.command('create <name>').description('Create a new API token').action(wrapAction(createTokenAction));
+authTokens
+  .command('create <name>')
+  .description('Create a new API token')
+  .option('--permission <permission>', 'grant a permission, e.g. databases:write (repeatable)', collect, [])
+  .action(wrapAction(createTokenAction));
 
 authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
 

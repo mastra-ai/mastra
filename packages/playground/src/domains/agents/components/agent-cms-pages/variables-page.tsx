@@ -26,7 +26,7 @@ function RecursiveFieldRenderer({
             <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
-            <JSONSchemaForm.FieldRemove aria-label="Remove Variable" />
+            <JSONSchemaForm.FieldRemove aria-label="Remove variable" />
           </div>
         </div>
 

@@ -49,7 +49,7 @@ export function BulkTagPicker({
               setSearch('');
             }
           }}
-          placeholder="Search or create tag..."
+          placeholder="Search or create tag"
           className="mb-1 h-7 text-caption"
           autoFocus
         />

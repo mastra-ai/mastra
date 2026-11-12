@@ -540,9 +540,8 @@ export class MastraVoiceAgent extends voice.Agent {
           id: identity.attemptId,
           delta: { role: 'assistant' as const, content: chunk, extra: { [VOICE_TURN_METADATA]: identity } },
         };
-      } else {
-        return FlushSentinel;
       }
+      return FlushSentinel;
     });
   }
 }

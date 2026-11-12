@@ -9,6 +9,16 @@ import {
   AiIcon,
   ApiIcon,
   BranchIcon,
+  ByteDanceIcon,
+  CohereBrandIcon,
+  FireworksIcon,
+  LongCatIcon,
+  MorphIcon,
+  NousResearchIcon,
+  NovaIcon,
+  PerplexityIcon,
+  StepFunIcon,
+  UpstageIcon,
   CheckIcon,
   ClaudeIcon,
   ChevronIcon,
@@ -35,6 +45,7 @@ import {
   McpCoinIcon,
   McpServerIcon,
   MetaIcon,
+  MicrosoftIcon,
   MemoryIcon,
   MinimaxIcon,
   MistralIcon,
@@ -45,12 +56,15 @@ import {
   PromptIcon,
   QwenIcon,
   RepoIcon,
+  SakanaIcon,
   SettingsIcon,
   SlashIcon,
+  TencentIcon,
   ToolCoinIcon,
   ToolsIcon,
   TraceIcon,
   TsIcon,
+  TypesafeIcon,
   VariablesIcon,
   WorkflowCoinIcon,
   WorkflowIcon,
@@ -118,7 +132,7 @@ const icons = [
 const IconGrid = ({ size = 'md' }: { size?: IconSize }) => (
   <div className="grid grid-cols-6 gap-4">
     {icons.map(({ name, component: IconComponent }) => (
-      <div key={name} className="state-layer flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+      <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card state-layer p-3">
         <Icon size={size} className="text-foreground">
           <IconComponent />
         </Icon>
@@ -274,6 +288,20 @@ const brandIcons = [
   { name: 'Meta', component: MetaIcon },
   { name: 'Moonshot', component: MoonshotIcon },
   { name: 'xAI', component: XaiIcon },
+  { name: 'Typesafe', component: TypesafeIcon },
+  { name: 'Tencent', component: TencentIcon },
+  { name: 'ByteDance', component: ByteDanceIcon },
+  { name: 'Sakana', component: SakanaIcon },
+  { name: 'Microsoft', component: MicrosoftIcon },
+  { name: 'Cohere', component: CohereBrandIcon },
+  { name: 'Fireworks', component: FireworksIcon },
+  { name: 'LongCat', component: LongCatIcon },
+  { name: 'Morph', component: MorphIcon },
+  { name: 'Nova', component: NovaIcon },
+  { name: 'Nous Research', component: NousResearchIcon },
+  { name: 'Perplexity', component: PerplexityIcon },
+  { name: 'StepFun', component: StepFunIcon },
+  { name: 'Upstage', component: UpstageIcon },
 ];
 
 export const BrandIcons: Story = {
@@ -316,10 +344,10 @@ export const Stroke: Story = {
       ))}
       <div className="flex items-center gap-3">
         <Button size="sm" icon={<Plus />}>
-          Add Header
+          Add header
         </Button>
         <Button size="md" icon={<Plus />}>
-          Add Header
+          Add header
         </Button>
         <Button size="lg" icon={<Play />}>
           Run

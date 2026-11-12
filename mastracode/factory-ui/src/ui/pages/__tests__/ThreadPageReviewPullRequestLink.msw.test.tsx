@@ -3,8 +3,10 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { sessionCardsWhileBoardLoads } from '../../../../e2e/ui/session-cards';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
@@ -98,21 +100,13 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Mastra Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'connection-1',
-            installationId: 'installation-1',
+            id: FACTORY_ID,
+            name: 'Mastra Factory',
             repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/local/mastra',
-                repository: { slug: 'mastra-ai/mastra', defaultBranch: 'main' },
-              },
+              listedRepository(REPO_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/local/mastra' }),
             ],
           },
         ],
@@ -127,7 +121,7 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: THREAD_ID }),
     ),
-    http.get(`${AC}/sessions/:resourceId`, () =>
+    http.get(`${AC}/sessions/:sessionId`, () =>
       HttpResponse.json({
         controllerId: 'code',
         resourceId: SESSION_ID,
@@ -137,17 +131,17 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.put(`${AC}/sessions/:resourceId/state`, () => HttpResponse.json({ ok: true })),
+    http.put(`${AC}/sessions/:sessionId/state`, () => HttpResponse.json({ ok: true })),
     http.get(
-      `${AC}/sessions/:resourceId/stream`,
+      `${AC}/sessions/:sessionId/stream`,
       () =>
         new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
-    http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
-    http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${AC}/sessions/:sessionId/permissions`, () => HttpResponse.json({})),
+    http.get(`${AC}/sessions/:sessionId/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${AC}/sessions/:sessionId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
@@ -158,10 +152,8 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
   );
 }
 
-function renderThreadRoute() {
-  const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`],
-  });
+function renderThreadRoute(path = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`) {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
@@ -297,6 +289,44 @@ describe('ThreadPage pull request link placement', () => {
       expect(
         within(factorySession).queryByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when the session is a personal one, held by no card', () => {
+    it('shows its pull request in the composer', async () => {
+      stubThreadRoute(createWireWorkItem('issue'), [pullRequestSubscription]);
+      renderThreadRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
+
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      const link = await within(composer).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+
+      expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
+    });
+  });
+
+  describe('while the board is still loading', () => {
+    it('shows a review session its pull request in the header', async () => {
+      const reviewCard = createWireWorkItem('pull-request');
+      stubThreadRoute(reviewCard, []);
+      server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [reviewCard]));
+      renderThreadRoute();
+
+      const factorySession = await findPageHeader();
+      const link = await within(factorySession).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+
+      expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
+    });
+
+    it('shows an ordinary session its pull request in the composer', async () => {
+      const issueCard = createWireWorkItem('issue');
+      stubThreadRoute(issueCard, [pullRequestSubscription]);
+      server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [issueCard]));
+      renderThreadRoute();
+
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      const link = await within(composer).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+
+      expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
     });
   });
 });

@@ -105,6 +105,17 @@ Once Studio is connected to your Mastra server, it has full access to your agent
 
 The Vercel deployer supports configuration options that are written to the Vercel Output API function config. See the [`VercelDeployer` reference](/reference/deployer/vercel#constructor-options) for available options like `maxDuration`, `memory`, and `regions`.
 
+Request timeouts have two separate limits. `maxDuration` (seconds) caps how long Vercel lets the function run, while Mastra's `server.timeout` (milliseconds, default `180000`) caps how long Mastra waits before answering `504 Gateway Timeout`. Raising `maxDuration` alone doesn't extend the 180 second Mastra limit, so long-running requests such as workflow runs need both:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  deployer: new VercelDeployer({ maxDuration: 600 }),
+  server: { timeout: 600_000 },
+})
+```
+
+See [Request timeouts](/reference/deployer/vercel#request-timeouts) for details.
+
 ## Observability
 
 Serverless functions can terminate immediately after returning a response. Any pending async work - like sending telemetry - may get killed before completing. Awaiting `flush()` ensures all traces are sent before the function exits.

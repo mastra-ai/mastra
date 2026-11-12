@@ -89,6 +89,10 @@ export class DuckDBConnection extends MastraBase {
   private instance: DuckDBInstance | null = null;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private closed = false;
+  private activeConnections = 0;
+  private drainPromise: Promise<void> | null = null;
+  private finishDrain: (() => void) | null = null;
   private path: string;
   private instanceOptions: Record<string, string>;
 
@@ -102,6 +106,7 @@ export class DuckDBConnection extends MastraBase {
   }
 
   private async initialize(): Promise<void> {
+    if (this.closed) throw new Error('DuckDB connection is closed');
     if (this.initialized && this.instance) return;
 
     if (this.initPromise) {
@@ -129,10 +134,53 @@ export class DuckDBConnection extends MastraBase {
   /** Create a new connection to the DuckDB instance, initializing if needed. */
   async getConnection() {
     await this.initialize();
+    if (this.closed) throw new Error('DuckDB connection is closed');
     if (!this.instance) {
       throw new Error('DuckDB instance not initialized');
     }
-    return this.instance.connect();
+    this.activeConnections++;
+    try {
+      const connection = await this.instance.connect();
+      let released = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          this.releaseConnection();
+        }
+      };
+      return new Proxy(connection, {
+        get(target, key) {
+          const value = Reflect.get(target, key, target);
+          if (typeof value !== 'function') return value;
+          if (key === 'closeSync' || key === 'disconnectSync' || key === 'close' || key === 'disconnect') {
+            return (...args: unknown[]) => {
+              try {
+                const result = value.apply(target, args);
+                if (result instanceof Promise) return result.finally(release);
+                release();
+                return result;
+              } catch (error) {
+                release();
+                throw error;
+              }
+            };
+          }
+          return value.bind(target);
+        },
+      });
+    } catch (error) {
+      this.releaseConnection();
+      throw error;
+    }
+  }
+
+  private releaseConnection(): void {
+    this.activeConnections--;
+    if (this.activeConnections === 0) {
+      this.finishDrain?.();
+      this.finishDrain = null;
+      this.drainPromise = null;
+    }
   }
 
   private closeConnection(connection: unknown): void {
@@ -341,6 +389,12 @@ export class DuckDBConnection extends MastraBase {
 
   /** Release the DuckDB instance, allowing garbage collection. */
   async close(): Promise<void> {
+    this.closed = true;
+    await this.initPromise?.catch(() => undefined);
+    if (this.activeConnections > 0) {
+      this.drainPromise ??= new Promise<void>(resolve => (this.finishDrain = resolve));
+      await this.drainPromise;
+    }
     if (this.instance) {
       try {
         const instance = this.instance as unknown as { closeSync?: () => void; close?: () => void };

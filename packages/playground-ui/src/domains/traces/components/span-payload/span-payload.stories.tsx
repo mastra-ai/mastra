@@ -4,6 +4,7 @@ import { FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import { SpanDetailsView } from '../span-details-view';
+import { getSpanChanges } from '../span-outcome.utils';
 import { ALL_SPAN_FIXTURES } from './__tests__/fixtures/span-payloads';
 import type { SpanRecord } from './__tests__/fixtures/span-payloads';
 import { SpanErrorRenderer } from './span-error-renderer';
@@ -11,7 +12,7 @@ import { SpanInputRenderer } from './span-input-renderers';
 import { SpanOutputRenderer } from './span-output-renderers';
 import { asCoreSpan } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
-import { SpanProcessorAttributes } from './span-processor-attributes';
+import { SpanProcessorMutations } from './span-processor-mutations';
 import { cn } from '@/lib/utils';
 
 type FixtureName = keyof typeof ALL_SPAN_FIXTURES;
@@ -213,16 +214,16 @@ const PANEL_WIDTHS = [
   { label: 'Desktop', className: 'w-240' },
 ];
 
-export const ProcessorAttributes: StoryObj = {
+export const ProcessorChanges: StoryObj = {
   render: () => (
     <Grid>
       {PROCESSOR_FIXTURES.map(name => {
         const span = ALL_SPAN_FIXTURES[name];
-        const hasPreview = describeProcessorPipeline(asCoreSpan(span)) !== undefined;
+        const changes = getSpanChanges(span);
         return (
-          <Cell key={name} title={name} tag={hasPreview ? 'processor' : 'json'}>
-            <SpanPayloadSection title="Attributes" raw={span.attributes} hasPreview={hasPreview}>
-              <SpanProcessorAttributes span={span} />
+          <Cell key={name} title={name} tag={changes.length > 0 ? 'changes' : 'none'}>
+            <SpanPayloadSection title="Changes" raw={changes}>
+              <SpanProcessorMutations span={span} />
             </SpanPayloadSection>
           </Cell>
         );

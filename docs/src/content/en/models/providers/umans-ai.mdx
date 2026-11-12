@@ -7,7 +7,7 @@ description: "Browse Umans AI model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/umans-ai.svg" alt="Umans AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Umans AI
 
-Access 7 Umans AI models through Mastra's model router. Authentication is handled automatically using the `UMANS_AI_API_KEY` environment variable.
+Access 8 Umans AI models through Mastra's model router. Authentication is handled automatically using the `UMANS_AI_API_KEY` environment variable.
 
 Learn more in the [Umans AI documentation](https://app.umans.ai/offers/code/docs/orgs).
 
@@ -82,6 +82,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
+    "model": "umans-ai/umans-deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 393215,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
     "model": "umans-ai/umans-flash",
     "imageInput": true,
     "audioInput": false,
@@ -139,6 +151,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -156,6 +170,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

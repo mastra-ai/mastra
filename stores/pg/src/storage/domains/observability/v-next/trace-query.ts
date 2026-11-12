@@ -45,9 +45,56 @@ export const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' EL
 /** Core versions without the field reject it in strict query results, so it is only returned when core knows it. */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
 
-export const timeToFirstChunkFeatures = timeToFirstChunkSupported
-  ? (['trace-query-time-to-first-chunk'] as const)
-  : ([] as const);
+/** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
+const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
+
+/** Same rule for time to first token: returned and sorted only when core knows the field. */
+export const timeToFirstTokenSupported = 'timeToFirstTokenMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
+const timeToFirstTokenSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstTokenMs') === true;
+
+/**
+ * Outcome fields follow the same rule: core before them rejects their predicates and strict rows,
+ * so they are only returned and declared when core knows them.
+ */
+export const spanQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {});
+export const traceQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+
+export const outcomeFeatures = [
+  ...(spanQueryOutcomeFieldsSupported ? (['span-query-outcome-fields'] as const) : []),
+  ...(traceQueryOutcomeFieldsSupported ? (['trace-query-outcome-fields'] as const) : []),
+];
+
+/** Core before the fields rejects their trace and span predicates, so the feature is only declared when core plans them. */
+export const contextFieldFeatures: readonly 'trace-query-context-fields'[] =
+  'requestId' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {}) ? ['trace-query-context-fields'] : [];
+
+export const timingFeatures = [
+  ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
+  ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
+  ...(timeToFirstTokenSupported ? (['trace-query-time-to-first-token'] as const) : []),
+  ...(timeToFirstTokenSortSupported ? (['trace-query-time-to-first-token-sort'] as const) : []),
+];
+
+/**
+ * Keyset bounds for a cursor's sort value: terms for rows strictly past it in `direction`, and the
+ * condition for rows level with it. Empty values sort last in both directions, so they are past
+ * every value and level only with each other.
+ */
+export function keysetSortBounds(
+  field: string,
+  direction: 'asc' | 'desc',
+  sortValue: string | number | null,
+  values: unknown[],
+  stringSort = false,
+): { past: string[]; level: string } {
+  if (sortValue === null) return { past: [], level: `${field} IS NULL` };
+  values.push(sortValue);
+  const parameter = `$${values.length}::${stringSort ? 'text COLLATE "C"' : typeof sortValue === 'number' ? 'float8' : 'timestamptz'}`;
+  return {
+    past: [`${field} ${direction === 'asc' ? '>' : '<'} ${parameter}`, `${field} IS NULL`],
+    level: `${field} = ${parameter}`,
+  };
+}
 
 export function durationMsSql(startedAt: string, endedAt: string): string {
   return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
@@ -61,16 +108,23 @@ const TRACE_FIELDS = {
   sessionId: 'r."sessionId"',
   userId: 'r."userId"',
   organizationId: 'r."organizationId"',
+  requestId: 'r."requestId"',
+  serviceName: 'r."serviceName"',
+  experimentId: 'r."experimentId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   timeToFirstChunkMs: 'r."timeToFirstChunkMs"',
+  timeToFirstTokenMs: 'r."timeToFirstTokenMs"',
+  entityId: 'r."entityId"',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
   name: 'r."name"',
   spanType: 'r."spanType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  outcome: 'r."outcome"',
+  stopReason: 'r."stopReason"',
   tags: 'r."tags"',
 } satisfies FieldRegistry<TraceQueryField>;
 
@@ -83,7 +137,10 @@ const SPAN_FIELDS = {
   endedAt: 's."endedAt"',
   durationMs: 's."durationMs"',
   timeToFirstChunkMs: 's."timeToFirstChunkMs"',
+  timeToFirstTokenMs: 's."timeToFirstTokenMs"',
   status: 's."status"',
+  outcome: 's."outcome"',
+  stopReason: 's."stopReason"',
   error: 's."error"',
   entityType: 's."entityType"',
   entityId: 's."entityId"',
@@ -95,6 +152,9 @@ const SPAN_FIELDS = {
   sessionId: 's."sessionId"',
   userId: 's."userId"',
   organizationId: 's."organizationId"',
+  requestId: 's."requestId"',
+  serviceName: 's."serviceName"',
+  experimentId: 's."experimentId"',
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 // Direct querySpans policy is separate from trace-related span predicates.
@@ -105,9 +165,6 @@ const SPAN_QUERY_FIELDS = {
   parentSpanId: 's."parentSpanId"',
   threadId: 's."threadId"',
   resourceId: 's."resourceId"',
-  requestId: 's."requestId"',
-  serviceName: 's."serviceName"',
-  experimentId: 's."experimentId"',
   environment: 's."environment"',
   executionSource: 's."executionSource"',
   parentEntityType: 's."parentEntityType"',
@@ -158,10 +215,14 @@ const TRACE_SELECT = `
   r."startedAt" AS "startedAt",
   r."endedAt" AS "endedAt",
   r."timeToFirstChunkMs" AS "timeToFirstChunkMs",
+  r."timeToFirstTokenMs" AS "timeToFirstTokenMs",
   r."entityName" AS "entityName",
   r."entityType" AS "entityType",
   r."environment" AS "environment",
-  ${TRACE_STATUS_SQL} AS "status"`;
+  ${TRACE_STATUS_SQL} AS "status",
+  r."outcome" AS "outcome",
+  r."stopReason" AS "stopReason",
+  r."stopReasonContext" AS "stopReasonContext"`;
 
 function fieldSql<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
@@ -413,8 +474,12 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'sessionId',
   'userId',
   'organizationId',
+  'requestId',
+  'serviceName',
+  'experimentId',
   'startedAt',
   'endedAt',
+  'entityId',
   'entityName',
   'entityType',
   'name',
@@ -593,13 +658,15 @@ function compilePostgresTraceScope(
   ];
 
   if (relationCollections.has('spans')) {
+    // Model and provider fall back to span attributes: exporters before the dedicated columns
+    // existed wrote them only there. Span queries filter on the columns alone (memory budget).
     ctes.push(`current_spans AS MATERIALIZED (
     SELECT
       s."traceId",
       s."name",
       s."spanType",
-      CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END AS "model",
-      CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END AS "provider",
+      COALESCE(s."model", CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END) AS "model",
+      COALESCE(s."provider", CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END) AS "provider",
       s."startedAt",
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE
@@ -607,7 +674,10 @@ function compilePostgresTraceScope(
         ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
       s."timeToFirstChunkMs",
+      s."timeToFirstTokenMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
+      s."outcome",
+      s."stopReason",
       s."error",
       s."entityType",
       s."entityId",
@@ -618,7 +688,10 @@ function compilePostgresTraceScope(
       s."runId",
       s."sessionId",
       s."userId",
-      s."organizationId"
+      s."organizationId",
+      s."requestId",
+      s."serviceName",
+      s."experimentId"
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
@@ -757,8 +830,8 @@ LIMIT $${values.length}`,
     };
   }
 
-  const orderField = plan.orderBy.field === 'startedAt' ? '"startedAt"' : '"endedAt"';
-  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  const orderField = `"${plan.orderBy.field}"`;
+  const direction = `${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`;
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
@@ -773,11 +846,9 @@ LIMIT $${values.length - 1} OFFSET $${values.length}`,
 
   let pageCondition = '';
   if (plan.cursor) {
-    const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    const sortParameter = `$${values.length + 1}`;
-    const idParameter = `$${values.length + 2}`;
-    pageCondition = `WHERE (${orderField} ${comparison} ${sortParameter} OR (${orderField} = ${sortParameter} AND "traceId" > ${idParameter}))`;
-    values.push(plan.cursor.sortValue, plan.cursor.traceId);
+    const { past, level } = keysetSortBounds(orderField, plan.orderBy.direction, plan.cursor.sortValue, values);
+    values.push(plan.cursor.traceId);
+    pageCondition = `WHERE (${[...past, `(${level} AND "traceId" > $${values.length})`].join(' OR ')})`;
   }
   values.push(plan.limit + 1);
 
@@ -1084,10 +1155,18 @@ function traceRowToResult(row: Record<string, unknown>) {
     ...(timeToFirstChunkSupported && {
       timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
     }),
+    ...(timeToFirstTokenSupported && {
+      timeToFirstTokenMs: row.timeToFirstTokenMs == null ? null : Number(row.timeToFirstTokenMs),
+    }),
     entityName: row.entityName == null ? null : String(row.entityName),
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
+    ...(traceQueryOutcomeFieldsSupported && {
+      outcome: row.outcome == null ? null : String(row.outcome),
+      stopReason: row.stopReason == null ? null : String(row.stopReason),
+      stopReasonContext: (row.stopReasonContext ?? null) as Record<string, unknown> | null,
+    }),
   };
 }
 
@@ -1204,7 +1283,7 @@ export async function queryTraces(
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: last[plan.orderBy.field] ?? null,
               traceId: last.traceId,
             })
           : null,

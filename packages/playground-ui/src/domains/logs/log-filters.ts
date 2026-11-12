@@ -16,6 +16,7 @@ export const LOGS_ROOT_ENTITY_TYPES = {
   WORKFLOW: 'workflow_run',
   SCORER: 'scorer',
   INGEST: 'rag_ingestion',
+  CLASSIFIER: 'classifier',
 } as const satisfies Record<string, EntityTypeValue>;
 
 export const LOGS_ROOT_ENTITY_TYPE_OPTIONS = [
@@ -23,6 +24,7 @@ export const LOGS_ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: LOGS_ROOT_ENTITY_TYPES.WORKFLOW },
   { label: 'Scorer', entityType: LOGS_ROOT_ENTITY_TYPES.SCORER },
   { label: 'Ingest', entityType: LOGS_ROOT_ENTITY_TYPES.INGEST },
+  { label: 'Classifier', entityType: LOGS_ROOT_ENTITY_TYPES.CLASSIFIER },
 ] as const satisfies readonly LogsEntityOptions[];
 
 export const LOG_LEVEL_VALUES: readonly LogLevel[] = ['debug', 'info', 'warn', 'error', 'fatal'] as const;
@@ -39,6 +41,13 @@ export const LOGS_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const LOGS_DATE_PRESET_PARAM = 'datePreset';
 export const LOGS_DATE_FROM_PARAM = 'dateFrom';
 export const LOGS_DATE_TO_PARAM = 'dateTo';
+
+/** The range the logs page shows when the URL names none. */
+export const DEFAULT_LOGS_DATE_PRESET: LogsDatePreset = 'last-24h';
+
+/** Fields the logs list can be sorted by. */
+export const LOGS_SORT_FIELDS = ['timestamp'] as const;
+export const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
 
 export const LOGS_DATE_PRESET_VALUES = new Set<LogsDatePreset>([
   'all',

@@ -4,23 +4,31 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
+import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
-
 import type { MastraFGAPermissionInput } from '../../auth/ee';
+
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
+import type { ToolResultCommitOutcome } from '../../loop/shared/steps/tool-result-commit-core';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { RunScope } from '../../mastra/run-scope';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
+import type {
+  AIModelGenerationSpan,
+  Span,
+  SpanTermination,
+  SpanType,
+  TracingContext,
+  TracingOptions,
+} from '../../observability';
 import type {
   InputProcessorOrWorkflow,
   LLMRequestProcessorOrWorkflow,
@@ -39,14 +47,16 @@ import type {
   ToolPayloadTransformTarget,
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
+import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
-import type { MessageList } from '../message-list';
+import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { CreatedAgentSignal } from '../signals';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
-import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { AgentMethodType, GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
+import type { ResponseRecord } from './workflows/shared/schemas';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -166,6 +176,8 @@ export interface SerializableStructuredOutput {
    * text and the finish step runs a separate structuring pass, like Agent.
    */
   hasStructuringModel?: boolean;
+  /** The model answers omitted optional fields with `null` (OpenAI strict mode); validate with null → undefined. */
+  nullToUndefined?: boolean;
   /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
   errorStrategy?: 'strict' | 'warn' | 'fallback';
   /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
@@ -306,6 +318,8 @@ export interface SerializableDurableOptions {
    * observability and cross-process engines.
    */
   isTaskComplete?: {
+    fromAgentDefaults?: boolean;
+    scorerIds?: string[];
     scorerNames?: string[];
     strategy?: 'all' | 'any';
     timeout?: number;
@@ -405,10 +419,14 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     request?: LanguageModelRequestMetadata;
   };
+  /** Provider id and serving model of this step's response; absent when the provider sent none */
+  response?: ResponseRecord;
   /** Processor retry count */
   processorRetryCount?: number;
   /** Processor retry feedback message */
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps that an output processor held until this step's stream ended */
+  releasedToolResultIds?: string[];
   /** Updated serializable state */
   state: SerializableDurableState;
   /** Exported model_generation span data (only set when there are tool calls) */
@@ -421,6 +439,10 @@ export interface DurableLLMStepOutput {
   deferredStepFinishChunk?: unknown;
   /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this step's first chunk (kept with that chunk's clock) */
+  timeToFirstTokenMs?: number;
+  /** Outcome of a step that ended the run itself (fatal model failure or a tripwire), for the root spans */
+  tracingTermination?: SpanTermination;
 }
 
 /**
@@ -431,10 +453,10 @@ export interface DurableToolCallInput {
   toolCallId: string;
   /** Name of the tool to execute */
   toolName: string;
-  /** Arguments for the tool */
-  args: Record<string, unknown>;
+  /** Arguments for the tool; absent when the model's JSON could not be parsed. */
+  args?: Record<string, unknown>;
   /** Provider-specific metadata */
-  providerMetadata?: Record<string, unknown>;
+  providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */
   providerExecuted?: boolean;
   /** Output if provider-executed */
@@ -443,6 +465,8 @@ export interface DurableToolCallInput {
   activeTools?: string[] | null;
   /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
   completionStartTime?: Date;
+  /** Time to first token of the same step, applied the same way */
+  timeToFirstTokenMs?: number;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -484,6 +508,13 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  tripwire?: StepTripwireData;
+  /**
+   * Set when an output processor dropped the tool-result chunk without a
+   * tripwire. The model still gets the result, but callbacks leave it out of
+   * `toolResults`, as the stream never emitted it.
+   */
+  resultHidden?: boolean;
   /**
    * Non-transient data-* chunks emitted by output processors via
    * writer.custom() during this tool call. The tool-call step's messageList
@@ -494,6 +525,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   processorDataParts?: Array<{
     type: string;
     data?: unknown;
+    id?: string;
     messageId?: string;
   }>;
   /**
@@ -517,6 +549,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * the same iteration on every engine (G3).
    */
   delegationBailed?: boolean;
+  /** Why the delegation that bailed failed, carried beside `delegationBailed` for the root spans */
+  tracingDelegationFailure?: SpanTermination;
+  /** Set when the total deadline aborted this tool call; carried so any worker ends the run as the deadline */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped this tool call; carried so any worker ends the run as aborted */
+  runAborted?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -564,14 +602,28 @@ export interface DurableAgenticExecutionOutput {
   /** Processor retry tracking */
   processorRetryCount?: number;
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps emitted at the end of this iteration's stream */
+  releasedToolResultIds?: string[];
   /** Whether background tasks are still running after this iteration */
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Set when the total deadline aborted a tool call this iteration */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped a tool call this iteration */
+  runAborted?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this iteration's first chunk */
+  timeToFirstTokenMs?: number;
+  /** Provider id and model of this iteration's response */
+  response?: ResponseRecord;
+  /** Outcome of a step that ended the run itself, see DurableLLMStepOutput */
+  tracingTermination?: SpanTermination;
+  /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
+  tracingDelegationFailure?: SpanTermination;
 }
 
 /**
@@ -594,40 +646,7 @@ export interface DurableAgenticLoopOutput {
   state: SerializableDurableState;
 }
 
-/**
- * Event types emitted via pubsub for agent streaming
- */
-export type AgentStreamEventType =
-  | 'chunk'
-  | 'step-start'
-  | 'step-finish'
-  | 'finish'
-  | 'error'
-  | 'suspended'
-  | 'abort'
-  | 'iteration-complete'
-  | 'ownership-claimed';
-
-/**
- * Event emitted via pubsub for agent streaming
- */
-export interface AgentStreamEvent<T = unknown> {
-  /** Event type */
-  type: AgentStreamEventType;
-  /** Run identifier */
-  runId: string;
-  /** Event payload */
-  data: T;
-  /** Epoch ms at which a `chunk` event's chunk was produced. */
-  producedAt?: number;
-  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
-  generation?: number;
-  /**
-   * The `chunk` event's chunk already ran through the run's output processors
-   * before it was published, so the stream consumer must not run them again.
-   */
-  outputProcessed?: boolean;
-}
+export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
 
 /**
  * Chunk event data
@@ -653,6 +672,18 @@ export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: s
 export interface AgentFinishEventData {
   output: DurableAgenticLoopOutput['output'];
   stepResult: DurableLLMStepOutput['stepResult'];
+  /** The run's conversation, as on the default loop's finish chunk. */
+  messages?: {
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
+  };
+  /**
+   * Set when processOutputResult changed the reply after the last step-finish was streamed.
+   * The last entry of `output.steps` then holds the processed text, and callers must use it
+   * instead of the text they buffered from the stream.
+   */
+  textRewritten?: boolean;
 }
 
 /**
@@ -734,6 +765,10 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
+  tracingTermination?: SpanTermination;
+  tracingDelegationFailure?: SpanTermination;
+  tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
   /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
   agentId?: string;
   /**
@@ -769,6 +804,12 @@ export interface RunRegistryEntry {
    * replaced tools are kept (#25960).
    */
   requestTools?: Record<string, CoreTool>;
+  /**
+   * The method that started the run (`stream` or `generate`). A warm resume
+   * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
+   * streaming whatever the resume's `closeOnSuspend` is (#29436).
+   */
+  methodType?: AgentMethodType;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
@@ -791,6 +832,27 @@ export interface RunRegistryEntry {
   runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Message list as of the last completed step; memory saves this when a total deadline ends the run */
+  completedStepsState?: SerializedMessageListState;
+  /**
+   * Text the step in flight has streamed (as published) before a total deadline cut it off; cleared once the
+   * step completes. Only kept for runs with a total deadline.
+   */
+  streamedStepText?: string[];
+  /**
+   * Tool calls of the step in flight that settled, kept for runs with a total deadline: when the deadline ends
+   * the run before the step merges its results, the deadline save records them.
+   */
+  settledToolResults?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    outcome: ToolResultCommitOutcome;
+    /** The approval decision of an approved approval-gated tool, so it round-trips on recall. */
+    approval?: { id: string; approved: boolean; reason?: string };
+    /** Includes the tool payload transform metadata, so transcript transforms apply on recall. */
+    providerMetadata?: Record<string, any>;
+  }>;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**
@@ -807,6 +869,8 @@ export interface RunRegistryEntry {
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** Processor state map (carried across steps) */
   processorStates?: Map<string, ProcessorState>;
+  /** The agent running this run, passed to every processor hook as `agent`. */
+  agent?: Agent<any, any, any, any>;
   /** Background task manager instance (non-serializable) */
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
@@ -827,6 +891,8 @@ export interface RunRegistryEntry {
   resumeModelSpanData?: unknown;
   /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
   resumeCompletionStartTime?: Date;
+  /** Time to first token of the resumed segment's spans, kept the same way. */
+  resumeTimeToFirstTokenMs?: number;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from
@@ -888,6 +954,12 @@ export interface RunRegistryEntry {
    */
   requireToolApproval?: RequireToolApproval;
   /**
+   * Per-call delegation config (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, ...). Closures, so in-process only. A warm resume that
+   * rebuilds tools reuses it when the resume call supplies no `delegation`.
+   */
+  delegation?: AgentExecutionOptions['delegation'];
+  /**
    * Signal drain closure. When the durable agent inherits `sendSignal()` from
    * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This
    * closure retrieves and clears those queues, keyed by scope:
@@ -898,8 +970,17 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /**
+   * Queues a signal on `AgentThreadStreamRuntime` for this run, where the
+   * drain closure picks it up. Processors that keep a step's `sendSignal`
+   * and call it after that step returned are routed here, because the step's
+   * MessageList has already been serialized. In-process only like the drain.
+   */
+  enqueuePendingSignal?: (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal>;
+  /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
+  pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
-  subscribePendingSignals?: (listener: () => void) => () => void;
+  subscribePendingSignals?: (listener: PendingSignalListener) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
   stopStepSignalListener?: () => void;
   /**
@@ -969,6 +1050,8 @@ export interface RunRegistryEntry {
    * `createTimeoutAbortSignal` at install time.
    */
   timeoutTotalMs?: number;
+  /** A late subscriber re-publishes the winning deadline error at most once per segment. */
+  deadlineErrorRedelivered?: boolean;
   /**
    * Whether this process has already subscribed to cross-process abort
    * requests for the run. Set by `ensureRemoteAbortListener`, which every
@@ -991,6 +1074,8 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /** The evented engine may dispatch this execution to another process. */
+  eventedExecution?: boolean;
   /**
    * Tool call resumed by the `resume()` currently driving this run in this
    * process. Its in-flight marker is cleared when the segment suspends again.

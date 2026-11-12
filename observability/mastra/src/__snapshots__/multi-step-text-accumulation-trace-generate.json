@@ -1,20 +1,21 @@
 {
   "__structure__": [
     "agent_run: \"agent run: 'multi-step-agent'\"",
+    "├── generic: \"agent:prepare-tools\"",
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    ├── model_step: \"step: 0\"",
     "    │   ├── processor_run: \"llm request processor: provider-history-compat\"",
     "    │   ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "    │   ├── model_inference: \"inference: 0\"",
-    "    │   │   ├── model_chunk: \"chunk: 'text'\"",
-    "    │   │   ├── model_chunk: \"chunk: 'tool-call'\"",
-    "    │   │   └── model_chunk: \"chunk: 'tool-result'\"",
-    "    │   └── tool_call: \"tool: 'calculator'\"",
+    "    │   ├── model_chunk: \"chunk: 'text'\"",
+    "    │   ├── model_chunk: \"chunk: 'tool-call'\"",
+    "    │   ├── tool_call: \"tool: 'calculator'\"",
+    "    │   └── model_chunk: \"chunk: 'tool-result'\"",
     "    └── model_step: \"step: 1\"",
     "        ├── processor_run: \"llm request processor: provider-history-compat\"",
     "        ├── processor_run: \"llm request processor: unsupported-file-handler\"",
-    "        └── model_inference: \"inference: 1\"",
-    "            └── model_chunk: \"chunk: 'text'\""
+    "        ├── model_inference: \"inference: 1\"",
+    "        └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -30,8 +31,11 @@
         "entityId": "multi-step-agent",
         "attributes": {
           "instructions": "You are a helpful calculator assistant that announces what you will do before doing it.",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "availableTools": ["calculator"],
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -47,6 +51,27 @@
         {
           "span": {
             "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "agent:prepare-tools",
+            "type": "generic",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "multi-step-agent",
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
+            "output": {
+              "toolCount": 1
+            }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-3>",
             "traceId": "<trace-1>",
             "name": "llm: 'mock-model-id'",
             "type": "model_generation",
@@ -86,6 +111,7 @@
                 }
               ],
               "completionStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -143,20 +169,23 @@
           "children": [
             {
               "span": {
-                "id": "<span-3>",
+                "id": "<span-4>",
                 "traceId": "<trace-1>",
                 "name": "step: 0",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-2>",
+                "parentId": "<span-3>",
                 "entityType": "agent",
                 "entityId": "multi-step-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 10,
                     "outputTokens": 15,
@@ -208,14 +237,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-4>",
+                    "id": "<span-5>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
@@ -253,14 +282,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-5>",
+                    "id": "<span-6>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: unsupported-file-handler",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "input_processor",
                     "entityId": "unsupported-file-handler",
                     "attributes": {
@@ -298,14 +327,14 @@
                 },
                 {
                   "span": {
-                    "id": "<span-6>",
+                    "id": "<span-7>",
                     "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "agent",
                     "entityId": "multi-step-agent",
                     "attributes": {
@@ -353,8 +382,8 @@
                         }
                       },
                       "finishReason": "tool-calls",
-                      "warnings": [],
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {
@@ -385,89 +414,63 @@
                         }
                       ]
                     }
-                  },
-                  "children": [
-                    {
-                      "span": {
-                        "id": "<span-7>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'text'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": false,
-                        "isRootSpan": false,
-                        "parentId": "<span-6>",
-                        "entityType": "agent",
-                        "entityId": "multi-step-agent",
-                        "attributes": {
-                          "chunkType": "text",
-                          "sequenceNumber": 0
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test"
-                        },
-                        "output": {
-                          "text": "Let me calculate that for you. "
-                        }
-                      }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-8>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-4>",
+                    "entityType": "agent",
+                    "entityId": "multi-step-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
                     },
-                    {
-                      "span": {
-                        "id": "<span-8>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'tool-call'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": false,
-                        "isRootSpan": false,
-                        "parentId": "<span-6>",
-                        "entityType": "agent",
-                        "entityId": "multi-step-agent",
-                        "attributes": {
-                          "chunkType": "tool-call",
-                          "sequenceNumber": 1
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test"
-                        },
-                        "output": {
-                          "toolName": "calculator",
-                          "toolCallId": "call-calc-1",
-                          "toolInput": {
-                            "operation": "add",
-                            "a": 5,
-                            "b": 3
-                          }
-                        }
-                      }
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
-                    {
-                      "span": {
-                        "id": "<span-9>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'tool-result'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": true,
-                        "isRootSpan": false,
-                        "parentId": "<span-6>",
-                        "entityType": "agent",
-                        "entityId": "multi-step-agent",
-                        "attributes": {
-                          "chunkType": "tool-result",
-                          "sequenceNumber": 2
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test",
-                          "toolCallId": "call-calc-1",
-                          "toolName": "calculator"
-                        }
+                    "output": {
+                      "text": "Let me calculate that for you. "
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-9>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-call'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-4>",
+                    "entityType": "agent",
+                    "entityId": "multi-step-agent",
+                    "attributes": {
+                      "chunkType": "tool-call",
+                      "sequenceNumber": 1
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "output": {
+                      "toolName": "calculator",
+                      "toolCallId": "call-calc-1",
+                      "toolInput": {
+                        "operation": "add",
+                        "a": 5,
+                        "b": 3
                       }
                     }
-                  ]
+                  }
                 },
                 {
                   "span": {
@@ -478,7 +481,7 @@
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-3>",
+                    "parentId": "<span-4>",
                     "entityType": "tool",
                     "entityId": "calculator",
                     "attributes": {
@@ -500,25 +503,52 @@
                       "result": 8
                     }
                   }
+                },
+                {
+                  "span": {
+                    "id": "<span-11>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-result'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": true,
+                    "isRootSpan": false,
+                    "parentId": "<span-4>",
+                    "entityType": "agent",
+                    "entityId": "multi-step-agent",
+                    "attributes": {
+                      "chunkType": "tool-result",
+                      "sequenceNumber": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test",
+                      "toolCallId": "call-calc-1",
+                      "toolName": "calculator"
+                    }
+                  }
                 }
               ]
             },
             {
               "span": {
-                "id": "<span-11>",
+                "id": "<span-12>",
                 "traceId": "<trace-1>",
                 "name": "step: 1",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-2>",
+                "parentId": "<span-3>",
                 "entityType": "agent",
                 "entityId": "multi-step-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 20,
                     "outputTokens": 10,
@@ -568,14 +598,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-12>",
+                    "id": "<span-13>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-11>",
+                    "parentId": "<span-12>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
@@ -614,94 +644,9 @@
                               "toolCallId": "call-calc-1",
                               "toolName": "calculator",
                               "input": {
-                                "operation": "add",
                                 "a": 5,
-                                "b": 3
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": [
-                            {
-                              "type": "tool-result",
-                              "toolCallId": "call-calc-1",
-                              "toolName": "calculator",
-                              "output": {
-                                "type": "json",
-                                "value": {
-                                  "result": 8
-                                }
-                              },
-                              "input": {
-                                "operation": "add",
-                                "a": 5,
-                                "b": 3
-                              }
-                            }
-                          ]
-                        }
-                      ],
-                      "stepNumber": 1,
-                      "retryCount": 0
-                    },
-                    "output": {
-                      "shortCircuited": false
-                    }
-                  }
-                },
-                {
-                  "span": {
-                    "id": "<span-13>",
-                    "traceId": "<trace-1>",
-                    "name": "llm request processor: unsupported-file-handler",
-                    "type": "processor_run",
-                    "completed": true,
-                    "isEvent": false,
-                    "isRootSpan": false,
-                    "parentId": "<span-11>",
-                    "entityType": "input_processor",
-                    "entityId": "unsupported-file-handler",
-                    "attributes": {
-                      "processorPhase": "llmRequest",
-                      "processorExecutor": "legacy",
-                      "processorIndex": 2
-                    },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "environment": "test"
-                    },
-                    "input": {
-                      "prompt": [
-                        {
-                          "role": "system",
-                          "content": "You are a helpful calculator assistant that announces what you will do before doing it."
-                        },
-                        {
-                          "role": "user",
-                          "content": [
-                            {
-                              "type": "text",
-                              "text": "What is 5 + 3?"
-                            }
-                          ]
-                        },
-                        {
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "text",
-                              "text": "Let me calculate that for you. "
-                            },
-                            {
-                              "type": "tool-call",
-                              "toolCallId": "call-calc-1",
-                              "toolName": "calculator",
-                              "input": {
-                                "operation": "add",
-                                "a": 5,
-                                "b": 3
+                                "b": 3,
+                                "operation": "add"
                               }
                             }
                           ]
@@ -740,12 +685,97 @@
                   "span": {
                     "id": "<span-14>",
                     "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-12>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "What is 5 + 3?"
+                            }
+                          ]
+                        },
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Let me calculate that for you. "
+                            },
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-calc-1",
+                              "toolName": "calculator",
+                              "input": {
+                                "a": 5,
+                                "b": 3,
+                                "operation": "add"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": [
+                            {
+                              "type": "tool-result",
+                              "toolCallId": "call-calc-1",
+                              "toolName": "calculator",
+                              "output": {
+                                "type": "json",
+                                "value": {
+                                  "result": 8
+                                }
+                              },
+                              "input": {
+                                "operation": "add",
+                                "a": 5,
+                                "b": 3
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 1,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-15>",
+                    "traceId": "<trace-1>",
                     "name": "inference: 1",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-11>",
+                    "parentId": "<span-12>",
                     "entityType": "agent",
                     "entityId": "multi-step-agent",
                     "attributes": {
@@ -793,8 +823,8 @@
                         }
                       },
                       "finishReason": "stop",
-                      "warnings": [],
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {
@@ -823,34 +853,32 @@
                       "text": "The result of 5 + 3 is 8.",
                       "toolCalls": []
                     }
-                  },
-                  "children": [
-                    {
-                      "span": {
-                        "id": "<span-15>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'text'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": false,
-                        "isRootSpan": false,
-                        "parentId": "<span-14>",
-                        "entityType": "agent",
-                        "entityId": "multi-step-agent",
-                        "attributes": {
-                          "chunkType": "text",
-                          "sequenceNumber": 0
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test"
-                        },
-                        "output": {
-                          "text": "The result of 5 + 3 is 8."
-                        }
-                      }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-16>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-12>",
+                    "entityType": "agent",
+                    "entityId": "multi-step-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "output": {
+                      "text": "The result of 5 + 3 is 8."
                     }
-                  ]
+                  }
                 }
               ]
             }

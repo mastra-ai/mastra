@@ -6,9 +6,15 @@ import type {
   TrustedThreadRowsQueryPlan,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
-import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { TABLE_TRACE_ROOTS } from './ddl';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
-import { compileThreadQueryPredicate, ParameterBuilder, runWithClickHouseTraceQueryTimeout } from './trace-query';
+import {
+  compileThreadQueryPredicate,
+  ParameterBuilder,
+  ROOT_VERSION_ORDER,
+  runWithClickHouseTraceQueryTimeout,
+  timeToFirstTokenSupported,
+} from './trace-query';
 
 const contextFields = [
   'resourceId',
@@ -145,7 +151,7 @@ export function compileClickHouseThreadRowsQuery(
       ? 's.inWindow > 0'
       : `s.${plan.timeRange.field} >= ${from} AND s.${plan.timeRange.field} < ${to}`;
   const filtered = predicateFields(plan.where);
-  const firstContext = [...contextFields, 'timeToFirstChunkMs'].filter(
+  const firstContext = [...contextFields, 'timeToFirstChunkMs', 'timeToFirstTokenMs'].filter(
     field => field === 'resourceId' || filtered.has(field),
   );
   const firstFields = ['startedAt', 'traceId', 'spanId', 'endedAt', ...firstContext];
@@ -160,9 +166,7 @@ export function compileClickHouseThreadRowsQuery(
   // Select one root per logical trace before applying thread identity or time filters.
   // Malformed extra roots can disagree on thread/time; they must not qualify a thread.
   // Use the earliest-started root, then the lowest spanId, consistently across stores.
-  // Within that root, prefer the completed copy: a pending write encodes endedAt
-  // as startedAt and can lack threadId. Equal-time completion must win that tie too.
-  // queryTraces has a separate, order-dependent rule.
+  // Within that root, keep the current version (ROOT_VERSION_ORDER), as every root collapse does.
   const rootDataFields = [
     'threadId',
     'spanId',
@@ -172,15 +176,15 @@ export function compileClickHouseThreadRowsQuery(
     ...(filtered.has('status') ? ['status'] : []),
   ];
   const rootExpression = (field: string) =>
-    field === 'timeToFirstChunkMs'
-      ? "if(spanType = 'agent_run', timeToFirstChunkMs, NULL)"
+    field === 'timeToFirstChunkMs' || field === 'timeToFirstTokenMs'
+      ? `if(spanType = 'agent_run', ${field}, NULL)`
       : field === 'status'
         ? "if(isNull(error), 'success', 'error')"
         : field;
   const sortedRoots = `roots AS (
     SELECT organizationId, traceId, ${rootDataFields.map(field => `${rootExpression(field)} AS ${field}`).join(', ')}
     FROM ${TABLE_TRACE_ROOTS} ${scope.length || strategy === 'candidates' ? `WHERE ${[...scope, ...(strategy === 'candidates' ? [candidateTracesFilter] : [])].join(' AND ')}` : ''}
-    ORDER BY organizationId, traceId, startedAt ASC, spanId, endedAt DESC, isNotNull(threadId) DESC, dedupeKey
+    ORDER BY organizationId, traceId, startedAt ASC, spanId, ${ROOT_VERSION_ORDER}
     LIMIT 1 BY organizationId, traceId
   )`;
   const query = `WITH ${strategy === 'candidates' ? `${candidateCtes(scope, from, to, plan)}, ` : ''}${sortedRoots}, grouped AS (
@@ -304,11 +308,12 @@ export async function queryThreadRows(
   for (const batch of batches([...roots.values()]))
     stored.push(
       ...(await run<Root & Record<string, unknown>>({
-        query: `SELECT organizationId, traceId, spanId, startedAt, endedAt, spanType,
+        query: `SELECT organizationId, traceId, spanId, startedAt, endedAt,
       ${contextFields.join(', ')}, if(spanType = 'agent_run', timeToFirstChunkMs, NULL) AS timeToFirstChunkMs,
+      if(spanType = 'agent_run', timeToFirstTokenMs, NULL) AS timeToFirstTokenMs,
       if(isNull(error), 'success', 'error') AS status, ${PREVIEW_COLUMNS.join(', ')}
       FROM ${TABLE_TRACE_ROOTS} WHERE ${rootWhere}
-      ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
+      ORDER BY ${ROOT_VERSION_ORDER} LIMIT 1 BY organizationId, traceId, spanId`,
         query_params: { roots: keys(batch) },
       })),
     );
@@ -318,7 +323,7 @@ export async function queryThreadRows(
   for (const batch of batches(missing, 32)) {
     const payloads = await run<Root & Record<string, unknown>>({
       query: `SELECT organizationId, traceId, spanId, input, output, error FROM ${TABLE_TRACE_ROOTS}
-        WHERE ${rootWhere} ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
+        WHERE ${rootWhere} ORDER BY ${ROOT_VERSION_ORDER} LIMIT 1 BY organizationId, traceId, spanId`,
       query_params: { roots: keys(batch) },
     });
     for (const payload of payloads) {
@@ -326,48 +331,10 @@ export async function queryThreadRows(
       if (row) Object.assign(row, resolveStoredPreviews(row, payload));
     }
   }
-  // Only the first root agent's direct model generation supplies display model/provider.
-  // Nested processor/scorer agents have a different parent and cannot supply these values.
-  const firstRoots = page
-    .map(row => representative(row, 'first'))
-    .filter(root => byRoot.get(rootKey(root))?.spanType === 'agent_run');
-  const models: Array<{
-    organizationId: string | null;
-    traceId: string;
-    model: string | null;
-    provider: string | null;
-  }> = [];
-  for (const batch of batches(firstRoots))
-    models.push(
-      ...(await run<(typeof models)[number]>({
-        query: `SELECT organizationId, traceId,
-      if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
-      if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider
-      FROM ${TABLE_SPAN_EVENTS} WHERE spanType = 'model_generation' AND
-      tuple(isNull(organizationId), ifNull(organizationId, ''), isNull(resourceId), ifNull(resourceId, ''), traceId, parentSpanId)
-        IN {agents:Array(Tuple(UInt8, String, UInt8, String, String, String))}
-      ORDER BY organizationId, traceId, startedAt, spanId LIMIT 1 BY organizationId, traceId`,
-        query_params: {
-          agents: batch.map(
-            root =>
-              new TupleParam([
-                root.organizationId === null ? 1 : 0,
-                root.organizationId ?? '',
-                root.resourceId === null ? 1 : 0,
-                root.resourceId ?? '',
-                root.traceId,
-                root.spanId,
-              ]),
-          ),
-        },
-      })),
-    );
-  const byTrace = new Map(models.map(row => [JSON.stringify([row.organizationId, row.traceId]), row]));
   const threads = page.flatMap(row => {
     const first = byRoot.get(rootKey(representative(row, 'first')));
     const last = byRoot.get(rootKey(representative(row, 'last')));
     if (!first || !last) return []; // Concurrent deletion between selection and hydration.
-    const model = byTrace.get(JSON.stringify([row.organizationId, row.firstTraceId]));
     return [
       coreStorage.threadQueryRowSchema.parse({
         organizationId: row.organizationId,
@@ -380,8 +347,7 @@ export async function queryThreadRows(
         endedAt: iso(row.endedAt),
         traceCount: Number(row.traceCount),
         timeToFirstChunkMs: first.timeToFirstChunkMs,
-        model: model?.model ?? null,
-        provider: model?.provider ?? null,
+        ...(timeToFirstTokenSupported && { timeToFirstTokenMs: first.timeToFirstTokenMs }),
         inputPreview: resolveStoredPreviews(first).inputPreview,
         outputPreview: resolveStoredPreviews(last).outputPreview,
         errorPreview: resolveStoredPreviews(last).errorPreview,

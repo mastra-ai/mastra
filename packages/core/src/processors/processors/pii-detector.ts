@@ -549,10 +549,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
         if (result.redacted_content?.trim()) {
           console.info(`[PIIDetector] Redacted PII: ${alertMessage}`);
           return this.createRedactedMessage(message, result.redacted_content);
-        } else {
-          console.warn(`[PIIDetector] No redaction available, filtering: ${alertMessage}`);
-          return null; // Fallback to filtering if no redaction available
         }
+        console.warn(`[PIIDetector] No redaction available, filtering: ${alertMessage}`);
+        return null; // Fallback to filtering if no redaction available
 
       default:
         return null;
@@ -846,10 +845,9 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
               text: detectionResult.redacted_content,
             },
           };
-        } else {
-          console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
-          return null;
         }
+        console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
+        return null;
 
       default:
         return part;

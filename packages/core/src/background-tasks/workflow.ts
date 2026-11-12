@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { resolveSuspendedToolRunId } from '../agent/utils';
 import { InternalSpans } from '../observability';
-import { stripModelSnapshots } from '../stream/strip-model-snapshots';
+import { slimProgressChunk } from '../stream/strip-model-snapshots';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
@@ -33,40 +33,6 @@ const bodyOutputSchema = z.object({
 });
 
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
-
-const PROGRESS_WRAPPER_TYPES = new Set(['tool-output', 'workflow-step-output']);
-
-/**
- * Removes model request/history snapshots from agent chunks before a progress
- * chunk is published to pubsub. Nested agent chunks arrive wrapped in
- * `tool-output` / `workflow-step-output` payloads, so only those wrappers are
- * unwrapped, and only agent-origin chunks are stripped — data a tool writes
- * itself (`from: 'USER'`) is published as-is.
- */
-export function slimProgressChunk<T>(chunk: T, depth = 0): T {
-  if (!chunk || typeof chunk !== 'object') return chunk;
-  const { type, from, payload } = chunk as { type?: unknown; from?: unknown; payload?: unknown };
-
-  if (typeof type === 'string' && PROGRESS_WRAPPER_TYPES.has(type) && payload && typeof payload === 'object') {
-    const p = payload as Record<string, unknown>;
-    const inner = p.output as { type?: unknown; from?: unknown } | undefined;
-    const isNestedChunk =
-      !!inner &&
-      typeof inner === 'object' &&
-      typeof inner.type === 'string' &&
-      (inner.from === 'AGENT' || PROGRESS_WRAPPER_TYPES.has(inner.type));
-    if (!isNestedChunk) return chunk;
-    // Past the nesting limit, drop the nested chunk rather than publish it unslimmed.
-    if (depth >= 20) {
-      const { output: _output, ...rest } = p;
-      return { ...chunk, payload: rest };
-    }
-    const output = slimProgressChunk(inner, depth + 1);
-    return output === inner ? chunk : { ...chunk, payload: { ...p, output } };
-  }
-
-  return from === 'AGENT' ? stripModelSnapshots(chunk) : chunk;
-}
 
 /**
  * Builds the per-task workflow that owns executor + retries.
@@ -225,6 +191,14 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         if (resumeData !== undefined && suspendedToolRunId) {
           args.suspendedToolRunId = suspendedToolRunId;
         }
+        // The payload this task suspended with, so the resumed tool knows which
+        // request it is answering. The step's suspend data may carry the internal
+        // `suspendedToolRunId` bridge (see below); strip it back off.
+        let suspendPayload: unknown = suspendData;
+        if (suspendPayload && typeof suspendPayload === 'object' && 'suspendedToolRunId' in suspendPayload) {
+          const { suspendedToolRunId: _bridge, ...rest } = suspendPayload as Record<string, unknown>;
+          suspendPayload = Object.keys(rest).length > 0 ? rest : undefined;
+        }
 
         const result = await executor.execute(args, {
           abortSignal: abortController.signal,
@@ -234,6 +208,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           // the initial run.
           resumeData,
           suspendedToolRunId: resumeData !== undefined ? suspendedToolRunId : undefined,
+          suspendPayload: resumeData !== undefined ? suspendPayload : undefined,
         });
 
         if (pendingSuspend) {

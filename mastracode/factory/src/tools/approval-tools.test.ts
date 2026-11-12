@@ -24,15 +24,23 @@ function setup({
   follows = true,
   armed = true,
   live = true,
+  parkedTool,
 }: {
   row?: Record<string, unknown>;
   binding?: boolean;
   follows?: boolean;
   armed?: boolean;
   live?: boolean;
+  parkedTool?: string;
 } = {}) {
   const respondToToolApproval = vi.fn((_input: unknown) => ({ accepted: true as const }));
-  const session = { approval: { isArmed: vi.fn(() => armed) }, respondToToolApproval };
+  const respondToToolSuspension = vi.fn(async (_input: unknown) => {});
+  const session = {
+    approval: { isArmed: vi.fn(() => armed) },
+    respondToToolApproval,
+    suspensions: { resolve: vi.fn(() => (parkedTool ? { toolName: parkedTool } : undefined)) },
+    respondToToolSuspension,
+  };
   const record = vi.fn();
   const tools = createFactoryApprovalTools(scope, {
     sessions: {
@@ -52,16 +60,52 @@ function setup({
       listSessionSubscriptions: async () => (follows ? [{ workItemId: ITEM }] : []) as never,
     },
     auditRecorder: { record } as never,
-    messaging: async () => ({ controller: { getSessionByResource: async () => (live ? session : null) } }) as never,
+    messaging: async () => ({ controller: { getSession: async () => (live ? session : null) } }) as never,
   });
   const answer = (input: Record<string, unknown>) =>
     (
       tools.factory_answer_approval as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }
     ).execute({ sessionId: WORKER, toolCallId: 'call-1', ...input }, {});
-  return { answer, session, respondToToolApproval, record };
+  return { answer, session, respondToToolApproval, respondToToolSuspension, record };
 }
 
 describe('factory_answer_approval', () => {
+  it('approves a plan the session is parked on with submit_plan, as the person', async () => {
+    const { answer, respondToToolApproval, respondToToolSuspension, record } = setup({
+      armed: false,
+      parkedTool: 'submit_plan',
+    });
+
+    await expect(answer({ decision: 'approve' })).resolves.toMatchObject({ answered: 'approve' });
+
+    expect(respondToToolApproval).not.toHaveBeenCalled();
+    expect(respondToToolSuspension).toHaveBeenCalledWith(
+      expect.objectContaining({ resumeData: { action: 'approved' }, toolCallId: 'call-1' }),
+    );
+    const { requestContext } = respondToToolSuspension.mock.calls[0]![0] as {
+      requestContext: { get(key: string): unknown };
+    };
+    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.approved' }));
+  });
+
+  it('declines a parked plan with the reason as feedback', async () => {
+    const { answer, respondToToolSuspension } = setup({ armed: false, parkedTool: 'submit_plan' });
+
+    await answer({ decision: 'decline', reason: 'Split it in two.' });
+
+    expect(respondToToolSuspension).toHaveBeenCalledWith(
+      expect.objectContaining({ resumeData: { action: 'rejected', feedback: 'Split it in two.' } }),
+    );
+  });
+
+  it('does not answer other parked tools, like ask_user', async () => {
+    const { answer, respondToToolSuspension } = setup({ armed: false, parkedTool: 'ask_user' });
+
+    await expect(answer({ decision: 'approve' })).rejects.toThrow(/Nothing is waiting/);
+    expect(respondToToolSuspension).not.toHaveBeenCalled();
+  });
+
   it('approves the call a followed work session is holding, and audits it as the person', async () => {
     const { answer, session, respondToToolApproval, record } = setup();
 

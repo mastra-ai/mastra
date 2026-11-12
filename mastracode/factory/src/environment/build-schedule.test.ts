@@ -1,8 +1,9 @@
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { FactorySandbox } from '@mastra/core/workspace';
-import type { FactorySandboxBuild, FactorySandboxBuilds } from '@mastra/core/workspace';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FactorySandboxBuild, FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { getBranchHead } from '../integrations/github/commits.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { EnvironmentBuildRunner } from './build-runner.js';
@@ -130,6 +131,41 @@ describe('factory-environment-build workflow', () => {
     expect(sandbox.gets).toEqual(['build-1', 'build-1']);
   });
 
+  it('hands start, poll and status reads the same Build variables and revision', async () => {
+    const project = await seedProject(seed);
+    await seed.sandboxEnvs.set('org-1', project.id, { name: 'PROOF_BUILD', value: 'b1', appliesTo: 'build' }, 'u');
+    await seed.sandboxEnvs.set('org-1', project.id, { name: 'RUNTIME_ONLY', value: 'r1', appliesTo: 'runtime' }, 'u');
+    const { buildRevision } = (await seed.sandboxEnvs.revisions('org-1', project.id))!;
+    const seen: Array<{ path: string; buildEnv: unknown; buildEnvRevision: unknown }> = [];
+    const record = (path: string, ctx: FactorySandboxContext) =>
+      seen.push({ path, buildEnv: ctx.buildEnv, buildEnvRevision: ctx.buildEnvRevision });
+    const sandbox = new BuildingSandbox();
+    const { start, get } = sandbox.builds;
+    Object.assign(sandbox, {
+      builds: {
+        start: (ctx, settings) => (record('start', ctx), start(ctx, settings)),
+        get: (ctx, settings, buildId) => (record('poll', ctx), get(ctx, settings, buildId)),
+      } satisfies FactorySandboxBuilds<Settings>,
+    });
+    let mastra: Mastra | undefined;
+    const runner = new EnvironmentBuildRunner(
+      { ...depsFor(seed, sandbox), sandboxEnvs: seed.sandboxEnvs },
+      { getMastra: () => mastra, sleep: async () => {} },
+    );
+    mastra = bootMastra(runner);
+
+    await runner.start(project.id, 'manual');
+    await vi.waitFor(async () => {
+      expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBe('tpl-1');
+    });
+    record('read', (await runner.readContext(project.id))!.ctx);
+
+    expect(seen.map(entry => entry.path)).toEqual(expect.arrayContaining(['start', 'poll', 'read']));
+    for (const entry of seen) {
+      expect(entry).toMatchObject({ buildEnv: { PROOF_BUILD: 'b1' }, buildEnvRevision: buildRevision });
+    }
+  });
+
   it('does not let an older run that finishes late overwrite a newer build', async () => {
     const project = await seedProject(seed);
     const sandbox = new BuildingSandbox();
@@ -202,6 +238,34 @@ describe('factory-environment-build workflow', () => {
     );
     expect(logged.some(line => line.includes('environment build did not complete'))).toBe(true);
     expect(logged.join('\n')).not.toMatch(/secret-1|ghs_secret2/);
+  });
+
+  it('masks Build variable values in a failed build before returning or logging it', async () => {
+    const project = await seedProject(seed);
+    await seed.sandboxEnvs.set(
+      'org-1',
+      project.id,
+      { name: 'NPM_TOKEN', value: 'npm-sentinel-77', appliesTo: 'build' },
+      'u',
+    );
+    const sandbox = new BuildingSandbox();
+    sandbox.statuses = ['failed'];
+    sandbox.failedError = 'setup failed: auth failed for npm-sentinel-77';
+    const logged: string[] = [];
+    const logger = { info: (msg: string, meta?: Record<string, unknown>) => logged.push(msg + JSON.stringify(meta)) };
+    let mastra: Mastra | undefined;
+    const runner = new EnvironmentBuildRunner(
+      { ...depsFor(seed, sandbox), sandboxEnvs: seed.sandboxEnvs, logger },
+      { getMastra: () => mastra, logger },
+    );
+    mastra = bootMastra(runner);
+
+    const run = await mastra.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID).createRun();
+    const result = await run.start({ inputData: { projectId: project.id, trigger: 'manual' } });
+
+    expect(result.status === 'success' && result.result.reason).toBe('setup failed: auth failed for ***');
+    expect(logged.some(line => line.includes('environment build did not complete'))).toBe(true);
+    expect(logged.join('\n')).not.toContain('npm-sentinel-77');
   });
 
   it('gives up with unknown once the wait runs out', async () => {
@@ -311,6 +375,125 @@ describe('factory-environment-build workflow', () => {
     await expect(runner.start(project.id, 'manual')).resolves.toEqual({
       outcome: 'unavailable',
       reason: 'no_workflow',
+    });
+  });
+
+  describe('a template input saved while a build runs', () => {
+    /** Builds stay `building` until `finish(buildId)`; every start records the setup command it baked. */
+    class HeldSandbox extends FactorySandbox<Settings> {
+      readonly provider = 'recording';
+      readonly starts: Array<string | string[] | undefined> = [];
+      readonly #finished = new Set<string>();
+      finish(buildId: string) {
+        this.#finished.add(buildId);
+      }
+      readonly builds: FactorySandboxBuilds<Settings> = {
+        start: async ctx => {
+          this.starts.push(ctx.repos?.[0]?.setupCommand);
+          const n = this.starts.length;
+          return { buildId: `build-${n}`, status: 'building', templateId: `tpl-${n}` };
+        },
+        get: async (_ctx, _settings, buildId) => ({
+          buildId,
+          status: this.#finished.has(buildId) ? 'ready' : 'building',
+          templateId: buildId.replace('build', 'tpl'),
+        }),
+      };
+      create(): never {
+        throw new Error('not used');
+      }
+    }
+
+    async function boot() {
+      const project = await seedProject(seed);
+      const github = seed.sourceControl.forIntegration('github');
+      const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+      const sandbox = new HeldSandbox();
+      let mastra: Mastra | undefined;
+      const runner = new EnvironmentBuildRunner(depsFor(seed, sandbox), {
+        getMastra: () => mastra,
+        sleep: () => new Promise<void>(resolve => setTimeout(resolve, 5)),
+      });
+      mastra = bootMastra(runner);
+      const saveSetupCommand = async (setupCommand: string) => {
+        await github.projectRepositories.update({ orgId: 'org-1', id: link!.id, input: { setupCommand } });
+        runner.onEnvironmentSaved(project.id);
+      };
+      return { project, sandbox, runner, mastra, saveSetupCommand };
+    }
+
+    it('is built once the run holding the lease ends without building, with no retry needed', async () => {
+      const project = await seedProject(seed);
+      const github = seed.sourceControl.forIntegration('github');
+      const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+      const sandbox = new HeldSandbox();
+      let mastra: Mastra | undefined;
+      const runner = new EnvironmentBuildRunner(depsFor(seed, sandbox), {
+        getMastra: () => mastra,
+        pollMs: 1,
+        // Polls tick; a `settings` retry never wakes, so only a run's end can build the save.
+        sleep: ms => new Promise<void>(resolve => (ms === 1 ? setTimeout(resolve, 5) : undefined)),
+      });
+      mastra = bootMastra(runner);
+      sandbox.finish('build-1');
+      await expect(runner.start(project.id, 'manual')).resolves.toMatchObject({ outcome: 'started' });
+      await vi.waitFor(async () => {
+        expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBe('tpl-1');
+      });
+
+      // The schedule run takes the lease and reads the old inputs, then waits on GitHub.
+      let headLookup!: () => void;
+      vi.mocked(getBranchHead).mockImplementationOnce(
+        () => new Promise<string>(resolve => (headLookup = () => resolve(SHA_A))),
+      );
+      const scheduled = runner.start(project.id, 'schedule');
+      await vi.waitFor(() => expect(headLookup).toBeDefined());
+      const settings = vi.spyOn(runner, 'start');
+      await github.projectRepositories.update({ orgId: 'org-1', id: link!.id, input: { setupCommand: 'pnpm i' } });
+      runner.onEnvironmentSaved(project.id);
+      await vi.waitFor(() => expect(settings).toHaveBeenCalledWith(project.id, 'settings'));
+      await expect(settings.mock.results[0]!.value).resolves.toEqual({ outcome: 'skipped', reason: 'starting' });
+
+      headLookup();
+      await expect(scheduled).resolves.toEqual({ outcome: 'skipped', reason: 'unchanged' });
+      await vi.waitFor(() => expect(sandbox.starts).toEqual([undefined, 'pnpm i']));
+    });
+
+    it('is built once a run the runner started is over', async () => {
+      const { project, sandbox, runner, saveSetupCommand } = await boot();
+
+      await expect(runner.start(project.id, 'manual')).resolves.toMatchObject({ outcome: 'started' });
+      await saveSetupCommand('pnpm i');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(sandbox.starts).toEqual([undefined]);
+
+      sandbox.finish('build-1');
+      await vi.waitFor(() => expect(sandbox.starts).toEqual([undefined, 'pnpm i']));
+      sandbox.finish('build-2');
+      await vi.waitFor(async () => {
+        expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBe('tpl-2');
+      });
+    });
+
+    it('is built once a run the schedule fired is over', async () => {
+      const { project, sandbox, mastra, saveSetupCommand } = await boot();
+      await mastra.startWorkers();
+      onTestFinished(() => mastra.shutdown());
+      await ensureSchedule(mastra.schedules, project.id, { enabled: true, cron: '0 3 * * *' });
+
+      // Fires through the same `workflow.start` event the scheduler publishes.
+      await mastra.schedules.run(scheduleIdFor(project.id));
+      await vi.waitFor(() => expect(sandbox.starts).toEqual([undefined]));
+      await saveSetupCommand('pnpm i');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(sandbox.starts).toEqual([undefined]);
+
+      sandbox.finish('build-1');
+      await vi.waitFor(() => expect(sandbox.starts).toEqual([undefined, 'pnpm i']));
+      sandbox.finish('build-2');
+      await vi.waitFor(async () => {
+        expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBe('tpl-2');
+      });
     });
   });
 

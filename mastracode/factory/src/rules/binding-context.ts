@@ -2,6 +2,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
+import { REVIEW_CONTEXT } from '../boards/define-board.js';
 import type {
   FactoryRunBindingAddress,
   FactoryRunBindingRecord,
@@ -32,12 +33,12 @@ export function getFactorySessionCoordinates(
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
   const factoryProjectId = context?.getState().factoryProjectId;
-  if (!context?.threadId || !context.resourceId || !factoryProjectId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId || !factoryProjectId) return null;
   return {
     factoryProjectId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   };
 }
 
@@ -85,14 +86,14 @@ export async function findSessionRunBinding(
 ): Promise<FactoryRunBindingRecord | null> {
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
-  if (!context?.threadId || !context.resourceId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
   const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
   if (!orgId) return null;
   return storage.findActiveRunBindingByThread({
     orgId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   });
 }
 
@@ -130,7 +131,7 @@ export async function resolveFactorySessionAddress(options: {
   const requestContext = options.requestContext;
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
-  if (!context?.threadId || !context.resourceId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
   const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
@@ -139,7 +140,7 @@ export async function resolveFactorySessionAddress(options: {
     orgId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   });
   if (!binding) return null;
 
@@ -151,7 +152,7 @@ export async function resolveFactorySessionAddress(options: {
       factoryProjectId: binding.factoryProjectId,
       threadId: context.threadId,
       resourceId: context.resourceId,
-      sessionId: context.resourceId,
+      sessionId: context.sessionId,
     },
     binding,
   };
@@ -170,7 +171,7 @@ async function healRecoveredSessionState(options: {
   // Security posture first, from the binding row alone (no I/O): review-bound
   // sessions run against attacker-writable checkouts, so `untrustedCheckout`
   // must survive even if the enrichment lookups below fail transiently.
-  if (binding.role === 'review') {
+  if (binding.role === REVIEW_CONTEXT) {
     updates.untrustedCheckout = true;
   }
   // Best-effort enrichment mirroring the start coordinator's original seed:
@@ -186,7 +187,7 @@ async function healRecoveredSessionState(options: {
     const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';
     if (untrusted) {
       updates.untrustedCheckout = true;
-      const metadataBaseBranch = item?.metadata?.baseBranch;
+      const metadataBaseBranch = item?.workItem.metadata?.baseBranch;
       const baseRef =
         sourceSession?.baseBranch ||
         (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);

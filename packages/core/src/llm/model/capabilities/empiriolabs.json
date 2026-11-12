@@ -1,6 +1,5 @@
 {
   "attachment": [
-    "deepseek-v4-1-flash",
     "deepseek-v4-1-flash-1017",
     "fugu-max",
     "fugu-ultra-v1-0",
@@ -14,7 +13,7 @@
     "kimi-k2-7-code",
     "kimi-k2-7-code-highspeed",
     "kimi-k3",
-    "mimo-v2-5",
+    "kimi-k3-1-pro",
     "mimo-v2-6-flash",
     "mimo-v2-6-pro",
     "mimo-v2-6-pro-ultraspeed",
@@ -52,7 +51,6 @@
     "step-5-preview"
   ],
   "temperature": [
-    "deepseek-v4-1-flash",
     "deepseek-v4-1-flash-1017",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -62,13 +60,12 @@
     "glm-4-5-flash",
     "glm-4-6v-flash",
     "glm-4-7-flash",
+    "glm-4-7-flashx",
     "glm-5-1",
     "glm-5-2",
     "glm-5-3",
     "glm-5-3-flash",
     "kimi-k2-6",
-    "mimo-v2-5",
-    "mimo-v2-5-pro",
     "mimo-v2-6-flash",
     "mimo-v2-6-pro",
     "mimo-v2-6-pro-ultraspeed",
@@ -104,7 +101,6 @@
     "seed-2-0-code",
     "seed-2-0-lite",
     "seed-2-0-mini",
-    "seed-2-0-pro",
     "seed-2-1-turbo",
     "step-3-5-flash",
     "step-3-5-flash-2603",
@@ -112,7 +108,6 @@
     "step-5-preview"
   ],
   "structuredOutput": [
-    "deepseek-v4-1-flash",
     "deepseek-v4-1-flash-1017",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -121,11 +116,11 @@
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
     "fugu-ultra-v2-0",
-    "gemma-3-27b",
     "gemma-4-26b-a4b",
     "glm-4-5-flash",
     "glm-4-6v-flash",
     "glm-4-7-flash",
+    "glm-4-7-flashx",
     "glm-5-1",
     "glm-5-2",
     "glm-5-3",
@@ -134,15 +129,10 @@
     "kimi-k2-7-code",
     "kimi-k2-7-code-highspeed",
     "kimi-k3",
-    "mimo-v2-5",
-    "mimo-v2-5-pro",
+    "kimi-k3-1-pro",
     "mimo-v2-6-flash",
     "mimo-v2-6-pro",
     "mimo-v2-6-pro-ultraspeed",
-    "minimax-m2-7",
-    "minimax-m2-7-highspeed",
-    "minimax-m3",
-    "minimax-m3-1-flash",
     "mistral-small-4",
     "muse-glimmer-30b",
     "muse-spark-1-1",
@@ -168,62 +158,15 @@
     "qwen3-8-max",
     "qwen3-8-max-0902",
     "qwen3-8-omni-flash",
-    "seed-2-0-code",
     "seed-2-0-lite",
     "seed-2-0-mini",
     "seed-2-0-pro",
     "seed-2-1-turbo",
-    "step-3-5-flash",
-    "step-3-5-flash-2603",
     "step-3-7-flash",
     "step-5-preview"
   ],
   "reasoning": {
-    "muse-spark-1-1": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "qwen3-5-122b-a10b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 80000
-      }
-    ],
-    "muse-spark-1-3": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "qwen3-7-plus": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 256000
-      }
-    ],
-    "qwen3-5-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 81920
-      }
-    ],
-    "qwen3-8-max": [
+    "qwen3-8-max-0902": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -234,112 +177,26 @@
         "max": 262144
       }
     ],
-    "step-5-preview": [
+    "step-3-5-flash-2603": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high"]
       }
     ],
-    "seed-2-1-turbo": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "fugu-ultra-v2-0": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "mimo-v2-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "fugu-max": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "fugu-ultra-v1-0": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "kimi-k2-6": [
+    "muse-glimmer-30b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "qwen3-5-flash": [
+      {
+        "type": "toggle"
       },
       {
         "type": "budget_tokens",
         "min": 1,
         "max": 81920
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-5-4b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 32768
-      }
-    ],
-    "qwen3-6-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "deepseek-v4-1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 393216
-      }
-    ],
-    "seed-2-0-lite": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3-7-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 131072
-      }
-    ],
-    "step-3-7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "seed-2-0-mini": [
@@ -351,7 +208,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3-8-omni-flash": [
+    "qwen3-5-122b-a10b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -359,111 +216,7 @@
       {
         "type": "budget_tokens",
         "min": 1,
-        "max": 262144
-      }
-    ],
-    "qwen3-5-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 80000
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "fugu-ultra-v1-1": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
-      }
-    ],
-    "gemma-4-26b-a4b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "minimax-m3-1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "step-3-5-flash-2603": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "qwen3-5-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 80000
-      }
-    ],
-    "mimo-v2-5-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2-6-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-6-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 64000
-      }
-    ],
-    "seed-2-0-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 393216
-      }
-    ],
-    "glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "max": 81920
       }
     ],
     "glm-5-1": [
@@ -477,7 +230,7 @@
         "max": 38912
       }
     ],
-    "qwen3-8-flash": [
+    "qwen3-5-35b-a3b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -485,26 +238,10 @@
       {
         "type": "budget_tokens",
         "min": 1,
-        "max": 262144
+        "max": 81920
       }
     ],
-    "glm-4-6v-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-5-9b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 32768
-      }
-    ],
-    "qwen3-5-397b-a17b": [
+    "kimi-k2-6": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -512,83 +249,7 @@
       {
         "type": "budget_tokens",
         "min": 1,
-        "max": 80000
-      }
-    ],
-    "qwen3-6-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 80000
-      }
-    ],
-    "glm-4-7-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-8-max-0902": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 262144
-      }
-    ],
-    "seed-2-0-code": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "muse-spark-1-2": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "mimo-v2-6-pro-ultraspeed": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "qwen3-6-plus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5-3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "max": 81920
       }
     ],
     "deepseek-v4-1-flash-1017": [
@@ -602,7 +263,50 @@
         "max": 393216
       }
     ],
-    "mimo-v2-6-flash": [
+    "qwen3-6-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "seed-2-1-turbo": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 393216
+      }
+    ],
+    "qwen3-7-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 262144
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2-6-pro": [
       {
         "type": "toggle"
       }
@@ -623,7 +327,99 @@
         "type": "toggle"
       }
     ],
-    "qwen3-5-flash": [
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3-5-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "mimo-v2-6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "step-3-7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-m3-1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3-7-plus": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 262144
+      }
+    ],
+    "glm-4-7-flashx": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3-1-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mimo-v2-6-pro-ultraspeed": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "fugu-ultra-v1-1": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 393216
+      }
+    ],
+    "glm-4-6v-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-5-plus": [
       {
         "type": "toggle"
       },
@@ -633,7 +429,208 @@
         "max": 81920
       }
     ],
-    "qwen3-7-max": [
+    "glm-4-7-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-6-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 131072
+      }
+    ],
+    "gemma-4-26b-a4b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "fugu-ultra-v1-0": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
+      }
+    ],
+    "fugu-max": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
+      }
+    ],
+    "muse-spark-1-1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "qwen3-8-omni-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 262144
+      }
+    ],
+    "muse-spark-1-3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "seed-2-0-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen3-5-9b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 32768
+      }
+    ],
+    "qwen3-6-plus": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 131072
+      }
+    ],
+    "qwen3-5-397b-a17b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
+      }
+    ],
+    "muse-spark-1-2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "qwen3-7-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 131072
+      }
+    ],
+    "glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "fugu-ultra-v2-0": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
+      }
+    ],
+    "seed-2-0-code": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "seed-2-0-lite": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3-8-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 262144
+      }
+    ],
+    "qwen3-8-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 262144
+      }
+    ],
+    "qwen3-5-4b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 32768
+      }
+    ],
+    "qwen3-6-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -642,17 +639,6 @@
         "type": "budget_tokens",
         "min": 1,
         "max": 64000
-      }
-    ],
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 393216
       }
     ]
   }

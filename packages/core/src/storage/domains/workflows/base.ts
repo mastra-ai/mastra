@@ -1,4 +1,5 @@
-import type { StepResult, WorkflowRunState } from '../../../workflows';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../../../workflows';
 import type {
   ClaimRunOwnershipInput,
   ClaimRunOwnershipResult,
@@ -9,7 +10,19 @@ import type {
 } from '../../run-fencing';
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type { WorkflowStepStartGuard, WorkflowStepCompletionGuard } from '../../workflow-step-guard';
 import { StorageDomain } from '../base';
+import type { StateRef, StateVersion, StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
+import type { StatePatchOp } from './state-patch';
+
+function runJournalNotSupportedError(adapter: string): MastraError {
+  return new MastraError({
+    id: 'STORAGE_RUN_JOURNAL_NOT_SUPPORTED',
+    domain: ErrorDomain.STORAGE,
+    category: ErrorCategory.USER,
+    text: `${adapter} does not support storage v2 runs. Check supportsRunJournal() before calling storage v2 methods.`,
+  });
+}
 
 export abstract class WorkflowsStorage extends StorageDomain {
   constructor() {
@@ -20,6 +33,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   abstract supportsConcurrentUpdates(): boolean;
+
+  /** Atomic occurrence checks for evented step writes and replay-safe continuation. */
+  supportsWorkflowStepGuards(): boolean {
+    return false;
+  }
 
   /**
    * Whether this adapter implements run ownership: the claim/renew/release
@@ -43,6 +61,16 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * rejects when the probe fails: it must never answer false and later true.
    */
   supportsRunFencing(): boolean | Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Whether this adapter stores storage v2 runs (`storageVersion: 2`): a header plus
+   * append-only entries, written and read by the storage v2 methods below.
+   * Reads without a `storageVersion` hint must find runs of either version.
+   * @experimental
+   */
+  supportsRunJournal(): boolean {
     return false;
   }
 
@@ -90,10 +118,161 @@ export abstract class WorkflowsStorage extends StorageDomain {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
+  // Storage v2 runs. Adapters that return true from supportsRunJournal() implement these.
+
+  /**
+   * A storage v2 run's header, without reading its entries. Null when the run isn't stored as v2.
+   * @experimental
+   */
+  async loadWorkflowRunHeader(_args: { workflowName: string; runId: string }): Promise<StoredWorkflowRunHeader | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * A storage v2 run's header, state and latest result per step (as `latestStepResults` rebuilds
+   * them). With `successfulSteps: 'summary'`, successful steps come back as summaries
+   * (`summarizeStepResult`) and are listed in `summarizedStepIds`.
+   *
+   * The state is rebuilt by `materializeState`: the latest `state` or `state-base` entry with every
+   * later state patch applied in `seq` order. A `state-base` entry names another run's state version,
+   * resolved by this same rule (`{}` when that run isn't stored). `statePatchBytes` reports the size
+   * of the run's own applied patches.
+   * @experimental
+   */
+  async loadWorkflowRun(_args: {
+    workflowName: string;
+    runId: string;
+    successfulSteps: 'full' | 'summary';
+  }): Promise<StoredWorkflowRun | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * The latest result of each given step of a storage v2 run (as `latestStepResults` rebuilds it).
+   * Steps without an entry are left out. Null when the run isn't stored, or when `expectedLastSeq`
+   * is given and the run's `lastSeq` differs from it (the run was written to since). Stores that
+   * return `runToken` must also reject a differing `expectedRunToken` (the run was deleted and
+   * recreated). The identity/sequence checks and the read see the same version of the run.
+   * @experimental
+   */
+  async loadWorkflowRunSteps(_args: {
+    workflowName: string;
+    runId: string;
+    stepIds: string[];
+    expectedLastSeq?: number;
+    expectedRunToken?: string;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Patch a storage v2 run's header. With `opts.expectedStatus`, only when the stored status
+   * matches. Returns the updated header, or undefined when the run isn't stored or the status
+   * didn't match.
+   * @experimental
+   */
+  async updateWorkflowRunHeader(_args: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
+  }): Promise<StoredWorkflowRunHeader | undefined> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Replace a storage v2 run's step entries (and step patches) with one per step, in the given
+   * order, and start its state over: from `state`, or from `stateBase` with `statePatch` applied, or
+   * from `{}`. Earlier state entries are kept, so a nested run built on an earlier version of this
+   * run's state still reads it. Writes the header, creating the run if it isn't stored. Returns the
+   * run's `lastSeq`, or null when `expectedStatus` rejected the write (see `appendWorkflowRunEntries`).
+   * Throws when `stateBase` names a version that isn't stored (its run was deleted, or a checkpoint
+   * of it dropped that version), rather than starting the run's state from `{}`, or one past its
+   * run's `lastSeq` (not written yet): a run only builds on state that already exists.
+   *
+   * `threadId` is the whole run's thread (`getSnapshotMemoryInfo`), passed on every write.
+   * Stores that keep it next to the header filter `listWorkflowRuns` by it without reading entries.
+   * @experimental
+   */
+  async writeWorkflowRunCheckpoint(_args: {
+    workflowName: string;
+    runId: string;
+    resourceId?: string;
+    threadId?: string;
+    header: WorkflowRunHeader;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state?: Record<string, any>;
+    stateBase?: StateRef;
+    statePatch?: StatePatchOp[];
+    fence?: RunFence;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number; runToken?: string } | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Append one entry per given step to a storage v2 run, then one `step-patch` entry per step in
+   * `stepPatches` (its ops change the step's latest result, see `latestStepResults`; a step is in
+   * `steps` or `stepPatches`, not both), then the full state or a state patch when given (at most
+   * one of them). Writes the header, creating the run if it isn't stored.
+   * With `startStateSeq` (a resumed run's first append), records it as the run's `startStateSeq`.
+   * Returns the run's `lastSeq`.
+   *
+   * `threadId` is the whole run's thread, as for `writeWorkflowRunCheckpoint`, not only the given steps'.
+   *
+   * `expectedStatus` is a compare-and-set guard, which every storage v2 store enforces atomically
+   * with the write (`supportsGuardedSnapshotWrites` is about v1 snapshots): when the run is stored
+   * and its header's status is not one of these values, nothing is written and the call resolves
+   * to null. A run that isn't stored yet is always written.
+   * @experimental
+   */
+  async appendWorkflowRunEntries(_args: {
+    workflowName: string;
+    runId: string;
+    resourceId?: string;
+    threadId?: string;
+    header: WorkflowRunHeader;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    stepPatches?: Record<string, StatePatchOp[]>;
+    state?: Record<string, any>;
+    statePatch?: StatePatchOp[];
+    startStateSeq?: number;
+    fence?: RunFence;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number; runToken?: string } | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * A storage v2 run's state as of `seq`, rebuilt like `loadWorkflowRun`'s. Null when the run isn't stored.
+   * @experimental
+   */
+  async loadWorkflowRunState(_args: {
+    workflowName: string;
+    runId: string;
+    seq: number;
+  }): Promise<Record<string, any> | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Append a draft of a stored storage v2 run's state: `ops` applied to the version `on`, or a full
+   * `state`. A draft doesn't change the run's state; nested runs build on it. Returns its `seq`.
+   * @experimental
+   */
+  async appendWorkflowRunStateDraft(
+    _args: { workflowName: string; runId: string } & (
+      | { on: StateVersion; ops: StatePatchOp[] }
+      | { state: Record<string, any> }
+    ),
+  ): Promise<{ seq: number }> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
   /**
    * In-memory, LibSQL, and PostgreSQL storage return an empty object without writing when the workflow run does not
    * exist. Remaining adapters are being aligned under COR-1448; callers must not rely on this method to create the
-   * initial run snapshot.
+   * initial run snapshot. Not supported for storage v2 runs.
    */
   abstract updateWorkflowResults({
     workflowName,
@@ -115,20 +294,47 @@ export abstract class WorkflowsStorage extends StorageDomain {
      */
     state?: Record<string, any>;
     fence?: RunFence;
+    startGuard?: WorkflowStepStartGuard;
+    completionGuard?: WorkflowStepCompletionGuard;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
+  /**
+   * `storageVersion` picks the store to patch. Without it, adapters that support run journals
+   * patch the run wherever it is stored.
+   */
   abstract updateWorkflowState({
     workflowName,
     runId,
     opts,
     fence,
+    storageVersion,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
     fence?: RunFence;
+    /** @experimental */
+    storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | undefined>;
 
+  /**
+   * Whether `persistWorkflowSnapshot` enforces its `expectedStatus` guard atomically
+   * with the write. Adapters that return false ignore the guard, so callers that
+   * need it must check the run status themselves before writing.
+   */
+  supportsGuardedSnapshotWrites(): boolean {
+    return false;
+  }
+
+  /**
+   * Upserts a run snapshot.
+   *
+   * `expectedStatus` is an optional compare-and-set guard, honored only by adapters
+   * where `supportsGuardedSnapshotWrites()` is true. When the run already has a
+   * snapshot whose status is not one of these values, the write is skipped and the
+   * call resolves to `false`. A run with no snapshot yet is always written. Adapters
+   * that honor the guard resolve to `true` after a write; others resolve to `undefined`.
+   */
   abstract persistWorkflowSnapshot(_: {
     workflowName: string;
     runId: string;
@@ -137,19 +343,60 @@ export abstract class WorkflowsStorage extends StorageDomain {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void>;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean | void>;
 
+  /**
+   * `storageVersion` limits the lookup to one store. Without it, adapters that support run
+   * journals look in both.
+   */
   abstract loadWorkflowSnapshot({
+    workflowName,
+    runId,
+    storageVersion,
+  }: {
+    workflowName: string;
+    runId: string;
+    /** @experimental */
+    storageVersion?: 1 | 2;
+  }): Promise<WorkflowRunState | null>;
+
+  /**
+   * Returns only the persisted status of a run, or `null` when the run has no
+   * snapshot. Adapters that support run journals look in both stores, as
+   * `loadWorkflowSnapshot` does without `storageVersion`. Adapters should override
+   * this to avoid reading the whole snapshot (a storage v2 run's header has the
+   * status); the default loads it.
+   */
+  async loadWorkflowRunStatus({
     workflowName,
     runId,
   }: {
     workflowName: string;
     runId: string;
-  }): Promise<WorkflowRunState | null>;
+  }): Promise<WorkflowRunStatus | null> {
+    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+    return snapshot?.status ?? null;
+  }
 
+  /** Adapters that support run journals list runs of both versions. */
   abstract listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
 
-  abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+  /**
+   * `storageVersion` limits the lookup to one store. Without it, adapters that support run
+   * journals look in both.
+   */
+  abstract getWorkflowRunById(args: {
+    runId: string;
+    workflowName?: string;
+    /** @experimental */
+    storageVersion?: 1 | 2;
+  }): Promise<WorkflowRun | null>;
 
-  abstract deleteWorkflowRunById(args: { runId: string; workflowName: string; fence?: RunFence }): Promise<void>;
+  abstract deleteWorkflowRunById(args: {
+    runId: string;
+    workflowName: string;
+    storageVersion?: 1 | 2;
+    fence?: RunFence;
+  }): Promise<void>;
 }

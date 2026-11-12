@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import type { SpanType } from '@mastra/core/observability';
 import type {
   QueryThreadsInput,
@@ -8,7 +9,13 @@ import type {
   SpanQueryResponse,
   TraceQueryPredicate,
 } from '@mastra/core/storage';
-import type { ClientOptions, GetObservabilityCapabilitiesResponse, ListFeedbackResponse } from '../types';
+import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
+  ClientOptions,
+  GetObservabilityCapabilitiesResponse,
+  ListFeedbackResponse,
+} from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 import type {
@@ -25,6 +32,8 @@ import type {
   TraceQueryGroupResponse,
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -61,6 +70,7 @@ import type {
   GetScorePercentilesResponse,
   ListFeedbackArgs,
   CreateFeedbackBody,
+  ReplaceFeedbackBody,
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
   DeleteFeedbackResponse,
@@ -96,6 +106,8 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from './observability-route-types.js';
+import { writeSignal } from './signal-writes';
+import type { SignalWriteOptions } from './signal-writes';
 
 // ============================================================================
 // Legacy Types (for backward compatibility with main branch API)
@@ -330,8 +342,17 @@ export class Observability extends BaseResource {
    * Groups and measures the traces selected by a time range and optional trace-query predicate.
    * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
-  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
-    return this.request('/observability/traces/aggregate', { method: 'POST', body: params });
+  aggregateTraces(params: AggregateTracesArgs, options?: { signal?: AbortSignal }): Promise<AggregateTracesResponse> {
+    return this.request('/observability/traces/aggregate', { method: 'POST', body: params, signal: options?.signal });
+  }
+
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.request('/observability/spans/aggregate', { method: 'POST', body: params });
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
@@ -374,7 +395,7 @@ export class Observability extends BaseResource {
    * Queries completed spans using a span predicate, returning one row per matching span.
    *
    * @param params - Span query, including its required time range
-   * @returns Matching span rows with input/output previews and model cost
+   * @returns Matching span rows with model/provider fields and input/output/error previews
    */
   querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
     return this.request('/observability/spans/query', { method: 'POST', body: params });
@@ -460,7 +481,9 @@ export class Observability extends BaseResource {
    * On ClickHouse-backed stores, reads may briefly return deleted rows until
    * the lightweight delete is fully applied.
    * @param params - IDs of the traces to delete
-   * @returns Promise resolving to `{ success: true }` once the delete is issued
+   * @returns `{ success: true }` after OSS deletion, or `{ accepted: true }`
+   * when a supporting Platform backend queues cleanup. Acceptance does not
+   * mean records have disappeared from reads.
    */
   deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.request(`/observability/traces/delete`, {
@@ -485,6 +508,11 @@ export class Observability extends BaseResource {
   // Scores (observability storage)
   // --------------------------------------------------------------------------
 
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.request(`/observability/scores/${encodeURIComponent(id)}`);
+  }
+
   /**
    * Retrieves a paginated list of scores with optional filtering and sorting.
    */
@@ -495,19 +523,28 @@ export class Observability extends BaseResource {
 
   /**
    * Creates a single score record in the observability store.
-   * Timestamp is set server-side.
+   * Missing IDs and timestamps are generated once, before retries.
    */
-  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
-    return this.request(`/observability/scores`, {
-      method: 'POST',
-      body: params,
-    });
+  createScore(params: CreateScoreBody, options?: SignalWriteOptions): Promise<CreateScoreResponse> {
+    const body = {
+      ...params,
+      ...(params?.score && {
+        score: {
+          ...params.score,
+          scoreId: params.score.scoreId ?? uuid(),
+          timestamp: params.score.timestamp ?? new Date().toISOString(),
+        },
+      }),
+    };
+    return writeSignal(this, '/observability/scores', 'POST', body, options);
   }
 
   /**
    * Deletes score records by scoreId, optionally scoped to a tenant.
    * Idempotent: deleting missing ids succeeds. Depending on the storage
    * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   * A supporting Platform backend returns `{ accepted: true }` after queueing
+   * cleanup; OSS returns `{ success: boolean }` after deletion.
    */
   deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
     return this.request(`/observability/scores`, {
@@ -560,6 +597,11 @@ export class Observability extends BaseResource {
   // Feedback
   // --------------------------------------------------------------------------
 
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.request(`/observability/feedback/${encodeURIComponent(id)}`);
+  }
+
   /**
    * Retrieves a paginated list of feedback with optional filtering and sorting.
    */
@@ -570,13 +612,31 @@ export class Observability extends BaseResource {
 
   /**
    * Creates a single feedback record in the observability store.
-   * Timestamp is set server-side.
+   * Missing IDs and timestamps are generated once, before retries.
    */
-  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
-    return this.request(`/observability/feedback`, {
-      method: 'POST',
-      body: params,
-    });
+  createFeedback(params: CreateFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    const body = {
+      ...params,
+      ...(params?.feedback && {
+        feedback: {
+          ...params.feedback,
+          feedbackId: params.feedback.feedbackId ?? uuid(),
+          timestamp: params.feedback.timestamp ?? new Date().toISOString(),
+        },
+      }),
+    };
+    return writeSignal(this, '/observability/feedback', 'POST', body, options);
+  }
+
+  /** Replaces Platform feedback using its original identity and timestamp. Each accepted PUT retry is a new replacement. */
+  replaceFeedback(params: ReplaceFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return writeSignal(
+      this,
+      `/observability/feedback/${encodeURIComponent(params.feedback.feedbackId)}`,
+      'PUT',
+      params,
+      options,
+    );
   }
 
   /** Updates a feedback record's review workflow status. */
@@ -591,6 +651,8 @@ export class Observability extends BaseResource {
    * Deletes feedback records by feedbackId, optionally scoped to a tenant.
    * Idempotent: deleting missing ids succeeds. Depending on the storage
    * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   * A supporting Platform backend returns `{ accepted: true }` after queueing
+   * cleanup; OSS returns `{ success: boolean }` after deletion.
    */
   deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
     return this.request(`/observability/feedback`, {

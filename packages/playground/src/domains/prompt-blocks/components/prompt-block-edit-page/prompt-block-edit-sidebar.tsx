@@ -29,7 +29,7 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className={'py-2'} style={{ paddingLeft: depth * 8 }}>
+    <div className="py-2" style={{ paddingLeft: depth * 8 }}>
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row items-center gap-4">

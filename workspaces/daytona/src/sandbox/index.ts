@@ -104,7 +104,13 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
   id?: string;
   /** API key for authentication. Falls back to DAYTONA_API_KEY env var. */
   apiKey?: string;
-  /** API URL. Falls back to DAYTONA_API_URL env var or https://app.daytona.io/api. */
+  /**
+   * API URL. Falls back to the DAYTONA_API_URL (or deprecated DAYTONA_SERVER_URL)
+   * process env var, then https://app.daytona.io/api. The SDK does not read these
+   * from `.env` files; if one is set in both the process env and a working-directory
+   * `.env`/`.env.local`/`.env.development`, startup fails with
+   * "The Daytona API endpoint is ambiguous". Pass this option explicitly to avoid that.
+   */
   apiUrl?: string;
   /** Target runner region. Falls back to DAYTONA_TARGET env var. */
   target?: string;
