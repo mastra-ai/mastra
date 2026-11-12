@@ -17,7 +17,7 @@ import { createStep } from '../workflow';
 import type { Workflow } from '../workflow';
 
 /** A storage v2 result's `steps` is a loader; the suite checks the steps it loads. */
-async function withLoadedSteps(result: unknown): Promise<WorkflowResult> {
+export async function withLoadedSteps(result: unknown): Promise<WorkflowResult> {
   const { steps } = result as { steps: unknown };
   if (typeof steps !== 'function') return result as WorkflowResult;
   return { ...(result as WorkflowResult), steps: await steps() };

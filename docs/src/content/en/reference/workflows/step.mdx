@@ -330,13 +330,19 @@ A classifier without constructor-configured questions can't be used as a workflo
             name: 'state',
             type: 'z.infer<TState>',
             description:
-              "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
+              "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema. Reading it in a run stored with `storageVersion: 2` throws; use `await getState()` instead.",
+          },
+          {
+            name: 'getState',
+            type: '(keys?: string[]) => Promise<z.infer<TState>>',
+            description:
+              "Resolves to the current workflow state, including this step's own `setState` changes. Pass top-level keys to get only those keys. Works on every engine and storage version.",
           },
           {
             name: 'setState',
-            type: '(state: z.infer<TState>) => void',
+            type: '(state: Partial<z.infer<TState>>) => Promise<void>',
             description:
-              "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
+              "Merges the top-level keys it's given into the workflow state. Pass only the keys that changed: spreading a state you read earlier can overwrite changes that parallel steps made. Await it, so the update is applied before the step returns and a validation error fails the step.",
           },
           {
             name: 'runId',

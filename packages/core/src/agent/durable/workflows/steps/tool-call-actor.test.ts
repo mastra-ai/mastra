@@ -22,6 +22,7 @@ describe('durable tool-call context forwarding', () => {
 
     try {
       await (createDurableToolCallStep() as any).execute({
+        getState: async () => ({}),
         inputData: {
           toolCallId: 'call-1',
           toolName: 'secureTool',
@@ -97,6 +98,7 @@ describe('durable tool-call context forwarding', () => {
 
       try {
         await (createDurableToolCallStep() as any).execute({
+          getState: async () => ({}),
           inputData: {
             toolCallId: 'resume-call',
             toolName: 'workflow-sub',
@@ -168,6 +170,7 @@ describe('durable tool-call context forwarding', () => {
 
     try {
       await (createDurableToolCallStep() as any).execute({
+        getState: async () => ({}),
         inputData: {
           toolCallId: 'call-a',
           toolName: 'workflow-sub',
@@ -216,6 +219,7 @@ describe('durable tool-call context forwarding', () => {
 
     try {
       await (createDurableToolCallStep() as any).execute({
+        getState: async () => ({}),
         inputData: {
           toolCallId: 'call-1',
           toolName: 'secureTool',

@@ -114,7 +114,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
-import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
+import { collectPredicateStepRefs, predicateReadsState, resolveStepOutputs } from './step-refs';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -220,6 +220,7 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
   const stepRefs = collectPredicateStepRefs(predicate);
+  const readsState = predicateReadsState(predicate);
   return async (params: any) => {
     // Resolve every referenced step up front. Passing the sync getStepResult
     // instead would let the predicate's fail-quiet lookup swallow its throw on
@@ -231,7 +232,12 @@ export function predicateToCondition(predicate: Predicate): (params: any) => Pro
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
       inputData: params?.inputData,
-      state: params?.state,
+      // Storage v2 runs serve the state through getState only.
+      state: readsState
+        ? typeof params?.getState === 'function'
+          ? await params.getState()
+          : params?.state
+        : undefined,
       stepResults,
     });
   };
@@ -2196,12 +2202,12 @@ export class Workflow<
 
   __registerMastra(mastra: Mastra) {
     // Checked here rather than in the constructor: other engines set engineType after super().
-    if (this.#options.storageVersion === 2 && this.engineType !== 'default') {
+    if (this.#options.storageVersion === 2 && this.engineType !== 'default' && this.engineType !== 'evented') {
       throw new MastraError({
         id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
         domain: ErrorDomain.MASTRA_WORKFLOW,
         category: ErrorCategory.USER,
-        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default engine or storageVersion: 1.`,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default or evented engine, or storageVersion: 1.`,
       });
     }
     this.#mastra = mastra;
@@ -3340,7 +3346,7 @@ export class Workflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await run.runStorage.writeInitial(
+      await run.runStorage.writeSnapshot(
         // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
         this.#options.pruneSnapshot && storageVersion === 1
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
@@ -3421,7 +3427,7 @@ export class Workflow<
     inputData: TInput;
     resumeData?: unknown;
     state: TState;
-    setState: (state: TState) => Promise<void>;
+    setState: (state: Partial<TState>) => Promise<void>;
     suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
     restart?: boolean;
     timeTravel?: {
@@ -4662,7 +4668,7 @@ export class Run<
           timestamp: Date.now(),
         };
         try {
-          await this.runStorage.writeInitial(
+          await this.runStorage.writeSnapshot(
             this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
               ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
               : initialRunSnapshot,

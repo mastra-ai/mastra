@@ -37,8 +37,14 @@ export type ExecuteFunctionParams<
   requestContext: RequestContext<TRequestContext>;
   actor?: ActorSignal;
   inputData: TStepInput;
+  /** The run's state. On runs with `storageVersion: 2`, reading it throws: use `await getState()` instead. */
   state: TState;
-  setState(state: TState): Promise<void>;
+  /** Resolves to the run's state, or only its named top-level keys, with this step's `setState` changes. */
+  getState(): Promise<unknown extends TState ? Record<string, any> : TState>;
+  getState<K extends (unknown extends TState ? string : keyof TState & string)>(
+    keys: readonly K[],
+  ): Promise<unknown extends TState ? Record<string, any> : Pick<TState, K & keyof TState>>;
+  setState(state: Partial<TState>): Promise<void>;
   resumeData?: TResume;
   suspendData?: TSuspend;
   retryCount: number;

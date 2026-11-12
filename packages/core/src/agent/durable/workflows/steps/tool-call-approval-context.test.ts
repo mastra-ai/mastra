@@ -29,6 +29,7 @@ const resolveTool = vi.mocked(resolveRuntime.resolveTool);
 
 function makeParams(runId: string, overrides: Record<string, any> = {}) {
   return {
+    getState: async () => ({}),
     inputData: { toolCallId: 'call-1', toolName: 'gatedTool', args: { q: 1 } },
     mastra: { getLogger: () => undefined },
     suspend: vi.fn(),

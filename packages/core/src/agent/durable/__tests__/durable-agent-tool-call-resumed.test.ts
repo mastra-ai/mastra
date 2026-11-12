@@ -76,7 +76,6 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
   it('waits for evented suspension persistence before restoring tool calls', async () => {
     const storage = new InMemoryStore();
     const workflows = (await storage.getStore('workflows'))!;
-    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
     let releasePersistence!: () => void;
     const persistenceGate = new Promise<void>(resolve => {
       releasePersistence = resolve;
@@ -85,12 +84,16 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const persistenceBlocked = new Promise<void>(resolve => {
       persistenceStarted = resolve;
     });
-    const stateSpy = vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(async args => {
-      if (args.workflowName === DurableStepIds.AGENTIC_LOOP && args.opts.status === 'suspended') {
-        persistenceStarted();
-        await persistenceGate;
-      }
-      return updateWorkflowState(args);
+    // v1 stores the suspension through updateWorkflowState, v2 through updateWorkflowRunHeader.
+    const stateSpies = (['updateWorkflowState', 'updateWorkflowRunHeader'] as const).map(method => {
+      const original = workflows[method].bind(workflows) as (args: any) => Promise<any>;
+      return vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
+        if (args.workflowName === DurableStepIds.AGENTIC_LOOP && args.opts.status === 'suspended') {
+          persistenceStarted();
+          await persistenceGate;
+        }
+        return original(args);
+      });
     });
     const agent = new Agent({
       id: 'delayed-approver',
@@ -112,7 +115,9 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const first = await wrapped.stream('go', { maxSteps: 3, closeOnSuspend: true });
     await drain(first);
     await persistenceBlocked;
-    const reads = vi.spyOn(workflows, 'getWorkflowRunById');
+    const reads = (['getWorkflowRunById', 'loadWorkflowRunHeader', 'loadWorkflowRun'] as const).map(method =>
+      vi.spyOn(workflows, method),
+    );
     let resumeSettled = false;
     const resuming = wrapped.resume(first.runId, { approved: true }, { toolCallId: 'tc-1' }).then(result => {
       resumeSettled = true;
@@ -121,11 +126,10 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     try {
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(resumeSettled).toBe(false);
-      expect(reads).not.toHaveBeenCalled();
+      for (const read of reads) expect(read).not.toHaveBeenCalled();
     } finally {
       releasePersistence();
-      reads.mockRestore();
-      stateSpy.mockRestore();
+      for (const spy of [...reads, ...stateSpies]) spy.mockRestore();
     }
     const resumed = await resuming;
     await drain(resumed);

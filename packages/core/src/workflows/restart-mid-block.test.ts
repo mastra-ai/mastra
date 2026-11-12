@@ -653,7 +653,8 @@ describe.each([1, 2] as const)('restart after a crash at any write inside a fore
     const stateSchema = z.record(z.string(), z.number());
     const build = (): Built => {
       const random = seeded(7);
-      const execute = vi.fn(async ({ inputData, state, setState }: any) => {
+      const execute = vi.fn(async ({ inputData, getState, setState }: any) => {
+        const state = await getState();
         await sleep(Math.floor(random() * 4));
         await setState({ ...state, [`n${inputData}`]: (state[`n${inputData}`] ?? 0) + 1 });
         return inputData;
@@ -664,7 +665,7 @@ describe.each([1, 2] as const)('restart after a crash at any write inside a fore
         inputSchema: anySchema,
         outputSchema: anySchema,
         stateSchema,
-        execute: async ({ state }) => state,
+        execute: async ({ getState }) => getState(),
       });
       const workflow = createWorkflow({
         id: 'foreach-state-once',

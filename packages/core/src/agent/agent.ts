@@ -10656,9 +10656,7 @@ export class Agent<
       mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       await Promise.all(
-        [...workflowNames].map(workflowName =>
-          workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 }),
-        ),
+        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
       );
       return true;
     } catch (error) {

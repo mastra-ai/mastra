@@ -1,7 +1,7 @@
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
-import type { WorkflowsStorage } from '../../../storage/domains/workflows';
+import type { RunStorage } from '../../run-storage';
 import { withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { getStepId } from './utils';
@@ -81,12 +81,12 @@ export async function processWorkflowSleep(
   {
     pubsub,
     stepExecutor,
-    workflowsStore,
+    runStorage,
     step,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
-    workflowsStore?: WorkflowsStorage;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
@@ -110,9 +110,7 @@ export async function processWorkflowSleep(
     });
   }
 
-  await workflowsStore?.updateWorkflowResults({
-    workflowName: workflowId,
-    runId,
+  await runStorage.writeStepResult({
     stepId: step.id,
     result: {
       status: 'waiting',
@@ -121,14 +119,10 @@ export async function processWorkflowSleep(
     },
     requestContext: withoutAuthToken(requestContext ?? {}),
   });
-  await workflowsStore?.updateWorkflowState({
-    workflowName: workflowId,
-    runId,
-    opts: {
-      status: 'running',
-      activePaths: executionPath,
-      activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
-    },
+  await runStorage.updateHeader({
+    status: 'running',
+    activePaths: executionPath,
+    activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
   });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
@@ -223,12 +217,12 @@ export async function processWorkflowSleepUntil(
   {
     pubsub,
     stepExecutor,
-    workflowsStore,
+    runStorage,
     step,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
-    workflowsStore?: WorkflowsStorage;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
@@ -237,9 +231,7 @@ export async function processWorkflowSleepUntil(
   const emitStepEvents = workflow.options.emitStepEvents !== false;
   const startedAt = Date.now();
 
-  await workflowsStore?.updateWorkflowResults({
-    workflowName: workflowId,
-    runId,
+  await runStorage.writeStepResult({
     stepId: step.id,
     result: {
       status: 'waiting',
@@ -248,14 +240,10 @@ export async function processWorkflowSleepUntil(
     },
     requestContext: withoutAuthToken(requestContext ?? {}),
   });
-  await workflowsStore?.updateWorkflowState({
-    workflowName: workflowId,
-    runId,
-    opts: {
-      status: 'running',
-      activePaths: executionPath,
-      activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
-    },
+  await runStorage.updateHeader({
+    status: 'running',
+    activePaths: executionPath,
+    activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
   });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs

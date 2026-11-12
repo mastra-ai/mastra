@@ -87,6 +87,14 @@ export interface CreateEventedAgentOptions<
    * multi-worker coordination build on.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+
+  /**
+   * How the agent's new runs are stored (`1` or `2`). Defaults to `1`. See
+   * {@link DurableAgentConfig.storageVersion}.
+   *
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
 }
 
 /**
@@ -120,7 +128,7 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot, storageVersion } = options;
 
   return new EventedAgent({
     agent,
@@ -129,6 +137,7 @@ export function createEventedAgent<
     maxSteps,
     shouldCache,
     shouldPersistSnapshot,
+    storageVersion,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

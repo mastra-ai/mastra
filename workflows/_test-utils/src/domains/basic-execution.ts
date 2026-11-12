@@ -62,7 +62,8 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
 
     const step1 = createStep({
       id: 'step1',
-      execute: async ({ state, setState }: any) => {
+      execute: async ({ getState, setState }: any) => {
+        const state = await getState();
         // Track call via mock
         const callsMock = mockRegistry.get('basic-single-step-with-state:calls');
         callsMock();
@@ -249,12 +250,14 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
   // Test: should execute multiple steps in parallel with state
   {
     mockRegistry.register('basic-parallel-with-state:step1Action', () =>
-      vi.fn().mockImplementation(async ({ state }: any) => {
+      vi.fn().mockImplementation(async ({ getState }: any) => {
+        const state = await getState();
         return { value: 'step1', stateValue: state.value };
       }),
     );
     mockRegistry.register('basic-parallel-with-state:step2Action', () =>
-      vi.fn().mockImplementation(async ({ state }: any) => {
+      vi.fn().mockImplementation(async ({ getState }: any) => {
+        const state = await getState();
         return { value: 'step2', stateValue: state.value };
       }),
     );
@@ -295,6 +298,54 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
       },
       resetMocks: () => mockRegistry.reset(),
     };
+  }
+
+  // Tests: setState with only the keys a step changes
+  {
+    const stateSchema = z.object({ a: z.number(), b: z.number(), c: z.number() });
+    const writes = (id: string, updates: Record<string, unknown>[], delayMs = 0) =>
+      createStep({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        execute: async ({ setState }: any) => {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          for (const update of updates) await setState(update);
+          return {};
+        },
+      });
+    const reads = () =>
+      createStep({
+        id: 'read',
+        inputSchema: z.any(),
+        outputSchema: z.object({ a: z.number(), b: z.number(), c: z.number() }),
+        stateSchema,
+        execute: async ({ getState }: any) => ({ ...(await getState()) }),
+      });
+    const partialStateWorkflow = (id: string) =>
+      createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.any(), stateSchema });
+
+    const sequential = partialStateWorkflow('basic-partial-state');
+    sequential
+      .then(writes('write', [{ b: 3 }, { c: 4 }]))
+      .then(reads())
+      .commit();
+    workflows['basic-partial-state'] = { workflow: sequential, mocks: {} };
+
+    const parallel = partialStateWorkflow('basic-parallel-partial-state');
+    parallel
+      .parallel([writes('writeB', [{ b: 3 }], 5), writes('writeC', [{ c: 4 }], 15)])
+      .then(reads())
+      .commit();
+    workflows['basic-parallel-partial-state'] = { workflow: parallel, mocks: {} };
+
+    const invalid = partialStateWorkflow('basic-invalid-partial-state');
+    invalid
+      .then(writes('write', [{ b: 'not a number' }]))
+      .then(reads())
+      .commit();
+    workflows['basic-invalid-partial-state'] = { workflow: invalid, mocks: {} };
   }
 
   // Test: should have access to typed workflow results
@@ -445,6 +496,33 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
         output: { result: 'success', value: 'test-state!!!' },
       });
     });
+
+    it.skipIf(skipTests.state)('should merge setState calls that pass only the keys they change', async () => {
+      const { workflow } = registry['basic-partial-state']!;
+      const result = await execute(workflow, {}, { initialState: { a: 1, b: 2, c: 3 } });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.read).toMatchObject({ status: 'success', output: { a: 1, b: 3, c: 4 } });
+    });
+
+    it.skipIf(skipTests.state)('should keep setState keys from each parallel branch', async () => {
+      const { workflow } = registry['basic-parallel-partial-state']!;
+      const result = await execute(workflow, {}, { initialState: { a: 1, b: 2, c: 3 } });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.read).toMatchObject({ status: 'success', output: { a: 1, b: 3, c: 4 } });
+    });
+
+    it.skipIf(skipTests.state || skipTests.stateValidation)(
+      'should fail a step whose setState breaks the state schema',
+      async () => {
+        const { workflow } = registry['basic-invalid-partial-state']!;
+        const result = await execute(workflow, {}, { initialState: { a: 1, b: 2, c: 3 } });
+
+        expect(result.status).toBe('failed');
+        expect(result.steps.write).toMatchObject({ status: 'failed' });
+      },
+    );
 
     it('should execute multiple steps in sequence', async () => {
       const { workflow, mocks } = registry['basic-two-step-sequence']!;

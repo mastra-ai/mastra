@@ -96,6 +96,7 @@ async function runMapping(staleSnapshot: unknown, { modelOutputComputed }: { mod
         toolCalls: [],
       },
     },
+    getState: async () => ({}),
     mastra: { getLogger: () => undefined },
     requestContext: new Map(),
   });

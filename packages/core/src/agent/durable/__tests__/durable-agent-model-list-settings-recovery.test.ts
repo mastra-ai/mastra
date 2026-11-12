@@ -15,7 +15,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { DurableStepIds } from '../constants';
-import { storeRunsInV2 } from './storage-version';
 
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
 type Checkpoint = { rows: SnapshotRow[]; requestsSoFar: number };
@@ -82,10 +81,10 @@ async function startProcess(kind: AgentKind) {
     },
   });
   // Checkpoints are captured and restored through v1's snapshot writes.
-  const durableAgent = storeRunsInV2(
-    kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent }),
-    false,
-  );
+  const durableAgent =
+    kind === 'durable'
+      ? createDurableAgent({ agent, storageVersion: 1 })
+      : createEventedAgent({ agent, storageVersion: 1 });
   const storage = new InMemoryStore();
   // Before `new Mastra(...)`: the engine resolves during agent registration.
   if (kind === 'evented-fallback') {

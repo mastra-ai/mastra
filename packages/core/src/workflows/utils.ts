@@ -4,6 +4,7 @@ import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
+import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import { withoutNestedRunStartState } from './nested-state';
@@ -305,6 +306,47 @@ export function defineLazyWriter<T extends object, W>(
     configurable: true,
     get: () => (writer ??= createWriter()),
   }) as T & { writer: W };
+}
+
+/**
+ * Defines `getState` on step params, resolving to `view()` or only its named top-level keys. On storage
+ * v2 runs, reading `state` throws and points to `getState`, as sync `getStepResult` does. That getter
+ * isn't enumerable, so spreading the params still works.
+ */
+export function defineStateAccessors<T extends object>(
+  params: T,
+  view: () => Record<string, any>,
+  storageV2: boolean,
+): NoInfer<T> & { getState: (keys?: readonly string[]) => Promise<Record<string, any>> } {
+  Object.defineProperty(params, 'getState', {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: async (keys?: readonly string[]) => pickStateKeys(view(), keys),
+  });
+  if (storageV2) {
+    Object.defineProperty(params, 'state', {
+      enumerable: false,
+      configurable: true,
+      get: (): never => {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_SYNC_STATE',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: "`state` isn't available in workflows with storageVersion: 2. Use `await getState()` instead.",
+        });
+      },
+    });
+  }
+  return params as T & { getState: (keys?: readonly string[]) => Promise<Record<string, any>> };
+}
+
+/** Applies a storage v2 `setState` change set to `state`: a key set to `undefined` is deleted. */
+export function applyStateDelta(state: Record<string, any>, delta: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(delta)) {
+    if (value === undefined) delete state[key];
+    else state[key] = value;
+  }
 }
 
 const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;

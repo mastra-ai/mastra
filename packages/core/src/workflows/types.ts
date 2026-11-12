@@ -435,7 +435,10 @@ export interface WorkflowRunState {
    * @internal
    */
   resumeLeasedClaimAt?: number;
-  /** @internal Snapshot created only to guard evented step deliveries. */
+  /**
+   * @internal Snapshot stored only because evented step guards or storage v2 need it while the run
+   * runs; the workflow's `shouldPersistSnapshot` declined it.
+   */
   guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
@@ -657,9 +660,9 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * per run on every write. `2` stores a run header plus per-step entries, and
    * each write sends only what changed.
    *
-   * Version 2 requires the default execution engine and a storage adapter that
-   * supports it (in-memory, `@mastra/pg`, `@mastra/libsql`), and can't be
-   * combined with `pruneSnapshot`. Steps read earlier results with
+   * Version 2 requires the default or evented execution engine and a storage
+   * adapter that supports it (in-memory, `@mastra/pg`, `@mastra/libsql`), and
+   * can't be combined with `pruneSnapshot`. Steps read earlier results with
    * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
    * they were created with: a run resumed after this option changes continues
    * in its stored version. A nested workflow's run uses its parent run's
@@ -674,7 +677,8 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
 
   /**
    * When `storageVersion` isn't set, a new top-level run takes version 2 if
-   * it runs on the default engine and the store supports it, otherwise 1.
+   * it runs on the default or evented engine and the store supports it,
+   * otherwise 1.
    * Unlike an explicit `storageVersion: 2`, this never throws, and runs it
    * stores as version 2 skip `pruneSnapshot`.
    *
@@ -1425,6 +1429,11 @@ export type MutableContext = {
    * to. Applying it applies those changes to the state then, not `state` itself.
    */
   stateBase?: Record<string, unknown>;
+  /**
+   * @internal A storage v2 step's `setState` changes, applied on top of the state then. A key set
+   * to `undefined` is deleted.
+   */
+  stateDelta?: Record<string, unknown>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

@@ -308,7 +308,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
   {
     const step1 = createStep({
       id: 'step1',
-      execute: async ({ state }: any) => {
+      execute: async ({ getState }: any) => {
+        const state = await getState();
         return { result: 'success', value: state.value };
       },
       inputSchema: z.object({}),
@@ -346,7 +347,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
   {
     const step1 = createStep({
       id: 'step1',
-      execute: async ({ state, setState }: any) => {
+      execute: async ({ getState, setState }: any) => {
+        const state = await getState();
         await setState({ ...state, value: state.value + '!!!' });
         return {};
       },
@@ -357,7 +359,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
 
     const step2 = createStep({
       id: 'step2',
-      execute: async ({ state }: any) => {
+      execute: async ({ getState }: any) => {
+        const state = await getState();
         return { result: 'success', value: state.value };
       },
       inputSchema: z.object({}),
@@ -398,7 +401,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
 
     const bodyStep = createStep({
       id: 'body',
-      execute: async ({ inputData, state, setState }: any) => {
+      execute: async ({ inputData, getState, setState }: any) => {
+        const state = await getState();
         const n = inputData.n + 1;
         await setState({ ...state, log: [...state.log, `body${n}`] });
         return { n };
@@ -420,7 +424,7 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
 
     const finalStep = createStep({
       id: 'final',
-      execute: async ({ state }: any) => ({ log: state.log }),
+      execute: async ({ getState }: any) => ({ log: (await getState()).log }),
       inputSchema: z.object({ n: z.number() }),
       outputSchema: z.object({ log: z.array(z.string()) }),
       stateSchema,

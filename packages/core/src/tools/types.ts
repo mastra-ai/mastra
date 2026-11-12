@@ -284,6 +284,8 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   runId: string;
   workflowId: string;
   state: any;
+  /** Resolves to the run's state, or only its named top-level keys. Use it instead of `state` on storage v2 runs. */
+  getState: (keys?: readonly string[]) => Promise<any>;
   setState: (state: any) => void;
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended

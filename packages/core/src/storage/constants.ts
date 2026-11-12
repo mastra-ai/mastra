@@ -1155,7 +1155,8 @@ export const TABLE_WORKFLOW_RUN_ENTRIES = 'mastra_workflow_run_entries';
  * it only increases, across checkpoints too. `startStateSeq` is the state version the run's
  * current drive started from (see `StoredWorkflowRunHeader`). `stateShared` is set once another
  * run's state builds on this run's state, so a checkpoint keeps the earlier state entries and a
- * delete knows to detach the runs built on it.
+ * delete knows to detach the runs built on it. `stateSeq`, `statePatchCount`, `statePatchBytes`
+ * and `stateBytes` track where the run's state chain stands (see `StoredStateColumns`).
  * @experimental
  */
 export const WORKFLOW_RUNS_SCHEMA: Record<string, StorageColumn> = {
@@ -1168,6 +1169,10 @@ export const WORKFLOW_RUNS_SCHEMA: Record<string, StorageColumn> = {
   lastSeq: { type: 'integer', nullable: false },
   startStateSeq: { type: 'integer', nullable: false },
   stateShared: { type: 'boolean', nullable: false },
+  stateSeq: { type: 'integer', nullable: false },
+  statePatchCount: { type: 'integer', nullable: false },
+  statePatchBytes: { type: 'integer', nullable: false },
+  stateBytes: { type: 'integer', nullable: true },
   /** Picked when the run is first stored, kept until it is deleted (see `StoredWorkflowRunHeader`). */
   runToken: { type: 'text', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },

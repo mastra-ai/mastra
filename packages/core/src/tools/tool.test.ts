@@ -78,6 +78,37 @@ describe('createTool', () => {
   });
 });
 
+describe('createTool in a workflow', () => {
+  it('reads workflow getters that use their own object', async () => {
+    class WorkflowContext {
+      #state = { count: 1 };
+      runId = 'run-1';
+      workflowId = 'wf';
+      suspend = async () => {};
+      constructor() {
+        // An own accessor, as Mastra's workflow contexts define `state`.
+        Object.defineProperty(this, 'state', {
+          enumerable: true,
+          get() {
+            return this.#state;
+          },
+        });
+      }
+    }
+    const workflow = new WorkflowContext();
+    const tool = createTool({
+      id: 'read-state',
+      description: 'Reads workflow state',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => ({ state: context.workflow?.state, runId: context.workflow?.runId }),
+    });
+
+    const output = await tool.execute?.({}, { workflow } as any);
+
+    expect(output).toStrictEqual({ state: { count: 1 }, runId: 'run-1' });
+  });
+});
+
 describe('createTool with providerOptions', () => {
   it('should preserve providerOptions when creating a tool', () => {
     const toolWithProviderOptions = createTool({

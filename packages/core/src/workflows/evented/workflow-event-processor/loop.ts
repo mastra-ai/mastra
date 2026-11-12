@@ -2,8 +2,8 @@ import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
 import { getErrorFromUnknown } from '../../../error';
 import type { PubSub } from '../../../events';
-import type { Mastra } from '../../../mastra';
 import { isFrameworkCondition } from '../../framework-condition';
+import type { RunStorage } from '../../run-storage';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
 import {
@@ -15,6 +15,7 @@ import {
 } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
+import { currentStorageVersion } from './storage-scope';
 import type { ProcessorArgs } from '.';
 
 const FOREACH_QUEUED = '__mastra_foreach_queued__';
@@ -95,12 +96,14 @@ export async function processWorkflowLoop(
   }: ProcessorArgs,
   {
     pubsub,
+    runStorage,
     stepExecutor,
     step,
     stepResult,
     savedCondition,
   }: {
     pubsub: PubSub;
+    runStorage: RunStorage;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
@@ -134,6 +137,33 @@ export async function processWorkflowLoop(
       stepResult,
     ));
 
+  const countedBody = {
+    ...stepResults[getEntryId(step.step)],
+    metadata: { ...stepResults[getEntryId(step.step)]?.metadata, ...stepResult.metadata, iterationCount },
+  };
+  const loopAgain = async () => {
+    // On storage v2 the body's dispatch loads step results from the stored run, not this message.
+    // (Before the body's first result is stored this is only the count, as on the v1 message.)
+    if (currentStorageVersion() === 2) {
+      await runStorage.writeStepResult({
+        stepId: getEntryId(step.step),
+        // Unguarded stores have no committed body result here; record the next iteration as
+        // started with its input, so a restart re-runs it instead of a body with no input.
+        result:
+          savedCondition === undefined
+            ? {
+                status: 'running',
+                payload: stepResult.status === 'success' ? stepResult.output : undefined,
+                startedAt: Date.now(),
+                metadata: countedBody.metadata,
+              }
+            : (countedBody as StepResult<any, any, any, any>),
+        requestContext: withoutAuthToken(requestContext),
+      });
+    }
+    await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+  };
+
   // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
   // resume metadata. Otherwise the body would keep receiving the same resumeData on every
   // iteration (and e.g. never re-suspend).
@@ -150,13 +180,7 @@ export async function processWorkflowLoop(
     // condition is always evaluated with iterationCount === 1 (an infinite loop when
     // termination depends on the count). Mirrors the default engine, which stamps
     // metadata.iterationCount onto the step result. See handlers/step.ts.
-    stepResults: {
-      ...stepResults,
-      [getEntryId(step.step)]: {
-        ...stepResults[getEntryId(step.step)],
-        metadata: { ...stepResults[getEntryId(step.step)]?.metadata, ...stepResult.metadata, iterationCount },
-      },
-    },
+    stepResults: { ...stepResults, [getEntryId(step.step)]: countedBody },
     prevResult: stepResult,
     resumeData: undefined,
     activeStepsPath,
@@ -188,10 +212,10 @@ export async function processWorkflowLoop(
     if (loopCondition) {
       await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     } else {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+      await loopAgain();
     }
   } else if (loopCondition) {
-    await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+    await loopAgain();
   } else {
     await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
   }
@@ -201,7 +225,7 @@ export async function processWorkflowForEach(
   args: ProcessorArgs,
   deps: {
     pubsub: PubSub;
-    mastra: Mastra;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
@@ -259,11 +283,11 @@ async function advanceForEach(
   }: ProcessorArgs,
   {
     pubsub,
-    mastra,
+    runStorage,
     step,
   }: {
     pubsub: PubSub;
-    mastra: Mastra;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
@@ -467,15 +491,12 @@ async function advanceForEach(
       // PendingMarker ({ __mastra_pending__: true }) tells the storage layer
       // "force this to null, don't preserve the existing suspended result."
       // See inmemory.ts updateWorkflowResults for the merge logic.
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const updatedOutput = [...currentResult.output];
       for (const suspIdx of indicesToResume) {
         updatedOutput[suspIdx] = createPendingMarker() as any;
       }
 
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result: {
           ...currentResult,
@@ -527,8 +548,6 @@ async function advanceForEach(
       return;
     }
   }
-
-  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   const stepId = getEntryId(step.step);
   const preservedForeachOutput = currentResult?.suspendPayload?.__workflow_meta?.foreachOutput;
 
@@ -557,9 +576,7 @@ async function advanceForEach(
       },
     };
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId,
       result: currentResult,
       requestContext: withoutAuthToken(requestContext),
@@ -586,9 +603,7 @@ async function advanceForEach(
       return { [FOREACH_QUEUED]: true, ...(nestedRunId ? { nestedRunId } : {}) };
     });
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId,
       result: currentResult,
       requestContext: withoutAuthToken(requestContext),
@@ -616,9 +631,7 @@ async function advanceForEach(
       for (const index of indicesToRun) {
         updatedOutput[index] = createPendingMarker() as any;
       }
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId,
         result: { ...currentResult, output: updatedOutput } as any,
         requestContext: withoutAuthToken(requestContext),
@@ -702,9 +715,7 @@ async function advanceForEach(
         endedAt: Date.now(),
         payload: (prevResult as any)?.output,
       };
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result,
         requestContext: withoutAuthToken(requestContext),
@@ -719,14 +730,12 @@ async function advanceForEach(
         startedAt: currentResult.startedAt ?? Date.now(),
         endedAt: Date.now(),
       };
-      const merged = await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      const merged = await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result,
         requestContext: withoutAuthToken(requestContext),
       });
-      stepResults[getEntryId(step.step)] = (merged?.[getEntryId(step.step)] ?? result) as StepResult<
+      stepResults[getEntryId(step.step)] = (merged?.results[getEntryId(step.step)] ?? result) as StepResult<
         any,
         any,
         any,
@@ -769,9 +778,7 @@ async function advanceForEach(
     const concurrency = Math.min(resolveConcurrency(), targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId: getEntryId(step.step),
       result: {
         // Iterations are still running; the completion branch above writes success.
@@ -826,9 +833,7 @@ async function advanceForEach(
   }
 
   (currentResult as any).output.push(null);
-  await workflowsStore?.updateWorkflowResults({
-    workflowName: workflowId,
-    runId,
+  await runStorage.mergeStepResult({
     stepId: getEntryId(step.step),
     result: {
       status: 'running',

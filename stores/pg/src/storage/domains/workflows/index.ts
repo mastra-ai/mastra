@@ -2,12 +2,16 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   materializeState,
   materializeWorkflowRun,
+  mergeStepResult,
   mergeWorkflowStepResult,
   assertWorkflowStepGuard,
   isWorkflowStepConflictError,
   latestStepResults,
+  WorkflowStepConflictError,
   normalizePerPage,
+  pickStateKeys,
   stateBaseOf,
+  stateColumnsWrite,
   STEP_RESULT_SUMMARY_FIELDS,
   summarizeStepResult,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -33,13 +37,16 @@ import type {
   WorkflowStepStartGuard,
   WorkflowStepCompletionGuard,
   UpdateWorkflowStateOptions,
+  StateColumnsWrite,
   StatePatchOp,
   StateRef,
   StateVersion,
   StorageListWorkflowRunsInput,
+  StoredStateColumns,
   StoredWorkflowRun,
   StoredWorkflowRunHeader,
   WorkflowRun,
+  WorkflowRunAppendHeader,
   WorkflowRunEntry,
   WorkflowRunHeader,
   WorkflowRuns,
@@ -261,6 +268,42 @@ type DraftPayload = { state: Record<string, any> } | { on: StateVersion; ops: St
  */
 const entryRows = (param: string) => `jsonb_array_elements(${param}::jsonb) WITH ORDINALITY AS e(elem, ord)`;
 const ENTRY_VALUES = `e.elem ->> 'kind', e.elem ->> 'step_id', e.elem -> 'payload'`;
+
+/** The state columns of a storage v2 run row (`StoredStateColumns`). */
+const STATE_COLUMNS = `"stateSeq", "statePatchCount", "statePatchBytes", "stateBytes"`;
+/** The columns of a `StoredWorkflowRunHeader`. */
+const HEADER_COLUMNS = `header, "lastSeq", "startStateSeq", "runToken", ${STATE_COLUMNS}`;
+
+/**
+ * The parameters `stateColumnsSet` and `stateColumnsValues` take for a write's `StateColumnsWrite`:
+ * its `reset` (null when the write has no state entry), `stateBytes`, and patch count and bytes.
+ */
+function stateColumnsParams(write: StateColumnsWrite | undefined): unknown[] {
+  return [write?.reset ?? null, write?.stateBytes ?? null, write?.patchCount ?? 0, write?.patchBytes ?? 0];
+}
+
+/**
+ * SET clauses applying a write to the state columns of the run row `r`, as `applyStateColumnsWrite`
+ * does. `params` hold `stateColumnsParams`; `lastSeq` is the row's new `lastSeq`.
+ */
+function stateColumnsSet(lastSeq: string, [reset, stateBytes, patchCount, patchBytes]: string[]): string {
+  return `"stateSeq" = CASE WHEN ${reset}::boolean IS NULL THEN r."stateSeq" ELSE ${lastSeq} END,
+    "statePatchCount" = CASE WHEN ${reset}::boolean THEN 0 ELSE r."statePatchCount" END + ${patchCount}::int,
+    "statePatchBytes" = CASE WHEN ${reset}::boolean THEN 0 ELSE r."statePatchBytes" END + ${patchBytes}::int,
+    "stateBytes" = CASE WHEN ${reset}::boolean THEN ${stateBytes}::int ELSE r."stateBytes" END`;
+}
+
+/** The {@link STATE_COLUMNS} values of a new run row, as `stateColumnsSet` would set them. */
+function stateColumnsValues(lastSeq: string, [reset, stateBytes, patchCount, patchBytes]: string[]): string {
+  return `CASE WHEN ${reset}::boolean IS NULL THEN 0 ELSE ${lastSeq} END, ${patchCount}::int, ${patchBytes}::int,
+    CASE WHEN ${reset}::boolean THEN ${stateBytes}::int END`;
+}
+
+/** The `stateColumnsParams` positions of `#upsertHeaderSql`. */
+const UPSERT_STATE_PARAMS = ['$12', '$13', '$14', '$15'];
+
+/** What a header-less append returns: the run's new `lastSeq`, run token and state columns. */
+type AppendedRow = { lastSeq: number; runToken: string } & StoredStateColumns;
 
 /** The entries of {@link EntryRow} rows; an undefined payload reads back as undefined, as in v1. */
 function toEntries(rows: EntryRow[]): WorkflowRunEntry[] {
@@ -522,6 +565,12 @@ export class WorkflowsPG extends WorkflowsStorage {
         compositePrimaryKey: config.compositePrimaryKey,
       });
     }
+    // Runs tables created by @mastra/pg 1.36.0-alpha.0 lack the state columns.
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_RUNS as TABLE_NAMES,
+      schema: WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS[TABLE_WORKFLOW_RUNS].columns,
+      ifNotExists: ['stateSeq', 'statePatchCount', 'statePatchBytes', 'stateBytes'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -700,22 +749,59 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   /**
-   * A jsonb array of {@link EntryRow} with the entries `materializeState` uses for the state of the
-   * storage v2 run `alias` refers to as of a version: `seqParam` its `seq`, `draftParam` whether
-   * it is a draft. For a draft, every state entry up to it, as the drafts it is on can build on
-   * any earlier version; otherwise the latest full state or state base up to it and the state
+   * A jsonb array of {@link EntryRow} with the entries of the steps `stepIdsParam` names in the run
+   * `alias` refers to: each step's latest entry (up to `upToSeqParam`, when given) and the step
    * patches after it.
    */
-  #stateEntriesSql(alias: string, seqParam: string, draftParam: string): string {
+  #stepEntriesSql(alias: string, stepIdsParam: string, upToSeqParam?: string): string {
+    const upTo = upToSeqParam ? `AND (${upToSeqParam}::int IS NULL OR e.seq <= ${upToSeqParam}::int)` : '';
     return `(SELECT COALESCE(jsonb_agg(jsonb_build_object(
           'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', x.payload
+        ) ORDER BY x.seq), '[]'::jsonb)
+      FROM (
+        SELECT e.seq, e.kind, e.step_id, e.payload,
+          MAX(CASE WHEN e.kind = 'step' THEN e.seq END) OVER (PARTITION BY e.step_id) AS step_seq
+        FROM ${this.#entriesTable()} e
+        WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id
+          AND e.kind IN ('step', 'step-patch') AND e.step_id = ANY(${stepIdsParam}::text[])
+          ${upTo}
+      ) x
+      WHERE x.seq >= x.step_seq)`;
+  }
+
+  /**
+   * A jsonb array of {@link EntryRow} with the entries `materializeState` uses for the state of the
+   * storage v2 run `alias` refers to as of a version: `seqParam` its `seq` (latest when null),
+   * `draftParam` whether it is a draft. For a draft, every state entry up to it, as the drafts it is
+   * on can build on any earlier version; otherwise the latest full state or state base up to it and
+   * the state patches after it.
+   *
+   * With `keysParam` (a text[] parameter, or null for every key), full states keep only those
+   * top-level keys and patches only the ops on them or on the root, so other keys are never sent.
+   * The result still needs `pickStateKeys`: root ops and drafts aren't filtered.
+   */
+  #stateEntriesSql(alias: string, seqParam: string, draftParam: string, keysParam: string): string {
+    const payload = `CASE
+        WHEN ${keysParam}::text[] IS NULL THEN x.payload
+        WHEN x.kind = 'state' AND jsonb_typeof(x.payload) = 'object' THEN (
+          SELECT COALESCE(jsonb_object_agg(f.key, f.value), '{}'::jsonb)
+          FROM jsonb_each(x.payload) f WHERE f.key = ANY(${keysParam}::text[])
+        )
+        WHEN x.kind = 'state-patch' AND jsonb_typeof(x.payload) = 'array' THEN (
+          SELECT COALESCE(jsonb_agg(o.op ORDER BY o.ord), '[]'::jsonb)
+          FROM jsonb_array_elements(x.payload) WITH ORDINALITY AS o(op, ord)
+          WHERE COALESCE(jsonb_array_length(o.op -> 'path'), 0) = 0 OR o.op -> 'path' ->> 0 = ANY(${keysParam}::text[])
+        )
+        ELSE x.payload END`;
+    return `(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', ${payload}
         ) ORDER BY x.seq), '[]'::jsonb)
       FROM (
         SELECT e.seq, e.kind, e.step_id, e.payload,
           MAX(CASE WHEN e.kind IN ('state', 'state-base') THEN e.seq END) OVER () AS base_seq
         FROM ${this.#entriesTable()} e
         WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id
-          AND e.kind NOT IN ('step', 'step-patch') AND e.seq <= ${seqParam}::int
+          AND e.kind NOT IN ('step', 'step-patch') AND (${seqParam}::int IS NULL OR e.seq <= ${seqParam}::int)
       ) x
       WHERE ${draftParam}::boolean OR (x.kind <> 'state-draft' AND (x.base_seq IS NULL OR x.seq >= x.base_seq)))`;
   }
@@ -773,33 +859,40 @@ export class WorkflowsPG extends WorkflowsStorage {
   /**
    * The `base` that `materializeState` takes for a run's entries (as of `at`, or latest): the state
    * version of another run it builds on (`stateBaseOf`), resolved recursively, else undefined. `{}`
-   * when that run isn't stored. One query per run in the chain.
+   * when that run isn't stored. One query per run in the chain. With `keys`, the base may hold only
+   * those keys (see `#stateAt`).
    */
   async #stateBase(
     q: Queryable,
     entries: readonly WorkflowRunEntry[],
     at?: StateVersion,
+    keys?: readonly string[],
   ): Promise<Record<string, any> | undefined> {
     const ref = stateBaseOf(entries, at);
     if (!ref) return undefined;
-    return (await this.#stateAt(q, ref.workflowName, ref.runId, ref))?.state ?? {};
+    return (await this.#stateAt(q, ref.workflowName, ref.runId, ref, keys)) ?? {};
   }
 
-  /** A storage v2 run's state as of the version `at`, or null when the run isn't stored. */
+  /**
+   * A storage v2 run's state as of the version `at` (latest without it), or null when the run isn't
+   * stored. With `keys`, only reads the entries' parts for those keys: the result holds them, and
+   * maybe others a root op or draft set, so pick them from it.
+   */
   async #stateAt(
     q: Queryable,
     workflowName: string,
     runId: string,
-    at: StateVersion,
-  ): Promise<{ state: Record<string, any>; statePatchBytes: number } | null> {
+    at?: StateVersion,
+    keys?: readonly string[],
+  ): Promise<Record<string, any> | null> {
     const row = await q.oneOrNone<{ entries: EntryRow[] }>(
-      `SELECT ${this.#stateEntriesSql('r', '$3', '$4')} AS entries
+      `SELECT ${this.#stateEntriesSql('r', '$3', '$4', '$5')} AS entries
        FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
-      [workflowName, runId, at.seq, at.draft === true],
+      [workflowName, runId, at?.seq ?? null, at?.draft === true, keys ?? null],
     );
     if (!row) return null;
     const entries = toEntries(row.entries);
-    return materializeState(entries, { at, base: await this.#stateBase(q, entries, at) });
+    return materializeState(entries, { at, base: await this.#stateBase(q, entries, at, keys) });
   }
 
   /**
@@ -817,7 +910,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const version = `${child.payload.seq}:${child.payload.draft === true}`;
       let state = states.get(version);
       if (!state) {
-        state = (await this.#stateAt(q, workflowName, runId, child.payload))?.state ?? {};
+        state = (await this.#stateAt(q, workflowName, runId, child.payload)) ?? {};
         states.set(version, state);
       }
       await q.none(
@@ -861,10 +954,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
   }): Promise<StoredWorkflowRunHeader | null> {
     try {
-      return await this.#db.client.oneOrNone<StoredWorkflowRunHeader>(
-        `SELECT header, "lastSeq", "startStateSeq", "runToken" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2`,
+      const row = await this.#db.client.oneOrNone<StoredWorkflowRunHeader & { resourceId: string | null }>(
+        `SELECT ${HEADER_COLUMNS}, "resourceId" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2`,
         [workflowName, runId],
       );
+      if (!row) return null;
+      const { resourceId, ...header } = row;
+      return resourceId === null ? header : { ...header, resourceId };
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN_HEADER', workflowName, runId, error);
     }
@@ -882,14 +978,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       const summary = successfulSteps === 'summary';
       const run = await this.#db.client.oneOrNone<StoredWorkflowRunHeader & { entries: EntryRow[] }>(
-        `SELECT r.header, r."lastSeq", r."startStateSeq", r."runToken", ${this.#entriesSql('r', { summaryFieldsParam: summary ? '$3' : undefined })} AS entries
+        `SELECT ${HEADER_COLUMNS}, ${this.#entriesSql('r', { summaryFieldsParam: summary ? '$3' : undefined })} AS entries
          FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
         summary ? [workflowName, runId, STEP_RESULT_SUMMARY_FIELDS] : [workflowName, runId],
       );
       if (!run) return null;
 
-      const entries = toEntries(run.entries);
-      const summarizedInQuery = new Set(run.entries.filter(row => row.summarized).map(row => row.step_id));
+      const { entries: rows, ...header } = run;
+      const entries = toEntries(rows);
+      const summarizedInQuery = new Set(rows.filter(row => row.summarized).map(row => row.step_id));
       const steps: StoredWorkflowRun['steps'] = {};
       const summarizedStepIds: string[] = [];
       for (const [stepId, result] of latestStepResults(entries) as Map<string, StoredWorkflowRun['steps'][string]>) {
@@ -901,14 +998,9 @@ export class WorkflowsPG extends WorkflowsStorage {
         }
       }
       const base = await this.#stateBase(this.#db.client, entries);
-      const { state, statePatchBytes } = materializeState(entries, { base });
       return {
-        header: run.header,
-        lastSeq: run.lastSeq,
-        startStateSeq: run.startStateSeq,
-        runToken: run.runToken,
-        state,
-        statePatchBytes,
+        ...header,
+        state: materializeState(entries, { base }),
         steps,
         summarizedStepIds,
       };
@@ -921,34 +1013,24 @@ export class WorkflowsPG extends WorkflowsStorage {
     workflowName,
     runId,
     stepIds,
+    upToSeq,
     expectedLastSeq,
     expectedRunToken,
   }: {
     workflowName: string;
     runId: string;
     stepIds: string[];
+    upToSeq?: number;
     expectedLastSeq?: number;
     expectedRunToken?: string;
   }): Promise<Record<string, StepResult<any, any, any, any>> | null> {
     try {
       // One statement, so the header checked and the steps read are the same version of the run:
-      // each step's latest entry and the step patches after it.
+      // each step's latest entry (up to `upToSeq`) and the step patches after it.
       const run = await this.#db.client.oneOrNone<{ lastSeq: number; runToken: string; entries: EntryRow[] }>(
-        `SELECT r."lastSeq", r."runToken", (
-           SELECT COALESCE(jsonb_agg(jsonb_build_object(
-               'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', x.payload
-             ) ORDER BY x.seq), '[]'::jsonb)
-           FROM (
-             SELECT e.seq, e.kind, e.step_id, e.payload,
-               MAX(CASE WHEN e.kind = 'step' THEN e.seq END) OVER (PARTITION BY e.step_id) AS step_seq
-             FROM ${this.#entriesTable()} e
-             WHERE e.workflow_name = r.workflow_name AND e.run_id = r.run_id
-               AND e.kind IN ('step', 'step-patch') AND e.step_id = ANY($3::text[])
-           ) x
-           WHERE x.seq >= x.step_seq
-         ) AS entries
+        `SELECT r."lastSeq", r."runToken", ${this.#stepEntriesSql('r', '$3', '$4')} AS entries
          FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
-        [workflowName, runId, stepIds],
+        [workflowName, runId, stepIds, upToSeq ?? null],
       );
       if (!run) return null;
       if (expectedLastSeq !== undefined && run.lastSeq !== expectedLastSeq) return null;
@@ -990,7 +1072,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           `UPDATE ${this.#runsTable()}
            SET header = $3::jsonb, status = $4, "updatedAt" = $5, "updatedAtZ" = $6
            WHERE workflow_name = $1 AND run_id = $2
-           RETURNING header, "lastSeq", "startStateSeq", "runToken"`,
+           RETURNING ${HEADER_COLUMNS}`,
           [workflowName, runId, toPgJson(header), header.status, now, now],
         );
       });
@@ -1001,32 +1083,35 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   /**
-   * Upserts a storage v2 run's header from `$1`–`$12` ({@link #headerParams}), adds `$7` (the
-   * number of entries the write adds) to `lastSeq`, and returns the new `lastSeq`, `stateShared`
-   * and `runToken`. `$12` is the run token of a run the write creates; a stored run keeps its own.
-   * A checkpoint's state entries come last, so its `startStateSeq` is the new `lastSeq`; an append
-   * keeps the stored one unless given `$13`. The header's row lock is held
-   * until commit, so the writes to one run commit in `seq` order. With `expectedParam` (a text
-   * array of statuses), a stored run whose status isn't in it is left as is and nothing is returned.
+   * Upserts a storage v2 run's header from `$1`–`$16` ({@link #headerParams}), adds `$7` (the
+   * number of entries the write adds) to `lastSeq`, applies the write to the state columns, and
+   * returns the new `lastSeq`, `stateShared` and `runToken`. `$16` is the run token of a run the
+   * write creates; a stored run keeps its own. A checkpoint's state entries come last, so its
+   * `startStateSeq` is the new `lastSeq`; an append keeps the stored one unless given `$17`. The
+   * header's row lock is held until commit, so the writes to one run commit in `seq` order. With
+   * `expectedParam` (a text array of statuses), a stored run whose status isn't in it is left as
+   * is and nothing is returned.
    */
   #upsertHeaderSql(checkpoint: boolean, expectedParam?: string): string {
     const startStateSeq = checkpoint
       ? { insert: '$7::int', update: 'r."lastSeq" + EXCLUDED."lastSeq"' }
-      : { insert: 'COALESCE($13::int, 0)', update: 'COALESCE($13::int, r."startStateSeq")' };
+      : { insert: 'COALESCE($17::int, 0)', update: 'COALESCE($17::int, r."startStateSeq")' };
     return `INSERT INTO ${this.#runsTable()} AS r
          (workflow_name, run_id, "resourceId", "threadId", status, header, "lastSeq", "startStateSeq", "stateShared",
-          "runToken", "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::int, ${startStateSeq.insert}, false, $12, $8, $9, $10, $11)
+          ${STATE_COLUMNS}, "runToken", "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::int, ${startStateSeq.insert}, false,
+          ${stateColumnsValues('$7::int', UPSERT_STATE_PARAMS)}, $16, $8, $9, $10, $11)
        ON CONFLICT (workflow_name, run_id) DO UPDATE
        SET "resourceId" = COALESCE(EXCLUDED."resourceId", r."resourceId"), "threadId" = EXCLUDED."threadId",
            status = EXCLUDED.status, header = EXCLUDED.header, "lastSeq" = r."lastSeq" + EXCLUDED."lastSeq",
            "startStateSeq" = ${startStateSeq.update},
+           ${stateColumnsSet('r."lastSeq" + EXCLUDED."lastSeq"', UPSERT_STATE_PARAMS)},
            "updatedAt" = EXCLUDED."updatedAt", "updatedAtZ" = EXCLUDED."updatedAtZ"
        ${expectedParam ? `WHERE r.status = ANY(${expectedParam}::text[])` : ''}
        RETURNING "lastSeq", "stateShared", "runToken"`;
   }
 
-  #headerParams(run: RunWrite, entryCount: number): unknown[] {
+  #headerParams(run: RunWrite, entryCount: number, write: StateColumnsWrite | undefined): unknown[] {
     const now = new Date();
     return [
       run.workflowName,
@@ -1040,6 +1125,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       now,
       now,
       now,
+      ...stateColumnsParams(write),
       crypto.randomUUID(),
     ];
   }
@@ -1081,8 +1167,11 @@ export class WorkflowsPG extends WorkflowsStorage {
           baseLastSeq = row?.lastSeq;
         }
         const header = await t.oneOrNone<{ lastSeq: number; stateShared: boolean; runToken: string }>(
-          this.#upsertHeaderSql(true, expected.length ? '$13' : undefined),
-          [...this.#headerParams(run, entries.length), ...expected],
+          this.#upsertHeaderSql(true, expected.length ? '$17' : undefined),
+          [
+            ...this.#headerParams(run, entries.length, stateColumnsWrite({ state, stateBase, statePatch }, true)),
+            ...expected,
+          ],
         );
         // `expectedStatus` rejected the write: the header is left as is, and so are the entries.
         if (!header) return null;
@@ -1132,66 +1221,363 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  /** One statement: the header upsert numbers the entries inserted after it. */
-  async appendWorkflowRunEntries({
-    fence,
-    steps,
-    stepPatches,
-    state,
-    statePatch,
-    startStateSeq,
-    expectedStatus,
-    ...run
-  }: RunWrite & {
-    steps: Record<string, StepResult<any, any, any, any>>;
-    stepPatches?: Record<string, StatePatchOp[]>;
-    state?: Record<string, any>;
-    statePatch?: StatePatchOp[];
-    startStateSeq?: number;
-    fence?: RunFence;
-    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
-  }): Promise<{ lastSeq: number; runToken: string } | null> {
+  /**
+   * One statement: the header upsert (header-less, `#appendWithoutHeader`'s update) numbers the
+   * entries inserted after it.
+   */
+  async appendWorkflowRunEntries(
+    args: {
+      workflowName: string;
+      runId: string;
+      steps: Record<string, StepResult<any, any, any, any>>;
+      stepPatches?: Record<string, StatePatchOp[]>;
+      state?: Record<string, any>;
+      statePatch?: StatePatchOp[];
+      startStateSeq?: number;
+      fence?: RunFence;
+      expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+      startGuard?: WorkflowStepStartGuard;
+      completionGuard?: WorkflowStepCompletionGuard;
+    } & WorkflowRunAppendHeader,
+  ): Promise<{ lastSeq: number; runToken: string } | null> {
+    const { workflowName, runId, steps, stepPatches, state, statePatch, startStateSeq, expectedStatus } = args;
     const entries = journalEntries(steps, { state, statePatch }, false, stepPatches);
-    const expected = expectedStatus === undefined ? [] : [[expectedStatus].flat()];
+    const write = stateColumnsWrite({ state, statePatch }, false);
+    const expected = expectedStatus === undefined ? undefined : [expectedStatus].flat();
+    const fence = resolveRunFence(this, args.fence, runId);
+    const guarded = !!(args.startGuard || args.completionGuard);
+    if (guarded && args.header) throw new Error('Step guards apply to header-less appends');
+    let row: AppendedRow | null;
     try {
-      return await withRunFence(
-        this.#db.client,
-        this.#runOwnersTable(),
-        resolveRunFence(this, fence, run.runId),
-        'appendWorkflowRunEntries',
-        q =>
+      if (args.header) {
+        const run: RunWrite = {
+          workflowName,
+          runId,
+          resourceId: args.resourceId,
+          threadId: args.threadId,
+          header: args.header,
+        };
+        return await withRunFence(this.#db.client, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', q =>
           // When `expectedStatus` rejects the write, `h` has no row, so neither has the insert.
           q.oneOrNone<{ lastSeq: number; runToken: string }>(
-            `WITH h AS (${this.#upsertHeaderSql(false, expected.length ? '$15' : undefined)}),
+            `WITH h AS (${this.#upsertHeaderSql(false, expected ? '$19' : undefined)}),
              e AS (
                INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
                SELECT $1, $2, h."lastSeq" - $7::int + e.ord, ${ENTRY_VALUES}
-               FROM h, ${entryRows('$14')}
+               FROM h, ${entryRows('$18')}
              )
              SELECT "lastSeq", "runToken" FROM h`,
-            [...this.#headerParams(run, entries.length), startStateSeq ?? null, toPgJson(entries), ...expected],
+            [
+              ...this.#headerParams(run, entries.length, write),
+              startStateSeq ?? null,
+              toPgJson(entries),
+              ...(expected ? [expected] : []),
+            ],
           ),
+        );
+      }
+      row = guarded
+        ? await this.#db.client.tx(async t => {
+            if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries');
+            return this.#appendGuarded(t, { ...args, expected });
+          })
+        : await withRunFence(this.#db.client, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', q =>
+            this.#appendWithoutHeader(q, {
+              workflowName,
+              runId,
+              entries,
+              write,
+              requestContext: args.requestContext,
+              startStateSeq,
+              expected,
+            }),
+          );
+    } catch (error) {
+      if (isRunFenceConflictError(error) || isWorkflowStepConflictError(error)) throw error;
+      throw this.#runError('APPEND_WORKFLOW_RUN_ENTRIES', workflowName, runId, error);
+    }
+    if (!row) return null;
+    const { lastSeq, runToken, ...columns } = row;
+    await this.checkpointStateIfDue({ workflowName, runId, columns });
+    return { lastSeq, runToken };
+  }
+
+  /**
+   * A header-less append of one step checked by its step guards against the run as stored, as
+   * `updateWorkflowResults` checks a v1 snapshot. The run's row lock is held from the read through
+   * the append, so no other write lands between the check and the write.
+   */
+  async #appendGuarded(
+    t: Queryable,
+    {
+      workflowName,
+      runId,
+      steps,
+      stepPatches,
+      state,
+      statePatch,
+      requestContext,
+      startStateSeq,
+      expected,
+      startGuard,
+      completionGuard,
+    }: {
+      workflowName: string;
+      runId: string;
+      steps: Record<string, StepResult<any, any, any, any>>;
+      stepPatches?: Record<string, StatePatchOp[]>;
+      state?: Record<string, any>;
+      statePatch?: StatePatchOp[];
+      requestContext?: Record<string, any>;
+      startStateSeq?: number;
+      expected?: WorkflowRunStatus[];
+      startGuard?: WorkflowStepStartGuard;
+      completionGuard?: WorkflowStepCompletionGuard;
+    },
+  ): Promise<AppendedRow | null> {
+    const [stepId, ...others] = Object.keys(steps);
+    if (!stepId || others.length) throw new Error('A guarded append writes exactly one step');
+    const run = await t.oneOrNone<{ header: WorkflowRunHeader }>(
+      `SELECT header FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+      [workflowName, runId],
+    );
+    let snapshot: WorkflowRunState | null = null;
+    if (run) {
+      if (!matchesExpectedWorkflowStatus(run.header.status, expected)) return null;
+      // The run's lock is held, so this read sees every append committed before it. The guard and
+      // the write below only read the guarded step and its predecessor, so the snapshot holds just
+      // those, and the read under the lock doesn't grow with the run.
+      const stepIds = [stepId, ...(startGuard?.previousStep ? [startGuard.previousStep.stepId] : [])];
+      const { entries } = await t.one<{ entries: EntryRow[] }>(
+        `SELECT ${this.#stepEntriesSql('r', '$3')} AS entries FROM ${this.#runsTable()} r
+         WHERE r.workflow_name = $1 AND r.run_id = $2`,
+        [workflowName, runId, stepIds],
       );
+      snapshot = materializeWorkflowRun(run.header, toEntries(entries));
+    }
+    try {
+      // Throws when the run isn't stored.
+      assertWorkflowStepGuard({ snapshot, stepId, startGuard, completionGuard });
+    } catch (error) {
+      if (!run || !isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
+      // Recovering from a completed delivery takes the whole run as stored.
+      const { entries } = await t.one<{ entries: EntryRow[] }>(
+        `SELECT ${this.#entriesSql('r')} AS entries FROM ${this.#runsTable()} r
+         WHERE r.workflow_name = $1 AND r.run_id = $2`,
+        [workflowName, runId],
+      );
+      const stored = await this.#materializeRun(t, run.header, entries);
+      throw new WorkflowStepConflictError('completed', error.storedResult, stored.requestContext, stored);
+    }
+    if (!snapshot) return null;
+
+    const result = steps[stepId]!;
+    const pruneOnly = completionGuard?.pruneOnly;
+    const written: Record<string, StepResult<any, any, any, any>> = {
+      [stepId]: pruneOnly
+        ? {
+            ...result,
+            metadata: { ...snapshot.context[stepId]?.metadata, ...result.metadata, __continuationStarted: true },
+          }
+        : result,
+    };
+    const previous = startGuard?.previousStep;
+    const previousResult = previous && snapshot.context[previous.stepId];
+    if (
+      previous &&
+      previous.stepId !== stepId &&
+      previousResult?.status === 'success' &&
+      previousResult.metadata?.startedBy === previous.eventId
+    ) {
+      written[previous.stepId] = {
+        ...previous.result,
+        metadata: { ...previousResult.metadata, ...previous.result.metadata, __continuationStarted: true },
+      };
+    }
+    // A prune only marks the step; like `updateWorkflowResults`, it leaves state and request context as stored.
+    const stateWrite = pruneOnly ? {} : { state, statePatch };
+    return this.#appendWithoutHeader(t, {
+      workflowName,
+      runId,
+      entries: journalEntries(written, stateWrite, false, stepPatches),
+      write: stateColumnsWrite(stateWrite, false),
+      requestContext: pruneOnly ? undefined : requestContext,
+      startStateSeq,
+    });
+  }
+
+  /**
+   * A header-less append (`WorkflowRunAppendHeader`) in one statement: adds the entries after the
+   * run's `lastSeq`, merges `requestContext` into the header's, and applies `write` to the state
+   * columns. The row lock orders concurrent appends. Null when the run isn't stored, or when its
+   * status isn't one of `expected`.
+   */
+  #appendWithoutHeader(
+    q: Queryable,
+    {
+      workflowName,
+      runId,
+      entries,
+      write,
+      requestContext,
+      startStateSeq,
+      expected,
+    }: {
+      workflowName: string;
+      runId: string;
+      entries: EntryInput[];
+      write: StateColumnsWrite | undefined;
+      requestContext?: Record<string, any>;
+      startStateSeq?: number;
+      expected?: WorkflowRunStatus[];
+    },
+  ): Promise<AppendedRow | null> {
+    const now = new Date();
+    // `||` is a shallow merge, like spreading; a requestContext that isn't an object counts as `{}`.
+    return q.oneOrNone<AppendedRow>(
+      `WITH h AS (
+         UPDATE ${this.#runsTable()} AS r
+         SET "lastSeq" = r."lastSeq" + $3::int,
+             header = CASE WHEN $4::jsonb IS NULL THEN r.header ELSE jsonb_set(r.header, '{requestContext}',
+               CASE WHEN jsonb_typeof(r.header -> 'requestContext') = 'object' THEN r.header -> 'requestContext'
+                 ELSE '{}'::jsonb END || $4::jsonb) END,
+             "startStateSeq" = COALESCE($5::int, r."startStateSeq"),
+             ${stateColumnsSet('r."lastSeq" + $3::int', ['$6', '$7', '$8', '$9'])},
+             "updatedAt" = $10, "updatedAtZ" = $11
+         WHERE r.workflow_name = $1 AND r.run_id = $2 AND ($13::text[] IS NULL OR r.status = ANY($13::text[]))
+         RETURNING "lastSeq", "runToken", ${STATE_COLUMNS}
+       ),
+       e AS (
+         INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+         SELECT $1, $2, h."lastSeq" - $3::int + e.ord, ${ENTRY_VALUES}
+         FROM h, ${entryRows('$12')}
+       )
+       SELECT * FROM h`,
+      [
+        workflowName,
+        runId,
+        entries.length,
+        requestContext === undefined ? null : toPgJson(requestContext),
+        startStateSeq ?? null,
+        ...stateColumnsParams(write),
+        now,
+        now,
+        toPgJson(entries),
+        expected ?? null,
+      ],
+    );
+  }
+
+  async mergeWorkflowRunStepResult({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+    statePatch,
+    fence: explicitFence,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext?: Record<string, any>;
+    statePatch?: StatePatchOp[];
+    fence?: RunFence;
+  }): Promise<{ lastSeq: number; result: StepResult<any, any, any, any> } | null> {
+    const fence = resolveRunFence(this, explicitFence, runId);
+    let written: { row: AppendedRow; result: StepResult<any, any, any, any> } | null;
+    try {
+      written = await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'mergeWorkflowRunStepResult');
+        // Locks the run before reading the step, so a concurrent merge into it has committed first.
+        const run = await t.oneOrNone(
+          `SELECT 1 FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+        if (!run) return null;
+        // The step's latest entry and the step patches after it.
+        const rows = await t.any<EntryRow>(
+          `SELECT seq, kind, step_id, payload IS NULL AS absent, payload FROM ${this.#entriesTable()}
+           WHERE workflow_name = $1 AND run_id = $2 AND step_id = $3 AND kind IN ('step', 'step-patch')
+             AND seq >= (SELECT seq FROM ${this.#entriesTable()}
+               WHERE workflow_name = $1 AND run_id = $2 AND kind = 'step' AND step_id = $3
+               ORDER BY seq DESC LIMIT 1)
+           ORDER BY seq`,
+          [workflowName, runId, stepId],
+        );
+        const latest = latestStepResults(toEntries(rows)).get(stepId) as StepResult<any, any, any, any> | undefined;
+        const merged = mergeStepResult(latest, result);
+        const row = await this.#appendWithoutHeader(t, {
+          workflowName,
+          runId,
+          entries: journalEntries({ [stepId]: merged }, { statePatch }, false),
+          write: stateColumnsWrite({ statePatch }, false),
+          requestContext,
+        });
+        return row && { row, result: merged };
+      });
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
-      throw this.#runError('APPEND_WORKFLOW_RUN_ENTRIES', run.workflowName, run.runId, error);
+      throw this.#runError('MERGE_WORKFLOW_RUN_STEP_RESULT', workflowName, runId, error);
     }
+    if (!written) return null;
+    const { lastSeq, ...columns } = written.row;
+    await this.checkpointStateIfDue({ workflowName, runId, columns });
+    return { lastSeq, result: written.result };
   }
 
   async loadWorkflowRunState({
     workflowName,
     runId,
     seq,
+    keys,
   }: {
     workflowName: string;
     runId: string;
-    seq: number;
+    seq?: number;
+    keys?: string[];
   }): Promise<Record<string, any> | null> {
     try {
-      return (await this.#stateAt(this.#db.client, workflowName, runId, { seq }))?.state ?? null;
+      const state = await this.#stateAt(
+        this.#db.client,
+        workflowName,
+        runId,
+        seq === undefined ? undefined : { seq },
+        keys,
+      );
+      return state && pickStateKeys(state, keys);
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN_STATE', workflowName, runId, error);
     }
+  }
+
+  /**
+   * Unfenced: it writes the run's state as of `stateSeq`, which a stale owner rebuilds the same, and
+   * only while that is still the run's latest state write.
+   */
+  protected async writeStateCheckpoint({
+    workflowName,
+    runId,
+    stateSeq,
+    state,
+  }: {
+    workflowName: string;
+    runId: string;
+    stateSeq: number;
+    state: Record<string, any>;
+  }): Promise<void> {
+    await this.#db.client.none(
+      `WITH h AS (
+         UPDATE ${this.#runsTable()} AS r
+         SET "lastSeq" = r."lastSeq" + 1, ${stateColumnsSet('r."lastSeq" + 1', ['$4', '$5', '$6', '$7'])}
+         WHERE r.workflow_name = $1 AND r.run_id = $2 AND r."stateSeq" = $3::int
+         RETURNING "lastSeq"
+       )
+       INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+       SELECT $1, $2, h."lastSeq", 'state', NULL, $8::jsonb FROM h`,
+      [workflowName, runId, stateSeq, ...stateColumnsParams(stateColumnsWrite({ state }, false)), toPgJson(state)],
+    );
   }
 
   async appendWorkflowRunStateDraft(

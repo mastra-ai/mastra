@@ -109,17 +109,22 @@ describe('T1 tool-roundtrip redelivery', () => {
             workflowId: 'durable-agentic-execution',
             runId: workflowRunId,
             executionPath: [3, 0],
-            stepResults: {
-              'extract-tool-calls': {
-                output: [
-                  {
-                    toolCallId: 'read-1',
-                    toolName: 'readRecord',
-                    args: { name: 'comparison', receipt: 'receipt-1' },
+            // Storage v2 events don't carry step results: each dispatch loads them from the stored run.
+            ...(original.data?.storageVersion === 2
+              ? {}
+              : {
+                  stepResults: {
+                    'extract-tool-calls': {
+                      output: [
+                        {
+                          toolCallId: 'read-1',
+                          toolName: 'readRecord',
+                          args: { name: 'comparison', receipt: 'receipt-1' },
+                        },
+                      ],
+                    },
                   },
-                ],
-              },
-            },
+                }),
           });
           expect(writes).toEqual([{ name: 'comparison', amount: 42 }]);
           expect(reads).toEqual([{ name: 'comparison', receipt: 'receipt-1' }]);
@@ -135,7 +140,9 @@ describe('T1 tool-roundtrip redelivery', () => {
               writes: [{ name: 'comparison', amount: 42 }],
               modelCalls: 3,
             },
-            mode === 'same-id'
+            // Storage v2 replays load the step's inputs from the stored run, which is deleted once the run
+            // finishes, so the replayed step fails before it reaches the tool: only storage v1 shows the bug.
+            mode === 'same-id' || original.data?.storageVersion === 2
               ? undefined
               : {
                   reason:

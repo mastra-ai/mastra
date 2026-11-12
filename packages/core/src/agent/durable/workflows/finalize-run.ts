@@ -34,6 +34,7 @@ import { getRunRegistryEntry } from '../run-registry';
 import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
+import { foldBackgroundResults } from './shared/background-results';
 import { hydrateMessageListState } from './shared/message-list-state';
 
 type GenerateThreadTitleArgs = Parameters<NonNullable<RunRegistryEntry['generateThreadTitle']>>[0];
@@ -195,6 +196,8 @@ export async function runDurableFinishSideEffects({
   if (registryEntry) {
     registryEntry.messageList = messageList;
   }
+  // A background result that landed after the last background check is still a placeholder here.
+  await foldBackgroundResults(registryEntry, messageList);
 
   // The caller-side MastraModelOutput only sees the finish event after this step has
   // persisted messages, and remote/recovered runs have no caller at all. Attach the
@@ -611,10 +614,7 @@ export async function runDurableDeadlineOutputPass({
     // A resumed run's persisted input keeps messages memory already stores as refs (a recovered run's
     // crash-time transcript is hydrated already). Defensive: refs only reach here when a resumed run's
     // deadline fires before its first step snapshot with no settled tool results, which no test drives.
-    await hydrateMessageListState(
-      { state: undefined, getInitData: () => initData, mastra, requestContext },
-      messageListState,
-    ),
+    await hydrateMessageListState({ getInitData: () => initData, mastra, requestContext }, messageListState),
   );
   // Untargeted processor data lands on the reply, as at finish; resolved before the cut-off text is added.
   const replyMessageId = resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? initData.messageId;

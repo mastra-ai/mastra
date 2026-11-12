@@ -83,6 +83,7 @@ import {
 } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
+import { recordBackgroundResult } from '../shared/background-results';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
 
@@ -1854,6 +1855,7 @@ export function createDurableToolCallStep() {
                 resolveReconciliation({ error });
                 throw error;
               }
+              resolveReconciliation({});
               return;
             }
 
@@ -1863,76 +1865,89 @@ export function createDurableToolCallStep() {
               // process restart.
               const liveEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
               const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
-              await applyBackgroundToolResult({
-                params,
-                currentRunId: runId,
-                hasResumeData: resumeData != null,
-                args: cleanedArgs,
-                messageList,
-                approvalGrant: approvalGrant as Record<string, unknown> | undefined,
-                baseProviderMetadata: typedInput.providerMetadata as any,
-                // Resolve the tool-level transform from the live registry at
-                // completion, since the entry may have been rebuilt after dispatch.
-                // Use the same resolved run/agent/Mastra policy as the other chunks.
-                transformForTranscript: async result => {
-                  const failed = params.status === 'failed';
-                  const transformCarrier = await applyToolPayloadTransformToChunk(
-                    {
-                      type: failed ? 'tool-error' : 'tool-result',
-                      payload: {
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args: cleanedArgs,
-                        ...(failed ? { error: params.error } : { result: params.result }),
-                      },
-                      metadata: {} as Record<string, any>,
+              // Resolve the tool-level transform from the live registry at
+              // completion, since the entry may have been rebuilt after dispatch.
+              // Use the same resolved run/agent/Mastra policy as the other chunks.
+              const transformForTranscript = async (result: unknown) => {
+                const failed = params.status === 'failed';
+                const transformCarrier = await applyToolPayloadTransformToChunk(
+                  {
+                    type: failed ? 'tool-error' : 'tool-result',
+                    payload: {
+                      toolCallId: params.toolCallId,
+                      toolName: params.toolName,
+                      args: cleanedArgs,
+                      ...(failed ? { error: params.error } : { result: params.result }),
                     },
-                    {
-                      policy: toolPayloadTransform,
-                      toolTransform: (mappingTool as { transform?: any })?.transform,
-                      tools: toolsForTransform,
-                      logger: logger as any,
-                      transformInput: {
-                        providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
-                      },
+                    metadata: {} as Record<string, any>,
+                  },
+                  {
+                    policy: toolPayloadTransform,
+                    toolTransform: (mappingTool as { transform?: any })?.transform,
+                    tools: toolsForTransform,
+                    logger: logger as any,
+                    transformInput: {
+                      providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
                     },
-                  );
-                  const transcriptArgsTransform = getTransformedToolPayload(
+                  },
+                );
+                const transcriptArgsTransform = getTransformedToolPayload(
+                  transformCarrier.metadata,
+                  'transcript',
+                  'input-available',
+                );
+                const transcriptResultTransform = getTransformedToolPayload(
+                  transformCarrier.metadata,
+                  'transcript',
+                  failed ? 'error' : 'output-available',
+                );
+                return {
+                  transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
+                    ? transcriptArgsTransform.transformed
+                    : cleanedArgs,
+                  transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
+                    ? transcriptResultTransform.transformed
+                    : result,
+                  providerMetadata: withToolPayloadTransformProviderMetadata(
+                    typedInput.providerMetadata as any,
                     transformCarrier.metadata,
-                    'transcript',
-                    'input-available',
-                  );
-                  const transcriptResultTransform = getTransformedToolPayload(
-                    transformCarrier.metadata,
-                    'transcript',
-                    failed ? 'error' : 'output-available',
-                  );
-                  return {
-                    transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
-                      ? transcriptArgsTransform.transformed
-                      : cleanedArgs,
-                    transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
-                      ? transcriptResultTransform.transformed
-                      : result,
-                    providerMetadata: withToolPayloadTransformProviderMetadata(
-                      typedInput.providerMetadata as any,
-                      transformCarrier.metadata,
-                    ) as any,
-                  };
-                },
-                toModelOutput: mappingTool.toModelOutput,
-                // Respect a custom idGenerator for the fallback appended message —
-                // parity with main, which reads generateId from its run scope.
-                generateId: mastra ? () => (mastra as Mastra).generateId() : undefined,
-                logger: logger as any,
-                flush: async () => {
-                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
-                      beforePersist: assertNotSuperseded,
-                    });
-                  }
-                },
+                  ) as any,
+                };
+              };
+              const toModelOutput = mappingTool.toModelOutput;
+              // Later steps apply this result again (see below); they reuse these instead of calling the tool's hooks twice.
+              let transcript: ReturnType<typeof transformForTranscript> | undefined;
+              let modelOutput: Promise<unknown> | undefined;
+              const applyTo = (list: MessageList, flush: () => Promise<void>) =>
+                applyBackgroundToolResult({
+                  params,
+                  currentRunId: runId,
+                  hasResumeData: resumeData != null,
+                  args: cleanedArgs,
+                  messageList: list,
+                  approvalGrant: approvalGrant as Record<string, unknown> | undefined,
+                  baseProviderMetadata: typedInput.providerMetadata as any,
+                  transformForTranscript: result => (transcript ??= transformForTranscript(result)),
+                  toModelOutput:
+                    toModelOutput && (output => (modelOutput ??= Promise.resolve().then(() => toModelOutput(output)))),
+                  // Respect a custom idGenerator for the fallback appended message —
+                  // parity with main, which reads generateId from its run scope.
+                  generateId: mastra ? () => (mastra as Mastra).generateId() : undefined,
+                  logger: logger as any,
+                  flush,
+                });
+              await applyTo(messageList, async () => {
+                if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+                  await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
+                    beforePersist: assertNotSuperseded,
+                  });
+                }
               });
+              if (info.disposition !== 'awaited' && liveEntry) {
+                // Later steps rebuild the transcript from workflow state; they apply this result too.
+                recordBackgroundResult(liveEntry, params.taskId, params.toolCallId, reconciliationComplete).apply =
+                  list => applyTo(list, async () => {});
+              }
               resolveReconciliation({});
               if (info.disposition !== 'awaited' && state?.threadId && state?.resourceId) {
                 const owner = Object.values(mastra?.listAgents?.() ?? {}).find(agent => agent.id === initData.agentId);
@@ -2024,6 +2039,10 @@ export function createDurableToolCallStep() {
             ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }
+
+        // Lets the background check wait for this task's result to be applied once it finishes.
+        const dispatchEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+        if (dispatchEntry) recordBackgroundResult(dispatchEntry, bgOutcome.taskId, toolCallId, reconciliationComplete);
 
         if (bgOutcome.status === 'started') {
           // Return placeholder result so the LLM can continue

@@ -148,6 +148,16 @@ class TransformedRequestContext extends RequestContext<Record<string, any>> {
   }
 }
 
+/** Own property descriptors of `target`, with accessors bound to it so they still read it when copied. */
+function bindAccessors(target: object): PropertyDescriptorMap {
+  const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(target);
+  for (const descriptor of Object.values(descriptors)) {
+    if (descriptor.get) descriptor.get = descriptor.get.bind(target);
+    if (descriptor.set) descriptor.set = descriptor.set.bind(target);
+  }
+  return descriptors;
+}
+
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
@@ -587,14 +597,23 @@ export class Tool<
                     },
                   }
                 : baseContext.agent,
+              // Copies descriptors, not values: a workflow's `state` may be a getter that throws.
               workflow: baseContext.workflow
-                ? {
-                    ...baseContext.workflow,
-                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
-                      suspendData = args;
-                      return baseContext.workflow?.suspend?.(args, suspendOptions);
+                ? Object.defineProperties(
+                    {},
+                    {
+                      ...bindAccessors(baseContext.workflow),
+                      suspend: {
+                        enumerable: true,
+                        configurable: true,
+                        writable: true,
+                        value: (args: any, suspendOptions?: SuspendOptions) => {
+                          suspendData = args;
+                          return baseContext.workflow?.suspend?.(args, suspendOptions);
+                        },
+                      },
                     },
-                  }
+                  )
                 : baseContext.workflow,
               requestContext: executionRequestContext ?? new RequestContext(),
             };

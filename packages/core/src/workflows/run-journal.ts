@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
-import { summarizeStepResult } from '../storage/domains/workflows/journal';
+import { STATE_CHECKPOINT_PATCHES, summarizeStepResult } from '../storage/domains/workflows/journal';
 import type { StateRef, StepResultSummary } from '../storage/domains/workflows/journal';
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import { diffState } from '../storage/domains/workflows/state-patch';
@@ -106,6 +106,8 @@ export class RunJournal {
   #inheritedRef: StateRef | undefined;
   /** JSON size of the patches stored after the latest full state. */
   #patchBytes: number;
+  /** The patches stored after the latest full state or state base. */
+  #patchCount: number;
   /** The latest draft of the live state written for nested runs to build on, since the last state write. */
   #draft: StateBase | undefined;
   /** JSON size of the draft patches chained since the latest full draft or state write. */
@@ -137,7 +139,7 @@ export class RunJournal {
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
    * context). Without it, the first boundary write is a checkpoint that replaces whatever is stored.
    * @param state The state already in storage, with `seed`.
-   * @param storedState What the store reported for `state`: its `lastSeq`, and its `statePatchBytes`.
+   * @param storedState What the store reported for `state`: its `lastSeq`, `statePatchBytes` and `statePatchCount`.
    * @param inherited For a nested run that starts from a version of its parent's state (the parent
    * journal's `baseFor`): the checkpoint stores that version as the base, and only the changes to it.
    * @param resumed Set for a resume: the run's new drive starts from `storedState`, which the first
@@ -158,7 +160,7 @@ export class RunJournal {
     runId: string;
     seed?: Record<string, unknown>;
     state?: unknown;
-    storedState?: { seq: number; patchBytes: number; runToken?: string };
+    storedState?: { seq: number; patchBytes: number; patchCount: number; runToken?: string };
     inherited?: StateBase;
     resumed?: boolean;
   }) {
@@ -176,6 +178,7 @@ export class RunJournal {
       if (storedState) this.#writtenRef = { workflowName, runId, seq: storedState.seq };
     }
     this.#patchBytes = storedState?.patchBytes ?? 0;
+    this.#patchCount = storedState?.patchCount ?? 0;
     if (resumed && seed) this.#startStateSeq = storedState?.seq;
     this.#lastSeq = storedState?.seq;
     this.#runToken = storedState?.runToken;
@@ -367,6 +370,7 @@ export class RunJournal {
 
     let writtenState = this.#writtenState;
     let patchBytes = this.#patchBytes;
+    let patchCount = this.#patchCount;
     let state: Record<string, unknown> | undefined;
     let stateBase: StateRef | undefined;
     let statePatch: StatePatchOp[] | undefined;
@@ -379,20 +383,26 @@ export class RunJournal {
           // The checkpoint starts the state over, from the inherited version.
           stateBase = this.#inheritedRef;
           patchBytes = 0;
+          patchCount = 0;
         }
         const ops = diffState(writtenState, next.state);
         if (ops.length) {
           const opsBytes = JSON.stringify(ops).length;
-          if (patchBytes + opsBytes > next.bytes) {
+          // A full state once the patches would outgrow it, or once a cold load would apply too many.
+          if (patchBytes + opsBytes > next.bytes || patchCount >= STATE_CHECKPOINT_PATCHES) {
             state = next.state;
             stateBase = undefined;
           } else {
             statePatch = ops;
             patchBytes += opsBytes;
+            patchCount++;
           }
         }
       }
-      if (state) patchBytes = 0;
+      if (state) {
+        patchBytes = 0;
+        patchCount = 0;
+      }
       if (state || statePatch) writtenState = next.state;
     }
 
@@ -451,6 +461,7 @@ export class RunJournal {
     }
     this.#writtenState = writtenState;
     this.#patchBytes = patchBytes;
+    this.#patchCount = patchCount;
     return true;
   }
 
@@ -555,46 +566,35 @@ export class RunJournal {
 
   /** Swap the stubs among `stepIds` back for their stored results, with one read. */
   async hydrate(stepResults: StepResults, stepIds: readonly string[] = Object.keys(stepResults)): Promise<void> {
-    const store = this.store;
-    const stubbed = new Map<string, unknown>();
-    for (const stepId of stepIds) {
-      if (isStepResultStub(stepResults[stepId])) stubbed.set(stepId, stepResults[stepId]);
-    }
-    if (!store || !stubbed.size) return;
-
-    const loaded = await store.loadWorkflowRunSteps({
-      workflowName: this.workflowName,
-      runId: this.runId,
-      stepIds: [...stubbed.keys()],
-    });
-    for (const [stepId, stub] of stubbed) {
-      // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
-      // is at least as new as the one read.
-      if (stepResults[stepId] !== stub) continue;
-      const result = loaded?.[stepId];
-      if (!result) {
-        throw new MastraError({
-          id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.SYSTEM,
-          text: `The stored result of step "${stepId}" in run ${this.runId} is missing. The run was deleted or overwritten while it ran.`,
-        });
-      }
-      stepResults[stepId] = result;
-      // The loaded result is what's stored, so the next write doesn't resend it.
-      this.#written.set(stepId, result);
-    }
+    const { store, workflowName, runId } = this;
+    // Without storage nothing is evicted, so there are no stubs to load.
+    if (!store) return;
+    const loadSteps = (ids: string[]) => store.loadWorkflowRunSteps({ workflowName, runId, stepIds: ids });
+    const hydrated = await hydrateStepResults({ runId, loadSteps }, stepResults, stepIds);
+    // The loaded results are what's stored, so the next write doesn't resend them.
+    for (const [stepId, result] of hydrated) this.#written.set(stepId, result);
   }
 
   /** `getStepResultAsync` for step code: reads an evicted step from storage first. */
-  async getStepResultAsync(stepResults: StepResults, step: unknown): Promise<any> {
-    const stepId = stepRefId(step);
-    if (stepId !== undefined && isStepResultStub(stepResults[stepId])) {
-      // The result stays in memory until the entry ends, so later reads in the entry are free.
-      await this.hydrate(stepResults, [stepId]);
-    }
-    return getStepResult(stepResults, step);
+  getStepResultAsync(stepResults: StepResults, step: unknown): Promise<any> {
+    return getHydratedStepResult(stepResults, step, stepIds => this.hydrate(stepResults, stepIds));
   }
+}
+
+/**
+ * `getStepResult` over step results that may hold stubs: a stubbed step is read back with
+ * `hydrate` first. The result stays in `stepResults`, so later reads of it are free.
+ *
+ * @internal
+ */
+export async function getHydratedStepResult(
+  stepResults: StepResults,
+  step: unknown,
+  hydrate: (stepIds: string[]) => Promise<unknown>,
+): Promise<any> {
+  const stepId = stepRefId(step);
+  if (stepId !== undefined && isStepResultStub(stepResults[stepId])) await hydrate([stepId]);
+  return getStepResult(stepResults, step);
 }
 
 /**
@@ -615,6 +615,19 @@ export function buildStepResultAccessors(
       getStepResultAsync: getStepResultAsync.bind(null, stepResults),
     };
   }
+  return storageV2StepResultAccessors(step => journal.getStepResultAsync(stepResults, step));
+}
+
+/**
+ * The accessor pair for step code in a storage v2 run: sync `getStepResult` throws, as the run's
+ * step results won't always be in memory, and points to `getStepResultAsync`.
+ *
+ * @internal
+ */
+export function storageV2StepResultAccessors(getStepResultAsync: (step: unknown) => Promise<any>): {
+  getStepResult: (step: any) => never;
+  getStepResultAsync: (step: any) => Promise<any>;
+} {
   return {
     getStepResult: (step: unknown): never => {
       const stepId = stepRefId(step) ?? String(step);
@@ -625,8 +638,46 @@ export function buildStepResultAccessors(
         text: `getStepResult("${stepId}") isn't available in workflows with storageVersion: 2. Use \`await getStepResultAsync("${stepId}")\` instead.`,
       });
     },
-    getStepResultAsync: (step: unknown) => journal.getStepResultAsync(stepResults, step),
+    getStepResultAsync,
   };
+}
+
+/**
+ * Swaps the stubs among `stepIds` back for the run's stored results, with one read.
+ *
+ * @returns The stored results put in, by step id.
+ * @internal
+ */
+export async function hydrateStepResults(
+  run: { runId: string; loadSteps: (stepIds: string[]) => Promise<StepResults | null | undefined> },
+  stepResults: StepResults,
+  stepIds: readonly string[] = Object.keys(stepResults),
+): Promise<Map<string, StepResult<any, any, any, any>>> {
+  const hydrated = new Map<string, StepResult<any, any, any, any>>();
+  const stubbed = new Map<string, unknown>();
+  for (const stepId of stepIds) {
+    if (isStepResultStub(stepResults[stepId])) stubbed.set(stepId, stepResults[stepId]);
+  }
+  if (!stubbed.size) return hydrated;
+
+  const loaded = await run.loadSteps([...stubbed.keys()]);
+  for (const [stepId, stub] of stubbed) {
+    // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
+    // is at least as new as the one read.
+    if (stepResults[stepId] !== stub) continue;
+    const result = loaded?.[stepId];
+    if (!result) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.SYSTEM,
+        text: `The stored result of step "${stepId}" in run ${run.runId} is missing. The run was deleted or overwritten while it ran.`,
+      });
+    }
+    stepResults[stepId] = result;
+    hydrated.set(stepId, result);
+  }
+  return hydrated;
 }
 
 /**
@@ -794,6 +845,18 @@ export function loadedStepResults(
     results,
     format,
   );
+}
+
+/**
+ * The `steps()` of a storage v2 result that already holds every step result, so it reads none
+ * from storage: an evented run's, whose finish event carries them all.
+ *
+ * @internal
+ */
+export function residentStepResultsLoader(stepResults: StepResults): () => Promise<StepResults> {
+  const steps = () => Promise.resolve(stepResults);
+  residentResults.set(steps, stepResults);
+  return steps;
 }
 
 function storedStepResults(

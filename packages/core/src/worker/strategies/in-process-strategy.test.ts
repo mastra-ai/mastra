@@ -8,6 +8,7 @@ import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows/evented';
+import { outsideStorageScope } from '../../workflows/evented/workflow-event-processor/storage-scope';
 import type { StepExecutionParams } from '../types';
 import { InProcessStrategy } from './in-process-strategy';
 
@@ -57,11 +58,14 @@ function executeStepsRemotely(mastra: Mastra) {
     const body = JSON.parse(String(init?.body));
     requests.push({ workflowId: decodeURIComponent(workflowId!), body });
     try {
-      const result = await server.executeStep({
-        ...body,
-        workflowId: decodeURIComponent(workflowId!),
-        runId: decodeURIComponent(runId!),
-      });
+      // A real server handles the request outside the dispatching processor's storage scope.
+      const result = await outsideStorageScope(() =>
+        server.executeStep({
+          ...body,
+          workflowId: decodeURIComponent(workflowId!),
+          runId: decodeURIComponent(runId!),
+        }),
+      );
       return new Response(JSON.stringify(result), { status: 200 });
     } catch (error) {
       return new Response(JSON.stringify({ error: (error as Error).message }), { status: 404 });
@@ -261,5 +265,82 @@ describe('remote step execution for nested workflows', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+});
+
+describe('remote step execution on storage v2', () => {
+  const looseObject = z.looseObject({});
+
+  function storageV2Workflow(id: string, readA: (params: any) => Promise<unknown>) {
+    return createWorkflow({
+      id,
+      inputSchema: looseObject,
+      outputSchema: z.any(),
+      stateSchema: z.object({ count: z.number().optional() }),
+      options: { storageVersion: 2 },
+    })
+      .then(
+        createStep({
+          id: 'a',
+          inputSchema: looseObject,
+          outputSchema: z.object({ n: z.number() }),
+          stateSchema: z.object({ count: z.number().optional() }),
+          execute: async ({ setState }) => {
+            await setState({ count: 1 });
+            return { n: 1 };
+          },
+        }),
+      )
+      .then(
+        createStep({
+          id: 'b',
+          inputSchema: z.object({ n: z.number() }),
+          outputSchema: z.any(),
+          stateSchema: z.object({ count: z.number().optional() }),
+          execute: readA,
+        }),
+      )
+      .commit();
+  }
+
+  async function runRemotely(workflow: ReturnType<typeof storageV2Workflow>) {
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      pubsub: new EventEmitterPubSub(),
+      workflows: { [workflow.id]: workflow },
+    });
+    const requests = executeStepsRemotely(mastra);
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      return { result: await run.start({ inputData: {} }), requests };
+    } finally {
+      await mastra.stopWorkers();
+    }
+  }
+
+  it('sends the storage version, so the remote step reads results and state asynchronously', async () => {
+    const { result, requests } = await runRemotely(
+      storageV2Workflow('remote-async-reads', async ({ getStepResultAsync, getState }) => ({
+        a: await getStepResultAsync('a'),
+        state: await getState(),
+      })),
+    );
+
+    expect(result).toMatchObject({ status: 'success', result: { a: { n: 1 }, state: { count: 1 } } });
+    expect(requests.map(request => request.body.storageVersion)).toEqual([2, 2]);
+  });
+
+  it('makes sync getStepResult and state throw in remotely executed v2 steps', async () => {
+    const syncResult = await runRemotely(
+      storageV2Workflow('remote-sync-result', async ({ getStepResult }) => getStepResult('a')),
+    );
+    expect(syncResult.result.status).toBe('failed');
+    expect((syncResult.result as any).error.message).toMatch(/Use `await getStepResultAsync\("a"\)` instead/);
+
+    const syncState = await runRemotely(storageV2Workflow('remote-sync-state', async ({ state }) => state));
+    expect(syncState.result.status).toBe('failed');
+    expect((syncState.result as any).error.message).toMatch(/getState\(\)/);
   });
 });

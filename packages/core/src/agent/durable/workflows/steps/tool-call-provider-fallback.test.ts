@@ -77,6 +77,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-1',
         toolName: 'web_search',
@@ -111,6 +112,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-mastra',
         toolName: 'mastraTool',
@@ -149,6 +151,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-provider-mastra',
         toolName: 'web_search',
@@ -181,6 +184,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-1',
         toolName: 'definitely_not_a_tool',
