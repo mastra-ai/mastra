@@ -2,6 +2,7 @@ import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import { exitsPhase, PHASE_EXITED_EVENT } from './board-events.js';
 import type { BoardEventFacts } from './board-events.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { boardFlow, boardForWorkItem, hasPullRequest } from './semantics.js';
@@ -39,13 +40,18 @@ export type IntakeTargetProblem = {
  */
 export function intakeTargetProblem(
   registry: BoardRegistry,
-  route: { target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean }; on: readonly string[] },
+  route: {
+    target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
+    on: readonly string[];
+    from?: { boardKey: string; phaseKey: string } | null;
+  },
 ): IntakeTargetProblem | undefined {
   const { target } = route;
   const board = registry.get(target.boardKey);
   if (!board) {
     return { code: 'unknown_board', message: `Board "${target.boardKey}" is not installed in this project.` };
   }
+  if (exitsPhase(route)) return phaseExitProblem(registry, board, route);
   if (target.joinClosedIssue && route.on.some(event => event !== 'work_item.created')) {
     return {
       code: 'join_on_event',
@@ -85,13 +91,54 @@ export function intakeTargetProblem(
   return undefined;
 }
 
+/** A `phase.exited` route listens on a phase cards leave and sends them to a phase they can keep working in. */
+function phaseExitProblem(
+  registry: BoardRegistry,
+  board: InstalledBoard,
+  route: {
+    target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
+    from?: { boardKey: string; phaseKey: string } | null;
+  },
+): IntakeTargetProblem | undefined {
+  const { target, from } = route;
+  if (target.joinClosedIssue) {
+    return {
+      code: 'join_on_event',
+      message: `A route that joins a pull request to the card of the issue it closes handles only arrivals, not ${PHASE_EXITED_EVENT}.`,
+    };
+  }
+  // Storage refuses a phase-exit route without `from`, saying what it needs.
+  if (!from) return undefined;
+  const fromBoard = registry.get(from.boardKey);
+  if (!fromBoard)
+    return { code: 'unknown_board', message: `Board "${from.boardKey}" is not installed in this project.` };
+  const fromKind = fromBoard.phaseKind(from.phaseKey);
+  if (!fromKind) return { code: 'unknown_phase', message: `Board "${from.boardKey}" has no phase "${from.phaseKey}".` };
+  if (fromKind === 'terminal') {
+    return {
+      code: 'terminal_phase',
+      message: `Phase "${from.phaseKey}" on board "${from.boardKey}" is terminal; cards don't leave it to be routed.`,
+    };
+  }
+  const phase = target.phaseKey ?? board.initialPhase;
+  const kind = board.phaseKind(phase);
+  if (!kind) return { code: 'unknown_phase', message: `Board "${target.boardKey}" has no phase "${phase}".` };
+  if (kind === 'terminal') {
+    return {
+      code: 'terminal_phase',
+      message: `Phase "${phase}" on board "${target.boardKey}" is terminal; a route run when a card leaves a phase sends it on to more work.`,
+    };
+  }
+  return undefined;
+}
+
 /**
  * On a board that reviews pull requests a pull request card works only in the pull request review
  * phase (it may also rest or finish), and nothing else lands in that review: a card arriving here
  * carries no attached pull request yet, and an existing issue card enters it only with one on it.
  * `FactoryTransitionService` refuses any move that breaks this, so a route can't either.
  */
-function placementTakesCard(
+export function placementTakesCard(
   board: InstalledBoard,
   phase: string,
   facts: RuleFacts,
@@ -218,4 +265,56 @@ export function resolveEventRoute(
     return { phase, routeId: route.id };
   }
   return undefined;
+}
+
+type PhaseExitRoute = Pick<StoredIntakeRouteRecord, 'id' | 'name' | 'enabled' | 'when' | 'target' | 'on' | 'from'>;
+
+/** The enabled `phase.exited` routes listening on a board's phase, in order. */
+export function phaseExitRoutes<T extends PhaseExitRoute>(routes: readonly T[], board: string, phase: string): T[] {
+  return routes.filter(
+    route => route.enabled && exitsPhase(route) && route.from?.boardKey === board && route.from.phaseKey === phase,
+  );
+}
+
+export interface PhaseExitResolution<T extends PhaseExitRoute> {
+  /** The first route whose condition matches and whose target takes the card. */
+  match?: { route: T; board: InstalledBoard; phase: string };
+  /** Routes whose condition matched but whose target can't take the card, and why. */
+  skipped: { route: T; problem: string }[];
+}
+
+/**
+ * Where a card leaving a phase goes instead of where its mover asked: the first of `routes` (see
+ * {@link phaseExitRoutes}) whose `when` matches the card's facts and whose target is a phase the
+ * card can keep working in, on any installed board. The left phase's next phases don't bind a
+ * route, as they don't bind any route move.
+ */
+export function resolvePhaseExitRoute<T extends PhaseExitRoute>(
+  routes: readonly T[],
+  facts: RuleFacts,
+  registry: BoardRegistry,
+  card: { standalonePullRequest: boolean; hasPullRequest: boolean },
+  cardShapeProblem: (board: InstalledBoard, phase: string) => string | undefined,
+): PhaseExitResolution<T> {
+  const skipped: PhaseExitResolution<T>['skipped'] = [];
+  for (const route of routes) {
+    if (!evaluateRuleGroup(route.when, facts)) continue;
+    const board = registry.get(route.target.boardKey);
+    const phase = board ? (route.target.phaseKey ?? board.initialPhase) : undefined;
+    const problem = !board
+      ? `board "${route.target.boardKey}" is not installed`
+      : !board.phaseKind(phase!)
+        ? `board "${board.id}" has no phase "${phase}"`
+        : board.isTerminal(phase!)
+          ? `phase "${phase}" on board "${board.id}" is terminal`
+          : !placementTakesCard(board, phase!, facts, card.hasPullRequest)
+            ? `board "${board.id}" doesn't take this card in "${phase}"`
+            : cardShapeProblem(board, phase!);
+    if (problem) {
+      skipped.push({ route, problem });
+      continue;
+    }
+    return { match: { route, board: board!, phase: phase! }, skipped };
+  }
+  return { skipped };
 }

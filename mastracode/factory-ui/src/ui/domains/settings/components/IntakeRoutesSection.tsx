@@ -49,6 +49,7 @@ import {
   boardName,
   catchesEveryArrival,
   describeTarget,
+  exitsPhase,
   MOVE_EVENTS,
   phaseName,
   phaseOptions,
@@ -76,12 +77,40 @@ const json = (rule: RuleGroup | null | undefined) => JSON.stringify(rule ?? null
  */
 type RouteScope = { kind: 'arrivals' } | { kind: 'moves'; board: InstalledBoardInfo };
 
-type RouteFields = Partial<Pick<IntakeRouteInfo, 'name' | 'enabled' | 'when' | 'on' | 'target'>>;
-type NewRouteValue = Pick<IntakeRouteInfo, 'name' | 'on' | 'when' | 'target'>;
+type RouteFields = Partial<Pick<IntakeRouteInfo, 'name' | 'enabled' | 'when' | 'on' | 'target' | 'from'>>;
+type NewRouteValue = Pick<IntakeRouteInfo, 'name' | 'on' | 'when' | 'target' | 'from'>;
 
 function inScope(route: IntakeRouteInfo, scope: RouteScope): boolean {
   if (scope.kind === 'arrivals') return placesNewCards(route);
+  // A card leaving a phase belongs to the board it leaves, wherever the route sends it.
+  if (exitsPhase(route)) return route.from?.boardKey === scope.board.id;
   return !placesNewCards(route) && route.target.boardKey === scope.board.id;
+}
+
+/** Phases a card can leave to be routed, or be routed into: any phase that isn't terminal. */
+function openPhases(board: InstalledBoardInfo | undefined) {
+  return (board?.phases ?? []).filter(phase => phase.kind !== 'terminal');
+}
+
+/** The phase a new phase-exit route listens on: the board's triage phase, else its first phase that runs work. */
+function defaultExitPhase(board: InstalledBoardInfo): string {
+  const open = openPhases(board);
+  return (
+    open.find(phase => phase.id === board.flow?.triage)?.id ??
+    open.find(phase => phase.kind === 'working')?.id ??
+    open[0]?.id ??
+    board.initialPhase
+  );
+}
+
+/** A trigger change's fields: a phase-exit route names the phase it listens on, every other route names none. */
+function triggerFields(
+  on: IntakeRouteInfo['on'],
+  board: InstalledBoardInfo,
+  from: IntakeRouteInfo['from'],
+): RouteFields {
+  if (exitsPhase({ on })) return { on, from: from ?? { boardKey: board.id, phaseKey: defaultExitPhase(board) } };
+  return { on, from: null };
 }
 
 /**
@@ -102,12 +131,16 @@ function targetPhases(board: InstalledBoardInfo | undefined, placesNew: boolean,
 }
 
 /** What a rule can't say on a route listening for these events, or undefined when the route can save it. */
-function whenProblem(on: IntakeRouteInfo['on'], when: RuleGroup | null): string | undefined {
+function whenProblem(
+  on: IntakeRouteInfo['on'],
+  when: RuleGroup | null,
+  from: IntakeRouteInfo['from'],
+): string | undefined {
   if (when) {
     const parsed = ROUTE_WHEN_SCHEMA.safeParse(when);
     if (!parsed.success) return parsed.error.issues[0]?.message;
   }
-  return routeEventsProblem(on, when) ?? undefined;
+  return routeEventsProblem(on, when, from) ?? undefined;
 }
 
 /** The values a change replaces, so Undo can put them back. */
@@ -118,6 +151,7 @@ function previousOf(route: IntakeRouteInfo, fields: RouteFields): RouteFields {
   if (fields.when !== undefined) previous.when = route.when;
   if (fields.on !== undefined) previous.on = route.on;
   if (fields.target !== undefined) previous.target = route.target;
+  if (fields.from !== undefined) previous.from = route.from;
   return previous;
 }
 
@@ -126,6 +160,7 @@ function updateMessage(fields: RouteFields): string {
   if (fields.name !== undefined) return 'Route renamed';
   if (fields.on !== undefined) return 'Trigger changed';
   if (fields.target !== undefined) return 'Destination changed';
+  if (fields.from !== undefined) return 'Phase changed';
   return 'Conditions saved';
 }
 
@@ -306,6 +341,7 @@ function PhasePicker({
   value,
   placesNew,
   joining = false,
+  phases = targetPhases(board, placesNew, joining),
   label,
   onChange,
 }: {
@@ -314,6 +350,8 @@ function PhasePicker({
   placesNew: boolean;
   /** The route joins a pull request to its issue's card, which already sits on the board. */
   joining?: boolean;
+  /** The phases offered, when they aren't the ones a route's cards may land in. */
+  phases?: InstalledBoardInfo['phases'];
   label: string;
   onChange: (phaseKey: string) => void;
 }) {
@@ -323,7 +361,7 @@ function PhasePicker({
         <PhaseLabel board={board} phaseKey={value} />
       </SelectTrigger>
       <SelectContent>
-        {targetPhases(board, placesNew, joining).map(phase => (
+        {phases.map(phase => (
           <SelectItem key={phase.id} value={phase.id}>
             <PhaseLabel board={board} phaseKey={phase.id} />
           </SelectItem>
@@ -442,7 +480,7 @@ function RouteConditions({
         onChange={(when, incomplete) => {
           // An empty new-card route isn't saved, and the empty rows already say why.
           if (incomplete || (needsOne && when === null)) return setProblem(undefined);
-          const next = whenProblem(route.on, when);
+          const next = whenProblem(route.on, when, route.from);
           setProblem(next);
           if (next || json(when) === json(route.when)) return;
           setWritten(json(when));
@@ -495,6 +533,9 @@ function RouteCard({
   const board = boards.find(candidate => candidate.id === route.target.boardKey);
   const phaseKey = route.target.phaseKey ?? board?.initialPhase ?? '';
   const placesNew = placesNewCards(route);
+  const exits = exitsPhase(route);
+  // The board a phase-exit route listens on is the one whose settings list it.
+  const fromBoard = scope.kind === 'moves' ? scope.board : undefined;
   const setTarget = (target: Partial<IntakeRouteInfo['target']>) =>
     onUpdate({ target: { ...route.target, ...target } });
 
@@ -551,9 +592,28 @@ function RouteCard({
               <RuleLineKeyword>When</RuleLineKeyword>
               <RuleLineContent>
                 {readOnly ? (
-                  <Badge size="sm">{triggerLabel(route.on)}</Badge>
+                  <Badge size="sm">
+                    {exits && route.from && fromBoard
+                      ? `A card leaves ${phaseName(fromBoard, route.from.phaseKey) ?? route.from.phaseKey}`
+                      : triggerLabel(route.on)}
+                  </Badge>
                 ) : (
-                  <EventPicker value={route.on} onChange={on => onUpdate({ on })} />
+                  <>
+                    <EventPicker
+                      value={route.on}
+                      onChange={on => fromBoard && onUpdate(triggerFields(on, fromBoard, route.from))}
+                    />
+                    {exits && fromBoard && (
+                      <PhasePicker
+                        board={fromBoard}
+                        value={route.from?.phaseKey ?? defaultExitPhase(fromBoard)}
+                        placesNew={false}
+                        phases={openPhases(fromBoard)}
+                        label="Phase cards leave"
+                        onChange={next => onUpdate({ from: { boardKey: fromBoard.id, phaseKey: next } })}
+                      />
+                    )}
+                  </>
                 )}
               </RuleLineContent>
             </RuleLine>
@@ -578,11 +638,13 @@ function RouteCard({
       <RuleCardOutcome label={destinationLabel}>
         {readOnly ? (
           <Badge size="sm">
-            {scope.kind === 'moves' && board ? (phaseName(board, phaseKey) ?? phaseKey) : describeTarget(route, boards)}
+            {scope.kind === 'moves' && board && !exits
+              ? (phaseName(board, phaseKey) ?? phaseKey)
+              : describeTarget(route, boards)}
           </Badge>
         ) : (
           <>
-            {scope.kind === 'arrivals' && (
+            {(scope.kind === 'arrivals' || exits) && (
               <>
                 <BoardPicker
                   value={route.target.boardKey}
@@ -591,7 +653,7 @@ function RouteCard({
                   onChange={boardKey => {
                     if (isCatchAll) return onSendTo(boardKey);
                     const next = boards.find(candidate => candidate.id === boardKey);
-                    if (next) setTarget({ boardKey, phaseKey: next.initialPhase });
+                    if (next) setTarget({ boardKey, phaseKey: exits ? defaultExitPhase(next) : next.initialPhase });
                   }}
                 />
                 {board && (
@@ -607,6 +669,7 @@ function RouteCard({
                 value={phaseKey}
                 placesNew={placesNew}
                 joining={joining}
+                {...(exits ? { phases: openPhases(board) } : {})}
                 label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
                 onChange={next => setTarget({ phaseKey: next })}
               />
@@ -653,6 +716,9 @@ function NewRoute({
   const [incomplete, setIncomplete] = useState(false);
   const [boardKey, setBoardKey] = useState(initialBoard?.id ?? '');
   const board = boards.find(candidate => candidate.id === boardKey);
+  const exits = exitsPhase({ on });
+  const fromBoard = scope.kind === 'moves' ? scope.board : undefined;
+  const [fromPhase, setFromPhase] = useState(fromBoard ? defaultExitPhase(fromBoard) : '');
   const [phaseKey, setPhaseKey] = useState(
     scope.kind === 'moves'
       ? (scope.board.flow?.completed ?? scope.board.initialPhase)
@@ -662,8 +728,14 @@ function NewRoute({
   const offersJoin = scope.kind === 'arrivals' && canJoinIssueCard(on, when);
   const joining = offersJoin && wantsJoin;
   // Leaving joining can leave a phase new cards can't land in picked.
-  const targetPhase = scope.kind === 'arrivals' ? phaseStillOffered(board, phaseKey, joining) : phaseKey;
-  const problem = whenProblem(on, when);
+  const targetPhase =
+    scope.kind === 'arrivals'
+      ? phaseStillOffered(board, phaseKey, joining)
+      : exits && !openPhases(board).some(phase => phase.id === phaseKey)
+        ? (openPhases(board)[0]?.id ?? '')
+        : phaseKey;
+  const from = exits && fromBoard ? { boardKey: fromBoard.id, phaseKey: fromPhase } : null;
+  const problem = whenProblem(on, when, from);
   const needsCondition = scope.kind === 'arrivals' && when === null;
   const [adding, setAdding] = useState(false);
   const ready =
@@ -671,6 +743,7 @@ function NewRoute({
     name.trim() !== '' &&
     board !== undefined &&
     targetPhase !== '' &&
+    (!exits || fromPhase !== '') &&
     !incomplete &&
     !problem &&
     !needsCondition;
@@ -695,6 +768,16 @@ function NewRoute({
             <RuleLineKeyword>When</RuleLineKeyword>
             <RuleLineContent>
               <EventPicker value={on} onChange={setOn} />
+              {exits && fromBoard && (
+                <PhasePicker
+                  board={fromBoard}
+                  value={fromPhase}
+                  placesNew={false}
+                  phases={openPhases(fromBoard)}
+                  label="Phase cards leave"
+                  onChange={setFromPhase}
+                />
+              )}
             </RuleLineContent>
           </RuleLine>
         )}
@@ -717,7 +800,7 @@ function NewRoute({
       </RuleCardBody>
       {offersJoin && <JoinIssueCard checked={wantsJoin} onChange={setWantsJoin} />}
       <RuleCardOutcome label={destinationLabelFor(scope, joining)}>
-        {scope.kind === 'arrivals' && (
+        {(scope.kind === 'arrivals' || exits) && (
           <>
             <BoardPicker
               value={boardKey}
@@ -739,6 +822,7 @@ function NewRoute({
             value={targetPhase}
             placesNew={scope.kind === 'arrivals'}
             joining={joining}
+            {...(exits ? { phases: openPhases(board) } : {})}
             label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
             onChange={setPhaseKey}
           />
@@ -758,6 +842,7 @@ function NewRoute({
                 on,
                 when,
                 target: { boardKey: board.id, phaseKey: targetPhase, joinClosedIssue: joining },
+                from,
               });
               // An added route closes this form; a failed one leaves it to try again.
               if (!added) setAdding(false);
@@ -861,7 +946,14 @@ function RouteList({
       const [created] = await send([
         {
           kind: 'create',
-          route: { name: route.name, enabled: route.enabled, when: route.when, on: route.on, target: route.target },
+          route: {
+            name: route.name,
+            enabled: route.enabled,
+            when: route.when,
+            on: route.on,
+            target: route.target,
+            ...(route.from ? { from: route.from } : {}),
+          },
         },
       ]);
       if (!created) return;
@@ -917,6 +1009,7 @@ function RouteList({
             name: route.name,
             when: route.when,
             ...(scope.kind === 'moves' ? { on: route.on } : {}),
+            ...(route.from ? { from: route.from } : {}),
             target: {
               boardKey: route.target.boardKey,
               phaseKey: route.target.phaseKey,

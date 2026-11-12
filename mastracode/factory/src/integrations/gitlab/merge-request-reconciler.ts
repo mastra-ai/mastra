@@ -113,7 +113,7 @@ function terminalEvent(
 async function connectionForItem(
   gitlab: Pick<GitLabIntegrationBase, 'resolveActiveConnectionForHost'>,
   context: IntegrationContext,
-  project: FactoryProject,
+  project: Pick<FactoryProject, 'orgId' | 'id'>,
   projectId: string,
   host: string,
 ): Promise<string | undefined> {
@@ -350,5 +350,59 @@ export function attachGitLabMergeRequestReconciler(
       }
     }
     return summary;
+  };
+}
+
+/**
+ * Syncs one open GitLab merge-request card from GitLab, writing the sweep's metadata. A closed or
+ * merged MR is left to the sweep, which replays the close through the rules ingress first.
+ */
+export function attachGitLabMergeRequestSync(
+  gitlab: Pick<GitLabIntegrationBase, 'versionControl' | 'getProjectMemberAccessLevel' | 'resolveActiveConnectionForHost'>,
+  context: IntegrationContext,
+): ((item: Card) => Promise<void>) | undefined {
+  const workItems = context.runtime?.workItems;
+  if (!workItems) return undefined;
+  return async item => {
+    if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') return;
+    const identity = identityForItem(item);
+    if (!identity) return;
+    const { projectId, mergeRequestIid, host } = identity;
+    const project = { orgId: item.orgId, id: item.factoryProjectId };
+    const connectionId = await connectionForItem(gitlab, context, project, String(projectId), host);
+    if (!connectionId) return;
+    const pullRequest = await gitlab.versionControl.getPullRequest({
+      connection: gitlabConnection(connectionId),
+      sourceId: String(projectId),
+      pullRequestId: String(mergeRequestIid),
+    });
+    if (!pullRequest || pullRequest.state === 'closed') return;
+    const accessLevel = pullRequest.author
+      ? await gitlab.getProjectMemberAccessLevel(connectionId, String(projectId), pullRequest.author)
+      : undefined;
+    await workItems.syncCard({
+      orgId: item.orgId,
+      id: item.id,
+      userId: 'factory-rule-dispatcher',
+      patch: {
+        metadata: {
+          gitlabHost: host,
+          gitlabProjectId: projectId,
+          gitlabMergeRequestIid: mergeRequestIid,
+          state: pullRequest.state,
+          draft: pullRequest.draft,
+          merged: pullRequest.merged,
+          assignees: pullRequest.assignees ?? [],
+          requestedReviewers: pullRequest.requestedReviewers ?? [],
+          labels: pullRequest.labels ?? [],
+          headBranch: pullRequest.headBranch,
+          baseBranch: pullRequest.baseBranch,
+          ...(pullRequest.author
+            ? { author: pullRequest.author, authorTrusted: (accessLevel ?? 0) >= GITLAB_TRUSTED_ACCESS_LEVEL }
+            : {}),
+          updatedAt: pullRequest.updatedAt,
+        },
+      },
+    });
   };
 }

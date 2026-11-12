@@ -31,6 +31,7 @@ function seededRoutes(): IntakeRouteInfo[] {
       joinClosedIssue: route.target.joinClosedIssue ?? false,
     },
     on: [...(route.on ?? ['work_item.created'])],
+    from: null,
     revision: 1,
     createdBy: 'factory',
     createdAt: '2026-11-01T00:00:00.000Z',
@@ -59,6 +60,7 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       const body = (await request.json()) as Pick<IntakeRouteInfo, 'name' | 'when'> & {
         target: { boardKey: string; phaseKey?: string };
         on?: IntakeRouteInfo['on'];
+        from?: IntakeRouteInfo['from'];
       };
       state.requests.push({ method: 'POST', path: '', body });
       const route: IntakeRouteInfo = {
@@ -68,6 +70,7 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
         when: body.when ?? null,
         target: { boardKey: body.target.boardKey, phaseKey: body.target.phaseKey ?? null, joinClosedIssue: false },
         on: body.on ?? ['work_item.created'],
+        from: body.from ?? null,
         createdBy: 'admin',
       };
       // A route that places new cards goes ahead of the first route taking every new card. Each
@@ -1012,6 +1015,79 @@ describe('CardMovesSection', () => {
       on: ['pull_request.merged'],
       target: { boardKey: 'ship' },
     });
+  });
+
+  it('adds a route for cards leaving a phase, sending them on to a phase of another board', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="ship" />);
+
+    const draft = await startRoute(user, 'Docs work goes to Work', 'Add card move');
+    await user.click(within(draft).getByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'A card leaves a phase' }));
+    // The board's triage phase is the one a new route listens on until another is picked.
+    expect(within(draft).getByRole('combobox', { name: 'Phase cards leave' })).toHaveTextContent('Think');
+    await user.click(within(draft).getByRole('combobox', { name: 'Phase cards leave' }));
+    const leaving = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(leaving).toEqual(['Inbox', 'Think', 'Make', 'Check', 'Pr']);
+    await user.click(screen.getByRole('option', { name: 'Make' }));
+
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Work' }));
+    await user.click(within(draft).getByRole('combobox', { name: 'Move to' }));
+    // A card can't be routed into a finished phase: closing it stays the mover's call.
+    const into = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(into).toEqual(workBoardInfo.phases.filter(phase => phase.kind !== 'terminal').map(phase => phase.name));
+    await user.click(screen.getByRole('option', { name: 'Planning' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add card move' }));
+
+    await waitFor(() => expect(moveNames()).toContain('Docs work goes to Work'));
+    expect(state.requests[0]?.body).toMatchObject({
+      name: 'Docs work goes to Work',
+      on: ['phase.exited'],
+      from: { boardKey: 'ship', phaseKey: 'make' },
+      target: { boardKey: 'work', phaseKey: 'planning' },
+    });
+  });
+
+  it('lists a phase-exit route on the board cards leave, not the board it sends them to, and edits what it listens on', async () => {
+    const exitRoute: IntakeRouteInfo = {
+      ...seededRoutes()[0],
+      id: 'docs-work',
+      name: 'Docs work goes to Work',
+      position: 99,
+      on: ['phase.exited'],
+      from: { boardKey: 'ship', phaseKey: 'think' },
+      when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'area: docs' }] },
+      target: { boardKey: 'work', phaseKey: 'planning', joinClosedIssue: false },
+    };
+    const state = serveRoutes({ routes: [...seededRoutes(), exitRoute] });
+    const user = userEvent.setup();
+    const { unmount } = renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="work" />);
+    await screen.findByRole('list', { name: 'Card moves' });
+    expect(moveNames()).not.toContain('Docs work goes to Work');
+    unmount();
+
+    renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="ship" />);
+    await screen.findByRole('list', { name: 'Card moves' });
+    const row = routeRow('Docs work goes to Work');
+    expect(within(row).getByRole('combobox', { name: 'When' })).toHaveTextContent('A card leaves a phase');
+    expect(within(row).getByRole('combobox', { name: 'Board' })).toHaveTextContent('Work');
+    expect(within(row).getByRole('combobox', { name: 'Move to' })).toHaveTextContent('Planning');
+
+    await user.click(within(row).getByRole('combobox', { name: 'Phase cards leave' }));
+    await user.click(await screen.findByRole('option', { name: 'Inbox' }));
+    await waitFor(() =>
+      expect(state.routes.find(route => route.id === 'docs-work')?.from).toEqual({
+        boardKey: 'ship',
+        phaseKey: 'inbox',
+      }),
+    );
+
+    await user.click(within(routeRow('Docs work goes to Work')).getByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'A card is closed' }));
+    // Any other trigger listens on no phase.
+    await waitFor(() => expect(state.requests.at(-1)?.body).toMatchObject({ on: ['work_item.closed'], from: null }));
   });
 });
 

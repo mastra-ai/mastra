@@ -509,6 +509,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "bodyParams": [
       "enabled",
       "expectedRevision",
+      "from",
       "name",
       "on",
       "target",
@@ -790,6 +791,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "enabled",
+      "from",
       "name",
       "on",
       "target",
@@ -2824,9 +2826,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "pull_request.synchronized",
                     "pull_request.review_requested",
                     "pull_request.merged",
-                    "pull_request.closed"
+                    "pull_request.closed",
+                    "phase.exited"
                   ]
                 }
+              },
+              "from": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "boardKey": {
+                        "type": "string"
+                      },
+                      "phaseKey": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "boardKey",
+                      "phaseKey"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "revision": {
                 "type": "integer",
@@ -2860,6 +2885,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when",
               "target",
               "on",
+              "from",
               "revision",
               "createdBy",
               "createdAt",
@@ -3141,9 +3167,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
-                  "pull_request.closed"
+                  "pull_request.closed",
+                  "phase.exited"
                 ]
               }
+            },
+            "from": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "boardKey": {
+                      "type": "string"
+                    },
+                    "phaseKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "boardKey",
+                    "phaseKey"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "revision": {
               "type": "integer",
@@ -3177,6 +3226,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
+            "from",
             "revision",
             "createdBy",
             "createdAt",
@@ -5199,8 +5249,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "on": {
           "$ref": "#/$defs/__schema12"
         },
-        "expectedRevision": {
+        "from": {
           "$ref": "#/$defs/__schema14"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/__schema15"
         }
       },
       "required": [
@@ -5444,10 +5497,34 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
-            "pull_request.closed"
+            "pull_request.closed",
+            "phase.exited"
           ]
         },
         "__schema14": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "phaseKey": {
+                  "$ref": "#/$defs/__schema11"
+                }
+              },
+              "required": [
+                "boardKey",
+                "phaseKey"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema15": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -5541,9 +5618,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
-                  "pull_request.closed"
+                  "pull_request.closed",
+                  "phase.exited"
                 ]
               }
+            },
+            "from": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "boardKey": {
+                      "type": "string"
+                    },
+                    "phaseKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "boardKey",
+                    "phaseKey"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "revision": {
               "type": "integer",
@@ -5577,6 +5677,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
+            "from",
             "revision",
             "createdBy",
             "createdAt",
@@ -7812,6 +7913,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "$ref": "#/$defs/__schema8"
           }
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "$ref": "#/$defs/__schema7"
+                },
+                "phaseKey": {
+                  "$ref": "#/$defs/__schema7"
+                }
+              },
+              "required": [
+                "boardKey",
+                "phaseKey"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -7985,7 +8109,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
-            "pull_request.closed"
+            "pull_request.closed",
+            "phase.exited"
           ]
         }
       }
@@ -8077,9 +8202,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
-                  "pull_request.closed"
+                  "pull_request.closed",
+                  "phase.exited"
                 ]
               }
+            },
+            "from": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "boardKey": {
+                      "type": "string"
+                    },
+                    "phaseKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "boardKey",
+                    "phaseKey"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "revision": {
               "type": "integer",
@@ -8113,6 +8261,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
+            "from",
             "revision",
             "createdBy",
             "createdAt",
@@ -8406,9 +8555,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "pull_request.synchronized",
                     "pull_request.review_requested",
                     "pull_request.merged",
-                    "pull_request.closed"
+                    "pull_request.closed",
+                    "phase.exited"
                   ]
                 }
+              },
+              "from": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "boardKey": {
+                        "type": "string"
+                      },
+                      "phaseKey": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "boardKey",
+                      "phaseKey"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "revision": {
                 "type": "integer",
@@ -8442,6 +8614,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when",
               "target",
               "on",
+              "from",
               "revision",
               "createdBy",
               "createdAt",

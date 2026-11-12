@@ -3,7 +3,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../boards/board-events.js';
+import { INTAKE_ROUTE_RULE_FIELDS, ROUTE_EVENTS, routeEventsProblem } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -104,6 +104,9 @@ const intakeRouteTargetSchema = z
     joinClosedIssue: z.boolean().optional(),
   })
   .strict();
+const intakeRouteFromSchema = z
+  .object({ boardKey: intakeRouteIdentifierSchema, phaseKey: intakeRouteIdentifierSchema })
+  .strict();
 const intakeRouteWhenSchema = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
 const intakeRouteFields = {
   name: nonEmptyTrimmed(120),
@@ -112,13 +115,18 @@ const intakeRouteFields = {
   when: intakeRouteWhenSchema.nullable(),
   /** Where matching cards land. */
   target: intakeRouteTargetSchema,
-  /** The status events the route handles. `work_item.created` places new cards; the others move existing ones. */
+  /**
+   * The events the route handles. `work_item.created` places new cards; the status events move
+   * existing ones; `phase.exited` (alone, with `from`) sends a card on as it leaves a phase.
+   */
   on: z
-    .array(z.enum(STATUS_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
+    .array(z.enum(ROUTE_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
     .superRefine((on, ctx) => {
-      const problem = routeEventsProblem(on, null);
+      const problem = on.length === 0 || new Set(on).size !== on.length ? routeEventsProblem(on, null) : null;
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
+  /** The board and phase a `phase.exited` route listens on; null on every other route. */
+  from: intakeRouteFromSchema.nullable(),
 };
 export const intakeRouteInputSchema = z
   .object({
@@ -127,6 +135,7 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
+    from: intakeRouteFields.from.optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -137,6 +146,7 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
+    from: intakeRouteFields.from.optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -161,7 +171,9 @@ const intakeRouteSchema = z.object({
   position: z.number().int(),
   when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
-  on: z.array(z.enum(STATUS_EVENTS)),
+  on: z.array(z.enum(ROUTE_EVENTS)),
+  /** The board and phase a `phase.exited` route listens on; null on every other route. */
+  from: z.object({ boardKey: z.string(), phaseKey: z.string() }).nullable(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),

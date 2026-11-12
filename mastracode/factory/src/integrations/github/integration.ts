@@ -47,7 +47,7 @@ import type {
   ReviewComment,
   VersionControl,
 } from '../../capabilities/version-control.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../base.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
@@ -69,6 +69,7 @@ import {
 } from './session-subscriptions.js';
 import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
+import { attachGithubWorkItemSync } from './work-item-sync.js';
 
 type InputOf<TMethod extends keyof VersionControl> =
   NonNullable<VersionControl[TMethod]> extends (input: infer TInput) => unknown ? TInput : never;
@@ -1328,6 +1329,15 @@ export class GithubIntegration implements FactoryIntegration {
    * Pull-request and issue sweeps share a worker and lease, but can be enabled
    * and paced independently. The legacy combined controls remain the fallback.
    */
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachGithubWorkItemSync(
+      this,
+      ctx,
+      input => this.fetchIssueState(input),
+      input => this.fetchPullRequestState(input),
+    );
+  }
+
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pullRequestEnabled = reconciliationEnabled(
       process.env.MASTRACODE_GITHUB_PR_RECONCILE_ENABLED,

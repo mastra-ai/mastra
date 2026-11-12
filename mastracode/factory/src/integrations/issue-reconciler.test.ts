@@ -793,4 +793,64 @@ describe('issue reconcilers', () => {
       }
     },
   );
+
+  it("syncs one Linear card's facts from Linear without replaying anything", async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const card = (
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: project.createdBy,
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'linear:ENG-42',
+            url: 'https://linear.app/acme/issue/ENG-42',
+          },
+          title: 'ENG-42: Issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: { linearIssueId: 'linear-uuid', labels: ['triage'] },
+        },
+      })
+    ).item;
+    const other = (
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: project.createdBy,
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-43' },
+          title: 'ENG-43: Other',
+          stages: ['planning'],
+          sessions: {},
+          metadata: { linearIssueId: 'linear-other', labels: ['triage'] },
+        },
+      })
+    ).item;
+    const getIssue = vi.fn().mockResolvedValue(issue({ labels: ['area: docs'], assignees: ['Linear Ada'] }));
+    const intake = {
+      resolveIntakeDispatch: vi
+        .fn()
+        .mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
+      getIssue,
+    } as unknown as Intake;
+    const sync = attachLinearIssueReconciler(
+      { intake, rules: resolveLinearRules(undefined) },
+      {
+        storage: { projects: seeded.projects },
+        runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createTriageWorkRegistry() },
+      } as never,
+    )?.sync;
+
+    await sync!(card);
+
+    expect(getIssue).toHaveBeenCalledOnce();
+    const synced = await seeded.workItems.get({ orgId: 'org-1', id: card.id });
+    expect(synced?.workItem.labels).toEqual(['area: docs']);
+    expect((await seeded.workItems.get({ orgId: 'org-1', id: other.id }))?.workItem.labels).toEqual(['triage']);
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
 });

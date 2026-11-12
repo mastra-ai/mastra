@@ -8,7 +8,7 @@ import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } f
 import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../../base.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.js';
 import { resolveLinearRules } from '../../linear/default-rules.js';
@@ -395,6 +395,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       workspaceUrlKey: workspaces.length === 1 ? (workspaces[0]?.urlKey ?? null) : null,
       checkedAt: Date.now(),
     };
+  }
+
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachLinearIssueReconciler(this, ctx)?.sync;
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

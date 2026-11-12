@@ -609,6 +609,30 @@ describe('Board work-item activity', () => {
     expect(row).toHaveAttribute('title', `Move to Review rejected: ${reason}\n\nWhy it was asked: ${rationale}`);
   });
 
+  it('names the route that sent a card on as it left its phase', async () => {
+    stubBoardEndpoints();
+    const routed = {
+      ...events.find(event => event.id === 'event-work-human')!,
+      id: 'event-routed',
+      metadata: {
+        from: 'triage',
+        to: 'planning',
+        route: { id: 'route-1', name: 'Docs work goes to Work' },
+        fromBoard: 'shipyard',
+        toBoard: 'work',
+      },
+      occurredAt: '2026-08-05T11:00:00.000Z',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
+        HttpResponse.json({ events: [routed, ...events], actors }),
+      ),
+    );
+    renderBoard('work');
+
+    await expectActivity('Ada Lovelace', 'Moved the item, routed by Docs work goes to Work');
+  });
+
   it("names a rejected move's phase from the card's own board when another board uses the same phase id", async () => {
     stubBoardEndpoints();
     const rejected = {

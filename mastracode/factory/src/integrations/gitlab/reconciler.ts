@@ -1,13 +1,13 @@
-import type { IntegrationContext } from '../base.js';
-import type { IssueReconciler, IssueReconcileSummary } from '../issue-reconciler.js';
+import type { IntegrationContext, WorkItemSync } from '../base.js';
+import type { IssueReconcileSummary } from '../issue-reconciler.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { attachGitLabIssueReconciler } from './issue-reconciler.js';
-import { attachGitLabMergeRequestReconciler } from './merge-request-reconciler.js';
+import { attachGitLabMergeRequestReconciler, attachGitLabMergeRequestSync } from './merge-request-reconciler.js';
 
 export function attachGitLabReconciler(
   gitlab: GitLabIntegrationBase,
   context: IntegrationContext,
-): IssueReconciler | undefined {
+): (() => Promise<IssueReconcileSummary>) | undefined {
   const issues = attachGitLabIssueReconciler(gitlab, context);
   const mergeRequests = attachGitLabMergeRequestReconciler(gitlab, context);
   if (!issues && !mergeRequests) return undefined;
@@ -27,5 +27,19 @@ export function attachGitLabReconciler(
         }),
         { projects: 0, checked: 0, updated: 0, closed: 0, missing: 0, failed: 0, errors: [] },
       );
+  };
+}
+
+/** Syncs one GitLab issue or merge-request card from GitLab. */
+export function attachGitLabWorkItemSync(
+  gitlab: GitLabIntegrationBase,
+  context: IntegrationContext,
+): WorkItemSync | undefined {
+  const issues = attachGitLabIssueReconciler(gitlab, context)?.sync;
+  const mergeRequests = attachGitLabMergeRequestSync(gitlab, context);
+  if (!issues && !mergeRequests) return undefined;
+  return async item => {
+    if (item.externalSource?.type === 'pull-request') await mergeRequests?.(item);
+    else await issues?.(item);
   };
 }

@@ -782,6 +782,10 @@ export interface FactoryTransitionResultAccepted {
   revision: number;
   stage: FactoryRuleStage;
   decisions: FactoryCommitDecision[];
+  /** The `phase.exited` route that sent the card here instead of where the mover asked. */
+  route?: { id: string; name: string };
+  /** The board the card is on after a route move; set only with `route`. */
+  board?: string;
 }
 
 export interface FactoryTransitionResultRejected {

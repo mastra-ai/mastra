@@ -75,6 +75,14 @@ function RejectedMove({ event, board }: { event: AuditEvent; board: BoardInfo | 
   );
 }
 
+/** The route that sent a moved card on as it left its phase, named on the move it redirected. */
+function routedBy(event: AuditEvent): string | undefined {
+  if (event.action !== 'factory.work_item.stage_moved') return undefined;
+  const route = event.metadata.route;
+  if (typeof route !== 'object' || route === null || !('name' in route)) return undefined;
+  return typeof route.name === 'string' && route.name.trim() ? route.name : undefined;
+}
+
 function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
@@ -123,6 +131,8 @@ export function ActivityEvent({
               </time>
             ) : event.action === 'factory.work_item.transition_rejected' ? (
               <RejectedMove event={event} board={board} />
+            ) : routedBy(event) ? (
+              `${actionLabel(event.action)}, routed by ${routedBy(event)}`
             ) : (
               actionLabel(event.action)
             )}

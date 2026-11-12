@@ -23,6 +23,7 @@ function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): 
     when: null,
     target: { boardKey, phaseKey: null, joinClosedIssue: false },
     on: ['work_item.created'],
+    from: null,
     revision: 1,
     createdBy: 'user-1',
     createdAt: '2026-11-01T00:00:00.000Z',

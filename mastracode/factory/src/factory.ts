@@ -69,7 +69,12 @@ import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js'
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
-import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
+import type {
+  FactoryIntegration,
+  IntegrationPostToolContext,
+  IntegrationTools,
+  WorkItemSync,
+} from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubRuleOverrides } from './integrations/github/default-rules.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -585,6 +590,7 @@ export class MastraFactory {
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
+  #workItemSyncs = new Map<string, WorkItemSync>();
   #shutdownPromise: Promise<void> | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
@@ -1340,6 +1346,12 @@ export class MastraFactory {
           audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(stopLeftContextSandbox ? { onContextLeft: stopLeftContextSandbox } : {}),
+          ...(this.#projectBoards ? { routes: storedBoardsStorage } : {}),
+          // Bound once integrations mount (below); until then a card routes on its stored facts.
+          syncWorkItem: async item => {
+            const integrationId = item.externalSource?.integrationId;
+            if (integrationId) await this.#workItemSyncs.get(integrationId)?.(item);
+          },
           onTransitionCommitted: (() => {
             const notifyStageChange = createStageChangeNotifier({
               workItems: workItemsStorage,
@@ -2425,6 +2437,35 @@ export class MastraFactory {
         const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
         if (disconnect) this.#channelShutdowns.push(() => disconnect.call(adapter));
       }
+    }
+
+    // One-card provider syncs, from READY integrations only: the transition service
+    // calls them before a card's phase-exit routes read its facts.
+    this.#workItemSyncs.clear();
+    for (const { integration, ready } of integrationRegistrations) {
+      if (!ready || !integration.workItemSync) continue;
+      const sync = integration.workItemSync(
+        buildIntegrationContext(
+          {
+            controller: prepared.base.controller,
+            publicOrigin,
+            auth: routeAuth,
+            stateSigner,
+            sandbox: sandboxConfig,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            integrations: integrationRegistrations,
+            configVersion,
+            boardRegistry: this.#projectBoards ?? this.#boards,
+            factoryReady,
+            domains,
+            ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+          },
+          integration.id,
+        ),
+      );
+      if (sync) this.#workItemSyncs.set(integration.id, sync);
     }
 
     // Integration lifecycle workers (e.g. polling an upstream without

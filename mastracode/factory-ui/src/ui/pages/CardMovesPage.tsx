@@ -44,7 +44,8 @@ export function CardMovesPage() {
           <PageHeader>
             <PageHeader.Title>Card moves</PageHeader.Title>
             <PageHeader.Description>
-              Where cards on this board go when their issue or pull request changes. The first matching move wins.
+              Where cards on this board go when their issue or pull request changes, or as they leave a phase. The first
+              matching move wins.
             </PageHeader.Description>
           </PageHeader>
         </div>

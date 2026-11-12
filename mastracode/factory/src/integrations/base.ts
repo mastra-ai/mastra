@@ -44,7 +44,7 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
 export interface RepositoryPushEvent {
@@ -56,6 +56,13 @@ export interface RepositoryPushEvent {
   /** The repository's default branch as the provider reports it. */
   defaultBranch: string;
 }
+
+/**
+ * Re-reads one card's source from the provider and writes every fact Factory mirrors from it
+ * (title, state, labels, assignees, author) through the same storage path the provider's webhooks
+ * and sweeps use. Only that one entity: never a project or board sweep. Replays no events.
+ */
+export type WorkItemSync = (item: Card) => Promise<void>;
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
@@ -270,6 +277,12 @@ export interface FactoryIntegration {
    * duplicates fail the `new Mastra(...)` construction loudly.
    */
   workers?(ctx: IntegrationContext): MastraWorker[];
+  /**
+   * Syncs one of this integration's cards from its provider on demand, e.g. before routes read
+   * the facts a phase's run just changed there. Called once at boot for READY integrations;
+   * undefined when the integration can't (no work-item runtime).
+   */
+  workItemSync?(ctx: IntegrationContext): WorkItemSync | undefined;
   /**
    * Chat-platform channels this integration contributes (Slack, Discord, …).
    * Called once at boot for READY integrations only; the factory constructs an

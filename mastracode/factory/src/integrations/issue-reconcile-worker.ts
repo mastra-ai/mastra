@@ -3,14 +3,14 @@ import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerDeps } from '@mastra/core/worker';
 
-import type { IssueReconciler } from './issue-reconciler.js';
+import type { IssueReconcileSummary } from './issue-reconciler.js';
 
 export const DEFAULT_ISSUE_RECONCILE_INTERVAL_MS = 5 * 60_000;
 const MIN_LEASE_TTL_MS = 30_000;
 
 export interface IssueReconcileWorkerConfig {
   integrationId: string;
-  reconcile: IssueReconciler;
+  reconcile: () => Promise<IssueReconcileSummary>;
   intervalMs?: number;
 }
 
@@ -18,7 +18,7 @@ export class IssueReconcileWorker extends MastraWorker {
   readonly name: string;
 
   readonly #integrationId: string;
-  readonly #reconcile: IssueReconciler;
+  readonly #reconcile: IssueReconcileWorkerConfig['reconcile'];
   readonly #intervalMs: number;
   readonly #leaseTtlMs: number;
   readonly #leaseKey: string;

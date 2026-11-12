@@ -347,7 +347,7 @@ function workItemSourceKey(item: Card): string | null {
 // Throws on a failed lookup: callers writing permanent state must retry, not
 // record the failure as distrust.
 export async function trustedCollaborator(
-  github: GithubRulesIntegration,
+  github: Pick<GithubRulesIntegration, 'getRepositoryCollaboratorPermission'>,
   input: { installationId: number; repository: string; login: string },
 ): Promise<boolean> {
   const permission = await github.getRepositoryCollaboratorPermission(
@@ -374,7 +374,7 @@ function authorAwaitingTrust(item: Card, repository: ReconcileRepository): strin
 }
 
 export function sweepTrustLookup(
-  github: GithubRulesIntegration,
+  github: Pick<GithubRulesIntegration, 'getRepositoryCollaboratorPermission'>,
   repository: ReconcileRepository,
 ): (login: string) => Promise<boolean> {
   const cache = new Map<string, boolean>();
@@ -1625,7 +1625,7 @@ export function sameStrings(left: unknown, right: string[] | undefined): boolean
  * a project mapped to multiple repositories must not reconcile one repo's
  * card against another repo's PR number.
  */
-function reconcilablePullRequestNumber(item: Card, repository: ReconcileRepository): number | undefined {
+export function reconcilablePullRequestNumber(item: Card, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'pull-request') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -1858,7 +1858,7 @@ function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
   return names.map(name => ({ name }));
 }
 
-function reconciledPullRequestMetadata(
+export function reconciledPullRequestMetadata(
   state: ReconcilePullRequestState,
   reconciliation: 'clear' | 'settled' | undefined,
   authorTrusted?: boolean,

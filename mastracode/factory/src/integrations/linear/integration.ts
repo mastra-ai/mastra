@@ -35,7 +35,7 @@ import type {
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
@@ -1146,6 +1146,10 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   // ── FactoryIntegration surface ───────────────────────────────────────────
+
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachLinearIssueReconciler(this, ctx)?.sync;
+  }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!linearIssueReconciliationEnabled()) return [];

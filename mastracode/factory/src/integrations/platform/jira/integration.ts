@@ -20,7 +20,7 @@ import type {
 } from '../../../capabilities/intake.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../../base.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
@@ -519,6 +519,10 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       this.#siteUrlByConnectionId.set(connection.id, siteUrl);
     }
     return { connection, api, siteUrl };
+  }
+
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachJiraIssueReconciler(this, ctx)?.sync;
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

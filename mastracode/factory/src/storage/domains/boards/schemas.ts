@@ -75,6 +75,9 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     allow_working_phase: { type: 'boolean', nullable: true },
     // True files a pull request on the card of the issue it closes instead of a new card. Null on rows written before it.
     join_closed_issue: { type: 'boolean', nullable: true },
+    // The board and phase a `phase.exited` route listens on. Null on every other route.
+    from_board_key: { type: 'text', nullable: true },
+    from_phase_key: { type: 'text', nullable: true },
     // Rises on every write to the route, including a move; the compare-and-set token for edits.
     revision: { type: 'integer' },
     created_by: { type: 'text' },

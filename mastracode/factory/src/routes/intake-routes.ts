@@ -14,7 +14,7 @@ import type { Context } from 'hono';
 import type { z } from 'zod';
 
 import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
-import type { StatusEvent } from '../boards/board-events.js';
+import type { RouteEvent } from '../boards/board-events.js';
 import { intakeTargetProblem } from '../boards/intake-routing.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
@@ -116,7 +116,8 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     scope: Resolved,
     route: {
       target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
-      on: readonly StatusEvent[];
+      on: readonly RouteEvent[];
+      from?: { boardKey: string; phaseKey: string } | null;
     },
   ) {
     const problem = intakeTargetProblem(await this.#registry(scope), route);
@@ -202,7 +203,11 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
         const input = await this.#body(c, contracts.intakeRouteCreate.bodySchema);
-        await this.#checkTarget(scope, { target: input.target, on: input.on ?? DEFAULT_ROUTE_EVENTS });
+        await this.#checkTarget(scope, {
+          target: input.target,
+          on: input.on ?? DEFAULT_ROUTE_EVENTS,
+          from: input.from,
+        });
         const route = await storage.createIntakeRoute(scope, input, scope.userId);
         await this.#audit(c, scope, 'created', [route]);
         return this.#respond(c, scope, route, 201);
@@ -213,11 +218,15 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         await this.#requireAdmin(c, scope);
         const id = this.#routeId(c);
         const { expectedRevision, ...patch } = await this.#body(c, contracts.intakeRouteUpdate.bodySchema);
-        if (patch.target || patch.on) {
+        if (patch.target || patch.on || patch.from) {
           // Narrowing or widening `on` changes which targets are allowed, so check the route as it will be.
           const current = await storage.getIntakeRoute(scope, id);
           if (!current) throw new Refusal(404, { error: 'intake_route_not_found' });
-          await this.#checkTarget(scope, { target: patch.target ?? current.target, on: patch.on ?? current.on });
+          await this.#checkTarget(scope, {
+            target: patch.target ?? current.target,
+            on: patch.on ?? current.on,
+            from: patch.from !== undefined ? patch.from : current.from,
+          });
         }
         const route = await storage.updateIntakeRoute(scope, id, patch, { expectedRevision, actor: scope.userId });
         await this.#audit(c, scope, 'updated', [route]);

@@ -5,7 +5,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildIncidentioAgentTools } from './agent-tools.js';
 import { IncidentioApiClient } from './api.js';
@@ -144,6 +144,10 @@ export class IncidentioIntegration implements FactoryIntegration {
    */
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
     return buildIncidentioAgentTools({ requestContext: args.requestContext, incidentio: this });
+  }
+
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachIncidentioIssueReconciler(this, ctx)?.sync;
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

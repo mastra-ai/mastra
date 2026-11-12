@@ -22,7 +22,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildGitLabAgentTools } from './agent-tools.js';
 import {
@@ -35,7 +35,7 @@ import {
 import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
-import { attachGitLabReconciler } from './reconciler.js';
+import { attachGitLabReconciler, attachGitLabWorkItemSync } from './reconciler.js';
 import { gitlabReconciliationEnabled, gitlabReconciliationInterval } from './reconciliation-config.js';
 import { buildGitLabRoutes, ingestLinkedGitLabRepositoryBacklog } from './routes.js';
 import { attachGitLabRules } from './rules.js';
@@ -338,6 +338,10 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
 
   protected get webhookSecret(): string | undefined {
     return undefined;
+  }
+
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachGitLabWorkItemSync(this, ctx);
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

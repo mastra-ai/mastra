@@ -1,4 +1,4 @@
-import { STATUS_EVENTS } from '@mastra/factory/boards/board-events';
+import { PHASE_EXITED_EVENT, STATUS_EVENTS } from '@mastra/factory/boards/board-events';
 import type { RuleGroup } from '@mastra/factory/rules/rule-group';
 import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 
@@ -53,10 +53,16 @@ const TRIGGER_TEXT: Record<string, string> = {
   'pull_request.review_requested': 'a review is requested',
   'pull_request.merged': 'a pull request is merged',
   'pull_request.closed': 'a pull request closes unmerged',
+  [PHASE_EXITED_EVENT]: 'a card leaves a phase',
 };
 
 /** The events that move a card already on a board, in the order a card meets them. */
-export const MOVE_EVENTS = STATUS_EVENTS.filter(event => event !== 'work_item.created');
+export const MOVE_EVENTS = [...STATUS_EVENTS.filter(event => event !== 'work_item.created'), PHASE_EXITED_EVENT];
+
+/** Whether a route sends cards on as they leave a phase, rather than moving them on a source's event. */
+export function exitsPhase(route: Pick<IntakeRouteInfo, 'on'>): boolean {
+  return route.on.includes(PHASE_EXITED_EVENT);
+}
 
 /** Events as a choice in a list: "A card is closed", or "A card is closed or a card is reopened". */
 export function triggerLabel(events: readonly string[]): string {
@@ -150,7 +156,12 @@ export function sendNewCardsTo(
 
   if (from && from.id !== to.id) {
     for (const route of routes) {
-      if (route.target.boardKey !== from.id || route.on.includes('work_item.created') || route.target.joinClosedIssue)
+      if (
+        route.target.boardKey !== from.id ||
+        route.on.includes('work_item.created') ||
+        exitsPhase(route) ||
+        route.target.joinClosedIssue
+      )
         continue;
       const phaseKey = matchingPhase(from, to, route.target.phaseKey);
       if (phaseKey === undefined) continue;

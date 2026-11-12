@@ -4,7 +4,7 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
-import type { StatusEvent } from '../../../boards/board-events.js';
+import type { RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
@@ -160,8 +160,16 @@ export interface StoredIntakeRouteInput {
   /** Null matches every card. */
   when?: RuleGroup | null;
   target: IntakeRouteTarget;
-  /** The status events the route handles; unset handles new cards (`work_item.created`). */
-  on?: StatusEvent[];
+  /** The events the route handles; unset handles new cards (`work_item.created`). */
+  on?: RouteEvent[];
+  /** The board and phase a `phase.exited` route listens on; null on every other route. */
+  from?: IntakeRouteFrom | null;
+}
+
+/** Where a card is leaving, for a route that runs when a card leaves a phase. */
+export interface IntakeRouteFrom {
+  boardKey: string;
+  phaseKey: string;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -173,7 +181,8 @@ export interface StoredIntakeRouteRecord {
   position: number;
   when: RuleGroup | null;
   target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
-  on: StatusEvent[];
+  on: RouteEvent[];
+  from: IntakeRouteFrom | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -278,8 +287,11 @@ interface IntakeRouteRow extends Record<string, unknown> {
   board_key: string;
   phase_key: string | null;
   /** Null on rows written before routes named events: they place new cards. */
-  on_events: StatusEvent[] | null;
+  on_events: RouteEvent[] | null;
   join_closed_issue: boolean | null;
+  /** Null on every route but a `phase.exited` one, and on rows written before them. */
+  from_board_key: string | null;
+  from_phase_key: string | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -687,7 +699,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     actor: string,
   ): Promise<StoredIntakeRouteRecord> {
     const id = randomUUID();
-    checkRouteEvents(input.on ?? DEFAULT_ROUTE_EVENTS, input.when ?? null);
+    checkRouteEvents(input.on ?? DEFAULT_ROUTE_EVENTS, input.when ?? null, input.from ?? null);
     await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
@@ -720,9 +732,17 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await this.#transact(async ops => {
       const row = await findIntakeRoute(ops, scope, id);
       checkIntakeRouteRevision(row, options.expectedRevision);
-      checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
+      checkRouteEvents(
+        patch.on ?? routeEvents(row),
+        patch.when !== undefined ? patch.when : row.when_condition,
+        patch.from !== undefined ? patch.from : routeFrom(row),
+      );
       await updateIntakeRouteRow(ops, row, {
         ...(patch.on !== undefined && { on_events: patch.on }),
+        ...(patch.from !== undefined && {
+          from_board_key: patch.from?.boardKey ?? null,
+          from_phase_key: patch.from?.phaseKey ?? null,
+        }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
@@ -1001,12 +1021,18 @@ async function writeBoard(
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }
 
-function routeEvents(row: IntakeRouteRow): StatusEvent[] {
+function routeEvents(row: IntakeRouteRow): RouteEvent[] {
   return row.on_events ?? [...DEFAULT_ROUTE_EVENTS];
 }
 
-function checkRouteEvents(on: readonly string[], when: RuleGroup | null): void {
-  const problem = routeEventsProblem(on, when);
+function routeFrom(row: IntakeRouteRow): IntakeRouteFrom | null {
+  return row.from_board_key && row.from_phase_key
+    ? { boardKey: row.from_board_key, phaseKey: row.from_phase_key }
+    : null;
+}
+
+function checkRouteEvents(on: readonly string[], when: RuleGroup | null, from: IntakeRouteFrom | null): void {
+  const problem = routeEventsProblem(on, when, from);
   if (problem) throw new StoredBoardError('invalid_intake_route', problem);
 }
 
@@ -1021,6 +1047,7 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     when: row.when_condition,
     target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
     on: routeEvents(row),
+    from: routeFrom(row),
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -1096,6 +1123,8 @@ async function insertIntakeRoute(
     phase_key: route.input.target.phaseKey ?? null,
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
+    from_board_key: route.input.from?.boardKey ?? null,
+    from_phase_key: route.input.from?.phaseKey ?? null,
     revision: 1,
     created_by: route.actor,
     created_at: now,

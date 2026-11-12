@@ -54,9 +54,18 @@ export interface IssueReconcilerOptions<TScope = void> {
   now?: () => Date;
 }
 
-export type IssueReconciler<TScope = void> = TScope extends void
+type IssueSweep<TScope> = TScope extends void
   ? () => Promise<IssueReconcileSummary>
   : (scope: IssueReconcileScope<TScope>) => Promise<IssueReconcileSummary>;
+
+/** The sweep, plus {@link IssueReconcilerSync} for one card. */
+export type IssueReconciler<TScope = void> = IssueSweep<TScope> & { sync: IssueReconcilerSync };
+
+/**
+ * Syncs one of the provider's issue cards: fetches the issue and writes the sweep's metadata patch
+ * when it differs. Replays no close; that stays the sweep's.
+ */
+export type IssueReconcilerSync = (item: Card) => Promise<void>;
 
 function sameValue(left: unknown, right: unknown): boolean {
   if (Array.isArray(right)) {
@@ -237,5 +246,28 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
     return summary;
   };
 
-  return run as IssueReconciler<TScope>;
+  const sync: IssueReconcilerSync = async item => {
+    if (item.externalSource?.integrationId !== options.integrationId || item.externalSource.type !== 'issue') return;
+    const resolved = await options.intake.resolveIntakeDispatch?.({
+      orgId: item.orgId,
+      externalSource: options.externalSource?.(item) ?? item.externalSource,
+    });
+    if (!resolved) return;
+    const issue = await options.intake.getIssue({ ...resolved, issueId: options.issueId(item) ?? resolved.issueId });
+    if (!issue) return;
+    const missing = typeof item.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY] === 'string';
+    const baseMetadata = withoutMissingMarker({ ...item.workItem.metadata, ...item.metadata });
+    const metadata = withoutUndefined(await options.metadata(item, issue, resolved));
+    if (!missing && metadataMatches(baseMetadata, metadata)) return;
+    await options.storage.syncCard({
+      orgId: item.orgId,
+      id: item.id,
+      userId: 'factory-rule-dispatcher',
+      patch: {
+        metadata: { ...baseMetadata, ...metadata, ...(missing ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}) },
+      },
+    });
+  };
+
+  return Object.assign(run, { sync }) as unknown as IssueReconciler<TScope>;
 }

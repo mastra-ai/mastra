@@ -37,7 +37,7 @@ import type {
 } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { adfToText } from './adf.js';
 import { buildJiraAgentTools } from './agent-tools.js';
@@ -457,6 +457,10 @@ export class JiraIntegration implements FactoryIntegration {
    * Jira cards' metadata fresh and replays close events through the rules
    * ingress. Registered only when reconciliation is enabled.
    */
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachJiraIssueReconciler(this, ctx)?.sync;
+  }
+
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!jiraReconciliationEnabled()) return [];
     const reconcile = attachJiraIssueReconciler(this, ctx);

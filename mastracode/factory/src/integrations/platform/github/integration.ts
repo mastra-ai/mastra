@@ -47,7 +47,7 @@ import type {
   SourceControlInstallation,
   SourceControlStorageHandle,
 } from '../../../storage/domains/source-control/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, WorkItemSync } from '../../base.js';
 import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
 import { resolveGithubRules } from '../../github/default-rules.js';
@@ -77,6 +77,7 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
+import { attachGithubWorkItemSync } from '../../github/work-item-sync.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -926,6 +927,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       ),
     );
     return { installations, hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? undefined };
+  }
+
+  workItemSync(ctx: IntegrationContext): WorkItemSync | undefined {
+    return attachGithubWorkItemSync(
+      this,
+      ctx,
+      input => this.fetchIssueState(input),
+      input => this.fetchPullRequestState(input),
+    );
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

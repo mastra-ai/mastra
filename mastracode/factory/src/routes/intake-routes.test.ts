@@ -503,6 +503,50 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     ).toMatchObject(refused);
   });
 
+  it('saves a route for cards leaving a phase, from any phase cards leave to any board phase that is not terminal', async () => {
+    const { base, replicaA } = await setup();
+    const leavesTriage = { name: 'Docs work', on: ['phase.exited'], from: TRIAGE, when: DOCS, target: WORK };
+
+    const created = await replicaA.send('POST', base, leavesTriage);
+    expect(created).toMatchObject({
+      status: 201,
+      body: { intakeRoute: { on: ['phase.exited'], from: TRIAGE, target: { boardKey: 'work' }, problems: [] } },
+    });
+    const route = created.body.intakeRoute as Route;
+    // A phase-exit route never places new cards, so it does not jump ahead of the catch-all.
+    expect((await list(replicaA.send, base)).map(saved => saved.id)).toEqual([route.id]);
+    const moved = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      from: { boardKey: 'work', phaseKey: 'planning' },
+      expectedRevision: route.revision,
+    });
+    expect(moved).toMatchObject({ status: 200, body: { intakeRoute: { from: { phaseKey: 'planning' } } } });
+
+    const refusals: Array<[Record<string, unknown>, string]> = [
+      [{ from: { boardKey: 'work', phaseKey: 'done' } }, 'terminal_phase'],
+      [{ from: { boardKey: 'nope', phaseKey: 'triage' } }, 'unknown_board'],
+      [{ from: { boardKey: 'work', phaseKey: 'nope' } }, 'unknown_phase'],
+      [{ target: { boardKey: 'work', phaseKey: 'done' } }, 'terminal_phase'],
+      [{ target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true } }, 'join_on_event'],
+      [{ from: undefined }, 'invalid_intake_route'],
+      [{ on: ['phase.exited', 'work_item.closed'] }, 'invalid_intake_route'],
+      [{ on: ['work_item.closed'] }, 'invalid_intake_route'],
+      [
+        { when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'canceled' }] } },
+        'invalid_intake_route',
+      ],
+    ];
+    for (const [change, error] of refusals) {
+      expect(await replicaA.send('POST', base, { ...leavesTriage, ...change }), JSON.stringify(change)).toMatchObject({
+        status: 422,
+        body: { error },
+      });
+    }
+    expect(
+      await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.created'], expectedRevision: 2 }),
+    ).toMatchObject({ status: 422, body: { error: 'invalid_intake_route' } });
+    expect(await list(replicaA.send, base)).toHaveLength(1);
+  });
+
   it('refuses a route that names no event, an unknown or repeated one, activity, or event conditions it cannot test', async () => {
     const { base, replicaA } = await setup();
     const bodies = [

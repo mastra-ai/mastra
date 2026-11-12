@@ -62,6 +62,8 @@ const ROUTE_FACT_PROPERTIES = {
  * to one handling `work_item.closed`, the one event that carries a reason.
  */
 export function intakeRouteFacts(on: readonly string[]): Facts {
+  // A card leaving a phase brings no event or closed issue with it, only its own facts.
+  if (on.includes('phase.exited')) return CARD_FACTS;
   if (on.every(type => type === 'work_item.created')) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
   const event = {
     type: { type: 'string', title: 'Type' },

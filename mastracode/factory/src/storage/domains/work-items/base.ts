@@ -129,6 +129,16 @@ export interface WorkItemStageEntry {
    * stamping existed — treat as human.
    */
   exitedBy?: string;
+  /** The route that sent the card here as it left its last phase, instead of where the mover asked. */
+  routedBy?: WorkItemRouteRef;
+  /** The board the card entered on, when a route moved it to another board. */
+  board?: string;
+}
+
+/** A route as a moved card names it. */
+export interface WorkItemRouteRef {
+  id: string;
+  name: string;
 }
 
 /**
@@ -493,6 +503,13 @@ export interface CommitFactoryTransitionInput {
   triageType?: FactoryTriageType;
   /** Record the person's acceptance of this item in the same revision-checked update; a no-op once set. */
   accept?: boolean;
+  /**
+   * The board the card lands on when a `phase.exited` route sends it to another board; unset keeps
+   * its board. Written in the same revision-checked update as the stage.
+   */
+  destinationBoard?: string;
+  /** The `phase.exited` route that chose the destination instead of the mover. */
+  routedBy?: WorkItemRouteRef;
 }
 
 export type CommitFactoryTransitionResult =
@@ -910,6 +927,18 @@ export function applyStageTransition(
     if (!oldStages.includes(stage)) next.push({ stage, enteredAt: timestamp, by });
   }
   return next;
+}
+
+/** Names the route, and across boards the board, on the entry a route move opened. */
+function stampRoute(
+  history: WorkItemStageEntry[],
+  input: Pick<CommitFactoryTransitionInput, 'routedBy' | 'destinationBoard'>,
+): WorkItemStageEntry[] {
+  const entered = history.at(-1);
+  if (!input.routedBy || !entered) return history;
+  entered.routedBy = input.routedBy;
+  if (input.destinationBoard !== undefined) entered.board = input.destinationBoard;
+  return history;
 }
 
 export function stampSessions(sessions: Record<string, WorkItemSessionInput>, by: string): WorkItemSessions {
@@ -2411,7 +2440,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const accept = input.accept === true && !existing.acceptedAt;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
-            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
+            const boardChange = input.destinationBoard !== undefined && input.destinationBoard !== existing.board;
+            if (!boardChange && existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
               return arm || disarm || accept || classified
@@ -2428,13 +2458,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               ...(disarm ? { autonomyArmedAt: null } : {}),
               ...(accept ? { acceptedAt: now } : {}),
               ...(classified ? { triageType } : {}),
+              ...(boardChange ? { board: input.destinationBoard } : {}),
               stages: [input.destinationStage],
-              stageHistory: applyStageTransition(
-                existing.stageHistory,
-                existing.stages,
-                [input.destinationStage],
-                input.actorId,
-                now,
+              stageHistory: stampRoute(
+                boardChange
+                  ? // A card entering another board leaves its phase there, even one of the same name.
+                    applyStageTransition(
+                      applyStageTransition(existing.stageHistory, existing.stages, [], input.actorId, now),
+                      [],
+                      [input.destinationStage],
+                      input.actorId,
+                      now,
+                    )
+                  : applyStageTransition(
+                      existing.stageHistory,
+                      existing.stages,
+                      [input.destinationStage],
+                      input.actorId,
+                      now,
+                    ),
+                input,
               ),
               revision: existing.revision + 1,
               updatedAt: now,
@@ -2457,6 +2500,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 revision: item!.revision,
                 stage: input.destinationStage,
                 decisions: input.evaluation.outcome === 'accepted' ? input.evaluation.decisions : [],
+                ...(input.routedBy ? { route: input.routedBy, ...(item!.board ? { board: item!.board } : {}) } : {}),
               }
             : { status: 'rejected', transitionId: input.ingress.transitionId, itemId: input.workItemId, code, reason };
         // A stale revision only lost a race with another write; recording it
