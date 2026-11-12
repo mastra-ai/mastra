@@ -15,13 +15,13 @@ export function createFactoryBackgroundNoticeDelivery({
   prepareWakeRequestContext,
 }: {
   /** Resolved per notice: the controller exists only once the Factory is mounted. */
-  getController: () => Pick<MountedMastraCode['controller'], 'getSession'> | undefined;
+  getController: () => Pick<MountedMastraCode['controller'], 'getSession' | 'queryThreadById'> | undefined;
   resolveWakeSession: (target: BackgroundNoticeTarget) => Promise<{ sessionId: string; row: unknown }>;
   prepareWakeRequestContext: (
     input: BackgroundNoticeTarget & { requestContext: RequestContext; reportFailure?: boolean },
   ) => Promise<void>;
 }): BackgroundNoticeDelivery {
-  return createBackgroundNoticeDelivery(
+  const delivery = createBackgroundNoticeDelivery(
     () => ({ getSession: async sessionId => getController()?.getSession(sessionId) }),
     {
       resolveSession: async target => {
@@ -44,4 +44,14 @@ export function createFactoryBackgroundNoticeDelivery({
       },
     },
   );
+  return {
+    async deliver(target, signal, options) {
+      // A command's exit names the resource its thread had when the command started. Sharing a session or
+      // making it private moves its threads, so the stored thread says where the notice goes now.
+      const thread = await getController()?.queryThreadById({ threadId: target.threadId });
+      const current = thread?.resourceId ? { ...target, resourceId: thread.resourceId } : target;
+      return delivery.deliver(current, signal, options);
+    },
+    flush: () => delivery.flush(),
+  };
 }

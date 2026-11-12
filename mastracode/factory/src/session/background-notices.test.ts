@@ -124,13 +124,25 @@ describe('Factory background notices', () => {
     expect(saved).toHaveBeenCalledWith(signal, target);
   });
 
+  // Sharing a session moves its threads from its owner's resource to its Factory's; a command started before
+  // that reports its exit under the old one.
+  it('follows a thread the session moved to another resource after the command started', async () => {
+    const { second, delivery, woken } = await setup();
+
+    await delivery.deliver({ resourceId: 'user-1', threadId: second.id }, signal);
+
+    expect(woken).toHaveBeenCalledTimes(1);
+    expect(woken.mock.calls[0]![1]).toMatchObject({ ifIdle: { behavior: 'wake' } });
+  });
+
   it('holds a notice for a session that is offline, and drops the ones no session owns so they cannot crowd it out', async () => {
     const { project, controller, session, delivery, woken, saved } = await setup();
     const offline = { resourceId: project.id, threadId: 'session-b' };
     await delivery.deliver(offline, signal, { wake: false });
-    // A stamp naming a session, on a thread under a resource that session doesn't run on.
-    const forged = await session.thread.create();
-    await session.thread.setSettingOn({ threadId: forged.id, key: 'factorySessionId', value: 'session-a' });
+    // Someone else's thread, on their own resource, stamped with this session's id.
+    const attacker = await controller.createSession({ id: 'attacker', resourceId: 'user-attacker' });
+    const forged = await attacker.thread.create();
+    await attacker.thread.setSettingOn({ threadId: forged.id, key: 'factorySessionId', value: 'session-a' });
     for (let i = 0; i < 100; i++) {
       await delivery.deliver({ resourceId: 'user-attacker', threadId: forged.id }, { ...signal, id: `junk-${i}` });
     }
