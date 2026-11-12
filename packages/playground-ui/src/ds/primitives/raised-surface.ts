@@ -27,7 +27,9 @@
  * site that genuinely wants another fill still overrides it, since its own
  * classes come after these.
  */
-const fieldsOnSurface =
+/** The field colors a raised surface gives the inputs on it. A surface that drops the rim and shadow but keeps
+ * the card fill (a settings card) uses it alone, so its fields look the same as on a raised card. */
+export const fieldsOnSurface =
   '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)]';
 const fieldsOnDialog =
   '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)]';
