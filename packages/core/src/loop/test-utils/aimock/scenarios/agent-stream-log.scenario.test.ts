@@ -12,6 +12,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../../../../agent/streams/constants';
 import { InMemoryServerCache } from '../../../../cache/inmemory';
+import { CachingPubSub } from '../../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { createTool } from '../../../../tools';
 import type { OutputProcessor } from '../../../../processors';
@@ -25,7 +26,8 @@ import { SCENARIO_MODEL_ID } from '../types';
 
 const PROMPT_MARKER = 'PROMPT-MARKER-7f3c';
 const WRITER_MARKER = 'WRITER-INSTRUCTIONS-91ad';
-const TOOL_STEPS = 5;
+/** Enough steps that producers resend the whole response list mid-run. */
+const TOOL_STEPS = 9;
 
 /** A bus that, like Redis, only ever hands readers JSON copies of what was published. */
 class JsonPubSub extends EventEmitterPubSub {
@@ -106,7 +108,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     scriptToolLoop(llm);
     const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
     const run: any = await agent.stream(`${PROMPT_MARKER} ${'Look this up carefully. '.repeat(200)}`, {
-      maxSteps: 10,
+      maxSteps: 12,
     });
     try {
       const output = run.output ?? run;
@@ -124,41 +126,194 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     }
   }, 30_000);
 
-  // Technical: a delegated agent's chunks are forwarded inside `tool-output` chunks, and its own
-  // step-start / step-finish / finish carried its prompt like the parent's did.
-  // Durable engines still publish them as-is: their callers read their own run back from the
-  // topic, so slimming there would change what the caller sees. Not yet fixed for them.
-  // Tracked in #29035; this flips to `it` once durable engines slim delegated chunks.
-  const itOnPlainAgents = isDurableEngineVariant(engine) ? it.fails : it;
-  itOnPlainAgents(
-    "keeps a delegated agent's prompt off the log",
-    async () => {
-      const llm = getMock();
-      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
-      const writer = new Agent({
-        id: 'writer',
-        name: 'Writer',
-        description: 'Drafts written content',
-        instructions: `${WRITER_MARKER} You are a skilled writer subagent.`,
-        model: openai(SCENARIO_MODEL_ID),
-      });
-      llm.on(
-        { endpoint: 'chat', hasToolResult: false },
-        { toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a coffee tagline.' } }] },
-      );
-      llm.onMessage(/coffee tagline/i, { content: 'Brewed fresh, served warm.' });
-      llm.on({ endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true }, { content: 'Brewed fresh.' });
-      const { agent, mastra } = await createSharedAgent(llm, { engine, agents: { writer } });
-      const run: any = await agent.stream('Ask the writer for a tagline.', { maxSteps: 5 });
-      try {
-        const output = run.output ?? run;
-        await output.consumeStream();
-        expect(await output.text).toBe('Brewed fresh.');
+  // Technical: every step-finish carried the run's response messages so far, so the first tool's
+  // output was stored once per later step. Step-finish events now send only what changed.
+  it('stores an early tool result about as often as the last one', async () => {
+    const llm = getMock();
+    scriptToolLoop(llm);
+    const { agent, mastra } = await createSharedAgent(llm, {
+      engine,
+      tools: { lookup },
+      ...(engine === 'inngest' ? {} : { pubsub: new JsonPubSub(), cache: new JsonCache() }),
+    });
+    const run: any = await agent.stream('Look it all up.', { maxSteps: 12 });
+    try {
+      await (run.output ?? run).consumeStream();
+      const history = await waitForTerminal(runBus(agent), run.runId);
+      const log = JSON.stringify(history);
+      const first = occurrences(log, 'RESULT-0');
+      const last = occurrences(log, `RESULT-${TOOL_STEPS - 1}`);
+      // A whole list resent before the last tool's step repeats the first result only. The producer
+      // resends it once the diffs since the previous one add up to its size.
+      const stepFinishes = history.filter(event => event.data?.type === 'step-finish');
+      const resentBeforeLast = stepFinishes
+        .slice(1, TOOL_STEPS - 1)
+        .filter(event => event.data.payload._durableResponseMessagesDiff?.from === 0).length;
+      expect(resentBeforeLast).toBeLessThanOrEqual(3);
+      expect(first).toBe(last + resentBeforeLast);
+    } finally {
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
 
-        const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
-        // The delegated run did stream through the parent.
-        expect(log).toContain('Brewed fresh, served warm.');
-        expect(occurrences(log, WRITER_MARKER)).toBe(0);
+  // Technical: approving a suspended tool call resumes the run in a new publisher on the same
+  // topic, which numbers its diffs from scratch and starts with the whole list.
+  it('replays the response messages of a run suspended for approval and resumed', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_approve', name: 'lookup', arguments: { q: 'approved' } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Approved and done.' });
+    const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
+    const run: any = await agent.stream('Look it up.', { requireToolApproval: true, maxSteps: 5 });
+    let resumed: any;
+    try {
+      let toolCallId: string | undefined;
+      for await (const chunk of run.fullStream) {
+        if (chunk.type === 'tool-call-approval') {
+          toolCallId = chunk.payload.toolCallId;
+          break;
+        }
+      }
+      resumed = await agent.approveToolCall({ runId: run.runId, toolCallId: toolCallId! });
+      const resumedOutput = resumed.output ?? resumed;
+      await resumedOutput.consumeStream();
+      expect(await resumedOutput.text).toBe('Approved and done.');
+      const liveSteps = JSON.parse(
+        JSON.stringify((await resumedOutput.steps).map((step: any) => step.response.messages)),
+      );
+      const liveMessages = liveSteps.at(-1);
+      await waitForTerminal(runBus(agent), run.runId);
+
+      const observed: any[] = [];
+      const observation: any = await agent.observe(run.runId, {
+        onStepFinish: (step: any) => {
+          observed.push(step);
+        },
+      });
+      for await (const _chunk of observation.fullStream) {
+        // drain
+      }
+      expect(JSON.stringify(liveMessages)).toContain('RESULT-approved');
+      expect(observed.slice(-liveSteps.length).map(step => step.response.messages)).toEqual(liveSteps);
+    } finally {
+      resumed?.cleanup?.();
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
+
+  // Technical: an observer that starts at an offset skips the step-finish events that carried the
+  // earlier response messages; it rebuilds them from the run's log before following it.
+  it('gives an observer resuming mid-run the full response messages of each step', async () => {
+    const llm = getMock();
+    scriptToolLoop(llm);
+    const { agent, mastra } = await createSharedAgent(llm, {
+      engine,
+      tools: { lookup },
+      ...(engine === 'inngest' ? {} : { pubsub: new JsonPubSub(), cache: new JsonCache() }),
+    });
+    const live: any[] = [];
+    const run: any = await agent.stream('Look it all up.', {
+      maxSteps: 12,
+      onStepFinish: (step: any) => {
+        live.push(step);
+      },
+    });
+    try {
+      await (run.output ?? run).consumeStream();
+      const history = await waitForTerminal(runBus(agent), run.runId);
+      const stepFinishes = history.filter(event => event.data?.type === 'step-finish');
+      const offset = stepFinishes[2].index + 1;
+
+      const observed: any[] = [];
+      const observation: any = await agent.observe(run.runId, {
+        offset,
+        onStepFinish: (step: any) => {
+          observed.push(step);
+        },
+      });
+      for await (const _chunk of observation.fullStream) {
+        // drain
+      }
+
+      expect(observed.map(step => step.response.messages)).toEqual(
+        live.slice(3).map(step => JSON.parse(JSON.stringify(step.response.messages))),
+      );
+      expect(JSON.stringify(observed.at(-1).response.messages)).toContain('RESULT-0');
+    } finally {
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
+
+  // Technical: on a bus that keeps no history of the run's topic, an observer that attaches mid-run
+  // has none of the earlier step-finishes, so it can't place a diff made against them. Producers
+  // send such a bus whole lists. A CachingPubSub supports offsets even for the topics it doesn't
+  // cache, so producers ask the bus about the topic.
+  // The Inngest engine runs on its own bus.
+  (engine === 'inngest' ? it.skip : it).each(['replay turned off', 'a cache that leaves the topic out'] as const)(
+    'gives an observer that joins mid-run with %s the full response messages of each step',
+    async bus => {
+      const llm = getMock();
+      scriptToolLoop(llm);
+      let reachedMidRun!: () => void;
+      const midRun = new Promise<void>(resolve => (reachedMidRun = resolve));
+      let attach!: () => void;
+      const attached = new Promise<void>(resolve => (attach = resolve));
+      const pausingLookup = createTool({
+        id: 'lookup',
+        description: 'Look something up.',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async ({ q }) => {
+          if (q === '3') {
+            reachedMidRun();
+            await attached;
+          }
+          return { value: `RESULT-${q}` };
+        },
+      });
+      const { agent, mastra } = await createSharedAgent(llm, {
+        engine,
+        tools: { lookup: pausingLookup },
+        ...(bus === 'replay turned off'
+          ? { pubsub: new JsonPubSub(), streamReplay: false }
+          : {
+              pubsub: new CachingPubSub(new JsonPubSub(), new JsonCache(), {
+                shouldCache: topic => !topic.startsWith(AGENT_STREAM_TOPIC('')),
+              }),
+            }),
+      });
+      const live: any[] = [];
+      const run: any = await agent.stream('Look it all up.', {
+        maxSteps: 12,
+        onStepFinish: (step: any) => {
+          live.push(step);
+        },
+      });
+      try {
+        const consumed = (run.output ?? run).consumeStream();
+        await midRun;
+        const observed: any[] = [];
+        const observation: any = await agent.observe(run.runId, {
+          onStepFinish: (step: any) => {
+            observed.push(step);
+          },
+        });
+        attach();
+        for await (const _chunk of observation.fullStream) {
+          // drain
+        }
+        await consumed;
+
+        // Attached during the fourth step's tool call: it sees that step's step-finish and the rest.
+        expect(observed).toHaveLength(TOOL_STEPS + 1 - 3);
+        expect(observed.map(step => step.response.messages)).toEqual(
+          live.slice(3).map(step => JSON.parse(JSON.stringify(step.response.messages))),
+        );
+        expect(JSON.stringify(observed[0].response.messages)).toContain('RESULT-0');
       } finally {
         run.cleanup?.();
         if (engine !== 'inngest') await mastra.shutdown();
@@ -166,6 +321,41 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     },
     30_000,
   );
+
+  // Technical: a delegated agent's chunks are forwarded inside `tool-output` chunks, and its own
+  // step-start / step-finish / finish carried its prompt like the parent's did.
+  it("keeps a delegated agent's prompt off the log", async () => {
+    const llm = getMock();
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+    const writer = new Agent({
+      id: 'writer',
+      name: 'Writer',
+      description: 'Drafts written content',
+      instructions: `${WRITER_MARKER} You are a skilled writer subagent.`,
+      model: openai(SCENARIO_MODEL_ID),
+    });
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a coffee tagline.' } }] },
+    );
+    llm.onMessage(/coffee tagline/i, { content: 'Brewed fresh, served warm.' });
+    llm.on({ endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true }, { content: 'Brewed fresh.' });
+    const { agent, mastra } = await createSharedAgent(llm, { engine, agents: { writer } });
+    const run: any = await agent.stream('Ask the writer for a tagline.', { maxSteps: 5 });
+    try {
+      const output = run.output ?? run;
+      await output.consumeStream();
+      expect(await output.text).toBe('Brewed fresh.');
+
+      const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
+      // The delegated run did stream through the parent.
+      expect(log).toContain('Brewed fresh, served warm.');
+      expect(occurrences(log, WRITER_MARKER)).toBe(0);
+    } finally {
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
 
   // Technical: plain step-finish events had no `_durableStepContent`, so an observer built each
   // step's content from its own (empty) message list and replayed `content: []`. The finish
@@ -183,7 +373,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
       });
       const live: any[] = [];
       const run: any = await agent.stream('Look it all up.', {
-        maxSteps: 10,
+        maxSteps: 12,
         onStepFinish: (step: any) => {
           live.push(step);
         },

@@ -46,6 +46,8 @@ export const queryKeys = {
     ['factory', 'environment-builds', factoryProjectId ?? null] as const,
   factoryEnvironmentBuild: (factoryProjectId: string | undefined, buildId: string | undefined) =>
     ['factory', 'environment-build', factoryProjectId ?? null, buildId ?? null] as const,
+  factorySandboxEnvs: (factoryProjectId: string | undefined) =>
+    ['factory', 'sandbox-envs', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
@@ -102,6 +104,21 @@ export const queryKeys = {
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
+  sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
+  workItemsWithSessions: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
+  unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
+  workItemsFiledFrom: (factoryProjectId: string | undefined, sources: readonly string[]) =>
+    [...queryKeys.workItems(factoryProjectId), 'sources', sources] as const,
+  // Outside the board's key: these hold counts and dates, not cards, so a rewrite of the cached cards must not reach them.
+  boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
+  workItemStarters: (factoryProjectId: string | undefined) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'starters'] as const,
+  workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
@@ -203,5 +220,9 @@ export const queryKeys = {
     ] as const,
 } as const;
 
+/** Every mutation that writes a card of this Factory's board. */
+export const cardWriteMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'write-work-item', factoryProjectId] as const;
+
 export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
-  ['factory', 'transition-work-item', factoryProjectId] as const;
+  [...cardWriteMutationKey(factoryProjectId), 'transition'] as const;

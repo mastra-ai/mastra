@@ -117,6 +117,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot ov
       for (const legacy of await new Cards(seed.storage.ops).findMany({})) {
         delete legacy.work_item;
         delete legacy.work_item_sources;
+        delete legacy.changed_at;
         await seed.storage.ops.upsertOne('work_items', ['id'], legacy);
       }
       for (const table of [FACTORY_BOARD_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SOURCES_SCHEMA, FACTORY_WORK_ITEMS_SCHEMA])

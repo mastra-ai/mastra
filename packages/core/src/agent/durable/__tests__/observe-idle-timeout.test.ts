@@ -392,4 +392,41 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
 
     cleanup();
   });
+
+  it('does not time out while an observer at an offset is still reading the history before it', async () => {
+    // Locks in: step-finish events carry only the response messages that changed, so a reader at
+    // an offset first reads the skipped history. Events wait for that read; their wait is not the
+    // run going quiet, and the idle countdown starts only once the read is done.
+    const runId = 'idle-offset-replay';
+    await emitChunkEvent(pubsub, runId, textChunk('before'));
+    let releaseHistory!: () => void;
+    const historyHeld = new Promise<void>(resolve => (releaseHistory = resolve));
+    const getHistory = pubsub.getHistory.bind(pubsub);
+    vi.spyOn(pubsub, 'getHistory').mockImplementation(async (...args) => {
+      await historyHeld;
+      return getHistory(...args);
+    });
+
+    const { output, cleanup, ready } = makeStream(runId, {
+      offset: 1,
+      replayResponseMessagesBeforeOffset: true,
+      idleTimeoutMs: IDLE,
+      isAlive: () => false,
+    });
+    await ready;
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitChunkEvent(pubsub, runId, textChunk('after'));
+
+    // Several idle windows pass while the history read is held.
+    await delay(IDLE * 3);
+    expect(reader.isClosed()).toBe(false);
+
+    releaseHistory();
+    await emitFinishEvent(pubsub, runId, finishData);
+    expect(await settleWithin(reader.done, IDLE * 20)).toBe('done');
+    expect(reader.chunks.filter(c => c.type === 'text-delta').map((c: any) => c.payload.text)).toEqual(['after']);
+    expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
+
+    cleanup();
+  });
 });

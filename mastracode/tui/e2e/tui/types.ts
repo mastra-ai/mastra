@@ -77,6 +77,7 @@ export type ScenarioName =
   | 'first-run-onboarding'
   | 'github-signals-command'
   | 'schedules-command'
+  | 'schedules-multiline-prompt'
   | 'github-signals-multi-subscribe'
   | 'github-signals-legacy-upgrade'
   | 'github-signals-tool-multi-subscribe'

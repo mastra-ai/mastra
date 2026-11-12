@@ -172,6 +172,21 @@ describe('thread stream runtime reads stored run state', () => {
     expect(types).toEqual(['start', 'text-delta']);
   });
 
+  it('reads only the stored run status, not the whole run snapshot', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('stored-lease-status-only');
+    const storage = await storeWithRun(harness.runId, 'suspended');
+    const workflows = await storage.getStore('workflows');
+    const fullRunReads = vi.spyOn(workflows!, 'getWorkflowRunById');
+    const statusReads = vi.spyOn(workflows!, 'loadWorkflowRunStatus');
+    withStorage(harness, storage);
+
+    await partsAfterLeaseLapse(harness, [{ type: 'start', payload: {} }]);
+
+    expect(statusReads).toHaveBeenCalled();
+    expect(fullRunReads).not.toHaveBeenCalled();
+  });
+
   it('still parks a run whose suspension prompt was seen when storage holds a terminal row', async () => {
     vi.useFakeTimers();
     const harness = createHarness('stored-lease-prompt-terminal');

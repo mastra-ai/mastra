@@ -220,6 +220,8 @@ export function useBoardIntake({
       !route.target.joinClosedIssue &&
       route.target.boardKey === kind,
   );
+  // Sources are connected and the routes loaded, but none places new cards on this board.
+  const unrouted = readsIntakeRoutes && intakeRoutesQuery.isSuccess && !routePlacesCardsHere;
   // Whether anything files onto this board: a feed it browses, or a connected source routed here.
   // While routes load the column stays pending, and a failed load reports the error with a retry.
   const fed =
@@ -348,6 +350,7 @@ export function useBoardIntake({
     active: failedSource ?? browsedSources[0],
     available,
     fed,
+    unrouted,
     candidates,
     alreadyMaterialized,
     participantCandidates,

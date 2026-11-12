@@ -56,6 +56,7 @@ import {
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { assertStoredAgentAccess } from './agent-access';
 
 import { handleError } from './error';
 import {
@@ -79,7 +80,7 @@ interface MemoryContext extends Context {
   agentId?: string;
   resourceId?: string;
   threadId?: string;
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
 }
 
 /**
@@ -249,6 +250,7 @@ async function getMemoryFromContext({
 }): Promise<MastraMemory | null | undefined> {
   const logger = mastra.getLogger();
   let agent;
+  let fromStore = false;
   if (agentId) {
     try {
       agent = mastra.getAgentById(agentId);
@@ -262,6 +264,7 @@ async function getMemoryFromContext({
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -285,18 +288,24 @@ async function getMemoryFromContext({
         }
       }
     }
+  }
 
-    if (!agent) {
-      if (allowMissingAgent) {
-        logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
-        return null;
-      }
-      throw new HTTPException(404, { message: 'Agent not found' });
+  // Sub-agents (`SubAgent`) have no raw config and are never stored agents; everything else is checked. A hidden
+  // agent takes the missing-agent path, so the response can't reveal that the id exists.
+  if (agent && 'toRawConfig' in agent && !canReadAgent(agent, agentId!, requestContext, fromStore)) {
+    agent = undefined;
+  }
+
+  if (agentId && !agent) {
+    if (allowMissingAgent) {
+      logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
+      return null;
     }
+    throw new HTTPException(404, { message: 'Agent not found' });
   }
 
   if (agent) {
-    return await agent?.getMemory({
+    return await agent.getMemory({
       requestContext,
     });
   }
@@ -353,12 +362,14 @@ async function getAgentFromContext({
   }
 
   // Then try stored agents
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
     try {
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -385,7 +396,27 @@ async function getAgentFromContext({
     }
   }
 
+  // A hidden agent is reported as missing, so the response can't reveal that the id exists.
+  if (agent && !canReadAgent(agent, agentId, requestContext, fromStore)) {
+    return null;
+  }
   return agent;
+}
+
+/** Whether the caller may read the agent; a denied stored agent is handled exactly like a missing one. */
+function canReadAgent(
+  agent: Pick<Agent, 'source' | 'toRawConfig'>,
+  agentId: string,
+  requestContext: RequestContext,
+  fromStore: boolean,
+): boolean {
+  try {
+    assertStoredAgentAccess({ agent, agentId, requestContext, access: 'read', fromStore });
+    return true;
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 404) return false;
+    throw error;
+  }
 }
 
 /**
@@ -496,6 +527,12 @@ async function getOMStatus(
 export const GET_MEMORY_STATUS_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/status',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_memory_status',
+    description: 'Show whether an agent has memory, its memory configuration, and its Observational Memory status.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: getMemoryStatusQuerySchema,
   responseSchema: memoryStatusResponseSchema,
@@ -662,6 +699,12 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/config',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_memory_status',
+    description: 'Show whether an agent has memory, its memory configuration, and its Observational Memory status.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: getMemoryConfigQuerySchema,
   responseSchema: memoryConfigResponseSchema,
@@ -730,6 +773,13 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
 export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/observational-memory',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_observations',
+    description:
+      "Get the current Observational Memory record (the agent's condensed observations) for a thread or resource.",
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: getObservationalMemoryQuerySchema,
   responseSchema: getObservationalMemoryResponseSchema,
@@ -950,6 +1000,12 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
 export const LIST_THREADS_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads',
+  mcp: {
+    toolset: 'memory',
+    name: 'list_threads',
+    description: 'List conversation threads you can access, newest first.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: listThreadsQuerySchema,
   responseSchema: listThreadsResponseSchema,
@@ -1105,6 +1161,12 @@ export const LIST_THREADS_ROUTE = createRoute({
 export const GET_THREAD_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads/:threadId',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_thread',
+    description: 'Get a conversation thread by id.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: getThreadByIdQuerySchema,
@@ -1196,6 +1258,12 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
 export const LIST_MESSAGES_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads/:threadId/messages',
+  mcp: {
+    toolset: 'memory',
+    name: 'list_messages',
+    description: 'List the messages in a conversation thread.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: listMessagesQuerySchema,
@@ -1405,6 +1473,12 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
 export const SAVE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/save-messages',
+  mcp: {
+    toolset: 'memory',
+    name: 'save_messages',
+    description: 'Save messages to threads you own.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: agentIdQuerySchema,
   bodySchema: saveMessagesBodySchema,
@@ -1510,9 +1584,30 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
   },
 });
 
+/**
+ * Tool-approval rules are saved on thread metadata by the agent controller.
+ * Clients writing thread metadata must not be able to set them, or a metadata
+ * write could turn an approval gate off. Drops the key from client input and
+ * carries over the stored value, if any.
+ */
+function withServerOwnedThreadMetadata(
+  metadata: Record<string, unknown> | undefined,
+  stored?: Record<string, unknown> | null,
+): Record<string, unknown> | undefined {
+  if (metadata === undefined) return undefined;
+  const { permissionRules: _ignored, ...rest } = metadata;
+  return stored && 'permissionRules' in stored ? { ...rest, permissionRules: stored.permissionRules } : rest;
+}
+
 export const CREATE_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/threads',
+  mcp: {
+    toolset: 'memory',
+    name: 'create_thread',
+    description: 'Create a conversation thread.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: agentIdQuerySchema,
   bodySchema: createThreadBodySchema,
@@ -1546,7 +1641,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
             id: effectiveThreadId,
             resourceId: effectiveResourceId!,
             title,
-            metadata,
+            metadata: withServerOwnedThreadMetadata(metadata, existing?.thread.metadata),
           });
           return toLocalThread(result.thread);
         }
@@ -1572,7 +1667,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
       const result = await memory.createThread({
         resourceId: effectiveResourceId!,
         title,
-        metadata,
+        metadata: withServerOwnedThreadMetadata(metadata, existing?.metadata),
         threadId: effectiveThreadId,
       });
       return result;
@@ -1585,6 +1680,12 @@ export const CREATE_THREAD_ROUTE = createRoute({
 export const UPDATE_THREAD_ROUTE = createRoute({
   method: 'PATCH',
   path: '/memory/threads/:threadId',
+  mcp: {
+    toolset: 'memory',
+    name: 'update_thread',
+    description: "Update a thread's title or metadata.",
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,
@@ -1617,7 +1718,10 @@ export const UPDATE_THREAD_ROUTE = createRoute({
               permission: MastraFGAPermissions.MEMORY_WRITE,
             });
           }
-          const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
+          const result = await gwClient.updateThread(effectiveThreadId!, {
+            title,
+            metadata: withServerOwnedThreadMetadata(metadata, existing?.thread.metadata),
+          });
           if (!result) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
@@ -1649,7 +1753,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       const updatedThread = {
         ...thread,
         title: title !== undefined ? title : thread.title,
-        metadata: metadata !== undefined ? metadata : thread.metadata,
+        metadata: metadata !== undefined ? withServerOwnedThreadMetadata(metadata, thread.metadata) : thread.metadata,
         // Don't allow changing resourceId if effectiveResourceId is set (prevents reassigning threads)
         resourceId: effectiveResourceId || resourceId || thread.resourceId,
         createdAt: thread.createdAt,
@@ -1738,6 +1842,12 @@ export const DELETE_THREAD_ROUTE = createRoute({
 export const CLONE_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/threads/:threadId/clone',
+  mcp: {
+    toolset: 'memory',
+    name: 'clone_thread',
+    description: 'Copy a thread and its messages into a new thread.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,
@@ -1784,7 +1894,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
         newThreadId: effectiveNewThreadId,
         resourceId: cloneResourceId,
         title,
-        metadata,
+        metadata: withServerOwnedThreadMetadata(metadata),
         options,
       });
 
@@ -2062,6 +2172,12 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
 export const SEARCH_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/search',
+  mcp: {
+    toolset: 'memory',
+    name: 'search_memory',
+    description: "Semantic search over an agent's memory for a resource, optionally within one thread.",
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: searchMemoryQuerySchema,
   responseSchema: searchMemoryResponseSchema,

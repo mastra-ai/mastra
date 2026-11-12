@@ -92,9 +92,15 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     updated_at: { type: 'timestamp' },
     migrated_from_updated_at: { type: 'timestamp', nullable: true },
     migrated_from_hash: { type: 'text', nullable: true },
+    /** Moves on every change to the card, in any of its tables; board reloads read rows changed since. */
+    changed_at: { type: 'timestamp', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_board_items_work_item_unique', columns: ['work_item_id'] }],
   indexes: [
+    {
+      name: 'factory_board_items_project_changed_at_idx',
+      columns: ['org_id', 'factory_project_id', 'changed_at'],
+    },
     {
       name: 'factory_board_items_org_project_created_at_id_idx',
       columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
@@ -211,6 +217,7 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   updated_at: Date;
   migrated_from_updated_at: Date | null;
   migrated_from_hash: string | null;
+  changed_at?: Date | null;
 }
 
 /** Serializes first-copy migration with deletion without locking an entire project's cards. */
@@ -230,7 +237,14 @@ export const FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA: CollectionSchema = {
     id: { type: 'uuid-pk' },
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
+    deleted_at: { type: 'timestamp', nullable: true },
   },
+  indexes: [
+    {
+      name: 'factory_board_item_tombstones_project_deleted_at_idx',
+      columns: ['org_id', 'factory_project_id', 'deleted_at'],
+    },
+  ],
 };
 
 /** The pre-split card table. Frozen: only the split migration reads it. */

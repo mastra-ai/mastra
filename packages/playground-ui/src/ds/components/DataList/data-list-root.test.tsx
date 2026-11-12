@@ -116,43 +116,49 @@ describe('DataListRoot', () => {
       );
 
       expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-left')).toBe('0px');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-right')).toBe('1.25rem');
     });
 
-    it('leaves the top unfaded by default, since the header sits there', () => {
+    // The sticky header sits at the top of the scroller, so a top mask would fade it with the rows.
+    // The top edge fades the rows just below the header instead.
+    it('never fades the header, and fades the rows below it by default', () => {
       const scrollRef = createRef<HTMLDivElement>();
-      render(
+      const { container } = render(
         <DataList columns="1fr 1fr" scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
       expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('1.25rem');
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-fade-top')).toBe('1.25rem');
     });
 
-    it('fades the top when the caller asks for it by name', () => {
+    it('uses the depth the caller gives for the top fade below the header', () => {
       const scrollRef = createRef<HTMLDivElement>();
-      render(
-        <DataList columns="1fr 1fr" mask={{ top: true }} scrollRef={scrollRef}>
+      const { container } = render(
+        <DataList columns="1fr 1fr" mask={{ top: '3rem' }} scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-fade-top')).toBe('3rem');
     });
 
-    it('fades every end when the caller turns masking on outright', () => {
+    it('drops only the top fade when the caller turns it off', () => {
       const scrollRef = createRef<HTMLDivElement>();
-      render(
-        <DataList columns="1fr 1fr" mask scrollRef={scrollRef}>
+      const { container } = render(
+        <DataList columns="1fr 1fr" mask={{ top: false }} scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-fade-top')).toBe('');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('1.25rem');
     });
 
     it('fades nothing when the caller turns masking off', () => {

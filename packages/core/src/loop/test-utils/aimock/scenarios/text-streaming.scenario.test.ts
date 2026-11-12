@@ -33,6 +33,7 @@ async function collect<T>(stream: ReadableStream<T> | AsyncIterable<T>): Promise
  *  - text-start/text-end chunks bracket text-delta chunks
  *  - step-start/step-finish bracket each model turn
  *  - start/finish bracket the entire run
+ *  - the `textStream` getter yields plain string deltas, replays, and spans tool loops
  */
 describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine => {
   const getMock = useLoopScenarioAimock();
@@ -75,6 +76,60 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
 
     // The reassembled text matches the scripted fixture content exactly.
     expect(finalText).toBe(scriptedText);
+  });
+
+  // textStream getter: yields text deltas as plain strings, replays after the run.
+  it('streams the reply as string deltas and replays after the run', async () => {
+    const reply = 'Hello, wonderful streaming world!';
+    getMock().on({ endpoint: 'chat', userMessage: 'Say hello' }, { content: reply }, { chunkSize: 5 });
+    const { agent } = await createSharedAgent(getMock(), { engine, instructions: 'You are a helpful assistant.' });
+    const result: any = await agent.stream('Say hello');
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+
+    try {
+      const deltas = await collect<unknown>(output.textStream);
+      expect(deltas.length).toBeGreaterThan(1);
+      for (const delta of deltas) expect(delta).toBeTypeOf('string');
+      expect(deltas.join('')).toBe(reply);
+
+      expect(await collect<unknown>(output.textStream)).toEqual(deltas);
+      expect(await output.text).toBe(reply);
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
+  it('carries only text across a tool loop', async () => {
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look up a value.',
+      inputSchema: z.object({ key: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ key }) => ({ value: `VALUE_${key}` }),
+    });
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { content: 'Looking it up. ', toolCalls: [{ id: 'call_1', name: 'lookup', arguments: { key: 'a' } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value is VALUE_a.' });
+
+    const { agent } = await createSharedAgent(llm, {
+      engine,
+      instructions: 'You are a helpful assistant.',
+      tools: { lookup },
+    });
+    const result: any = await agent.stream('Look up a', { stopWhen: stepCountIs(3) });
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+
+    try {
+      const deltas = await collect<unknown>(output.textStream);
+      for (const delta of deltas) expect(delta).toBeTypeOf('string');
+      expect(deltas.join('')).toBe('Looking it up. The value is VALUE_a.');
+      expect(llm.getRequests()).toHaveLength(2);
+    } finally {
+      result.cleanup?.();
+    }
   });
 
   // runLoopScenario does not forward `onChunk` to durable/evented engines (harness gap, #27408).

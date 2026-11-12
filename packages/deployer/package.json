@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.83.0-alpha.6",
+  "version": "1.83.0-alpha.12",
   "description": "",
   "type": "module",
   "files": [
@@ -153,7 +153,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.81.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

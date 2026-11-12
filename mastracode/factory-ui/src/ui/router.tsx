@@ -33,6 +33,7 @@ import {
   createLoadOnEntry,
   prefetchBoard,
   prefetchComposer,
+  prefetchDraft,
   prefetchFactories,
   prefetchFactoryLayout,
   prefetchRuleDecisions,
@@ -66,6 +67,10 @@ const SettingsPage = lazyPage(
 );
 const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
+  <AppPageLoader />,
+);
+const CardMovesPage = lazyPage(
+  () => import('./pages/CardMovesPage').then(module => module.CardMovesPage),
   <AppPageLoader />,
 );
 const NewBoardPage = lazyPage(
@@ -112,8 +117,8 @@ function RootLanding() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  // Onboarding does the same once its factory exists (created on repo pick): the
-  // GitHub/Linear round-trips must resume the wizard, not land on the factory.
+  // Onboarding does the same once its pending factory exists: the
+  // GitHub/Linear round-trips must resume onboarding, not land on the factory.
   if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
@@ -254,7 +259,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { index: true, element: <FactoryHomeRedirect /> },
                         { path: 'workspaces/:sessionId', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
-                        { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchComposer) },
+                        { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchDraft) },
                         { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
@@ -267,6 +272,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'work/moves', ...lazyRoute(CardMovesPage) },
+                        { path: 'boards/:boardId/moves', ...lazyRoute(CardMovesPage) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },

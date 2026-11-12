@@ -907,6 +907,13 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it('hands the context-left sandbox stop to the transition service when a sandbox is configured', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), sandbox: () => ({ id: 'sb' }) as never });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    expect(transitionServiceOptions).toHaveLength(1);
+    expect(transitionServiceOptions[0]!.onContextLeft).toBeTypeOf('function');
+  });
+
   it('threads the default config version when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
@@ -953,6 +960,7 @@ describe('MastraFactory.prepare', () => {
       'memory-settings',
       'boards',
       'custom-providers',
+      'sandbox-envs',
       'queue-health',
       'integrations',
       'projects',
@@ -1062,6 +1070,7 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.initialState).toMatchObject({ skipGlobalInstructions: true, factoryOrgUnresolved: true });
     expect(config.disableSettingsOmSeed).toBe(true);
+    expect(config.planApprovalStartsGoal).toBe(false);
   });
 
   it('heals a cold pull request review binding before the SDK reads repository instructions', async () => {
@@ -1644,7 +1653,12 @@ describe('MastraFactory.prepare', () => {
       return requestContext;
     }
 
-    const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+    const READ_TOOLS = [
+      'factory_list_work_items',
+      'factory_inspect_work_item',
+      'factory_list_attention',
+      'factory_list_audit_events',
+    ];
     const MANAGEMENT_TOOLS = [
       'factory_create_work_item',
       'factory_update_work_item',
@@ -3266,11 +3280,11 @@ describe('MastraFactory.finalize', () => {
       // Both used to wait for the migration, so the server never listened until it finished.
       await factory.prepare();
       await factory.finalize();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
 
-      // Its messages moved before its run binding did, so the boot reconcile may have missed them.
+      // Its messages moved before its run binding did, so an earlier reconcile may have missed them.
       finish(1);
-      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledOnce());
     } finally {
       sessionMigrationOverride.current = undefined;
       reconcile.mockRestore();
@@ -3287,7 +3301,21 @@ describe('MastraFactory.finalize', () => {
       // The real migration over an empty store; give its background job time to settle.
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(finalizeSettled).toHaveBeenCalledOnce();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
+    } finally {
+      reconcile.mockRestore();
+    }
+  });
+
+  it('finishes booting without waiting for a bound-thread reconcile', async () => {
+    // A walk over hundreds of active bindings took ~75s and pushed boot past the health check.
+    const reconcile = vi
+      .spyOn(FactoryPhaseStateProcessor.prototype, 'reconcileAllBoundThreads')
+      .mockImplementation(() => new Promise(() => {}));
+    try {
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await factory.prepare();
+      await expect(factory.finalize()).resolves.toBeUndefined();
     } finally {
       reconcile.mockRestore();
     }

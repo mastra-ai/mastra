@@ -1,5 +1,18 @@
 # @mastra/voice-openai-realtime
 
+## 0.14.9-alpha.2
+
+### Patch Changes
+
+- Use gpt-realtime-2.1-mini by default for OpenAI Realtime voice connections instead of the retired gpt-4o-mini-realtime-preview-2024-12-17 model. ([#30183](https://github.com/mastra-ai/mastra/pull/30183))
+
+## 0.14.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`056d35d`](https://github.com/mastra-ai/mastra/commit/056d35d943316bdf657e4a504b2082cb6c14c075)]:
+  - @mastra/schema-compat@1.4.0-alpha.1
+
 ## 0.14.9-alpha.0
 
 ### Patch Changes

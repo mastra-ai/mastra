@@ -5,11 +5,14 @@
  * real router search params and toaster, with no component mocks.
  */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { OnboardingPage } from '../../../../pages/OnboardingPage';
 import { GitHubAppCallbackHandler } from '../GitHubAppCallbackHandler';
 
@@ -48,59 +51,16 @@ describe('GitHubAppCallbackHandler', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?keep=1'));
   });
 
-  it('given Platform refused an install the GitHub account already had, when the settings page renders, then it says to reinstall the app', async () => {
+  it('given Platform refused the link with a known reason, when the settings page renders, then it keeps that reason up instead of a generic failure', async () => {
     const router = renderCallback(
       '/factories/fp-1/settings/repositories?github_app_error=github_app_installation_preexisting&keep=1',
     );
 
-    expect(
-      await screen.findByText(
-        'Your GitHub account already had the Mastra GitHub App installed before you clicked Connect GitHub, so this link didn’t connect it. Uninstall the Mastra GitHub App from that GitHub account or organization, then choose Connect GitHub again.',
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/choose Refresh accounts/)).toBeInTheDocument();
     expect(screen.queryByText('GitHub connection failed')).not.toBeInTheDocument();
 
     await waitFor(() => expect(router.state.location.search).toBe('?keep=1'));
   });
-
-  it.each([
-    ['github_app_sign_in_required', 'Sign in to Mastra Platform in this browser, then connect GitHub again.'],
-    [
-      'github_app_session_mismatch',
-      'This GitHub link was started for a different Mastra account or organization. Connect GitHub again from your own account.',
-    ],
-    [
-      'github_app_person_not_platform_user',
-      'This GitHub link was started for an account that isn’t a Mastra account. To link GitHub through Mastra Platform, sign in to Factory with Mastra.',
-    ],
-    [
-      'github_app_link_already_used',
-      'This GitHub link was already used. If you just finished connecting GitHub, you’re all set; otherwise connect GitHub again.',
-    ],
-    [
-      'github_app_user_authorization_required',
-      'Mastra Platform needs you to authorize the GitHub App with your GitHub account to link this installation. Connect GitHub again and approve the authorization step.',
-    ],
-    [
-      'github_app_installation_not_owned',
-      'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation.',
-    ],
-    [
-      'github_app_link_not_started_here',
-      'This GitHub link was opened in a different browser, or opened directly instead of from Factory. Go back to Factory and choose Connect GitHub to start it again.',
-    ],
-    [
-      'github_app_connection_mismatch',
-      'Your Mastra account is already connected to a different GitHub account. Disconnect that GitHub account in Mastra Platform first, then connect GitHub here again.',
-    ],
-  ])(
-    'given Platform refused the link with %s, when the settings page renders, then it shows that reason',
-    async (code, message) => {
-      renderCallback(`/factories/fp-1/settings/repositories?github_app_error=${code}`);
-
-      expect(await screen.findByText(message)).toBeInTheDocument();
-    },
-  );
 
   it('given an unrecognised callback error, when the settings page renders, then it falls back to a generic failure', async () => {
     renderCallback('/factories/fp-1/settings/repositories?github_app_error=something_new');
@@ -110,7 +70,12 @@ describe('GitHubAppCallbackHandler', () => {
 });
 
 describe('OnboardingPage GitHub callback', () => {
-  it('given the install callback returns to onboarding with a refusal, when onboarding renders, then it shows the reason instead of landing silently', async () => {
+  function renderOnboarding(initialEntry: string) {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
     const router = createMemoryRouter(
       [
         {
@@ -123,13 +88,37 @@ describe('OnboardingPage GitHub callback', () => {
           ),
         },
       ],
-      { initialEntries: ['/onboarding?github_app_error=github_app_installation_preexisting'] },
+      { initialEntries: [initialEntry] },
     );
     renderWithProviders(<RouterProvider router={router} />);
+    return router;
+  }
 
-    expect(
-      await screen.findByText(/Uninstall the Mastra GitHub App from that GitHub account or organization/),
-    ).toBeInTheDocument();
+  it('given the install callback returns to onboarding with a refusal, when onboarding renders, then it shows the reason in the Codebase section instead of a toast', async () => {
+    const router = renderOnboarding('/onboarding?github_app_error=github_app_installation_preexisting');
+
+    const codebase = await screen.findByRole('region', { name: 'Codebase' });
+    expect(await within(codebase).findByText(/choose Refresh accounts/)).toBeInTheDocument();
     await waitFor(() => expect(router.state.location.search).toBe(''));
+    expect(screen.getAllByText(/choose Refresh accounts/)).toHaveLength(1);
+
+    // Dismissing clears the page-owned callback state; the host choices stay so the user can retry.
+    await userEvent.click(within(codebase).getByRole('button', { name: 'Dismiss notice' }));
+    expect(within(codebase).queryByText(/choose Refresh accounts/)).not.toBeInTheDocument();
+    expect(within(codebase).getByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
+  });
+
+  it('shows an approval request inline on onboarding', async () => {
+    const router = renderOnboarding('/onboarding?github_app_requested=true');
+
+    const codebase = await screen.findByRole('region', { name: 'Codebase' });
+    expect(await within(codebase).findByText('GitHub App installation requested')).toBeInTheDocument();
+    expect(within(codebase).getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+    expect(
+      screen.queryByText(
+        'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
+      ),
+    ).not.toBeInTheDocument();
   });
 });

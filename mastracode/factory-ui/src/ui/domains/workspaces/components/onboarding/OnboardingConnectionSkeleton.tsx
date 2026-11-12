@@ -3,7 +3,7 @@ import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleto
 export function OnboardingConnectionSkeleton({ label }: { label: string }) {
   return (
     <div role="status" aria-label={label}>
-      <div aria-hidden className="-mx-3 flex min-h-22 min-w-0 items-center gap-3 rounded-lg px-3 py-3">
+      <div aria-hidden className="flex min-h-15 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
         <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
         <div className="min-w-0 flex-1 basis-40">
           <SkeletonText line="text-caption" className="w-24 max-w-full motion-reduce:before:animate-none" />

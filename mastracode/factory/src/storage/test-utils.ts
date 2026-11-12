@@ -20,6 +20,7 @@ import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
+import { SandboxEnvsStorage } from './domains/sandbox-envs/base.js';
 import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
@@ -40,6 +41,7 @@ export async function demoteCardsToLegacyForTests(storage: FactoryStorage, cardI
     const workItemId = (legacy.work_item as { id: string }).id;
     delete legacy.work_item;
     delete legacy.work_item_sources;
+    delete legacy.changed_at;
     await storage.ops.insertOne('work_items', legacy);
     await storage.ops.deleteMany('factory_board_items', { id });
     await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: workItemId });
@@ -122,6 +124,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   modelDefaults: ModelDefaultsStorage;
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
+  sandboxEnvs: SandboxEnvsStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
   boards: StoredBoardsStorage;
@@ -157,6 +160,7 @@ export async function createFactoryStorageForTests(
   const modelDefaults = storage.registerDomain(new ModelDefaultsStorage());
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
+  const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const boards = storage.registerDomain(new StoredBoardsStorage());
@@ -176,6 +180,7 @@ export async function createFactoryStorageForTests(
     modelDefaults,
     memorySettings,
     customProviders,
+    sandboxEnvs,
     queueHealth,
     channelIdentity,
     boards,
