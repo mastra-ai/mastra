@@ -307,6 +307,39 @@ test.describe('Factory board virtualization', () => {
     }
   }
 
+  test.describe('when the ends of two board columns scroll into view together', () => {
+    test.use(viewports[0].use);
+    test('lists both columns deeper', async ({ page }) => {
+      server.use(
+        http.get('*/web/factory/projects/fp-1/work-items', () =>
+          HttpResponse.json({
+            workItems: largeBoard(240).map((item, index) => ({
+              ...item,
+              stages: [index < 120 ? 'triage' : 'planning'],
+            })),
+          }),
+        ),
+      );
+      await page.goto('/factories/fp-1/work');
+      await expect(page.getByRole('article', { name: 'Large task 119', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'New view', exact: true }).click();
+      await page.getByRole('radio', { name: 'Board', exact: true }).click();
+      await page.getByRole('button', { name: 'Save view', exact: true }).click();
+      await expect(page.getByRole('group', { name: 'Board columns' })).toBeVisible();
+
+      await page
+        .getByTestId('board-column-triage')
+        .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " overflow-auto ")][1]')
+        .evaluate(element => {
+          element.scrollTop = element.scrollHeight;
+        });
+
+      // Each column listed its newest fifty: the fifty-first of each follows.
+      await expect(page.getByRole('article', { name: 'Large task 69', exact: true })).toBeVisible();
+      await expect(page.getByRole('article', { name: 'Large task 189', exact: true })).toBeVisible();
+    });
+  });
+
   test.describe('when a card with open details is sorted out of the rendered range', () => {
     test.use(viewports[0].use);
     test('keeps the card mounted so its draft is there when the user scrolls back', async ({ page }) => {

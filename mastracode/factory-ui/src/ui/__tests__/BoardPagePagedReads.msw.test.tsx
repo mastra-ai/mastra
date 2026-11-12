@@ -16,11 +16,11 @@ import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 const CARDS_PATH = `/web/factory/projects/${FACTORY_ID}/work-items`;
 
 /**
- * Opens the Work board of a project holding `count` cards in Triage, none of them with a session,
- * and records what the page then asks the server about its cards.
+ * Opens the Work board of a project holding `count` cards, in Triage unless `stageOf` says where,
+ * none of them with a session, and records what the page then asks the server about its cards.
  */
-function openLargeBoard(count: number) {
-  const project = { cards: largeBoard(count) };
+function openLargeBoard(count: number, stageOf: (index: number) => string = () => 'triage') {
+  const project = { cards: largeBoard(count).map((card, index) => ({ ...card, stages: [stageOf(index)] })) };
   const asked = { listings: new Array<URLSearchParams>(), cardReads: new Array<string[]>(), wholeBoards: 0 };
   stubWorkBoard();
   server.use(
@@ -86,6 +86,36 @@ describe('The board of a large project', () => {
     fireEvent.scroll(boardViewport(), { target: { scrollTop: 60 * 48 } });
     expect(await screen.findByRole('article', { name: 'Large task 189' })).toBeInTheDocument();
     expect(asked.wholeBoards).toBe(0);
+  });
+
+  it('lists a second column deeper while the first one is still being read', async () => {
+    let answerTriage = () => {};
+    const triageHeld = new Promise<void>(resolve => {
+      answerTriage = resolve;
+    });
+    const { asked } = openLargeBoard(240, index => (index < 120 ? 'triage' : 'planning'));
+    server.use(
+      http.get(`${TEST_BASE_URL}${CARDS_PATH}/columns`, async ({ request }) => {
+        const windows = new URL(request.url).searchParams.getAll('window');
+        // Triage's deeper window alone is the read to hold; the ambient read answers every one.
+        if (windows.length === 1) await triageHeld;
+      }),
+    );
+    const user = userEvent.setup();
+    const [moreOfTriage] = await screen.findAllByRole('button', { name: 'Load more cards' });
+    if (!moreOfTriage) throw new Error('Triage offers no more cards');
+
+    await user.click(moreOfTriage);
+    await screen.findByRole('status', { name: 'Loading more cards' });
+    await user.click(screen.getByRole('button', { name: 'Load more cards' }));
+    answerTriage();
+
+    // Each column listed its newest fifty: the fifty-first of each follows.
+    await waitFor(() => expect(asked.cardReads).not.toEqual([]));
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 50 * 48 } });
+    expect(await screen.findByRole('article', { name: 'Large task 69' })).toBeInTheDocument();
+    expect(await screen.findByRole('article', { name: 'Large task 189' })).toBeInTheDocument();
+    expect(asked.listings.at(-1)?.getAll('window').toSorted()).toEqual(['planning:100', 'triage:100']);
   });
 
   it('searches the whole project once typing stops, and finds a card it had not loaded', async () => {

@@ -399,12 +399,20 @@ export function BoardContent({
           />
           <LoadMoreSentinel
             hasNextPage={!column.listedAll}
-            isFetchingNextPage={columns.isPlaceholderData}
+            // A column waits for its own deeper window, and every column for a view not read yet.
+            // Another column's end coming into view meanwhile lists that one deeper too.
+            isFetchingNextPage={
+              columns.isPlaceholderData && (windows === NO_WINDOWS || (windows[stage.id] ?? 0) > column.cards.length)
+            }
             onLoadMore={() =>
-              setDeepened({
+              // From the windows as they stand: two ends coming into view together both list deeper.
+              setDeepened(current => ({
                 viewKey,
-                windows: { ...windows, [stage.id]: deeperColumnWindow(column.cards.length) },
-              })
+                windows: {
+                  ...(current.viewKey === viewKey ? current.windows : NO_WINDOWS),
+                  [stage.id]: deeperColumnWindow(column.cards.length),
+                },
+              }))
             }
             label="Load more cards"
             loadingIndicator={<BoardItemsSkeleton label="Loading more cards" rows={1} layout={layout} />}
