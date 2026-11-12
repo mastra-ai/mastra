@@ -842,6 +842,34 @@ describe('a failed nested run hands back the state its completed steps set', () 
     // `inner-a` appended this before `boom` threw; a flat workflow keeps it, so a nested one must too.
     expect(result.state).toEqual({ items: ['inner-a:0'] });
   });
+
+  it('keeps the last attempt state when a retried nested run fails', async () => {
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+      .then(appendItem('inner-a'))
+      .then(boom)
+      .commit();
+    // The nested step is retried, and every attempt re-runs `inner` from the parent's
+    // unchanged state. So `inner-a` is appended once per attempt, not piled up across them.
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: num,
+      outputSchema: z.any(),
+      stateSchema: items,
+      retryConfig: { attempts: 2 },
+    })
+      .then(inner)
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun();
+    const result = await run.start({
+      inputData: { n: 0 },
+      initialState: { items: [] },
+      outputOptions: { includeState: true },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.state).toEqual({ items: ['inner-a:0'] });
+  });
 });
 
 describe('what a parked nested run exposes to callers', () => {
