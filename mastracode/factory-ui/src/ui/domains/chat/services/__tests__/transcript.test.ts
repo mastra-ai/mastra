@@ -1378,11 +1378,11 @@ describe('transcript reducer mergeWindow', () => {
       return message;
     };
 
-    function streamRun(parts: MastraMessagePart[], { suspend = false } = {}) {
+    function streamRun(parts: MastraMessagePart[], { suspend = false, end = true } = {}) {
       let state = createInitialTranscript({ messages: [] });
       const message = dbMessage('streamed-turn', 'assistant', parts);
       state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message } });
-      state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: message.id } });
+      if (end) state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: message.id } });
       if (suspend) {
         state = transcriptReducer(state, {
           type: 'event',
@@ -1465,6 +1465,56 @@ describe('transcript reducer mergeWindow', () => {
       const window = [dbMessage('s1', 'assistant', [tool('a')]), suspended(dbMessage('s2', 'assistant', [plan]))];
       for (const merged of mergeTwice(state, window)) {
         expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'plan'], prompts: ['suspension-plan'] });
+      }
+    });
+
+    it('draws what a stream that never ended missed, once', () => {
+      // A gap can swallow message_end, leaving the run entry streaming.
+      const state = streamRun([tool('a'), tool('b')], { end: false });
+      const window = [
+        dbMessage('s1', 'assistant', [tool('a')]),
+        suspended(dbMessage('s2', 'assistant', [tool('b'), plan, text('Final answer')])),
+      ];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({
+          toolCallIds: ['a', 'b', 'plan'],
+          texts: ['Final answer'],
+          prompts: ['suspension-plan'],
+        });
+      }
+
+      // The stream catching up does not draw the plan a second time.
+      const [merged] = mergeTwice(state, window);
+      const caughtUp = transcriptReducer(merged, {
+        type: 'event',
+        event: {
+          type: 'message_start',
+          message: dbMessage('streamed-turn', 'assistant', [tool('a'), tool('b'), plan]),
+        },
+      });
+      expect(drawn(caughtUp).toolCallIds).toEqual(['a', 'b', 'plan']);
+    });
+
+    it('does not restore a stored prompt for a tool call already finished on screen', () => {
+      const finished: MastraMessagePart = {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'plan', toolName: 'submit_plan', args: {}, result: 'ok' },
+      };
+      const state = streamRun([tool('a'), finished]);
+      const window = [dbMessage('s1', 'assistant', [tool('a')]), suspended(dbMessage('s2', 'assistant', [plan]))];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'plan'], prompts: [] });
+      }
+    });
+
+    it('keeps a step text that repeats words the run already drew for another step', () => {
+      const state = streamRun([text('Done'), tool('a')]);
+      const window = [
+        dbMessage('s1', 'assistant', [text('Done')]),
+        dbMessage('s2', 'assistant', [tool('a'), tool('c'), text('Done')]),
+      ];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'c'], texts: ['Done', 'Done'] });
       }
     });
 

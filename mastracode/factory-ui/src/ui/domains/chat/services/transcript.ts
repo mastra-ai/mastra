@@ -622,7 +622,7 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
     state: folded,
     absorbed,
     positionOf,
-  } = foldStepsIntoRunEntries(anchored, unclaimed, terminalToolCallIds(messages));
+  } = foldStepsIntoRunEntries(anchored, unclaimed, onScreenIndex, terminalToolCallIds(messages));
   if (unclaimed.every(message => absorbed.has(message))) return reconcileToolResults(folded, messages);
 
   const entries: TimelineEntry[] = [];
@@ -652,24 +652,51 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 // step. A stored step that shares a tool call with an on-screen entry belongs
 // to that run: fold the parts the entry lacks into it (plus any stored prompt
 // not yet on screen) instead of drawing the step, and its tool calls, again.
-// A streaming entry is left alone; its stream still owns the part indexes, and
-// the merge after the run ends folds whatever the stream missed.
+// A streaming entry's part indexes belong to its stream, so what it lacks is
+// drawn as an entry of its own right after it; the stream will not redraw
+// those tool calls (`withoutToolPartsDrawnElsewhere`), and this still holds
+// when the stream dropped the run's `message_end`.
 function foldStepsIntoRunEntries(
   state: TranscriptState,
   unclaimed: MastraDBMessage[],
-  settled: Set<string>,
+  anchors: Map<MastraDBMessage, number>,
+  settledInWindow: Set<string>,
 ): { state: TranscriptState; absorbed: Set<MastraDBMessage>; positionOf: (index: number) => number } {
   const absorbed = new Set<MastraDBMessage>();
   if (unclaimed.length === 0) return { state, absorbed, positionOf: index => index };
 
   const entries = [...state.entries];
   const runOf = new Map<string, number>();
+  const settled = new Set(settledInWindow);
   for (const [index, entry] of entries.entries()) {
     if (entry.kind !== 'message') continue;
-    for (const toolCallId of toolCallIdsOf(entry.message.content.parts)) runOf.set(toolCallId, index);
+    for (const part of entry.message.content.parts) {
+      if (part.type !== 'tool-invocation') continue;
+      runOf.set(part.toolInvocation.toolCallId, index);
+      if (isTerminalInvocationState(part.toolInvocation.state)) settled.add(part.toolInvocation.toolCallId);
+    }
   }
+  // Text a run entry draws that no claimed step accounts for, by occurrence.
+  const spareTexts = new Map<number, string[]>();
+  const spareTextsOf = (index: number, entry: MessageEntry) => {
+    let spare = spareTexts.get(index);
+    if (spare) return spare;
+    spare = drawableTexts(entry.message);
+    for (const [message, anchor] of anchors) {
+      if (anchor !== index) continue;
+      for (const text of drawableTexts(message)) {
+        const at = spare.indexOf(text);
+        if (at !== -1) spare.splice(at, 1);
+      }
+    }
+    spareTexts.set(index, spare);
+    return spare;
+  };
   const promptIds = new Set(entries.flatMap(entry => (entry.kind === 'message' ? [] : [entry.id])));
-  const promptsAfter = new Map<number, TimelineEntry[]>();
+  const after = new Map<number, TimelineEntry[]>();
+  const insertAfter = (index: number, added: TimelineEntry[]) => {
+    if (added.length > 0) after.set(index, [...(after.get(index) ?? []), ...added]);
+  };
 
   for (const message of unclaimed) {
     const index = toolCallIdsOf(message.content.parts)
@@ -678,20 +705,25 @@ function foldStepsIntoRunEntries(
     const entry = index === undefined ? undefined : entries[index];
     if (index === undefined || !entry || entry.kind !== 'message' || entry.message.role !== message.role) continue;
     absorbed.add(message);
-    if (entry.streaming) continue;
 
-    const unseen = partsMissingFrom(entry.message.content.parts, message.content.parts);
-    if (unseen.length > 0) {
+    const drawn = [...entry.message.content.parts, ...(after.get(index) ?? []).flatMap(partsOfMessageEntry)];
+    const unseen = partsMissingFrom(drawn, message.content.parts, spareTextsOf(index, entry));
+    if (unseen.length > 0 && entry.streaming) {
+      const { metadata: _prompts, ...content } = message.content;
+      insertAfter(index, [
+        toMessageEntry({ ...message, content: { ...content, parts: unseen } }, { streaming: false }),
+      ]);
+    } else if (unseen.length > 0) {
       const parts = [...entry.message.content.parts, ...unseen];
       entries[index] = { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
-      for (const toolCallId of toolCallIdsOf(unseen)) runOf.set(toolCallId, index);
     }
+    for (const toolCallId of toolCallIdsOf(unseen)) runOf.set(toolCallId, index);
 
     const prompts = persistedPrompts(message).filter(
       prompt => !settled.has(prompt.toolCallId) && !promptIds.has(prompt.id),
     );
     for (const prompt of prompts) promptIds.add(prompt.id);
-    if (prompts.length > 0) promptsAfter.set(index, [...(promptsAfter.get(index) ?? []), ...prompts]);
+    insertAfter(index, prompts);
   }
 
   if (absorbed.size === 0) return { state, absorbed, positionOf: index => index };
@@ -699,18 +731,33 @@ function foldStepsIntoRunEntries(
   const folded: TimelineEntry[] = [];
   for (const [index, entry] of entries.entries()) {
     positions.push(folded.length);
-    folded.push(entry, ...(promptsAfter.get(index) ?? []));
+    folded.push(entry, ...(after.get(index) ?? []));
   }
   return { state: { ...state, entries: folded }, absorbed, positionOf: index => positions[index] ?? folded.length };
 }
 
-function partsMissingFrom(drawn: MastraMessagePart[], parts: MastraMessagePart[]): MastraMessagePart[] {
+function partsOfMessageEntry(entry: TimelineEntry): MastraMessagePart[] {
+  return entry.kind === 'message' ? entry.message.content.parts : [];
+}
+
+// `spareTexts` is consumed: each drawn text accounts for one stored copy.
+function partsMissingFrom(
+  drawn: MastraMessagePart[],
+  parts: MastraMessagePart[],
+  spareTexts: string[],
+): MastraMessagePart[] {
   const toolCallIds = new Set(toolCallIdsOf(drawn));
-  const texts = new Set(drawn.flatMap(part => (part.type === 'text' ? [part.text.trim()] : [])));
   return parts.filter(part => {
     if (part.type === 'step-start') return false;
     if (part.type === 'tool-invocation') return !toolCallIds.has(part.toolInvocation.toolCallId);
-    if (part.type === 'text') return part.text.trim().length > 0 && !texts.has(part.text.trim());
+    if (part.type === 'text') {
+      const text = part.text.trim();
+      if (text.length === 0) return false;
+      const at = spareTexts.indexOf(text);
+      if (at === -1) return true;
+      spareTexts.splice(at, 1);
+      return false;
+    }
     const key = JSON.stringify(part);
     return !drawn.some(candidate => JSON.stringify(candidate) === key);
   });
