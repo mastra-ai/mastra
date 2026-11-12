@@ -51,7 +51,7 @@ import type {
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
-import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
+import { renewWorkflowLease, WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
 import type { ScheduledWorkflowTrigger } from '../../scheduler/types';
 import {
@@ -1661,7 +1661,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           timeTravel,
           perStep,
         });
-        await handOff?.keep();
       } catch (error) {
         // The parent did not continue: a redelivery of this end must be able to hand off again.
         await handOff?.release();
@@ -1672,6 +1671,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
 
         loopFailure = error;
+      }
+
+      if (!loopFailure) {
+        await handOff?.keep();
       }
     }
 
@@ -1733,17 +1736,22 @@ export class WorkflowEventProcessor extends EventProcessor {
    * `'done'` when the parent's stored record of the step is already this
    * child's success, or when another end of this child holds the hand-off
    * claim. A loop's body record is saved before the loop's next event is
-   * published, so for a loop only the claim counts. The claim, on stores with
-   * run fencing, lasts one lease TTL while the hand-off runs, so a worker that
-   * dies during it leaves it to a redelivery. Once the hand-off is published,
-   * `keep` extends it to {@link LATE_DELIVERY_MARKER_TTL_MS} and it is never
-   * released, so it outlasts late redeliveries. `release` is for a hand-off
-   * that failed, so a redelivery can retry it. A rerun of the parent step
-   * starts a new child run, with a new claim.
+   * published, so for a loop only the claim counts. The claim is renewed for
+   * one lease TTL at a time while the hand-off runs (a loop condition can take
+   * a while), so a worker that dies during it leaves it to a redelivery. Once
+   * the hand-off is published, `keep` extends it to
+   * {@link LATE_DELIVERY_MARKER_TTL_MS} and it is never released, so it
+   * outlasts late redeliveries. `release` is for a hand-off that threw, so a
+   * redelivery can retry it. A rerun of the parent step starts a new child
+   * run, with a new claim.
    *
-   * Time travel, per-step runs and resumes hand the same child's result off
-   * again on purpose and are not checked. The record check and the claim are
-   * separate calls, so two ends racing past the check meet at the claim.
+   * A restart hands the child's result off again while the parent's record
+   * shows it unhandled, so it takes the claim by force: the child's original
+   * end, still queued, then finds it held. Time travel, per-step runs and
+   * resumes hand the same child's result off again on purpose and are not
+   * checked, nor are parents whose workflow takes no step leases. The record
+   * check and the claim are separate calls, so two ends racing past the check
+   * meet at the claim.
    */
   async #claimNestedHandOff(
     args: Pick<ProcessorArgs, 'runId' | 'timeTravel' | 'perStep' | 'resumeSteps' | 'restart'>,
@@ -1753,7 +1761,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       return undefined;
     }
 
-    const store = await this.mastra.getStorage()?.getStore('workflows');
+    let parentDefinition: Workflow | undefined;
+    try {
+      parentDefinition = this.#resolveLiveWorkflow(parentWorkflow) ?? undefined;
+    } catch {
+      // The ancestor chain's root isn't registered on this worker: resolve the parent by id.
+      parentDefinition = this.#tryResolveWorkflow(parentWorkflow.workflowId);
+    }
+
+    const store = await this.#leaseStore(parentDefinition);
     if (!store) {
       return undefined;
     }
@@ -1776,29 +1792,35 @@ export class WorkflowEventProcessor extends EventProcessor {
       return 'done';
     }
 
-    // A restart re-drives a child whose hand-off the parent may never have handled, so it hands
-    // off again whenever the parent's record shows the child unfinished.
-    if (args.restart || !(await store.supportsRunFencing())) {
-      return undefined;
-    }
-
     const claim = await store.claimRunOwnership({
       runId: nestedHandOffKey(parentWorkflow.runId, parentWorkflow.executionPath, args.runId),
       ownerId: globalThis.crypto.randomUUID(),
       leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
-      force: false,
+      force: !!args.restart,
     });
     if (!claim.acquired) {
       return 'done';
     }
 
-    const { runId, generation, ownerId } = claim.record;
+    const fence = { runId: claim.record.runId, generation: claim.record.generation, ownerId: claim.record.ownerId };
+    const stopRenewing = renewWorkflowLease({
+      store,
+      fence,
+      onLost: () => {
+        this.mastra.getLogger()?.warn('A nested workflow hand-off claim was taken over while handing off', fence);
+      },
+      onError: error => {
+        this.mastra.getLogger()?.warn('Failed to renew a nested workflow hand-off claim', { ...fence, error });
+      },
+    });
     return {
       keep: async () => {
-        await store.renewRunOwnership({ runId, generation, ownerId, leaseMs: LATE_DELIVERY_MARKER_TTL_MS });
+        stopRenewing();
+        await store.renewRunOwnership({ ...fence, leaseMs: LATE_DELIVERY_MARKER_TTL_MS });
       },
       release: async () => {
-        await store.releaseRunOwnership({ runId, generation, ownerId });
+        stopRenewing();
+        await store.releaseRunOwnership(fence);
       },
     };
   }
@@ -1858,6 +1880,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       // The nested run's final state replaces the parent's: the parent's
       // `__state` predates this iteration and would win over `state`.
       const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: state };
+      // A restart that reads the loop before the next iteration starts would hand this child's
+      // result to the loop again, so a parent that takes step leases saves the loop's progress
+      // first, as a body step's own delivery does.
+      const saveProgress =
+        !!(await this.#leaseStore(liveParentWorkflow ?? undefined)) &&
+        (liveParentWorkflow?.options?.shouldPersistSnapshot?.({
+          stepResults: loopStepResults,
+          workflowStatus: 'running',
+        }) ??
+          true);
       // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
       await this.#processLoop(
         {
@@ -1883,6 +1915,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         !parentWorkflow.timeTravel && !parentWorkflow.resumeSteps?.length
           ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy
           : undefined,
+        { saveProgress },
       );
       return;
     }
@@ -2963,8 +2996,15 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const store = await this.mastra.getStorage()?.getStore('workflows');
+    // The next iteration of a nested-workflow body starts a new child: a restart that finds this
+    // record must not re-drive the child that just finished.
+    const { metadata, ...previous } = omitPriorCompletionFields(
+      (decision.stepResults[leafId] ?? {}) as Record<string, unknown>,
+    ) as Record<string, unknown> & { metadata?: Record<string, unknown> };
+    const { nestedRunId: _finishedChild, ...nextMetadata } = metadata ?? {};
     const nextStart = {
-      ...omitPriorCompletionFields((decision.stepResults[leafId] ?? {}) as Record<string, unknown>),
+      ...previous,
+      metadata: nextMetadata,
       payload: result.status === 'success' ? result.output : undefined,
       startedAt: Date.now(),
       status: 'running' as const,
@@ -3350,8 +3390,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         // Time travel reuses the recorded child run, or creates one if absent.
         nestedDispatch = 'time-travel';
         nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
-      } else if (restart && !!restart.activeStepsPath?.[leafId]) {
-        // Restart reuses the iteration's or step's child run, if recorded.
+      } else if (
+        restart &&
+        !!restart.activeStepsPath?.[leafId] &&
+        (step.type !== 'loop' || !!stepResults[leafId]?.metadata?.nestedRunId)
+      ) {
+        // Restart reuses the iteration's or step's child run, if recorded. A loop iteration saved
+        // before its child started (see #saveLoopProgress) names none, and starts one instead.
         nestedDispatch = 'restart';
         nestedRunId =
           (step.type === 'foreach'
@@ -3927,20 +3972,37 @@ export class WorkflowEventProcessor extends EventProcessor {
           };
           const nestedState = (snapshot.context as Record<string, any>)?.__state ?? snapshot.value ?? currentState;
           if (finishedResult) {
-            await this.#handNestedSuccessToParent({
-              parentWorkflow: parentContext,
-              nestedRunId,
-              prevResult: finishedResult,
-              state: nestedState,
-              resumeSteps,
-              resumeData,
-              activeStepsPath,
-              requestContext,
-              actor,
-              timeTravel,
-              perStep,
-              outputOptions,
-            });
+            // Claimed like the child's own end would, so that end, if still queued, finds the
+            // hand-off done instead of continuing the parent a second time.
+            const handOff = await this.#claimNestedHandOff(
+              { runId: nestedRunId, restart, timeTravel, perStep, resumeSteps },
+              parentContext,
+            );
+            if (handOff === 'done') {
+              return;
+            }
+
+            try {
+              await this.#handNestedSuccessToParent({
+                parentWorkflow: parentContext,
+                nestedRunId,
+                prevResult: finishedResult,
+                state: nestedState,
+                resumeSteps,
+                resumeData,
+                activeStepsPath,
+                requestContext,
+                actor,
+                timeTravel,
+                perStep,
+                outputOptions,
+              });
+            } catch (error) {
+              await handOff?.release();
+              throw error;
+            }
+
+            await handOff?.keep();
             return;
           }
           // Hand up the failed step's own record, which keeps the step's error as thrown.

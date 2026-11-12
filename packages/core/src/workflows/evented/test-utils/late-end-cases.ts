@@ -7,10 +7,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Event } from '../../../events/types';
 import type { MastraStorage } from '../../../storage';
-import { stepOccurrenceKey } from '../leases';
+import { nestedHandOffKey, stepOccurrenceKey } from '../leases';
 import { abandonLease } from './abandon-lease';
 import {
   copyEvent,
+  deferred,
   finishesOf,
   heldQueue,
   samePath,
@@ -37,7 +38,10 @@ export function describeLateEndCases({
   connect?: () => MastraStorage | Promise<MastraStorage>;
 }) {
   describe('ends of evented runs whose events arrive late or twice (#28712)', () => {
-    const { startReplica, storedRun, redeliver } = useLateDeliveryReplicas({ getStorage, connect });
+    const { startReplica, storedRun, redeliver, waitUntilOrphaned } = useLateDeliveryReplicas({
+      getStorage,
+      connect,
+    });
 
     /**
      * A two-step run on replica A whose last step end A's broker holds back.
@@ -237,6 +241,158 @@ export function describeLateEndCases({
 
       expect(checks).toBe(2);
       expect(finishesOf(run.runId, a)).toHaveLength(1);
+    }, 20_000);
+
+    /**
+     * A parent `dountil` around a nested child that adds one to `n`, until `n`
+     * reaches 2. `checks` and `iterations` record each condition evaluation and
+     * each child run, by the `n` they saw. `condition` runs before each check.
+     */
+    function nestedLoop({
+      options,
+      condition,
+    }: { options?: { autoRestartActiveRuns?: boolean }; condition?: (n: number) => Promise<void> } = {}) {
+      const checks: number[] = [];
+      const iterations: number[] = [];
+      const build = () => {
+        const child = createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num })
+          .then(
+            createStep({
+              id: 'increment',
+              inputSchema: Num,
+              outputSchema: Num,
+              execute: async ({ inputData }) => {
+                iterations.push(inputData.n + 1);
+                return { n: inputData.n + 1 };
+              },
+            }),
+          )
+          .commit();
+        return createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, options })
+          .dountil(child, async ({ inputData }) => {
+            await condition?.(inputData.n);
+            checks.push(inputData.n);
+            return inputData.n >= 2;
+          })
+          .commit();
+      };
+      return { checks, iterations, build };
+    }
+
+    it('takes no hand-off claims for a nested loop whose workflow takes no step leases', async () => {
+      const { checks, build } = nestedLoop({ options: { autoRestartActiveRuns: false } });
+      const a = await startReplica(build());
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 2 } });
+      expect(checks).toEqual([1, 2]);
+
+      const store = (await getStorage().getStore('workflows'))!;
+      const children = childEnds(a.published, run.runId).map(event => event.runId);
+      expect(children).toHaveLength(2);
+      for (const child of children) {
+        expect(await store.getRunOwnership({ runId: nestedHandOffKey(run.runId, [0], child) })).toBeNull();
+      }
+    }, 20_000);
+
+    it('evaluates a dountil condition once when a nested end arrives again while the condition runs past a lease TTL', async () => {
+      const slow = deferred<void>();
+      const conditionRuns = deferred<void>();
+      let evaluations = 0;
+      // Only the first evaluation is slow.
+      const { checks, build } = nestedLoop({
+        condition: async () => {
+          if (++evaluations > 1) {
+            return;
+          }
+
+          conditionRuns.resolve();
+          await slow.promise;
+        },
+      });
+      const fromA = heldQueue(() => false);
+      const a = await startReplica(build(), fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 0 });
+      await conditionRuns.promise;
+
+      // The first child's end reaches B while A still evaluates the condition, after a lease TTL.
+      await new Promise(resolve => setTimeout(resolve, 3 * Number(process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS)));
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      expect(await redeliver(b, childEnds(a.published, run.runId)[0]!)).toEqual({ ok: true });
+      await fromB.drain(b);
+
+      // A's condition returns and A goes on with the loop.
+      fromA.holdAll();
+      slow.resolve();
+      await expect.poll(() => fromA.queue.length).toBeGreaterThan(0);
+      await fromA.drain(a);
+
+      expect((await storedRun(run.runId))?.status).toBe('success');
+      expect(checks).toEqual([1, 2]);
+    }, 20_000);
+
+    it('evaluates a dountil condition once per iteration when a restart hands off a nested iteration whose end is held', async () => {
+      const { checks, iterations, build } = nestedLoop();
+      let parentRunId = '';
+      // The first child's end sits in A's broker queue past a lease TTL, so the parent looks stopped.
+      const fromA = heldQueue(event => event.type === 'workflow.end' && event.runId !== parentRunId);
+      const a = await startReplica(build(), fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      parentRunId = run.runId;
+      startInBackground(run, { n: 0 });
+      await fromA.firstHeld;
+      await waitUntilOrphaned(run.runId);
+
+      // B's restart hands the finished child off to the loop, then A's held end arrives.
+      const b = await startReplica(build());
+      expect(await (await b.workflow.createRun({ runId: run.runId })).restart()).toMatchObject({
+        status: 'success',
+        result: { n: 2 },
+      });
+      fromA.holdAll();
+      await fromA.drain(a);
+
+      expect(checks).toEqual([1, 2]);
+      expect(iterations).toEqual([1, 2]);
+      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+    }, 20_000);
+
+    it('evaluates a dountil condition once per iteration when a restart reads the loop before its next nested iteration starts', async ({
+      skip,
+    }) => {
+      // A store with step guards commits the body's success with the loop decision instead of the
+      // next iteration's start, and a restart reads that success as a finished loop.
+      if ((await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards()) {
+        skip();
+      }
+
+      const { checks, iterations, build } = nestedLoop();
+      let parentRunId = '';
+      let loopRuns = 0;
+      // The loop's second iteration sits in A's broker queue past a lease TTL.
+      const fromA = heldQueue(
+        event =>
+          event.type === 'workflow.step.run' && event.runId === parentRunId && samePath(event, [0]) && ++loopRuns === 2,
+      );
+      const a = await startReplica(build(), fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      parentRunId = run.runId;
+      startInBackground(run, { n: 0 });
+      await fromA.firstHeld;
+      await waitUntilOrphaned(run.runId);
+
+      const b = await startReplica(build());
+      expect(await (await b.workflow.createRun({ runId: run.runId })).restart()).toMatchObject({
+        status: 'success',
+        result: { n: 2 },
+      });
+      fromA.holdAll();
+      await fromA.drain(a);
+
+      expect(checks).toEqual([1, 2]);
+      expect(iterations).toEqual([1, 2]);
+      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
     /** A two-step workflow that keeps no snapshot, so its run's end deletes it. */

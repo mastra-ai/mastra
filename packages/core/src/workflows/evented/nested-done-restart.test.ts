@@ -229,21 +229,25 @@ describe.each(['default', 'evented'] as Engine[])('%s restart after a nested wor
 
   // Default engine: every iteration's child shares one run id, so restart reuses
   // iteration 1's finished child as iteration 2 and the loop stops one short
-  // (result n=2). Evented engine: iteration 2's child run has not been saved yet,
-  // so restart finds no snapshot for it (COR-1348).
-  it.fails("runs the next iteration when the run was cut before that iteration's child started", async () => {
-    const log: Entry[] = [];
-    const result = await restartAtHold({
-      engine,
-      name: 'loop-next-not-started',
-      hold: { when: iteration2NotStarted },
-      build: loop(engine, log),
-    });
+  // (result n=2). Evented engine: the saved start of iteration 2 names no child,
+  // so restart starts one.
+  itKeepsError(
+    "runs the next iteration when the run was cut before that iteration's child started",
+    async () => {
+      const log: Entry[] = [];
+      const result = await restartAtHold({
+        engine,
+        name: 'loop-next-not-started',
+        hold: { when: iteration2NotStarted },
+        build: loop(engine, log),
+      });
 
-    expect(result.status).toBe('success');
-    expect(result.result).toEqual({ n: 3 });
-    expect(starts(log, 'inner')).toEqual([{ n: 2 }]);
-  }, 60_000);
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ n: 3 });
+      expect(starts(log, 'inner')).toEqual([{ n: 2 }]);
+    },
+    60_000,
+  );
 });
 
 describe('evented restart does not reuse a finished child from another occurrence (COR-1351)', () => {
@@ -297,7 +301,7 @@ describe('evented restart does not reuse a finished child from another occurrenc
     // Naming iteration 1's finished child here would make a restart from this cut
     // reuse its result for iteration 2, ending the loop one iteration short.
     const leaf = (findRow(secondCrash, 'loop-parent', runId)?.snapshot.context as any)['loop-body'];
-    expect(leaf.metadata?.nestedRunId).toBeTruthy();
+    expect(leaf.status).toBe('running');
     expect(leaf.metadata?.nestedRunId).not.toBe(iteration1Child);
   }, 60_000);
 
