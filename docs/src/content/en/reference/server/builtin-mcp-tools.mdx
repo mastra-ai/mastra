@@ -1,0 +1,139 @@
+---
+title: 'Reference: Built-in MCP tools | Server'
+description: 'Every tool the built-in MCP server at /api/mcp can serve, with its arguments, the HTTP route it calls, and the permission that route needs.'
+packages:
+  - '@mastra/server'
+  - '@mastra/mcp'
+---
+
+# Built-in MCP tools
+
+The [built-in MCP server](/docs/server/mcp) at `/api/mcp` builds its tool list per caller from the toolsets below. Each tool calls the listed HTTP route in-process, so it needs that route's permission on top of `mcp:read` and `mcp:execute`, and it runs the same FGA and ownership checks as the HTTP request. A tool whose route the caller can't call isn't listed.
+
+Arguments marked with `*` are required. Routes are relative to the API prefix (`/api` by default). Tools marked read-only carry the MCP `readOnlyHint` annotation and stay available with `readOnly: true` or `?readonly=1`.
+
+## `agents`
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `list_agents` | `query` | `GET /agents` | `agents:read` |
+| `get_agent` | `agentId*` | `GET /agents/:agentId` | `agents:read` |
+| `call_agent` | `agentId*`, `message*`, `threadId`, `resourceId` | `POST /agents/:agentId/generate` | `agents:execute` |
+| `agent_<id>` | `message*`, `threadId`, `resourceId` | `POST /agents/:agentId/generate` | `agents:execute` |
+
+- `list_agents` returns each agent's `id`, `name`, and `description`. `query` keeps agents whose id or name contains the text.
+- `call_agent` returns the reply text and the `threadId` to pass back to continue the conversation.
+- `agent_<id>` is added for each agent listed in `server.mcp.featured.agents`.
+- When the caller can see up to `enumLimit` agents (25 by default), `agentId` lists the allowed ids.
+
+## `workflows`
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `list_workflows` | `query` | `GET /workflows` | `workflows:read` |
+| `get_workflow` | `workflowId*` | `GET /workflows/:workflowId` | `workflows:read` |
+| `start_workflow` | `workflowId*`, `inputData`, `runId` | `POST /workflows/:workflowId/start-async` | `workflows:execute` |
+| `get_workflow_run` | `workflowId*`, `runId*`, `fields` | `GET /workflows/:workflowId/runs/:runId` | `workflows:read` |
+| `resume_workflow_run` | `workflowId*`, `runId*`, `step`, `resumeData` | `POST /workflows/:workflowId/resume-async` | `workflows:execute` |
+| `cancel_workflow_run` | `workflowId*`, `runId*` | `POST /workflows/:workflowId/runs/:runId/cancel` | `workflows:execute` |
+| `workflow_<id>` | The workflow's input schema | `POST /workflows/:workflowId/start-async` | `workflows:execute` |
+
+- `start_workflow`, `resume_workflow_run`, and `workflow_<id>` wait for the run to finish or suspend. A suspended run returns `status: 'suspended'`, its `runId`, `suspendPayload`, and `suspendedSteps`.
+- `get_workflow_run` takes `fields` as a comma-separated subset of `result`, `error`, `payload`, `steps`, and `activeStepsPath`.
+- `cancel_workflow_run` carries the MCP `destructiveHint` annotation.
+- `workflow_<id>` is added for each workflow listed in `server.mcp.featured.workflows`. When the input schema isn't an object, the tool takes it as `inputData`.
+
+## `tools`
+
+When the caller can see up to `enumLimit` tools, each tool gets its own entry:
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `tool_<id>` | The tool's input schema | `POST /tools/:toolId/execute` | `tools:execute` |
+
+Above `enumLimit`, three operation tools replace them:
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `list_tools` | `query` | `GET /tools` | `tools:read` |
+| `get_tool` | `toolId*` | `GET /tools/:toolId` | `tools:read` |
+| `call_tool` | `toolId*`, `data` | `POST /tools/:toolId/execute` | `tools:execute` |
+
+A `tool_<id>` entry uses the tool's own `mcp.annotations` when the tool defines them.
+
+## `memory`
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `list_threads` | `agentId`, `resourceId`, `page`, `perPage` | `GET /memory/threads` | `memory:read` |
+| `get_thread` | `threadId*`, `agentId` | `GET /memory/threads/:threadId` | `memory:read` |
+| `list_messages` | `threadId*`, `agentId`, `page`, `perPage` | `GET /memory/threads/:threadId/messages` | `memory:read` |
+| `search_memory` | `agentId*`, `searchQuery*`, `resourceId`, `threadId`, `limit` | `GET /memory/search` | `memory:read` |
+| `get_memory_status` | `agentId*`, `resourceId`, `threadId` | `GET /memory/status`, `GET /memory/config` | `memory:read` |
+| `get_observations` | `agentId*`, `threadId`, `resourceId`, `waitForPending` | `GET /memory/observational-memory` | `memory:read` |
+| `create_thread` | `agentId*`, `resourceId`, `title`, `metadata`, `threadId` | `POST /memory/threads` | `memory:write` |
+| `update_thread` | `threadId*`, `agentId*`, `title`, `metadata` | `PATCH /memory/threads/:threadId` | `memory:write` |
+| `clone_thread` | `threadId*`, `agentId*`, `newThreadId`, `title`, `metadata`, `messageLimit` | `POST /memory/threads/:threadId/clone` | `memory:execute` |
+| `save_messages` | `agentId*`, `messages*` | `POST /memory/save-messages` | `memory:write` |
+
+- `resourceId` defaults to the caller when `server.auth` sets `mapUserToResourceId`. A caller can't read or write another resource's threads, messages, or Observational Memory.
+- `get_observations` reads resource-scoped Observational Memory when `threadId` is left out. `waitForPending: true` waits up to 30 seconds for pending observations, and is only offered when the caller may call `POST /memory/observational-memory/buffer-status`, which needs `memory:write`.
+- `search_memory` returns up to 20 results unless `limit` is set.
+
+## `observability`
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `query_traces` | `timeRange*`, `where`, `textSearch`, `rootSource`, `group`, `orderBy`, `page` | `POST /observability/traces/query` | `observability:read` |
+| `aggregate_traces` | `timeRange*`, `measures*`, `where`, `groupBy`, `interval`, `having`, `orderBy`, `limit` | `POST /observability/traces/aggregate` | `observability:read` |
+| `query_spans` | `timeRange*`, `where`, `textSearch`, `orderBy`, `page` | `POST /observability/spans/query` | `observability:read` |
+| `aggregate_spans` | `timeRange*`, `measures*`, `where`, `groupBy`, `interval`, `having`, `orderBy`, `limit` | `POST /observability/spans/aggregate` | `observability:read` |
+| `query_threads` | `timeRange*`, `where`, `orderBy`, `page` | `POST /observability/threads/query` | `observability:read` |
+| `get_trace_query_fields` | `timeRange*`, `predicateScope*`, `search`, `limit` | `POST /observability/traces/query/fields` | `observability:read` |
+| `get_trace_query_values` | `timeRange*`, `predicateScope*`, `path*`, `search`, `limit` | `POST /observability/traces/query/values` | `observability:read` |
+| `list_traces` | Filters such as `entityType`, `entityName`, `status`, `traceId`, `threadId`, `dateRange`, plus `page`, `perPage`, `field`, `direction` | `GET /observability/traces` | `observability:read` |
+| `get_trace` | `traceId*`, `offset` | `GET /observability/traces/:traceId/light` | `observability:read` |
+| `get_span` | `traceId*`, `spanId*` | `GET /observability/traces/:traceId/spans/:spanId` | `observability:read` |
+| `get_trace_trajectory` | `traceId*` | `GET /observability/traces/:traceId/trajectory` | `observability:read` |
+| `list_logs` | Filters such as `level`, `traceId`, `entityName`, `threadId`, `timestamp`, plus `page`, `perPage`, `direction` | `GET /observability/logs` | `observability:read` |
+
+- A store that supports trace queries serves the query and aggregate tools and not `list_traces`. A store without them serves `list_traces` instead. `list_logs` is served only when the store implements logs.
+- `predicateScope` is `trace`, `spans`, `scores`, or `feedback`. `interval` is `1m`, `5m`, `15m`, `1h`, or `1d`.
+- `get_trace` returns light span records. Pass the returned `nextOffset` as `offset` to read the rest of a cut trace.
+
+## `observability_analytics`
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `list_scores` | Filters such as `scorerId`, `traceId`, `entityName`, `timestamp`, plus `page`, `perPage`, `field`, `direction` | `GET /observability/scores` | `observability:read` |
+| `analyze_scores` | `op*`, `scorerId*`, `scoreSource`, `aggregation`, `filters`, `comparePeriod`, `groupBy`, `interval`, `percentiles` | `POST /observability/scores/<op>` | `observability:read` |
+| `list_feedback` | Filters such as `feedbackType`, `traceId`, `reviewStatus`, `timestamp`, plus `page`, `perPage`, `direction` | `GET /observability/feedback` | `observability:read` |
+| `analyze_feedback` | `op*`, `feedbackType*`, `feedbackSource`, `aggregation`, `filters`, `comparePeriod`, `groupBy`, `interval`, `percentiles` | `POST /observability/feedback/<op>` | `observability:read` |
+| `analyze_metrics` | `op*`, `name*`, `aggregation`, `distinctColumn`, `filters`, `comparePeriod`, `groupBy`, `limit`, `orderDirection`, `interval`, `percentiles` | `POST /observability/metrics/<op>` | `observability:read` |
+| `list_metric_names` | `metricName`, `labelKey`, `prefix`, `limit` | `GET /observability/discovery/metric-names`, `metric-label-keys`, `metric-label-values` | `observability:read` |
+
+- `op` is `aggregate`, `breakdown`, `timeseries`, or `percentiles`, and selects the route the tool calls.
+- `aggregation` is `sum`, `avg`, `min`, `max`, `count`, `count_distinct`, or `last`. `comparePeriod` is `previous_period`, `previous_day`, or `previous_week`.
+- `list_metric_names` lists metric names. With `metricName`, it lists that metric's label keys. With `metricName` and `labelKey`, it lists that label's values.
+- Each tool is served only when the store implements the matching scores, feedback, or metrics queries.
+
+## `stored_agents`
+
+| Tool | Arguments | Route | Permission |
+| - | - | - | - |
+| `list_available_models` | None | `GET /editor/builder/models/available` | `stored-agents:read` |
+| `list_stored_agents` | `status`, `page`, `perPage` | `GET /stored/agents` | `stored-agents:read` |
+| `get_stored_agent` | `storedAgentId*` | `GET /stored/agents/:storedAgentId` | `stored-agents:read` |
+| `create_stored_agent` | `name*`, `instructions*`, `model`, `tools`, `memory`, `visibility`, `autoPublish`, `id`, and the other stored agent fields | `POST /stored/agents` | `stored-agents:write` |
+| `update_stored_agent` | `storedAgentId*`, any stored agent field, `changeMessage`, `autoPublish` | `PATCH /stored/agents/:storedAgentId` | `stored-agents:write` |
+
+- `list_stored_agents` returns published agents unless `status` is `draft` or `archived`, 100 per page by default.
+- `create_stored_agent` and `update_stored_agent` publish the change unless `autoPublish` is `false`. A created agent is owned by the caller and private unless `visibility` is `public`. See [stored agent visibility](/docs/studio/editor#visibility).
+- When the agent builder restricts models, both tools reject models it doesn't allow. `list_available_models` returns the allowed models.
+
+## Related
+
+- [Built-in MCP server](/docs/server/mcp)
+- [`server.mcp` configuration reference](/reference/configuration#servermcp)
+- [Server routes](/reference/server/routes)
+- [`dispatchRoute()`](/reference/server/dispatch-route)
