@@ -14,6 +14,10 @@
     font-size: var(--text-body);
     line-height: 1.7;
     overflow-wrap: break-word;
+
+    /* Opts out of the global `pretty`: it re-breaks a block's last lines on every
+     * streamed delta, jumping words already on screen onto another line. */
+    text-wrap-style: auto;
   }
 
   .mastra-markdown > :first-child {

@@ -216,6 +216,17 @@
     font-size-adjust: none;
   }
 
+  /* No one-word last lines anywhere. The longhand inherits without touching
+     `text-wrap-mode`, so `whitespace-nowrap` and `truncate` still work. Code keeps
+     plain wrapping, and so does text being typed, where a moving break would jump. */
+  :root {
+    text-wrap-style: pretty;
+  }
+
+  :where(code, samp, pre, kbd, .font-mono, input, textarea, [contenteditable]) {
+    text-wrap-style: auto;
+  }
+
   /* Every lucide icon draws its line from one token instead of lucide's default
      `stroke-width="2"`. The value is in the icon's 24-unit grid, so the line still
      thickens a little as the icon grows. Components size icons; none sets a stroke. */
