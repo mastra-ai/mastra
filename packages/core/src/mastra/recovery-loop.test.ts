@@ -1,0 +1,439 @@
+/**
+ * The workflow recovery loop `startWorkers()` starts (#28712): it applies the
+ * recovery rule at boot and then on a timer, so a run whose process stopped is
+ * restarted without another instance booting. Replicas are Mastra instances
+ * sharing one store, the way pods share one database. Leases use a short TTL
+ * here, read when core loads.
+ */
+vi.hoisted(() => {
+  process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS = '600';
+});
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSub } from '../events/pubsub';
+import type { Event } from '../events/types';
+import { InMemoryStore } from '../storage/mock';
+import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
+import { createStep, createWorkflow } from '../workflows';
+import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
+import { runLivenessKey } from '../workflows/evented/leases';
+import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
+import { killableProcess } from './test-utils/killable-process';
+import { Mastra } from './index';
+import type { MastraRecoveryConfig } from './index';
+
+const GRACE_MS = 300;
+// Short enough for a test to see several passes.
+const scanning = { workflowScanIntervalMs: 100 };
+
+const replicas: { mastra: Mastra; revive?: () => void }[] = [];
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(
+    replicas.splice(0).map(({ mastra, revive }) => {
+      revive?.();
+      return mastra.shutdown({ drainTimeout: 0 });
+    }),
+  );
+});
+
+const schema = z.object({});
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/** The one-step `recovered-wf` on `engine`, whose step records `<replica>:work` and then runs `then`. */
+function oneStep(engine: 'default' | 'evented', replica: string, executions: string[], then?: () => Promise<void>) {
+  const create = (engine === 'evented' ? createEventedWorkflow : createWorkflow) as typeof createWorkflow;
+  const step = (engine === 'evented' ? createEventedStep : createStep) as typeof createStep;
+  return create({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
+    .then(
+      step({
+        id: 'work',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async () => {
+          executions.push(`${replica}:work`);
+          await then?.();
+          return {};
+        },
+      }),
+    )
+    .commit();
+}
+
+/** A replica running `recovered-wf` on `engine`, not started yet. */
+function replica(
+  storage: InMemoryStore,
+  engine: 'default' | 'evented',
+  name: string,
+  executions: string[],
+  { recovery = { workflowGraceMs: GRACE_MS }, pubsub }: { recovery?: MastraRecoveryConfig; pubsub?: PubSub } = {},
+) {
+  const mastra = new Mastra({
+    logger: false,
+    storage,
+    pubsub,
+    recovery,
+    workflows: { 'recovered-wf': oneStep(engine, name, executions) },
+  });
+  replicas.push({ mastra });
+  return mastra;
+}
+
+/** Stores a `running` run of `workflowName`, as a process that stopped mid-run leaves it. */
+async function persistActiveRun(
+  storage: InMemoryStore,
+  runId: string,
+  { workflowName = 'recovered-wf', parentRunId }: { workflowName?: string; parentRunId?: string } = {},
+) {
+  await (await storage.getStore('workflows'))!.persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    snapshot: {
+      ...createEmptyWorkflowSnapshot(runId),
+      status: 'running',
+      activePaths: [],
+      context: { input: {} } as any,
+      ...(parentRunId ? { parentWorkflow: { workflowId: 'parent-wf', runId: parentRunId } } : {}),
+    } as any,
+  });
+}
+
+/** Records the restart start events a pubsub publishes. */
+function recordRestarts(inner: PubSub, restarts: string[]): PubSub {
+  return new Proxy(inner, {
+    get(target, prop) {
+      if (prop === 'publish') {
+        return (topic: string, event: Event, options?: { localOnly?: boolean }) => {
+          if (topic === 'workflows' && event.type === 'workflow.start' && event.data?.restart) {
+            restarts.push(event.runId);
+          }
+
+          return target.publish(topic, event, options);
+        };
+      }
+
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+/** The stored status of `runId`. */
+async function statusOf(storage: InMemoryStore, runId: string) {
+  return (await (await storage.getStore('workflows'))!.loadWorkflowSnapshot({ workflowName: 'recovered-wf', runId }))
+    ?.status;
+}
+
+describe('workflow recovery loop (#28712)', () => {
+  it('restarts the same stored runs from a fresh instance boot call and from a running instance tick', async () => {
+    const graceMs = 1_000;
+    /** Stores every case of the rule in `storage`, and returns the runs the rule restarts. */
+    const storeCases = async (storage: InMemoryStore) => {
+      const store = (await storage.getStore('workflows'))!;
+      const claim = (runId: string, leaseMs: number) =>
+        store.claimRunOwnership({ runId, ownerId: 'other-process', leaseMs, force: true });
+
+      // Written longer ago than the grace period.
+      for (const runId of ['live', 'expired-past-grace', 'expired-by-shutdown', 'missing-key']) {
+        await persistActiveRun(storage, runId);
+      }
+      await persistActiveRun(storage, 'parent', { workflowName: 'parent-wf' });
+      await persistActiveRun(storage, 'nested-under-active-parent', {
+        workflowName: 'child-wf',
+        parentRunId: 'parent',
+      });
+      await claim('live', 60_000);
+      await claim('parent', 60_000);
+      await claim('expired-past-grace', -2 * graceMs);
+      const { record } = await claim('expired-by-shutdown', 60_000);
+      await sleep(graceMs + 100);
+
+      // A process that shut down just now expired its lease then.
+      await store.renewRunOwnership({ ...record!, leaseMs: 1 });
+      // Written just now, with no lease at all.
+      await persistActiveRun(storage, 'in-grace');
+
+      return ['expired-past-grace', 'missing-key'];
+    };
+    /** An instance whose restarts record the run instead of running it. */
+    const instance = (storage: InMemoryStore, recovery: MastraRecoveryConfig) => {
+      const workflows = {
+        'recovered-wf': oneStep('default', 'X', []),
+        'child-wf': createWorkflow({ id: 'child-wf', inputSchema: schema, outputSchema: schema }).commit(),
+        'parent-wf': createWorkflow({ id: 'parent-wf', inputSchema: schema, outputSchema: schema }).commit(),
+      };
+      const mastra = new Mastra({ logger: false, storage, recovery, workflows });
+      replicas.push({ mastra });
+      const restarted = new Set<string>();
+      for (const workflow of Object.values(workflows)) {
+        vi.spyOn(workflow, 'createRun').mockImplementation(async ({ runId } = {}) => {
+          restarted.add(runId!);
+          return { restart: async () => {} } as any;
+        });
+      }
+
+      return { mastra, restarted };
+    };
+
+    const booting = new InMemoryStore();
+    const expected = await storeCases(booting);
+    const fresh = instance(booting, { workflowGraceMs: graceMs });
+    await fresh.mastra.restartAllActiveWorkflowRuns();
+
+    // This instance's workers, and its loop, were running before any of the runs were stored.
+    const ticking = new InMemoryStore();
+    const running = instance(ticking, { workflowGraceMs: graceMs, ...scanning });
+    await running.mastra.startWorkers();
+    await storeCases(ticking);
+    // A few passes, all before the run written last comes out of its grace period.
+    await sleep(300);
+
+    expect([...fresh.restarted].sort()).toEqual(expected);
+    expect([...running.restarted].sort()).toEqual(expected);
+  }, 15_000);
+
+  it('restarts a run whose instance crashed mid-step once its liveness lapsed and the grace period passed, though no instance boots', async () => {
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    const a = killableProcess({ storage, pubsub: new EventEmitterPubSub() });
+    const onA = new Mastra({
+      logger: false,
+      storage: a.storage,
+      pubsub: a.pubsub,
+      workflows: { 'recovered-wf': oneStep('evented', 'A', executions, () => new Promise<never>(() => {})) },
+    });
+    replicas.push({ mastra: onA, revive: a.revive });
+    await onA.startWorkers();
+    const run = await onA.getWorkflow('recovered-wf').createRun();
+    await run.startAsync({ inputData: {} });
+    await vi.waitFor(() => expect(executions).toEqual(['A:work']));
+
+    // B checks storage once a minute, so only the run its first pass saw live brings its next passes forward.
+    const restarts: string[] = [];
+    const onB = replica(storage, 'evented', 'B', executions, {
+      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
+    });
+    await onB.startWorkers();
+    await onB.restartAllActiveWorkflowRuns();
+    await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 2);
+    expect(restarts).toEqual([]);
+
+    a.kill();
+    const killedAt = Date.now();
+    await vi.waitFor(async () => expect(await statusOf(storage, run.runId)).toBe('success'), {
+      timeout: 6_000,
+      interval: 50,
+    });
+
+    expect(Date.now() - killedAt).toBeGreaterThanOrEqual(GRACE_MS);
+    expect(restarts).toEqual([run.runId]);
+    expect(executions).toEqual(['A:work', 'B:work']);
+  }, 15_000);
+
+  it('restarts a run its instance left behind at shutdown about a grace period later, from the next instance to boot', async () => {
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    const a = killableProcess({ storage, pubsub: new EventEmitterPubSub() });
+    const onA = new Mastra({
+      logger: false,
+      storage: a.storage,
+      pubsub: a.pubsub,
+      workflows: { 'recovered-wf': oneStep('evented', 'A', executions, () => new Promise<never>(() => {})) },
+    });
+    replicas.push({ mastra: onA, revive: a.revive });
+    await onA.startWorkers();
+    const run = await onA.getWorkflow('recovered-wf').createRun();
+    await run.startAsync({ inputData: {} });
+    await vi.waitFor(() => expect(executions).toEqual(['A:work']));
+
+    // A shuts down giving up on the step, as a reload does, and its process exits. The default grace
+    // with the in-process pubsub is 2 s.
+    await onA.shutdown({ drainTimeout: 0 });
+    a.kill();
+    const shutDownAt = Date.now();
+    const onB = new Mastra({
+      logger: false,
+      storage,
+      workflows: { 'recovered-wf': oneStep('evented', 'B', executions) },
+    });
+    replicas.push({ mastra: onB });
+    await onB.startWorkers();
+    await onB.restartAllActiveWorkflowRuns();
+    expect(executions).toEqual(['A:work']);
+
+    await vi.waitFor(async () => expect(await statusOf(storage, run.runId)).toBe('success'), {
+      timeout: 5_000,
+      interval: 50,
+    });
+    const recoveredAfter = Date.now() - shutDownAt;
+    expect(recoveredAfter).toBeGreaterThanOrEqual(1_900);
+    expect(recoveredAfter).toBeLessThan(4_000);
+    expect(executions).toEqual(['A:work', 'B:work']);
+  }, 15_000);
+
+  it('publishes one restart of a stopped run that the loops of two instances find', async () => {
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    const restarts: string[] = [];
+    const recovery = { workflowGraceMs: 0, ...scanning };
+    const b = replica(storage, 'evented', 'B', executions, {
+      recovery,
+      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
+    });
+    const c = replica(storage, 'evented', 'C', executions, {
+      recovery,
+      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
+    });
+    await Promise.all([b.startWorkers(), c.startWorkers()]);
+
+    await persistActiveRun(storage, 'stopped');
+    await vi.waitFor(async () => expect(await statusOf(storage, 'stopped')).toBe('success'));
+    // Several more passes of both loops.
+    await sleep(500);
+
+    expect(restarts).toEqual(['stopped']);
+    expect(executions).toHaveLength(1);
+  });
+
+  it('arms a timer that does not keep the process alive', async () => {
+    const intervalMs = 123_456;
+    const timers: { delay: number; timer: ReturnType<typeof setTimeout> }[] = [];
+    const setTimer = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((callback: () => void, delay?: number) => {
+      const timer = setTimer(callback, delay);
+      timers.push({ delay: delay ?? 0, timer });
+      return timer;
+    }) as typeof setTimeout);
+    const mastra = replica(new InMemoryStore(), 'default', 'B', [], {
+      recovery: { workflowScanIntervalMs: intervalMs },
+    });
+
+    await mastra.startWorkers();
+    await mastra.restartAllActiveWorkflowRuns();
+
+    await vi.waitFor(() =>
+      expect(timers.some(({ delay }) => delay >= intervalMs * 0.8 && delay <= intervalMs * 1.2)).toBe(true),
+    );
+    const loopTimers = timers.filter(({ delay }) => delay >= intervalMs * 0.8 && delay <= intervalMs * 1.2);
+    expect(loopTimers.every(({ timer }) => !timer.hasRef())).toBe(true);
+  });
+
+  it.each([
+    ['stopWorkers()', (mastra: Mastra) => mastra.stopWorkers({ drainTimeout: 0 })],
+    ['shutdown()', (mastra: Mastra) => mastra.shutdown({ drainTimeout: 0 })],
+  ])('checks storage no more after %s', async (_, stop) => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = replica(storage, 'default', 'B', [], { recovery: scanning });
+    const listings = vi.spyOn(store, 'listWorkflowRuns');
+    await mastra.startWorkers();
+    await vi.waitFor(() => expect(listings.mock.calls.length).toBeGreaterThanOrEqual(4));
+
+    await stop(mastra);
+    const listed = listings.mock.calls.length;
+    await sleep(scanning.workflowScanIntervalMs * 5);
+
+    expect(listings.mock.calls.length).toBe(listed);
+  });
+
+  it('waits on shutdown for a pass in flight', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = replica(storage, 'default', 'B', []);
+    const list = store.listWorkflowRuns.bind(store);
+    const listing = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
+      listing.resolve();
+      await release.promise;
+      return list(args);
+    });
+    await mastra.startWorkers();
+    await listing.promise;
+
+    let shutDown = false;
+    const shutdown = mastra.shutdown({ drainTimeout: 5_000 }).then(() => (shutDown = true));
+    await sleep(200);
+    expect(shutDown).toBe(false);
+
+    release.resolve();
+    await shutdown;
+    expect(shutDown).toBe(true);
+  });
+
+  it('keeps checking after a pass whose store failed to answer', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const executions: string[] = [];
+    const mastra = replica(storage, 'default', 'B', executions, { recovery: { workflowGraceMs: 0, ...scanning } });
+    const supportsRunFencing = store.supportsRunFencing.bind(store);
+    let failures = 0;
+    vi.spyOn(store, 'supportsRunFencing').mockImplementation(async () => {
+      if (failures < 3) {
+        failures++;
+        throw new Error('connection reset');
+      }
+
+      return supportsRunFencing();
+    });
+    await persistActiveRun(storage, 'stopped');
+
+    await mastra.startWorkers();
+
+    await vi.waitFor(() => expect(executions).toEqual(['B:work']));
+    expect(failures).toBe(3);
+  });
+
+  it.each([
+    ['the store has no run fencing', { workflowGraceMs: 0, ...scanning }, false],
+    ["recovery.workflows is 'off'", { workflows: 'off', workflowGraceMs: 0, ...scanning }, true],
+  ] as const)('checks nothing on a timer when %s', async (_, recovery, fenced) => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const executions: string[] = [];
+    vi.spyOn(store, 'supportsRunFencing').mockResolvedValue(fenced);
+    const listings = vi.spyOn(store, 'listWorkflowRuns');
+    const mastra = replica(storage, 'default', 'B', executions, { recovery });
+    await persistActiveRun(storage, 'stopped');
+
+    await mastra.startWorkers();
+    await sleep(scanning.workflowScanIntervalMs * 5);
+
+    expect(listings).not.toHaveBeenCalled();
+    expect(executions).toEqual([]);
+  });
+
+  it('leaves a live run alone across passes, however long it runs', async () => {
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    const gate = Promise.withResolvers<void>();
+    const onA = new Mastra({
+      logger: false,
+      storage,
+      workflows: { 'recovered-wf': oneStep('evented', 'A', executions, () => gate.promise) },
+    });
+    replicas.push({ mastra: onA });
+    const restarts: string[] = [];
+    const onB = replica(storage, 'evented', 'B', executions, {
+      recovery: { workflowGraceMs: 0, ...scanning },
+      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
+    });
+    await Promise.all([onA.startWorkers(), onB.startWorkers()]);
+    const run = await onA.getWorkflow('recovered-wf').createRun();
+    await run.startAsync({ inputData: {} });
+    await vi.waitFor(() => expect(executions).toEqual(['A:work']));
+
+    // Several lease TTLs of B's passes while A keeps renewing the run's liveness.
+    await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 4);
+    expect(
+      (await (await storage.getStore('workflows'))!.getRunOwnership({ runId: runLivenessKey(run.runId) }))?.live,
+    ).toBe(true);
+
+    gate.resolve();
+    await vi.waitFor(async () => expect(await statusOf(storage, run.runId)).toBe('success'));
+    expect(restarts).toEqual([]);
+    expect(executions).toEqual(['A:work']);
+  }, 15_000);
+});
