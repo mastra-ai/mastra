@@ -1238,6 +1238,21 @@ A repository maintainer with write or admin access can start a Factory review fr
 
 `@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first review pass for a missing or Intake card (new cards are filed on Work), restarts a completed card with `factory-rereview`, and is a no-op while a Reviewing card has no recorded verdict, because a pass is pending or running. Once a verdict is recorded, the card rests in Reviewing and the command re-enters it to start another pass with `factory-rereview`. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
 
+### Background commands
+
+An agent can start a long-running command, such as a dev server, with `execute_command` and `background: true`. Turn on **Background commands** in a project's environment settings (`backgroundToolsEnabled` on `PATCH /web/factory/projects/:id/environment`) to keep those commands running when someone stops the run, and to tell the session when one exits: the agent gets a notice with the exit code and the last lines of output, and an idle session wakes up to read it, running as the session's owner. The setting is off by default. A command started before the setting changed keeps the behavior it started with.
+
+The Factory UI lists a thread's running background commands above the composer, with their output, and can stop them. Anyone who can read the session can stop its background work, the same people who can send it messages. A command stopped this way posts no exit notice.
+
+| Method | Path                                                            | Result                                                                                        |
+| ------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `GET`  | `/web/user-sessions/:sessionId/background/processes?threadId=`  | `{ processes }`: the commands an agent started in the session's sandbox, running or unread.   |
+| `GET`  | `/web/user-sessions/:sessionId/background/processes/:pid?tail=` | The command's status and output; `tail` keeps the last lines. Reading it doesn't release it.  |
+| `POST` | `/web/user-sessions/:sessionId/background/processes/:pid/kill`  | `{ pid, killed }`.                                                                            |
+| `POST` | `/web/user-sessions/:sessionId/background/tasks/:taskId/cancel` | The cancelled background task. Needs a background task manager on the host's Mastra instance. |
+
+These routes read the sandbox held by the server process that runs the session, and never start one: a sandbox that isn't running, or runs on another replica, lists nothing. Recreating a session's sandbox ends its background commands without exit notices. After a Factory server restart, commands started before it are no longer tracked: they get no exit notice and the routes don't list them, even when the sandbox kept them running.
+
 ### Factory tools in user sessions
 
 A person's own Factory session (a user session) gets tools to find, file and manage the Factory's work items through its agent. Factory scopes the tools from the stored session row, never from the thread's `factoryProjectId` tag: the session must belong to a Factory in the caller's organization, and a private session only works for its owner. With authentication disabled, the shared `local` tenant applies. Sessions doing work for someone else, either bound to a work item's run or started as a side session, only get `factory_message_origin`, so they can report back and answer messages.

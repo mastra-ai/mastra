@@ -23,6 +23,7 @@ import { existsSync } from 'node:fs';
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { createBackgroundProcessNotices } from '@mastra/code-sdk/agents/background-processes';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
@@ -131,6 +132,7 @@ import { peekSessionSandbox } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { createFactoryBackgroundNoticeDelivery } from './session/background-notices.js';
 import { resolveFactoryCredentialTenant, resolveFactoryModelPolicy } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
@@ -1656,6 +1658,17 @@ export class MastraFactory {
     const sessionTools =
       this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
     const warnedConfiguredToolClashes = new Set<string>();
+    // One dispatcher for every session's workspace. It reaches sessions through the
+    // controller, which exists only once mounted; an exit with no live session is held
+    // until one is created.
+    const backgroundNotices = createFactoryBackgroundNoticeDelivery({
+      getController: () => this.#prepared?.base.controller,
+      sessions: sourceControlSessions,
+    });
+    const backgroundProcesses = createBackgroundProcessNotices({
+      delivery: backgroundNotices,
+      getSession: async sessionId => this.#prepared?.base.controller.getSession(sessionId),
+    });
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
     // providers) — the terminal app's, minus modes. Agent state lives in
@@ -1694,6 +1707,7 @@ export class MastraFactory {
           sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
+          backgroundProcesses,
         }),
         disableGithubSignals: true,
         // Host mcp.json files never belong to a hosted session; MCP tools come through `tools`.
@@ -2323,6 +2337,7 @@ export class MastraFactory {
         },
       );
       observeSessionThreadStamp(session);
+      void backgroundNotices.flush();
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation

@@ -409,6 +409,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         settings: project.sandboxSettings ?? {},
         sandboxWorkingDirectory: project.sandboxWorkingDirectory,
         workspaceSetupCommand: project.workspaceSetupCommand,
+        backgroundToolsEnabled: project.backgroundToolsEnabled,
         activeTemplateId: project.activeTemplateId,
         activeTemplateHeads: project.activeTemplateHeads,
         repositories,

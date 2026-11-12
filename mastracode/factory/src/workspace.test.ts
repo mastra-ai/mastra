@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createBackgroundProcessNotices } from '@mastra/code-sdk/agents/background-processes';
 import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-instructions';
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
@@ -3964,6 +3965,7 @@ describe('factory environment sandbox context', () => {
     project?: Record<string, unknown>;
     workspaceRegistry?: FactoryWorkspaceRegistry;
     sandboxEnvs?: CreateWorkspaceFactoryOptions['sandboxEnvs'];
+    backgroundProcesses?: CreateWorkspaceFactoryOptions['backgroundProcesses'];
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -4001,8 +4003,9 @@ describe('factory environment sandbox context', () => {
       projects: projects as any,
       workspaceRegistry: options.workspaceRegistry,
       ...(options.sandboxEnvs ? { sandboxEnvs: options.sandboxEnvs } : {}),
+      ...(options.backgroundProcesses ? { backgroundProcesses: options.backgroundProcesses } : {}),
     });
-    return { resolver, projects, sandbox, github };
+    return { resolver, projects, project, sandbox, github };
   }
 
   const twoLinks = [
@@ -4237,6 +4240,42 @@ describe('factory environment sandbox context', () => {
     expect('repos' in call!.ctx).toBe(false);
     expect(call!.ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
     expect(call!.settings).toEqual({ cpuCount: 4 });
+  });
+
+  it('reports background command exits only while the project has background tools on, never for a stopped one', async () => {
+    const delivered: string[] = [];
+    const backgroundProcesses = createBackgroundProcessNotices({
+      delivery: {
+        deliver: async (_target, signal) => {
+          delivered.push(String((signal.metadata as any)?.backgroundCompletion?.pid));
+        },
+        flush: async () => {},
+      },
+      getSession: async () => undefined,
+    });
+    const { resolver, project } = environmentFixture({
+      links: twoLinks,
+      project: { backgroundToolsEnabled: true },
+      backgroundProcesses,
+    });
+    addProject();
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const commandConfig = (workspace: any) => workspace.getToolsConfig()[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+    const workspace = await resolver({ requestContext });
+    const processes = commandConfig(workspace).backgroundProcesses;
+    // A stopped run leaves its background commands running.
+    expect(processes.abortSignal).toBeNull();
+    const exit = { toolCallId: 'call-1', threadId: 'session-a', resourceId: 'factory-1', stdout: 'ok', stderr: '' };
+    await processes.onExit({ ...exit, pid: 'stopped-from-ui', exitCode: 143, killedOnRequest: true });
+    await processes.onExit({ ...exit, pid: 'finished', exitCode: 0 });
+    expect(delivered).toEqual(['finished']);
+
+    // Turning the setting off reaches the live session's workspace on its next resolution.
+    project.backgroundToolsEnabled = false;
+    expect(await resolver({ requestContext })).toBe(workspace);
+    expect(commandConfig(workspace).backgroundProcesses).toBeUndefined();
   });
 
   describe('environment boot', () => {

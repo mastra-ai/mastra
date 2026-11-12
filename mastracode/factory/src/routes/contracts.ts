@@ -338,6 +338,8 @@ export const projectEnvironmentResponseSchema = z.object({
     settings: z.record(z.string(), z.unknown()),
     sandboxWorkingDirectory: z.string().nullable(),
     workspaceSetupCommand: z.string().nullable(),
+    /** Whether background commands survive a stopped run and tell the session when they exit. */
+    backgroundToolsEnabled: z.boolean(),
     activeTemplateId: z.string().nullable(),
     activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
     repositories: z.array(environmentRepositorySchema),
@@ -388,6 +390,7 @@ export const updateProjectEnvironmentBodySchema = z
     /** Partial settings merged onto the stored document; null removes a key. Validated by the FactorySandbox. */
     settings: z.record(z.string(), z.unknown().nullable()).optional(),
     workspaceSetupCommand: nullableTrimmed(2_000).optional(),
+    backgroundToolsEnabled: z.boolean().optional(),
     /** Build triggers; only accepted when the sandbox can build. */
     buildTriggers: z
       .object({
