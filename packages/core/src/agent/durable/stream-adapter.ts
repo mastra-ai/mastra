@@ -336,6 +336,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   rereadMinGeneration?: () => Promise<number | undefined>;
   /** Reject events in uncheckpointed tails superseded before this reader attached. */
   keepReplayEvent?: (event: AgentStreamEvent) => boolean | Promise<boolean>;
+  /** Refresh takeover ranges after replay attachment and before delivering cached events. */
+  refreshReplayFilter?: () => Promise<unknown>;
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -473,6 +475,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     minGeneration,
     rereadMinGeneration,
     keepReplayEvent,
+    refreshReplayFilter,
     idleTimeoutMs,
     isAlive,
     onChunk,
@@ -1065,8 +1068,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     for (const release of [...logIndexWaiters]) release();
   };
   const ackingHandleEvent = withAck(handleEvent);
+  // A takeover may be appended while cached events are still replaying. Hold
+  // deliveries (and their acknowledgments) until the attached log is reconciled.
+  let bufferingReplay = !!refreshReplayFilter && offset !== 'latest';
+  const bufferedEvents: Array<() => Promise<void>> = [];
   const subscribedCallback: EventCallback = (event, ack, nack) => {
-    const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
+    let delivery: Promise<void>;
+    if (bufferingReplay) {
+      activityVersion++;
+      bufferedEvents.push(async () => {
+        await ackingHandleEvent(event, ack, nack);
+      });
+      delivery = Promise.resolve();
+    } else {
+      delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
+    }
     inFlightDeliveries.add(delivery);
     void delivery
       .finally(() => {
@@ -1146,21 +1162,31 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             : pubsub.subscribeFromOffset(topic, offset, subscribedCallback);
 
       subscribePromise
-        .then(() => {
+        .then(async () => {
           if (cancelled) {
             // cleanup() was called before subscribe resolved — unsubscribe now
-            void pubsub.unsubscribe(topic, subscribedCallback).catch(error => {
-              logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
-            });
+            await pubsub.unsubscribe(topic, subscribedCallback);
             resolveReady();
             return;
           }
           isSubscribed = true;
-          // Start the idle countdown only once subscribed.
+          if (bufferingReplay) {
+            await refreshReplayFilter?.();
+            // New frames may be appended during the drain; preserve arrival order.
+            for (let i = 0; i < bufferedEvents.length; i++) {
+              await bufferedEvents[i]!();
+            }
+            bufferedEvents.length = 0;
+            bufferingReplay = false;
+          }
+          // Start the idle countdown only once subscribed and replay is reconciled.
           armIdleTimer();
           resolveReady();
         })
         .catch(error => {
+          void pubsub.unsubscribe(topic, subscribedCallback).catch(unsubscribeError => {
+            logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, unsubscribeError);
+          });
           logError(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
           rejectReady(error);
           // Replay may already have ended the stream; keep its terminal outcome.

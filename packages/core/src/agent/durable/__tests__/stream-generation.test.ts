@@ -297,6 +297,53 @@ async function takeOver(workflows: Awaited<ReturnType<typeof observedAgent>>['wo
 }
 
 describe('observe() from an offset', () => {
+  it.each([undefined, 1])(
+    'does not replay abandoned output when a takeover lands during attachment (offset %s)',
+    async offset => {
+      const { durable, pubsub, transport, workflows } = await observedAgent();
+      const runId = `public-replay-takeover-${offset ?? 'start'}`;
+      const { stale, current } = await takeOver(workflows, runId);
+      await runInRunFenceScope(scopeAt(runId, stale), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('committed 0'));
+        await emitChunkEvent(pubsub, runId, textChunk('committed 1'));
+        await emitIterationStartEvent(pubsub, runId, 1);
+        await emitChunkEvent(pubsub, runId, textChunk('abandoned'));
+      });
+      const subscribe =
+        offset === undefined ? pubsub.subscribeWithReplay.bind(pubsub) : pubsub.subscribeFromOffset.bind(pubsub);
+      const intercept = async (topic: string, cb: Parameters<typeof pubsub.subscribeWithReplay>[1], from?: number) => {
+        let announced = false;
+        const replay: typeof cb = async (event, ack, nack) => {
+          await cb(event, ack, nack);
+          if (!announced && event.index === (offset ?? 0)) {
+            announced = true;
+            await emitOwnershipClaimedEvent(pubsub, runId, current, 2);
+            await runInRunFenceScope(scopeAt(runId, current), async () => {
+              await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+              await emitFinishEvent(pubsub, runId, finishData);
+            });
+          }
+        };
+        return offset === undefined
+          ? (subscribe as typeof pubsub.subscribeWithReplay)(topic, replay)
+          : (subscribe as typeof pubsub.subscribeFromOffset)(topic, from!, replay);
+      };
+      if (offset === undefined)
+        vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementationOnce((topic, cb) => intercept(topic, cb));
+      else
+        vi.spyOn(pubsub, 'subscribeFromOffset').mockImplementationOnce((topic, from, cb) => intercept(topic, cb, from));
+
+      const observed = await durable.observe(runId, { offset });
+      const reader = readFullStream(observed.fullStream as ReadableStream<any>);
+      await reader.done;
+      expect(texts(reader.chunks)).toEqual(
+        offset === undefined ? ['committed 0', 'committed 1', 'replayed'] : ['committed 1', 'replayed'],
+      );
+      observed.cleanup();
+      await transport.close();
+    },
+  );
+
   it('replays checkpointed steps but omits a superseded uncheckpointed step', async () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'replayed-tail';
