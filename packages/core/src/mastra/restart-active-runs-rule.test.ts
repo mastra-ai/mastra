@@ -538,9 +538,14 @@ describe('workflow recovery rule (#28712)', () => {
     expect(Date.now() - startedAt).toBeLessThan(2_500);
   }, 15_000);
 
-  it('calls onFinish once with the result of an evented run it restarted', async () => {
+  it('settles an evented run it restarted once the run finishes: onFinish once, its span ended, the run dropped', async () => {
     const storage = new InMemoryStore();
     const onFinish = vi.fn();
+    const observability = new NoOpObservability();
+    const runSpanEnds: { attributes?: { status?: string }; output?: unknown }[] = [];
+    vi.spyOn(observability, 'getSelectedInstance').mockReturnValue({
+      startSpan: (options: { type: SpanType }) => recordingSpan(options, runSpanEnds),
+    } as any);
     const workflow = createEventedWorkflow({
       id: 'recovered-wf',
       inputSchema: schema,
@@ -552,6 +557,7 @@ describe('workflow recovery rule (#28712)', () => {
     const mastra = new Mastra({
       logger: false,
       storage,
+      observability,
       workflows: { 'recovered-wf': workflow },
       recovery: { workflowGraceMs: 0 },
     });
@@ -564,21 +570,13 @@ describe('workflow recovery rule (#28712)', () => {
     await vi.waitFor(() =>
       expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'success', runId: 'stopped' })),
     );
+    await vi.waitFor(() => expect(workflow.runs.has('stopped')).toBe(false));
+    await vi.waitFor(() =>
+      expect(runSpanEnds).toContainEqual(expect.objectContaining({ attributes: { status: 'success' } })),
+    );
+    expect(runSpanEnds).not.toContainEqual(expect.objectContaining({ attributes: { status: 'running' } }));
     await mastra.shutdown();
     expect(onFinish).toHaveBeenCalledTimes(1);
-  });
-
-  it('drops an evented run it restarted from the workflow once the run finishes', async () => {
-    const storage = new InMemoryStore();
-    const b = startReplica(storage, 'evented', 'B', [], { recovery: { workflowGraceMs: 0 } });
-    await b.startWorkers();
-    await persistActiveRun(storage, 'stopped');
-    const workflow = b.getWorkflow('recovered-wf');
-
-    await b.restartAllActiveWorkflowRuns();
-
-    await vi.waitFor(async () => expect(await statusOf(storage, 'stopped')).toBe('success'));
-    await vi.waitFor(() => expect(workflow.runs.has('stopped')).toBe(false));
   });
 
   it('settles an evented run it restarted as failed, and drops it from the workflow, when its finish fails to publish', async () => {
@@ -614,36 +612,6 @@ describe('workflow recovery rule (#28712)', () => {
 
     await vi.waitFor(() => expect(workflow.runs.has('stuck')).toBe(false));
     expect(run.workflowRunStatus).toBe('failed');
-  });
-
-  it('ends the trace span of an evented run it restarted with its final status', async () => {
-    const storage = new InMemoryStore();
-    const observability = new NoOpObservability();
-    const runSpanEnds: { attributes?: { status?: string }; output?: unknown }[] = [];
-    vi.spyOn(observability, 'getSelectedInstance').mockReturnValue({
-      startSpan: (options: { type: SpanType }) => recordingSpan(options, runSpanEnds),
-    } as any);
-    const workflow = createEventedWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
-      .then(reportingStep('evented', 'B', 'work', []))
-      .commit();
-    const mastra = new Mastra({
-      logger: false,
-      storage,
-      observability,
-      workflows: { 'recovered-wf': workflow },
-      recovery: { workflowGraceMs: 0 },
-    });
-    replicas.push({ mastra });
-    await mastra.startWorkers();
-    await persistActiveRun(storage, 'stopped');
-
-    await mastra.restartAllActiveWorkflowRuns();
-
-    await vi.waitFor(async () => expect(await statusOf(storage, 'stopped')).toBe('success'));
-    await vi.waitFor(() =>
-      expect(runSpanEnds).toContainEqual(expect.objectContaining({ attributes: { status: 'success' } })),
-    );
-    expect(runSpanEnds).not.toContainEqual(expect.objectContaining({ attributes: { status: 'running' } }));
   });
 
   it('restarts nothing while a nested run works, and restarts the parent once when its instance crashes', async () => {
