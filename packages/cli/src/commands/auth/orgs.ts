@@ -41,7 +41,14 @@ export async function resolveCurrentOrg(
 ): Promise<{ orgId: string; orgName: string }> {
   // A configured org is authoritative even when API tokens cannot list organizations.
   const envOrgId = process.env.MASTRA_ORG_ID;
-  if (envOrgId) return { orgId: envOrgId, orgName: envOrgId };
+  if (envOrgId) {
+    try {
+      const orgs = await fetchOrgs(token);
+      return { orgId: envOrgId, orgName: orgs.find(org => org.id === envOrgId)?.name ?? envOrgId };
+    } catch {
+      return { orgId: envOrgId, orgName: envOrgId };
+    }
+  }
 
   const orgs = await fetchOrgs(token);
 

@@ -117,8 +117,7 @@ describe('resolveCurrentOrg', () => {
 
     const result = await resolveCurrentOrg('tok', { forcePrompt: true });
 
-    expect(result).toEqual({ orgId: 'org_a', orgName: 'org_a' });
-    expect(fetchOrgsMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ orgId: 'org_a', orgName: 'Org A' });
     expect(selectMock).not.toHaveBeenCalled();
   });
 
@@ -158,7 +157,20 @@ describe('resolveCurrentOrg', () => {
       orgId: 'org_from_env',
       orgName: 'org_from_env',
     });
-    expect(fetchOrgsMock).not.toHaveBeenCalled();
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(getCurrentOrgIdMock).not.toHaveBeenCalled();
+  });
+
+  test('uses the configured org when the API token cannot list organizations (#29943)', async () => {
+    process.env.MASTRA_API_TOKEN = 'api-token';
+    process.env.MASTRA_ORG_ID = 'org_from_env';
+    process.env.CI = '1';
+    fetchOrgsMock.mockRejectedValue(new Error('Organization listing unavailable'));
+
+    await expect(resolveCurrentOrg('api-token')).resolves.toEqual({
+      orgId: 'org_from_env',
+      orgName: 'org_from_env',
+    });
     expect(selectMock).not.toHaveBeenCalled();
     expect(getCurrentOrgIdMock).not.toHaveBeenCalled();
   });
