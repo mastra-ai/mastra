@@ -514,7 +514,9 @@ const workItemListQuerySchema = z
   })
   // A narrowed list is not the board a cursor names, so it answers as it does without one.
   .transform(query =>
-    query.sessionId || query.scope || query.started || query.source ? { ...query, since: undefined } : query,
+    query.sessionId || query.scope || query.started || query.source || query.workItemId
+      ? { ...query, since: undefined }
+      : query,
   );
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
