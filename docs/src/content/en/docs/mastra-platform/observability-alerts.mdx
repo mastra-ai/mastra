@@ -21,7 +21,7 @@ Observability alerts are different from the [deploy, service, and usage alerts](
 - Send traces to Mastra Platform Observability. Follow [Observability on Mastra platform](/docs/mastra-platform/observability) if your project doesn't send data yet. A preview needs recent data to show anything useful.
 - Use an organization admin account. Members and viewers can see alerts, but only admins can create, edit, enable, or delete them.
 - Check that your plan includes alerts. On a plan without alerts, the **Alerts** page shows **Upgrade to use Alerts** in place of your alert list.
-- Add a [destination](/docs/mastra-platform/alerts#add-a-destination), such as a Slack channel or email group, to receive notifications. You can create an alert without one, but it won't notify anyone.
+- Add a [destination](/docs/mastra-platform/alerts#add-a-destination), such as a Slack channel or email group, to receive notifications. You can create an observability alert without one, but it won't notify anyone.
 
 If **Alerts** doesn't appear under **Observability** in the sidebar, observability alerts aren't available for your organization yet.
 
@@ -37,7 +37,7 @@ If **Alerts** doesn't appear under **Observability** in the sidebar, observabili
   </StepItem>
 
   <StepItem>
-    Under **Applies to**, choose **All projects** or one project. An alert that applies to all projects reads the projects in one region, which you choose under **Region** when your organization uses more than one. You can't change **Applies to** after you create the alert.
+    Under **Applies to**, choose **All projects** or one project. An alert that applies to all projects reads the projects in one region, which you choose under **Region** if the field is shown, for example when your organization uses more than one region. You can't change **Applies to** after you create the alert.
   </StepItem>
 
   <StepItem>
@@ -53,7 +53,7 @@ If **Alerts** doesn't appear under **Observability** in the sidebar, observabili
   </StepItem>
 
   <StepItem>
-    Review the **Backtest** chart beside the form. It replays the alert against the last 6 hours, 1 day, or 2 days of data and draws the value against the threshold. Adjust the threshold or window until the alert would fire only when you'd want someone to act.
+    Review the **Backtest** chart beside the form. It replays the alert against past data, over the last 6 hours, 1 day, or 2 days where the rule allows it, and draws the value against the threshold. Adjust the threshold or window until the alert would fire only when you'd want someone to act.
 
     The backtest uses past data only. It doesn't send notifications or prove that a destination works.
   </StepItem>
@@ -71,36 +71,36 @@ If **Alerts** doesn't appear under **Observability** in the sidebar, observabili
   </StepItem>
 </Steps>
 
-To confirm that notifications reach your team, use **Test** on the destination's actions menu in organization settings. See [Add a destination](/docs/mastra-platform/alerts#add-a-destination).
+To confirm that notifications reach your team, go to your organization settings, select **Alerts** > **Destinations**, then select **More actions for \<destination>** > **Test**. See [Add a destination](/docs/mastra-platform/alerts#add-a-destination).
 
 ## Understand checks and windows
 
-Mastra checks every enabled alert every five minutes. Each check measures the window you chose. An alert with the window **the last 1h** checks every five minutes and each check measures the past hour of data. The window **today (since midnight)** measures from the start of the current day in the timezone shown under the field.
+Mastra checks every enabled alert every five minutes. Each check measures the window you chose. An alert with the window **the last 1h** checks every five minutes and each check measures the past hour of data. The window **today (since midnight)** measures from the start of the current day. The info tip beside the window shows which timezone the day starts in.
 
-If an alert fires on a short window and the value settles once late data arrives, set **Ingest delay** to a minute or two so each check skips that much of the newest data. Most alerts work without a delay.
+If an alert fires on a short window and the value settles once late data arrives, set **Ingest delay**, below the condition, to a minute or two so each check skips that much of the newest data. Most alerts work without a delay.
 
 ## Set a recovery level
 
 By default, an alert recovers as soon as the value is back on the safe side of the threshold. A value that hovers near the threshold can then fire and recover repeatedly.
 
-Use **Recovers at** to set a level further from the threshold. For example, an alert that fires above a 5% error rate and recovers at 2% stays firing until the error rate drops to 2% or less.
+Below the condition, enter a number after **Recovers once it's back** to set a level further from the threshold. For example, an alert that fires above a 5% error rate and recovers at 2% stays firing until the error rate drops to 2% or less.
 
 ## Check groups separately
 
-Some alerts can measure everything together or each group on its own. Under **Check**, choose:
+Some alerts can measure everything together or each group on its own. When the measure supports groups, choose under **Check**:
 
 - **All together**: One check covers everything that matches. The alert fires once.
 - **Each group separately**: Each agent, model, or tool is checked on its own. One failing agent isn't hidden by healthy ones, and the alert names the group that fired.
 
 When you check groups separately, choose the dimension under **Group by**. Mastra checks up to 50 groups, prioritizing the groups closest to firing. If more groups match, the alert page says that only the top 50 groups were checked. Some measures can skip groups with too few samples, so a single slow run doesn't fire the alert.
 
-All groups of one alert share one incident. When another group starts firing, destinations get an update to the existing notification instead of a separate one.
+All groups of one alert share one incident. When another group starts firing, Slack destinations update the existing message to list it. Other destinations aren't notified again until the incident recovers.
 
 ## Understand notifications
 
-Each destination receives a message when the alert starts firing and when it recovers. While an alert keeps firing, Mastra sends a repeat notification at most once every 15 minutes. Recovery notifications are always sent immediately.
+You get one message when the alert starts firing and one when it recovers, with no reminders in between. If a message fails, Mastra retries it up to five times over the following minutes. While the alert keeps firing, later checks try again about every 15 minutes until the message goes through. A destination that never received the firing message doesn't receive the recovery message either.
 
-The **Activity** tab in organization alert settings shows incidents and their delivery attempts.
+In your organization settings, **Alerts** > **Activity** shows incidents and their delivery attempts.
 
 ## Understand alert states
 
@@ -116,11 +116,11 @@ The **Alerts** page and each alert's page show one of these states:
 | **Error** | The query failed, for example because it timed out. |
 | **Disabled** | The alert is turned off and isn't checked. |
 
-With default settings, only firing and recovery send notifications. **No data** and **Error** are shown on the alert's page. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
+Only firing and recovery send notifications. **No data** and **Error** are shown on the alert's page. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
 
 ## Manage alerts
 
-On the **Alerts** page, use the **Enabled** switch to pause or resume an alert. Open an alert and select **Edit** to change it, then select **Save changes**. Select **Delete** on the alert's page to remove it.
+On the **Alerts** page, use the **Enabled** switch to pause or resume an alert. Open an alert and select **Edit** to change it, then select **Save changes**. To remove an alert, open it, select **More actions** > **Delete alert**, then confirm.
 
 When you open **Alerts** inside a project, the page shows that project's alerts plus the organization's alerts that apply to all projects. Edit an alert that applies to all projects from the organization's **Alerts** page.
 
