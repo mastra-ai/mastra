@@ -3409,12 +3409,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    // The stored failure already used the last attempt: it is the step's final failure, saved
-    // before its step end was handled. Continue from it instead of running the step again.
+    // The stored failure already used the last attempt, or allows none: it is the step's final
+    // failure, saved before its step end was handled. Continue from it instead of running the
+    // step again.
     if (
       restart &&
       storedAttempt?.status === 'failed' &&
-      retryCount > (getEntryRetries(leaf) ?? workflow.retryConfig.attempts ?? 0)
+      (storedAttempt.nonRetryable || retryCount > (getEntryRetries(leaf) ?? workflow.retryConfig.attempts ?? 0))
     ) {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',

@@ -6,6 +6,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraNonRetryableError } from '../../../error';
 import type { MastraStorage } from '../../../storage';
 import { runEndedKey, runLivenessKey, stepOccurrenceKey } from '../leases';
 import {
@@ -235,9 +236,13 @@ export function describeLateDeliveryCases({
       expect(attempts).toBe(3);
     }, 20_000);
 
-    it.each([2, 0])(
-      'fails the run without another attempt when a restart finds the final failure saved (%i retries)',
-      async retries => {
+    it.each([
+      { retries: 2, nonRetryable: false, expected: 3 },
+      { retries: 0, nonRetryable: false, expected: 1 },
+      { retries: 2, nonRetryable: true, expected: 1 },
+    ])(
+      'fails the run without another attempt when a restart finds the final failure saved ($retries retries, non-retryable $nonRetryable)',
+      async ({ retries, nonRetryable, expected }) => {
         let attempts = 0;
         const build = () =>
           createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, retryConfig: { attempts: retries } })
@@ -248,7 +253,7 @@ export function describeLateDeliveryCases({
                 outputSchema: Num,
                 execute: async () => {
                   attempts++;
-                  throw new Error('always fails');
+                  throw nonRetryable ? new MastraNonRetryableError('fails for good') : new Error('always fails');
                 },
               }),
             )
@@ -263,7 +268,7 @@ export function describeLateDeliveryCases({
 
         const b = await startReplica(build());
         expect((await (await b.workflow.createRun({ runId: run.runId })).restart()).status).toBe('failed');
-        expect(attempts).toBe(retries + 1);
+        expect(attempts).toBe(expected);
       },
       20_000,
     );
