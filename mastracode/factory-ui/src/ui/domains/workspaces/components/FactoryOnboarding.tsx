@@ -176,7 +176,11 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
                 onConnect={connectGithubFromOnboarding}
                 onManageConnection={manageGithubFromOnboarding}
                 onPreviewRepository={repository => setPreview(current => ({ ...current, repository }))}
-                onSelectRepository={repository => finish({ repository })}
+                onSelectRepository={repository => {
+                  // The GitHub result has served its purpose; kept, it would reopen Change on GitHub over a GitLab pick.
+                  onDismissGithubCallback();
+                  finish({ repository });
+                }}
               />
             ) : (
               <OnboardingCodebaseRow repository={draft.repository} {...change('vcs')} />

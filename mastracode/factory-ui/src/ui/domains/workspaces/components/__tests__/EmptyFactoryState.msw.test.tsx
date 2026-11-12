@@ -16,6 +16,7 @@ import {
   readOnboardingDraft,
 } from '../../services/onboardingFlow';
 import type { OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
+import { OnboardingPage } from '../../../../pages/OnboardingPage';
 import { EmptyFactoryState } from '../EmptyFactoryState';
 import { chooseProvider, chooseSubscription } from './fixtures/modelSection';
 
@@ -197,6 +198,30 @@ beforeEach(() => sessionStorage.clear());
 afterEach(() => sessionStorage.clear());
 
 describe('Draft Factory onboarding', () => {
+  it('reopens a GitLab pick on GitLab after a GitHub install result was shown', async () => {
+    seedOnboarding('vcs');
+    registerSetup();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/onboarding?github_app_installed=true']}>
+        <Routes>
+          <Route path="/onboarding" element={<OnboardingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'GitHub' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'GitLab' }));
+    await user.click(await screen.findByRole('radio', { name: 'team/backend' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await findActiveSection('Work');
+
+    await user.click(screen.getByRole('button', { name: 'Change codebase' }));
+    expect(await screen.findByRole('radio', { name: 'team/backend' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'GitLab' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
   it('lets users change repository, VCS and model, then commits only the confirmed choices', async () => {
     seedOnboarding('vcs');
     const writes = registerSetup();
