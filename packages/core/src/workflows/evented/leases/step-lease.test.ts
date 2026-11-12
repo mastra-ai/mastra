@@ -20,7 +20,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
-import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
+import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import { abandonLease } from '../test-utils/abandon-lease';
 import {
   Num,
@@ -179,7 +179,8 @@ describe('evented step leases (#28712)', () => {
 
   it('runs a failed step again at once when publishing its retry failed', async () => {
     const storage = new InMemoryStore();
-    const attemptsAt: number[] = [];
+    const leases = await recordLeases(storage);
+    let attempts = 0;
     let rejected = false;
     const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
       if (rejected || event.type !== 'workflow.step.run' || (event.data as { retryCount?: number }).retryCount !== 1) {
@@ -195,7 +196,7 @@ describe('evented step leases (#28712)', () => {
           inputSchema: Num,
           outputSchema: Num,
           execute: async () => {
-            attemptsAt.push(Date.now());
+            attempts++;
             throw new Error('transient');
           },
         }),
@@ -209,10 +210,8 @@ describe('evented step leases (#28712)', () => {
     // again, then the retry runs. The redelivery finds the step lease released, so it does not
     // wait for the lease to expire first.
     expect(rejected).toBe(true);
-    expect(attemptsAt).toHaveLength(3);
-    expect(attemptsAt[1]! - attemptsAt[0]!).toBeLessThan(
-      WORKFLOW_RUN_LEASE_TTL_MS - WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS,
-    );
+    expect(attempts).toBe(3);
+    expect(leases.claims.filter(c => c.key === stepOccurrenceKey(run.runId, [0]) && !c.acquired)).toEqual([]);
   }, 20_000);
 
   it('continues a run once from the replica that took over a step whose holder stalled past its lease', async () => {
