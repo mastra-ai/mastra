@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  gitlabCandidate,
-  incidentioCandidate,
-  issueCandidate,
-  jiraCandidate,
-  linearCandidate,
-  pullRequestCandidate,
-} from './boardCandidates';
+import type { IntakeCandidateInfo } from '../../../api/types';
+import { incidentioRecord, jiraRecord, linearRecord } from '../../__tests__/fixtures/intakeCandidates';
+import { gitlabCandidate, intakeCandidate, issueCandidate, pullRequestCandidate } from './boardCandidates';
 import { boardFiltersFromParams } from './boardFilters';
 import {
   boardParticipants,
@@ -77,6 +72,12 @@ function picks(entries: Array<[string, string]>, reviewsPullRequests = true) {
   return boardFiltersFromParams(new URLSearchParams(entries), reviewsPullRequests);
 }
 
+function offered(record: IntakeCandidateInfo) {
+  const candidate = intakeCandidate(record);
+  if (!candidate) throw new Error(`${record.key} is not offered for filing`);
+  return candidate;
+}
+
 describe('board person filters', () => {
   it('matches each role filter only through its own role, and Involves through any', () => {
     const matches = (entries: Array<[string, string]>) =>
@@ -136,28 +137,6 @@ describe('board person filters', () => {
     expect(matches([['author', 'github:octocat']])).toBe(false);
     expect(matches([['assignee', 'gitlab:hubot']])).toBe(true);
     expect(matches([['reviewer', 'gitlab:monalisa']])).toBe(true);
-  });
-
-  it('matches what the live candidate says now alongside what the item stored', () => {
-    const reassigned = pullRequestCandidate({
-      number: 12,
-      title: 'Ship relevance filters',
-      url: 'https://github.com/acme/app/pull/12',
-      author: 'octocat',
-      assignees: ['grace'],
-      requestedReviewers: [],
-      baseBranch: 'main',
-      headBranch: 'feat/relevance',
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-02T09:00:00.000Z',
-    });
-    const filters = picks([
-      ['author', 'github:octocat'],
-      ['assignee', 'github:grace'],
-    ]);
-
-    expect(workItemMatchesPeople(item, activityPage, filters, asIs)).toBe(false);
-    expect(workItemMatchesPeople(item, activityPage, filters, asIs, reassigned)).toBe(true);
   });
 
   it("treats the signed-in user's GitHub login as them", () => {
@@ -250,56 +229,10 @@ describe('board person filters', () => {
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
-    const linear = linearCandidate({
-      id: 'linear-1',
-      identifier: 'ENG-12',
-      title: 'Filter the board',
-      url: 'https://linear.app/acme/issue/ENG-12',
-      state: 'Todo',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: 'Grace Hopper',
-      creator: 'Ada Lovelace',
-      team: 'Engineering',
-      labels: [],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-    });
-
-    const jira = jiraCandidate({
-      id: 'jira-1',
-      identifier: 'ENG-13',
-      title: 'Filter the board from Jira',
-      url: 'https://acme.atlassian.net/browse/ENG-13',
-      state: 'To Do',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: 'Grace Hopper',
-      author: 'Ada Lovelace',
-      project: 'ENG',
-      site: 'acme.atlassian.net',
-      labels: [],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-      sourceId: '10001',
-    });
-
-    const incidentio = incidentioCandidate({
-      id: 'incidentio:follow-up:01HFOLLOWUP',
-      identifier: 'INC-42',
-      title: 'Add database failover alert',
-      url: 'https://app.incident.io/org/follow-ups/01HFOLLOWUP',
-      state: 'outstanding',
-      stateType: 'unstarted',
-      priorityLabel: 'Urgent',
-      assignee: 'Grace Hopper',
-      author: 'Ada Lovelace',
-      incident: 'incident-1',
-      labels: [],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-      sourceId: 'incidentio:follow-ups',
-    });
+    const people = { author: 'Ada Lovelace', metadata: { assignee: 'Grace Hopper' } };
+    const linear = offered(linearRecord('ENG-12', people));
+    const jira = offered(jiraRecord('jira-1', 'ENG-13', people));
+    const incidentio = offered(incidentioRecord('incidentio:follow-up:01HFOLLOWUP', 'INC-42', people));
 
     const matches = (candidate: Parameters<typeof candidateMatchesPeople>[0], fieldId: string, participantId: string) =>
       candidateMatchesPeople(candidate, picks([[fieldId, participantId]]), asIs);

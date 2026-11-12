@@ -178,12 +178,8 @@ function targetsWorkItem(event: NonNullable<AuditEventPage>['events'][number], w
   return event.targets.some(target => target.type === 'work_item' && target.id === workItemId);
 }
 
-/** The item's own relations, plus whatever its live intake candidate now says (a reassignment, a new reviewer). */
-function workItemRelations(
-  item: WorkItem,
-  activityPage: AuditEventPage | undefined,
-  liveCandidate: BoardCandidate | undefined,
-): BoardRelations {
+/** The people the card's stored facts and its activity name. */
+function workItemRelations(item: WorkItem, activityPage: AuditEventPage | undefined): BoardRelations {
   const relations = cardRelations(item);
   for (const actorId of workItemHumanActorIds(item)) relations.worked.add(factoryParticipantId(actorId));
   for (const event of activityPage?.events ?? []) {
@@ -193,10 +189,6 @@ function workItemRelations(
   }
   if (item.source === 'manual' && isHumanActorId(item.createdBy)) {
     relations.authored.add(factoryParticipantId(item.createdBy));
-  }
-  if (liveCandidate) {
-    const live = cardRelations(liveCandidate);
-    for (const role of BOARD_PERSON_ROLES) for (const id of live[role]) relations[role].add(id);
   }
   return relations;
 }
@@ -215,10 +207,9 @@ export function workItemMatchesPeople(
   activityPage: AuditEventPage | undefined,
   people: BoardPeopleFilters,
   personId: PersonIdentity,
-  liveCandidate?: BoardCandidate,
 ): boolean {
   if (BOARD_PERSON_FIELDS.every(fieldId => people[fieldId].size === 0)) return true;
-  return matchesPeople(workItemRelations(item, activityPage, liveCandidate), people, personId);
+  return matchesPeople(workItemRelations(item, activityPage), people, personId);
 }
 
 export function candidateMatchesPeople(

@@ -1,5 +1,7 @@
 import type { Card } from '@mastra/factory';
-import type { GithubIssuePage } from '../../domains/factory/services/factory';
+import type { IntakeCandidateInfo } from '../../../api/types';
+
+import { recordOfGithubIssue } from './intakeCandidates';
 
 export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -47,18 +49,15 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
   }));
 }
 
-export function largeCandidatePage(count: number, start = 0): GithubIssuePage {
-  return {
-    issues: Array.from({ length: count }, (_, offset) => ({
+/** Open GitHub issues with no card, as the server lists them. */
+export function largeCandidates(count: number, start = 0): IntakeCandidateInfo[] {
+  return Array.from({ length: count }, (_, offset) =>
+    recordOfGithubIssue({
       number: start + offset + 1,
       title: `Candidate ${start + offset}`,
       url: `https://github.com/acme/app/issues/${start + offset + 1}`,
       author: 'alice',
-      labels: [],
-      comments: 0,
       createdAt: '2026-08-01T00:00:00.000Z',
-      updatedAt: '2026-08-01T00:00:00.000Z',
-    })),
-    nextPage: null,
-  };
+    }),
+  );
 }

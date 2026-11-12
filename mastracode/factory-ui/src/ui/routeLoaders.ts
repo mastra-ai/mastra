@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { noop } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import type { LoaderFunctionArgs } from 'react-router';
@@ -14,6 +15,7 @@ import { factoryProjectQueryOptions } from '../hooks/useFactoryDefaultModel';
 import { gitLabStatusQueryOptions } from '../hooks/useGitLabData';
 import { githubStatusQueryOptions } from '../hooks/useGithubStatus';
 import { incidentioStatusQueryOptions } from '../hooks/useIncidentioData';
+import { intakeCandidatesQueryOptions } from '../hooks/useIntakeCandidates';
 import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/useIntakeConfig';
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
@@ -97,7 +99,7 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
 };
 
 export const prefetchBoard: Prefetch = (services, { params }) => {
-  const { factoryId } = params;
+  const { factoryId, boardId = DEFAULT_BOARD_ID } = params;
   if (!factoryId) return;
   const { queryClient, api } = services;
   // The page's largest read leaves with the Factory list, not once it answers: waiting to hear a
@@ -112,6 +114,10 @@ export const prefetchBoard: Prefetch = (services, { params }) => {
     void queryClient.query(linearStatusQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(jiraStatusQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(incidentioStatusQueryOptions(api.baseUrl)).catch(noop);
+    // Only the default board lists the records that have no card yet.
+    if (boardId === DEFAULT_BOARD_ID) {
+      void queryClient.infiniteQuery(intakeCandidatesQueryOptions(api.baseUrl, factoryId)).catch(noop);
+    }
   });
 };
 

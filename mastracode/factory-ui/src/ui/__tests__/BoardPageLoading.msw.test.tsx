@@ -73,10 +73,10 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // Serves both the intake feed (no label) and the triage feed (status: auto-triaged label).
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async () => {
+    // One list feeds Intake and Triage both.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, async () => {
       await issuesGate.promise;
-      return HttpResponse.json({ issues: [], nextPage: null });
+      return HttpResponse.json({ candidates: [], passes: [] });
     }),
     // Ambient workspace plumbing kicked off alongside the board queries.
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),

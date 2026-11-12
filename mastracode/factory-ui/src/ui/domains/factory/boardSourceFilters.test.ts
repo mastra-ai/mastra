@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { linearCandidate } from './boardCandidates';
 import {
   boardFilterItems,
   boardFilterParams,
@@ -9,7 +8,7 @@ import {
 } from './boardFilters';
 import { boardSource, cardMatchesSourceFilters } from './boardSourceFilters';
 import type { WorkItem } from './services/workItems';
-import { linearIssue, sourceCards } from '../../__tests__/fixtures/boardSourceFilters';
+import { sourceCards } from '../../__tests__/fixtures/boardSourceFilters';
 
 describe('Board source filters', () => {
   it('preserves every filter through URL and saved view filters', () => {
@@ -27,11 +26,14 @@ describe('Board source filters', () => {
     expect(url.get('sort')).toBe('created-newest');
   });
 
-  it('does not use an old stored project when the live issue has no project', () => {
+  it('narrows a Linear card by the project its stored facts name', () => {
     const card = sourceCards[0];
-    const filters = boardFiltersFromParams(new URLSearchParams('linearProject=project-a'), true);
-    expect(cardMatchesSourceFilters(card, filters)).toBe(true);
-    expect(cardMatchesSourceFilters(card, filters, linearCandidate(linearIssue('ENG-102', null)))).toBe(false);
+    expect(
+      cardMatchesSourceFilters(card, boardFiltersFromParams(new URLSearchParams('linearProject=project-a'), true)),
+    ).toBe(true);
+    expect(
+      cardMatchesSourceFilters(card, boardFiltersFromParams(new URLSearchParams('linearProject=project-b'), true)),
+    ).toBe(false);
   });
 
   it('narrows only Linear cards by project when other sources are picked too', () => {

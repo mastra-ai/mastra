@@ -82,16 +82,10 @@ function serialWrite<TCache, TVariables>(
   };
 }
 
-// The GitHub feed never reads intake config or bindings, so it has nothing to refresh.
+// Search still lists GitLab issues itself, scoped by the bindings; the board's Intake reads the
+// server's own list, which the server refreshes on its next pass.
 function invalidateIssueFeed(queryClient: QueryClient, baseUrl: string, integrationId: string) {
-  const feeds: Record<string, QueryKey> = {
-    linear: queryKeys.linearIssuesAll(),
-    jira: queryKeys.jiraIssuesAll(),
-    gitlab: queryKeys.gitlabIssuesAll(baseUrl),
-    incidentio: queryKeys.incidentioIssuesAll(),
-  };
-  const queryKey = feeds[integrationId];
-  if (queryKey) void queryClient.invalidateQueries({ queryKey });
+  if (integrationId === 'gitlab') void queryClient.invalidateQueries({ queryKey: queryKeys.gitlabIssuesAll(baseUrl) });
 }
 
 export function useSaveIntakeSelectionMutation(

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
-import { largeBoard, largeCandidatePage } from '../src/ui/__tests__/fixtures/largeBoard';
+import { largeBoard, largeCandidates } from '../src/ui/__tests__/fixtures/largeBoard';
 import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
@@ -34,8 +34,6 @@ test.describe('Factory board virtualization', () => {
       ),
       http.get('*/web/factory/projects/fp-1/work-items', () => HttpResponse.json({ workItems: largeBoard(2000) })),
       http.get('*/web/factory/projects/fp-1/sessions', () => HttpResponse.json({ sessions: [] })),
-      http.get('*/web/github/projects/repo-1/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
-      http.get('*/web/github/projects/repo-1/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
       http.get('*/web/intake/config', () =>
         HttpResponse.json({
           config: { github: { enabled: false, sourceIds: null }, linear: { enabled: false, sourceIds: null } },
@@ -125,7 +123,7 @@ test.describe('Factory board virtualization', () => {
         test('appends query pages without jumps or duplicate requests and can retry a failed page', async ({
           page,
         }) => {
-          const requestedPages: number[] = [];
+          const requestedPages: string[] = [];
           let releasePage = () => {};
           const secondPage = new Promise<void>(resolve => {
             releasePage = resolve;
@@ -136,19 +134,18 @@ test.describe('Factory board virtualization', () => {
             http.get('*/web/intake/config', () =>
               HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
             ),
-            http.get('*/web/github/projects/repo-1/issues', async ({ request }) => {
-              const params = new URL(request.url).searchParams;
-              if (params.has('label')) return HttpResponse.json(largeCandidatePage(0));
-              const pageNumber = Number(params.get('page') ?? 1);
-              requestedPages.push(pageNumber);
-              if (pageNumber === 2) await secondPage;
-              if (pageNumber === 3 && failLastPage) {
-                return HttpResponse.json({ error: 'Candidate page unavailable' }, { status: 503 });
+            http.get('*/web/factory/projects/fp-1/intake/candidates', async ({ request }) => {
+              const cursor = new URL(request.url).searchParams.get('cursor') ?? 'first';
+              requestedPages.push(cursor);
+              if (cursor === 'first') {
+                return HttpResponse.json({ candidates: largeCandidates(30), nextCursor: 'second', passes: [] });
               }
-              return HttpResponse.json({
-                ...largeCandidatePage(pageNumber === 1 ? 30 : 100, pageNumber === 1 ? 0 : 30 + (pageNumber - 2) * 100),
-                nextPage: pageNumber < 3 ? pageNumber + 1 : null,
-              });
+              if (cursor === 'second') {
+                await secondPage;
+                return HttpResponse.json({ candidates: largeCandidates(100, 30), nextCursor: 'third', passes: [] });
+              }
+              if (failLastPage) return HttpResponse.json({ error: 'Candidate page unavailable' }, { status: 503 });
+              return HttpResponse.json({ candidates: largeCandidates(100, 130), passes: [] });
             }),
           );
           await page.goto('/factories/fp-1/work');
@@ -163,7 +160,9 @@ test.describe('Factory board virtualization', () => {
           const scroll = page
             .getByTestId('board-column-intake')
             .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " overflow-auto ")][1]');
-          expect(requestedPages).toEqual([1]);
+          // The dev server's StrictMode remount abandons the first read and starts it again.
+          const later = () => requestedPages.filter(cursor => cursor !== 'first');
+          expect(later()).toEqual([]);
           await scroll.evaluate(element => {
             element.scrollTop = element.scrollHeight;
           });
@@ -177,7 +176,7 @@ test.describe('Factory board virtualization', () => {
               await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
             }
           });
-          expect(requestedPages).toEqual([1, 2]);
+          expect(later()).toEqual(['second']);
           releasePage();
           await expect(page.getByRole('status', { name: 'Loading more candidates' })).toHaveCount(0);
           await expect(anchor).toBeInViewport();
@@ -185,7 +184,7 @@ test.describe('Factory board virtualization', () => {
             Math.abs((await anchor.evaluate(element => element.getBoundingClientRect().top)) - before),
           ).toBeLessThan(2);
           expect(await cards.count()).toBeLessThan(40);
-          expect(requestedPages).toEqual([1, 2]);
+          expect(later()).toEqual(['second']);
 
           await scroll.evaluate(element => {
             element.scrollTop = element.scrollHeight;
@@ -201,14 +200,14 @@ test.describe('Factory board virtualization', () => {
           });
           await expect(page.getByRole('article', { name: 'Candidate 229', exact: true })).toBeInViewport();
           expect(await cards.count()).toBeLessThan(40);
-          expect(requestedPages).toEqual([1, 2, 3, 3]);
+          expect(later()).toEqual(['second', 'third', 'third']);
 
           await scroll.evaluate(element => {
             element.scrollTop = 0;
           });
           await expect(page.getByRole('article', { name: 'Candidate 0', exact: true })).toBeInViewport();
           expect(await cards.count()).toBeLessThan(40);
-          expect(requestedPages).toEqual([1, 2, 3, 3]);
+          expect(later()).toEqual(['second', 'third', 'third']);
         });
       });
 

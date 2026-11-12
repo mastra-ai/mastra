@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate, linearCandidate } from './boardCandidates';
+import { linearRecord } from '../../__tests__/fixtures/intakeCandidates';
+import { intakeCandidate, issueCandidate } from './boardCandidates';
 import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from './boardLabels';
 import type { WorkItem } from './services/workItems';
 
@@ -52,21 +53,8 @@ describe('board labels', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
 
-    const linear = linearCandidate({
-      id: 'linear-2',
-      identifier: 'ENG-13',
-      title: 'Linear labels',
-      url: 'https://linear.app/acme/issue/ENG-13',
-      state: 'Todo',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: null,
-      creator: null,
-      team: 'Engineering',
-      labels: ['frontend'],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-    });
+    const linear = intakeCandidate(linearRecord('ENG-12', { labels: ['frontend'] }));
+    if (!linear) throw new Error('Linear records are offered for filing');
 
     expect(boardLabels({ items: [labelled], candidates: [candidate, linear] })).toEqual([
       'bug',
@@ -80,22 +68,5 @@ describe('board labels', () => {
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'missing']))).toBe(false);
     expect(candidateMatchesLabels(candidate, new Set(['p1']))).toBe(true);
     expect(candidateMatchesLabels(candidate, new Set(['bug']))).toBe(false);
-  });
-
-  it('matches labels the live candidate gained since the item was stored', () => {
-    const live = issueCandidate({
-      number: 12,
-      title: 'Ship relevance filters',
-      url: 'https://github.com/acme/app/issues/12',
-      author: 'octocat',
-      assignee: null,
-      labels: ['bug'],
-      comments: 0,
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-02T09:00:00.000Z',
-    });
-
-    expect(workItemMatchesLabels(item, new Set(['bug']))).toBe(false);
-    expect(workItemMatchesLabels(item, new Set(['bug']), live)).toBe(true);
   });
 });

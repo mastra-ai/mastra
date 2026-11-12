@@ -5,7 +5,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
 
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
-import { cardMatchesSourceFilters, hasBoardSourceFilters } from '../../domains/factory/boardSourceFilters';
+import { cardMatchesSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { stageContentCount } from '../../domains/factory/boardCandidates';
@@ -39,7 +39,7 @@ import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
 import type { DragPayload } from '../../domains/factory/boardDrag';
-import { cardMatchesSearch, isPersistedCandidate } from '../../domains/factory/boardItems';
+import { cardMatchesSearch } from '../../domains/factory/boardItems';
 import { orderWorkItemsForStage } from '../../domains/factory/boardOrder';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 import { relatedWorkItemIndex } from '../../domains/factory/services/relationships';
@@ -52,22 +52,6 @@ import { InlineWorkItemComposer } from '../../domains/factory/components/InlineW
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
 import { BoardStages } from './BoardStages';
 import { cardProjectRepositoryId } from '../../domains/factory/boardRepository';
-
-/** Count all available candidates before source filters so empty states can explain excluded cards. */
-function countUnfilteredCandidates({
-  sourceFiltered,
-  candidates,
-  participantCandidates,
-  knownSourceKeys,
-}: {
-  sourceFiltered: boolean;
-  candidates: readonly BoardCandidate[];
-  participantCandidates: readonly BoardCandidate[];
-  knownSourceKeys: ReadonlySet<string>;
-}): number {
-  if (!sourceFiltered) return candidates.length;
-  return participantCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate)).length;
-}
 
 // One item can sit in several stages; each copy is its own card.
 const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
@@ -144,11 +128,8 @@ export function BoardContent({
     factoryProjectId,
     repositories: factory.repositories,
     definition,
-    knownSourceKeys: items.knownSourceKeys,
-    elsewhereSourceKeys: items.elsewhereSourceKeys,
     sourceFilters: filters,
   });
-  const sourceFiltered = hasBoardSourceFilters(filters);
   const runs = useBoardRuns({ factoryProjectId, refetchItems: () => items.refetch() });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
@@ -168,9 +149,6 @@ export function BoardContent({
     currentUser: auth.data?.user,
     personId,
   });
-  const participantCandidateBySourceKey = new Map(
-    intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
-  );
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const candidateMatchesView = (candidate: BoardCandidate): boolean => {
     if (!candidateMatchesPeople(candidate, filters, personId)) return false;
@@ -182,10 +160,9 @@ export function BoardContent({
   const unfilteredWorkItemsForStage = (stage: (typeof stages)[number]['id']) =>
     items.visible.filter(item => itemAppearsInStage(item, stage, stages));
   const workItemMatchesView = (item: WorkItem): boolean => {
-    const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
-    if (!workItemMatchesPeople(item, activityPage, filters, personId, liveCandidate)) return false;
-    if (!workItemMatchesLabels(item, filters.label, liveCandidate)) return false;
-    if (!cardMatchesSourceFilters(item, filters, liveCandidate)) return false;
+    if (!workItemMatchesPeople(item, activityPage, filters, personId)) return false;
+    if (!workItemMatchesLabels(item, filters.label)) return false;
+    if (!cardMatchesSourceFilters(item, filters)) return false;
     return cardMatchesSearch(item, view.search);
   };
   const workItemsForStage = (stage: (typeof stages)[number]['id']) => {
@@ -228,13 +205,8 @@ export function BoardContent({
   const visibleWorkItems = new Set(boardWorkItems);
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
-  const unfilteredCandidateCount = countUnfilteredCandidates({
-    sourceFiltered,
-    candidates: intake.candidates,
-    participantCandidates: intake.participantCandidates,
-    knownSourceKeys: items.knownSourceKeys,
-  });
-  const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
+  // Counted before source filters, so an empty board can say its filters hide what is there.
+  const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.participantCandidates.length;
   const anyFilterActive = boardFiltersActive(filters) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
   const intakeSetup = intake.fed ? undefined : intake.unrouted ? 'route' : 'source';
@@ -295,7 +267,6 @@ export function BoardContent({
           intakeSource={intake.active}
           intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
-          alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions

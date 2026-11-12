@@ -15,14 +15,9 @@ export function boardLabels({
   return [...labels].sort((left, right) => left.localeCompare(right));
 }
 
-export function workItemMatchesLabels(
-  item: WorkItem,
-  selectedLabels: ReadonlySet<string>,
-  liveCandidate?: BoardCandidate,
-): boolean {
+export function workItemMatchesLabels(item: WorkItem, selectedLabels: ReadonlySet<string>): boolean {
   if (selectedLabels.size === 0) return true;
   const itemLabels = new Set(metadataLabels(sourceMetadata(item)));
-  if (liveCandidate) for (const label of metadataLabels(liveCandidate.metadata)) itemLabels.add(label);
   return [...selectedLabels].every(label => itemLabels.has(label));
 }
 

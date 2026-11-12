@@ -62,6 +62,9 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  // Ambient empty Intake: the default board reads the records the server holds with no card yet.
+  // Intake tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/intake/candidates', () => HttpResponse.json({ candidates: [], passes: [] })),
   // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
   http.get('*/web/factory/projects/:id/work-items/starters', () =>
     HttpResponse.json({

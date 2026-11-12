@@ -10,7 +10,6 @@ import {
   useWorkItemsQuery,
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
-import { persistedSourceKeys } from '../boardItems';
 import { belongsToBoard, itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
 import { inferredParentWorkItemId } from '../services/relationships';
@@ -50,9 +49,6 @@ export function useBoardItems({
   const movingRef = useRef<Set<string>>(new Set());
 
   const all = useMemo(() => given ?? items.data ?? [], [given, items.data]);
-  const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
-  // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
   const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
@@ -159,8 +155,6 @@ export function useBoardItems({
   return {
     all,
     visible,
-    knownSourceKeys,
-    elsewhereSourceKeys,
     isPending: items.isPending,
     error: items.isError ? items.error : undefined,
     mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,

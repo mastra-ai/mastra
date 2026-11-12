@@ -18,6 +18,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
 import { createAppRoutes } from '../router';
+import { intakeCandidatesHandler, recordOfGithubPullRequest } from './fixtures/intakeCandidates';
 import { reviewCandidate, reviewItem } from './fixtures/reviewCard';
 
 const FACTORY_ID = reviewItem.factoryProjectId;
@@ -95,12 +96,7 @@ function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCan
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({ pullRequests: candidates, nextPage: null }),
-    ),
+    intakeCandidatesHandler(TEST_BASE_URL, candidates.map(recordOfGithubPullRequest)),
     http.get(`${projectUrl}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ permissions: [] }),

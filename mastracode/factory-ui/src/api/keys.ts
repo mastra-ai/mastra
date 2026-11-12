@@ -78,30 +78,23 @@ export const queryKeys = {
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,
-  linearIssuesAll: () => ['linear', 'issues'] as const,
-  linearIssues: (githubProjectId: string | undefined) =>
-    [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueId: string | undefined) =>
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   connectTools: () => ['connect-tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
-  jiraIssuesAll: () => ['jira', 'issues'] as const,
-  jiraIssues: (factoryProjectId: string | undefined) =>
-    [...queryKeys.jiraIssuesAll(), factoryProjectId ?? null] as const,
   jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
     ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
   incidentioSources: () => ['incidentio', 'sources'] as const,
   incidentioStatus: () => ['incidentio', 'status'] as const,
-  incidentioIssuesAll: () => ['incidentio', 'issues'] as const,
-  incidentioIssues: (factoryProjectId: string | undefined) =>
-    [...queryKeys.incidentioIssuesAll(), factoryProjectId ?? null] as const,
   incidentioIssue: (factoryProjectId: string | undefined, issueRef: string | undefined) =>
     ['incidentio', 'issue', factoryProjectId ?? null, issueRef ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  intakeCandidates: (factoryProjectId: string | undefined) =>
+    ['intake', 'candidates', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.

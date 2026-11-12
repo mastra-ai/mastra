@@ -307,6 +307,29 @@ describe('GET /web/factory/projects/:id/intake/candidates', () => {
     expect(await boardVersion()).toBe(version);
   });
 
+  it.each([1, 5])('asks GitHub the same in a pass with %i tabs open on the board', async tabs => {
+    const t = await setup();
+    // Each tab reads the list when it opens and again whenever the server says the list changed.
+    const rereads: Array<Promise<Listed>> = [];
+    const readInEveryTab = () => {
+      for (let tab = 0; tab < tabs; tab++) rereads.push(t.read());
+    };
+    t.seed.workItems.onIntakeChanged(readInEveryTab);
+    readInEveryTab();
+
+    t.open.issues = [listedIssue('acme/repo-0', 1, BEFORE_LINK)];
+    await t.pass();
+    t.open.issues = [listedIssue('acme/repo-0', 2, BEFORE_LINK)];
+    await t.pass();
+    await Promise.all(rereads);
+
+    // The read on open, then one for each write: the first pass adds a record, the second adds one and removes one.
+    expect(rereads).toHaveLength(tabs * 4);
+    expect((await t.read()).candidates.map(candidate => candidate.title)).toEqual(['Issue 2']);
+    expect(t.github.intake.listIssues).toHaveBeenCalledTimes(2);
+    expect(t.github.versionControl.listPullRequests).toHaveBeenCalledTimes(2);
+  });
+
   it('answers a project of another organization, and a malformed id, as not found', async () => {
     const t = await setup({ user: { workosId: 'user-mallory', organizationId: 'org-2' } });
     t.open.issues = [listedIssue('acme/repo-0', 1, BEFORE_LINK)];

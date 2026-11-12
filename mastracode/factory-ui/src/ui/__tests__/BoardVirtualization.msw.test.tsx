@@ -11,7 +11,8 @@ import { queryKeys } from '../../api/keys';
 import { createAppRoutes } from '../router';
 import type { GithubIssueDetail } from '../domains/factory/services/factory';
 import { saveKanbanView } from './boardLayoutQueries';
-import { largeBoard, largeCandidatePage } from './fixtures/largeBoard';
+import { intakeCandidatesHandler } from './fixtures/intakeCandidates';
+import { largeBoard, largeCandidates } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 const ITEM_COUNT = 250;
@@ -203,7 +204,7 @@ describe('Large factory boards', () => {
     'given 30 candidates in %s layout, when another query page arrives, preserves an open prompt and bounds mounted cards',
     async layout => {
       const { client } = renderBoard();
-      const requestedPages: number[] = [];
+      const requestedPages: string[] = [];
       let releasePage = () => {};
       const nextPage = new Promise<void>(resolve => {
         releasePage = resolve;
@@ -215,20 +216,25 @@ describe('Large factory boards', () => {
         http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
           HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
         ),
-        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, async ({ request }) => {
-          const params = new URL(request.url).searchParams;
-          if (params.has('label')) return HttpResponse.json(largeCandidatePage(0));
-          const page = Number(params.get('page') ?? 1);
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, async ({ request }) => {
+          const page = new URL(request.url).searchParams.get('cursor') ?? 'first';
           requestedPages.push(page);
-          if (page === 2) await nextPage;
-          return HttpResponse.json({
-            ...largeCandidatePage(page === 1 ? 30 : 100, page === 1 ? 0 : 30),
-            nextPage: page === 1 ? 2 : null,
-          });
+          if (page === 'first') {
+            return HttpResponse.json({ candidates: largeCandidates(30), nextCursor: 'second', passes: [] });
+          }
+          await nextPage;
+          return HttpResponse.json({ candidates: largeCandidates(100, 30), passes: [] });
         }),
         http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues/1`, () =>
           HttpResponse.json({
-            ...largeCandidatePage(1).issues[0],
+            number: 1,
+            title: 'Candidate 0',
+            url: 'https://github.com/acme/app/issues/1',
+            author: 'alice',
+            labels: [],
+            comments: 0,
+            createdAt: '2026-08-01T00:00:00.000Z',
+            updatedAt: '2026-08-01T00:00:00.000Z',
             description: 'Candidate description',
           } satisfies GithubIssueDetail),
         ),
@@ -236,8 +242,10 @@ describe('Large factory boards', () => {
       const user = userEvent.setup();
       await screen.findByRole('article', { name: 'Candidate 0' });
       if (layout === 'board') await saveKanbanView(user);
-      await user.click(screen.getByRole('button', { name: 'Load more candidates' }));
-      await screen.findByRole('status', { name: 'Loading more candidates' });
+      // Triage reads the same list, so it offers the same button.
+      const intake = within(screen.getByTestId('board-column-intake'));
+      await user.click(intake.getByRole('button', { name: 'Load more candidates' }));
+      await intake.findByRole('status', { name: 'Loading more candidates' });
       await user.click(screen.getByRole('button', { name: 'Details for Candidate 0' }));
       const details = await screen.findByRole('dialog', { name: 'Candidate 0' });
       await user.click(within(details).getByRole('button', { name: 'Custom prompt…' }));
@@ -256,10 +264,12 @@ describe('Large factory boards', () => {
       await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 1' })).not.toBeInTheDocument());
       expect(prompt).toHaveValue('Keep this guidance while loading more');
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
-      expect(requestedPages).toEqual([1, 2]);
+      // StrictMode's remount abandons the first read and starts it again, so only the later page is counted.
+      expect(requestedPages.filter(page => page === 'second')).toEqual(['second']);
+      const readsBeforeRefetch = requestedPages.length;
 
-      await act(() => client.refetchQueries({ queryKey: queryKeys.githubIssues(['repo-1']) }));
-      expect(requestedPages).toEqual([1, 2, 1, 2]);
+      await act(() => client.refetchQueries({ queryKey: queryKeys.intakeCandidates(FACTORY_ID) }));
+      expect(requestedPages.slice(readsBeforeRefetch)).toEqual(['first', 'second']);
       expect(prompt).toBeInTheDocument();
       expect(prompt).toHaveValue('Keep this guidance while loading more');
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
@@ -277,9 +287,7 @@ describe('Large factory boards', () => {
         http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
           HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
         ),
-        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-          HttpResponse.json(largeCandidatePage(new URL(request.url).searchParams.has('label') ? 0 : ITEM_COUNT)),
-        ),
+        intakeCandidatesHandler(TEST_BASE_URL, largeCandidates(ITEM_COUNT)),
       );
       await screen.findByRole('article', { name: 'Candidate 0' });
       if (layout === 'board') await saveKanbanView(userEvent.setup());

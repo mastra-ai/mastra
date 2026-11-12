@@ -31,16 +31,10 @@ export function pickedBoardSources(filters: BoardSourceFilters): ReadonlySet<str
   return filters.source;
 }
 
-/** Source and project filters determine which intake feeds to browse. */
-export function hasBoardSourceFilters(filters: BoardSourceFilters): boolean {
-  return pickedBoardSources(filters).size > 0;
-}
-
-/** Live metadata wins, including an issue moved out of a project; stored metadata covers older pages. */
+/** A card or a candidate against the picked sources and Linear projects. */
 export function cardMatchesSourceFilters(
   card: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
   filters: BoardSourceFilters,
-  liveCandidate?: BoardCandidate,
 ): boolean {
   const sources = pickedBoardSources(filters);
   if (
@@ -50,6 +44,6 @@ export function cardMatchesSourceFilters(
   )
     return false;
   if (card.source !== 'linear-issue' || filters.linearProject.size === 0) return true;
-  const projectId = sourceMetadata(liveCandidate ?? card).linearProjectId;
+  const projectId = sourceMetadata(card).linearProjectId;
   return typeof projectId === 'string' && filters.linearProject.has(projectId);
 }

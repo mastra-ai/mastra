@@ -183,7 +183,7 @@ interface WireCreateWorkItemInput extends Omit<CreateWorkItemInput, 'source' | '
   externalSource?: ExternalWorkItemSource;
 }
 
-function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkItemSource {
+export function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';

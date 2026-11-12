@@ -13,6 +13,7 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, cardWriteMutationKey, queryKeys } from '../api/keys';
+import { dropIntakeCandidate } from './useIntakeCandidates';
 import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
 import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import {
@@ -211,13 +212,15 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
     mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: (input: CreateWorkItemInput) =>
       createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
-    onSuccess: item => {
+    onSuccess: (item, input) => {
       const boardKey = queryKeys.workItems(factoryProjectId);
       // A session's cards take the saved card only where they hold it; a new card joins the board alone.
       patchCards(queryClient, boardKey, cards => cards.map(card => (card.id === item.id ? item : card)));
       queryClient.setQueryData<BoardSnapshot>(boardKey, board =>
         board ? { ...board, workItems: [item, ...board.workItems.filter(card => card.id !== item.id)] } : undefined,
       );
+      // The record that was filed, not the card that came back: an older card may answer under its own key.
+      dropIntakeCandidate(queryClient, factoryProjectId, input);
     },
   });
 }
