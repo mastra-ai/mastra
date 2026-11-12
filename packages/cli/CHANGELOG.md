@@ -1,5 +1,24 @@
 # mastra
 
+## 1.39.0-alpha.14
+
+### Patch Changes
+
+- Added `mastra api factory work-item starters` and `mastra api factory work-item activity`. The first counts the cards behind each new-session starter on a project's default board. The second lists when a project's cards were created and completed since an instant: ([#30097](https://github.com/mastra-ai/mastra/pull/30097))
+
+  ```bash
+  mastra api factory work-item starters <project-id>
+  mastra api factory work-item activity <project-id> '{"since":"2026-06-01T00:00:00.000Z"}'
+  ```
+
+- Added a "Join the issue's card instead" switch to intake routes in the Factory UI. A route for pull requests that close an issue can now put the pull request on that issue's card instead of giving it a card of its own; until now only the route Factory seeds could do this. The switch shows on new and saved routes whose conditions include "Source kind is Pull request" and "Pull request closes an issue is Yes". ([#30197](https://github.com/mastra-ai/mastra/pull/30197))
+
+- Improved the Factory new session page on large boards. Its starters and its activity band now load the counts and dates they show instead of downloading every card of the project. They show the same content as before. ([#30097](https://github.com/mastra-ai/mastra/pull/30097))
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+  - @mastra/deployer@1.83.0-alpha.12
+
 ## 1.39.0-alpha.13
 
 ### Patch Changes

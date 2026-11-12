@@ -1,5 +1,20 @@
 # mastracode
 
+## 0.50.0-alpha.13
+
+### Patch Changes
+
+- Fix `/settings` crashing when mouse preferences are missing from saved settings by defaulting to Off. ([#30184](https://github.com/mastra-ai/mastra/pull/30184))
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4)]:
+  - @mastra/core@1.83.0-alpha.12
+  - @mastra/observability@1.24.0-alpha.7
+  - @mastra/duckdb@1.19.0-alpha.5
+  - @mastra/pg@1.36.0-alpha.6
+  - @mastra/code-sdk@1.19.0-alpha.14
+  - @mastra/mcp@2.9.0-alpha.4
+  - @mastra/libsql@1.30.0-alpha.3
+
 ## 0.50.0-alpha.12
 
 ### Patch Changes
