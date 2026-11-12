@@ -1231,7 +1231,8 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
 /**
  * The sum of the token counts that were reported for a run. `incomplete` is true when `totalUsage`
  * has an unknown input, output, or total count, so the run may have cost more than these counts.
- * A count nobody reported stays undefined.
+ * A count nobody reported stays undefined, except `totalTokens`, which is the sum of input and output when
+ * both are known.
  */
 export type ObservedUsage = LanguageModelUsage & { incomplete: boolean };
 
