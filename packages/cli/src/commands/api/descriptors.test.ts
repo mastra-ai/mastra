@@ -132,6 +132,8 @@ describe('api command descriptors', () => {
       'factoryWork-itemList': ['workItemList', ['id'], true, false, false],
       'factoryWork-itemStarters': ['workItemStarters', ['id'], false, false, false],
       'factoryWork-itemActivity': ['workItemActivity', ['id'], true, true, false],
+      'factoryWork-itemColumns': ['workItemColumns', ['id'], true, true, false],
+      'factoryWork-itemFilter-options': ['workItemFilterOptions', ['id'], false, false, false],
       'factoryWork-itemCreate': ['workItemCreate', ['id'], true, true, false],
       'factoryWork-itemUpdate': ['workItemUpdate', ['id'], true, true, false],
       'factoryWork-itemDelete': ['workItemDelete', ['id'], false, false, false],

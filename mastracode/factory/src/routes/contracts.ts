@@ -91,12 +91,12 @@ const storedBoardResponseSchema = z.object({
   canEdit: z.boolean().optional(),
 });
 const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
-const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
+const boardIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
 const intakeRouteTargetSchema = z
   .object({
-    boardKey: intakeRouteIdentifierSchema,
+    boardKey: boardIdentifierSchema,
     /** Unset lands the card in the board's first phase. */
-    phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
+    phaseKey: boardIdentifierSchema.nullable().optional(),
     /**
      * File a pull request on the card of the issue it closes (on `boardKey`) instead of a new card;
      * that card moves to `phaseKey` when its board allows it. Matches no other arrival.
@@ -543,6 +543,116 @@ export const workItemActivityResponseSchema = z.object({
   createdAt: z.array(z.string()),
   doneAt: z.array(z.string()),
 });
+
+export const WORK_ITEM_COLUMN_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
+
+/** Repeatable. The values picked for one filter: a card matches on any of them, and none picks every card. */
+const pickedValuesSchema = z
+  .array(z.string().min(1).max(512))
+  .max(100)
+  .default([])
+  .transform(values => new Set(values));
+
+/** `<stage>:<count>`: how many cards of one column to list. */
+const columnWindowSchema = z
+  .string()
+  .transform((entry): [stage: string, count: string] => {
+    const colon = entry.lastIndexOf(':');
+    return [entry.slice(0, Math.max(colon, 0)), entry.slice(colon + 1)];
+  })
+  .pipe(
+    z.tuple([
+      boardIdentifierSchema,
+      z
+        .string()
+        .regex(/^[1-9]\d{0,5}$/)
+        .transform(Number),
+    ]),
+  );
+
+/** One board view: the board, its order, its search and filters, and how deep each column is listed. */
+export const workItemColumnsQuerySchema = z.object({
+  board: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
+  /** `recent-mine` puts the cards the signed-in user last moved into the column before the others. */
+  sort: z.enum(WORK_ITEM_COLUMN_SORTS).default('recent'),
+  /** Words that must all be in the card's title, key, number or source id. */
+  q: z.string().max(200).optional(),
+  /** A provider (`github`, `linear`, `manual`…), or `pull-request` for every card that has one. */
+  source: pickedValuesSchema,
+  /** Linear project ids. Picked without `source`, they keep Linear cards only. */
+  linearProject: pickedValuesSchema,
+  /** A card matches when it carries every one of them. */
+  label: pickedValuesSchema,
+  /** Participant ids (`github:octocat`, `factory:<user id>`) related to the card in any way. */
+  teammate: pickedValuesSchema,
+  author: pickedValuesSchema,
+  assignee: pickedValuesSchema,
+  reviewer: pickedValuesSchema,
+  /** Factory users who created the card, moved it or started a session on it. */
+  worked: pickedValuesSchema,
+  /** How many cards each column lists. */
+  limit: boundedLimitSchema(50, 200),
+  /** Repeatable `<stage>:<count>`: lists that column's first `count` cards instead of `limit`. */
+  window: z
+    .array(columnWindowSchema)
+    .max(64)
+    .default([])
+    .refine(windows => new Set(windows.map(([stage]) => stage)).size === windows.length, {
+      message: 'Send one window per stage',
+    })
+    .transform(windows => new Map(windows)),
+  /** A card to list in every column that holds it, however deep it is there. */
+  item: uuidSchema.optional(),
+  /** `true` also sends the body of every card the answer names. */
+  cards: z.enum(['true']).optional(),
+});
+
+/** Names a card and the version of it the answer was read from. */
+const cardStampSchema = z.object({ id: z.string(), changedAt: z.string().nullable() });
+
+export const workItemColumnsResponseSchema = z.object({
+  /** The board's phases in declaration order. */
+  columns: z.array(
+    z.object({
+      stage: z.string(),
+      /** Cards of this column that match the view. */
+      total: countSchema,
+      /** The first of them in the view's order: what the reader shows. */
+      cards: z.array(cardStampSchema),
+    }),
+  ),
+  /** Cards related to a listed card that no column lists. */
+  related: z.array(cardStampSchema),
+  /** Cards of the board, whatever the search and filters. */
+  boardTotal: countSchema,
+  /** Cards of the board that match the view, each counted once: a card in two columns is one. */
+  matchingTotal: countSchema,
+  /** With `cards=true`: the body of every card named in `columns` and `related`. */
+  workItems: z.array(cardSchema).optional(),
+  /** Among the named cards. */
+  runningSessionIds: z.array(z.string()),
+  parkedSessionIds: z.array(z.string()),
+});
+
+/** What the board's filter menus offer, read over every card of the project. */
+export const workItemFilterOptionsResponseSchema = z.object({
+  /** Every label on a card, sorted. */
+  labels: z.array(z.string()),
+  /** The people the cards' sources name, sorted by name. `id` is what a people filter sends. */
+  people: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      source: z.enum(['github', 'gitlab', 'linear', 'jira', 'incidentio']),
+    }),
+  ),
+  /** The Factory users who created a card, moved one or started a session on one, sorted. */
+  actorIds: z.array(z.string()),
+});
+
+export type WorkItemColumnsQuery = z.output<typeof workItemColumnsQuerySchema>;
+export type WorkItemColumnsResponse = z.infer<typeof workItemColumnsResponseSchema>;
+export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
@@ -1114,6 +1224,21 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: workItemActivityQuerySchema,
     responseSchema: workItemActivityResponseSchema,
+  },
+  workItemColumns: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/columns',
+    description: 'List the cards each column of a board view shows, in order, with how many match',
+    pathSchema: projectPathSchema,
+    querySchema: workItemColumnsQuerySchema,
+    responseSchema: workItemColumnsResponseSchema,
+  },
+  workItemFilterOptions: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/filter-options',
+    description: 'List the labels and people the cards of a project can be filtered by',
+    pathSchema: projectPathSchema,
+    responseSchema: workItemFilterOptionsResponseSchema,
   },
   workItemCreate: {
     method: 'POST',

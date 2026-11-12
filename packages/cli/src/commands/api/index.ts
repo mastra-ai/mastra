@@ -711,6 +711,21 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'columns', FACTORY_API_ROUTE_CATALOG.workItemColumns, {
+    description: 'List the first cards of each column of a Factory board, with how many each column holds',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'The ten latest bugs of each column of the Work board, with the card bodies',
+        command: `mastra api factory work-item columns <project-id> '{"board":"work","label":["bug"],"limit":10,"cards":"true"}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'filter-options', FACTORY_API_ROUTE_CATALOG.workItemFilterOptions, {
+    description: 'List the labels and people a Factory board can be filtered by',
+    routePlacement: 'origin',
+  });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
     description: 'Create a Factory work item in Intake',
     input: 'required',

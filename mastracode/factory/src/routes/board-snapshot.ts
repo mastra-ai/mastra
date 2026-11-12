@@ -66,9 +66,9 @@ export function movedBody(body: unknown): Pick<BoardSnapshot, 'json' | 'gzipped'
  * A computed answer's wire body, named by a hash of itself: a reader that kept it revalidates
  * instead of downloading it again.
  */
-export function hashedBody(body: unknown): Pick<BoardSnapshot, 'etag' | 'json'> {
+export function hashedBody(body: unknown): BoardSnapshot {
   const json = JSON.stringify(body);
-  return { etag: `W/"${sha1(json)}"`, json };
+  return { etag: `W/"${sha1(json)}"`, json, gzipped: () => gzip(json) };
 }
 
 const checks = new WeakMap<readonly Card[], string>();
