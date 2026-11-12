@@ -18,16 +18,15 @@ Gateways handle provider-specific logic for accessing language models:
 
 ## When to use custom gateways
 
-Use a custom gateway when your models need more than a base URL and an API key:
+Use a custom gateway to connect Mastra to models you host yourself or reach through a private deployment, for example to keep prompts and data on your own infrastructure or to control token costs. A gateway also lets you:
 
-- Several models sit behind one endpoint and you want typed model IDs and a Studio model picker for them
-- Authentication needs a token exchange, rotating credentials, or per-request headers
-- The endpoint URL depends on a region, account, or tenant
-- The API isn't OpenAI-compatible, so you need to return a model from a specific AI SDK provider
-- You want [cost metrics](#model-pricing) for models that models.dev doesn't list
-- Studio should list only your own models, with [`AUTO_BLOCK_EXTERNAL_PROVIDERS`](#showing-only-custom-gateways-in-studio)
+- List the models behind your endpoint, so they get typed model IDs and appear in the Studio model picker
+- Resolve credentials on every call, for example to exchange or rotate tokens
+- Call models through any AI SDK provider, including APIs that aren't OpenAI-compatible
+- Report [cost metrics](#model-pricing) for models that models.dev doesn't list
+- [Limit the Studio model picker](#showing-only-custom-gateways-in-studio) to your own models
 
-To connect to a single OpenAI-compatible endpoint, such as a privately hosted model, set `url` in the model config instead. Mastra doesn't read an API key from environment variables for a `url` model, so also set `apiKey` when the endpoint needs one. See [Use local models with Mastra](/models#use-local-models-with-mastra).
+To call a single endpoint with an OpenAI-compatible API, you don't need a gateway: set `url` and `apiKey` in the model config instead. See [Use local models with Mastra](/models#use-local-models-with-mastra).
 
 ## Creating a Custom Gateway
 
@@ -646,7 +645,7 @@ By default, **Studio** lists every external model provider (such as OpenAI, Anth
 AUTO_BLOCK_EXTERNAL_PROVIDERS=true
 ```
 
-When this variable is set to `true` or `1`, Mastra returns only the providers from gateways you register yourself. The static provider registry and the built-in gateways (`models.dev`, `netlify`, and `mastra`) are hidden from the model picker. This is useful when you route all model traffic through a single private gateway and don't want the other providers to appear.
+When this variable is set to `true` or `1`, Mastra returns only the providers from gateways you register yourself. The static provider registry and the built-in gateways (`models.dev`, `netlify`, and `mastra`) are hidden from the model picker. This is useful when you route all model traffic through a single private gateway and don't want the other providers to appear. The variable only changes what Studio lists. It doesn't stop agents from calling other providers in code.
 
 With this variable set and no custom gateway registered, the model picker is empty. Register at least one custom gateway to expose its models.
 
