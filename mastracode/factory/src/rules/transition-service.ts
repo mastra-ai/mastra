@@ -615,18 +615,18 @@ export class FactoryTransitionService {
     // A phase with an exit tool holds the card until the tool succeeds (for submit_plan, with
     // an approved plan; autoApprove only decides whether it approves itself). Then the agent,
     // or the board's own rule for the tool, moves the card. A person can move it any time.
-    // Checked on the mover's own move, so a route can't open the gate for it.
+    // Checked on the mover's own move and on every route's target, so a route can't open the gate.
     const leftPhase = board.phases[fromStage];
     const exitTool = leftPhase?.kind === 'working' ? leftPhase.exitTool : undefined;
-    if (
+    const gateHolds =
       request.actor.type !== 'human' &&
       !request.eventRoute &&
-      exitTool &&
-      fromStage !== request.stage &&
-      board.isWorking(request.stage) &&
+      exitTool !== undefined &&
       !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id) &&
-      !exitToolSucceeded(item, fromStage, exitTool.id)
-    ) {
+      !exitToolSucceeded(item, fromStage, exitTool.id);
+    const holds = (target: typeof board, stage: string) =>
+      gateHolds && (target !== board || fromStage !== stage) && target.isWorking(stage);
+    if (exitTool && holds(board, request.stage)) {
       return this.#commit(
         request,
         transitionId,
@@ -649,8 +649,16 @@ export class FactoryTransitionService {
       standalonePullRequest: isPullRequest,
       hasPullRequest: hasPullRequest({ workItem: item.workItem, source: itemSource }),
     };
-    const exit = resolvePhaseExitRoute(exitRoutes, cardRuleFacts(item), boards, cardShape, (target, phase) =>
-      pullRequestCardRejection(target, cardShape, phase),
+    const exit = resolvePhaseExitRoute(
+      exitRoutes,
+      cardRuleFacts(item),
+      boards,
+      cardShape,
+      (target, phase) =>
+        pullRequestCardRejection(target, cardShape, phase) ??
+        (holds(target, phase)
+          ? `${leftPhase?.name ?? fromStage} holds the card until ${exitTool?.id} succeeds, and ${phase} on ${target.name} starts work`
+          : undefined),
     );
     for (const { route, problem } of exit.skipped) {
       console.warn(

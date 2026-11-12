@@ -338,6 +338,63 @@ describe('phase-exit routes', () => {
     });
   });
 
+  it("skips a route into a working phase while the left phase's exit tool still holds the card", async () => {
+    const { seeded, scope, route, move, get } = await setup();
+    await seeded.boards.create(
+      scope,
+      {
+        key: 'design',
+        name: 'Design',
+        phases: [
+          { key: 'inbox', name: 'Inbox', kind: 'resting' as const, nextPhases: ['draft'] },
+          {
+            key: 'draft',
+            name: 'Draft',
+            kind: 'working' as const,
+            runner: { context: 'work' },
+            exitTool: { id: 'submit_plan', autoApprove: false },
+            nextPhases: ['parked', 'build'],
+          },
+          { key: 'parked', name: 'Parked', kind: 'resting' as const, nextPhases: ['build'] },
+          { key: 'build', name: 'Build', kind: 'working' as const, runner: { context: 'work' }, nextPhases: ['done'] },
+          { key: 'done', name: 'Done', kind: 'terminal' as const },
+        ],
+      },
+      'admin',
+    );
+    const draft = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: scope.factoryProjectId,
+        input: {
+          board: 'design',
+          externalSource: { integrationId: 'native', type: 'task', externalId: 'native:draft-card' },
+          title: 'Design the intro',
+          stages: ['draft'],
+          sessions: {},
+          metadata: {},
+        },
+      })
+    ).item;
+    await route({
+      name: 'Straight to build',
+      when: null,
+      from: { boardKey: 'design', phaseKey: 'draft' },
+      target: { boardKey: 'design', phaseKey: 'build' },
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // No plan was approved: parking the card is allowed, starting the build is not.
+    const result = await move(draft.id, 'design', 'parked');
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'parked' });
+    expect(result).not.toHaveProperty('route');
+    expect((await get(draft.id)).stages).toEqual(['parked']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"Straight to build"'));
+    warn.mockRestore();
+  });
+
   it('does not route a card leaving a phase that is terminal by now', async () => {
     const { github, card, route, move, get, fetchIssue } = await setup();
     // Saved before a board edit made the phase terminal: saving refuses a terminal `from` today.
