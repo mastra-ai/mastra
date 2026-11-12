@@ -100,10 +100,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
   }
 
   /**
-   * How run `runId` ended, when it ended after a restart read it: the stored
-   * success or failure in the shape a finish event carries, or an error when
-   * the run's end already went out but its result is not stored (the final
-   * snapshot was declined). `undefined` while the run still has to be driven.
+   * How run `runId` stopped, when it stopped after a restart read it: the
+   * stored success, failure or suspension in the shape a finish event carries,
+   * or an error when the run's end already went out but its result is not
+   * stored (the final snapshot was declined). `undefined` while the run still
+   * has to be driven.
    */
   async #endedBeforeRestart(
     workflowId: string,
@@ -119,10 +120,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
     const markedEnded =
       (await store.supportsRunFencing()) && !!(await store.getRunOwnership({ runId: runEndedKey(runId) }))?.live;
     const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-    if (snapshot?.status === 'success' || snapshot?.status === 'failed') {
+    if (snapshot?.status === 'success' || snapshot?.status === 'failed' || snapshot?.status === 'suspended') {
+      const prevResult = {
+        success: snapshot.result,
+        failed: { status: 'failed', error: snapshot.error },
+        suspended: { status: 'suspended' },
+      }[snapshot.status];
       return {
         result: {
-          prevResult: snapshot.status === 'success' ? snapshot.result : { status: 'failed', error: snapshot.error },
+          prevResult,
           stepResults: hydrateSerializedStepErrors(snapshot.context),
           state: snapshot.context?.__state ?? snapshot.value,
         },

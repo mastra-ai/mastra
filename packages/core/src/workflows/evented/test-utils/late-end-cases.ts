@@ -268,6 +268,52 @@ export function describeLateEndCases({
       20_000,
     );
 
+    it('settles a restart from the stored suspension when the run suspends before the restart listens', async () => {
+      const executions: string[] = [];
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num, stateSchema: Seen })
+          .then(noting('first', executions))
+          .then(noting('second', executions, true))
+          .commit();
+      // The suspending step's end sits in A's broker queue past a lease TTL, so the run looks stopped.
+      const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [1]));
+      const a = await startReplica(build(), fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await fromA.firstHeld;
+      await waitUntilOrphaned(run.runId);
+
+      // B's restart reads the run, and A suspends it before B listens for its finish.
+      const b = await startReplica(build());
+      const store = (await b.mastra.getStorage()!.getStore('workflows'))!;
+      const claim = store.claimRunOwnership.bind(store);
+      let suspended = false;
+      const spy = vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+        if (!suspended && args.runId === restartLeaseKey(run.runId)) {
+          suspended = true;
+          fromA.holdAll();
+          await fromA.drain(a);
+        }
+
+        return claim(args);
+      });
+      try {
+        const restart = (await b.workflow.createRun({ runId: run.runId })).restart({
+          outputOptions: { includeState: true },
+        });
+        expect(await restart).toMatchObject({
+          status: 'suspended',
+          steps: { second: { status: 'suspended' } },
+          state: { last: 'second' },
+        });
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(executions).toEqual(['first', 'second']);
+      expect((await storedRun(run.runId))?.status).toBe('suspended');
+    }, 20_000);
+
     it('restarts a time travel of an ended run whose start event never reached a worker', async () => {
       const build = () =>
         createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
