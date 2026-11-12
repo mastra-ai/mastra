@@ -2095,7 +2095,12 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
-            ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
+            ...(environmentBuilds
+              ? {
+                  onRepositoryPush: environmentBuilds.onRepositoryPush,
+                  onEnvironmentSaved: environmentBuilds.onEnvironmentSaved,
+                }
+              : {}),
             sessionRetirement,
             moveThread: async ({ threadId, resourceId }) => {
               // The sessions' own Memory, so a moved thread takes its observation vectors along.
@@ -2194,6 +2199,7 @@ export class MastraFactory {
             sandboxEnvs: sandboxEnvsStorage,
             writable: !secretsUnencrypted,
             audit: auditDomain,
+            ...(environmentBuilds ? { onEnvironmentSaved: environmentBuilds.onEnvironmentSaved } : {}),
           }).routes(),
           ...buildFeedEventsRoutes({ auth: routeAuth, projects: factoryProjectsStorage, pubsub: eventBus }),
           ...auditDomain.routes(),
