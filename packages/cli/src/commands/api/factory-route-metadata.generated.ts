@@ -363,6 +363,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "q",
       "scope",
       "sessionId",
+      "since",
       "source",
       "started",
       "workItemId"
@@ -3448,6 +3449,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "workItemId": {
           "$ref": "#/$defs/__schema7"
+        },
+        "since": {
+          "$ref": "#/$defs/__schema9"
         }
       },
       "$defs": {
@@ -3502,6 +3506,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "__schema8": {
           "type": "string",
           "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "__schema9": {
+          "type": "string",
+          "pattern": "^\\d{1,15}$"
         }
       }
     },
@@ -3585,6 +3593,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "removedIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "check": {
+          "type": "string"
         }
       },
       "required": [

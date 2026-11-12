@@ -1952,7 +1952,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             // agent default; the first call parked its own delegation on the entry.
             delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
             hooks: resumeOptions.hooks ?? execOptions.hooks,
-            methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
+            // Build for the method that started the run, not from `closeOnSuspend` (#29436).
+            methodType: existingRegistryEntry.methodType ?? 'stream',
             backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
             backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
             model: existingRegistryEntry.model,
@@ -2299,6 +2300,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // As in core `DurableAgent.observe()`: this output belongs to this
       // observer alone, so a consumer that stops reading fullStream detaches
       // the pubsub subscription instead of leaving it open.
+      //
+      // Kept inline rather than using core's `detachFullStreamOnEnd`: the
+      // `@mastra/core` peer range admits published versions (1.83.0-alpha.7
+      // through .9) that do not export it, which would fail at module load.
+      // Migrate this call site once a released core supplies the export.
       const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
       Object.defineProperty(output, 'fullStream', {
         configurable: true,

@@ -482,6 +482,15 @@ const workItemListQuerySchema = z
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
     /** Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing. */
     workItemId: z.array(uuidSchema).min(1).max(100).optional(),
+    /**
+     * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
+     * this server did not issue reads as none, and the board answers whole.
+     */
+    since: z
+      .string()
+      .regex(/^\d{1,15}$/)
+      .optional()
+      .catch(undefined),
   })
   .refine(query => !(query.scope && query.sessionId), {
     path: ['scope'],
@@ -502,7 +511,11 @@ const workItemListQuerySchema = z
   .refine(query => !(query.workItemId && (query.source || query.started || query.scope || query.sessionId)), {
     path: ['workItemId'],
     message: 'Send workItemId without source, started, scope or sessionId',
-  });
+  })
+  // A narrowed list is not the board a cursor names, so it answers as it does without one.
+  .transform(query =>
+    query.sessionId || query.scope || query.started || query.source ? { ...query, since: undefined } : query,
+  );
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
@@ -1046,11 +1059,18 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
     responseSchema: z.object({
+      /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
       /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
       total: z.number().int().nonnegative().optional(),
+      /** Names this read of the whole board. Absent when the next read must list it whole again. */
+      cursor: z.string().optional(),
+      /** Cards gone since the `since` sent. Its presence marks an answer that holds only what moved. */
+      removedIds: z.array(z.string()).optional(),
+      /** With `removedIds`: `boardCheck` of the whole board, for a reader to check its merged copy against. */
+      check: z.string().optional(),
     }),
   },
   workItemCreate: {

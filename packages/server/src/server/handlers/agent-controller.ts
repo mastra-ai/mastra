@@ -908,6 +908,11 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // can trip the request timeout and leave CORS mutating an already-sent response.
       // Claim the parked suspension before acking so a concurrent duplicate answer
       // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
+      // A run parked by a process that has since gone away is only in storage.
+      // Older @mastra/core peers lack it; they only claim in-memory suspensions.
+      if (typeof session.restoreStoredToolSuspension === 'function') {
+        await session.restoreStoredToolSuspension(toolCallId, runId);
+      }
       const claim = session.claimToolSuspension(toolCallId, runId);
       if (!claim.accepted) return { ok: false, reason: claim.reason };
       ackBackgroundSessionWork({

@@ -9,6 +9,7 @@
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
+import type { WorkItemListResponse } from '../../../../api/types';
 import { requestJson } from './request';
 
 export type WorkItemSource =
@@ -134,6 +135,8 @@ export interface WorkItem {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  /** When the card last changed in any way, which `boardCheck` reads. */
+  changedAt?: string | null;
 }
 
 /** Session ref as sent by the client — `startedBy` is stamped server-side. */
@@ -300,7 +303,12 @@ export interface BoardSnapshot {
   parkedSessionIds: string[];
   /** How many cards matched a `started: 'false'` read, of which `workItems` holds the first. */
   total?: number;
+  /** Names this read of the whole board to the server. Kept with the cards it was read with. */
+  cursor?: string;
 }
+
+/** A board read as the server answers it. With `removedIds` it holds only what moved since the cursor sent. */
+export type BoardRead = BoardSnapshot & Pick<WorkItemListResponse, 'removedIds' | 'check'>;
 
 /**
  * List the org's work items for a Factory project: the whole board, or with `only` a part of it.
@@ -308,6 +316,7 @@ export interface BoardSnapshot {
  * the cards related to them; `started: 'false'` for the most recently updated cards holding no
  * session whose text has every word of `q`; `source` for the cards filed from those source ids or
  * URLs; `workItemId` for the cards with those ids.
+ * With `since`, the cursor of a board already held, a server that can sends only what moved.
  */
 export async function listWorkItems(
   baseUrl: string,
@@ -318,8 +327,9 @@ export async function listWorkItems(
     | { scope: 'sessions' }
     | { started: 'false'; q: string }
     | { source: string[] }
-    | { workItemId: string[] },
-): Promise<BoardSnapshot> {
+    | { workItemId: string[] }
+    | { since: string },
+): Promise<BoardRead> {
   const params =
     only &&
     new URLSearchParams(
@@ -329,20 +339,16 @@ export async function listWorkItems(
           ? only.workItemId.map(id => ['workItemId', id])
           : only,
     );
-  const data = await requestJson<{
-    workItems: WireWorkItem[];
-    runningSessionIds?: string[];
-    parkedSessionIds?: string[];
-    total?: number;
-  }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${params ? `?${params}` : ''}`,
-    { signal },
-  );
+  const { workItems, runningSessionIds, parkedSessionIds, ...rest } = await requestJson<
+    Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
+  >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${params ? `?${params}` : ''}`, {
+    signal,
+  });
   return {
-    workItems: data.workItems.map(fromWireWorkItem),
-    runningSessionIds: data.runningSessionIds ?? [],
-    parkedSessionIds: data.parkedSessionIds ?? [],
-    ...(data.total === undefined ? {} : { total: data.total }),
+    ...rest,
+    workItems: workItems.map(fromWireWorkItem),
+    runningSessionIds: runningSessionIds ?? [],
+    parkedSessionIds: parkedSessionIds ?? [],
   };
 }
 
