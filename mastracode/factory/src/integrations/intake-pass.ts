@@ -163,11 +163,20 @@ export interface IntakePassStatus {
   error: string | null;
   /** Sources whose import at link time has run, by the time each was bound. */
   imported: Record<string, string>;
+  /** Sources whose open records have all been read since they were bound, by that same time. */
+  listed: Record<string, string>;
 }
 
 export type IntakePassStatusStore = Pick<IntegrationStorageHandle['settings'], 'get' | 'save'>;
 
-const NO_STATUS: IntakePassStatus = { version: 1, completeAt: null, failedAt: null, error: null, imported: {} };
+const NO_STATUS: IntakePassStatus = {
+  version: 1,
+  completeAt: null,
+  failedAt: null,
+  error: null,
+  imported: {},
+  listed: {},
+};
 
 /** The settings row a pass keeps its status in; the `user` half of the key names the project and kind. */
 export function intakePassStatusKey(factoryProjectId: string, kind: IntakeKind): string {
@@ -357,7 +366,11 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
               if (!sourceId || !bound) return false;
               const createdAt = options.record(item).createdAt;
               if (createdAt && createdAt.getTime() >= bound.getTime()) return true;
-              return options.importsAtBind && imported.has(item) && status?.imported[sourceId] !== boundAt(sourceId);
+              if (!options.importsAtBind) return false;
+              // Every open record of the source has been seen, so one that shows up now is new to
+              // the listing whatever its age: it was reopened, or gained a label the project takes.
+              if (status?.listed[sourceId] === boundAt(sourceId)) return true;
+              return imported.has(item) && status?.imported[sourceId] !== boundAt(sourceId);
             },
             offer: fresh => options.offer({ orgId, factoryProjectId }, fresh),
           });
@@ -366,12 +379,14 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
           summary.removed += settled.removed;
 
           const at = now().toISOString();
+          const bindings = Object.fromEntries([...sources].map(([sourceId, bound]) => [sourceId, bound.toISOString()]));
           await saveIntakePassStatus(options.status, scope, {
             version: 1,
             completeAt: complete ? at : (status?.completeAt ?? null),
             failedAt: null,
             error: null,
-            imported: Object.fromEntries([...sources].map(([sourceId, bound]) => [sourceId, bound.toISOString()])),
+            imported: bindings,
+            listed: complete ? bindings : (status?.listed ?? {}),
           });
         } catch (error) {
           summary.failed += 1;

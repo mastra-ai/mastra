@@ -11,3 +11,5 @@ Fixed Factory slowing down while boards are open. Each open board used to ask Gi
 - A new issue from GitLab, Linear, Jira or incident.io reaches the board within five minutes instead of 30 seconds. GitHub and GitLab events still arrive at once.
 - The list routes of the five providers no longer create cards. Cards are created by the server's own checks, so disabling a provider's reconcile flag also stops its new issues from reaching the board.
 - Deleting the card of an issue that is still open puts the issue back in Intake.
+
+Work-item storage gains `storeIntakeCandidate`, `removeIntakeCandidate`, `listIntakeCandidates` and `onIntakeChanged`.

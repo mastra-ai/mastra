@@ -38,6 +38,8 @@ describe('the intake pass on Jira', () => {
   /** What Jira holds; its id is its place in this list, so an issue keeps its id while listed. */
   let issues: ListedIssue[];
   let jiraIsDown: boolean;
+  /** Jira always has another page, so no pass reads its issues to the end. */
+  let jiraNeverEnds: boolean;
   let searches: number;
   let offered: ReturnType<typeof vi.spyOn<JiraRules, 'ingest'>>;
 
@@ -48,6 +50,7 @@ describe('the intake pass on Jira', () => {
     vi.setSystemTime(new Date(BOUND_AT));
     issues = [];
     jiraIsDown = false;
+    jiraNeverEnds = false;
     searches = 0;
     vi.stubGlobal(
       'fetch',
@@ -73,7 +76,7 @@ describe('the intake pass on Jira', () => {
             },
           ];
         });
-        return new Response(JSON.stringify({ issues: page }), {
+        return new Response(JSON.stringify({ issues: page, ...(jiraNeverEnds ? { nextPageToken: 'more' } : {}) }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -155,19 +158,54 @@ describe('the intake pass on Jira', () => {
     expect(offeredIssues()).toEqual(['OPS-1', 'OPS-2']);
   });
 
-  it('offers an issue older than the binding in Intake without handing it to the rules', async () => {
+  it('hands an old issue to the rules when it enters the listing after every open issue was read', async () => {
     issues = [issue('OPS-1')];
     await intakePass();
     await fileProposedCards();
 
-    // Reopened in Jira after the import that binding runs: it predates the binding.
+    // Reopened in Jira, or given a label this project takes: older than the binding, new to the listing.
+    issues = [issue('OPS-1'), issue('OPS-9', { created: BEFORE_BINDING })];
+    expect(await intakePass()).toMatchObject({ failed: 0, offered: 1, stored: 1 });
+
+    expect(offeredIssues()).toEqual(['OPS-1', 'OPS-9']);
+    await fileProposedCards();
+    expect(await cards()).toEqual(['OPS-1', 'OPS-9']);
+    expect(await candidates()).toEqual([]);
+  });
+
+  it('keeps an old issue in Intake while the open issues were never read to the end', async () => {
+    jiraNeverEnds = true;
+    issues = [issue('OPS-1')];
+    expect(await intakePass()).toMatchObject({ failed: 0, offered: 1 });
+    expect((await status())?.listed).toEqual({});
+
+    // The pass stopped at its page limit, so this one may be backlog it had not reached yet.
     issues = [issue('OPS-1'), issue('OPS-9', { created: BEFORE_BINDING })];
     expect(await intakePass()).toMatchObject({ failed: 0, offered: 0, stored: 1 });
 
-    expect(await candidates()).toEqual(['OPS-9']);
+    expect(await candidates()).toEqual(['OPS-1', 'OPS-9']);
     expect(offeredIssues()).toEqual(['OPS-1']);
-    await fileProposedCards();
-    expect(await cards()).toEqual(['OPS-1']);
+  });
+
+  it('reads a source bound again to the end before an old issue counts as new', async () => {
+    issues = [issue('OPS-1')];
+    await intakePass();
+    expect((await status())?.listed).toEqual({ [OPS.projectId]: BOUND_AT });
+
+    await seed.intake.clearBinding({ orgId: 'org1', integrationId: 'jira', sourceId: OPS.projectId, factoryProjectId });
+    await seed.intake.setSharedBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: OPS.projectId,
+      factoryProjectId,
+      labels: null,
+    });
+    jiraNeverEnds = true;
+    await intakePass();
+
+    issues = [issue('OPS-1'), issue('OPS-9', { created: BEFORE_BINDING })];
+    expect(await intakePass()).toMatchObject({ failed: 0, offered: 0, stored: 1 });
+    expect(offeredIssues()).not.toContain('OPS-9');
   });
 
   it('hands the newest issues of a just-bound source to the rules, however old they are', async () => {

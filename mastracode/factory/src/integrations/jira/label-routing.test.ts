@@ -291,6 +291,29 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     }
   });
 
+  it('files an issue older than a label binding once it gains that label', async () => {
+    // Every issue here was created on 2026-07-01, so this binding is younger than all of them.
+    vi.setSystemTime(new Date('2026-08-01T00:00:00.000Z'));
+    const triage = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'triage' } })).id;
+    await seed.intake.setSharedBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: path.sourceId,
+      factoryProjectId: triage,
+      labels: ['bug'],
+    });
+    expect(await poll(triage)).toEqual(['OPS-2']);
+
+    const unlabelled = issues[0]!;
+    unlabelled.labels = ['bug'];
+    try {
+      expect((await poll(triage)).sort()).toEqual(['OPS-1', 'OPS-2']);
+      expect(await filed(triage)).toEqual(['OPS-1', 'OPS-2']);
+    } finally {
+      unlabelled.labels = [];
+    }
+  });
+
   it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {
     expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
     await fileProposedCards();
@@ -330,9 +353,9 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     await fileProposedCards(async tenant => {
       if (tenant.factoryProjectId !== factories.platform || takeover) return projectExists(tenant);
       takeover = (async () => {
-        expect(
-          (await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status,
-        ).toBe(204);
+        expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(
+          204,
+        );
         const growth = await takeOverWithGrowth();
         expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
         return growth;
