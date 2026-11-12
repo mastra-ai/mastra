@@ -107,19 +107,13 @@ export async function savePlanToDisk(opts: {
 }
 
 /**
- * Read a plan markdown file by absolute path.
+ * Split plan markdown into its title and body.
  *
- * The leading `# <title>` heading (if present) is parsed as the title and the remaining
- * content is returned as the plan body. Returns `undefined` when the file does not exist.
+ * The leading `# <title>` heading (if present) is the title and the remaining content is
+ * the plan body. Used both when reading a plan from local disk and when a host reads one
+ * through a session workspace filesystem.
  */
-export async function readPlanFile(absPath: string): Promise<{ title: string; plan: string } | undefined> {
-  let raw: string;
-  try {
-    raw = await fs.readFile(absPath, 'utf-8');
-  } catch {
-    return undefined;
-  }
-
+export function parsePlanContent(raw: string): { title: string; plan: string } {
   const lines = raw.split(/\r?\n/);
   const headingIndex = lines.findIndex(line => line.trim().length > 0);
   const heading = headingIndex >= 0 ? lines[headingIndex] : undefined;
@@ -134,6 +128,23 @@ export async function readPlanFile(absPath: string): Promise<{ title: string; pl
   }
 
   return { title: '', plan: raw.trimEnd() };
+}
+
+/**
+ * Read a plan markdown file by absolute path.
+ *
+ * The leading `# <title>` heading (if present) is parsed as the title and the remaining
+ * content is returned as the plan body. Returns `undefined` when the file does not exist.
+ */
+export async function readPlanFile(absPath: string): Promise<{ title: string; plan: string } | undefined> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(absPath, 'utf-8');
+  } catch {
+    return undefined;
+  }
+
+  return parsePlanContent(raw);
 }
 
 /**
