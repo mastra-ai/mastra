@@ -206,6 +206,22 @@ const STATE_BASE_WORKFLOW_EXPR = `payload ->> '$.workflowName'`;
 const STATE_BASE_RUN_EXPR = `payload ->> '$.runId'`;
 
 /**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns, built from the JSON column
+ * `state` (a v1 snapshot or a storage v2 header): `status` (the `status` expression), `timestamp`,
+ * and for a nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths
+ * are read, so `context` is never sent.
+ */
+function summarySnapshotSql(state: string, status: string): string {
+  const fields = `'status', ${status}, 'timestamp', json_extract(${state}, '$.timestamp')`;
+  // The parent is a separate branch because json_object() keeps a SQL NULL as a JSON null.
+  return `CASE WHEN json_type(${state}, '$.parentWorkflow') = 'object'
+    THEN json_object(${fields}, 'parentWorkflow', json_object(
+      'workflowId', json_extract(${state}, '$.parentWorkflow.workflowId'),
+      'runId', json_extract(${state}, '$.parentWorkflow.runId')))
+    ELSE json_object(${fields}) END`;
+}
+
+/**
  * A JSON array of {@link EntryRow} for the storage v2 run `alias` refers to: each step's
  * latest entry, the step patches after it (for `latestStepResults`), and the entries
  * `materializeState` uses for the latest state: the latest full state or state base and every
@@ -511,7 +527,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     const branches: string[] = [];
     if (v1Where !== null) {
       const snapshot = summary
-        ? `json_object('status', json_extract(snapshot, '$.status'), 'timestamp', json_extract(snapshot, '$.timestamp'))`
+        ? summarySnapshotSql('snapshot', `json_extract(snapshot, '$.status')`)
         : 'json(snapshot)';
       branches.push(
         `SELECT workflow_name, run_id, resourceId, ${snapshot} AS snapshot, NULL AS header, createdAt, updatedAt, 1 AS version
@@ -520,7 +536,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
     if (v2Where !== null) {
       const columns = summary
-        ? `json_object('status', status, 'timestamp', json_extract(header, '$.timestamp')) AS snapshot, NULL AS header`
+        ? `${summarySnapshotSql('header', 'status')} AS snapshot, NULL AS header`
         : 'NULL AS snapshot, json(header) AS header';
       branches.push(
         `SELECT workflow_name, run_id, resourceId, ${columns}, createdAt, updatedAt, 2 AS version
