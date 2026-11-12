@@ -613,6 +613,46 @@ describe.each(transports)(
       return { result, stored, flaky, executions: executions(), finishEvents };
     }
 
+    it('continues a leased step from its saved result when its step end publish throws once', async () => {
+      const { pubsub: inner, close } = await makeTransport();
+      cleanups.push(close);
+      const id = `leased-step-end-${Math.random().toString(36).slice(2)}`;
+      let executions = 0;
+      const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }) })
+        .then(
+          createStep({
+            id: 'work',
+            inputSchema: z.object({}),
+            outputSchema: z.object({ ok: z.boolean() }),
+            execute: async () => {
+              executions++;
+              return { ok: true };
+            },
+          }),
+        )
+        .commit();
+      const flaky = createFlakyPublishPubSub(inner, { 'workflow.step.end': 1 });
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: new MockStore(),
+        pubsub: flaky.pubsub,
+        logger: false,
+      });
+      await mastra.startWorkers();
+      cleanups.push(() => mastra.stopWorkers());
+
+      const wfRun = await workflow.createRun();
+      const result = await Promise.race([
+        wfRun.start({ inputData: {} }),
+        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+      ]);
+
+      // The redelivery of the step's event finds its saved result and continues without the step.
+      expect(result).toMatchObject({ status: 'success', result: { ok: true } });
+      expect(flaky.rejected['workflow.step.end']).toBe(1);
+      expect(executions).toBe(1);
+    });
+
     it('control: a workflow.fail publish that succeeds fails the run', async () => {
       const { result, stored, flaky } = await run(0);
       expect(result).not.toBe('HANG');
