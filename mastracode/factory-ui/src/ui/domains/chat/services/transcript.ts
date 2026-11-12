@@ -617,46 +617,103 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
   const anchored = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
-  if (messages.every(message => onScreenIndex.has(message))) return reconcileToolResults(anchored, messages);
+  const unclaimed = messages.filter(message => !onScreenIndex.has(message));
+  const {
+    state: folded,
+    absorbed,
+    positionOf,
+  } = foldStepsIntoRunEntries(anchored, unclaimed, terminalToolCallIds(messages));
+  if (unclaimed.every(message => absorbed.has(message))) return reconcileToolResults(folded, messages);
 
-  const drawnToolCallIds = new Set(
-    anchored.entries.flatMap(entry => (entry.kind === 'message' ? toolCallIdsOf(entry.message.content.parts) : [])),
-  );
   const entries: TimelineEntry[] = [];
   let cursor = 0;
   let missing: MastraDBMessage[] = [];
 
   for (const message of messages) {
+    if (absorbed.has(message)) continue;
     const anchorIndex = onScreenIndex.get(message);
     if (anchorIndex === undefined) {
-      const unseen = withoutDrawnToolCalls(message, drawnToolCallIds);
-      if (unseen) {
-        missing.push(unseen);
-        for (const toolCallId of toolCallIdsOf(unseen.content.parts)) drawnToolCallIds.add(toolCallId);
-      }
+      missing.push(message);
       continue;
     }
 
-    if (anchorIndex < cursor) continue;
-    entries.push(...anchored.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    const position = positionOf(anchorIndex);
+    if (position < cursor) continue;
+    entries.push(...folded.entries.slice(cursor, position), ...messagesToEntries(missing));
     missing = [];
-    cursor = anchorIndex;
+    cursor = position;
   }
-  entries.push(...anchored.entries.slice(cursor), ...messagesToEntries(missing));
+  entries.push(...folded.entries.slice(cursor), ...messagesToEntries(missing));
 
-  return reconcileToolResults({ ...anchored, entries }, messages);
+  return reconcileToolResults({ ...folded, entries }, messages);
 }
 
-// A stored step of a streamed run can arrive unclaimed while its tool calls are
-// already drawn by the run's entry; inserting them again duplicates their cards.
-function withoutDrawnToolCalls(message: MastraDBMessage, drawn: Set<string>): MastraDBMessage | undefined {
-  const parts = message.content.parts.filter(part => {
-    const toolCallId = toolCallIdForPart(part);
-    return toolCallId === undefined || !drawn.has(toolCallId);
+// The stream draws a whole run as one entry, but storage keeps one message per
+// step. A stored step that shares a tool call with an on-screen entry belongs
+// to that run: fold the parts the entry lacks into it (plus any stored prompt
+// not yet on screen) instead of drawing the step, and its tool calls, again.
+// A streaming entry is left alone; its stream still owns the part indexes, and
+// the merge after the run ends folds whatever the stream missed.
+function foldStepsIntoRunEntries(
+  state: TranscriptState,
+  unclaimed: MastraDBMessage[],
+  settled: Set<string>,
+): { state: TranscriptState; absorbed: Set<MastraDBMessage>; positionOf: (index: number) => number } {
+  const absorbed = new Set<MastraDBMessage>();
+  if (unclaimed.length === 0) return { state, absorbed, positionOf: index => index };
+
+  const entries = [...state.entries];
+  const runOf = new Map<string, number>();
+  for (const [index, entry] of entries.entries()) {
+    if (entry.kind !== 'message') continue;
+    for (const toolCallId of toolCallIdsOf(entry.message.content.parts)) runOf.set(toolCallId, index);
+  }
+  const promptIds = new Set(entries.flatMap(entry => (entry.kind === 'message' ? [] : [entry.id])));
+  const promptsAfter = new Map<number, TimelineEntry[]>();
+
+  for (const message of unclaimed) {
+    const index = toolCallIdsOf(message.content.parts)
+      .map(toolCallId => runOf.get(toolCallId))
+      .find(candidate => candidate !== undefined);
+    const entry = index === undefined ? undefined : entries[index];
+    if (index === undefined || !entry || entry.kind !== 'message' || entry.message.role !== message.role) continue;
+    absorbed.add(message);
+    if (entry.streaming) continue;
+
+    const unseen = partsMissingFrom(entry.message.content.parts, message.content.parts);
+    if (unseen.length > 0) {
+      const parts = [...entry.message.content.parts, ...unseen];
+      entries[index] = { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
+      for (const toolCallId of toolCallIdsOf(unseen)) runOf.set(toolCallId, index);
+    }
+
+    const prompts = persistedPrompts(message).filter(
+      prompt => !settled.has(prompt.toolCallId) && !promptIds.has(prompt.id),
+    );
+    for (const prompt of prompts) promptIds.add(prompt.id);
+    if (prompts.length > 0) promptsAfter.set(index, [...(promptsAfter.get(index) ?? []), ...prompts]);
+  }
+
+  if (absorbed.size === 0) return { state, absorbed, positionOf: index => index };
+  const positions: number[] = [];
+  const folded: TimelineEntry[] = [];
+  for (const [index, entry] of entries.entries()) {
+    positions.push(folded.length);
+    folded.push(entry, ...(promptsAfter.get(index) ?? []));
+  }
+  return { state: { ...state, entries: folded }, absorbed, positionOf: index => positions[index] ?? folded.length };
+}
+
+function partsMissingFrom(drawn: MastraMessagePart[], parts: MastraMessagePart[]): MastraMessagePart[] {
+  const toolCallIds = new Set(toolCallIdsOf(drawn));
+  const texts = new Set(drawn.flatMap(part => (part.type === 'text' ? [part.text.trim()] : [])));
+  return parts.filter(part => {
+    if (part.type === 'step-start') return false;
+    if (part.type === 'tool-invocation') return !toolCallIds.has(part.toolInvocation.toolCallId);
+    if (part.type === 'text') return part.text.trim().length > 0 && !texts.has(part.text.trim());
+    const key = JSON.stringify(part);
+    return !drawn.some(candidate => JSON.stringify(candidate) === key);
   });
-  if (parts.length === message.content.parts.length) return message;
-  if (parts.length === 0) return undefined;
-  return { ...message, content: { ...message.content, parts } };
 }
 
 function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {

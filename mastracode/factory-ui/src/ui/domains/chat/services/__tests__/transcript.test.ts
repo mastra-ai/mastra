@@ -1358,103 +1358,126 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries).toHaveLength(1);
   });
 
-  it('does not redraw a tool-only step of a streamed run as a second turn', () => {
-    // Each persisted step shares tool calls with the one streamed entry; a later
-    // step used to land as a new entry, drawing its submit_plan card twice.
-    const invocation = (toolCallId: string, toolName: string, state: 'call' | 'result'): MastraMessagePart => ({
-      type: 'tool-invocation',
-      toolInvocation:
-        state === 'result'
-          ? { state, toolCallId, toolName, args: {}, result: 'ok' }
-          : { state, toolCallId, toolName, args: {} },
-    });
-    let state = createInitialTranscript({ messages: [] });
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: {
-        type: 'message_start',
-        message: dbMessage('streamed-turn', 'assistant', [
-          invocation('tool-1', 'execute_command', 'result'),
-          invocation('plan-1', 'submit_plan', 'call'),
-        ]),
-      },
-    });
-
-    const next = transcriptReducer(state, {
-      type: 'mergeWindow',
-      messages: [
-        dbMessage('step-1', 'assistant', [invocation('tool-1', 'execute_command', 'result')]),
-        dbMessage('step-2', 'assistant', [invocation('plan-1', 'submit_plan', 'call')]),
-      ],
-    });
-
-    expect(next.entries).toHaveLength(1);
-    expect(messageParts(next.entries[0]).filter(isToolInvocationPart)).toHaveLength(2);
-  });
-
-  it('keeps unseen text from a later stored step whose tool call is already drawn', () => {
-    const view: MastraMessagePart = {
-      type: 'tool-invocation',
-      toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
-    };
-    const plan: MastraMessagePart = {
-      type: 'tool-invocation',
-      toolInvocation: { state: 'call', toolCallId: 'plan-1', toolName: 'submit_plan', args: {} },
-    };
-    let state = createInitialTranscript({ messages: [] });
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'message_start', message: dbMessage('streamed-turn', 'assistant', [view, plan]) },
-    });
-    const window = [
-      dbMessage('step-1', 'assistant', [view]),
-      dbMessage('step-2', 'assistant', [plan, { type: 'text', text: 'Final answer' }]),
-    ];
-
-    const next = transcriptReducer(state, { type: 'mergeWindow', messages: window });
-    const again = transcriptReducer(next, { type: 'mergeWindow', messages: window });
-
-    for (const merged of [next, again]) {
-      const parts = merged.entries.flatMap(messageParts);
-      expect(parts.filter(isToolInvocationPart)).toHaveLength(2);
-      expect(parts).toContainEqual({ type: 'text', text: 'Final answer' });
-    }
-  });
-
-  it('draws a tool call the stream missed from a stored step that repeats a drawn one', () => {
-    const tool = (toolCallId: string, toolName: string): MastraMessagePart => ({
+  describe('stored steps of a streamed run', () => {
+    // The stream draws a run as one entry; storage keeps one message per step.
+    // Steps sharing a tool call with that entry used to land as extra turns,
+    // drawing the same submit_plan card twice.
+    const tool = (toolCallId: string, toolName = 'view'): MastraMessagePart => ({
       type: 'tool-invocation',
       toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: 'ok' },
     });
     const plan: MastraMessagePart = {
       type: 'tool-invocation',
-      toolInvocation: { state: 'call', toolCallId: 'plan-1', toolName: 'submit_plan', args: {} },
+      toolInvocation: { state: 'call', toolCallId: 'plan', toolName: 'submit_plan', args: {} },
     };
-    let state = createInitialTranscript({ messages: [] });
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: {
-        type: 'message_start',
-        message: dbMessage('streamed-turn', 'assistant', [tool('a', 'view'), tool('b', 'view')]),
-      },
-    });
-    const window = [
-      dbMessage('step-1', 'assistant', [tool('a', 'view')]),
-      dbMessage('step-2', 'assistant', [tool('b', 'view'), plan]),
-      dbMessage('step-3', 'assistant', [plan, { type: 'text', text: 'Final answer' }]),
-      dbMessage('step-4', 'assistant', [tool('b', 'view'), { type: 'text', text: 'Done' }]),
-    ];
+    const text = (value: string): MastraMessagePart => ({ type: 'text', text: value });
+    const suspended = (message: MastraDBMessage) => {
+      message.content.metadata = {
+        suspendedTools: { plan: { toolCallId: 'plan', toolName: 'submit_plan', args: {}, suspendPayload: {} } },
+      };
+      return message;
+    };
 
-    const next = transcriptReducer(state, { type: 'mergeWindow', messages: window });
-    const again = transcriptReducer(next, { type: 'mergeWindow', messages: window });
-
-    for (const merged of [next, again]) {
-      const parts = merged.entries.flatMap(messageParts);
-      const ids = parts.filter(isToolInvocationPart).map(part => part.toolInvocation.toolCallId);
-      expect(ids.sort()).toEqual(['a', 'b', 'plan-1']);
-      expect(parts).toContainEqual({ type: 'text', text: 'Final answer' });
-      expect(parts).toContainEqual({ type: 'text', text: 'Done' });
+    function streamRun(parts: MastraMessagePart[], { suspend = false } = {}) {
+      let state = createInitialTranscript({ messages: [] });
+      const message = dbMessage('streamed-turn', 'assistant', parts);
+      state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message } });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: message.id } });
+      if (suspend) {
+        state = transcriptReducer(state, {
+          type: 'event',
+          event: { type: 'tool_suspended', toolCallId: 'plan', toolName: 'submit_plan', args: {}, suspendPayload: {} },
+        });
+      }
+      return state;
     }
+
+    function mergeTwice(state: ReturnType<typeof streamRun>, window: MastraDBMessage[]) {
+      const once = transcriptReducer(state, { type: 'mergeWindow', messages: window });
+      const twice = transcriptReducer(once, { type: 'mergeWindow', messages: window });
+      return [once, twice];
+    }
+
+    function drawn(state: ReturnType<typeof streamRun>) {
+      const parts = state.entries.flatMap(entry => (isMessageEntry(entry) ? entry.message.content.parts : []));
+      return {
+        messages: state.entries.filter(isMessageEntry).length,
+        toolCallIds: parts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [])),
+        texts: parts.flatMap(part => (part.type === 'text' ? [part.text] : [])),
+        prompts: state.entries.filter(entry => entry.kind === 'suspension').map(entry => entry.id),
+      };
+    }
+
+    it('folds a tool-only step into the run entry', () => {
+      const state = streamRun([tool('a', 'execute_command'), plan]);
+      for (const merged of mergeTwice(state, [
+        dbMessage('s1', 'assistant', [tool('a')]),
+        dbMessage('s2', 'assistant', [plan]),
+      ])) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'plan'] });
+      }
+    });
+
+    it('keeps text from a step whose tool call is already drawn', () => {
+      const state = streamRun([tool('a'), plan]);
+      const window = [
+        dbMessage('s1', 'assistant', [tool('a')]),
+        dbMessage('s2', 'assistant', [plan, text('Final answer')]),
+      ];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'plan'], texts: ['Final answer'] });
+      }
+    });
+
+    it('draws a text-first plan step once', () => {
+      const state = streamRun([tool('a'), text('Here is the plan'), plan]);
+      const window = [
+        dbMessage('s1', 'assistant', [tool('a')]),
+        dbMessage('s2', 'assistant', [text('Here is the plan'), plan]),
+      ];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'plan'], texts: ['Here is the plan'] });
+      }
+    });
+
+    it('draws a tool call the stream missed once, even when several steps repeat it', () => {
+      const state = streamRun([tool('a'), tool('b')]);
+      const window = [
+        dbMessage('s1', 'assistant', [tool('a')]),
+        dbMessage('s2', 'assistant', [tool('b'), plan]),
+        dbMessage('s3', 'assistant', [tool('b'), plan, text('Final answer')]),
+      ];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'b', 'plan'], texts: ['Final answer'] });
+      }
+    });
+
+    it('keeps one prompt when the stream already shows it', () => {
+      const state = streamRun([tool('a'), plan], { suspend: true });
+      const window = [dbMessage('s1', 'assistant', [tool('a')]), suspended(dbMessage('s2', 'assistant', [plan]))];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, prompts: ['suspension-plan'] });
+      }
+    });
+
+    it('restores the stored prompt of a step whose parts are all drawn', () => {
+      const state = streamRun([tool('a'), plan]);
+      const window = [dbMessage('s1', 'assistant', [tool('a')]), suspended(dbMessage('s2', 'assistant', [plan]))];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'plan'], prompts: ['suspension-plan'] });
+      }
+    });
+
+    it('adds no empty entry for a step that only starts', () => {
+      const state = streamRun([tool('a'), tool('b')]);
+      const window = [
+        dbMessage('s1', 'assistant', [tool('a')]),
+        dbMessage('s2', 'assistant', [{ type: 'step-start' }, tool('b')]),
+      ];
+      for (const merged of mergeTwice(state, window)) {
+        expect(drawn(merged)).toMatchObject({ messages: 1, toolCallIds: ['a', 'b'] });
+      }
+    });
   });
 
   it('does not redraw a step the stream has already written further', () => {
