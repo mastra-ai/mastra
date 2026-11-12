@@ -69,5 +69,23 @@ export const AgentStreamEventTypes = {
  */
 export const RUN_RECORD_ADMISSION_TIMEOUT_MS = 5_000;
 
+/**
+ * How many stream events a run may have waiting to be published before the
+ * publisher stops queueing them. Publishing goes out through a serial queue, so
+ * while the cache or transport is unreachable every event the loop produces
+ * stays queued with its payload. Without a limit that backlog grows for as long
+ * as the outage lasts. The bound covers the frames the publisher is holding, not
+ * the run's whole memory: the loop keeps producing chunks of its own either way.
+ */
+export const AGENT_STREAM_PUBLISH_QUEUE_LIMIT = 256;
+
+/**
+ * How many bytes of payload the queued stream events may hold, alongside
+ * {@link AGENT_STREAM_PUBLISH_QUEUE_LIMIT}. A run can produce few enough events
+ * and still hold large ones — a step's response messages, a delegated agent's
+ * nested output — so the count alone does not bound what is retained.
+ */
+export const AGENT_STREAM_PUBLISH_RETAINED_BYTES_LIMIT = 8 * 1024 * 1024;
+
 /** How long a finished run's stream stays replayable before it is cleaned up. */
 export const DEFAULT_STREAM_CLEANUP_TIMEOUT_MS = 30_000;

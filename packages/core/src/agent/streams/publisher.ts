@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
@@ -5,12 +6,17 @@ import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/prod
 import { slimNestedAgentChunks } from '../../stream/strip-model-snapshots';
 import type { ChunkType } from '../../stream/types';
 import { createRunAbortController } from '../durable/run-abort';
-import type { AgentSuspendedEventData } from '../durable/types';
+import type { AgentFinishEventData, AgentSuspendedEventData } from '../durable/types';
 import type { MessageList } from '../message-list';
 import { whenRunStepsSettle } from '../run-lease-fence';
 import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
-import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
+import {
+  AGENT_CONTROL_TOPIC,
+  AGENT_STREAM_PUBLISH_QUEUE_LIMIT,
+  AGENT_STREAM_PUBLISH_RETAINED_BYTES_LIMIT,
+  AGENT_STREAM_TOPIC,
+} from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
 import { diffResponseMessages } from './response-messages';
 import type { ResponseMessagesCursor, ResponseMessagesDiff } from './response-messages';
@@ -188,11 +194,124 @@ export function createAgentStreamPublisher({
   let suspended: AgentSuspendedEventData | undefined;
   let lastError: unknown;
 
+  /**
+   * Stream events the publisher is holding: accepted, not yet published. While the cache or
+   * transport is unreachable they accumulate, so both the count and the payload bytes they
+   * retain are bounded.
+   */
+  let pendingFrames = 0;
+  let pendingBytes = 0;
+  /**
+   * Set once an event was dropped, which happens only when the bounds above are reached.
+   * The run's log is then missing events, and readers have to be told rather than left to
+   * take a short replay for the whole run.
+   */
+  let replayIncomplete = false;
+  let droppedFrames = 0;
+
+  /** Queued before every event after the first drop, so the log marks where it is short. */
+  let gapNotificationQueued = false;
+  /** Whether that notification reached the log: a success terminal needs it to have landed first. */
+  let gapPersisted: boolean | undefined;
+
   const enqueue = (task: () => Promise<void>) => {
     queue = queue.then(task).catch(error => {
       logger?.warn?.(`[AgentStream:${runId}] failed to publish stream event`, { error });
     });
     return queue;
+  };
+
+  /** Queue a frame and hold its payload against the bounds until it is published. */
+  const enqueueFrame = (size: number, task: () => Promise<void>) => {
+    pendingFrames += 1;
+    pendingBytes += size;
+    queue = queue
+      .then(task)
+      .catch(error => {
+        logger?.warn?.(`[AgentStream:${runId}] failed to publish stream event`, { error });
+      })
+      .finally(() => {
+        pendingFrames -= 1;
+        pendingBytes -= size;
+      });
+    return queue;
+  };
+
+  /**
+   * Roughly what a frame's payload holds while it waits. Only the retained size matters
+   * here, so the estimate is taken once, when the frame is accepted, and never kept.
+   */
+  const frameSize = (value: unknown) => {
+    try {
+      return JSON.stringify(value)?.length ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  /**
+   * Report the gap this run's log now has, once per run. Published on the run topic as the
+   * error readers already handle, so an observer gets an explicit failure instead of a
+   * replay that looks complete. If it cannot be published the terminal below refuses to
+   * report success, so no reader is told a short replay is the whole run.
+   */
+  const queueGapNotification = () => {
+    if (gapNotificationQueued) return;
+    gapNotificationQueued = true;
+    void enqueue(async () => {
+      try {
+        await emitErrorEvent(pubsub, runId, replayIncompleteError(runId, droppedFrames));
+        gapPersisted = true;
+      } catch (error) {
+        gapPersisted = false;
+        logger?.warn?.(`[AgentStream:${runId}] failed to report an incomplete replay`, { error });
+      }
+    });
+  };
+
+  /**
+   * Drop a frame instead of queueing it: no task, no publish, nothing retained. The caller's
+   * own stream is unaffected — it reads the loop's output, and publishing only mirrors it.
+   */
+  const dropFrame = () => {
+    droppedFrames += 1;
+    if (!replayIncomplete) {
+      replayIncomplete = true;
+      // A dropped step-finish takes the response-message diff with it, so the next one has
+      // to describe the whole list rather than the part of it readers never saw.
+      forgetSentResponseMessages();
+      logger?.warn?.(`[AgentStream:${runId}] stream publishing is behind; dropping events`, {
+        limit: AGENT_STREAM_PUBLISH_QUEUE_LIMIT,
+        bytesLimit: AGENT_STREAM_PUBLISH_RETAINED_BYTES_LIMIT,
+      });
+    }
+    queueGapNotification();
+  };
+
+  /** Whether a frame of `size` would push the queued events past what the publisher holds. */
+  const overLimit = (size: number) =>
+    pendingFrames >= AGENT_STREAM_PUBLISH_QUEUE_LIMIT ||
+    (pendingBytes > 0 && pendingBytes + size > AGENT_STREAM_PUBLISH_RETAINED_BYTES_LIMIT);
+
+  /** Publish the run's success terminal, unless the log is short of events readers needed. */
+  const emitSuccessTerminal = async (data: AgentFinishEventData) => {
+    if (replayIncomplete && gapPersisted !== true) {
+      // Readers were never told the log is incomplete, so a finish event here would pass a
+      // short replay off as the whole run. Report the gap instead.
+      await emitErrorEvent(pubsub, runId, replayIncompleteError(runId, droppedFrames));
+      return;
+    }
+    await emitFinishEvent(pubsub, runId, data);
+  };
+
+  /** Queue a frame, or drop it when the publisher is already holding what it may hold. */
+  const publishFrame = (value: unknown, task: () => Promise<void>) => {
+    const size = frameSize(value);
+    if (overLimit(size)) {
+      dropFrame();
+      return;
+    }
+    void enqueueFrame(size, task);
   };
 
   const scheduleCleanup = () => {
@@ -256,7 +375,7 @@ export function createAgentStreamPublisher({
           return;
         case 'step-start': {
           const data = toStreamStepStart(chunk.payload);
-          void enqueue(() => emitStepStartEvent(pubsub, runId, data));
+          publishFrame(data, () => emitStepStartEvent(pubsub, runId, data));
           return;
         }
         case 'tool-call':
@@ -273,7 +392,7 @@ export function createAgentStreamPublisher({
           stepToolCallIds = [];
           const responseMessages = diffStepResponseMessages(chunk.payload?.messages?.nonUser);
           const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content, responseMessages));
-          void enqueue(async () => {
+          publishFrame(published, async () => {
             try {
               await emitChunkEvent(pubsub, runId, published);
             } catch (error) {
@@ -288,13 +407,14 @@ export function createAgentStreamPublisher({
         case 'workflow-step-output': {
           // A delegated agent's chunks arrive wrapped here, with their own prompts and steps.
           const published = keepProducedAt(chunk, slimNestedAgentChunks(chunk));
-          void enqueue(() => emitChunkEvent(pubsub, runId, published));
+          publishFrame(published, () => emitChunkEvent(pubsub, runId, published));
           return;
         }
         case 'finish': {
           finished = true;
           const data = toStreamFinish(chunk.payload);
-          void enqueue(() => emitFinishEvent(pubsub, runId, data));
+          // The terminal is never dropped: when the log is short it is what tells readers.
+          void enqueueFrame(frameSize(data), () => emitSuccessTerminal(data));
           return;
         }
         case 'tool-call-approval':
@@ -309,11 +429,11 @@ export function createAgentStreamPublisher({
         case 'error': {
           lastError = chunk.payload.error;
           const serialized = withPayload(chunk, { ...chunk.payload, error: serializeIfError(chunk.payload.error) });
-          void enqueue(() => emitChunkEvent(pubsub, runId, serialized));
+          publishFrame(serialized, () => emitChunkEvent(pubsub, runId, serialized));
           return;
         }
       }
-      void enqueue(() => emitChunkEvent(pubsub, runId, chunk));
+      publishFrame(chunk, () => emitChunkEvent(pubsub, runId, chunk));
     },
     close() {
       return end(() => new Error('Agent stream ended without a finish event'));
@@ -329,6 +449,21 @@ export function createAgentStreamPublisher({
 /** A copy of `chunk` with another payload, keeping when the chunk was produced. */
 function withPayload(chunk: ChunkType<any>, payload: unknown): ChunkType<any> {
   return keepProducedAt(chunk, { ...chunk, payload } as ChunkType<any>);
+}
+
+/**
+ * The gap a run's log has when the publisher dropped events. Published as a normal error
+ * event, so every reader that already handles a run's errors reports the run as failed
+ * instead of taking what it replayed for the whole run.
+ */
+function replayIncompleteError(runId: string, droppedFrames: number): MastraError {
+  return new MastraError({
+    id: 'AGENT_STREAM_REPLAY_INCOMPLETE',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.SYSTEM,
+    text: `Agent run "${runId}" produced more stream events than could be published while the cache was unreachable, so its replay is incomplete.`,
+    details: { runId, droppedFrames },
+  });
 }
 
 /** `copy`, stamped with when `chunk` was produced; publishing would otherwise stamp the copy when it's sent. */

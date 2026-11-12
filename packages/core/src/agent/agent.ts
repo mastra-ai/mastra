@@ -1004,6 +1004,16 @@ export class Agent<
   #streamBus?: AgentStreamBus;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
+  /**
+   * Run ids admitted for publication in this process but not yet handed to a publisher.
+   * The record read that admits a run and the record write its publisher makes are not
+   * atomic, and the setup between them awaits, so a second caller for the same id could
+   * otherwise reach the publisher too and both would publish on one topic. Kept apart
+   * from `#publishedRuns` so a claim with no publisher behind it is never reported as a
+   * running run. The value is the token of the invocation holding it, so a caller that
+   * fails can only give back its own claim.
+   */
+  #reservedRunIds = new Map<string, symbol>();
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
@@ -1847,6 +1857,11 @@ export class Agent<
    * record after the snapshot, so a slow snapshot write leaves the previous
    * `running` record in place for the whole resume handoff.
    *
+   * An id we generated ourselves is read from no cache at all: nothing else can hold it,
+   * so it is not a claim on anything, and refusing to start it during a cache outage
+   * would cost the caller a run that could not have collided. The in-process check above
+   * still runs for it, because a custom `generateId` can hand out one id twice.
+   *
    * Reading the record and writing our own is not atomic, so two processes
    * starting the same id within one cache round-trip of each other can still
    * overlap. The cache has no compare-and-set to close that.
@@ -1857,7 +1872,7 @@ export class Agent<
   async #assertRunIdAvailable(
     runId: string,
     resourceId: string | undefined,
-    { resuming }: { resuming: boolean },
+    { resuming, supplied }: { resuming: boolean; supplied: boolean },
   ): Promise<AgentRunRecord | undefined> {
     const bus = this.#ownStreamBus();
     if (!bus) return undefined;
@@ -1867,6 +1882,13 @@ export class Agent<
     if (!resuming && this.#publishedRuns.has(runId)) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
+
+    // An id we generated ourselves is not a claim on anything another run wrote down —
+    // nothing else can hold it — so its record is not read at all. Refusing such a run
+    // over an unreachable cache would deny a start that could not have collided. An id
+    // the caller supplied, and a resume continuing a run this process may not have
+    // started, still need the shared record before they can be admitted.
+    if (!supplied && !resuming) return undefined;
 
     // Fail closed: without the record we cannot tell whether another run owns this id.
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1896,25 +1918,61 @@ export class Agent<
     return record;
   }
 
+  /**
+   * Claim a run id for this process for the window between admitting a run and handing its
+   * id to a publisher. Refuses an id another run has published or already reserved, which
+   * is what the shared record would say, but without a cache round-trip — and unlike the
+   * record it cannot be overtaken by a second caller, because both callers are in here.
+   * Called after the cache read and immediately before the token is taken, so a record
+   * that answered "free" a moment ago cannot leave a second caller free to publish.
+   */
+  #reserveRunId(runId: string): symbol {
+    if (this.#publishedRuns.has(runId) || this.#reservedRunIds.has(runId)) {
+      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+    }
+    const token = Symbol(runId);
+    this.#reservedRunIds.set(runId, token);
+    return token;
+  }
+
+  /**
+   * Give a reservation back, but only when it is still ours: an invocation that fails must
+   * not release a claim another run has since taken.
+   */
+  #releaseRunId(runId: string, token: symbol): void {
+    if (this.#reservedRunIds.get(runId) === token) this.#reservedRunIds.delete(runId);
+  }
+
   #createStreamPublisher(
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
+    reservation?: symbol,
   ): AgentStreamPublisher | undefined {
     const bus = this.#ownStreamBus();
-    if (!bus) return undefined;
-    const publisher = createAgentStreamPublisher({
-      pubsub: bus.pubsub,
-      runId,
-      cleanupTimeoutMs: bus.cleanupTimeoutMs,
-      logger: this.logger,
-      abortSignal: owner.abortSignal,
-      onEnd: () => {
-        if (this.#publishedRuns.get(runId)?.publisher === publisher) this.#publishedRuns.delete(runId);
-      },
-      record: { cache: bus.runRecordCache, agentId: this.id, resourceId: owner.resourceId, threadId: owner.threadId },
-    });
-    this.#publishedRuns.set(runId, { publisher, resourceId: owner.resourceId, threadId: owner.threadId });
-    return publisher;
+    if (!bus) {
+      if (reservation) this.#releaseRunId(runId, reservation);
+      return undefined;
+    }
+    try {
+      const publisher = createAgentStreamPublisher({
+        pubsub: bus.pubsub,
+        runId,
+        cleanupTimeoutMs: bus.cleanupTimeoutMs,
+        logger: this.logger,
+        abortSignal: owner.abortSignal,
+        onEnd: () => {
+          if (this.#publishedRuns.get(runId)?.publisher === publisher) this.#publishedRuns.delete(runId);
+        },
+        record: { cache: bus.runRecordCache, agentId: this.id, resourceId: owner.resourceId, threadId: owner.threadId },
+      });
+      this.#publishedRuns.set(runId, { publisher, resourceId: owner.resourceId, threadId: owner.threadId });
+      return publisher;
+    } finally {
+      // The publisher answers for the id from here on, so the reservation has served its
+      // purpose. Clearing it on the way out also releases it if the publisher was never
+      // built, rather than leaving the id refused for the life of the process.
+      if (reservation) this.#releaseRunId(runId, reservation);
+    }
   }
 
   /**
@@ -9104,8 +9162,9 @@ export class Agent<
     methodType,
     resumeContext,
     _threadStreamPubSub,
+    _runIdSupplied,
     ...options
-  }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
+  }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub; _runIdSupplied?: boolean }) {
     const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
     const existingSnapshot = resumeContext?.snapshot;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
@@ -9162,9 +9221,13 @@ export class Agent<
               methodType,
               resumeContext,
               _threadStreamPubSub,
+              _runIdSupplied,
               ...options,
               requestContext,
-            } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+            } as unknown as InnerAgentExecutionOptions<OUTPUT> & {
+              _threadStreamPubSub?: PubSub;
+              _runIdSupplied?: boolean;
+            });
             return delegated as never;
           }
         } catch (versionError) {
@@ -9357,6 +9420,10 @@ export class Agent<
     // resume is holding either, or the retry it is told to make would start without them.
     const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
       resuming: Boolean(resumeContext?.claim),
+      // An id we generated is not a claim on another run's record, so the check skips the
+      // cache for it. The flag was read at the API boundary, before the fallback filled the
+      // id in and it stopped being possible to tell a caller's id from our own.
+      supplied: _runIdSupplied === true,
     });
 
     const keptOutputProcessors = this.#suspendedRunOutputProcessors.get(runId);
@@ -9476,19 +9543,39 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
+    // Reserve the id for this process before the last await that separates us from the
+    // publisher. The record read above and the record write the publisher makes are not
+    // atomic, and a cache round-trip passes between them, so an admitted caller could
+    // otherwise be overtaken by a second caller for the same id and both would publish on
+    // one topic. The claim rechecks the publisher map as well as the reservations, and
+    // everything from the admission to here is synchronous, so only one caller gets past
+    // this point. A resume is exempt: it continues a run this process may still be
+    // finishing, and its own suspended-run claim already guards it.
+    const reservation = isResume ? undefined : this.#reserveRunId(runId);
+
     // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
     // starts the new run on top of the old frames: a reader replaying from the start would
     // get the previous finish event and close before the new run says anything. Suspended
     // runs keep their log, because that is the history the resume continues.
     if (priorRunRecord?.status === 'finished') {
-      await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+      try {
+        await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+      } catch (error) {
+        // Nothing was published, so the id goes back: the caller can retry it.
+        if (reservation) this.#releaseRunId(runId, reservation);
+        throw error;
+      }
     }
 
-    const streamPublisher = this.#createStreamPublisher(runId, {
-      resourceId,
-      threadId: threadFromArgs?.id,
-      abortSignal: options.abortSignal,
-    });
+    const streamPublisher = this.#createStreamPublisher(
+      runId,
+      {
+        resourceId,
+        threadId: threadFromArgs?.id,
+        abortSignal: options.abortSignal,
+      },
+      reservation,
+    );
 
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
@@ -10212,6 +10299,9 @@ export class Agent<
     // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
     // never sees this turn. The wait also reserves the thread for this runId.
     const threadStreamPubSub = this.getPubSub();
+    // As in stream(): read the caller's id before the fallback fills it in, so the admission
+    // check can skip the cache for an id we generated.
+    const runIdSupplied = mergedOptions.runId !== undefined;
     mergedOptions.runId ??=
       this.#mastra?.generateId({
         idType: 'run',
@@ -10247,7 +10337,8 @@ export class Agent<
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
       _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
+      _runIdSupplied: runIdSupplied,
+    } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub; _runIdSupplied?: boolean };
 
     try {
       const result = await this.#execute(executeOptions);
@@ -11143,6 +11234,9 @@ export class Agent<
       { callScopes: streamOptions?.scopes, defaultScopes: defaultOptions?.scopes },
     );
     validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
+    // Read before any branch fills the id in: whether the caller named the run id decides
+    // whether the admission check reads the shared record at all.
+    const runIdSupplied = mergedOptions.runId !== undefined;
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -11151,14 +11245,16 @@ export class Agent<
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
     // to the wrapper so its internal agent.stream() call doesn't recurse.
     if (mergedOptions.untilIdle) {
-      const { untilIdle, ...rest } = mergedOptions ?? {};
+      const { untilIdle, runId, ...rest } = mergedOptions ?? {};
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
       return runStreamUntilIdle<OUTPUT>(
         this,
         messages,
         // Continuations re-enter stream() and resolve scopes again, so they get the
-        // caller's own request context rather than this call's run-scoped copy.
-        { ...rest, requestContext: streamOptions?.requestContext, maxIdleMs },
+        // caller's own request context rather than this call's run-scoped copy. The id only
+        // travels along when the caller named it: handing back an id we generated would make
+        // the wrapper's own call read the record as if someone had claimed it.
+        { ...rest, ...(runIdSupplied ? { runId } : {}), requestContext: streamOptions?.requestContext, maxIdleMs },
         {
           activeStreams: this.#activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
@@ -11241,7 +11337,8 @@ export class Agent<
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
       _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
+      _runIdSupplied: runIdSupplied,
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub; _runIdSupplied?: boolean };
 
     try {
       const result = await this.#execute(executeOptions);

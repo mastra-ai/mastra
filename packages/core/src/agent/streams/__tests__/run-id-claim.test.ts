@@ -187,6 +187,61 @@ describe('run id ownership', () => {
     expect(await agent.__getRunRecord('gated-run')).toMatchObject({ resourceId: 'tenant-b' });
   });
 
+  // The id is read, then the run's setup awaits, and only then is the id taken. Two
+  // callers for one reused id used to both get through and publish on one topic, crossing
+  // their chunks and abort requests. Reusing a finished id takes a cache call as well, so
+  // the window is a real one rather than a widened fixture.
+  it('starts only one run when two callers reuse a finished run id at once', async () => {
+    class HoldingPubSub extends EventEmitterPubSub {
+      cleared = 0;
+      #released = false;
+      #held: Array<() => void> = [];
+
+      override async clearTopic(_topic: string): Promise<void> {
+        this.cleared += 1;
+        if (this.#released) return;
+        await new Promise<void>(resolve => this.#held.push(resolve));
+      }
+
+      release() {
+        this.#released = true;
+        const held = this.#held;
+        this.#held = [];
+        for (const resolve of held) resolve();
+      }
+    }
+
+    const pubsub = new HoldingPubSub();
+    const cache = new InMemoryServerCache();
+    const agent = makeAgent();
+    new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+    await writeAgentRunRecord(agent.__getStreamBus()!.runRecordCache, {
+      agentId: agent.id,
+      runId: 'reused-race',
+      resourceId: 'tenant-a',
+      status: 'finished',
+      updatedAt: Date.now(),
+    });
+
+    const settle = (started: Promise<unknown>) =>
+      started.then(
+        () => 'started',
+        (error: { id?: string; message?: string }) => `refused:${error?.id ?? error?.message}`,
+      );
+
+    const first = settle(agent.stream('Say hello.', { runId: 'reused-race', requestContext: resource('tenant-a') }));
+    await vi.waitFor(() => expect(pubsub.cleared).toBe(1));
+
+    // The second caller arrives while the first is still inside the cache call.
+    const second = settle(agent.stream('Say hello.', { runId: 'reused-race', requestContext: resource('tenant-a') }));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    pubsub.release();
+
+    const outcomes = await Promise.all([first, second]);
+    expect(outcomes.filter(outcome => outcome === 'started')).toHaveLength(1);
+    expect(outcomes.filter(outcome => outcome.startsWith('refused:'))).toEqual([`refused:${RUN_ID_CLAIMED.id}`]);
+  }, 30_000);
+
   it('refuses a scoped run id to a caller without a resource id', async () => {
     const agent = makeAgent();
     new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), logger: false });
@@ -288,12 +343,10 @@ describe('run id ownership', () => {
       vi.restoreAllMocks();
     });
 
-    // A paused or partitioned cache answers nothing; the run must be refused
-    // within the bound instead of waiting out the outage.
-    it.each([
-      ['a generated run id', undefined],
-      ['a caller-supplied run id', 'caller-run'],
-    ])('refuses to start %s when the cache does not answer', async (_label, runId) => {
+    // A paused or partitioned cache answers nothing. An id the caller supplied is a claim
+    // on the shared record, so the run is refused within the bound instead of waiting out
+    // the outage.
+    it('refuses to start a caller-supplied run id when the cache does not answer', async () => {
       const pubsub = new RecordingPubSub();
       const cache = new InMemoryServerCache();
       const agent = makeAgent();
@@ -301,7 +354,7 @@ describe('run id ownership', () => {
       vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
-      const started = agent.stream('Say hello.', { runId, requestContext: resource('tenant-a') });
+      const started = agent.stream('Say hello.', { runId: 'caller-run', requestContext: resource('tenant-a') });
       const refused = expect(started).rejects.toMatchObject(RECORD_UNAVAILABLE);
       await vi.advanceTimersByTimeAsync(RUN_RECORD_ADMISSION_TIMEOUT_MS);
       await refused;
@@ -309,7 +362,23 @@ describe('run id ownership', () => {
       expect(pubsub.published).toEqual([]);
     });
 
-    it('refuses to start a run when the cache read fails', async () => {
+    // An id we generated cannot be held by another run, so its record is never read: an
+    // unreachable cache must not cost the caller a run that could not have collided.
+    it('starts a run on an id we generated while the cache does not answer', async () => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      const get = vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+
+      const started = await agent.stream('Say hello.', { requestContext: resource('tenant-a') });
+      await started.consumeStream();
+
+      expect(started.runId).toBeTruthy();
+      expect(get.mock.calls.filter(call => String(call[0]).includes('agent.run.'))).toEqual([]);
+    });
+
+    it('refuses to start a caller-supplied run id when the cache read fails', async () => {
       const pubsub = new RecordingPubSub();
       const cache = new InMemoryServerCache();
       const agent = makeAgent();
@@ -317,11 +386,31 @@ describe('run id ownership', () => {
       const outage = new Error('Socket closed unexpectedly');
       vi.spyOn(cache, 'get').mockRejectedValue(outage);
 
-      const error = await agent.stream('Say hello.', { requestContext: resource('tenant-a') }).catch(e => e);
+      const error = await agent
+        .stream('Say hello.', { runId: 'caller-run', requestContext: resource('tenant-a') })
+        .catch(e => e);
 
       expect(error).toMatchObject(RECORD_UNAVAILABLE);
       expect(error.cause).toMatchObject({ message: 'Socket closed unexpectedly' });
       expect(pubsub.published).toEqual([]);
+    });
+
+    // `generateId` is caller code and can hand one id out twice, so an id we generated is
+    // still checked in this process — which needs no cache.
+    it('refuses an id we generated that a run in this process already holds', async () => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      const mastra = new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      mastra.setIdGenerator(() => 'repeated-run');
+      vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+
+      const first = await agent.stream('Say hello.', { requestContext: resource('tenant-a') });
+
+      await expect(agent.stream('Say hello.', { requestContext: resource('tenant-a') })).rejects.toMatchObject(
+        RUN_ID_CLAIMED,
+      );
+      expect(first.runId).toBe('repeated-run');
     });
 
     it('still refuses a claimed run id once the cache answers within the bound', async () => {
@@ -421,6 +510,127 @@ describe('run id ownership', () => {
       await resumed.consumeStream();
 
       expect(overridesSeen.some(overrides => Array.isArray(overrides) && overrides.includes(retained))).toBe(true);
+    }, 30000);
+
+    // The generated-id skip has to hold for generate() too, and both of its paths — the one
+    // that reads the record and the one that does not — still have to run and answer.
+    it('runs generate() on a caller-supplied run id', async () => {
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+
+      const result = await agent.generate('Say hello.', {
+        runId: 'generate-run',
+        requestContext: resource('tenant-a'),
+      });
+
+      expect(result.text).toBe('Hello there.');
+    });
+
+    it('runs generate() on an id we generated while the cache does not answer', async () => {
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+      const get = vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+
+      const result = await agent.generate('Say hello.', { requestContext: resource('tenant-a') });
+
+      expect(result.text).toBe('Hello there.');
+      expect(get.mock.calls.filter(call => String(call[0]).includes('agent.run.'))).toEqual([]);
+    }, 30000);
+
+    // The caller was already refused, so an answer that arrives afterwards must not start the
+    // run behind its back — neither a record nor a published run appears.
+    it('stays refused when the cache answers after the bound', async () => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      let answer!: (value: unknown) => void;
+      vi.spyOn(cache, 'get').mockImplementation(() => new Promise(resolve => (answer = resolve)));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+      const started = agent.stream('Say hello.', { runId: 'late-run', requestContext: resource('tenant-a') });
+      const refused = expect(started).rejects.toMatchObject(RECORD_UNAVAILABLE);
+      await vi.advanceTimersByTimeAsync(RUN_RECORD_ADMISSION_TIMEOUT_MS);
+      await refused;
+
+      answer(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(pubsub.published).toEqual([]);
+      expect(agent.__getPublishedRunOwner('late-run')).toBeUndefined();
+    });
+
+    // Same for a read that fails late: the refusal stands and the late rejection is consumed
+    // rather than surfacing as an unhandled rejection.
+    it('stays refused when the cache fails after the bound', async () => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      let fail!: (error: Error) => void;
+      vi.spyOn(cache, 'get').mockImplementation(
+        () => new Promise((_resolve, reject) => (fail = reject)) as unknown as Promise<unknown>,
+      );
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+      const started = agent.stream('Say hello.', { runId: 'late-fail-run', requestContext: resource('tenant-a') });
+      const refused = expect(started).rejects.toMatchObject(RECORD_UNAVAILABLE);
+      await vi.advanceTimersByTimeAsync(RUN_RECORD_ADMISSION_TIMEOUT_MS);
+      await refused;
+
+      fail(new Error('Socket closed unexpectedly'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(pubsub.published).toEqual([]);
+      expect(agent.__getPublishedRunOwner('late-fail-run')).toBeUndefined();
+    });
+
+    // A run on an id we generated is admitted even while the cache is down, so an abort that
+    // arrived before the run began has to keep it from doing work of its own.
+    it('starts no tool for a generated run that was aborted before it began', async () => {
+      let toolRuns = 0;
+      const counted = createTool({
+        id: 'counted',
+        description: 'Records that it ran.',
+        inputSchema: z.object({}),
+        execute: async () => {
+          toolRuns += 1;
+          return { counted: true };
+        },
+      });
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'counted-resp', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'tool-call', toolCallId: 'counted-tc', toolName: 'counted', input: '{}' },
+            { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ] as any),
+        }),
+      });
+      const agent = new Agent({
+        id: 'aborted-agent',
+        name: 'aborted-agent',
+        instructions: 'Call the tool.',
+        model,
+        tools: { counted },
+      });
+      const cache = new InMemoryServerCache();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+      vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+      const aborted = new AbortController();
+      aborted.abort(new Error('caller gave up'));
+
+      await agent
+        .stream('Go.', { abortSignal: aborted.signal, requestContext: resource('tenant-a') })
+        .then(stream => stream.consumeStream?.())
+        .catch(() => {});
+
+      expect(toolRuns).toBe(0);
     }, 30000);
   });
 });
