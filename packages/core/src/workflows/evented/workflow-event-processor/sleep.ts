@@ -481,8 +481,15 @@ async function setUpSleep(
   await markRunAsleep({ runs: deps.wakeRuns, wakeAt, logger: deps.logger });
 
   // A restart derives the input from the sleep's id in this process, which may not be the stored one.
+  // A redelivery carries the state from before the duration function ran; the setup stored the state
+  // it set with the sleep.
+  const storedState = resumed ? (snapshot?.context as Record<string, any> | undefined)?.__state : undefined;
   const wakeArgs: ProcessorArgs = stored
-    ? { ...args, prevResult: { ...prevResult, status: 'success', output: payload } as ProcessorArgs['prevResult'] }
+    ? {
+        ...args,
+        prevResult: { ...prevResult, status: 'success', output: payload } as ProcessorArgs['prevResult'],
+        ...(storedState ? { stepResults: { ...args.stepResults, __state: storedState } } : {}),
+      }
     : args;
   scheduleWake(wakeArgs, deps, { stepId, payload, startedAt, wakeAt });
 }
