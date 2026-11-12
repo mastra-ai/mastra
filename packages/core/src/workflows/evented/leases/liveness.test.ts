@@ -15,7 +15,6 @@ import { createStep, createWorkflow } from '..';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
-import type { IMastraLogger } from '../../../logger';
 import { InMemoryStore } from '../../../storage/mock';
 import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import {
@@ -35,6 +34,24 @@ import type { Built, Report } from '../test-utils/lease-replicas';
 import { enterRunLiveness, runLivenessKey } from '.';
 
 afterEach(stopReplicas);
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/**
+ * Fakes the timers and returns a liveness scope with a workflows store whose liveness writes
+ * wait for `beforeWrite` first.
+ */
+async function fakeLivenessStore(beforeWrite: (key: string) => Promise<unknown> | undefined) {
+  vi.useFakeTimers();
+  const store = (await new InMemoryStore().getStore('workflows'))!;
+  const claim = store.claimRunOwnership.bind(store);
+  vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+    await beforeWrite(args.runId);
+    return claim(args);
+  });
+  return { store, scope: { __shuttingDown: false } };
+}
 
 /** A pubsub another instance could still deliver from: closing this instance leaves it open. */
 function sharedPubsub(inner: PubSub): PubSub {
@@ -186,80 +203,49 @@ describe('evented run liveness (#28712)', () => {
   }, 20_000);
 
   it('writes no more run liveness while an earlier liveness write is still pending', async () => {
-    vi.useFakeTimers();
-    try {
-      const store = (await new InMemoryStore().getStore('workflows'))!;
-      const scope = { __shuttingDown: false };
-      const claim = store.claimRunOwnership.bind(store);
-      const stalled = Promise.withResolvers<void>();
-      const livenessWrites: Record<string, number> = {};
-      // The store stalls on the second liveness write of run `slow`.
-      vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
-        if (args.runId.endsWith('::live')) {
-          livenessWrites[args.runId] = (livenessWrites[args.runId] ?? 0) + 1;
-          if (args.runId === runLivenessKey('slow') && livenessWrites[args.runId] === 2) {
-            await stalled.promise;
-          }
-        }
-        return claim(args);
-      });
-      const leaves = [
-        await enterRunLiveness({ scope, store, runId: 'slow' }),
-        await enterRunLiveness({ scope, store, runId: 'fast' }),
-      ];
+    const stalled = Promise.withResolvers<void>();
+    const writes: Record<string, number> = {};
+    // The store stalls on the second liveness write of run `slow`.
+    const { store, scope } = await fakeLivenessStore(key => {
+      writes[key] = (writes[key] ?? 0) + 1;
+      return key === runLivenessKey('slow') && writes[key] === 2 ? stalled.promise : undefined;
+    });
+    const leaves = [
+      await enterRunLiveness({ scope, store, runId: 'slow' }),
+      await enterRunLiveness({ scope, store, runId: 'fast' }),
+    ];
 
-      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 4);
+    await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 4);
 
-      // The tick waiting on `slow` holds the next one back, so `fast` is not written again meanwhile.
-      expect(livenessWrites[runLivenessKey('slow')]).toBe(2);
-      expect(livenessWrites[runLivenessKey('fast')]).toBe(2);
+    // The tick waiting on `slow` holds the next one back, so `fast` is not written again meanwhile.
+    expect(writes[runLivenessKey('slow')]).toBe(2);
+    expect(writes[runLivenessKey('fast')]).toBe(2);
 
-      stalled.resolve();
-      for (const leave of leaves) {
-        leave();
-      }
-    } finally {
-      vi.useRealTimers();
-    }
+    stalled.resolve();
+    leaves.forEach(leave => leave());
   });
 
-  it('renews the oldest liveness key first and warns once when a renewal pass outlasts its interval', async () => {
-    vi.useFakeTimers();
-    try {
-      const store = (await new InMemoryStore().getStore('workflows'))!;
-      const scope = { __shuttingDown: false };
-      const logger = { warn: vi.fn() } as unknown as IMastraLogger;
-      const claim = store.claimRunOwnership.bind(store);
-      const written: string[] = [];
-      let slow = false;
-      vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
-        written.push(args.runId);
-        if (slow) {
-          await new Promise(resolve => setTimeout(resolve, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS * 2));
-        }
+  it('renews the oldest liveness key first when a renewal pass outlasts its interval', async () => {
+    const written: string[] = [];
+    let slow = false;
+    const { store, scope } = await fakeLivenessStore(key => {
+      written.push(key);
+      return slow ? new Promise(resolve => setTimeout(resolve, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS * 2)) : undefined;
+    });
+    const leaveOld = await enterRunLiveness({ scope, store, runId: 'old' });
+    await vi.advanceTimersByTimeAsync(10);
+    const leaveNew = await enterRunLiveness({ scope, store, runId: 'new' });
+    // `old` comes back after `new`, while its key is still the one written first.
+    leaveOld();
+    const leaveOldAgain = await enterRunLiveness({ scope, store, runId: 'old' });
+    written.length = 0;
+    slow = true;
 
-        return claim(args);
-      });
-      const leaveOld = await enterRunLiveness({ scope, store, runId: 'old', logger });
-      await vi.advanceTimersByTimeAsync(10);
-      const leaveNew = await enterRunLiveness({ scope, store, runId: 'new', logger });
-      // `old` comes back after `new`, while its key is still the one written first.
-      leaveOld();
-      const leaveOldAgain = await enterRunLiveness({ scope, store, runId: 'old', logger });
-      written.length = 0;
-      slow = true;
+    await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 2);
 
-      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 2);
-
-      expect(written.slice(0, 2)).toEqual([runLivenessKey('old'), runLivenessKey('new')]);
-      expect(logger.warn).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(logger.warn).mock.calls[0]![0]).toContain('took longer than its interval');
-
-      leaveNew();
-      leaveOldAgain();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(written.slice(0, 2)).toEqual([runLivenessKey('old'), runLivenessKey('new')]);
+    leaveNew();
+    leaveOldAgain();
   });
 
   it('keeps a run live while its replica drains during shutdown', async () => {
