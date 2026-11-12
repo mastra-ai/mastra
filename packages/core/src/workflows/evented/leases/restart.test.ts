@@ -64,7 +64,9 @@ describe('evented restart refusal (#28712)', () => {
     }
 
     const booting = await Promise.all(
-      ['B', 'C', 'D'].map(name => startReplica(storage, shapes.step.build(tracked.reporter(name)))),
+      ['B', 'C', 'D'].map(name =>
+        startReplica(storage, shapes.step.build(tracked.reporter(name)), { recovery: scanning }),
+      ),
     );
     await Promise.all(booting.map(replica => replica.mastra.restartAllActiveWorkflowRuns()));
     expect(tracked.executions).toEqual(['A:a']);

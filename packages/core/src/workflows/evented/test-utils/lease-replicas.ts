@@ -131,8 +131,8 @@ export async function stopReplicas() {
   await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown({ drainTimeout: 0 })));
 }
 
-/** Recovery settings under which a replica's recovery loop finds a stopped run within a test. */
-export const scanning = { workflowScanIntervalMs: 100 };
+/** Recovery settings that turn a replica's recovery loop on, and let it find a stopped run within a test. */
+export const scanning = { workflows: 'auto', workflowScanIntervalMs: 100 } as const;
 
 /**
  * Starts a replica running `workflow` (registered as `leased`) and any nested workflows it calls,
@@ -153,7 +153,10 @@ export async function startReplica<W extends Built>(
     pubsub,
     workflows: { leased: workflow, ...nested } as any,
     // A zero grace leaves only the leases to keep a replica's recovery off a run, which is what these tests check.
-    recovery: { workflowGraceMs: 0, ...recovery },
+    // The recovery loop is off unless a test turns it on (see `scanning`): with a zero grace its boot pass
+    // would restart a crashed run before the test's own restart() calls. `restartAllActiveWorkflowRuns()`
+    // still restarts runs with it off.
+    recovery: { workflowGraceMs: 0, workflows: 'off', ...recovery },
   });
   await mastra.startWorkers();
   replicas.push(mastra);
