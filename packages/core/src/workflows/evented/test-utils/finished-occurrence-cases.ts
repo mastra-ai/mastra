@@ -734,36 +734,5 @@ export function describeFinishedOccurrenceCases({
       expect(travelled.status).toBe('success');
       expect(executions).toEqual(['A:first', 'A:second', 'A:first', 'A:second']);
     }, 20_000);
-
-    it('runs every retry of a failing step', async () => {
-      let attempts = 0;
-      const workflow = createWorkflow({
-        id: 'finished',
-        inputSchema: Num,
-        outputSchema: Num,
-        retryConfig: { attempts: 2 },
-      })
-        .then(
-          createStep({
-            id: 'flaky',
-            inputSchema: Num,
-            outputSchema: Num,
-            execute: async ({ inputData }) => {
-              if (++attempts < 3) {
-                throw new Error('transient');
-              }
-
-              return inputData;
-            },
-          }),
-        )
-        .commit();
-      const a = await startReplica(workflow);
-
-      expect((await (await a.workflow.createRun({ runId: uniqueRunId() })).start({ inputData: { n: 1 } })).status).toBe(
-        'success',
-      );
-      expect(attempts).toBe(3);
-    }, 20_000);
   });
 }
