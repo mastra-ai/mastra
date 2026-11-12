@@ -1,9 +1,9 @@
 /**
  * Replicas, workflow shapes and event interceptors shared by the evented lease
- * tests. Replicas are separate Mastra instances, each with its own pubsub,
- * sharing one store the way pods share one database.
+ * and sleep tests. Replicas are separate Mastra instances, each with its own
+ * pubsub, sharing one store the way pods share one database.
  */
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
@@ -11,7 +11,7 @@ import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraRecoveryConfig } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
-import { runLivenessKey } from '../leases';
+import { restartLeaseKey, runLivenessKey, stepOccurrenceKey } from '../leases';
 import { abandonLease } from './abandon-lease';
 import { createStep, createWorkflow } from '..';
 
@@ -121,6 +121,42 @@ export const shapes = {
 };
 export type Shape = (typeof shapes)[keyof typeof shapes];
 export type Built = ReturnType<Shape['build']>;
+
+/**
+ * Steps `before` and `after` around a two-second sleep, and the nested
+ * workflows to register. The `sleepUntil` date is computed when the sleep
+ * starts, so every replica's copy of the workflow sleeps until the same time
+ * after `before`.
+ */
+export const sleepingWorkflows = {
+  sleep: (report: Report) => ({
+    workflow: createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
+      .then(work('before', report))
+      .sleep(2_000)
+      .then(work('after', report))
+      .commit(),
+    nested: {},
+  }),
+  sleepUntil: (report: Report) => ({
+    workflow: createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
+      .then(work('before', report))
+      .sleepUntil(async () => new Date(Date.now() + 2_000))
+      .then(work('after', report))
+      .commit(),
+    nested: {},
+  }),
+  'sleep of a nested workflow': (report: Report) => {
+    const child = createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num })
+      .then(work('before', report))
+      .sleep(2_000)
+      .then(work('after', report))
+      .commit();
+    return {
+      workflow: createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: z.any() }).then(child).commit(),
+      nested: { child },
+    };
+  },
+};
 
 /** Every Mastra instance a test started; {@link stopReplicas} shuts them down. */
 export const replicas: Mastra[] = [];
@@ -371,5 +407,100 @@ export async function restartOutcome(replica: { workflow: Built }, runId: string
   );
 }
 
+/** Records every `restart()` of `runId` that got past the liveness check: each claims the restart lease. */
+export async function recordRestarts(storage: Store, runId: string) {
+  const store = (await storage.getStore('workflows'))!;
+  const claim = store.claimRunOwnership.bind(store);
+  const restarts: boolean[] = [];
+  vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+    const result = await claim(args);
+    if (args.runId === restartLeaseKey(runId)) {
+      restarts.push(result.acquired);
+    }
+
+    return result;
+  });
+
+  return restarts;
+}
+
 /** Waits `ms`, for the tests that must let a lease TTL pass. */
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Starts `run` without waiting for its result. The test reads the outcome from
+ * storage, and the replica that started the run may crash or never see it end,
+ * so a rejection is logged for the test's output instead of being awaited.
+ */
+export function startInBackground(run: { start: (args: { inputData: any }) => Promise<unknown> }, inputData: unknown) {
+  run.start({ inputData }).catch(error => console.error('A run started in the background rejected', error));
+}
+
+/** A workflow registered as `leased` with steps `before` and `after` around a sleep of `ms`. */
+export const sleepingFor = (ms: number) => (report: Report) =>
+  createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
+    .then(work('before', report))
+    .sleep(ms)
+    .then(work('after', report))
+    .commit() as unknown as Built;
+
+/** Waits until the `leased` run, or the nested run of its `child` step, is in a sleep, and returns that run's id. */
+export async function sleepingRunId(storage: Store, runId: string): Promise<string> {
+  const store = (await storage.getStore('workflows'))!;
+  let sleeping = '';
+  await vi.waitFor(async () => {
+    const parent = await store.loadWorkflowSnapshot({ workflowName: 'leased', runId });
+    const nestedRunId: string | undefined = (parent?.context as any)?.child?.metadata?.nestedRunId;
+    const snapshot = nestedRunId
+      ? await store.loadWorkflowSnapshot({ workflowName: 'child', runId: nestedRunId })
+      : parent;
+    const results = Object.values(snapshot?.context ?? {}) as { status?: string }[];
+    expect(results.some(result => result?.status === 'waiting')).toBe(true);
+    sleeping = nestedRunId ?? runId;
+  });
+
+  return sleeping;
+}
+
+/** Whether `key` is the wake lease key of an occurrence of the sleep at `[1]` of `runId`. */
+export const isSleepKeyOf = (key: string, runId: string) =>
+  key.startsWith(stepOccurrenceKey(runId, [1])) && /:sleep\d+$/.test(key);
+
+/**
+ * The statuses of the sleeps among `results`, a run's step results. Sleeps are found by the
+ * `sleep_` prefix of their generated id: each replica builds its own workflow, so the id differs
+ * per replica, and a sleep stored twice under two ids shows up as two entries.
+ */
+export const sleepStatuses = (results: Record<string, unknown>) =>
+  Object.entries(results)
+    .filter(([id]) => id.startsWith('sleep_'))
+    .map(([, result]) => (result as { status?: string }).status);
+
+/** The statuses of the sleeps of the stored `leased` run (see {@link sleepStatuses}). */
+export async function storedSleeps(storage: Store, runId: string) {
+  const store = (await storage.getStore('workflows'))!;
+  return sleepStatuses((await store.loadWorkflowSnapshot({ workflowName: 'leased', runId }))?.context ?? {});
+}
+
+/** Records each step a replica runs and when, and each `workflow.step.run` of `workflowId` at `[2]`. */
+export function observe(workflowId: string) {
+  const executions: string[] = [];
+  const at: Record<string, number> = {};
+  const continuations: string[] = [];
+  const reporter =
+    (replica: string): Report =>
+    async label => {
+      executions.push(`${replica}:${label}`);
+      at[`${replica}:${label}`] = Date.now();
+    };
+  const pubsub = (replica: string) =>
+    interceptWorkflowEvents(new EventEmitterPubSub(), event => {
+      if (isStepRunAt(event, [2]) && (event.data as { workflowId?: string }).workflowId === workflowId) {
+        continuations.push(replica);
+      }
+
+      return undefined;
+    });
+
+  return { executions, at, continuations, reporter, pubsub };
+}
