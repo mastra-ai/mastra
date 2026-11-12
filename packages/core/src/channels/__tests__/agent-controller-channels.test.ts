@@ -1127,11 +1127,10 @@ describe('AgentControllerChannels', () => {
         const { adapter, controller, mastra, channels } = await createSetup({
           model: createApprovalFlowModel(),
           tools: { deployTool: tool },
+          onSessionStart: ({ session }) => session.permissions.setForTool({ toolName: 'deployTool', policy }),
         });
         const threadId = `chan-1:t-${policy}`;
         const resourceId = `channel:${threadId}`;
-        const session = await controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
-        await session.permissions.setForTool({ toolName: 'deployTool', policy });
         const chatThread = createChatThread(adapter, threadId);
 
         await (channels as any).processChatMessage(
@@ -1141,6 +1140,7 @@ describe('AgentControllerChannels', () => {
           new RequestContext(),
         );
 
+        const session = (await controller.getSession(resourceId))!;
         await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed successfully.'), {
           what: 'continuation rendered',
         });
