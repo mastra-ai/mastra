@@ -1099,6 +1099,18 @@ describe('runExperiment', () => {
       // Meta-scorer should have been applied
       expect(runResult.results[0].scores).toHaveLength(1);
       expect(runResult.results[0].scores[0].scorerId).toBe('meta-scorer');
+
+      // Regression for #29787: the score must actually reach the scores store.
+      // Before the fix, `entityType: 'SCORER'` failed `saveScorePayloadSchema`
+      // validation, so the write was swallowed by a best-effort catch and the
+      // score was silently dropped.
+      const { scores: persistedScores } = await scoresStorage.listScoresByScorerId({
+        scorerId: 'meta-scorer',
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedScores).toHaveLength(1);
+      expect(persistedScores[0]!.score).toBe(0.95);
+      expect(persistedScores[0]!.entityType).toBe('SCORER');
     });
   });
 
