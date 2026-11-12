@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -168,6 +168,22 @@ describe('VCS Factory step', () => {
     expect(screen.getByRole('radio', { name: 'GitHub' })).toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: 'Choose another account' }));
     expect(onConnect).toHaveBeenCalledOnce();
+  });
+
+  it('keeps explaining a personal install Platform withholds when the user comes back later', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'personal_install_hidden' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+      ),
+    );
+    renderStep();
+
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('Factory can’t use this GitHub installation');
+    expect(within(notice).getByRole('button', { name: 'Choose another account' })).toBeInTheDocument();
   });
 
   it('shows nothing extra when an install is usable right away', async () => {

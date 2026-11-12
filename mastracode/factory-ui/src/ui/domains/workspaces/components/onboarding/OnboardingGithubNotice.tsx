@@ -39,6 +39,8 @@ export interface OnboardingGithubNoticeProps {
   connected: boolean;
   /** GitHub status has settled since the callback, so `connected` reflects the install it reported. */
   statusSettled: boolean;
+  /** Platform says it withholds a personal-account install from this organization. */
+  personalInstallHidden: boolean;
   refreshing: boolean;
   onConnect: () => void;
   onRefresh: () => void;
@@ -50,6 +52,7 @@ export function OnboardingGithubNotice({
   callback,
   connected,
   statusSettled,
+  personalInstallHidden,
   refreshing,
   onConnect,
   onRefresh,
@@ -95,14 +98,16 @@ export function OnboardingGithubNotice({
     );
   }
   // Platform hides a personal-account install from organizations with more than one member, so the install
-  // succeeds on GitHub and Factory still sees nothing. Say why instead of offering the same Connect again.
-  if (callback?.kind === 'installed' && statusSettled && !connected) {
+  // succeeds on GitHub and Factory still sees nothing. Platform says so in status; an install it reported that
+  // still isn't usable gets the same explanation. Either way, say why instead of offering the same Connect again.
+  if (personalInstallHidden || (callback?.kind === 'installed' && statusSettled && !connected)) {
     return (
       <Notice
         variant="warning"
         role="alert"
         title="Factory can’t use this GitHub installation"
-        onDismiss={onDismiss}
+        // Platform's reason holds until the organization changes, so only a callback-based guess can be dismissed.
+        onDismiss={personalInstallHidden ? undefined : onDismiss}
         action={
           <>
             <Notice.Button onClick={onConnect}>Choose another account</Notice.Button>
@@ -110,8 +115,8 @@ export function OnboardingGithubNotice({
           </>
         }
       >
-        A personal GitHub account only works while your Mastra organization has one member, who connected it. With
-        teammates, install the app on a GitHub organization instead.
+        A personal GitHub account only works while your Mastra organization has one member, who connected it. Pending
+        invitations count as members. With teammates, install the app on a GitHub organization instead.
       </Notice>
     );
   }

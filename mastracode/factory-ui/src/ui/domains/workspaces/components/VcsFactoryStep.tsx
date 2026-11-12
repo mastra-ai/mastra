@@ -205,11 +205,13 @@ export function VcsFactoryStep({
         )
       }
       notice={
-        host === 'github' && (
+        // With no host ready both host rows show, so GitHub's notice belongs there too.
+        (host === 'github' || !anyHostReady) && (
           <OnboardingGithubNotice
             callback={githubCallback}
             connected={connected}
             statusSettled={githubStatus.isSuccess && !githubStatus.isFetching}
+            personalInstallHidden={githubStatus.data?.reason === 'personal_install_hidden'}
             refreshing={githubStatus.isFetching || refreshRepos.isPending}
             onConnect={onConnect}
             onRefresh={refreshGithub}
