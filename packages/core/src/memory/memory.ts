@@ -140,6 +140,7 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   private readonly hasExplicitLastMessages: boolean;
   #mastra?: Mastra;
+  #agentName?: string;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
@@ -254,6 +255,16 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
   }
 
   /**
+   * Internal method used by an Agent to record which agent resolved this memory,
+   * so missing-storage diagnostics can name the agent when the memory has no
+   * attached Mastra instance.
+   * @internal
+   */
+  __registerAgent(agentName: string): void {
+    this.#agentName = agentName;
+  }
+
+  /**
    * Delete a thread's live event stream from the registered Mastra pubsub.
    * Call after the thread itself is deleted: nothing else ever clears an
    * open-ended thread topic, so without this it lingers until the pubsub's
@@ -275,8 +286,9 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
 
   get storage() {
     if (!this._storage) {
+      const agentLabel = !this.#mastra && this.#agentName ? `[Agent:${this.#agentName}] ` : '';
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
+        `${agentLabel}Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
           this.#mastra
             ? ''
             : ' If this memory belongs to an agent that should inherit storage from Mastra, register the agent with that Mastra instance (for example, via mastra.addAgent(agent)). Standalone agents must configure storage directly on Memory.'
