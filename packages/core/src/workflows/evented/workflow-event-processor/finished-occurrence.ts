@@ -1,3 +1,4 @@
+import type { WorkflowRun } from '../../../storage/types';
 import { getEntryId } from '../../step-entry';
 import type { RestartExecutionParams, StepFlowEntry, StepResult, WorkflowRunState } from '../../types';
 import { isSingleStepEntry } from '../../utils';
@@ -192,4 +193,28 @@ export function finishedOccurrence({
       : restartTarget && snapshot.activePaths?.[0] === executionPath[0];
 
   return notMovedOn ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
+}
+
+/**
+ * Whether a `workflow.start` or `workflow.resume` finds its run past what its
+ * caller saved before publishing it, so the event is a late copy the run
+ * already handled. `start()` saves a running record that holds only the run's
+ * input, and `resume()` leaves the resumed step suspended. A nested run's start
+ * can carry its parent's resume steps, which name no step of this run: it is
+ * checked as a start.
+ */
+export function startAlreadyHandled(run: WorkflowRun, resumeSteps: string[] | undefined): boolean {
+  const snapshot: Partial<WorkflowRunState> | undefined =
+    typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+  const context = (snapshot?.context ?? {}) as Record<string, StoredRecord | undefined>;
+  const resumed = resumeSteps?.length ? context[resumeSteps[0]!] : undefined;
+  if (resumed) {
+    return resumed.status !== 'suspended';
+  }
+
+  if (TERMINAL_STATUSES.has(snapshot?.status ?? '')) {
+    return true;
+  }
+
+  return Object.keys(context).some(id => id !== 'input' && id !== '__state');
 }

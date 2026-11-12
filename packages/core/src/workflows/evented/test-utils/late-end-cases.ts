@@ -814,6 +814,67 @@ export function describeLateEndCases({
       20_000,
     );
 
+    it('runs no step when the start of a finished run arrives again, and runs a new start under its ID', async () => {
+      const executions: string[] = [];
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+          .then(work('first', async id => void executions.push(id)))
+          .then(work('second', async id => void executions.push(id)))
+          .commit();
+      const a = await startReplica(build());
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+      const start = a.delivered.find(event => event.type === 'workflow.start')!;
+
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      expect(await redeliver(b, start)).toEqual({ ok: true });
+      await fromB.drain(b);
+      expect(executions).toEqual(['first', 'second']);
+      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+
+      const again = await a.workflow.createRun({ runId: run.runId });
+      expect(await again.start({ inputData: { n: 2 } })).toMatchObject({ status: 'success', result: { n: 2 } });
+      expect(executions).toEqual(['first', 'second', 'first', 'second']);
+    }, 20_000);
+
+    it('runs no step when the resume of a finished run arrives again', async () => {
+      const executions: string[] = [];
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+          .then(work('first', async id => void executions.push(id)))
+          .then(
+            createStep({
+              id: 'approve',
+              inputSchema: Num,
+              outputSchema: Num,
+              resumeSchema: z.object({ ok: z.boolean() }),
+              execute: async ({ inputData, resumeData, suspend }) => {
+                executions.push(resumeData ? 'approve:resumed' : 'approve');
+                if (!resumeData) {
+                  return suspend({});
+                }
+
+                return inputData;
+              },
+            }),
+          )
+          .commit();
+      const a = await startReplica(build());
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('suspended');
+      expect(await run.resume({ step: 'approve', resumeData: { ok: true } })).toMatchObject({ status: 'success' });
+      const resume = a.delivered.find(event => event.type === 'workflow.resume')!;
+
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      expect(await redeliver(b, resume)).toEqual({ ok: true });
+      await fromB.drain(b);
+
+      expect(executions).toEqual(['first', 'approve', 'approve:resumed']);
+      expect(finishesOf(run.runId, a, b).map(event => event.type)).toEqual(['workflow.suspend', 'workflow.end']);
+    }, 20_000);
+
     /** A two-step workflow that keeps no snapshot, so its run's end deletes it. */
     const keepsNoSnapshot = (executions: string[]) =>
       createWorkflow({

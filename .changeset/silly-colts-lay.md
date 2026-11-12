@@ -6,6 +6,7 @@ Fixed evented workflows running a step again, or ending a run twice, when their 
 
 - A step's result is saved before the run moves on, so a late event for the step continues from that result or is ignored instead of running the step again. A run whose instance stopped between two steps continues once the step's event is delivered again.
 - A run ends once, after a success or a failure, even when its end arrives twice. A nested workflow's result reaches its parent once, so a parent `dountil` or `dowhile` checks its condition once per iteration, also after a restart.
+- A late copy of a run's start or resume that the run already handled no longer runs its steps again. A new `start()` under the same run ID still runs.
 - When `shouldPersistSnapshot` declines the final snapshot, a late event for the finished run no longer runs its last step again, and a late copy of its start no longer runs the run again. Reusing the run ID for a new run still works.
 - On a store that updates a run's `updatedAt` when it saves a step result, `restart()` no longer erases steps the run saved after `restart()` read it. When the run moved on in the meantime, the restart is dropped and the run goes on from what it saved. The in-memory store doesn't update `updatedAt` on step saves yet.
 - A step that keeps failing still stops after its configured retries when its worker crashes between attempts and the run is restarted.

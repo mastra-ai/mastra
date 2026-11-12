@@ -83,7 +83,7 @@ import {
 } from '../leases';
 import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../leases';
 import { StepExecutor } from '../step-executor';
-import { finishedOccurrence } from './finished-occurrence';
+import { finishedOccurrence, startAlreadyHandled } from './finished-occurrence';
 import {
   evaluateLoopCondition,
   failedLoopStep,
@@ -1235,6 +1235,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
+    if (leaseStore && existingRun && !restart && !timeTravel && startAlreadyHandled(existingRun, resumeSteps)) {
+      this.mastra.getLogger()?.info('Dropping a workflow start or resume the run already handled', {
+        workflowId,
+        runId,
+        resume: !!resumeSteps?.length,
+      });
+      return;
+    }
+
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     let initialState = (arguments[0] as any).initialState ?? state ?? {};
     const completed = restart && resolveCompletedRestartEntry(workflow.stepGraph, restart, initialState);
@@ -1329,8 +1338,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Only starts pass here (liveness is entered for every event). A time travel, a resume or a
     // run that reuses the ID of an ended run must not be read as that ended run: `start()` saved
-    // a new run record first. A late copy of the ended run's own start finds no record and keeps
-    // the marker, so its steps are dropped. A restart of an ended run was dropped above.
+    // a new run record first. A late copy of the ended run's own start or resume, and a restart of
+    // an ended run, were dropped above, before the marker is cleared.
     if (leaseStore && existingRun && !restart) {
       await clearRunEnded(leaseStore, runId);
     }
