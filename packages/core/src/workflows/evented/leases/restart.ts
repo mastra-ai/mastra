@@ -2,14 +2,11 @@
  * The `restart()` side of evented leases: whether a run is still live, and the
  * short lease that lets one of several concurrent restarts publish.
  */
-import type { IMastraLogger } from '../../../logger';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import type { RunOwnershipRecord } from '../../../storage/run-fencing';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import type { WorkflowRunOwnership } from '../../run-ownership';
-import { holdRestartLease } from './held-leases';
 import { restartLeaseKey, runLivenessKey } from './keys';
-import type { LivenessScope } from './liveness';
 
 /**
  * Claims an evented run for `restart()`. Returns the run's live liveness lease
@@ -19,20 +16,16 @@ import type { LivenessScope } from './liveness';
  *
  * Otherwise claims the short `restart()` lease, so that of several concurrent
  * restarts only one publishes. Liveness is read first so a refused restart
- * takes no lease that would block a later one. The lease is kept until a
- * worker marks the run live (see {@link holdRestartLease}); after that the
- * restarted steps hold their own leases and it is left to lapse.
+ * takes no lease that would block a later one. The lease is never renewed or
+ * released: the restarted steps take their own leases on the workers, and the
+ * lease only has to last until they do.
  */
 export async function claimEventedRestart({
-  scope,
   store,
   runId,
-  logger,
 }: {
-  scope?: LivenessScope;
   store: WorkflowsStorage | undefined;
   runId: string;
-  logger?: IMastraLogger;
 }): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
   const unfenced: WorkflowRunOwnership = { release: async () => {} };
   if (!store || !(await store.supportsRunFencing())) {
@@ -50,7 +43,5 @@ export async function claimEventedRestart({
     leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
     force: false,
   });
-  return claim.acquired
-    ? holdRestartLease({ scope, store, runId, record: claim.record, logger })
-    : { owner: claim.record };
+  return claim.acquired ? unfenced : { owner: claim.record };
 }

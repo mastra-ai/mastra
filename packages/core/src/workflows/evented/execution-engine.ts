@@ -70,6 +70,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
     this.mastra?.__registerRunTracingContext(runId, { currentSpan: workflowSpan });
     try {
       const result = await execute();
+      // An execution that stopped waiting after its publish (`detachAfterDispatch`) has no result: its span
+      // covers the hand-off to the workers.
+      if (result === undefined) {
+        workflowSpan.end({ attributes: { status: 'running' } });
+        return result;
+      }
+
       const settled = result as {
         status: WorkflowRunStatus;
         result?: unknown;
@@ -139,6 +146,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     /** Called once the run's event is published; see the base `ExecutionEngine.execute`. @internal */
     onDispatched?: () => void;
+    /** Resolve with `undefined` right after the publish; see the base `ExecutionEngine.execute`. @internal */
+    detachAfterDispatch?: boolean;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
@@ -366,6 +375,20 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     // Only after a successful publish: a restart that never reached the workers must not count as handed over.
     params.onDispatched?.();
+
+    // Nobody waits for this run's result, so nothing should keep a finish subscription, or keep
+    // shutdown() waiting, until the run ends.
+    if (params.detachAfterDispatch) {
+      stopWatchingLoss?.();
+      releaseTracking();
+      try {
+        await pubsub.unsubscribe('workflows-finish', finishCb);
+      } catch (error) {
+        this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', error);
+      }
+
+      return undefined as TOutput;
+    }
 
     // Wait for workflow to complete
     let resultData: any;
