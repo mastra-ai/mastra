@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -7,6 +8,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { queryKeys } from '../../../api/keys';
+import { createQueryClient } from '../../../query-client';
 import { createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute, stubStarters } from './fixtures/draftRoute';
 
@@ -14,18 +16,21 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
   Element.prototype.scrollIntoView = () => {};
 }
 
-function renderDraft() {
+function renderDraft(client?: QueryClient) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
   });
-  return { router, ...renderWithProviders(<RouterProvider router={router} />) };
+  return { router, ...renderWithProviders(<RouterProvider router={router} />, client) };
 }
 
 const WORK_ITEMS_URL = `/web/factory/projects/${FACTORY_ID}/work-items`;
 /** A card created long before any period the activity band shows. */
 const OLD_CARD = { createdAt: '2026-08-01T00:00:00.000Z' };
 
-/** Every read of the Factory's cards the page sends, as path and query. */
+/**
+ * Every read of the Factory's cards the page sends, as path and query. Count them under the app's own
+ * client: how long a read stays fresh decides whether a hook mounting later asks again.
+ */
 function recordCardReads() {
   const reads: string[] = [];
   const listener = ({ request }: { request: Request }) => {
@@ -184,7 +189,7 @@ describe('the new session page', () => {
     vi.setSystemTime(now);
     stubDraftRoute({ starters: { untriaged: 1 }, cards: [{ createdAt: now.toISOString() }] });
     const reads = recordCardReads();
-    renderDraft();
+    renderDraft(createQueryClient());
 
     expect(await screen.findByRole('button', { name: 'Triage it' })).toBeInTheDocument();
     const week = await screen.findByRole('region', { name: 'This week' });
@@ -212,7 +217,7 @@ describe('the new session page', () => {
       ),
     );
     const reads = recordCardReads();
-    const { client } = renderDraft();
+    const { client } = renderDraft(createQueryClient());
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
