@@ -56,6 +56,14 @@ type WorkflowRow = {
   updatedAt: Date | string;
 };
 
+/** A `listWorkflowRuns({ summary: true })` row: the snapshot fields are read in SQL instead of the snapshot. */
+type WorkflowSummaryRow = Omit<WorkflowRow, 'snapshot'> & {
+  status: string | null;
+  timestamp: number | null;
+  parentWorkflowId: string | null;
+  parentRunId: string | null;
+};
+
 type RunOwnerRow = {
   generation: number;
   ownerId: string;
@@ -406,6 +414,10 @@ export class WorkflowsOracle extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -414,6 +426,7 @@ export class WorkflowsOracle extends WorkflowsStorage {
     page,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const { whereClause, binds } = this.workflowWhereClause({ workflowName, fromDate, toDate, resourceId, status });
@@ -432,8 +445,8 @@ export class WorkflowsOracle extends WorkflowsStorage {
           )
         : 0;
 
-      const rows = await this.db.manyOrNone<WorkflowRow>(
-        `${this.workflowSelect()} FROM ${this.table()} ${whereClause} ORDER BY ${WORKFLOW_CREATED_AT} DESC ${
+      const rows = await this.db.manyOrNone<WorkflowRow | WorkflowSummaryRow>(
+        `${summary ? this.workflowSummarySelect() : this.workflowSelect()} FROM ${this.table()} ${whereClause} ORDER BY ${WORKFLOW_CREATED_AT} DESC ${
           usePagination ? 'OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY' : ''
         }`,
         usePagination ? { ...binds, offset, limit: normalizedPerPage } : binds,
@@ -668,12 +681,26 @@ export class WorkflowsOracle extends WorkflowsStorage {
     return `SELECT workflow_name AS "workflowName", run_id AS "runId", ${WORKFLOW_RESOURCE_ID} AS "resourceId", snapshot AS "snapshot", ${WORKFLOW_CREATED_AT} AS "createdAt", ${WORKFLOW_UPDATED_AT} AS "updatedAt"`;
   }
 
-  private parseWorkflowRun(row: WorkflowRow): WorkflowRun {
+  /**
+   * Selects only the snapshot fields a summary listing returns, so the snapshot itself is never
+   * sent. `NULL ON ERROR` keeps a row whose snapshot isn't valid JSON from failing the listing.
+   */
+  private workflowSummarySelect(): string {
+    return `SELECT workflow_name AS "workflowName", run_id AS "runId", ${WORKFLOW_RESOURCE_ID} AS "resourceId",
+      JSON_VALUE(snapshot, '$.status' RETURNING VARCHAR2(64) NULL ON ERROR) AS "status",
+      JSON_VALUE(snapshot, '$.timestamp' RETURNING NUMBER NULL ON ERROR) AS "timestamp",
+      JSON_VALUE(snapshot, '$.parentWorkflow.workflowId' NULL ON ERROR) AS "parentWorkflowId",
+      JSON_VALUE(snapshot, '$.parentWorkflow.runId' NULL ON ERROR) AS "parentRunId",
+      ${WORKFLOW_CREATED_AT} AS "createdAt", ${WORKFLOW_UPDATED_AT} AS "updatedAt"`;
+  }
+
+  /** Maps a full row, or a summary row from `workflowSummarySelect()`, to a workflow run. */
+  private parseWorkflowRun(row: WorkflowRow | WorkflowSummaryRow): WorkflowRun {
     return {
       workflowName: String(row.workflowName),
       runId: String(row.runId),
       resourceId: row.resourceId === null || row.resourceId === undefined ? undefined : String(row.resourceId),
-      snapshot: parseSnapshot(row.snapshot),
+      snapshot: 'snapshot' in row ? parseSnapshot(row.snapshot) : summarySnapshot(row),
       createdAt: toDate(row.createdAt),
       updatedAt: toDate(row.updatedAt),
     };
@@ -721,6 +748,23 @@ function createDefaultSnapshot(runId: string): WorkflowRunState {
     runId,
     requestContext: {},
   } as WorkflowRunState;
+}
+
+/**
+ * Builds the reduced snapshot of a summary listing: `status`, `timestamp`, and `parentWorkflow`
+ * only for nested runs. Callers of `summary: true` read no other snapshot field.
+ */
+function summarySnapshot(row: WorkflowSummaryRow): WorkflowRunState {
+  const snapshot: Record<string, unknown> = {
+    status: row.status ?? undefined,
+    timestamp: row.timestamp === null ? undefined : Number(row.timestamp),
+  };
+
+  if (row.parentWorkflowId && row.parentRunId) {
+    snapshot.parentWorkflow = { workflowId: String(row.parentWorkflowId), runId: String(row.parentRunId) };
+  }
+
+  return snapshot as unknown as WorkflowRunState;
 }
 
 function parseSnapshot(value: unknown): WorkflowRunState {
