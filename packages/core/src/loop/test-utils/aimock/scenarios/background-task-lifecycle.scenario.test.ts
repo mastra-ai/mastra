@@ -3,6 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../../../agent';
+import type { BackgroundTaskManager } from '../../../../background-tasks';
 import { MockMemory } from '../../../../memory/mock';
 import { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
@@ -645,14 +646,35 @@ describeForAllEngines(
       const memory = new MockMemory();
       const thread = { threadId: 'bg-cancel-running-thread', resourceId: 'bg-cancel-running-user' };
       const prompt = 'Research tidal power in the background';
+      // Runs until cancelled, then stops on the abort like a well-behaved tool (subagents rethrow).
+      const research = createTool({
+        id: 'research',
+        description: 'Research a topic in the background',
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+        background: { enabled: true },
+        execute: (_input, context) =>
+          new Promise((_resolve, reject) => {
+            context?.abortSignal?.addEventListener('abort', () => reject(context.abortSignal!.reason));
+          }),
+      });
+      let taskId = '';
+      let manager!: BackgroundTaskManager;
+      let contextGoneBeforeCallbackEnded = false;
       const { chunks, mastra, llm } = await runLoopScenario({
         engine,
         llm: getMock(),
         prompt,
-        // Never released: the task is still running when it is cancelled.
-        tools: { research: makeResearchTool(new Promise<void>(() => {})) },
+        tools: { research },
         agentBackgroundTasks: { tools: { research: true } },
-        backgroundTasks: BG_CONFIG,
+        backgroundTasks: {
+          ...BG_CONFIG,
+          // A host callback that takes a while: the aborted run ends before the dispatcher hears of the cancel.
+          onTaskCancelled: async () => {
+            await vi.waitFor(() => expect(manager.taskContexts.has(taskId)).toBe(false), { timeout: 5000 });
+            contextGoneBeforeCallbackEnded = true;
+          },
+        },
         memory,
         ...thread,
         stopWhen: stepCountIs(3),
@@ -664,8 +686,8 @@ describeForAllEngines(
             report: 'The tidal research is finished.',
           }),
       });
-      const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
-      const manager = mastra.backgroundTaskManager!;
+      taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+      manager = mastra.backgroundTaskManager!;
       await waitFor(
         () => manager.getTask(taskId),
         (t: any) => t?.status === 'running',
@@ -673,6 +695,8 @@ describeForAllEngines(
       const placeholder = (await storedToolCall(memory, thread)).invocation?.result;
 
       await manager.cancel(taskId);
+      // The race this covers did happen: the run had ended before the dispatcher was told.
+      expect(contextGoneBeforeCallbackEnded).toBe(true);
 
       const stored = await waitFor(
         () => storedToolCall(memory, thread),

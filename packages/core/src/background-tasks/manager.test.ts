@@ -845,6 +845,84 @@ describe('BackgroundTaskManager', () => {
   });
 
   describe('cancel', () => {
+    // A tool that stops when its task is cancelled: its run ends, and its context goes, while the cancel is still running.
+    async function startAbortableTask(
+      onExecution: NonNullable<TaskContext['onExecution']>,
+      mgr: BackgroundTaskManager = manager,
+    ) {
+      let started = false;
+      const { task } = await mgr.enqueue(
+        { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1' },
+        {
+          executor: {
+            execute: (_args: any, opts: { abortSignal: AbortSignal }) =>
+              new Promise((_resolve, reject) => {
+                started = true;
+                opts.abortSignal.addEventListener('abort', () => reject(opts.abortSignal.reason));
+              }),
+          },
+          onExecution,
+        },
+      );
+      await vi.waitFor(() => expect(started).toBe(true));
+      return task;
+    }
+
+    it('tells the dispatcher a running task was cancelled when the tool stops on the abort', async () => {
+      // A host callback that takes a while: the aborted run ends before the cancel tells the dispatcher.
+      let taskId: string | undefined;
+      const local = await makeLocalManager({
+        enabled: true,
+        onTaskCancelled: () => vi.waitFor(() => expect(local.mgr.taskContexts.has(taskId!)).toBe(false)),
+      });
+      try {
+        const updates: Array<{ cancelledAt?: Date }> = [];
+        const task = await startAbortableTask(params => void updates.push(params), local.mgr);
+        taskId = task.id;
+
+        await local.mgr.cancel(task.id);
+
+        const cancelled = updates.filter(update => update.cancelledAt);
+        expect(cancelled).toHaveLength(1);
+        expect(cancelled[0]!.cancelledAt!.getTime()).toBe((await local.mgr.getTask(task.id))!.completedAt!.getTime());
+      } finally {
+        await local.cleanup();
+      }
+    });
+
+    // A shutdown leaves the stored call as a crash would, so hosts replay it as interrupted, not cancelled.
+    it('does not tell the dispatcher a task was cancelled when shutdown stops it', async () => {
+      let release!: (value: string) => void;
+      const local = await makeLocalManager({ enabled: true, onTaskCancelled: () => release('late') });
+      try {
+        const updates: Array<{ cancelledAt?: Date }> = [];
+        let started = false;
+        // Ignores the abort, so its context is still registered when shutdown cancels it.
+        const { task } = await local.mgr.enqueue(
+          { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1', maxRetries: 0 },
+          {
+            executor: {
+              execute: () =>
+                new Promise<string>(resolve => {
+                  started = true;
+                  release = resolve;
+                }),
+            },
+            onExecution: params => void updates.push(params),
+          },
+        );
+        await vi.waitFor(() => expect(started).toBe(true));
+
+        await local.mgr.shutdown();
+
+        expect((await local.mgr.getTask(task.id))?.status).toBe('cancelled');
+        expect(updates.length).toBeGreaterThan(0);
+        expect(updates.some(update => update.cancelledAt)).toBe(false);
+      } finally {
+        await local.cleanup();
+      }
+    });
+
     it('cancels a pending task', async () => {
       const resolvers: Array<() => void> = [];
       const executeFn = vi.fn().mockImplementation(

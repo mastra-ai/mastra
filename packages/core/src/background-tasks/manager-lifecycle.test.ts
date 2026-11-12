@@ -298,7 +298,7 @@ describe('BackgroundTaskManager lifecycle', () => {
     await storage.createTask(makeRunningTask({ maxRetries: 0 }));
     manager.activeAbortControllers.set('task-1', new AbortController());
     const error = new Error('storage unavailable');
-    vi.spyOn(manager, 'cancel').mockRejectedValue(error);
+    vi.spyOn(storage, 'updateTask').mockRejectedValue(error);
 
     try {
       await manager.shutdown();
