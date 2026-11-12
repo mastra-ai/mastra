@@ -207,18 +207,20 @@ const STATE_BASE_RUN_EXPR = `payload ->> '$.runId'`;
 
 /**
  * The summary snapshot `listWorkflowRuns({ summary: true })` returns, built from the JSON column
- * `state` (a v1 snapshot or a storage v2 header): `status` (the `status` expression), `timestamp`,
- * and for a nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths
- * are read, so `context` is never sent.
+ * `state` (a v1 snapshot or a storage v2 header): `status` (the `status` expression) and
+ * `timestamp` when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are
+ * non-empty strings. Only these paths are read, so `context` is never sent. `json_object()` keeps
+ * a SQL NULL as a JSON null, and patching `{}` with it drops those keys.
  */
 function summarySnapshotSql(state: string, status: string): string {
-  const fields = `'status', ${status}, 'timestamp', json_extract(${state}, '$.timestamp')`;
-  // The parent is a separate branch because json_object() keeps a SQL NULL as a JSON null.
-  return `CASE WHEN json_type(${state}, '$.parentWorkflow') = 'object'
-    THEN json_object(${fields}, 'parentWorkflow', json_object(
-      'workflowId', json_extract(${state}, '$.parentWorkflow.workflowId'),
-      'runId', json_extract(${state}, '$.parentWorkflow.runId')))
-    ELSE json_object(${fields}) END`;
+  const workflowId = `json_extract(${state}, '$.parentWorkflow.workflowId')`;
+  const runId = `json_extract(${state}, '$.parentWorkflow.runId')`;
+  const hasParent = `json_type(${state}, '$.parentWorkflow.workflowId') = 'text' AND json_type(${state}, '$.parentWorkflow.runId') = 'text'
+      AND ${workflowId} <> '' AND ${runId} <> ''`;
+  return `json_patch('{}', json_object(
+      'status', ${status},
+      'timestamp', json_extract(${state}, '$.timestamp'),
+      'parentWorkflow', CASE WHEN ${hasParent} THEN json_object('workflowId', ${workflowId}, 'runId', ${runId}) END))`;
 }
 
 /**
