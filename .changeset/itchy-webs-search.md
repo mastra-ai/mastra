@@ -17,6 +17,8 @@ Recovery is also faster when many runs are active: it reads the snapshot of a ru
 
 For evented workflows, `restartAllActiveWorkflowRuns()` returns once each restart is handed to the workers instead of waiting for the runs to finish. `shutdown()` doesn't wait for those runs either. A call made while another is still starting its restarts joins that call.
 
+`shutdown()` now waits, within `drainTimeout`, for the default-engine runs a recovery call is restarting.
+
 A default-engine nested run resumed directly now keeps its parent from being restarted while it runs. On stores without atomic status updates, it keeps itself from being restarted instead.
 
 Storage adapter authors can implement `getRunOwnerships({ runIds })` to read the ownership of many runs in one call. It returns a `Map` keyed by run ID and leaves out runs that were never claimed. Adapters that don't implement it read each run separately.
