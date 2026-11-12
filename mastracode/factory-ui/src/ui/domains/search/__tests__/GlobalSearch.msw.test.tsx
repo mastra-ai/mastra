@@ -16,6 +16,7 @@ import { createQueryClient } from '../../../../query-client';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
 import {
   ACTIVE_FACTORY_ID,
@@ -64,6 +65,7 @@ interface StubSearchOptions {
   sessionsGate?: Promise<void>;
   onSessionsAbort?: () => void;
   running?: boolean;
+  sessions?: Record<string, FactoryUserSession[]>;
   workItems?: WorkItem[];
 }
 
@@ -174,7 +176,9 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       }
       const repositoryIds =
         factoryProjectId === ACTIVE_FACTORY_ID ? [FIRST_REPOSITORY_ID, SECOND_REPOSITORY_ID] : [OTHER_REPOSITORY_ID];
-      return HttpResponse.json({ sessions: repositoryIds.flatMap(id => sessionsByRepository[id] ?? []) });
+      return HttpResponse.json({
+        sessions: repositoryIds.flatMap(id => (options.sessions ?? sessionsByRepository)[id] ?? []),
+      });
     }),
     http.post(
       `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
@@ -751,6 +755,52 @@ describe('Global search', () => {
       itemId: 'work-item-filed',
       body: { board: 'work', stage: 'pr-review' },
     });
+  });
+
+  it('tells apart the sessions one card holds on its branch by the phase each runs, current first', async () => {
+    const [searchItem] = workItems;
+    const [workSession] = sessionsByRepository[FIRST_REPOSITORY_ID];
+    const triageSession = { ...workSession, id: 'row-session-triage', sessionId: 'session-triage' };
+    stubSearchApi({
+      sessions: { ...sessionsByRepository, [FIRST_REPOSITORY_ID]: [triageSession, workSession] },
+      workItems: [
+        {
+          ...searchItem,
+          stageHistory: [
+            {
+              stage: 'triage',
+              enteredAt: '2026-07-29T10:00:00.000Z',
+              exitedAt: '2026-07-29T11:00:00.000Z',
+              by: 'user-search',
+            },
+          ],
+          sessions: {
+            triage: { ...searchItem.sessions.build, sessionId: 'session-triage', threadId: 'thread-triage' },
+            work: searchItem.sessions.build,
+          },
+        },
+        ...workItems.slice(1),
+      ],
+    });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    await openWithShortcut();
+    await screen.findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'universal 321');
+
+    const options = await screen.findAllByRole('option', { name: /Add universal command search/ });
+    expect(options).toHaveLength(2);
+    expect(within(options[0]).getByText('Work')).toBeInTheDocument();
+    expect(within(options[0]).getByText('current')).toBeInTheDocument();
+    expect(within(options[1]).getByText('Triage')).toBeInTheDocument();
+    expect(within(options[1]).queryByText('current')).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole('combobox', { name: 'Search MastraCode' }));
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'triage 321');
+    const triageOnly = await screen.findAllByRole('option', { name: /Add universal command search/ });
+    expect(triageOnly).toHaveLength(1);
+    expect(within(triageOnly[0]).getByText('Triage')).toBeInTheDocument();
   });
 
   it.each(['#900', '900', 'PR #900'])('finds the review session by GitHub identifier "%s"', async query => {
