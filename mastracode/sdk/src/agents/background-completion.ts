@@ -1,5 +1,6 @@
 import type { AgentControllerSubagent, Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
+import type { RequestContext } from '@mastra/core/request-context';
 import { SUBAGENT_TOOL_NAME } from '../tool-names.js';
 import type { BackgroundCompletionEvents, BackgroundTaskCompletionEvent } from './background-completion-events.js';
 
@@ -66,7 +67,23 @@ export interface BackgroundNoticeDelivery {
 
 type HeldNotice = { target: BackgroundNoticeTarget; signal: BackgroundNoticeSignal; wake: boolean };
 
-export function createBackgroundNoticeDelivery(getRouter: () => BackgroundCompletionRouter): BackgroundNoticeDelivery {
+export interface BackgroundNoticeDeliveryHooks {
+  /**
+   * Finds the live session that runs the notice's thread. Default: {@link findSessionForThread}. Undefined holds
+   * the notice until a session runs the thread; null drops it, for a thread no session will ever run.
+   */
+  resolveSession?(target: BackgroundNoticeTarget): Promise<Session | null | undefined>;
+  /**
+   * The request context a woken run uses, for hosts whose runs need an identity the session doesn't carry.
+   * Undefined saves the notice to the thread instead of waking it.
+   */
+  wakeRequestContext?(session: Session, target: BackgroundNoticeTarget): Promise<RequestContext | undefined>;
+}
+
+export function createBackgroundNoticeDelivery(
+  getRouter: () => BackgroundCompletionRouter,
+  hooks: BackgroundNoticeDeliveryHooks = {},
+): BackgroundNoticeDelivery {
   const held: HeldNotice[] = [];
   const hold = (notice: HeldNotice) => {
     held.push(notice);
@@ -74,12 +91,20 @@ export function createBackgroundNoticeDelivery(getRouter: () => BackgroundComple
   };
 
   const send = async ({ target, signal, wake }: HeldNotice): Promise<boolean> => {
-    const session = await findSessionForThread(getRouter(), target);
+    const session = hooks.resolveSession
+      ? await hooks.resolveSession(target)
+      : await findSessionForThread(getRouter(), target);
+    // Dropped: nothing will ever take it, so holding it would only push out notices that can be delivered.
+    if (session === null) return true;
     if (!session) return false;
     if (wake && session.thread.getId() === target.threadId) {
-      const woken = await session
-        .sendSignal(signal, { ifIdle: { behavior: 'wake' }, requireDelivery: true })
-        .accepted.catch(() => undefined);
+      const requestContext = hooks.wakeRequestContext ? await hooks.wakeRequestContext(session, target) : undefined;
+      const woken =
+        hooks.wakeRequestContext && !requestContext
+          ? undefined
+          : await session
+              .sendSignal(signal, { ifIdle: { behavior: 'wake' }, requireDelivery: true, requestContext })
+              .accepted.catch(() => undefined);
       // A wake that could not start or that the thread refused never reached the
       // thread. Save the notice instead; it has the event's id, so it is saved once.
       if (woken && woken.action !== 'blocked' && woken.action !== 'discard') return true;

@@ -106,13 +106,25 @@ export function createBackgroundProcessNotices(options: {
   events?: BackgroundCompletionEvents;
   getSession: (sessionId: string) => Promise<Session<any> | undefined>;
 }): BackgroundProcessNotices {
+  // By thread and tool call: tool call ids are only unique within a thread, and a host can share this dispatcher
+  // across many sessions' threads.
   const launches = new Map<string, Launch>();
+  const launchKey = (threadId: string | undefined, toolCallId: string) =>
+    JSON.stringify([threadId ?? null, toolCallId]);
   // The sandbox each PID runs in. The session's own workspace can be a different
   // instance than the one a run resolved, so read and kill where it was spawned.
   const sandboxes = new Map<string, WorkspaceSandbox>();
   // PIDs killed on purpose. `onExit` fires before `kill()` resolves, so they
-  // must be marked before the kill starts.
-  const killed = new Set<string>();
+  // must be marked before the kill starts. Kept per sandbox: a host can share
+  // this dispatcher across sandboxes whose PIDs repeat.
+  const killed = new WeakMap<object, Set<string>>();
+  const noSandbox = {};
+  const killMarks = (sandbox: WorkspaceSandbox | undefined) => {
+    const key = sandbox ?? noSandbox;
+    let marks = killed.get(key);
+    if (!marks) killed.set(key, (marks = new Set()));
+    return marks;
+  };
   // Nothing reports a sandbox's teardown here, so torn-down entries are dropped
   // when next touched, and all of them whenever a new shell starts.
   const liveSandbox = (pid: string) => {
@@ -124,18 +136,18 @@ export function createBackgroundProcessNotices(options: {
 
   return {
     async beforeToolCall({ workspaceToolName, input, context }) {
+      const toolContext = context as ToolContextLike | undefined;
       if (workspaceToolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS) {
         const pid = stringInput(input, 'pid');
-        if (pid) killed.add(pid);
+        if (pid) killMarks(toolContext?.workspace?.sandbox).add(pid);
         return;
       }
       if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
       if ((input as { background?: unknown } | undefined)?.background !== true) return;
-      const toolContext = context as ToolContextLike | undefined;
       const toolCallId = toolContext?.agent?.toolCallId;
       if (!toolCallId) return;
       for (const [pid, sandbox] of sandboxes) if (isTornDown(sandbox)) sandboxes.delete(pid);
-      launches.set(toolCallId, {
+      launches.set(launchKey(toolContext?.agent?.threadId || undefined, toolCallId), {
         command: stringInput(input, 'command'),
         description: stringInput(input, 'description'),
         sandbox: toolContext?.workspace?.sandbox,
@@ -144,36 +156,38 @@ export function createBackgroundProcessNotices(options: {
     },
 
     afterToolCall({ workspaceToolName, input, context, output, error }) {
+      const toolContext = context as ToolContextLike | undefined;
       if (workspaceToolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS) {
         // A successful kill already consumed the mark in `onExit`.
         const pid = stringInput(input, 'pid');
-        if (pid) killed.delete(pid);
+        if (pid) killMarks(toolContext?.workspace?.sandbox).delete(pid);
         return;
       }
       if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
-      const toolContext = context as ToolContextLike | undefined;
       const toolCallId = toolContext?.agent?.toolCallId;
+      const key = toolCallId && launchKey(toolContext?.agent?.threadId || undefined, toolCallId);
       const pid = error === undefined ? parseBackgroundProcessPid(output) : undefined;
       // No PID means no process started (an error, or a call the hook chain answered), so no exit will come.
       if (!pid) {
-        if (toolCallId) launches.delete(toolCallId);
+        if (key) launches.delete(key);
         return;
       }
       // A command that ends at once can exit before its call returns; `onExit` already recorded it.
-      if (toolCallId && !launches.has(toolCallId)) return;
+      if (key && !launches.has(key)) return;
       const sandbox = toolContext?.workspace?.sandbox;
       if (sandbox) sandboxes.set(pid, sandbox);
     },
 
     async onExit(meta) {
-      const launch = meta.toolCallId ? launches.get(meta.toolCallId) : undefined;
-      if (meta.toolCallId) launches.delete(meta.toolCallId);
+      const key = meta.toolCallId && launchKey(meta.threadId, meta.toolCallId);
+      const launch = key ? launches.get(key) : undefined;
+      if (key) launches.delete(key);
       const shuttingDown = isTornDown(launch?.sandbox);
       // A torn-down sandbox has no output left; otherwise keep the entry so the
       // output stays readable until it is released.
       if (shuttingDown) sandboxes.delete(meta.pid);
       else if (launch?.sandbox) sandboxes.set(meta.pid, launch.sandbox);
-      const killedOnPurpose = killed.delete(meta.pid);
+      const killedOnPurpose = killMarks(launch?.sandbox).delete(meta.pid);
       // `killedOnRequest` covers kills that bypass this dispatcher, such as a host's HTTP kill route.
       const wasKilled = killedOnPurpose || meta.killedByAbort === true || meta.killedOnRequest === true || shuttingDown;
       const ownTarget =
@@ -247,16 +261,17 @@ export function createBackgroundProcessNotices(options: {
     async kill(pid) {
       const sandbox = liveSandbox(pid);
       if (!sandbox?.processes) return false;
-      killed.add(pid);
+      const marks = killMarks(sandbox);
+      marks.add(pid);
       let result: boolean;
       try {
         result = await sandbox.processes.kill(pid);
       } catch (error) {
         // The process may still be running; keep it reachable for another try.
-        killed.delete(pid);
+        marks.delete(pid);
         throw error;
       }
-      killed.delete(pid);
+      marks.delete(pid);
       // Killed, or not found: either way the handle is released.
       sandboxes.delete(pid);
       return result;

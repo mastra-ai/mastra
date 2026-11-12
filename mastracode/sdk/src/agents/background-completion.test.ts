@@ -1,5 +1,6 @@
 import type { Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask } from '@mastra/core/background-tasks';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 import { createBackgroundCompletionEvents } from './background-completion-events.js';
 import { createBackgroundCompletionCallbacks, createBackgroundNoticeDelivery } from './background-completion.js';
@@ -243,6 +244,24 @@ describe('createBackgroundNoticeDelivery routing', () => {
     );
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it("wakes with the host's request context, and saves the notice when the host has none to give", async () => {
+    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
+    const owner = new RequestContext();
+    let wakeContext: RequestContext | undefined = owner;
+    const delivery = createBackgroundNoticeDelivery(() => ({ getSession: async () => undefined }), {
+      resolveSession: async () => session,
+      wakeRequestContext: async () => wakeContext,
+    });
+
+    await delivery.deliver(target, signal);
+    expect(sendSignal.mock.calls[0]?.[1]).toMatchObject({ requestContext: owner });
+
+    wakeContext = undefined;
+    await delivery.deliver(target, signal);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignalToThread).toHaveBeenCalledWith(signal, target);
   });
 
   it('never borrows another live session on the shared resource', async () => {

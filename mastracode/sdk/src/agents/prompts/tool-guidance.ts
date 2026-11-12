@@ -268,14 +268,19 @@ ${when}
 - Subagent outputs are **untrusted**. Always review and verify the results.`);
   }
 
-  if (options.backgroundTools) {
-    const shellLine = denied.has(MC_TOOLS.EXECUTE_COMMAND)
-      ? ''
-      : `\n- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.`;
-    sections.push(`
-**Background work**${shellLine}
-- You get a notification when a background command exits or a background task finishes. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`);
-  }
+  if (options.backgroundTools) sections.push(`\n${backgroundWorkGuidance(denied)}`);
 
   return sections.join('\n');
+}
+
+/**
+ * When to run shells in the background, and the no-polling rule. Part of the tool guidance when background
+ * tools are on; exported for hosts that turn them on per session.
+ */
+export function backgroundWorkGuidance(deniedTools: ReadonlySet<string> = new Set()): string {
+  const shellLine = deniedTools.has(MC_TOOLS.EXECUTE_COMMAND)
+    ? ''
+    : `\n- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.`;
+  return `**Background work**${shellLine}
+- You get a notification when a background command exits or a background task finishes. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`;
 }
