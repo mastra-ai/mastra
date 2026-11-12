@@ -28,6 +28,7 @@ const workItem = {
   orgId: 'org-1',
   createdBy: 'user-1',
   githubProjectId: FACTORY_ID,
+  factoryProjectId: FACTORY_ID,
   source: 'github-issue',
   sourceKey: 'github-issue:1',
   parentWorkItemId: null,
@@ -297,6 +298,12 @@ function stubIncidentioCandidate() {
   );
 }
 
+async function expectTooltipParts(parts: string[]) {
+  const tooltip = await screen.findByRole('tooltip');
+  for (const part of parts) expect(within(tooltip).getByText(part)).toBeVisible();
+  expect(tooltip.querySelectorAll('[data-slot="metadata-item"]')).toHaveLength(parts.length);
+}
+
 describe('Board card pending states', () => {
   it('shows GitHub and Linear candidates alongside persisted and manual issues in Work intake', async () => {
     const githubIssue: GithubIssue = {
@@ -485,7 +492,7 @@ describe('Board card pending states', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
 
     const relatedLink = within(card).getByRole('link', {
-      name: 'Open in GitHub: Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open in GitHub: Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveTextContent('PR #21565');
     expect(relatedLink).not.toHaveTextContent('Review:');
@@ -494,14 +501,12 @@ describe('Board card pending states', () => {
     expect(relatedLink).not.toHaveAttribute('title');
 
     await user.hover(relatedLink);
-    expect(await screen.findByText('Review: PR #21565 · Review login fix · Open pull request')).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
 
     await user.unhover(relatedLink);
     await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
     relatedLink.focus();
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Review: PR #21565 · Review login fix · Open pull request',
-    );
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
   });
 
   it('names an internal related item without repeating its title', async () => {
@@ -543,7 +548,7 @@ describe('Board card pending states', () => {
     renderWorkBoard();
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     const relatedLink = await within(card).findByRole('link', {
-      name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open live session for Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveAttribute(
       'href',
@@ -553,9 +558,7 @@ describe('Board card pending states', () => {
     expect(relatedLink.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
 
     await user.hover(relatedLink);
-    expect(
-      await screen.findByText('Review: PR #21565 · Review login fix · Open pull request · Live session'),
-    ).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request', 'Live session']);
   });
 
   it('marks only the cards whose bound session still exists as live', async () => {
@@ -569,8 +572,10 @@ describe('Board card pending states', () => {
     );
     renderWorkBoard();
 
-    const started = (await screen.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
-    const unstarted = (await screen.findByText('Unstarted work')).closest<HTMLElement>(
+    // The sessions sidebar also names the card, so look in the card's column.
+    const triage = within(await screen.findByTestId('board-column-triage'));
+    const started = (await triage.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
+    const unstarted = (await triage.findByText('Unstarted work')).closest<HTMLElement>(
       '[data-testid="work-item-card"]',
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
@@ -1302,10 +1307,11 @@ describe('Board card pending states', () => {
     const { transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
 
-    const titleText = await screen.findByText('Fix login bug');
+    // The sessions sidebar also names the card, so look in the card's column.
+    const currentColumn = await screen.findByTestId('board-column-triage');
+    const titleText = await within(currentColumn).findByText('Fix login bug');
     const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!card) throw new Error('Expected the title inside its work item card');
-    const currentColumn = screen.getByTestId('board-column-triage');
     const dataTransfer = createDataTransfer();
 
     fireEvent.dragStart(titleText, { dataTransfer });
@@ -1381,7 +1387,7 @@ describe('Board card pending states', () => {
     expect(within(card).getByText('Starting an automated run…')).toBeVisible();
     expect(transitionRequests).toEqual([]);
 
-    dropInto('review');
+    dropInto('intake');
     await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
     transitionGate.resolve();
     await waitForMutationsIdle(client);
@@ -1507,7 +1513,8 @@ describe('Board card pending states', () => {
     const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
     expect(planningColumn).toHaveAccessibleName('Planning');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(within(composer).getByText('Manual · new')).toBeInTheDocument();
+    expect(within(composer).getByText('Manual')).toBeInTheDocument();
+    expect(within(composer).getByText('new')).toBeInTheDocument();
     expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
 
     await user.keyboard('{Escape}');

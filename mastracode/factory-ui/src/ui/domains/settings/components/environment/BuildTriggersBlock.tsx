@@ -47,24 +47,22 @@ export function BuildTriggersRows({
       </SettingsRow>
       {push.enabled && (
         <SettingsRow label="Push debounce" description="Minimum minutes between push-triggered builds, 0 to 1440.">
-          <div className="w-full lg:max-w-40">
-            <CommittedInput
-              label="Push debounce in minutes"
-              type="number"
-              min={0}
-              max={1440}
-              value={String(push.debounceMinutes)}
-              disabled={disabled}
-              onCommit={raw => {
-                const debounceMinutes = Number(raw);
-                if (!Number.isInteger(debounceMinutes) || debounceMinutes < 0 || debounceMinutes > 1440) {
-                  toast.error('Enter a whole number between 0 and 1440');
-                  return Promise.reject(new Error('out of range'));
-                }
-                return onSave({ buildTriggers: { push: { debounceMinutes } } });
-              }}
-            />
-          </div>
+          <CommittedInput
+            label="Push debounce in minutes"
+            type="number"
+            min={0}
+            max={1440}
+            value={String(push.debounceMinutes)}
+            disabled={disabled}
+            onCommit={raw => {
+              const debounceMinutes = Number(raw);
+              if (!Number.isInteger(debounceMinutes) || debounceMinutes < 0 || debounceMinutes > 1440) {
+                toast.error('Enter a whole number between 0 and 1440');
+                return Promise.reject(new Error('out of range'));
+              }
+              return onSave({ buildTriggers: { push: { debounceMinutes } } });
+            }}
+          />
         </SettingsRow>
       )}
     </>
@@ -160,7 +158,7 @@ function ScheduleRows({
   );
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-3">
       <SettingsRow
         label="Build schedule"
         description={
@@ -170,7 +168,7 @@ function ScheduleRows({
         }
       >
         <Select value={frequency} onValueChange={next => pick(next)} disabled={locked}>
-          <SelectTrigger size="sm" aria-label="Build frequency" className="w-auto">
+          <SelectTrigger size="sm" aria-label="Build frequency">
             {FREQUENCY_LABEL[frequency]}
           </SelectTrigger>
           <SelectContent>
@@ -183,7 +181,7 @@ function ScheduleRows({
         </Select>
       </SettingsRow>
       {frequency !== 'off' && (
-        <div className="bg-surface3 mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-md px-3 py-2">
+        <div className="bg-surface3 flex flex-wrap items-center gap-2 rounded-md px-3 py-2">
           {frequency === 'daily' && (
             <>
               <Txt as="span" variant="caption" tone="muted">

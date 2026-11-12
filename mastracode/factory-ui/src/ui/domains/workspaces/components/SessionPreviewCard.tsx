@@ -7,9 +7,10 @@ import { useState } from 'react';
 import type { RefObject } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import { WorkItemExternalLink } from '../../factory/components/WorkItemExternalLink';
-import type { FactoryMentionMember } from '../../factory/services/members';
+import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
+import type { TrailPerson } from '../hooks/useSessionTrail';
 import type { WorkItem } from '../../factory/services/workItems';
+import { isPullRequestSource } from '../../factory/services/workItems';
 import { useSessionTrail } from '../hooks/useSessionTrail';
 import { layoutSessionTrack } from '../services/sessionTrack';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
@@ -88,6 +89,7 @@ function SessionPreview({
     ownerChanges,
   });
   const previousOwnerId = ownerChanges.at(-1)?.fromOwnerId;
+  const linkShowsPullRequestState = details.item?.url != null && isPullRequestSource(details.item.source);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -100,10 +102,12 @@ function SessionPreview({
             owner={details.owner}
             previousOwner={previousOwnerId === undefined ? undefined : ownerDetailsFor(people, previousOwnerId)}
           />
-          {details.item && <WorkItemExternalLink item={details.item} variant="default" />}
+          {details.item?.url != null && (
+            <RelatedWorkItemLink item={details.item} href={details.item.url} kind="external" />
+          )}
         </div>
       </div>
-      <SessionStatusLine status={status} merged={merged} />
+      <SessionStatusLine status={status} merged={merged && !linkShowsPullRequestState} />
       {(layout.stages.length > 0 || layout.runs.length > 0 || layout.pins.length > 0) && (
         <SessionTrack layout={layout} startedAt={startedAt} now={openedAt} people={people} />
       )}
@@ -111,7 +115,7 @@ function SessionPreview({
   );
 }
 
-function ownerDetailsFor(people: ReadonlyMap<string, FactoryMentionMember>, personId: string): SessionOwnerDetails {
+function ownerDetailsFor(people: ReadonlyMap<string, TrailPerson>, personId: string): SessionOwnerDetails {
   const person = people.get(personId);
   return { name: person?.name ?? personId, ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}) };
 }

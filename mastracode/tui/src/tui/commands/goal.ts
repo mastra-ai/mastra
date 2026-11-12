@@ -252,15 +252,18 @@ export async function startGoalWithDefaults(
 
 /**
  * Replace the thread's goal with `objective` without sending the goal reminder,
- * asking for judge defaults only if they are unset. Resolves to `null` when the
- * user cancels the defaults prompt or the goal could not be set.
+ * asking for judge defaults only if they are unset. With
+ * `useSessionModelAsJudge`, a missing judge default falls back to the session's
+ * current model instead of prompting. Resolves to `null` when the user cancels
+ * the defaults prompt or the goal could not be set.
  */
 export async function setGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
+  options: { useSessionModelAsJudge?: boolean } = {},
 ): Promise<GoalState | null> {
-  const defaults = getJudgeDefaults();
+  const defaults = getJudgeDefaults() ?? (options.useSessionModelAsJudge ? getSessionModelJudgeDefaults(ctx) : null);
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
   if (!judgeDefaults) return null;
 
@@ -272,6 +275,17 @@ function getJudgeDefaults(): JudgeDefaults | null {
   const judgeModelId = settings.models.goalJudgeModel;
   const maxTurns = settings.models.goalMaxTurns;
   if (!judgeModelId || typeof maxTurns !== 'number' || maxTurns <= 0) return null;
+  return { judgeModelId, maxTurns };
+}
+
+function getSessionModelJudgeDefaults(ctx: SlashCommandContext): JudgeDefaults | null {
+  const settings = loadSettings();
+  const judgeModelId = settings.models.goalJudgeModel || ctx.state.session.model.get();
+  if (!judgeModelId) return null;
+  const maxTurns =
+    typeof settings.models.goalMaxTurns === 'number' && settings.models.goalMaxTurns > 0
+      ? settings.models.goalMaxTurns
+      : DEFAULT_MAX_TURNS;
   return { judgeModelId, maxTurns };
 }
 

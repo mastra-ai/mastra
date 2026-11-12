@@ -16,6 +16,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
@@ -29,11 +30,6 @@ type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISSUE_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every Jira feature gate, mirroring the
@@ -261,7 +257,6 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
               selectedIds,
             })
           : null;
-        const intakeBoards = projectScope?.intakeBoards ?? null;
         const scopes = projectScope?.scopes ?? unfilteredJiraScopes(selectedIds);
         if (scopes.length === 0) {
           return c.json({ issues: [], nextCursor: null });
@@ -286,13 +281,12 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,
           }));
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
+          if (factoryProjectId && projectScope && options.ingestFactoryIssues) {
             await options.ingestFactoryIssues({
               orgId: resolved.tenant.orgId,
               userId: resolved.tenant.userId,
               factoryProjectId,
               issues: issuePayload.map(issue => ({ ...issue, site: issue.site ?? null })),
-              intakeBoards,
             });
           }
           return c.json({ issues: issuePayload, nextCursor });
@@ -338,7 +332,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           externalSource: { type: 'issue', externalId: issueRef },
         });
         const sourceId = dispatch?.sourceId;
-        if (!dispatch || !sourceId || !(sourceId in projectScope.intakeBoards)) {
+        if (!dispatch || !sourceId || !projectScope.sourceIds.includes(sourceId)) {
           return c.json({ error: 'issue_not_found' }, 404);
         }
 

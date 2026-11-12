@@ -79,7 +79,7 @@ export interface PlatformLinearEventWorkerConfig {
    * First-observation of a Linear issue happens through the user-authenticated
    * `/web/linear/issues?factoryProjectId=...` intake path instead.
    */
-  workItems: Pick<WorkItemsStorage, 'list'>;
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'copyLegacyCards'>;
   /** Called with a single-issue rules ingress derived from an `Issue` webhook. */
   ingestFactoryIssue?: (input: LinearRulesIngress) => Promise<unknown>;
   reconcileFactoryState?: IssueReconciler;
@@ -120,7 +120,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
   readonly #linear: PlatformLinearEventDispatchIntegration;
   readonly #storage: PlatformLinearEventStorage;
   readonly #projects: Pick<FactoryProjectsStorage, 'listAll'>;
-  readonly #workItems: Pick<WorkItemsStorage, 'list'>;
+  readonly #workItems: Pick<WorkItemsStorage, 'listShared' | 'copyLegacyCards'>;
   readonly #ingestFactoryIssue: ((input: LinearRulesIngress) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: IssueReconciler | undefined;
   readonly #pollEventsEnabled: boolean;
@@ -413,7 +413,13 @@ export class PlatformLinearEventWorker extends MastraWorker {
     for (const project of projects) {
       let items;
       try {
-        items = await this.#workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
+        // A finished card may still be only in the legacy table; copy it so the event finds it.
+        await this.#workItems.copyLegacyCards({
+          orgId: project.orgId,
+          factoryProjectId: project.id,
+          sources: [{ integrationId: 'linear', type: 'issue', externalId: sourceKey }],
+        });
+        items = await this.#workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id });
       } catch (error) {
         this.deps?.logger.error('Platform Linear work-item lookup failed', {
           linearWorkspaceId,

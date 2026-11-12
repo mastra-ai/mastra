@@ -31,7 +31,7 @@ describe('GitLab listed merge requests through rules ingress', () => {
     const sourceId = encodeSourceId({ host: 'gitlab.example.com', projectId: '101' });
     await seeded.intake.saveConfig({ orgId: 'org-1', config: { gitlab: { enabled: true, sourceIds: [sourceId] } } });
     await seeded.intake.setBinding({
-      orgId: 'org-1', integrationId: 'gitlab', sourceId, factoryProjectId: project.id, board: 'work', userId: 'user-1',
+      orgId: 'org-1', integrationId: 'gitlab', sourceId, factoryProjectId: project.id, userId: 'user-1',
     });
     const sourceKey = `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 })).toString('base64url')}`;
     const work = (await seeded.workItems.upsert({
@@ -94,7 +94,7 @@ describe('GitLab listed merge requests through rules ingress', () => {
       decision => !priorDecisions.some(previous => previous.id === decision.id),
     );
     expect(newDecisions).toEqual(
-      expect.arrayContaining([expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }) })]),
+      expect.arrayContaining([expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'pr-review' }) })]),
     );
 
     const decisionsAfterPush = await seeded.workItems.listDeferredDecisions('org-1', project.id);

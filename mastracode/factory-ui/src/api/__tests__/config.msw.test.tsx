@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { ApiConfigProvider, useApiConfig } from '../config';
+import { ApiConfigProvider, createApiConfig, useApiConfig } from '../config';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -14,7 +14,7 @@ describe('ApiConfigProvider', () => {
       server.use(http.get(`${BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })));
 
       const wrapper = ({ children }: { children: ReactNode }) => (
-        <ApiConfigProvider baseUrl={BASE_URL}>{children}</ApiConfigProvider>
+        <ApiConfigProvider config={createApiConfig({ baseUrl: BASE_URL })}>{children}</ApiConfigProvider>
       );
       const { result } = renderHook(() => useApiConfig(), { wrapper });
 

@@ -3,6 +3,7 @@ import { getAnalytics } from '../../analytics/index.js';
 import { requestApi } from './client.js';
 import { ApiCliError, errorEnvelope, toApiCliError } from './errors.js';
 import { FACTORY_API_ROUTE_CATALOG, FACTORY_API_ROUTE_METADATA } from './factory-route-metadata.generated.js';
+import { isFeedbackScoreWrite, prepareFeedbackScoreInput, requestFeedbackScoreWrite } from './feedback-score-writes.js';
 import { parseInput, resolvePathParams, stripPathParamsFromInput } from './input.js';
 import { LEARNING_ROUTE_METADATA } from './learning-route-metadata.js';
 import { normalizeData } from './normalizers.js';
@@ -425,7 +426,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     examples: [
       {
         description: 'Create an observability score',
-        command: `mastra api score create '{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}'`,
+        command: `mastra api score create '{"score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}'`,
       },
     ],
   });
@@ -459,7 +460,51 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
 
-  const feedback = api.command('feedback').description('Delete observability feedback');
+  const feedback = api.command('feedback').description('Create, inspect, replace, review, and delete feedback');
+  addAction(feedback, 'create', 'POST /observability/feedback', {
+    description: 'Create feedback on a trace or span',
+    input: 'required',
+    examples: [
+      {
+        description: 'Add textual feedback to a stored trace',
+        command: `mastra api feedback create '{"contextMode":"resolve","feedback":{"traceId":"trace_123","feedbackType":"comment","feedbackSource":"user","value":"actionable","feedbackUserId":"reviewer_123"}}'`,
+      },
+    ],
+  });
+  addAction(feedback, 'list', 'GET /observability/feedback', {
+    description: 'List feedback with filters and pagination',
+    list: true,
+    examples: [
+      {
+        description: 'List feedback for a trace',
+        command: `mastra api feedback list '{"traceId":"trace_123","page":0,"perPage":50}'`,
+      },
+    ],
+  });
+  addAction(feedback, 'get', 'GET /observability/feedback/:feedbackId', {
+    description: 'Get feedback by ID, or null when missing',
+    examples: [{ description: 'Get feedback by ID', command: 'mastra api feedback get feedback_123' }],
+  });
+  addAction(feedback, 'replace', 'PUT /observability/feedback/:feedbackId', {
+    description: 'Replace the full feedback record, retaining its original ID, trace ID, and timestamp',
+    input: 'required',
+    examples: [
+      {
+        description: 'Replace feedback using its original identity and timestamp',
+        command: `mastra api feedback replace feedback_123 '{"feedback":{"feedbackId":"feedback_123","traceId":"trace_123","timestamp":"2026-11-11T10:00:00.123Z","feedbackType":"comment","feedbackSource":"user","value":"corrected"}}'`,
+      },
+    ],
+  });
+  addAction(feedback, 'review-status', 'PATCH /observability/feedback/:feedbackId/review-status', {
+    description: 'Set feedback review status to needs-review or reviewed',
+    input: 'required',
+    examples: [
+      {
+        description: 'Mark existing feedback as reviewed',
+        command: `mastra api feedback review-status feedback_123 '{"reviewStatus":"reviewed"}'`,
+      },
+    ],
+  });
   addAction(feedback, 'delete', 'DELETE /observability/feedback', {
     description: 'Delete feedback by ID',
     input: 'required',
@@ -470,6 +515,29 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+
+  for (const [group, kind, selector] of [
+    [score, 'scores', { scorerId: 'quality' }],
+    [feedback, 'feedback', { feedbackType: 'rating' }],
+  ] as const) {
+    for (const [operation, description, args] of [
+      ['aggregate', 'Aggregate numeric values', { aggregation: 'avg' }],
+      ['breakdown', 'Group numeric values by dimension', { aggregation: 'avg', groupBy: ['entityName'] }],
+      ['timeseries', 'Bucket numeric values over time', { aggregation: 'avg', interval: '1d' }],
+      ['percentiles', 'Calculate numeric percentiles over time', { percentiles: [0.5, 0.95], interval: '1d' }],
+    ] as const) {
+      addAction(group, operation, `POST /observability/${kind}/${operation}`, {
+        description,
+        input: 'required',
+        examples: [
+          {
+            description,
+            command: `mastra api ${group.name()} ${operation} '${JSON.stringify({ ...selector, ...args })}'`,
+          },
+        ],
+      });
+    }
+  }
 
   const dataset = api.command('dataset').description('Create, list, and inspect datasets');
   addAction(dataset, 'list', 'GET /datasets', { description: 'List datasets', list: true });
@@ -588,11 +656,60 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  const factoryEnvironmentVariables = factoryEnvironment
+    .command('variables')
+    .description('Manage the sandbox environment variables of a Factory project; values are never returned');
+  addAction(factoryEnvironmentVariables, 'list', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvsList, {
+    description: 'List the sandbox environment variables of a Factory project: names and where they apply',
+    routePlacement: 'origin',
+  });
+  addAction(factoryEnvironmentVariables, 'set', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvSet, {
+    description: 'Add a sandbox environment variable or replace its value; it applies to build, runtime or both',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Give every command in the sandbox a token',
+        command: `mastra api factory project environment variables set <project-id> NPM_TOKEN '{"value":"<token>","appliesTo":"runtime"}'`,
+      },
+    ],
+  });
+  addAction(factoryEnvironmentVariables, 'update', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvUpdate, {
+    description: 'Change where a sandbox environment variable applies without changing its value',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryEnvironmentVariables, 'delete', FACTORY_API_ROUTE_CATALOG.projectSandboxEnvDelete, {
+    description: 'Delete a sandbox environment variable',
+    routePlacement: 'origin',
+  });
 
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
   addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {
     description: 'List Factory work items and running sessions',
+    input: 'optional',
     routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Find work items nobody has started by title, key, number or source id',
+        command: `mastra api factory work-item list <project-id> '{"started":"false","q":"login flow","limit":10}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'starters', FACTORY_API_ROUTE_CATALOG.workItemStarters, {
+    description: 'Count the cards behind each new-session starter',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'activity', FACTORY_API_ROUTE_CATALOG.workItemActivity, {
+    description: 'List when Factory work items were created and completed since an instant',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Activity since the start of June',
+        command: `mastra api factory work-item activity <project-id> '{"since":"2026-06-01T00:00:00.000Z"}'`,
+      },
+    ],
   });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
     description: 'Create a Factory work item in Intake',
@@ -649,9 +766,9 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const factoryBoard = factory
     .command('board')
-    .description("Manage a Factory project's boards; built-in and app boards are read-only");
+    .description("Manage a Factory project's boards; the built-in Work board and app boards are edited per project");
   addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
-    description: "Get a board's definition and, for a board the project stored, its revision",
+    description: "Get a board's definition and, except for the legacy Review board, its revision",
     routePlacement: 'origin',
   });
   addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
@@ -666,18 +783,31 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
   addAction(factoryBoard, 'update', FACTORY_API_ROUTE_CATALOG.boardReplace, {
-    description: "Replace a stored board's definition using its expected revision",
+    description:
+      "Replace a board's definition, including the project's Work and app boards, using its expected revision",
     input: 'required',
     routePlacement: 'origin',
   });
   addAction(factoryBoard, 'delete', FACTORY_API_ROUTE_CATALOG.boardDelete, {
-    description: 'Delete a stored board that has no cards, using its expected revision',
+    description: 'Delete a board that has no cards (not the Work board), using its expected revision',
     input: 'required',
     routePlacement: 'origin',
     examples: [
       {
         description: 'Delete a board at revision 2',
         command: `mastra api factory board delete <project-id> bugs '{"expectedRevision":2}'`,
+      },
+    ],
+  });
+  addAction(factoryBoard, 'reset', FACTORY_API_ROUTE_CATALOG.boardReset, {
+    description:
+      "Rewrite a project's Work or app board to Factory's current definition at the next revision, using its expected revision",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Reset the Work board at revision 3',
+        command: `mastra api factory board reset <project-id> work '{"expectedRevision":3}'`,
       },
     ],
   });
@@ -1164,7 +1294,11 @@ export async function executeDescriptor(
     const input = parseInput(requestDescriptor, inputText);
     const pathParams = resolvePathParams(requestDescriptor, positionalValues, input);
     // Do not send IDs twice when a route path param was supplied through JSON input.
-    const requestInput = stripPathParamsFromInput(input, pathParams);
+    const requestInput = prepareFeedbackScoreInput(
+      requestDescriptor,
+      stripPathParamsFromInput(input, pathParams),
+      pathParams,
+    );
 
     const requestOptions = {
       baseUrl: target.baseUrl,
@@ -1179,9 +1313,11 @@ export async function executeDescriptor(
     let response: unknown;
     let effectiveDescriptor = requestDescriptor;
     try {
-      response = await requestApi(requestOptions);
+      response = isFeedbackScoreWrite(requestDescriptor)
+        ? await requestFeedbackScoreWrite(requestOptions, target.fallbackHeaders)
+        : await requestApi(requestOptions);
     } catch (error) {
-      if (target.fallbackHeaders && isUnauthorizedError(error)) {
+      if (!isFeedbackScoreWrite(requestDescriptor) && target.fallbackHeaders && isUnauthorizedError(error)) {
         response = await requestApi({ ...requestOptions, headers: target.fallbackHeaders });
       } else if (!options.verbose && descriptor.verbose && isNotFoundError(error)) {
         // The default route is unavailable on this server (e.g. a new CLI
@@ -1204,12 +1340,27 @@ export async function executeDescriptor(
       }
     }
     const normalized = normalizeData(effectiveDescriptor, normalizeResponse(response));
-    writeJson(
-      normalizeSuccess(normalized, effectiveDescriptor.list, effectiveDescriptor.responseShape),
-      options.pretty,
-    );
+    const output = normalizeSuccess(normalized, effectiveDescriptor.list, effectiveDescriptor.responseShape);
+    if (
+      ['scoreList', 'feedbackList'].includes(effectiveDescriptor.key) &&
+      normalized &&
+      typeof normalized === 'object'
+    ) {
+      // Keep continuation cursors alongside the CLI's usual data/page envelope.
+      for (const key of ['delta', 'deltaCursor'] as const) {
+        if (key in normalized) Object.assign(output, { [key]: normalized[key as keyof typeof normalized] });
+      }
+    }
+    writeJson(output, options.pretty);
   } catch (error) {
     const apiError = error instanceof ApiCliError ? error : toApiCliError(error);
+    if (
+      (descriptor.key.startsWith('feedback') || descriptor.key.startsWith('score')) &&
+      apiError.code === 'HTTP_ERROR' &&
+      (apiError.details.status === 405 || apiError.details.status === 501)
+    ) {
+      apiError.message = `Target server does not support ${descriptor.name}; check its version and enabled endpoints`;
+    }
     writeJson(errorEnvelope(apiError), options.pretty, process.stderr);
     process.exitCode = 1;
   }

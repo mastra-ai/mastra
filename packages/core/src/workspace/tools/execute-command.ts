@@ -334,12 +334,15 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     return formatCommandOutput(stdoutForModel, stderrForModel).join('\n') || '(no output)';
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
       data: {
         exitCode: -1,
         success: false,
         executionTimeMs: Date.now() - startedAt,
+        // -1 is no exit code: the command could not run or be observed, and this says why.
+        error: errorMessage,
         toolCallId,
       },
     });
@@ -348,7 +351,6 @@ async function executeCommand(input: Record<string, any>, context: any) {
       noteDroppedOutput(await truncateOutput(stdout.toString(), tail, tokenLimit, tokenFrom), stdout.dropped, 'stdout'),
       noteDroppedOutput(await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom), stderr.dropped, 'stderr'),
     );
-    const errorMessage = error instanceof Error ? error.message : String(error);
     const errorLine = `Error: ${errorMessage}\nExit code: -1`;
     return appendTerminalLine(parts, abortedWhenSettled ? `${CANCELLED_RUN_NOTE}\n${errorLine}` : errorLine);
   }
@@ -380,7 +382,7 @@ export const executeCommandTool = createTool({
 
 const backgroundDescription = `${baseDescription}
 
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`;
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running.`;
 
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({

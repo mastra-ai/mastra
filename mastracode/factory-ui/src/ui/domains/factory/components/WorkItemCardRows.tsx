@@ -1,25 +1,24 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { BoardCardStatus } from '../boardCardState';
+import { boardLoop, boardOf } from '../boardFlow';
+import type { BoardInfo } from '../boardFlow';
 import type { CardAction } from '../cardPrimaryAction';
 import { sourceMetadata, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import { reviewVerdict, selfReviewVerdict } from '../reviewVerdict';
+import { reasonSummary } from '../reworkReason';
+import type { ReworkReason } from '../reworkReason';
 import type { ReviewVerdict } from '../reviewVerdict';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import {
-  CardActions,
-  CardStatus,
-  CommentCount,
-  MetadataLabels,
-  SourceTitle,
-  WorkItemSourceIcon,
-} from './BoardCardParts';
+import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -36,6 +35,7 @@ export function WorkItemCardRows({
   beforeStart,
   controls,
   open,
+  rework,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -51,9 +51,11 @@ export function WorkItemCardRows({
   controls: ReactNode;
   /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
+  rework?: ReworkReason;
 }) {
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
-  const verdict = columnReviewVerdict(item, columnStage);
+  const verdict = columnReviewVerdict(item, columnStage, board);
 
   return (
     <>
@@ -61,10 +63,18 @@ export function WorkItemCardRows({
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
           <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
-            {workItemMeta(item)}
+            <Metadata singleLine>
+              {workItemMeta(item).map((part, index, parts) => (
+                <Metadata.Item
+                  key={index}
+                  className={index === 0 || index === parts.length - 1 ? 'shrink-0' : undefined}
+                >
+                  {part}
+                </Metadata.Item>
+              ))}
+            </Metadata>
           </Txt>
           {relatedLinks}
-          <CommentCount count={item.commentCount} />
         </div>
         <div className="flex min-w-0 items-center gap-1.5">
           <WorkItemSourceIcon item={item} />
@@ -89,31 +99,50 @@ export function WorkItemCardRows({
               key={stage}
               className="border-border rounded-full border px-2 py-0.5"
             >
-              {itemStageLabel(item, stage)}
+              {itemStageLabel(item, stage, board)}
             </Txt>
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || verdict) && (
+      {(status.kind !== 'idle' || verdict || rework) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
           {verdict && <ReviewVerdictBadge verdict={verdict} />}
+          {rework && <ReworkLine rework={rework} />}
         </div>
       )}
       <CardActions
         actions={actions}
         beforeStart={beforeStart}
-        trailing={<WorkItemActivity activity={activity} actors={actors} />}
+        trailing={<WorkItemActivity activity={activity} actors={actors} board={board} />}
       />
     </>
   );
 }
 
-export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId) {
-  if (columnStage === 'review') return reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata);
-  if (columnStage === 'pr-review') return reviewVerdict(item.metadata);
-  if (columnStage === 'execute') return selfReviewVerdict(item.metadata);
+/** The verdict a column shows: the pull request's in its review, the builder's own in self-review and building. */
+export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId, board: BoardInfo | undefined) {
+  const loop = boardLoop(board);
+  if (loop === undefined) return undefined;
+  if (columnStage === loop.selfReview) return reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata);
+  if (columnStage === loop.pullRequestReview) return reviewVerdict(item.metadata);
+  if (columnStage === loop.build?.phase) return selfReviewVerdict(item.metadata);
   return undefined;
+}
+
+/** "Back from Review: <first line of why>", the whole reason on hover. */
+export function ReworkLine({ rework }: { rework: ReworkReason }) {
+  const text = `Back from ${rework.fromLabel}${rework.reason ? `: ${reasonSummary(rework.reason)}` : ''}`;
+  return (
+    <Txt
+      as="span"
+      variant="caption"
+      className="text-badge-orange-indicator max-w-full min-w-0 truncate"
+      title={rework.reason ?? text}
+    >
+      {text}
+    </Txt>
+  );
 }
 
 export function ReviewVerdictBadge({ verdict }: { verdict: ReviewVerdict }) {

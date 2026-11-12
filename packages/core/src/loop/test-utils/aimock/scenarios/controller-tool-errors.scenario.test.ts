@@ -89,10 +89,7 @@ describeForAllEngines('Controller tool status matches the tool outcome', engine 
   for (const route of ['direct', 'delegated', 'built-in subagent'] as const) {
     const delegated = route !== 'direct';
     const builtIn = route === 'built-in subagent';
-    // Durable/evented delegations currently emit no subagent_tool_end.
-    // Reproduced before and after the classification fix; not yet investigated.
-    const test = route === 'delegated' && (engine === 'durable' || engine === 'evented') ? it.fails : it;
-    test.each(cases)(`${route}: $name`, async ({ tool, args, isError, errorMessage }) => {
+    it.each(cases)(`${route}: $name`, async ({ tool, args, isError, errorMessage }) => {
       const llm = getMock();
       const tools = { lookup: tool };
       const worker =

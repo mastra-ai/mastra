@@ -802,7 +802,10 @@ packages:
         .slice(0, -1),
     );
     expect(outputLock.importers['.'].dependencies).toEqual({ zod: { specifier: '^4.0.0', version: '4.1.0' } });
-    expect(outputLock.importers['packages/shared'].devDependencies).toEqual({});
+    // The output installs only the root importer. Editing others would only make pnpm 11 recheck the lockfile (#29279).
+    expect(outputLock.importers['packages/shared'].devDependencies).toEqual({
+      '@inner/shared': { specifier: 'workspace:*', version: 'link:.' },
+    });
     expect(outputLock.packages).toEqual({ 'zod@4.1.0': { resolution: { integrity: 'sha512-abc' } } });
     expect(await readFile(join(root, 'pnpm-lock.yaml'), 'utf-8')).toBe(sourceLock);
   });

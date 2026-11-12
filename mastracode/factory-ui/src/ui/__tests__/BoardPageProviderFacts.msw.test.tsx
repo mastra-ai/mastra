@@ -101,7 +101,13 @@ it.each(['board', 'list'])(
 
     await user.click(within(card).getByRole('button', { name: 'Details for Repair source facts' }));
     const details = await screen.findByRole('dialog', { name: 'Repair source facts' });
-    expect(details).toHaveTextContent('acme/app#73 · reporter');
+    // The details show the reporter twice: in the source facts and as the card's latest activity.
+    const sourceFacts = within(details)
+      .getAllByText('reporter')
+      .map(reporter => reporter.closest('[data-slot="metadata"]'))
+      .filter(Boolean);
+    expect(sourceFacts).toHaveLength(1);
+    expect(sourceFacts[0]).toHaveTextContent('acme/app#73');
     expect(within(details).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(details).getByText('customer-visible')).toBeVisible();
     expect(within(details).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(

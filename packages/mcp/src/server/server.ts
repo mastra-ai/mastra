@@ -136,6 +136,7 @@ import type {
   MCPServerResources,
   MCPServerToolResultOptions,
 } from './types';
+import { matchesUriTemplate } from './uri-template';
 
 export interface MCPServerConfig extends CoreMCPServerConfig {
   resources?: MCPServerResources;
@@ -675,7 +676,7 @@ export class MCPServer extends MCPServerBase {
     return {};
   }
 
-  private createServerInstance(): Server {
+  private createServerInstance(era: 'legacy' | 'modern' = 'modern'): Server {
     const server = new Server(
       {
         name: this.name,
@@ -695,8 +696,9 @@ export class MCPServer extends MCPServerBase {
         requestState: { verify: this.requestStateCodec.verify },
       },
     );
-    // Deprecated session-level log control (SEP-2577): not served.
-    server.removeRequestHandler('logging/setLevel');
+    // Deprecated session-level log control (SEP-2577): not served on 2026-07-28. 2025-era clients
+    // still send it because `logging` is advertised, so legacy (stateless) instances keep it.
+    if (era === 'modern') server.removeRequestHandler('logging/setLevel');
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
@@ -1962,6 +1964,23 @@ export class MCPServer extends MCPServerBase {
       })) ?? []),
     ];
 
+    // A listed resource wins; otherwise the URI may expand one of the caller's own
+    // templates, so a read stays scoped to what that caller was advertised.
+    const findResource = async (
+      uri: string,
+      ctx: ServerContext,
+      requestContext: RequestContext,
+    ): Promise<Resource | undefined> => {
+      const listed = (await listResources(ctx, requestContext)).find(r => r.uri === uri);
+      if (listed || !options?.resourceTemplates) return listed;
+      const templates = await options.resourceTemplates({
+        extra: toToolExecutionContext(ctx, this.name).extra,
+        requestContext,
+      });
+      const template = templates.find(t => matchesUriTemplate(t.uriTemplate, uri));
+      return template && { uri, name: template.name, mimeType: template.mimeType, _meta: template._meta };
+    };
+
     // Providers are re-evaluated with the current request every time; resource
     // lists are scoped per caller and never cached on the shared server.
     this.setTracedHandler(server, 'resources/list', async (_request, ctx, trace) => ({
@@ -1970,7 +1989,7 @@ export class MCPServer extends MCPServerBase {
 
     this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
-      const resource = (await listResources(ctx, trace.requestContext)).find(r => r.uri === uri);
+      const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
       const html = this.appResourceHtml.get(uri);
@@ -2184,7 +2203,7 @@ export class MCPServer extends MCPServerBase {
 
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
-      this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
+      this.httpHandler = createMcpHandler(({ era }) => this.createServerInstance(era), {
         legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });

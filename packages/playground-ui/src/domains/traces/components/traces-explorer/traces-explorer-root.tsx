@@ -1,7 +1,9 @@
 import { EntityType } from '@mastra/core/observability';
+import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
   applyDatePreset,
@@ -60,6 +62,10 @@ export type TracesExplorerRootProps = {
   metricsSupport: TracesMetricsSupport;
   /** Host switches combined with the server capabilities; a feature runs only when both allow it. */
   features?: TracesExplorerFeatures;
+  /** Host-selected root projection. Hosts should offer aggregated roots only when the server advertises support. */
+  rootSource?: TraceQueryArgs['rootSource'];
+  /** Write context and action support for feedback in trace, span and thread panels. */
+  feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
   children: ReactNode;
@@ -90,6 +96,8 @@ export function TracesExplorerRoot({
   scope,
   metricsSupport,
   features,
+  rootSource,
+  feedbackOptions,
   initialFilters = DEFAULT_TRACES_FILTERS,
   children,
 }: TracesExplorerRootProps) {
@@ -223,13 +231,17 @@ export function TracesExplorerRoot({
   );
 
   const listId = listIdForScope(scope);
+  const hasFeedbackOptions = feedbackOptions !== undefined;
+  const { contextMode, feedbackUserId, allowDelete, allowReview } = feedbackOptions ?? {};
   const configValue = useMemo<TracesConfigContextValue>(
     () => ({
       listId,
+      rootSource,
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
@@ -246,10 +258,16 @@ export function TracesExplorerRoot({
     }),
     [
       listId,
+      rootSource,
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      hasFeedbackOptions,
+      contextMode,
+      feedbackUserId,
+      allowDelete,
+      allowReview,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
@@ -295,7 +313,7 @@ export function TracesExplorerRoot({
       <TracesFiltersContext.Provider value={filtersValue}>
         <TracesSelectionContext.Provider value={selectionValue}>
           <TracesColumnsProvider>
-            <TracesListProvider sort={sort} onSortChange={onSortChange}>
+            <TracesListProvider key={rootSource ?? 'legacy'} sort={sort} onSortChange={onSortChange}>
               {children}
             </TracesListProvider>
           </TracesColumnsProvider>

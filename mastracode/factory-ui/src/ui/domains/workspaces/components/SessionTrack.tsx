@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react';
 
 import { formatDuration } from '../../../../lib/date/formatDuration';
 import { stageStrongTintClass, stageTintClass } from '../../factory/components/BoardIcons';
-import type { FactoryMentionMember } from '../../factory/services/members';
+import type { TrailPerson } from '../hooks/useSessionTrail';
 import { stageLabel } from '../../factory/stages';
 import { trackMomentLabel, trackStartLabel } from '../services/sessionTrack';
 import type { TrackLayout, TrackPin, TrackSpan, TrackStage } from '../services/sessionTrack';
@@ -91,7 +91,7 @@ export function SessionTrack({
   layout: TrackLayout;
   startedAt: number;
   now: number;
-  people: ReadonlyMap<string, FactoryMentionMember>;
+  people: ReadonlyMap<string, TrailPerson>;
 }) {
   const [focus, setFocus] = useState<TrackFocus>();
   const nameOf = (personId: string) => people.get(personId)?.name ?? personId;
@@ -171,15 +171,14 @@ export function SessionTrack({
           return (
             <span
               key={pinKey(pin)}
-              className={cn(
-                'ring-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2',
-                fadedUnlessFocused(pinKey(pin)),
-              )}
+              className="ring-popover bg-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2"
               data-track-hit={pinCaption(pin, nameOf(pin.personId))}
               style={{ left: `${pin.left}%` }}
               onPointerEnter={() => setFocus(pinFocus(pin, nameOf(pin.personId)))}
             >
-              <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              <span className={cn('flex', fadedUnlessFocused(pinKey(pin)))}>
+                <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              </span>
             </span>
           );
         })}

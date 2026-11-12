@@ -24,7 +24,7 @@ export const opsAgent = new Agent({
 
 Returns: `ToolsResolver`, a resolver producing a flat tool record keyed by tool key (for example `linear_create_issue`). See [The resolver](#the-resolver).
 
-See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools](/docs/mastra-platform/connect/tools) for usage.
+See [Connect](/docs/mastra-platform/connect#add-tools-to-an-agent) to get started.
 
 ## Parameters
 
@@ -151,7 +151,7 @@ Each value in the `providers` record form is `true`, `false`, or a `ToolsProvide
 
 ### ConnectClientOptions
 
-Every field falls back to an environment variable, so a fully env-configured app can pass nothing.
+Every field except `fetch` and `resourceId` falls back to an environment variable. `fetch` defaults to `globalThis.fetch`, and `resourceId` has no fallback, so a fully env-configured app that doesn't scope calls to a resource can pass nothing.
 
 <PropertiesTable
   content={[
@@ -165,6 +165,20 @@ Every field falls back to an environment variable, so a fully env-configured app
     name: 'orgId',
     type: 'string',
     description: 'Organization ID. Falls back to MASTRA_ORG_ID; sent as the x-organization-id header when present.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description:
+      'Project ID, sent as the x-mastra-project-id header so the platform can attribute proxy activity to the project. Falls back to MASTRA_PROJECT_ID; the header is omitted when absent.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      "End-user resource key the client acts for, sent as the x-mastra-resource-id header. Connection listings are scoped to global connections plus that resource's connections. Has no environment variable fallback.",
     isOptional: true,
   },
   {
@@ -203,7 +217,35 @@ The resolver also exposes methods for manual control:
 
 - `refresh()` fetches from the platform immediately, then updates the cache and returns the tool record. Rejects if the platform fetch fails.
 - `disconnect()` clears the cached snapshots and closes the MCP transports of the state behind this resolver. Resolvers created with identical options share that state, so this disconnects them too. A later resolution rebuilds the state, and already-returned MCP tools reconnect on their next call.
-- `with(extra)` returns a new resolver that merges extra tools into every resolution, giving extras priority on key collision. It accepts a static tool record or a function (sync or async) and calls chain. For the same merge using a spread of the resolver's result in a `tools` callback, see [Tools](/docs/mastra-platform/connect/tools#combine-with-your-own-tools).
+- `with(extra)` returns a new resolver that merges extra tools into every resolution, giving extras priority on key collision. It accepts a static tool record or a function (sync or async) and calls chain. For the same merge using a spread of the resolver's result in a `tools` callback, see [Add tools to an agent](/docs/mastra-platform/connect#add-tools-to-an-agent).
+- `codeMode(options)` exposes the tools through [Code Mode](#code-mode).
+
+To filter on something other than tool keys, or on data that options can't express, post-process the resolved record in the agent's `tools` function. Create the resolver once, outside the function, so its cache is shared:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+const connectTools = tools({ providers: ['linear'] })
+const viewerTools = new Set(['linear_list_issues'])
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: 'You help the team track work in Linear.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: async ctx => {
+    const all = await connectTools(ctx)
+
+    if (ctx.requestContext?.get('role') === 'admin') {
+      return all
+    }
+    return Object.fromEntries(Object.entries(all).filter(([key]) => viewerTools.has(key)))
+  },
+})
+```
+
+Only the `admin` role gets every tool. Any other or missing role gets the viewer subset. Set `role` in trusted server-side code based on the authenticated user. [Vary tools by channel](/reference/connect/channels#vary-tools-by-channel) applies the same pattern to channel messages.
 
 Error handling depends on the cause:
 
@@ -211,6 +253,68 @@ Error handling depends on the cause:
 - An enabled provider ID that the platform catalog confirms is unknown fails the resolution with `invalid_options`. An unknown tool key or zero-match glob in a per-provider filter does the same. If the catalog can't be reached, an unknown ID downgrades to a warning and is skipped.
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
 - A problem with one provider, such as a connection that needs reauthorization, logs a warning and skips that provider. The other providers' tools still load.
+
+## Code Mode
+
+`codeMode()` gives the agent the connected tools through [Code Mode](/docs/agents/code-mode): the agent writes one TypeScript program that calls the tools as `external_*` functions, instead of calling each tool in its own step. Use it when tasks fan out across many calls or providers, such as listing items in one provider and looking each one up in another.
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { LocalSandbox } from '@mastra/core/workspace'
+import { tools } from '@mastra/connect'
+
+const code = tools({ providers: ['linear', 'slack'] }).codeMode({ sandbox: new LocalSandbox() })
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: async ctx => ['You help the team track work.', await code.instructions(ctx)],
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: code.tools,
+})
+```
+
+:::warning
+
+`LocalSandbox` runs the model-written program as a host `node` process with host privileges. Connected tools return third-party data, such as issue text, that can influence the code the model writes. Use `LocalSandbox` only for trusted or local development. See [how Code Mode works](/docs/agents/code-mode#how-it-works) for isolated alternatives.
+
+:::
+
+`codeMode()` returns two functions, `tools` and `instructions`. Pass both to the agent. Like the resolver, they resolve the current connections on every request. The functions the program can call change as providers are connected or disconnected. Within one request both use the same resolution, and the instructions never declare a function the program can't call.
+
+The method accepts every [`createCodeMode()` option](/reference/tools/create-code-mode) except `tools` (`sandbox`, `timeout`, `id`), plus `transport` for a [remote sandbox](/docs/agents/code-mode#remote-sandboxes) or [in-process isolation](/docs/agents/code-mode#in-process-isolation), and `toolSearch` for [tool search](#tool-search). Every resolver provides it, including the callback form and resolvers returned by `with()`. Extra tools from `with()` join the program's functions.
+
+Some tools stay direct agent tools instead of program functions, because they pause the agent run and a call from inside a program can't:
+
+- Tools that need approval through `requireApproval`. The agent still waits for the user to approve each call.
+- The `request_connection` tool, so the connect prompt can still pause the run until the user connects.
+
+For [MCP providers](#mcp-providers), a `requireApproval` list keeps **all** of that provider's tools direct, including the ones the list doesn't name. Mastra discovers MCP tools at request time and checks the list on each call, so Code Mode has no way to know in advance which calls need approval and keeps every tool from that provider out of the program. Generated HTTP tools work differently, because only the tools that match the list stay direct.
+
+```typescript
+// Every neon-mcp tool stays direct, not just neon-mcp_run_sql
+const ops = tools({
+  providers: { 'neon-mcp': { requireApproval: ['neon-mcp_run_sql'] } },
+}).codeMode({ sandbox })
+```
+
+To let a program call that provider's other tools, remove the gated tools with `disallowTools` instead of gating them. To keep them gated, accept that the agent calls the provider's tools one at a time.
+
+When there is nothing to orchestrate, for example when the project has no connections yet, `tools` returns only the direct tools and `instructions` returns an empty string.
+
+### Tool search
+
+Declaring every function in the instructions uses context on every request: about 4,000 tokens for Linear alone and over 20,000 for Linear, GitHub, and Stripe together. With tool search, the instructions list only the function names, and the agent gets a `search_functions` tool that returns the TypeScript declarations for the functions it needs. The agent searches by what it wants to do or by exact names from the list, then writes the program. The program can still call every function. Only the declarations move behind the search.
+
+Tool search turns on by itself when declaring every function would take more than about 10,000 tokens. Set `toolSearch` to choose:
+
+```typescript title="src/mastra/agents/ops.ts"
+// Always list names only and search for declarations
+const searching = tools().codeMode({ sandbox: new LocalSandbox(), toolSearch: true })
+
+// Always declare every function up front
+const declared = tools().codeMode({ sandbox: new LocalSandbox(), toolSearch: false })
+```
 
 ## Choosing providers
 

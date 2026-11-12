@@ -23,6 +23,7 @@
     "@inner/alias-source": "workspace:*",
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
+    "@inner/optional-peer-host": "workspace:*",
     "@inner/subpath-only": "workspace:*",
     "@inner/transitive-a": "workspace:*",
     "@inner/transitive-only-dependent": "workspace:*",
@@ -36,6 +37,8 @@
     "hono": "^4.13.11",
     "ws": "^8.21.3",
     "nodemailer": "^10.2.1",
+    "pino": "10.4.0",
+    "pino-pretty": "13.2.0",
     "read-excel-file": "9.3.12",
     "unicorn-magic": "0.4.0",
     "zod": "^4.6.7"

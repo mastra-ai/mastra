@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { BackgroundTaskResponse } from '@mastra/client-js';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -72,22 +72,29 @@ const Shell = ({ props }: { props: ToolCardProps }) => (
   </MemoryRouter>
 );
 
-const chipText = () => screen.getByTestId('mcp-task-chip').textContent;
+const chipStatus = () => within(screen.getByTestId('mcp-task-chip')).getByText(/^task /).textContent;
 
 describe('tool card for a call that continued as an MCP task', () => {
   describe('when its output becomes the "background task" placeholder', () => {
     it('keeps the task chip and keeps polling until the task ends', async () => {
       const background = serveBackgroundTask();
       const { rerender } = renderWithProviders(<Shell props={card([working])} />);
-      expect(chipText()).toContain('task · working');
+      expect(chipStatus()).toBe('task working');
 
       rerender(<Shell props={card('Background task started with id bg-05a4940e')} />);
 
       await waitFor(() => expect(background.requests.length).toBeGreaterThan(0));
-      expect(chipText()).toContain('task · working');
+      expect(chipStatus()).toBe('task working');
 
       background.finish();
-      await waitFor(() => expect(chipText()).toContain('task · completed · 0:42'), { timeout: 5_000 });
+      await waitFor(
+        () => {
+          const chip = within(screen.getByTestId('mcp-task-chip'));
+          expect(chip.getByText('task completed')).toBeTruthy();
+          expect(chip.getByText('0:42')).toBeTruthy();
+        },
+        { timeout: 5_000 },
+      );
     });
   });
 
@@ -100,11 +107,11 @@ describe('tool card for a call that continued as an MCP task', () => {
         ),
       );
       const { rerender } = renderWithProviders(<Shell props={card([working])} />);
-      expect(chipText()).toContain('task · working');
+      expect(chipStatus()).toBe('task working');
 
       rerender(<Shell props={card({ report: 'q3 ready' }, 'completed')} />);
 
-      await waitFor(() => expect(chipText()).toContain('task · completed'));
+      await waitFor(() => expect(chipStatus()).toBe('task completed'));
     });
   });
 });

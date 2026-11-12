@@ -8,11 +8,11 @@ import { Textarea } from '@/ds/components/Textarea';
 import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 const PROCESSOR_PHASES = [
-  { value: 'input', label: 'Input - Process input messages before LLM' },
-  { value: 'inputStep', label: 'Input Step - Process at each agentic loop step' },
-  { value: 'outputStream', label: 'Output Stream - Process streaming chunks' },
-  { value: 'outputResult', label: 'Output Result - Process complete output' },
-  { value: 'outputStep', label: 'Output Step - Process after each LLM response' },
+  { value: 'input', description: 'Process input messages before LLM' },
+  { value: 'inputStep', description: 'Process at each agentic loop step' },
+  { value: 'outputStream', description: 'Process streaming chunks' },
+  { value: 'outputResult', description: 'Process complete output' },
+  { value: 'outputStep', description: 'Process after each LLM response' },
 ];
 
 type WorkflowProcessorInputProps = Omit<WorkflowInputDataProps, 'defaultValues'> & {
@@ -92,7 +92,7 @@ export const WorkflowProcessorInput = ({
           </SelectContent>
         </Select>
         <FieldDescription>
-          {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
+          {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.description}
         </FieldDescription>
         <FieldError>{errors.phase.length > 0 && <ErrorLines errors={errors.phase} />}</FieldError>
       </Field>
