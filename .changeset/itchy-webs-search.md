@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-`restartAllActiveWorkflowRuns()` now restarts only workflow runs that stopped (#28712). A `running` or `waiting` run counts as stopped when no instance is running it and nothing about the run changed for `recovery.workflowGraceMs`. A run that stopped more recently is checked again once its grace period ends. Without run fencing in the store, every active run is still restarted, as before.
+`restartAllActiveWorkflowRuns()` now restarts only workflow runs that stopped (#28712). A `running` or `waiting` run counts as stopped when no instance is running it and nothing about the run changed for `recovery.workflowGraceMs`. A run that stopped more recently is restarted by the workflow recovery loop once its grace period ends. Without run fencing in the store, every active run is still restarted, as before.
 
 ```ts
 const mastra = new Mastra({
