@@ -60,6 +60,7 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
@@ -2614,8 +2615,9 @@ export class EventedRun<
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     // Start with the snapshot's request context (old values). Rows written before the
-    // auth token was stripped may still hold one; never restore a stale bearer token.
-    const requestContextObj = withoutAuthToken(snapshot.requestContext ?? {});
+    // auth token was stripped may still hold one; never restore a stale bearer token
+    // or the user who started the run.
+    const requestContextObj = withoutLiveRequestKeys(snapshot.requestContext);
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot

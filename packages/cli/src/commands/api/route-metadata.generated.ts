@@ -6032,6 +6032,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "perPage",
+      "status",
       "tags"
     ],
     "bodyParams": [],
@@ -6075,6 +6076,8 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [
       "baselineId",
+      "experimentIdA",
+      "experimentIdB",
       "experimentIds"
     ],
     "hasQuery": true,
@@ -6572,6 +6575,7 @@ export const API_ROUTE_METADATA = {
       "agentId",
       "attributes",
       "cron",
+      "endAt",
       "id",
       "ifActive",
       "ifIdle",
@@ -6583,6 +6587,7 @@ export const API_ROUTE_METADATA = {
       "providerOptions",
       "requestContext",
       "resourceId",
+      "runAt",
       "signalType",
       "tagName",
       "threadId",
@@ -6605,6 +6610,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "attributes",
       "cron",
+      "endAt",
       "ifActive",
       "ifIdle",
       "initialState",
@@ -6615,6 +6621,7 @@ export const API_ROUTE_METADATA = {
       "providerOptions",
       "requestContext",
       "resourceId",
+      "runAt",
       "signalType",
       "status",
       "tagName",

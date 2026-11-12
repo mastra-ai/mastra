@@ -66,6 +66,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { withoutLiveRequestKeys } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
@@ -80,6 +81,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
+import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { HAND_BACK_STATE_SYMBOL, PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
@@ -102,7 +104,7 @@ import { claimWorkflowRunOwnership } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
 import { createRunStorage } from './run-storage';
 import type { RunStorage } from './run-storage';
-import { validateCron } from './scheduler/cron';
+import { validateScheduleTiming } from './scheduler/cron';
 import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
   ConditionFunction,
@@ -2108,7 +2110,9 @@ export class Workflow<
       }
     }
     for (const entry of schedules) {
-      validateCron(entry.cron, entry.timezone);
+      // Declarative schedules are re-validated on every boot, so a `runAt`
+      // or `endAt` that has already passed must not break construction.
+      validateScheduleTiming(entry, { requireFuture: false });
     }
     this.#schedules = schedules.map(cfg => ({ ...cfg }));
     this.id = id;
@@ -3369,7 +3373,7 @@ export class Workflow<
         let scorersToUse = step.scorers;
 
         if (typeof scorersToUse === 'function') {
-          scorersToUse = await scorersToUse({ requestContext });
+          scorersToUse = await resolveDynamicArgument(scorersToUse, { requestContext });
         }
 
         for (const [id, scorer] of Object.entries(scorersToUse)) {
@@ -5682,7 +5686,7 @@ export class Run<
 
     const requestContextToUse = params.requestContext ?? new RequestContext();
 
-    Object.entries(snapshot?.requestContext ?? {}).forEach(([key, value]) => {
+    Object.entries(withoutLiveRequestKeys(snapshot?.requestContext)).forEach(([key, value]) => {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
@@ -6038,7 +6042,7 @@ export class Run<
     }
 
     const requestContextToUse = requestContext ?? new RequestContext();
-    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+    for (const [key, value] of Object.entries(withoutLiveRequestKeys(snapshot.requestContext))) {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }
@@ -6191,7 +6195,7 @@ export class Run<
     });
 
     const requestContextToUse = requestContext ?? new RequestContext();
-    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+    for (const [key, value] of Object.entries(withoutLiveRequestKeys(snapshot.requestContext))) {
       if (!(requestContextToUse as RequestContext).has(key)) {
         (requestContextToUse as RequestContext).set(key, value);
       }

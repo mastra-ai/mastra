@@ -16,6 +16,7 @@ const FAILURE_METADATA = {
   unsupported_provider_item: { canRetry: false, label: 'Unsupported provider work item' },
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
   run_terminal_event_missing: { canRetry: false, label: 'Agent run terminal event was not observed' },
+  run_incomplete: { canRetry: true, label: 'Agent run ended before completing the working phase' },
   skill_delivery_ambiguous: { canRetry: false, label: 'Factory skill delivery could not be confirmed' },
   run_overdue: { canRetry: false, label: 'Agent run is overdue' },
   repository_git_missing: { canRetry: false, label: 'Git is unavailable in the workspace' },

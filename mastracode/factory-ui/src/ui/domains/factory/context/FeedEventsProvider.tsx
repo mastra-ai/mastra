@@ -1,5 +1,5 @@
-import { hashKey, useQueryClient } from '@tanstack/react-query';
-import type { QueryKey } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Query, QueryKey } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
@@ -40,30 +40,35 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     let lastRefreshAt = Number.NEGATIVE_INFINITY;
     let streaming = false;
     const cardsKey = queryKeys.workItems(factoryProjectId);
+    const factsKey = queryKeys.boardFacts(factoryProjectId);
     const boardKeys = [
       cardsKey,
+      factsKey,
       queryKeys.factoryDecisionsRoot(factoryProjectId),
       queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
     ];
     // One read per query at a time, with at most one more queued behind it: a frame cancelling a slow
     // read for the next would starve a busy board, and a read that never ends holds up only its own query.
     const reading = new Map<string, { again: boolean }>();
-    const reread = (queryKey: QueryKey) => {
+    const reread = (boardKey: QueryKey, query: Query) => {
       // A card read taken mid-move puts the card back in the column it is leaving; the move re-reads the cards when it lands.
-      if (queryKey === cardsKey && queryClient.isMutating({ mutationKey: cardMoveMutationKey(factoryProjectId) }) > 0) {
+      if (boardKey === cardsKey && queryClient.isMutating({ mutationKey: cardMoveMutationKey(factoryProjectId) }) > 0) {
         return;
       }
-      const hash = hashKey(queryKey);
-      const inFlight = reading.get(hash);
+      // A server that predates these reads answers 404 for good: asking again on every frame cannot change it.
+      if (boardKey === factsKey && query.state.error instanceof RequestError && query.state.error.status === 404) {
+        return;
+      }
+      const inFlight = reading.get(query.queryHash);
       if (inFlight) {
         inFlight.again = true;
         return;
       }
       const read = { again: false };
-      reading.set(hash, read);
-      void queryClient.invalidateQueries({ queryKey }).finally(() => {
-        reading.delete(hash);
-        if (read.again && !abort.signal.aborted) reread(queryKey);
+      reading.set(query.queryHash, read);
+      void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true }).finally(() => {
+        reading.delete(query.queryHash);
+        if (read.again && !abort.signal.aborted) reread(boardKey, query);
       });
     };
     const refreshBoard = () => {
@@ -72,7 +77,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       settling = setTimeout(() => {
         settling = undefined;
         lastRefreshAt = Date.now();
-        for (const queryKey of boardKeys) reread(queryKey);
+        for (const boardKey of boardKeys) {
+          // Each query under a key waits only for itself: a session's few cards never queue behind the whole board.
+          for (const query of queryClient.getQueryCache().findAll({ queryKey: boardKey })) reread(boardKey, query);
+        }
       }, wait);
     };
     // The only poll for cards and decisions: it takes a frame's path, so it never reads cards mid-move either.

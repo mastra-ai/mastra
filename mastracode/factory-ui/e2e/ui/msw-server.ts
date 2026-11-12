@@ -32,6 +32,7 @@ export const server = setupServer(
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
   http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
+  http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
   // A server without the JIRA_* env group mounts no Jira routes; the ambient
   // 404 mirrors that and the Jira service degrades to a disabled status.
   // Jira-specific tests override these with `server.use(...)`.
@@ -61,5 +62,20 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/work-items/starters', () =>
+    HttpResponse.json({
+      failed: 0,
+      changesRequested: 0,
+      review: { count: 0 },
+      undecided: 0,
+      untriaged: 0,
+      unplannedBugs: 0,
+      stale: 0,
+    }),
+  ),
+  http.get('*/web/factory/projects/:id/work-items/activity', () =>
+    HttpResponse.json({ total: 0, createdAt: [], doneAt: [] }),
+  ),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
 );

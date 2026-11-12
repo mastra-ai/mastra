@@ -3,7 +3,6 @@ title: 'MCP | Connections'
 description: 'Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, subscribe to MCP events, and build interactive MCP Apps for Studio.'
 packages:
   - '@mastra/mcp'
-  - '@mastra/mcp-apps-components'
 ---
 
 # MCP
@@ -169,6 +168,8 @@ export async function handleRequest(prompt: string, apiKey: string) {
 ```
 
 Visit [`listTools()`](/reference/tools/mcp-client#listtools) and [`listToolsets()`](/reference/tools/mcp-client#listtoolsets) for their full APIs.
+
+This example finishes within one request. When agent work must continue after the request ends or survive a process restart, use [durable agents](/docs/harness/durable-agents) or [background tasks](/docs/harness/background-tasks) instead of building your own task tracking. Call-time `toolsets` can't move to another process, so with a durable agent, load per-request MCP tools in the agent's `tools` function from [request context](/docs/server/request-context).
 
 ### Tool approval
 
@@ -417,51 +418,6 @@ export const mastra = new Mastra({
 ```
 
 Tools loaded through `listTools()` include a `serverId` in `_meta.ui`, allowing Studio to resolve each app resource without scanning every server. Visit [`toMCPServerProxies()`](/reference/tools/mcp-client#tomcpserverproxies) for proxy configuration details.
-
-### Use prebuilt Mastra apps
-
-The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps. Each one is a self-contained HTML page that you register as an app resource, next to the tools it talks to.
-
-```bash npm2yarn
-npm install @mastra/mcp-apps-components
-```
-
-`greetingApp` greets someone by name. The host sends it the arguments of the tool that opened it, and the app reads `name`. It then calls the `getGreeting` tool on the same server for its data and shows the `greeting` from the result. Mark `getGreeting` as app-only with `visibility: ['app']`, so the model doesn't see it:
-
-```typescript title="src/mastra/mcp/greeting-server.ts"
-import { createTool } from '@mastra/core/tools'
-import { MCPServer } from '@mastra/mcp'
-import { greetingApp } from '@mastra/mcp-apps-components'
-import { z } from 'zod'
-
-const uri = 'ui://mastra/greeting'
-
-export const greetingServer = new MCPServer({
-  id: 'greeting-server',
-  name: 'Greeting Server',
-  version: '1.0.0',
-  appResources: { [uri]: greetingApp },
-  tools: {
-    showGreeting: createTool({
-      id: 'showGreeting',
-      description: 'Shows a greeting card for someone',
-      inputSchema: z.object({ name: z.string() }),
-      mcp: { _meta: { ui: { resourceUri: uri } } },
-      execute: async ({ name }) => ({ name }),
-    }),
-    getGreeting: createTool({
-      id: 'getGreeting',
-      description: 'Returns the greeting for a name',
-      inputSchema: z.object({ name: z.string() }),
-      outputSchema: z.object({ greeting: z.string() }),
-      mcp: { _meta: { ui: { resourceUri: uri, visibility: ['app'] } } },
-      execute: async ({ name }) => ({ greeting: `Hello, ${name}!` }),
-    }),
-  },
-})
-```
-
-`getGreeting` runs on your server, so it can call any API with your server's credentials. The app reaches your server through the host bridge, not by calling Studio itself.
 
 ### Sandbox security
 
