@@ -1335,6 +1335,12 @@ describe('accumulateChunk - background tasks', () => {
     expect(meta.runningBackgroundTasksCount).toBeUndefined();
   });
 
+  it("background-task-cancelled for a call this conversation doesn't hold changes nothing", () => {
+    const initial = reduce([startChunk(), toolCallChunk('tc-1', 'longRun', {}), bgTaskProgressChunk(1)]);
+    const out = reduce([bgTaskCancelledChunk('tc-other', 'bg-other')], streamMeta(), initial);
+    expect(out).toEqual(initial);
+  });
+
   it('background-task-output appends output to a partial-call result array', () => {
     const out = reduce([
       startChunk(),

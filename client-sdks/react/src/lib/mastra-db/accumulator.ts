@@ -1738,26 +1738,27 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     // A cancelled task never reconciles a result, so its call keeps the placeholder:
     // record the end and mark the call cancelled so it stops reading as running.
     case 'background-task-cancelled': {
-      const location = locateToolPart(result, chunk.payload.toolCallId, true);
+      // Only the cancelled task's own call: no fallback to another message, which would
+      // record the cancel (and clear its running count) on a message that doesn't hold it.
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
       if (!location) return result;
       const { messageIndex, toolPartIndex } = location;
       const targetMessage = result[messageIndex];
       if (!targetMessage || targetMessage.role !== 'assistant') return result;
 
       const parts = [...targetMessage.content.parts];
-      const toolPart = toolPartIndex >= 0 ? parts[toolPartIndex] : undefined;
+      const toolPart = parts[toolPartIndex];
       const mastraMeta = (toolPart as MastraToolInvocationPart | undefined)?.providerMetadata?.mastra as
         | { backgroundTask?: { taskId?: string } }
         | undefined;
-      if (toolPart && mastraMeta?.backgroundTask?.taskId === chunk.payload.taskId) {
-        parts[toolPartIndex] = {
-          ...toolPart,
-          providerMetadata: {
-            ...(toolPart as MastraToolInvocationPart).providerMetadata,
-            mastra: { ...mastraMeta, backgroundTask: { ...mastraMeta.backgroundTask, status: 'cancelled' } },
-          },
-        } as MastraMessagePart;
-      }
+      if (!toolPart || mastraMeta?.backgroundTask?.taskId !== chunk.payload.taskId) return result;
+      parts[toolPartIndex] = {
+        ...toolPart,
+        providerMetadata: {
+          ...(toolPart as MastraToolInvocationPart).providerMetadata,
+          mastra: { ...mastraMeta, backgroundTask: { ...mastraMeta.backgroundTask, status: 'cancelled' } },
+        },
+      } as MastraMessagePart;
 
       const nextMetadata = mergeBgTaskMetadata(
         targetMessage.content.metadata as MastraDBMessageMetadata | undefined,
