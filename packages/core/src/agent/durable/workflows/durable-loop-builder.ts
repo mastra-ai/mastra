@@ -443,8 +443,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   /**
    * The single iteration workflow (LLM -> Tool Calls -> Mapping).
    * Note: tool-call foreach concurrency is resolved per run at execution time
-   * (see resolveDurableToolCallConcurrency) — approval/suspend flows force
-   * sequential execution; otherwise the run's `toolCallConcurrency` applies.
+   * (see resolveDurableToolCallConcurrency) — suspend-capable tools force
+   * sequential execution (approval does not, #30152); otherwise the run's `toolCallConcurrency` applies.
    * This deliberately differs from the main loop, which resolves concurrency
    * once at loop build from the active tool set (#15978): the durable workflow
    * graph is built once and shared across runs, so anything per-run must be a
@@ -611,7 +611,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         )
         // Step 3: Execute each tool call individually (with suspend support).
         // Concurrency is resolved per run from the serialized iteration state:
-        // approval/suspend-capable tool sets run sequentially, everything else
+        // suspend-capable tool sets run sequentially, everything else
         // honors the run's `toolCallConcurrency` (default 10). The workflow graph
         // is shared across runs, so this must be a resolver — never a mutated
         // shared options object.

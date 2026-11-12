@@ -3373,7 +3373,6 @@ export class DurableAgent<
     // to false (stream stays open for a same-reader resume). The same value
     // gates the `across-suspension` continuation so the two cannot drift.
     const closeOnSuspend = options?.closeOnSuspend ?? false;
-    const closeOnPersistedSuspend = closeOnSuspend && this.suspendPersistedOnReturn;
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
@@ -3416,10 +3415,11 @@ export class DurableAgent<
       // now calls it in-process from globalRunRegistry and honors its return
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
-      // When the engine reports the persisted suspension, the stream is closed
-      // after executeWorkflow() returns (below) rather than on the SUSPENDED
-      // event, which is published before the snapshot is saved.
-      closeOnSuspend: closeOnSuspend && !closeOnPersistedSuspend,
+      // The stream is closed after executeWorkflow() reports the suspension
+      // (below) rather than on a SUSPENDED event: each parked tool call
+      // publishes its own SUSPENDED, possibly before the snapshot is saved and
+      // while sibling calls in the same step are still raising approvals (#30152).
+      closeOnSuspend: false,
       hideSignals: options?.hideSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
@@ -3462,7 +3462,7 @@ export class DurableAgent<
           } finally {
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
           }
-          if (closeOnPersistedSuspend && result?.status === 'suspended') {
+          if (closeOnSuspend && result?.status === 'suspended') {
             // The workflow result is the persisted suspension boundary. Deliver
             // buffered events (including onSuspended) before closing the stream.
             await this.pubsub.flush();

@@ -1,11 +1,12 @@
 /**
  * Two approval tool calls in one model step (#28479).
  *
- * The first stream stops at the first approval. Approving it with
- * `closeOnSuspend: true` runs that tool and re-suspends on the second approval;
- * the resumed stream must carry those chunks before it closes. On a transport
- * that redelivers retained frames to a resumed subscriber (Redis Streams), the
- * stream used to close before the resumed segment's frames reached it.
+ * Both approvals surface in the first stream, which closes once the step has
+ * parked both calls (#30152). Approving one with `closeOnSuspend: true` runs
+ * that tool while the other stays parked; the resumed stream must carry the
+ * resumed tool's chunks before it closes. On a transport that redelivers
+ * retained frames to a resumed subscriber (Redis Streams), the stream used to
+ * close before the resumed segment's frames reached it (#28479).
  *
  * Shared so every PubSub transport runs the same scenario. Lives with
  * @mastra/core's tests; there is no public export.
@@ -74,7 +75,7 @@ export function defineSiblingApprovalSuite(name: string, options: SiblingApprova
 
   describe.each(['durable', 'evented'] as const)(`${name}: %s agent, two approvals in one step`, engine => {
     it.each(Array.from({ length: repeat }, (_, i) => i + 1))(
-      'resumeStream(closeOnSuspend) streams the resumed tool and the second approval (run %i)',
+      'surfaces both approvals at once, then resumeStream(closeOnSuspend) streams each resumed tool (run %i)',
       async () => {
         const ran: string[] = [];
         const agent = new Agent({
@@ -104,19 +105,31 @@ export function defineSiblingApprovalSuite(name: string, options: SiblingApprova
 
         const start = await payer.stream('Pay alice and bob', { closeOnSuspend: true } as never);
         const first = await read(start);
-        expect(first.filter(type => type.startsWith('tool-call-approval'))).toEqual(['tool-call-approval(call-alice)']);
+        expect(first.filter(type => type.startsWith('tool-call-approval'))).toEqual([
+          'tool-call-approval(call-alice)',
+          'tool-call-approval(call-bob)',
+        ]);
+        expect(ran).toEqual([]);
 
-        const resumed = await payer.resumeStream(
-          { approved: true },
-          { runId: start.runId, toolCallId: 'call-alice', closeOnSuspend: true },
+        const second = await read(
+          await payer.resumeStream(
+            { approved: true },
+            { runId: start.runId, toolCallId: 'call-alice', closeOnSuspend: true },
+          ),
         );
-        const second = await read(resumed);
-
         expect(ran).toEqual(['alice']);
-        expect(second.filter(type => type !== 'start' && type !== 'step-start')).toEqual(
-          expect.arrayContaining(['tool-call-resumed', 'tool-result', 'tool-call-approval(call-bob)']),
+        expect(second).toEqual(expect.arrayContaining(['tool-call-resumed', 'tool-result']));
+        expect(second).not.toContain('finish');
+
+        const third = await read(
+          await payer.resumeStream(
+            { approved: true },
+            { runId: start.runId, toolCallId: 'call-bob', closeOnSuspend: true },
+          ),
         );
-        expect(second.indexOf('tool-result')).toBeLessThan(second.indexOf('tool-call-approval(call-bob)'));
+        expect(ran).toEqual(['alice', 'bob']);
+        expect(third).toEqual(expect.arrayContaining(['tool-call-resumed', 'tool-result', 'finish']));
+        expect(third.indexOf('tool-result')).toBeLessThan(third.indexOf('finish'));
       },
       30_000,
     );

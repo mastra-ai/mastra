@@ -39,8 +39,8 @@ export const DurableAgentDefaults = {
   /**
    * Default tool call concurrency.
    * Applied by `resolveDurableToolCallConcurrency` when a run doesn't
-   * configure `toolCallConcurrency`. Approval / suspend-capable tool sets
-   * always run sequentially (concurrency: 1) regardless of this value.
+   * configure `toolCallConcurrency`. Suspend-capable tool sets always
+   * run sequentially (concurrency: 1) regardless of this value.
    */
   TOOL_CALL_CONCURRENCY: 10,
 } as const;

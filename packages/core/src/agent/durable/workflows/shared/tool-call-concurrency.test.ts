@@ -17,12 +17,12 @@ function call(toolName: string, activeTools?: string[] | null): Pick<DurableTool
 
 /**
  * A tool call emitted by the LLM step for a processor-injected tool. The step stamps
- * approval/suspension capability from its effective tool set (issue #24377).
+ * suspension capability from its effective tool set (issue #24377).
  */
 function stampedCall(
   toolName: string,
-  flags: Pick<DurableToolCallInput, 'requireApproval' | 'hasSuspendSchema'> = {},
-): Pick<DurableToolCallInput, 'toolName' | 'requireApproval' | 'hasSuspendSchema'> {
+  flags: Pick<DurableToolCallInput, 'hasSuspendSchema'> = {},
+): Pick<DurableToolCallInput, 'toolName' | 'hasSuspendSchema'> {
   return { toolName, ...flags };
 }
 
@@ -49,22 +49,26 @@ describe('resolveDurableToolCallConcurrency', () => {
     );
   });
 
-  it('forces sequential execution when requireToolApproval is set globally', () => {
+  // Approval never serializes: gated calls park at their gates together and are
+  // resumed one toolCallId at a time (#30152). The serialized options carry a
+  // `true` shadow for function-form policies, so both forms are covered here.
+  it('does not force sequential execution for run-wide requireToolApproval', () => {
+    const options = { requireToolApproval: true, toolCallConcurrency: 10 };
     expect(
       resolveDurableToolCallConcurrency({
-        options: { requireToolApproval: true, toolCallConcurrency: 10 },
+        options,
         toolsMetadata: [tool({ name: 'plain' })],
       }),
-    ).toBe(1);
+    ).toBe(10);
   });
 
-  it('forces sequential execution when a tool requires approval', () => {
+  it('does not force sequential execution when a tool requires approval', () => {
     expect(
       resolveDurableToolCallConcurrency({
         options: { toolCallConcurrency: 10 },
         toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'gated', requireApproval: true })],
       }),
-    ).toBe(1);
+    ).toBe(10);
   });
 
   it('forces sequential execution when a tool has a suspend schema', () => {
@@ -76,39 +80,36 @@ describe('resolveDurableToolCallConcurrency', () => {
     ).toBe(1);
   });
 
-  it('ignores approval/suspend flags on tools excluded by activeTools', () => {
+  it('ignores suspend flags on tools excluded by activeTools', () => {
     expect(
       resolveDurableToolCallConcurrency({
         options: { toolCallConcurrency: 4, activeTools: ['plain'] },
-        toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'gated', requireApproval: true })],
+        toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'suspending', hasSuspendSchema: true })],
       }),
     ).toBe(4);
   });
 
-  it('still forces sequential execution when an active tool requires approval', () => {
+  it('keeps the configured concurrency when an active tool requires approval', () => {
     expect(
       resolveDurableToolCallConcurrency({
         options: { toolCallConcurrency: 4, activeTools: ['gated'] },
         toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'gated', requireApproval: true })],
       }),
-    ).toBe(1);
+    ).toBe(4);
   });
 
   // The check is against the step's effective active tool set, NOT the tools the model actually
-  // called: a registered suspending/approval tool the model skipped this step must still force
+  // called: a registered suspending tool the model skipped this step must still force
   // sequential — a concurrently-running sibling tool would race the suspension.
-  it.each([{ hasSuspendSchema: true }, { requireApproval: true }])(
-    'forces sequential for a registered %o tool even when it is not called',
-    flag => {
-      expect(
-        resolveDurableToolCallConcurrency({
-          options: { toolCallConcurrency: 5 },
-          toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'danger', ...flag })],
-          toolCalls: [call('plain')],
-        }),
-      ).toBe(1);
-    },
-  );
+  it('forces sequential for a registered suspending tool even when it is not called', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5 },
+        toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'danger', hasSuspendSchema: true })],
+        toolCalls: [call('plain')],
+      }),
+    ).toBe(1);
+  });
 
   it('stays concurrent when the suspending tool is outside the step active tool set', () => {
     expect(
@@ -124,7 +125,7 @@ describe('resolveDurableToolCallConcurrency', () => {
     expect(
       resolveDurableToolCallConcurrency({
         options: { toolCallConcurrency: 5 },
-        toolsMetadata: [tool({ name: 'a' }), tool({ name: 'danger', requireApproval: true })],
+        toolsMetadata: [tool({ name: 'a' }), tool({ name: 'danger', hasSuspendSchema: true })],
         toolCalls: [call('a', ['a', 'danger'])],
       }),
     ).toBe(1);
@@ -159,17 +160,7 @@ describe('resolveDurableToolCallConcurrency', () => {
     ).toBe(4);
   });
 
-  describe('step-stamped capability flags (issue #24377)', () => {
-    it('forces sequential execution for a stamped approval tool absent from run metadata', () => {
-      expect(
-        resolveDurableToolCallConcurrency({
-          options: { toolCallConcurrency: 10 },
-          toolsMetadata: [tool({ name: 'plain' })],
-          toolCalls: [stampedCall('processor_injected', { requireApproval: true })],
-        }),
-      ).toBe(1);
-    });
-
+  describe('step-stamped suspension flags (issue #24377)', () => {
     it('forces sequential execution for a stamped suspend-capable tool', () => {
       expect(
         resolveDurableToolCallConcurrency({
@@ -190,14 +181,14 @@ describe('resolveDurableToolCallConcurrency', () => {
       ).toBe(10);
     });
 
-    it('overrides the called strategy when a called tool is stamped approval-capable', () => {
-      // `strategy: 'called'` only narrows which tools are considered; an approval tool
-      // that WAS called still has to serialize.
+    it('overrides the called strategy when a called tool is stamped suspend-capable', () => {
+      // `strategy: 'called'` only narrows which tools are considered; a suspend-capable
+      // tool that WAS called still has to serialize.
       expect(
         resolveDurableToolCallConcurrency({
           options: { toolCallConcurrency: { limit: 5, strategy: 'called' } },
           toolsMetadata: [],
-          toolCalls: [stampedCall('a'), stampedCall('approval', { requireApproval: true })],
+          toolCalls: [stampedCall('a'), stampedCall('suspending', { hasSuspendSchema: true })],
         }),
       ).toBe(1);
     });
@@ -218,7 +209,7 @@ describe('resolveDurableToolCallConcurrency', () => {
       return { toolName };
     }
 
-    it('parallelizes a pure-safe batch even when a suspend/approval tool is registered', () => {
+    it('parallelizes a pure-safe batch even when a suspend tool is registered', () => {
       expect(
         resolveDurableToolCallConcurrency({
           options: { toolCallConcurrency: { limit: 5, strategy: 'called' } },
@@ -238,24 +229,14 @@ describe('resolveDurableToolCallConcurrency', () => {
       ).toBe(1);
     });
 
-    it('serializes a batch that actually called an approval tool', () => {
+    it('parallelizes a batch that called an approval tool (#30152)', () => {
       expect(
         resolveDurableToolCallConcurrency({
           options: { toolCallConcurrency: { limit: 5, strategy: 'called' } },
           toolsMetadata: [tool({ name: 'a' }), tool({ name: 'gated', requireApproval: true })],
-          toolCalls: [calledCall('gated')],
+          toolCalls: [calledCall('a'), calledCall('gated')],
         }),
-      ).toBe(1);
-    });
-
-    it('still forces sequential when run-wide requireToolApproval is set', () => {
-      expect(
-        resolveDurableToolCallConcurrency({
-          options: { requireToolApproval: true, toolCallConcurrency: { limit: 5, strategy: 'called' } },
-          toolsMetadata: [tool({ name: 'a' })],
-          toolCalls: [calledCall('a')],
-        }),
-      ).toBe(1);
+      ).toBe(5);
     });
   });
 });

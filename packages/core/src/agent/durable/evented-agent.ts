@@ -163,12 +163,16 @@ export class EventedAgent<
    * @internal
    */
   // The evented engine may resolve before the suspended snapshot lands, so
-  // closeOnSuspend keeps closing on the SUSPENDED event.
+  // suspension events are published as they happen instead of being held
+  // until the result.
   protected override get suspendPersistedOnReturn(): boolean {
     return false;
   }
 
-  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+  protected override async executeWorkflow(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<{ status?: string } | void> {
     // Captured now: a later resume() replaces the registry's fence before this
     // segment's background promise settles.
     const entry = getRunRegistryEntry(runId, this.getMastraInstance());
@@ -238,7 +242,7 @@ export class EventedAgent<
       // so an immediate resume waits for the suspension snapshot to be persisted.
       // Pass the caller's requestContext (so config selectors pick the same observability
       // instance the root spans were created with) and parent the run under the AGENT_RUN span.
-      await run
+      return await run
         .start({
           inputData: workflowInput,
           requestContext: entry?.requestContext,
@@ -253,18 +257,21 @@ export class EventedAgent<
           // terminal runs also drop their snapshots so they stop being
           // re-driven by recoverActiveRuns() (#22209). If the process dies
           // before this fires, the recover path performs the same cleanup.
-          result => {
+          // The status is returned so stream() can close a closeOnSuspend
+          // stream once the whole step has parked (#30152).
+          async result => {
             if (sharedExecution) {
               executionFence?.detach();
-              return;
+              return { status: result?.status };
             }
-            return this.settleExecution(runId, executionFence, {
+            await this.settleExecution(runId, executionFence, {
               status: result?.status,
               error:
                 result?.status === 'failed'
                   ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
                   : undefined,
             });
+            return { status: result?.status };
           },
           // settleExecution never rejects: a pubsub already closing during
           // shutdown must not become an unhandledRejection (#23168).
