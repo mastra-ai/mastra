@@ -1,6 +1,9 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { ProcessAPIErrorArgs, Processor, StreamErrorRetryProcessorOptions } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
@@ -1996,6 +1999,76 @@ describe('createMastraCode', () => {
     expect(options?.getBasePath?.({ requestContext: withProjectPath })).toBe('/work/target');
     expect(options?.getBasePath?.({ requestContext: undefined })).toBe(process.cwd());
   });
+
+  it('does not read literal sibling instructions outside the untrusted primary checkout', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mastracode-reminder-scope-'));
+    try {
+      const primary = join(root, 'primary');
+      const sibling = join(root, 'sibling');
+      mkdirSync(primary);
+      mkdirSync(sibling);
+      const siblingInstructions = join(sibling, 'AGENTS.md');
+      writeFileSync(siblingInstructions, 'untrusted sibling instructions');
+
+      const { createMastraCode } = await import('../index.js');
+      await createMastraCode();
+      const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+        getReader: (args: { requestContext: { get: (key: string) => unknown } }) => {
+          pathExists: (path: string) => boolean | Promise<boolean>;
+          readFile: (path: string) => string | Promise<string>;
+        };
+      };
+      const requestContext = {
+        get: () => ({
+          getState: () => ({
+            projectPath: root,
+            instructionRoots: ['primary'],
+            untrustedCheckout: true,
+            baseRef: 'main',
+          }),
+        }),
+      };
+      const reader = options.getReader({ requestContext });
+      expect(typeof reader.pathExists(siblingInstructions)).toBe('boolean');
+      expect(await reader.pathExists(siblingInstructions)).toBe(false);
+      expect(() => reader.readFile(siblingInstructions)).toThrow();
+      const ignoredPaths = (
+        agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+          getIgnoredInstructionPaths: (args: { requestContext: typeof requestContext }) => string[] | Promise<string[]>;
+        }
+      ).getIgnoredInstructionPaths({ requestContext });
+      expect(Array.isArray(ignoredPaths)).toBe(true);
+      expect(ignoredPaths).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('uses asynchronous instruction callbacks when core advertises support', async () => {
+    const { AgentsMDInjector } = await import('@mastra/core/processors');
+    Object.defineProperty(AgentsMDInjector, 'supportsAsyncInstructionReaders', { value: true, configurable: true });
+    try {
+      const { createMastraCode } = await import('../index.js');
+      await createMastraCode();
+      const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+        getReader: (args: { requestContext: { get: () => unknown } }) => {
+          pathExists: (path: string) => boolean | Promise<boolean>;
+        };
+        getIgnoredInstructionPaths: (args: { requestContext: { get: () => unknown } }) => string[] | Promise<string[]>;
+      };
+      const requestContext = {
+        get: () => ({ getState: () => ({ projectPath: '/missing', untrustedCheckout: true, baseRef: 'main' }) }),
+      };
+      const exists = options.getReader({ requestContext }).pathExists('/missing/AGENTS.md');
+      expect(exists).toBeInstanceOf(Promise);
+      await exists;
+      const ignoredPaths = options.getIgnoredInstructionPaths({ requestContext });
+      expect(ignoredPaths).toBeInstanceOf(Promise);
+      await ignoredPaths;
+    } finally {
+      Reflect.deleteProperty(AgentsMDInjector, 'supportsAsyncInstructionReaders');
+    }
+  }, 30_000);
 
   it('configures a single StreamErrorRetryProcessor with per-matcher policies', async () => {
     const { createMastraCode } = await import('../index.js');

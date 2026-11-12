@@ -48,3 +48,8 @@ describe('observabilityStorageCapabilitiesSchema', () => {
     ).toBe(false);
   });
 });
+
+it('treats missing duration ordering support from an older server as unavailable', () => {
+  const { spanQueryDurationSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+  expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryDurationSort).toBe(false);
+});

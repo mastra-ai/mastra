@@ -53,10 +53,12 @@ import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/deci
 import { relatedCardIndex } from '../work-items/related-cards.js';
 import type { PullRequestFacts } from '../work-items/related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { boardSnapshot, matchesEtag, scopedSnapshot } from './board-snapshot.js';
+import { boardSnapshot, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
+import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
+import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -110,22 +112,57 @@ const CARD_PULL_REQUESTS: PullRequestFacts<Card> = {
 
 // One index per board version: `listShared` returns the same array until a card changes.
 const relatedCards = new WeakMap<readonly Card[], (card: Card) => Card[]>();
+// One list per board version, so every tab's sidebar shares its serialization.
+const cardsInSessions = new WeakMap<readonly Card[], Card[]>();
 
-/** The cards that hold one of the sessions, and the cards related to them, in board order. */
-function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Card[] {
+/** The cards `holds` picks, and the cards related to them, in board order. */
+function withRelatedCards(board: readonly Card[], holds: (card: Card) => boolean): Card[] {
   let relatedTo = relatedCards.get(board);
   if (!relatedTo) {
     relatedTo = relatedCardIndex(board, CARD_PULL_REQUESTS);
     relatedCards.set(board, relatedTo);
   }
-  const wanted = new Set(sessionIds);
   const picked = new Set<Card>();
   for (const card of board) {
-    if (!Object.values(card.sessions).some(session => wanted.has(session.sessionId))) continue;
+    if (!holds(card)) continue;
     picked.add(card);
     for (const related of relatedTo(card)) picked.add(related);
   }
   return board.filter(card => picked.has(card));
+}
+
+/** The cards that hold one of the sessions, and the cards related to them, in board order. */
+function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Card[] {
+  const wanted = new Set(sessionIds);
+  return withRelatedCards(board, card => Object.values(card.sessions).some(session => wanted.has(session.sessionId)));
+}
+
+/** The cards that hold any session, and the cards related to them, in board order. */
+function allSessionCards(board: readonly Card[]): Card[] {
+  let cards = cardsInSessions.get(board);
+  if (!cards) {
+    cards = withRelatedCards(board, card => Object.keys(card.sessions).length > 0);
+    cardsInSessions.set(board, cards);
+  }
+  return cards;
+}
+
+/** The error a list query is refused with, named after the parameter that failed to parse. */
+function listQueryError(field: PropertyKey | undefined): string {
+  switch (field) {
+    case 'scope':
+      return 'invalid_scope';
+    case 'started':
+      return 'invalid_started';
+    case 'q':
+      return 'invalid_search';
+    case 'source':
+      return 'invalid_source';
+    case 'workItemId':
+      return 'invalid_work_item_id';
+    default:
+      return 'invalid_session_id';
+  }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -424,34 +461,61 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if ('response' in resolved) return resolved.response;
           const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
             sessionId: context.req.queries('sessionId'),
+            scope: context.req.query('scope'),
+            started: context.req.query('started'),
+            q: context.req.query('q'),
+            limit: context.req.query('limit'),
+            source: context.req.queries('source'),
+            workItemId: context.req.queries('workItemId'),
+            since: context.req.query('since'),
           });
-          // A scope that fails to parse must not widen to the whole board.
-          if (!query.success) return c.json({ error: 'invalid_session_id' }, 400);
+          // A filter that fails to parse must not widen to the whole board.
+          if (!query.success) return c.json({ error: listQueryError(query.error.issues[0]?.path[0]) }, 400);
           await workItems.ensureReady();
-          const board = await workItems.listShared({
+          const { sessionId: sessionIds, scope, started, q, limit, source, workItemId: ids, since } = query.data;
+          const list = await workItems.listSharedSince({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
+            since,
           });
-          const { sessionId: sessionIds } = query.data;
-          const items = sessionIds ? sessionCards(board, sessionIds) : board;
+          const board = list.items;
+          const unstarted = started ? unstartedCards(board, q ?? '', limit) : undefined;
+          const part =
+            unstarted?.cards ??
+            (scope
+              ? allSessionCards(board)
+              : sessionIds
+                ? sessionCards(board, sessionIds)
+                : source
+                  ? cardsFiledFrom(board, source)
+                  : ids && cardsWithIds(board, ids));
+          const items = part ?? board;
           const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
           const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
-          const snapshot = sessionIds
-            ? scopedSnapshot(items, toWireWorkItem, running, parked)
-            : boardSnapshot(board, toWireWorkItem, running, parked);
-          // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
-          const headers: Record<string, string> = {
-            ETag: snapshot.etag,
-            'Cache-Control': 'private, no-cache',
-            Vary: 'Accept-Encoding',
-          };
-          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) return c.body(null, 304, headers);
-          headers['Content-Type'] = 'application/json; charset=UTF-8';
-          if (/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) {
+          const send = async (body: Pick<BoardSnapshot, 'json' | 'gzipped'>, headers: Record<string, string>) => {
+            headers['Content-Type'] = 'application/json; charset=UTF-8';
+            headers.Vary = 'Accept-Encoding';
+            if (!/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) return c.body(body.json, 200, headers);
             headers['Content-Encoding'] = 'gzip';
-            return c.body(new Uint8Array(await snapshot.gzipped()), 200, headers);
+            return c.body(new Uint8Array(await body.gzipped()), 200, headers);
+          };
+          // A tab that kept the board gets what moved since its cursor: a body the size of the change.
+          if (list.changed) {
+            const workItems = list.changed.map(toWireWorkItem);
+            const moved = { workItems, removedIds: list.removed, check: listCheck(board), cursor: list.cursor };
+            return send(movedBody({ ...moved, runningSessionIds: running, parkedSessionIds: parked }), {
+              'Cache-Control': 'no-store',
+            });
           }
-          return c.body(snapshot.json, 200, headers);
+          const snapshot = part
+            ? scopedSnapshot(part, toWireWorkItem, running, parked, unstarted?.total)
+            : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
+          // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
+          const headers = { ETag: snapshot.etag, 'Cache-Control': 'private, no-cache' };
+          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) {
+            return c.body(null, 304, { ...headers, Vary: 'Accept-Encoding' });
+          }
+          return send(snapshot, headers);
         },
       }),
 

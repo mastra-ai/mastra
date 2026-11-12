@@ -29,6 +29,7 @@ import type {
   PullRequestComment,
   PublishCommitCheckInput,
   PullRequestRef,
+  RepositoriesAccess,
   RepositoryAccess,
   Review,
   ReviewComment,
@@ -184,10 +185,11 @@ const PLATFORM_GITHUB_APP_SLUG = 'mastra-platform';
 const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
 /**
  * How long a minted repository-scoped token may be reused. GitHub
- * installation tokens live ~60 minutes; 5 minutes keeps a wide validity
- * margin while collapsing the per-session-materialization mint round trip.
+ * installation tokens live ~60 minutes. A session re-mints the token it
+ * installed after `GITHUB_TOKEN_REFRESH_AFTER_MS` (30 minutes), so a token
+ * served from this cache is at most 50 minutes old when it is replaced.
  */
-const REPOSITORY_ACCESS_CACHE_TTL_MS = 5 * 60_000;
+const REPOSITORY_ACCESS_CACHE_TTL_MS = 20 * 60_000;
 /**
  * How long a collaborator permission lookup may be reused. The reconcile
  * sweep re-stamps every open card's author and the event tail gates every
@@ -559,14 +561,22 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           permissions: REPOSITORY_TOKEN_PERMISSIONS,
         },
       );
-      const access: RepositoryAccess = {
+      const authorization = { scheme: 'bearer' as const, token: token.token };
+      const expiresAt = Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS;
+      // Each repository's access under the shared token, handed only to the
+      // caller that asked for the set. It is never cached under a single
+      // repository's key, where it would widen that repository's own token.
+      const access: RepositoriesAccess = {
         cloneUrl: `https://github.com/${found[0]!.slug}.git`,
-        authorization: { scheme: 'bearer', token: token.token },
+        authorization,
+        repositories: Object.fromEntries(
+          found.map(repository => [
+            repository.id,
+            { cloneUrl: `https://github.com/${repository.slug}.git`, authorization },
+          ]),
+        ),
       };
-      setBounded(this.#repositoryAccessCache, cacheKey, {
-        access,
-        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-      });
+      setBounded(this.#repositoryAccessCache, cacheKey, { access, expiresAt });
       return access;
       });
     },

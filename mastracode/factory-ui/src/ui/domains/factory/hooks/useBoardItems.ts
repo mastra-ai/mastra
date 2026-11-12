@@ -29,14 +29,17 @@ export function useBoardItems({
   kind,
   currentUserId,
   onFailure,
+  items: given,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
+  /** The cards to act on, from a caller that holds a few of them and must not download the board, e.g. search. */
+  items?: readonly WorkItem[];
   currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
-  const items = useWorkItemsQuery(factoryProjectId);
+  const items = useWorkItemsQuery(given ? undefined : factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -46,7 +49,7 @@ export function useBoardItems({
   const [dropError, setDropError] = useState<Error>();
   const movingRef = useRef<Set<string>>(new Set());
 
-  const all = useMemo(() => items.data ?? [], [items.data]);
+  const all = useMemo(() => given ?? items.data ?? [], [given, items.data]);
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
   const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
