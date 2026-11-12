@@ -42,14 +42,16 @@ export function boardSnapshot(
  * The wire body for the cards a scoped listing picked. Its ETag names the cards by a hash of
  * their body, not by the board version: a write to a card outside the scope leaves it unchanged,
  * so the tab gets a 304. A caller that passes the same list again shares its serialization.
+ * `total` is how many cards matched when `items` is only the first of them.
  */
 export function scopedSnapshot(
   items: readonly Card[],
   toWire: (item: Card) => unknown,
   runningSessionIds: readonly string[],
   parkedSessionIds: readonly string[],
+  total?: number,
 ): BoardSnapshot {
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1);
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, total);
 }
 
 function snapshot(
@@ -58,6 +60,7 @@ function snapshot(
   runningSessionIds: readonly string[],
   parkedSessionIds: readonly string[],
   cardsId: (json: string) => string,
+  total?: number,
 ): BoardSnapshot {
   let cards = cardsJson.get(items);
   if (!cards) {
@@ -65,10 +68,12 @@ function snapshot(
     cards = { id: cardsId(json), json };
     cardsJson.set(items, cards);
   }
-  const etag = `W/"${cards.id}.${sha1(JSON.stringify([runningSessionIds, parkedSessionIds]))}"`;
+  // Everything the body holds beside the cards: a 304 must never hide a change to any of it.
+  const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, total });
+  const etag = `W/"${cards.id}.${sha1(rest)}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 
-  const json = listingJson(cards.json, runningSessionIds, parkedSessionIds);
+  const json = `{"workItems":${cards.json},${rest.slice(1)}`;
   let gzipped: Promise<Buffer> | undefined;
   // zlib runs on the libuv pool, off the event loop.
   cards.latest = { etag, json, gzipped: () => (gzipped ??= gzip(json)) };
@@ -77,10 +82,6 @@ function snapshot(
 
 function sha1(text: string): string {
   return createHash('sha1').update(text).digest('base64url');
-}
-
-function listingJson(cards: string, runningSessionIds: readonly string[], parkedSessionIds: readonly string[]): string {
-  return `{"workItems":${cards},"runningSessionIds":${JSON.stringify(runningSessionIds)},"parkedSessionIds":${JSON.stringify(parkedSessionIds)}}`;
 }
 
 /** Whether an `If-None-Match` header names this ETag (weak comparison, as for GET). */
