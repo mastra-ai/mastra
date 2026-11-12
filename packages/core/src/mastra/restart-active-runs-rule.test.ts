@@ -196,23 +196,26 @@ describe('workflow recovery rule (#28712)', () => {
   it("reads a queued restart's keys again, and leaves the run alone when another instance restarted it meanwhile", async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
-    // Long enough that run-2's re-read lands inside the lapsed lease's grace on a loaded machine too.
+    // Long enough that the queued run's re-read lands inside the lapsed lease's grace on a loaded machine too.
     const graceMs = 1_500;
-    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: graceMs, workflowConcurrency: 1 });
+    const b = startBlockingReplica(storage, ['run-1', 'run-2'], { workflowGraceMs: graceMs, workflowConcurrency: 1 });
     await persistActiveRun(storage, 'run-1');
     await persistActiveRun(storage, 'run-2');
     await sleep(graceMs);
 
-    // run-2 waits for run-1's slot. Meanwhile another instance restarts run-2, and the lease it took
-    // lapses at once, as one whose workers lag behind would: the run is in its grace period again.
+    // One run takes the only slot and the other waits for it. Meanwhile another instance restarts the waiting
+    // run, and the lease it took lapses at once, as one whose workers lag behind would: the run is in its grace
+    // period again.
     const pass = b.mastra.restartAllActiveWorkflowRuns();
     await b.started;
-    await store.claimRunOwnership({ runId: 'run-2', ownerId: 'other-instance', leaseMs: 1, force: true });
+    const [running] = b.executions;
+    const queued = running === 'run-1' ? 'run-2' : 'run-1';
+    await store.claimRunOwnership({ runId: queued, ownerId: 'other-instance', leaseMs: 1, force: true });
     await sleep(5);
     b.release();
     await pass;
 
-    expect(b.executions).toEqual(['run-1']);
+    expect(b.executions).toEqual([running]);
   });
 
   it('lets a later call list the runs again while an earlier call still waits for its default-engine restarts', async () => {
@@ -236,19 +239,19 @@ describe('workflow recovery rule (#28712)', () => {
 
   it('hands out more restarts than workflowConcurrency without holding up a later call, and runs them a slot at a time', async () => {
     const storage = new InMemoryStore();
-    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0, workflowConcurrency: 1 });
+    const b = startBlockingReplica(storage, ['run-1', 'run-2'], { workflowGraceMs: 0, workflowConcurrency: 1 });
     await persistActiveRun(storage, 'run-1');
     await persistActiveRun(storage, 'run-2');
     const first = b.mastra.restartAllActiveWorkflowRuns();
     await b.started;
 
-    // run-2 waits for run-1's slot, and this call finds both runs already handed out.
+    // One run waits for the other's slot, and this call finds both runs already handed out.
     await b.mastra.restartAllActiveWorkflowRuns();
 
-    expect(b.executions).toEqual(['run-1']);
+    expect(b.executions).toHaveLength(1);
     b.release();
     await first;
-    expect(b.executions).toEqual(['run-1', 'run-2']);
+    expect([...b.executions].sort()).toEqual(['run-1', 'run-2']);
   }, 10_000);
 
   it('restarts runs whose rechecks come due together workflowConcurrency at a time', async () => {
