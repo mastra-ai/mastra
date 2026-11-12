@@ -522,7 +522,7 @@ While a run executes, Mastra holds a storage lease on it and renews it in the ba
 
 On the evented engine, an instance that boots or calls `restart()` leaves a run alone while another instance is working on it: starting it, running one of its steps, moving between steps, or running a nested workflow it started. Instances that boot together still run each step once. `restart()` throws `WORKFLOW_RESTART_RUN_OWNED` for such a run, with the time to try again in `error.details.leaseExpiresAt`. Runs of an instance that calls `shutdown()` stay with it until `shutdown()` finishes draining (`drainTimeout`). Recovery on other instances can restart them one grace period after that. Recovery can restart runs of an instance that stops without calling `shutdown()` `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus one grace period after that instance last worked on them. The grace period applies only to these recovery restarts. A `restart()` call doesn't wait for it, and a redelivered event of the interrupted step runs the step on another instance as soon as the step's lease expires. This needs a storage adapter with run-ownership support.
 
-The evented engine stores one `workflows.runOwnership` record per step it runs, including each loop iteration and `foreach` item. Set a `workflows.runOwnership` retention policy and schedule `prune()` as described in [storage retention](/reference/storage/retention), or the table keeps growing.
+The evented engine stores `workflows.runOwnership` records for the steps and sleeps it runs, listed in [storage retention](/reference/storage/retention). Set a `workflows.runOwnership` retention policy and schedule `prune()` as described there, or the table keeps growing. Redis, Valkey and Upstash keep these records for 7 days, which you can't change, so a run whose sleep lasts longer is restarted about once a week, and each restart resumes the rest of the sleep.
 
 A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step that already saved its result doesn't run again when its event arrives late, for example after a broker redelivery or a `restart()` that raced the step. The run continues from the saved result instead. As with the restart check above, this needs a storage adapter with run-ownership support. Workflows that set `autoRestartActiveRuns: false`, including durable agent workflows, run the step again. Make steps with side effects idempotent, so a repeated step has no additional effect.
 
@@ -542,6 +542,8 @@ An instance that called `mastra.startWorkers()` with the orchestration worker, s
 
 - A run whose instance crashed can be restarted once `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus `recovery.workflowGraceMs` passed since that instance last worked on it.
 - A run whose instance called `shutdown()` can be restarted once `recovery.workflowGraceMs` passed since the shutdown. A `mastra worker` process calls `stopWorkers()` on `SIGTERM` and exits without `shutdown()`. Its runs wait as long as a crashed instance's.
+- On the evented engine, a run in a `sleep()` or `sleepUntil()` step, its own or a nested workflow's, is left alone until the sleep ends. With sleeps in parallel branches, the run is left alone until the last of them ends. The instance that started a sleep wakes the run at its end time. If that instance crashed or shut down, the run is restarted about `recovery.workflowGraceMs` after the sleep's end time, and the step after the sleep runs right away. While the run sleeps, a crash in another branch of the run is recovered only after the sleep ends. Call `restart()` on the run to recover it sooner. During a broker backlog longer than `MASTRA_AGENT_THREAD_LEASE_TTL_MS` plus `recovery.workflowGraceMs`, a recovery restart can run the step after a sleep again.
+- A run that was already in a sleep when you upgraded from an earlier release is restarted once, and its sleep starts over, so a `sleep()` waits its full duration again.
 
 The first check runs when the workers start, and the server's boot-time call joins it. Later checks run every `recovery.workflowScanIntervalMs` (60 seconds by default), each up to 20% earlier or later so instances started together check at different times. A run a check found stopped but still in its grace period moves the next check up to the end of that period. A run a check saw running is picked up by the first check after it can be restarted, so within about one interval plus `MASTRA_AGENT_THREAD_LEASE_TTL_MS` plus `recovery.workflowGraceMs` after its instance stops. An instance that boots right after a `mastra dev` reload finds the runs the reload left behind in their grace period, and restarts them about 2 seconds after the reload with the in-process pubsub.
 
@@ -570,6 +572,8 @@ const result = await run.start({ inputData: { value: 'initial data' } })
 
 const restartedResult = await run.restart()
 ```
+
+On the evented engine, `restart()` during a `sleep()` or `sleepUntil()` step waits only for the rest of the sleep. When the sleep already ended, the restarted run continues with the step after it right away. A woken sleep shows `success` in the run's step results.
 
 ### Identifying active workflow runs
 
