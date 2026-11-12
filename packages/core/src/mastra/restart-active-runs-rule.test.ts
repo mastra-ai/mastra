@@ -226,6 +226,41 @@ describe('workflow recovery rule (#28712)', () => {
     await first;
   }, 10_000);
 
+  it('hands out more restarts than workflowConcurrency without holding up a later call, and runs them a slot at a time', async () => {
+    const storage = new InMemoryStore();
+    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0, workflowConcurrency: 1 });
+    await persistActiveRun(storage, 'run-1');
+    await persistActiveRun(storage, 'run-2');
+    const first = b.mastra.restartAllActiveWorkflowRuns();
+    await b.started;
+
+    // run-2 waits for run-1's slot, and this call finds both runs already handed out.
+    await b.mastra.restartAllActiveWorkflowRuns();
+
+    expect(b.executions).toEqual(['run-1']);
+    b.release();
+    await first;
+    expect(b.executions).toEqual(['run-1', 'run-2']);
+  }, 10_000);
+
+  it('waits at shutdown for a restart the recovery pass is running', async () => {
+    const storage = new InMemoryStore();
+    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 });
+    await persistActiveRun(storage, 'run-1');
+    void b.mastra.restartAllActiveWorkflowRuns();
+    await b.started;
+
+    let shutDown = false;
+    const shutdown = b.mastra.shutdown({ drainTimeout: 5_000 }).then(() => {
+      shutDown = true;
+    });
+    await sleep(50);
+    expect(shutDown).toBe(false);
+    b.release();
+    await shutdown;
+    expect(await statusOf(storage, 'run-1')).toBe('success');
+  }, 10_000);
+
   it('rejects a background restart of an evented run whose end already went out without a stored result', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;

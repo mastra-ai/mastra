@@ -25,52 +25,36 @@ export async function runWithConcurrency<T>(
   await Promise.all(Array.from({ length: Math.min(normalizeConcurrency(limit), items.length) }, worker));
 }
 
-/** A concurrency limit shared by tasks that arrive over time, such as the restarts of each batch of runs the recovery sweep reads. */
+/** A concurrency limit shared by tasks that arrive over time, such as every recovery pass's restarts on one instance. */
 export interface ConcurrencyLimiter {
-  /**
-   * Waits for a free slot, then starts `task` without waiting for it, so a
-   * producer that awaits each call stops producing while every slot is busy.
-   */
-  start(task: () => Promise<void>): Promise<void>;
-  /** Resolves once every started task, including ones started meanwhile, has settled. */
-  drain(): Promise<void>;
+  /** Queues `task` until a slot is free, in arrival order, and settles as it does. */
+  run<T>(task: () => Promise<T>): Promise<T>;
 }
 
-/**
- * Creates a {@link ConcurrencyLimiter} with at most `limit` tasks in flight.
- * A task that rejects is reported to `onError` and frees its slot, so it
- * rejects neither `start()` nor `drain()` for the tasks around it.
- */
-export function createConcurrencyLimiter(
-  limit: number | undefined,
-  onError: (error: unknown) => void,
-): ConcurrencyLimiter {
+/** Creates a {@link ConcurrencyLimiter} with at most `limit` tasks running. */
+export function createConcurrencyLimiter(limit: number | undefined): ConcurrencyLimiter {
   const max = normalizeConcurrency(limit);
-  // Each entry settles without rejecting: `run` reports the task's failure to `onError`.
-  const running = new Set<Promise<void>>();
-
-  const run = async (task: () => Promise<void>) => {
-    try {
-      await task();
-    } catch (error) {
-      onError(error);
-    }
-  };
+  let running = 0;
+  const waiting: (() => void)[] = [];
 
   return {
-    async start(task) {
-      // A loop, not one wait: several callers can wake on the same freed slot.
-      while (running.size >= max) {
-        await Promise.race(running);
+    async run(task) {
+      if (running < max) {
+        running++;
+      } else {
+        await new Promise<void>(resolve => waiting.push(resolve));
       }
 
-      const settled = run(task).finally(() => running.delete(settled));
-      running.add(settled);
-    },
-    async drain() {
-      // A loop, not one wait: tasks started while draining join the set.
-      while (running.size > 0) {
-        await Promise.all(running);
+      try {
+        return await task();
+      } finally {
+        // A finished task hands its slot straight to the next one, so `running` only drops when none waits.
+        const next = waiting.shift();
+        if (next) {
+          next();
+        } else {
+          running--;
+        }
       }
     },
   };

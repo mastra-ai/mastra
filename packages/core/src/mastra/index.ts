@@ -129,6 +129,7 @@ import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
+import type { ConcurrencyLimiter } from './run-with-concurrency';
 import {
   DEFAULT_RESTART_CONCURRENCY,
   createConcurrencyLimiter,
@@ -1031,6 +1032,10 @@ export class Mastra<
   #shuttingDown = false;
   /** The workflow recovery pass in flight; see `#recoverStoppedRuns`. */
   #recoveryPass?: Promise<RecoveryPass>;
+  /** Runs the restarts of every recovery pass, `recovery.workflowConcurrency` at a time. */
+  #recoveryRestarts!: ConcurrencyLimiter;
+  /** The runs a recovery pass handed to `#recoveryRestarts` whose restart has not settled. */
+  #queuedRecoveryRestarts = new Set<string>();
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
   #tools?: TTools;
@@ -1773,6 +1778,7 @@ export class Mastra<
       workflowGraceMs: DEFAULT_WORKFLOW_GRACE_MS,
       durableAgents: config?.recovery?.durableAgents ?? 'off',
     };
+    this.#recoveryRestarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency);
 
     this.#editor = config?.editor;
 
@@ -4556,11 +4562,7 @@ export class Mastra<
    * become due. Never rejects.
    */
   async #runRecoveryPass(): Promise<RecoveryPass> {
-    // Shared by every batch, so a long default-engine restart holds one slot rather than the next batch.
-    const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency, error =>
-      this.#logger.error('Failed to restart workflow run', { error }),
-    );
-
+    const restarts: Promise<void>[] = [];
     let earliestDueAt: number | undefined;
     try {
       const workflowsStore = await this.#storage?.getStore('workflows');
@@ -4578,7 +4580,10 @@ export class Mastra<
           break;
         }
 
-        const batch = candidates.slice(start, start + RECOVERY_OWNERSHIP_BATCH_SIZE);
+        // A run an earlier pass handed out and that is still queued or running here is that pass's to restart.
+        const batch = candidates
+          .slice(start, start + RECOVERY_OWNERSHIP_BATCH_SIZE)
+          .filter(({ run }) => !this.#queuedRecoveryRestarts.has(recoveryRunKey(run.workflowName, run.runId)));
         const owners = readsLiveness ? await this.#readRunOwners(workflowsStore, batch) : undefined;
         const now = Date.now();
 
@@ -4589,8 +4594,13 @@ export class Mastra<
 
           const verdict = this.#batchVerdict({ workflow, run, readsLiveness, owners, now });
           if (verdict.restart) {
-            // Waits for a free slot, so the pass reads the next batch only once a restart frees one.
-            await restarts.start(() => this.#restartStoppedRun({ workflow, run, workflowsStore, readsLiveness }));
+            // Queued without waiting for a slot, so long default-engine restarts never hold up the pass.
+            const key = recoveryRunKey(run.workflowName, run.runId);
+            this.#queuedRecoveryRestarts.add(key);
+            const restart = this.#recoveryRestarts.run(() =>
+              this.#trackDurableRecovery(this.#restartStoppedRun({ workflow, run, workflowsStore, readsLiveness })),
+            );
+            restarts.push(restart.finally(() => this.#queuedRecoveryRestarts.delete(key)));
             continue;
           }
 
@@ -4607,8 +4617,8 @@ export class Mastra<
       this.#logger.error('Failed to recover stopped workflow runs', { error });
     }
 
-    // `drain()` never rejects: the limiter reports each task's failure itself.
-    return { earliestDueAt, settled: restarts.drain() };
+    // `#restartStoppedRun` never rejects.
+    return { earliestDueAt, settled: Promise.all(restarts).then(() => {}) };
   }
 
   /** What the pass does with one run of a batch whose liveness keys `owners` holds. */
@@ -4809,6 +4819,11 @@ export class Mastra<
     workflowsStore: WorkflowsStorage;
     readsLiveness: boolean;
   }): Promise<void> {
+    // A restart can wait for its slot past the start of shutdown.
+    if (this.#shuttingDown) {
+      return;
+    }
+
     try {
       if (readsLiveness) {
         const keys = livenessKeysOf(workflow, run.runId);
@@ -4842,7 +4857,7 @@ export class Mastra<
    * run. A default-engine restart runs here and holds its slot until the run ends.
    */
   async #restartWorkflowRun(workflow: AnyWorkflow, runId: string): Promise<void> {
-    // A pass's wait for a free slot can outlast the start of shutdown.
+    // The reads before it can outlast the start of shutdown.
     if (this.#shuttingDown) {
       return;
     }
