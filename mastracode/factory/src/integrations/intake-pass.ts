@@ -11,8 +11,6 @@ import type {
 import { candidateIsCurrent } from '../storage/domains/work-items/candidates.js';
 import type { IssueReconcileSummary } from './issue-reconciler.js';
 
-/** Pages of a just-bound source offered to the rules, as linking a GitHub repository does. */
-export const INTAKE_IMPORT_MAX_PAGES = 5;
 /** A source with more pages than this is not read to the end, so the pass removes nothing. */
 export const INTAKE_PASS_MAX_PAGES = 100;
 const CANDIDATE_PAGE = 200;
@@ -194,7 +192,7 @@ export interface IntakePassStatus {
   /** Set while the latest pass failed; the next one that succeeds clears it. */
   failedAt: string | null;
   error: string | null;
-  /** Sources whose import at link time has run, by the time each was bound. */
+  /** Sources the last pass ran over, by the time each was bound. */
   imported: Record<string, string>;
   /** Sources whose open records have all been read since they were bound, by that same time. */
   listed: Record<string, string>;
@@ -294,10 +292,11 @@ export interface IntakePassOptions<T> {
   /** `null` when the organization has no connection to the provider. */
   open(orgId: string, factoryProjectIds: string[]): Promise<OrgIntakeListing<T> | null>;
   /**
-   * Whether the first pass after a source is bound hands its newest records to the rules. Off for
-   * a provider that runs that import itself when the source is linked.
+   * Whether a record that enters a listing already read to its end goes to the rules whatever its
+   * age. Off where the import at link time and the provider's events hand the rules all they
+   * should see: there a record older than its source stays in Intake.
    */
-  importsAtBind: boolean;
+  offersNewlyListed: boolean;
   record(item: T): IntakeRecord;
   /** The bound source the item was listed from. */
   sourceId(item: T): string | null | undefined;
@@ -375,7 +374,6 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
           summary.projects += 1;
 
           const boundAt = (sourceId: string) => bindings[sourceId];
-          const imported = new Set<T>();
           const settlement = await openIntakeSettlement<T>({
             storage,
             orgId,
@@ -392,11 +390,10 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
               if (!sourceId || !bound) return false;
               const createdAt = options.record(item).createdAt;
               if (createdAt && createdAt.getTime() >= bound.getTime()) return true;
-              if (!options.importsAtBind) return false;
               // Every open record of the source has been seen, so one that shows up now is new to
               // the listing whatever its age: it was reopened, or gained a label the project takes.
-              if (status?.listed[sourceId] === boundAt(sourceId)) return true;
-              return imported.has(item) && status?.imported[sourceId] !== boundAt(sourceId);
+              // Until then an old record is backlog, and backlog waits in Intake.
+              return options.offersNewlyListed && status?.listed[sourceId] === boundAt(sourceId);
             },
             offer: fresh => options.offer({ orgId, factoryProjectId }, fresh),
           });
@@ -408,7 +405,6 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
           const pages = INTAKE_PASS_MAX_PAGES * sources.size;
           for (let page = 0; org && page < pages; page += 1) {
             const listed = await org.list(factoryProjectId, [...sources.keys()], cursor);
-            if (page < INTAKE_IMPORT_MAX_PAGES) for (const item of listed.items) imported.add(item);
             // Settled page by page: a record is stored moments after the provider said it is open,
             // not once every page after it has been read.
             await settlement.page(listed.items);

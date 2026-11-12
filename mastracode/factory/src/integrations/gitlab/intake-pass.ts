@@ -132,8 +132,7 @@ export function attachGitLabIntakePasses(gitlab: GitLabIntegrationBase, context:
     createIntakePass<IntakeIssue>({
       ...shared,
       kind: 'issue',
-      // A source bound without a linked repository gets no import when it is bound.
-      importsAtBind: true,
+      offersNewlyListed: true,
       open: async orgId => {
         const bound = await boundIntakeSources(context.storage.intake, orgId, 'gitlab');
         return {
@@ -155,7 +154,7 @@ export function attachGitLabIntakePasses(gitlab: GitLabIntegrationBase, context:
     createIntakePass<ListedMergeRequest>({
       ...shared,
       kind: 'pull-request',
-      importsAtBind: false,
+      offersNewlyListed: false,
       open: async (orgId, factoryProjectIds) => {
         const linked = await linkedIntakeRepositories(context.storage.sourceControl, orgId, factoryProjectIds);
         return {

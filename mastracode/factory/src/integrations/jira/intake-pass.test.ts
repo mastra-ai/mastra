@@ -208,13 +208,17 @@ describe('the intake pass on Jira', () => {
     expect(offeredIssues()).not.toContain('OPS-9');
   });
 
-  it('hands the newest issues of a just-bound source to the rules, however old they are', async () => {
-    issues = [issue('OPS-1', { created: BEFORE_BINDING })];
+  it('offers what was open before the source was bound in Intake and hands none of it to the rules', async () => {
+    issues = [issue('OPS-1', { created: BEFORE_BINDING }), issue('OPS-2')];
 
-    expect(await intakePass()).toMatchObject({ failed: 0, offered: 1 });
+    expect(await intakePass()).toMatchObject({ failed: 0, offered: 1, stored: 2 });
 
-    expect(offeredIssues()).toEqual(['OPS-1']);
-    expect((await status())?.imported).toEqual({ [OPS.projectId]: BOUND_AT });
+    expect(offeredIssues()).toEqual(['OPS-2']);
+    expect(await candidates()).toEqual(['OPS-1', 'OPS-2']);
+
+    // Read to the end since: the backlog is a candidate by now, not a record new to the listing.
+    expect(await intakePass()).toMatchObject({ failed: 0, offered: 0, stored: 0 });
+    expect(offeredIssues()).toEqual(['OPS-2']);
   });
 
   it('refreshes a candidate Jira changed and writes nothing for one it did not', async () => {

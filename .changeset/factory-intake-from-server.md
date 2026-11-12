@@ -10,6 +10,7 @@ Fixed Factory slowing down while boards are open. Each open board used to ask Gi
 
 - A new issue from GitLab, Linear, Jira or incident.io reaches the board within five minutes instead of 30 seconds. GitHub and GitLab events still arrive at once.
 - The list routes of the five providers no longer create cards. Cards are created by the server's own checks, so disabling a provider's reconcile flag also stops its new issues from reaching the board.
+- Issues that were already open when a Linear, Jira, incident.io or GitLab issue source is bound to a project wait in Intake to be filed by hand. They used to get a card as soon as a board listed them. An issue opened later, reopened, or given a label the project takes still gets its card from the rules.
 - Deleting the card of an issue that is still open puts the issue back in Intake.
 - A GitHub repository picked or dropped as an issue source in Settings › Intake changes the Intake column within five minutes, at the server's next check for missed pull requests. Saving the selection asks GitHub for nothing.
 

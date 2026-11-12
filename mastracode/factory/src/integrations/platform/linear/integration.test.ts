@@ -1319,6 +1319,8 @@ describe('PlatformLinearIntegration', () => {
 
   it('offers a new Platform issue to the Linear rules from the intake pass, not from the list', async () => {
     const seed = await createPlatformStorageForTests();
+    // Opened after the project took the source: what was open before waits in Intake instead.
+    const opened = new Date(Date.now() + 60_000).toISOString();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
@@ -1333,7 +1335,7 @@ describe('PlatformLinearIntegration', () => {
         });
       }
       if (url.includes('/workspaces/workspace-1/issues?')) {
-        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
+        return json({ issues: [{ ...issue, createdAt: opened }], pageInfo: { hasNextPage: false, endCursor: null } });
       }
       throw new Error(`Unexpected request: ${url}`);
     });

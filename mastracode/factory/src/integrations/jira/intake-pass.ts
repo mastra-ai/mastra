@@ -82,7 +82,7 @@ export function attachJiraIntakePass(jira: JiraIntakeLister, context: Integratio
     projects: context.storage.projects,
     storage: context.runtime.workItems,
     status: context.storage.generic.settings,
-    importsAtBind: true,
+    offersNewlyListed: true,
     open: async orgId => {
       const bound = await boundIntakeSources(context.storage.intake, orgId, 'jira');
       return {

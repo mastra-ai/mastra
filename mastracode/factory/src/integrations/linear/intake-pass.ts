@@ -77,7 +77,7 @@ export function createLinearIntakePass(options: LinearIntakePassOptions): Intake
     projects: options.projects,
     storage: options.storage,
     status: options.status,
-    importsAtBind: true,
+    offersNewlyListed: true,
     open: async orgId => {
       const bound = await boundIntakeSources(options.intake, orgId, 'linear');
       if (bound.selectedIds.length === 0) return null;

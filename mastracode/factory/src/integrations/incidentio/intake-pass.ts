@@ -86,7 +86,7 @@ export function attachIncidentioIntakePass(
     projects: context.storage.projects,
     storage: context.runtime.workItems,
     status: context.storage.generic.settings,
-    importsAtBind: true,
+    offersNewlyListed: true,
     open: async orgId => {
       const bound = await boundIntakeSources(context.storage.intake, orgId, 'incidentio');
       return {

@@ -75,7 +75,7 @@ export function createGithubIntakePasses(options: GithubIntakePassOptions): Inta
     projects: options.projects,
     storage: options.storage,
     status: options.status,
-    importsAtBind: false,
+    offersNewlyListed: false,
     cardKeys,
   };
   const open =

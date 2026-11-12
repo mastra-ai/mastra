@@ -303,12 +303,14 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       labels: ['bug'],
     });
     expect(await poll(triage)).toEqual(['OPS-2']);
+    // OPS-2 carried the label before the binding: it is backlog, offered in Intake and not filed.
+    expect(await filed(triage)).toEqual([]);
 
     const unlabelled = issues[0]!;
     unlabelled.labels = ['bug'];
     try {
       expect((await poll(triage)).sort()).toEqual(['OPS-1', 'OPS-2']);
-      expect(await filed(triage)).toEqual(['OPS-1', 'OPS-2']);
+      expect(await filed(triage)).toEqual(['OPS-1']);
     } finally {
       unlabelled.labels = [];
     }
