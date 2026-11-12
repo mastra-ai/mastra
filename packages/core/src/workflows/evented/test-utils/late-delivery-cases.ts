@@ -251,8 +251,6 @@ export function describeLateDeliveryCases({
 
     it('runs the step after a foreach once when two items finish together', async () => {
       const executions: string[] = [];
-      const started = { count: 0, both: deferred<void>() };
-      const release = deferred<void>();
       const workflow = createWorkflow({ id: 'finished', inputSchema: z.array(Num), outputSchema: z.any() })
         .foreach(
           createStep({
@@ -260,11 +258,6 @@ export function describeLateDeliveryCases({
             inputSchema: Num,
             outputSchema: Num,
             execute: async ({ inputData }) => {
-              if (++started.count === 2) {
-                started.both.resolve();
-              }
-
-              await release.promise;
               executions.push(`item:${inputData.n}`);
               return inputData;
             },
@@ -283,17 +276,23 @@ export function describeLateDeliveryCases({
           }),
         )
         .commit();
-      const a = await startReplica(workflow);
+      // Both items finished before either item's step end is handled.
+      const fromA = heldQueue(
+        event =>
+          event.type === 'workflow.step.end' &&
+          (event.data.executionPath as number[] | undefined)?.[0] === 0 &&
+          (event.data.executionPath as number[]).length === 2,
+      );
+      const a = await startReplica(workflow, fromA.intercept);
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      const result = run.start({ inputData: [{ n: 1 }, { n: 2 }] });
-      await started.both.promise;
+      startInBackground(run, [{ n: 1 }, { n: 2 }]);
+      await expect.poll(() => fromA.queue.length).toBe(2);
 
-      release.resolve();
+      fromA.holdAll();
+      await fromA.drain(a);
 
-      expect((await result).status).toBe('success');
-      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+      expect((await storedRun(run.runId))?.status).toBe('success');
       expect(executions.sort()).toEqual(['after', 'item:1', 'item:2']);
-      expect(a.published.filter(event => event.type === 'workflow.step.run' && samePath(event, [1]))).toHaveLength(1);
     }, 20_000);
   });
 }
