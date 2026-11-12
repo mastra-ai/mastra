@@ -14,7 +14,13 @@ import {
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import type { IntakeConfig, IntakeSourceBinding } from '../domains/factory/services/intake';
-import { githubIssue, linearIssue, linearIssues, linearProjects, wireSourceCards } from './fixtures/boardSourceFilters';
+import {
+  linearProjects,
+  offeredGithubIssue,
+  offeredLinearIssue,
+  offeredLinearIssues,
+  wireSourceCards,
+} from './fixtures/boardSourceFilters';
 import {
   docsWatchId,
   hostedCards,
@@ -23,6 +29,7 @@ import {
   hostedTeamId,
   otherHostedTeamId,
 } from './fixtures/hostedLinearProjectFilters';
+import { intakeCandidatesHandler } from './fixtures/intakeCandidates';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 function stubSources() {
@@ -55,13 +62,7 @@ function stubSources() {
       HttpResponse.json({ enabled: true, connected: true, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/projects`, () => HttpResponse.json({ projects: linearProjects })),
-    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: linearIssues, nextCursor: null })),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-      HttpResponse.json({
-        issues: new URL(request.url).searchParams.has('label') ? [] : [githubIssue],
-        nextPage: null,
-      }),
-    ),
+    intakeCandidatesHandler(TEST_BASE_URL, [offeredGithubIssue, ...offeredLinearIssues]),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: wireSourceCards }),
     ),
@@ -89,7 +90,7 @@ function stubHostedSources() {
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
     http.get(`${TEST_BASE_URL}/web/linear/projects`, () => HttpResponse.json({ projects: hostedProjects })),
-    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: hostedIssues, nextCursor: null })),
+    intakeCandidatesHandler(TEST_BASE_URL, hostedIssues),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: hostedCards }),
     ),
@@ -168,7 +169,7 @@ describe('Board source and Linear project filters', () => {
   });
 
   describe('when a hosted Linear project is selected', () => {
-    it('keeps matching live and stored cards across the board after saving and reloading the view', async () => {
+    it('keeps matching candidates and cards across the board after saving and reloading the view', async () => {
       stubHostedSources();
       const first = renderBoard();
       await screen.findByText('DocsWatch: new documentation request');
@@ -204,7 +205,7 @@ describe('Board source and Linear project filters', () => {
     });
   });
 
-  it('filters live Intake and stored cards across stages, then saves and reloads a project view', async () => {
+  it('filters Intake candidates and cards across stages, then saves and reloads a project view', async () => {
     stubSources();
     const first = renderBoard();
     await screen.findByText('GitHub: update dependencies');
@@ -226,34 +227,6 @@ describe('Board source and Linear project filters', () => {
     const second = renderBoard(`?view=${viewId}`);
     await waitForMutationsIdle(second.client);
     await expectPortalView();
-  });
-
-  it('hides a repository-scoped candidate already filed with a legacy key when source filters combine feeds', async () => {
-    stubSources();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-        HttpResponse.json({
-          issues: new URL(request.url).searchParams.has('label') ? [] : [{ ...githubIssue, repositoryId: 987 }],
-          nextPage: null,
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({
-          workItems: wireSourceCards.map(item => {
-            if (item.id !== '50' || !item.externalSource) return item;
-            return {
-              ...item,
-              externalSource: { ...item.externalSource, externalId: 'github-issue:42', url: githubIssue.url },
-            };
-          }),
-        }),
-      ),
-    );
-    const view = renderBoard('?source=github&source=linear');
-    await waitForMutationsIdle(view.client);
-    await screen.findByText('Portal: add account switcher');
-    expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
-    expect(screen.queryByText('GitHub: improve error messages')).not.toBeInTheDocument();
   });
 
   it('restores a project-only URL and combines it with an existing label filter', async () => {
@@ -289,12 +262,10 @@ describe('Board source and Linear project filters', () => {
   it('keeps pagination available when the matching project is on a later page', async () => {
     stubSources();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) =>
-        HttpResponse.json(
-          new URL(request.url).searchParams.has('after')
-            ? { issues: [linearIssue('ENG-105', 'project-a', 'Portal: later page')], nextCursor: null }
-            : { issues: [linearIssues[1]], nextCursor: 'next-page' },
-        ),
+      intakeCandidatesHandler(TEST_BASE_URL, request =>
+        new URL(request.url).searchParams.has('cursor')
+          ? { candidates: [offeredLinearIssue('ENG-105', 'project-a', 'Portal: later page')], passes: [] }
+          : { candidates: [offeredLinearIssues[1]], nextCursor: 'next-page', passes: [] },
       ),
     );
     const { client } = renderBoard('?linearProject=project-a');
@@ -303,65 +274,58 @@ describe('Board source and Linear project filters', () => {
     await screen.findByText('Portal: later page');
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
   });
-  it('pages a healthy feed without retrying a failed provider', async () => {
+
+  it('pages the list while the server could not read one of its sources', async () => {
     stubSources();
-    let githubAttempts = 0;
-    let linearPageRequests = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => {
-        githubAttempts++;
-        return HttpResponse.json({ error: 'GitHub feed unavailable' }, { status: 502 });
-      }),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) => {
-        if (new URL(request.url).searchParams.has('after')) {
-          linearPageRequests++;
-          return HttpResponse.json({
-            issues: [linearIssue('ENG-105', 'project-a', 'Portal: later page')],
-            nextCursor: null,
-          });
-        }
-        return HttpResponse.json({ issues: [linearIssues[0]], nextCursor: 'next-page' });
-      }),
+      intakeCandidatesHandler(TEST_BASE_URL, request =>
+        new URL(request.url).searchParams.has('cursor')
+          ? { candidates: [offeredLinearIssue('ENG-105', 'project-a', 'Portal: later page')], passes: [] }
+          : {
+              candidates: [offeredLinearIssues[0]],
+              nextCursor: 'next-page',
+              passes: [{ integrationId: 'github', kind: 'issue', completeAt: null, failed: true }],
+            },
+      ),
     );
 
     renderBoard('?source=github&source=linear');
-    await screen.findAllByText('GitHub: GitHub feed unavailable');
+    await screen.findAllByText('GitHub could not be read. This list may be out of date.');
     await screen.findByText('Portal: add account switcher');
-    const githubAttemptsBeforePaging = githubAttempts;
-    fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
+    fireEvent.click(
+      await within(screen.getByTestId('board-column-intake')).findByRole('button', { name: 'Load more candidates' }),
+    );
     await screen.findByText('Portal: later page');
-    expect(linearPageRequests).toBe(1);
-    expect(githubAttempts).toBe(githubAttemptsBeforePaging);
-    expect(screen.getAllByText('GitHub: GitHub feed unavailable')).not.toHaveLength(0);
+    expect(screen.getAllByText('GitHub could not be read. This list may be out of date.')).not.toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 
-  it('retries a failed page in a combined feed without losing the other source cards', async () => {
+  it('retries a failed page without losing the candidates already listed', async () => {
     stubSources();
     let pageAttempts = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) => {
-        if (!new URL(request.url).searchParams.has('after')) {
-          return HttpResponse.json({ issues: [linearIssues[0]], nextCursor: 'next-page' });
+      intakeCandidatesHandler(TEST_BASE_URL, request => {
+        if (!new URL(request.url).searchParams.has('cursor')) {
+          return { candidates: [offeredGithubIssue, offeredLinearIssues[0]], nextCursor: 'next-page', passes: [] };
         }
         pageAttempts += 1;
-        if (pageAttempts === 1) return HttpResponse.json({ error: 'Linear page unavailable' }, { status: 502 });
-        return HttpResponse.json({
-          issues: [linearIssue('ENG-105', 'project-a', 'Portal: later page')],
-          nextCursor: null,
-        });
+        if (pageAttempts === 1) return HttpResponse.json({ error: 'Candidates unavailable' }, { status: 502 });
+        return { candidates: [offeredLinearIssue('ENG-105', 'project-a', 'Portal: later page')], passes: [] };
       }),
     );
     const view = renderBoard('?source=github&source=linear');
     await waitForMutationsIdle(view.client);
     await screen.findByText('Portal: add account switcher');
-    fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
-    await screen.findByText('Linear: Linear page unavailable');
+    fireEvent.click(
+      await within(screen.getByTestId('board-column-intake')).findByRole('button', { name: 'Load more candidates' }),
+    );
+    await screen.findAllByText('Candidates unavailable');
     expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(within(screen.getByTestId('board-column-intake')).getByRole('button', { name: 'Retry' }));
     await screen.findByText('Portal: later page');
     expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
     expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
-    expect(screen.queryByText('Linear page unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByText('Candidates unavailable')).not.toBeInTheDocument();
   });
 
   it('matches any selected Linear project and narrows only Linear cards by it', async () => {
@@ -382,24 +346,19 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
   });
 
-  it('offers Linear reconnection when the selected feed authorization expires', async () => {
+  it('says the list may be behind when the server could not read Linear', async () => {
     stubSources();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
-        HttpResponse.json(
-          {
-            error: 'linear_reauth_required',
-            message: 'Authorization expired',
-          },
-          { status: 401 },
-        ),
-      ),
+      intakeCandidatesHandler(TEST_BASE_URL, offeredLinearIssues, [
+        { integrationId: 'linear', kind: 'issue', completeAt: '2026-10-06T11:00:00.000Z', failed: true },
+      ]),
     );
-    const { client } = renderBoard('?source=github&source=linear');
+    const { client } = renderBoard('?source=linear');
     await waitForMutationsIdle(client);
-    await screen.findByRole('button', { name: 'Connect Linear' });
-    expect(screen.getByText('Linear authorization expired. Reconnect to keep syncing issues.')).toBeInTheDocument();
+    await screen.findByText('Linear could not be read. This list may be out of date.');
+    expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
   });
+
   it('explains that filters excluded Intake candidates instead of suggesting an integration setup', async () => {
     stubSources();
     server.use(

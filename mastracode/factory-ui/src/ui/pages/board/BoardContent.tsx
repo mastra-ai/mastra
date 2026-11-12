@@ -9,7 +9,6 @@ import { useMemo, useState } from 'react';
 import type { InstalledBoardInfo } from '../../../api/types';
 
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
-import { hasBoardSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import {
@@ -22,6 +21,7 @@ import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow, isCardId } from '../../domains/factory/boardPhasesRequest';
+import { isPersistedCandidate, persistedSourceKeys } from '../../domains/factory/boardItems';
 import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
@@ -49,7 +49,6 @@ import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
 import type { DragPayload } from '../../domains/factory/boardDrag';
-import { isPersistedCandidate } from '../../domains/factory/boardItems';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 import { relatedWorkItemIndex } from '../../domains/factory/services/relationships';
 import type { FactoryProject, LinkedRepositoryPayload } from '../../domains/workspaces/services/github';
@@ -68,21 +67,6 @@ const NO_ACTORS: string[] = [];
 const NO_PEOPLE: readonly ProviderPerson[] = [];
 const NO_LABELS: readonly string[] = [];
 const NO_PHASE: ShownPhase = { cards: NO_CARDS, total: 0, listed: 0, listedAll: true };
-
-function countUnfilteredCandidates({
-  sourceFiltered,
-  candidates,
-  participantCandidates,
-  knownSourceKeys,
-}: {
-  sourceFiltered: boolean;
-  candidates: readonly BoardCandidate[];
-  participantCandidates: readonly BoardCandidate[];
-  knownSourceKeys: ReadonlySet<string>;
-}): number {
-  if (!sourceFiltered) return candidates.length;
-  return participantCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate)).length;
-}
 
 // One item can sit in several stages; each copy is its own card.
 const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
@@ -187,7 +171,6 @@ export function BoardContent({
     definition,
     sourceFilters: filters,
   });
-  const sourceFiltered = hasBoardSourceFilters(filters);
   const runs = useBoardRuns({ factoryProjectId });
   const relatedItemsFor = useMemo(() => relatedWorkItemIndex(cards), [cards]);
   const sessionStatuses = useItemSessionStatuses({
@@ -219,8 +202,12 @@ export function BoardContent({
   });
   // The server searches and filters the cards; issues not filed yet are matched here, by its rules.
   const searchedWords = searchWords(view.q);
-  const filteredCandidates = intake.candidates.filter(candidate =>
-    candidateMatchesView(candidate, storedFilters, searchedWords),
+  // A record filed between the two reads is still in the list: the card on screen stands for it.
+  const shownSourceKeys = useMemo(() => persistedSourceKeys(cards), [cards]);
+  const filteredCandidates = intake.candidates.filter(
+    candidate =>
+      !isPersistedCandidate(shownSourceKeys, candidate) &&
+      candidateMatchesView(candidate, storedFilters, searchedWords),
   );
   const shownPhases = useMemo(() => shownBoardPhases(snapshot, definition.phases), [snapshot, definition.phases]);
   const targetStages = targetItemId
@@ -263,13 +250,8 @@ export function BoardContent({
 
   const mutationError = runs.error ?? decisions.error ?? items.mutationError;
   const totalTaskCount = (snapshot?.matchingTotal ?? 0) + filteredCandidates.length;
-  const unfilteredCandidateCount = countUnfilteredCandidates({
-    sourceFiltered,
-    candidates: intake.candidates,
-    participantCandidates: intake.participantCandidates,
-    knownSourceKeys: intake.knownSourceKeys,
-  });
-  const unfilteredTaskCount = (snapshot?.boardTotal ?? 0) + unfilteredCandidateCount;
+  // Counted before source filters, so an empty board can say its filters hide what is there.
+  const unfilteredTaskCount = (snapshot?.boardTotal ?? 0) + intake.participantCandidates.length;
   const anyFilterActive = boardFiltersActive(filters) || view.q !== '';
   // The phases of the view before a change stay up until the new ones answer: they say nothing of it.
   const filtersExcludeAll = viewAnswered && anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
@@ -332,7 +314,6 @@ export function BoardContent({
           intakeSource={intake.active}
           intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
-          alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions

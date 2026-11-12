@@ -65,6 +65,9 @@ export const server = setupServer(
   // What a test stubs here is the project's cards: the board's paged reads are answered from it.
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   ...boardReadHandlers,
+  // Ambient empty Intake: the default board reads the records the server holds with no card yet.
+  // Intake tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/intake/candidates', () => HttpResponse.json({ candidates: [], passes: [] })),
   // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
   http.get('*/web/factory/projects/:id/work-items/starters', () =>
     HttpResponse.json({

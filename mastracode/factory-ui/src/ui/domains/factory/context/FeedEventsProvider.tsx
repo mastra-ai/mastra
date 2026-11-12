@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import type { Query, QueryKey } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -30,6 +30,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // per host, so a few background tabs starve every other request to the app.
   // A quick tab switch keeps the stream; only a tab left hidden releases it.
   const visible = useRecentlyVisible();
+  // When this tab last let go of which project's stream.
+  const released = useRef<{ factoryProjectId: string; at: number }>(undefined);
 
   useEffect(() => {
     if (!visible) return;
@@ -38,7 +40,15 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     let retry: ReturnType<typeof setTimeout> | undefined;
     let settling: ReturnType<typeof setTimeout> | undefined;
     let lastRefreshAt = Number.NEGATIVE_INFINITY;
+    let lastIntakeAt = Number.NEGATIVE_INFINITY;
+    let boardDueAt: number | undefined;
+    let intakeDueAt: number | undefined;
     let streaming = false;
+    // Since when this tab heard no stream: what it read before then may have changed unannounced.
+    // A page that just opened has let go of none, so the candidates it loaded with are its first read.
+    let unheardSince =
+      released.current?.factoryProjectId === factoryProjectId ? released.current.at : Number.NEGATIVE_INFINITY;
+    const intakeKey = queryKeys.intakeCandidates(factoryProjectId);
     const cardsKey = queryKeys.workItems(factoryProjectId);
     const factsKey = queryKeys.boardFacts(factoryProjectId);
     const boardKeys = [
@@ -71,21 +81,52 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         if (read.again && !abort.signal.aborted) reread(boardKey, query);
       });
     };
-    const refreshBoard = () => {
-      if (settling) return;
-      const wait = Math.max(BOARD_REFRESH_SETTLE_MS, lastRefreshAt + BOARD_FALLBACK_POLL_MS - Date.now());
+    // One settle timer carries both kinds, each at its own pace: a pass announcing candidates never delays the cards.
+    const settle = () => {
+      const next = Math.min(boardDueAt ?? Number.POSITIVE_INFINITY, intakeDueAt ?? Number.POSITIVE_INFINITY);
+      if (!Number.isFinite(next)) return;
+      clearTimeout(settling);
       settling = setTimeout(() => {
-        settling = undefined;
-        lastRefreshAt = Date.now();
-        for (const boardKey of boardKeys) {
-          // Each query under a key waits only for itself: a session's few cards never queue behind the whole board.
-          for (const query of queryClient.getQueryCache().findAll({ queryKey: boardKey })) reread(boardKey, query);
+        const now = Date.now();
+        if (boardDueAt !== undefined && boardDueAt <= now) {
+          boardDueAt = undefined;
+          lastRefreshAt = now;
+          for (const boardKey of boardKeys) {
+            // Each query under a key waits only for itself: a session's few cards never queue behind the whole board.
+            for (const query of queryClient.getQueryCache().findAll({ queryKey: boardKey })) reread(boardKey, query);
+          }
         }
-      }, wait);
+        if (intakeDueAt !== undefined && intakeDueAt <= now) {
+          intakeDueAt = undefined;
+          lastIntakeAt = now;
+          for (const query of queryClient.getQueryCache().findAll({ queryKey: intakeKey })) reread(intakeKey, query);
+        }
+        settle();
+      }, next - Date.now());
+    };
+    const dueAfter = (last: number) => Math.max(Date.now() + BOARD_REFRESH_SETTLE_MS, last + BOARD_FALLBACK_POLL_MS);
+    const refreshBoard = () => {
+      if (boardDueAt !== undefined) return;
+      boardDueAt = dueAfter(lastRefreshAt);
+      settle();
+    };
+    // Candidates change in bursts (a pass stores many at once), so they settle and space out as the cards do.
+    const refreshIntake = () => {
+      if (intakeDueAt !== undefined) return;
+      intakeDueAt = dueAfter(lastIntakeAt);
+      settle();
     };
     // The only poll for cards and decisions: it takes a frame's path, so it never reads cards mid-move either.
+    // Candidates ride the same tick at the safety pace only: without a stream the list is behind, and no provider is asked.
     const poll = setInterval(() => {
       if (!streaming || Date.now() - lastRefreshAt >= FEED_SAFETY_POLL_MS) refreshBoard();
+      const behind = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: intakeKey, type: 'active', fetchStatus: 'idle' })
+        .some(
+          query => Date.now() - Math.max(query.state.dataUpdatedAt, query.state.errorUpdatedAt) >= FEED_SAFETY_POLL_MS,
+        );
+      if (behind) refreshIntake();
     }, BOARD_FALLBACK_POLL_MS);
 
     const connect = () => {
@@ -94,10 +135,17 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         factoryProjectId,
         {
           onEvent: refreshBoard,
+          onIntake: refreshIntake,
           onConnected: () => {
             streaming = true;
             // Whatever landed while this tab held no stream was never announced.
             refreshBoard();
+            // Candidates read since the stream was last heard are the view's own first read: asking again doubles every board view.
+            const unheard = queryClient
+              .getQueryCache()
+              .findAll({ queryKey: intakeKey, fetchStatus: 'idle' })
+              .some(query => query.state.dataUpdatedAt < unheardSince);
+            if (unheard) refreshIntake();
           },
         },
         abort.signal,
@@ -107,6 +155,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         .then(fatal => {
           if (abort.signal.aborted) return;
           streaming = false;
+          unheardSince = Date.now();
           // An expired session or a deleted project never heals by retrying;
           // the fallback poll carries the feed from here.
           if (!fatal) retry = setTimeout(connect, RETRY_MS);
@@ -115,6 +164,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     connect();
 
     return () => {
+      released.current = { factoryProjectId, at: Date.now() };
       abort.abort();
       clearTimeout(retry);
       clearTimeout(settling);

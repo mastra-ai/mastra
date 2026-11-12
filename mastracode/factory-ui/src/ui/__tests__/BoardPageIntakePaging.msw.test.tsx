@@ -13,49 +13,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import type { IntakeCandidateListResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
+import { githubIssueRecord, githubPullRequestRecord } from './fixtures/intakeCandidates';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 
-function pullRequest(number: number, title: string) {
-  return {
-    number,
-    title,
-    url: `https://github.com/acme/app/pull/${number}`,
-    author: 'alice',
-    assignees: [],
-    requestedReviewers: [],
-    baseBranch: 'main',
-    headBranch: `feat/${number}`,
-    createdAt: '2026-08-01T00:00:00.000Z',
-    updatedAt: '2026-08-01T00:00:00.000Z',
-  };
-}
-
-function issue(number: number, title: string) {
-  return {
-    number,
-    title,
-    url: `https://github.com/acme/app/issues/${number}`,
-    author: 'alice',
-    assignee: null,
-    labels: ['status: auto-triaged'],
-    comments: 0,
-    createdAt: '2026-08-01T00:00:00.000Z',
-    updatedAt: '2026-08-01T00:00:00.000Z',
-  };
-}
-
-const pullRequestPages: Record<string, { pullRequests: ReturnType<typeof pullRequest>[]; nextPage: number | null }> = {
-  '1': { pullRequests: [pullRequest(7, 'Fix login')], nextPage: 2 },
-  '2': { pullRequests: [pullRequest(8, 'Fix signup')], nextPage: 3 },
-  '3': { pullRequests: [pullRequest(9, 'Fix logout')], nextPage: null },
+/** The server pages its list by cursor; these stand in for three and two pages of it. */
+const pullRequestPages: Record<string, IntakeCandidateListResponse> = {
+  '1': { candidates: [githubPullRequestRecord(7, { title: 'Fix login' })], nextCursor: '2', passes: [] },
+  '2': { candidates: [githubPullRequestRecord(8, { title: 'Fix signup' })], nextCursor: '3', passes: [] },
+  '3': { candidates: [githubPullRequestRecord(9, { title: 'Fix logout' })], passes: [] },
 };
 
-const triageIssuePages: Record<string, { issues: ReturnType<typeof issue>[]; nextPage: number | null }> = {
-  '1': { issues: [issue(17, 'Triage login')], nextPage: 2 },
-  '2': { issues: [issue(18, 'Triage signup')], nextPage: null },
+const triaged = { labels: ['status: auto-triaged'] };
+const triageIssuePages: Record<string, IntakeCandidateListResponse> = {
+  '1': { candidates: [githubIssueRecord(17, { title: 'Triage login', ...triaged })], nextCursor: '2', passes: [] },
+  '2': { candidates: [githubIssueRecord(18, { title: 'Triage signup', ...triaged })], passes: [] },
 };
 
 /**
@@ -98,7 +73,7 @@ function stubIntersectionObserver(startsInView: boolean) {
   };
 }
 
-/** Stubs the review board's endpoints and records which candidate pages were requested. */
+/** Stubs Work narrowed to pull requests, and records which pages of them were requested. */
 function stubReviewBoard() {
   const requestedPages: string[] = [];
   server.use(
@@ -130,8 +105,16 @@ function stubReviewBoard() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, ({ request }) => {
-      const page = new URL(request.url).searchParams.get('page') ?? '1';
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      // Triage asks for the auto-triaged issues, and this project has none.
+      if (query.has('label')) return HttpResponse.json({ candidates: [], passes: [] });
+      // The whole list, read for the person and label filters, holds the same pull requests in one page.
+      if (query.getAll('source').join() !== 'github:pull-request') {
+        const candidates = Object.values(pullRequestPages).flatMap(listed => listed.candidates);
+        return HttpResponse.json({ candidates, passes: [] });
+      }
+      const page = query.get('cursor') ?? '1';
       requestedPages.push(page);
       return HttpResponse.json(pullRequestPages[page]);
     }),
@@ -140,7 +123,7 @@ function stubReviewBoard() {
   return requestedPages;
 }
 
-/** Stubs Work's independent Intake and Triage candidate feeds. */
+/** Stubs Work, whose Triage pages the auto-triaged issues on its own, and records the pages it asked for. */
 function stubWorkBoard() {
   const requestedTriagePages: string[] = [];
   let releaseSecondPage = () => {};
@@ -177,10 +160,14 @@ function stubWorkBoard() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async ({ request }) => {
-      const params = new URL(request.url).searchParams;
-      if (!params.has('label')) return HttpResponse.json({ issues: [], nextPage: null });
-      const page = params.get('page') ?? '1';
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake/candidates`, async ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      // Intake reads the whole list, which holds the same issues in one page.
+      if (!query.has('label')) {
+        const candidates = Object.values(triageIssuePages).flatMap(listed => listed.candidates);
+        return HttpResponse.json({ candidates, passes: [] });
+      }
+      const page = query.get('cursor') ?? '1';
       requestedTriagePages.push(page);
       if (page === '2') await secondPageGate;
       return HttpResponse.json(triageIssuePages[page]);

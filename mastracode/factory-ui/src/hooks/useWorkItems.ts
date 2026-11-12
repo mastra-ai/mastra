@@ -14,6 +14,7 @@ import {
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, cardWriteMutationKey, isUnnarrowedBoardView, queryKeys } from '../api/keys';
 import type { BoardPhasesRequest } from '../api/types';
+import { dropIntakeCandidate } from './useIntakeCandidates';
 import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
 import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import { itemBoard } from '../ui/domains/factory/boardStages';
@@ -396,7 +397,7 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
     mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: (input: CreateWorkItemInput) =>
       createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
-    onSuccess: item => {
+    onSuccess: (item, input) => {
       // A session's cards take the saved card only where they hold it; a new card joins its board alone.
       patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards =>
         cards.map(card => (card.id === item.id ? item : card)),
@@ -421,6 +422,8 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
           return { ...answer, workItems: [item, ...answer.workItems] };
         },
       );
+      // The record that was filed, not the card that came back: an older card may answer under its own key.
+      dropIntakeCandidate(queryClient, factoryProjectId, input);
     },
   });
 }

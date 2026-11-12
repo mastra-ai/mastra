@@ -89,8 +89,6 @@ test.describe('Factory board list row layout', () => {
       ),
       http.get('*/web/factory/projects/fp-1/work-items', () => HttpResponse.json({ workItems })),
       http.get('*/web/factory/projects/fp-1/sessions', () => HttpResponse.json({ sessions: [] })),
-      http.get('*/web/github/projects/repo-1/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
-      http.get('*/web/github/projects/repo-1/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
       http.get('*/web/intake/config', () =>
         HttpResponse.json({
           config: { github: { enabled: false, sourceIds: null }, linear: { enabled: false, sourceIds: null } },

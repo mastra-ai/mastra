@@ -15,6 +15,11 @@ import {
 } from '../../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
+import {
+  intakeCandidatesHandler,
+  recordOfGithubIssue,
+  recordOfGithubPullRequest,
+} from '../../__tests__/fixtures/intakeCandidates';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 import type { GithubIssue, GithubPullRequest } from '../../domains/factory/services/factory';
 import { FactoryLayout } from '../../domains/workspaces/components/FactoryLayout';
@@ -122,19 +127,10 @@ function renderBoard(initialSearch = '', issues = [issue(10, ['bug'], 'alice'), 
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
-    // The auto-triaged lane refetches issues by label; keep it empty so candidates aren't duplicated.
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-      HttpResponse.json({
-        issues: new URL(request.url).searchParams.has('label') ? [] : issues,
-        nextPage: null,
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({
-        pullRequests: [pull(20, 'alice', [], ['needs-review']), pull(21, 'bob', ['alice'])],
-        nextPage: null,
-      }),
-    ),
+    intakeCandidatesHandler(TEST_BASE_URL, [
+      ...issues.map(recordOfGithubIssue),
+      ...[pull(20, 'alice', [], ['needs-review']), pull(21, 'bob', ['alice'])].map(recordOfGithubPullRequest),
+    ]),
   );
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/work${initialSearch}`]}>

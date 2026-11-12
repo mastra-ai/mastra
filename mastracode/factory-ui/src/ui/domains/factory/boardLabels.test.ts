@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate, linearCandidate } from './boardCandidates';
+import { linearRecord } from '../../__tests__/fixtures/intakeCandidates';
+import { intakeCandidate, issueCandidate } from './boardCandidates';
 import { boardLabels } from './boardLabels';
 
 describe('board labels', () => {
@@ -16,21 +17,8 @@ describe('board labels', () => {
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
-    const linear = linearCandidate({
-      id: 'linear-2',
-      identifier: 'ENG-13',
-      title: 'Linear labels',
-      url: 'https://linear.app/acme/issue/ENG-13',
-      state: 'Todo',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: null,
-      creator: null,
-      team: 'Engineering',
-      labels: ['frontend'],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-    });
+    const linear = intakeCandidate(linearRecord('ENG-13', { labels: ['frontend'] }));
+    if (!linear) throw new Error('Linear records are offered for filing');
 
     expect(boardLabels({ labels: ['p1', 'bug'], candidates: [github, linear] })).toEqual([
       'bug',
