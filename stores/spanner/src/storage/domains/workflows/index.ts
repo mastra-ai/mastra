@@ -65,18 +65,23 @@ const WORKFLOW_SUMMARY_COLUMNS = [
 ].join(', ');
 
 /**
- * Builds the reduced snapshot of a summary row: `status`, `timestamp`, and `parentWorkflow`
- * only for nested runs. Callers of `summary: true` read no other snapshot field.
+ * The reduced snapshot of a summary row: `status` and `timestamp` when set, and `parentWorkflow`
+ * only when both of its IDs are non-empty strings.
  */
 function summarySnapshot(row: Record<string, any>): WorkflowRunState {
-  const snapshot: Record<string, unknown> = {
-    status: row.summaryStatus ?? undefined,
-    timestamp:
-      row.summaryTimestamp === null || row.summaryTimestamp === undefined ? undefined : Number(row.summaryTimestamp),
-  };
+  const snapshot: Record<string, unknown> = {};
 
-  if (row.summaryParentWorkflowId && row.summaryParentRunId) {
-    snapshot.parentWorkflow = { workflowId: row.summaryParentWorkflowId, runId: row.summaryParentRunId };
+  if (row.summaryStatus !== null && row.summaryStatus !== undefined) {
+    snapshot.status = row.summaryStatus;
+  }
+
+  if (row.summaryTimestamp !== null && row.summaryTimestamp !== undefined) {
+    snapshot.timestamp = Number(row.summaryTimestamp);
+  }
+
+  const { summaryParentWorkflowId: workflowId, summaryParentRunId: runId } = row;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    snapshot.parentWorkflow = { workflowId, runId };
   }
 
   return snapshot as unknown as WorkflowRunState;
