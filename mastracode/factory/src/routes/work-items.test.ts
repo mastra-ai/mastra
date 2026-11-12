@@ -3438,6 +3438,17 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       expect(raw.workItems[2].version).toEqual(expect.any(String));
     });
 
+    it('declares the version of each body it sends, so a typed reader takes it from the answer', async () => {
+      await file('1');
+      const schema = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema;
+
+      const raw = await (await json('GET', phasesPath('cards=true'))).json();
+
+      expect(schema.parse(raw)).toEqual(raw);
+      const [{ version: _version, ...unversioned }] = raw.workItems;
+      expect(schema.safeParse({ ...raw, workItems: [unversioned] }).success).toBe(false);
+    });
+
     it('names a card by the same version in the by-id read, so a reader can tell it holds the body', async () => {
       const card = await file('1');
 
