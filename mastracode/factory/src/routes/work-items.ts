@@ -57,7 +57,7 @@ import { boardSnapshot, matchesEtag, scopedSnapshot } from './board-snapshot.js'
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
-import { cardsFiledFrom, unstartedCards } from './work-item-selection.js';
+import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -157,6 +157,8 @@ function listQueryError(field: PropertyKey | undefined): string {
       return 'invalid_search';
     case 'source':
       return 'invalid_source';
+    case 'workItemId':
+      return 'invalid_work_item_id';
     default:
       return 'invalid_session_id';
   }
@@ -463,6 +465,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             q: context.req.query('q'),
             limit: context.req.query('limit'),
             source: context.req.queries('source'),
+            workItemId: context.req.queries('workItemId'),
           });
           // A filter that fails to parse must not widen to the whole board.
           if (!query.success) return c.json({ error: listQueryError(query.error.issues[0]?.path[0]) }, 400);
@@ -471,7 +474,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          const { sessionId: sessionIds, scope, started, q, limit, source } = query.data;
+          const { sessionId: sessionIds, scope, started, q, limit, source, workItemId: ids } = query.data;
           const unstarted = started ? unstartedCards(board, q ?? '', limit) : undefined;
           const part =
             unstarted?.cards ??
@@ -479,7 +482,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               ? allSessionCards(board)
               : sessionIds
                 ? sessionCards(board, sessionIds)
-                : source && cardsFiledFrom(board, source));
+                : source
+                  ? cardsFiledFrom(board, source)
+                  : ids && cardsWithIds(board, ids));
           const items = part ?? board;
           const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
           const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);

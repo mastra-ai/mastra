@@ -465,7 +465,7 @@ const boundedLimitSchema = (defaultValue: number, max: number) =>
       const parsed = value ? Number.parseInt(value, 10) : defaultValue;
       return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
     });
-/** Without `sessionId`, `scope`, `started` or `source`, the list is the whole board. */
+/** Without `sessionId`, `scope`, `started`, `source` or `workItemId`, the list is the whole board. */
 const workItemListQuerySchema = z
   .object({
     /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
@@ -480,6 +480,8 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
+    /** Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing. */
+    workItemId: z.array(uuidSchema).min(1).max(100).optional(),
   })
   .refine(query => !(query.scope && query.sessionId), {
     path: ['scope'],
@@ -496,6 +498,10 @@ const workItemListQuerySchema = z
   .refine(query => !(query.source && (query.started || query.scope || query.sessionId)), {
     path: ['source'],
     message: 'Send source without started, scope or sessionId',
+  })
+  .refine(query => !(query.workItemId && (query.source || query.started || query.scope || query.sessionId)), {
+    path: ['workItemId'],
+    message: 'Send workItemId without source, started, scope or sessionId',
   });
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);

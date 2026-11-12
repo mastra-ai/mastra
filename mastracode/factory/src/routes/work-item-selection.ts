@@ -61,3 +61,9 @@ export function cardsFiledFrom(board: readonly Card[], sources: readonly string[
     ),
   );
 }
+
+/** The cards whose id is one of `ids`, in board order. An id no card has is left out. */
+export function cardsWithIds(board: readonly Card[], ids: readonly string[]): Card[] {
+  const wanted = new Set(ids);
+  return board.filter(card => wanted.has(card.id));
+}
