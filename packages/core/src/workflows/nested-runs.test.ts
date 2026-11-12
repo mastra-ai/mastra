@@ -805,6 +805,45 @@ describe('a nested run hands back only its changes', () => {
   });
 });
 
+// https://github.com/mastra-ai/mastra/issues/29733
+describe('a failed nested run hands back the state its completed steps set', () => {
+  const boom = createStep({
+    id: 'boom',
+    inputSchema: num,
+    outputSchema: num,
+    stateSchema: items,
+    execute: async () => {
+      throw new Error('boom');
+    },
+  });
+
+  const build = () => {
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+      .then(appendItem('inner-a'))
+      .then(boom)
+      .commit();
+    const outer = createWorkflow({ id: 'outer', inputSchema: num, outputSchema: z.any(), stateSchema: items })
+      .then(inner)
+      .commit();
+    return outer;
+  };
+
+  it('keeps the changes its completed steps made once the run fails', async () => {
+    const outer = build();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun();
+    const result = await run.start({
+      inputData: { n: 0 },
+      initialState: { items: [] },
+      outputOptions: { includeState: true },
+    });
+
+    expect(result.status).toBe('failed');
+    // `inner-a` appended this before `boom` threw; a flat workflow keeps it, so a nested one must too.
+    expect(result.state).toEqual({ items: ['inner-a:0'] });
+  });
+});
+
 describe('what a parked nested run exposes to callers', () => {
   /** `inner` suspends on its first step, so the parent parks on it holding the state it started from. */
   const build = (nested: 'then' | 'foreach') => {

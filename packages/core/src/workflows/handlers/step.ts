@@ -384,6 +384,11 @@ export async function executeStep(
 
   let execResults: any;
 
+  // A nested workflow hands its state back through `setState` before it throws, so the failure
+  // path has to keep the last hand-back to surface the state its completed steps set. Reset per
+  // attempt so a retry that fails before handing back doesn't resurface an earlier attempt's state.
+  let nestedStateHandback: { stateUpdate: any; stateBase?: Record<string, unknown> } | undefined;
+
   const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
   const delay = executionContext.retryConfig.delay ?? 0;
 
@@ -418,6 +423,7 @@ export async function executeStep(
         stateUpdate: null,
         requestContextUpdate: null,
       };
+      nestedStateHandback = undefined;
 
       // For nested workflow steps, pass raw mastra - the nested workflow will
       // register it on its own engine and wrap it fresh for its own steps.
@@ -517,6 +523,9 @@ export async function executeStep(
         }
         contextMutations.stateUpdate = stateData;
         contextMutations.stateBase = base;
+        if (isNestedWorkflow) {
+          nestedStateHandback = { stateUpdate: stateData, stateBase: base };
+        }
       };
 
       const stepParams = {
@@ -748,9 +757,11 @@ export async function executeStep(
         ...executionContext,
         state: stepRetryResult.ok
           ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
-          : executionContext.state,
+          : (nestedStateHandback?.stateUpdate ?? executionContext.state),
       }),
-      stateBase: stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateBase : undefined,
+      stateBase: stepRetryResult.ok
+        ? stepRetryResult.result.contextMutations.stateBase
+        : nestedStateHandback?.stateBase,
     },
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps
