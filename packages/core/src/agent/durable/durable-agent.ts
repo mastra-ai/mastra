@@ -32,7 +32,6 @@ import {
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
-import { toStandardSchema } from '../../schema';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
@@ -120,6 +119,7 @@ import type {
   DurableAgentStreamOptions as DurableStreamAdapterOptions,
   DurableAgentStreamResult as DurableStreamAdapterResult,
 } from './stream-adapter';
+import { toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type {
   AgentAbortEventData,
   AgentChunkEventData,
@@ -1790,7 +1790,10 @@ export class DurableAgent<
       structuredOutput: workflowInput.options?.structuredOutput?.schema
         ? {
             ...workflowInput.options.structuredOutput,
-            schema: toStandardSchema(workflowInput.options.structuredOutput.schema),
+            schema: toLiveStructuredOutputSchema(
+              workflowInput.options.structuredOutput.schema,
+              workflowInput.options.structuredOutput.nullToUndefined,
+            ),
           }
         : undefined,
       backgroundTaskManager,
@@ -5796,7 +5799,10 @@ export class DurableAgent<
       const persistedStructuredOutput = workflowInput.options?.structuredOutput;
       if (persistedStructuredOutput?.schema) {
         const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
-        const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
+        const schema = toLiveStructuredOutputSchema<{}>(
+          persistedStructuredOutput.schema,
+          persistedStructuredOutput.nullToUndefined,
+        );
         // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
         structuredOutput =
           errorStrategy === 'fallback'
