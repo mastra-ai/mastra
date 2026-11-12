@@ -51,7 +51,11 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
 import { resolveGithubRules } from '../../github/default-rules.js';
-import { attachGithubIntakePasses, withGithubIntakePasses } from '../../github/intake-pass.js';
+import {
+  attachGithubIntakePasses,
+  withChangedGithubIntakeSources,
+  withGithubIntakePasses,
+} from '../../github/intake-pass.js';
 import type {
   GithubIntegration,
   GithubRepositoryPermission,
@@ -78,7 +82,7 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
-import { runIntakePasses, runIntakePassesForLink } from '../../intake-pass.js';
+import { runIntakePassesForLink } from '../../intake-pass.js';
 import type { IntakePass } from '../../intake-pass.js';
 import {
   logPlatformInfo,
@@ -762,12 +766,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await runIntakePassesForLink(this.#intakePasses, this.storage, args);
   }
 
-  /** Selecting an issue source offers its open issues now, not at the hourly pass. */
-  async syncIntake(scope: { orgId: string }): Promise<void> {
-    const summary = await runIntakePasses(this.#intakePasses, scope);
-    if (summary.failed > 0) throw new Error(summary.errors[0]?.error ?? 'The intake pass failed.');
-  }
-
   #statusRoute(ctx: IntegrationContext): ApiRoute {
     return registerApiRoute('/web/github/status', {
       method: 'GET',
@@ -922,6 +920,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
+    const intakePasses = attachGithubIntakePasses(this, ctx);
     return [
       new PlatformGithubEventWorker({
         client: this.#client,
@@ -932,9 +931,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
-        discoverPullRequests: this.#pullRequestReconcileEnabled
-          ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
-          : undefined,
+        discoverPullRequests: withChangedGithubIntakeSources(
+          this.#pullRequestReconcileEnabled
+            ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
+            : undefined,
+          intakePasses,
+        ),
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? withGithubIntakePasses(
               attachGithubIssueReconciler(
@@ -943,7 +945,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                 input => this.fetchIssueState(input),
                 input => this.listOpenIssueStates(input),
               ),
-              attachGithubIntakePasses(this, ctx),
+              intakePasses,
             )
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,

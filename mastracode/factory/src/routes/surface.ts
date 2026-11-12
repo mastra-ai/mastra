@@ -932,15 +932,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           intake: deps.domains.intake,
           projects: deps.domains.projects,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
-            integration.intake
-              ? [
-                  {
-                    id: integration.id,
-                    intake: integration.intake,
-                    ...(integration.syncIntake ? { syncIntake: integration.syncIntake.bind(integration) } : {}),
-                  },
-                ]
-              : [],
+            integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
         }).routes()
       : []),

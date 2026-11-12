@@ -309,19 +309,24 @@ export interface IntakePassOptions<T> {
   now?: () => Date;
 }
 
-/** What a scoped run covers: one project, or every project of the organization. */
-export interface IntakePassScope {
-  orgId: string;
-  factoryProjectId?: string;
-}
+/**
+ * What a scoped run covers: one project, or every project whose sources are not the ones its last
+ * pass read, because one was linked, picked or dropped since.
+ */
+export type IntakePassScope = { orgId: string; factoryProjectId: string } | { changedSources: true };
 
-/** Runs over every project, or over the ones named: where a source was just linked or selected. */
+/** Runs over every project, or over the ones the scope names. */
 export type IntakePass = (only?: IntakePassScope) => Promise<IntakePassSummary>;
 
 export interface IntakePassSummary extends IntakeSettleSummary {
   projects: number;
   failed: number;
   errors: Array<{ projectId: string; error: string }>;
+}
+
+function sameBindings(left: Record<string, string>, right: Record<string, string>): boolean {
+  const ids = Object.keys(left);
+  return ids.length === Object.keys(right).length && ids.every(id => left[id] === right[id]);
 }
 
 function errorMessage(error: unknown): string {
@@ -340,9 +345,10 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
   return async function pass(only): Promise<IntakePassSummary> {
     const summary: IntakePassSummary = { projects: 0, offered: 0, stored: 0, removed: 0, failed: 0, errors: [] };
     const byOrg = new Map<string, string[]>();
-    const projects = only?.factoryProjectId
-      ? [{ orgId: only.orgId, id: only.factoryProjectId }]
-      : (await options.projects.listAll()).filter(project => !only || project.orgId === only.orgId);
+    const projects =
+      only && 'factoryProjectId' in only
+        ? [{ orgId: only.orgId, id: only.factoryProjectId }]
+        : await options.projects.listAll();
     for (const project of projects) {
       byOrg.set(project.orgId, [...(byOrg.get(project.orgId) ?? []), project.id]);
     }
@@ -365,9 +371,11 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
           status = await readIntakePassStatus(options.status, scope);
           // A project that never took records from this provider has nothing stored to clear.
           if (sources.size === 0 && !status) continue;
+          const bindings = Object.fromEntries([...sources].map(([sourceId, bound]) => [sourceId, bound.toISOString()]));
+          if (only && 'changedSources' in only && sameBindings(status?.imported ?? {}, bindings)) continue;
           summary.projects += 1;
 
-          const boundAt = (sourceId: string) => sources.get(sourceId)?.toISOString();
+          const boundAt = (sourceId: string) => bindings[sourceId];
           const imported = new Set<T>();
           const settlement = await openIntakeSettlement<T>({
             storage,
@@ -414,7 +422,6 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
           summary.removed += settled.removed;
 
           const at = now().toISOString();
-          const bindings = Object.fromEntries([...sources].map(([sourceId, bound]) => [sourceId, bound.toISOString()]));
           await saveIntakePassStatus(options.status, scope, {
             version: 1,
             completeAt: complete ? at : (status?.completeAt ?? null),

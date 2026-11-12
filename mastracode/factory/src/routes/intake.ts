@@ -13,8 +13,6 @@ import { loose, Route } from './route.js';
 export interface IntakeIntegration {
   id: string;
   intake: Pick<Intake, 'listSources' | 'listItems' | 'bindingLabelFilters'>;
-  /** Brings the organization's intake candidates in step with a selection that just changed. */
-  syncIntake?(scope: { orgId: string }): Promise<void>;
 }
 
 interface AggregatedIntakeItem extends Omit<IntakeItem, 'source'> {
@@ -285,16 +283,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
 
           await intake.ensureReady();
           await intake.mergeConfig({ orgId: tenant.orgId, config: registeredConfig });
-          // Not awaited: the save has succeeded, and the provider's own pass repairs a sync that fails.
-          for (const integration of integrations) {
-            if (!(integration.id in registeredConfig)) continue;
-            void integration.syncIntake?.({ orgId: tenant.orgId }).catch(error => {
-              console.warn('[factory] Failed to bring the intake candidates in step with the saved selection', {
-                integrationId: integration.id,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            });
-          }
           await audit.emit({
             context: loose(c),
             input: {

@@ -3,18 +3,22 @@
  * step that follows each event, on real storage, the real GitHub rules and the real dispatcher.
  * Only GitHub's own listings are faked.
  */
+import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
 import type { IntakeIssue } from '../../capabilities/intake.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
+import { IntakeRoutes } from '../../routes/intake.js';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
+import type { IntakeConfig } from '../../storage/domains/intake/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { IntegrationContext } from '../base.js';
 import { runIntakePasses } from '../intake-pass.js';
 import { resolveGithubRules } from './default-rules.js';
-import { attachGithubIntakePasses } from './intake-pass.js';
+import { attachGithubIntakePasses, withChangedGithubIntakeSources } from './intake-pass.js';
 import { attachGithubRules, GithubRules } from './rules.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
@@ -148,7 +152,35 @@ async function setup() {
     offered,
     select,
     seeded,
-    pass: (only?: { orgId: string }) => runIntakePasses(passes, only),
+    pass: () => runIntakePasses(passes),
+    /** What the worker runs between two full passes, after it has looked for missed pull requests. */
+    discovery: withChangedGithubIntakeSources(
+      async () => ({ repositories: 0, listed: 0, created: 0, repaired: 0, failed: 0, errors: [] }),
+      passes,
+    )!,
+    /** The save of Settings › Intake, through its route. */
+    save: (config: IntakeConfig) => {
+      const app = new Hono();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        app as never,
+        new IntakeRoutes({
+          auth: fakeRouteAuth(),
+          audit: { emit: async () => {} },
+          intake: seeded.intake,
+          projects: seeded.projects,
+          integrations: [{ id: 'github', intake: github.intake as never }],
+        }).routes(),
+      );
+      return app.request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+    },
     event: attachGithubRules(github as never, context)!,
     candidates: async (kind?: 'issue' | 'pull-request') =>
       (await workItems.listIntakeCandidates({ ...scope, ...(kind ? { kind } : {}), limit: 100 })).candidates,
@@ -501,43 +533,71 @@ describe('the repositories an organization takes issues from', () => {
   });
 });
 
-describe('a pass asked for by one organization', () => {
-  it('reads the repositories of that organization and of no other', async () => {
+describe('a selection saved in Settings › Intake', () => {
+  it('asks GitHub for nothing when it is saved, and the next run reads only the project it changed', async () => {
     const t = await setup();
     const sourceControl = t.seeded.sourceControl.forIntegration('github');
-    const project = await t.seeded.projects.create({ orgId: 'org-2', userId: 'user-2', input: { name: 'Project 2' } });
-    const installation = await sourceControl.installations.upsert({
-      orgId: 'org-2',
-      connectedByUserId: 'user-2',
-      externalId: '8',
-    });
+    const other = await t.seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Project 2' } });
+    const [installation] = await sourceControl.installations.list({ orgId: 'org-1' });
     const repository = await sourceControl.repositories.upsert({
-      orgId: 'org-2',
-      input: { installationId: installation.id, externalId: '20', slug: 'other/repo', defaultBranch: 'main' },
+      orgId: 'org-1',
+      input: { installationId: installation!.id, externalId: '11', slug: 'acme/other', defaultBranch: 'main' },
     });
     const connection = await sourceControl.connections.create({
-      orgId: 'org-2',
-      factoryProjectId: project.id,
-      installationId: installation.id,
-      createdByUserId: 'user-2',
+      orgId: 'org-1',
+      factoryProjectId: other.id,
+      installationId: installation!.id,
+      createdByUserId: 'user-1',
     });
     await sourceControl.projectRepositories.link({
-      orgId: 'org-2',
+      orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-2',
+      createdByUserId: 'user-1',
       sandboxProvider: 'local',
       sandboxWorkdir: '/workspace',
     });
+    const issuesOf = async (factoryProjectId: string) =>
+      (
+        await t.workItems.listIntakeCandidates({ orgId: 'org-1', factoryProjectId, kind: 'issue', limit: 100 })
+      ).candidates.map(candidate => candidate.title);
     const read = () =>
-      (t.github.versionControl.listPullRequests.mock.calls as unknown as Array<[{ sourceId: string }]>).map(
-        ([input]) => input.sourceId,
+      (t.github.intake.listIssues.mock.calls as unknown as Array<[{ sourceIds: string[] }]>).flatMap(
+        ([input]) => input.sourceIds,
       );
-
-    await t.pass({ orgId: 'org-1' });
-    expect(read()).toEqual(['acme/repo']);
-
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
     await t.pass();
-    expect(read().sort()).toEqual(['acme/repo', 'acme/repo', 'other/repo']);
+    expect(await issuesOf(other.id)).toEqual([]);
+    t.github.intake.listIssues.mockClear();
+    t.github.versionControl.listPullRequests.mockClear();
+
+    expect((await t.save({ github: { enabled: true, sourceIds: ['acme/repo', 'acme/other'] } })).status).toBe(200);
+
+    expect(t.github.intake.listIssues).not.toHaveBeenCalled();
+    expect(t.github.versionControl.listPullRequests).not.toHaveBeenCalled();
+    expect(await issuesOf(other.id)).toEqual([]);
+
+    expect(await t.discovery([])).toMatchObject({ failed: 0 });
+
+    expect(read()).toEqual(['acme/other']);
+    expect(t.github.versionControl.listPullRequests).not.toHaveBeenCalled();
+    expect(await issuesOf(other.id)).toEqual(['Issue 1']);
+
+    await t.discovery([]);
+    expect(read()).toEqual(['acme/other']);
+  });
+
+  it('stops offering the issues of a repository dropped from it without asking GitHub', async () => {
+    const t = await setup();
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
+    await t.pass();
+    t.github.intake.listIssues.mockClear();
+
+    await t.save({ github: { enabled: true, sourceIds: [] } });
+    expect(await t.candidates('issue')).toHaveLength(1);
+
+    expect(await t.discovery([])).toMatchObject({ failed: 0 });
+    expect(await t.candidates('issue')).toEqual([]);
+    expect(t.github.intake.listIssues).not.toHaveBeenCalled();
   });
 });

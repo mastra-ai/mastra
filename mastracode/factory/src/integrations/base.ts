@@ -214,11 +214,6 @@ export interface FactoryIntegration {
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
   /**
-   * Bring the organization's intake candidates in step with its source selection now. Only for a
-   * provider whose own pass is too far away to wait for after the selection changes.
-   */
-  syncIntake?(scope: { orgId: string }): Promise<void>;
-  /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),
    * so instance methods that run outside an `IntegrationContext` — per-request

@@ -48,11 +48,11 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
-import { runIntakePasses, runIntakePassesForLink } from '../intake-pass.js';
+import { runIntakePassesForLink } from '../intake-pass.js';
 import type { IntakePass } from '../intake-pass.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
-import { attachGithubIntakePasses, withGithubIntakePasses } from './intake-pass.js';
+import { attachGithubIntakePasses, withChangedGithubIntakeSources, withGithubIntakePasses } from './intake-pass.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -1330,12 +1330,6 @@ export class GithubIntegration implements FactoryIntegration {
     await runIntakePassesForLink(this.#intakePasses, this.sourceControlStorage, args);
   }
 
-  /** Selecting an issue source offers its open issues now, not at the hourly pass. */
-  async syncIntake(scope: { orgId: string }): Promise<void> {
-    const summary = await runIntakePasses(this.#intakePasses, scope);
-    if (summary.failed > 0) throw new Error(summary.errors[0]?.error ?? 'The intake pass failed.');
-  }
-
   /**
    * Pull-request and issue sweeps share a worker and lease, but can be enabled
    * and paced independently. The legacy combined controls remain the fallback.
@@ -1354,9 +1348,13 @@ export class GithubIntegration implements FactoryIntegration {
     const reconcile = pullRequestEnabled
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
-    const discover = pullRequestEnabled
-      ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
-      : undefined;
+    const intakePasses = attachGithubIntakePasses(this, ctx);
+    const discover = withChangedGithubIntakeSources(
+      pullRequestEnabled
+        ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
+        : undefined,
+      intakePasses,
+    );
     const issueSweep = issueEnabled
       ? attachGithubIssueReconciler(
           this,
@@ -1365,7 +1363,7 @@ export class GithubIntegration implements FactoryIntegration {
           input => this.listOpenIssueStates(input),
         )
       : undefined;
-    const issues = withGithubIntakePasses(issueSweep, attachGithubIntakePasses(this, ctx));
+    const issues = withGithubIntakePasses(issueSweep, intakePasses);
     if (!reconcile && !issues && !discover) return [];
 
     const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);

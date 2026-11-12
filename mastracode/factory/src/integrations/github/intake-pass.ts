@@ -28,7 +28,7 @@ import {
   polledPullRequestEvent,
   reconciledIssueOpenedEvent,
 } from './rules.js';
-import type { GithubRulesIntegration, ReconcileRepository } from './rules.js';
+import type { GithubPullRequestDiscovery, GithubRulesIntegration, ReconcileRepository } from './rules.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 interface Listed<T> {
@@ -213,6 +213,27 @@ export function attachGithubIntakePasses(
     ...(options.intake ? { intake: options.intake } : {}),
     ingest: event => rules.ingest(event),
   });
+}
+
+/**
+ * Run the passes of the projects whose sources changed after pull-request discovery, under its
+ * lease and on its timer. That is what brings a selection saved in Settings › Intake into effect:
+ * the save itself asks GitHub for nothing, and the hourly pass is too far away to wait for.
+ */
+export function withChangedGithubIntakeSources(
+  discover: GithubPullRequestDiscovery | undefined,
+  passes: readonly IntakePass[],
+): GithubPullRequestDiscovery | undefined {
+  if (!discover || passes.length === 0) return discover;
+  return async repositories => {
+    const found = await discover(repositories);
+    const intake = await runIntakePasses(passes, { changedSources: true });
+    return {
+      ...found,
+      failed: found.failed + intake.failed,
+      errors: [...found.errors, ...intake.errors.map(error => ({ repository: error.projectId, error: error.error }))],
+    };
+  };
 }
 
 /** Run the intake passes after the issue sweep, under its lease and on its timer. */
