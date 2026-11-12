@@ -354,15 +354,13 @@ export function useBoardIntake({
   });
   // A source materializes once per Factory, so items that already have a card are held back. The
   // server says which ones do, for the feed items alone: the board lists only the first cards of
-  // each column. An item waits for that answer, or it would flash as new before leaving.
-  const initialFeedLookups = filedLookupSources([
-    boardIssues.map(issueCandidate),
-    boardGitLabIssues.map(gitlabCandidate),
-    boardLinearIssues.map(linearCandidate),
-    boardJiraIssues.map(jiraCandidate),
-    boardIncidentioIssues.map(incidentioCandidate),
-    browsesPullRequests ? reviewCandidates : [],
-  ]);
+  // each column. An item waits for that answer, or it would flash as new before leaving. A source
+  // the view hides shows no item, so nothing is asked for it and its answer holds no feed back.
+  const initialFeedLookups = filedLookupSources(
+    browsedSources.map(source =>
+      participantCandidates.filter(candidate => candidate.source === INTAKE_CARD_SOURCES[source]),
+    ),
+  );
   const triageFeedLookups = filedLookupSources([(triageIssues.data ?? []).map(issueCandidate)]);
   const filedLookups = useQueries({
     queries: [...initialFeedLookups, ...triageFeedLookups].map(sources => ({
@@ -438,7 +436,7 @@ export function useBoardIntake({
     candidates,
     alreadyMaterialized,
     participantCandidates,
-    /** The sources of the feed items already filed as a card, on this board or another. */
+    /** The sources of the browsed feeds' items already filed as a card, on this board or another. */
     knownSourceKeys,
     feedByColumn,
     isPending,

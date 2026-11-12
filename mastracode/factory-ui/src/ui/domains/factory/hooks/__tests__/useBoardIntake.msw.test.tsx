@@ -330,6 +330,69 @@ describe('useBoardIntake project-bound sources', () => {
     await waitFor(() => expect(result.current.candidates).toHaveLength(2));
     expect(result.current.feedByColumn.intake?.error).toBeNull();
   });
+
+  it('shows the one source picked when the lookup of a source the view hides fails, and looks nothing up for that source', async () => {
+    stubIntake(bindings, ['factory-1'], issues);
+    const lookedUp: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['proj-1', 'proj-2'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
+        HttpResponse.json({
+          issues: [
+            {
+              number: 7,
+              title: 'Issue 7',
+              url: 'https://github.com/acme/app/issues/7',
+              author: 'octocat',
+              labels: [],
+              comments: 0,
+              createdAt: '2026-07-01T00:00:00Z',
+              updatedAt: '2026-07-02T00:00:00Z',
+            },
+          ],
+          nextCursor: null,
+        }),
+      ),
+      // The server answers for Linear items and fails for GitHub ones.
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, ({ request }) => {
+        const sources = new URL(request.url).searchParams.getAll('source');
+        lookedUp.push(...sources);
+        if (sources.some(source => source.includes('github'))) {
+          return HttpResponse.json({ error: 'nope' }, { status: 500 });
+        }
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repositories: [repository],
+        definition: workBoard,
+        sourceFilters: { source: new Set(['linear']), linearProject: new Set() },
+      }),
+    );
+
+    // The hidden GitHub feed is read all the same: the person filters name its people.
+    await waitFor(() =>
+      expect(result.current.participantCandidates).toContainEqual(expect.objectContaining({ source: 'github-issue' })),
+    );
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual(['linear:ENG-1', 'linear:REL-1']);
+    expect(result.current.feedByColumn.intake?.error).toBeNull();
+    expect(result.current.isPending).toBe(false);
+    expect(lookedUp.filter(source => source.includes('github'))).toEqual([]);
+    expect(lookedUp).toContain('linear:ENG-1');
+  });
 });
 
 describe('useBoardIntake GitLab routing', () => {
