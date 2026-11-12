@@ -11,8 +11,8 @@ import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/wor
 
 import type {
   WorkItemActivity,
-  WorkItemColumnsRequest,
-  WorkItemColumnsResponse,
+  BoardPhasesRequest,
+  BoardPhasesResponse,
   WorkItemFilterOptions,
   WorkItemListResponse,
   WorkItemStarters,
@@ -142,8 +142,11 @@ export interface WorkItem {
   revision: number;
   createdAt: string;
   updatedAt: string;
-  /** When the card last changed in any way: what the columns read stamps a card with. */
-  changedAt?: string | null;
+  /**
+   * What the server names this body by: the board read names each card with the version of the
+   * body it would send. A card a write answered, or one changed here, has none until it is read again.
+   */
+  version?: string;
 }
 
 /** Session ref as sent by the client — `startedBy` is stamped server-side. */
@@ -350,38 +353,39 @@ export async function listWorkItems(
   };
 }
 
-/** The columns read's answer. It holds the cards' bodies only when they were asked for. */
-export interface WorkItemColumnsAnswer extends Omit<WorkItemColumnsResponse, 'workItems'> {
+/** The board read's answer. It holds the cards' bodies only when they were asked for. */
+export interface BoardPhasesAnswer extends Omit<BoardPhasesResponse, 'workItems'> {
   workItems?: WorkItem[];
 }
 
 /**
- * Which cards each column of a board view lists, in the view's order, and how many match.
+ * Which cards each phase of a board view lists, in the view's order, and how many match.
  * `cards` also asks for the body of every card the answer names.
  */
-export async function fetchWorkItemColumns(
+export async function fetchBoardPhases(
   baseUrl: string,
   factoryProjectId: string,
-  request: WorkItemColumnsRequest,
+  request: BoardPhasesRequest,
   cards: boolean,
   signal?: AbortSignal,
-): Promise<WorkItemColumnsAnswer> {
+): Promise<BoardPhasesAnswer> {
   // One order of parameters per view: the browser revalidates an address it has already read.
-  const params = new URLSearchParams({ board: request.board, sort: request.sort });
+  const params = new URLSearchParams({ sort: request.sort });
   if (request.q) params.set('q', request.q);
   for (const [filter, picked] of Object.entries(request.filters).sort(([left], [right]) => left.localeCompare(right))) {
     for (const value of picked) params.append(filter, value);
   }
-  for (const [stage, count] of Object.entries(request.windows).sort(([left], [right]) => left.localeCompare(right))) {
-    params.append('window', `${stage}:${count}`);
+  for (const [phase, count] of Object.entries(request.windows).sort(([left], [right]) => left.localeCompare(right))) {
+    params.append('window', `${phase}:${count}`);
   }
   if (request.item) params.set('item', request.item);
   if (cards) params.set('cards', 'true');
   const { workItems, ...answer } = await requestJson<
-    Omit<WorkItemColumnsResponse, 'workItems'> & { workItems?: WireWorkItem[] }
-  >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/columns?${params}`, {
-    signal,
-  });
+    Omit<BoardPhasesResponse, 'workItems'> & { workItems?: WireWorkItem[] }
+  >(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/boards/${encodeURIComponent(request.board)}/phases?${params}`,
+    { signal },
+  );
   return workItems ? { ...answer, workItems: workItems.map(fromWireWorkItem) } : answer;
 }
 

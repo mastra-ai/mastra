@@ -1,14 +1,14 @@
 import type { Card } from '@mastra/factory';
 import { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
-import { workItemColumns } from '@mastra/factory/work-items/board-columns';
 import { workItemFilterOptions } from '@mastra/factory/work-items/board-filter-options';
+import { boardPhases } from '@mastra/factory/work-items/board-phases';
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
 /**
  * The server's paged board reads for the UI suites, answered by the server's own rules from the
  * project's cards as a test lists them. A test keeps stubbing one list of cards; the board asks
- * for columns of it, and gets what the real server would answer for that list.
+ * for the phases of a board, and gets what the real server would answer for that list.
  */
 
 const dateSchema = z.coerce.date();
@@ -89,11 +89,16 @@ const wireCardSchema = z.object({
     .optional(),
 });
 
-/** A stamp for a card that states none: it changes whenever anything of the card does. */
-function contentStamp(wire: unknown): Date {
+/** The version of a card's body: it changes whenever anything of the card does. */
+function bodyVersion(wire: unknown): string {
   let hash = 2166136261;
   for (const char of JSON.stringify(wire)) hash = Math.imul(hash ^ (char.codePointAt(0) ?? 0), 16777619);
-  return new Date(hash >>> 0);
+  return (hash >>> 0).toString(16);
+}
+
+/** A card a test lists on the wire, as the server sends it where it names cards by version. */
+export function versionedCard(wire: unknown): Record<string, unknown> {
+  return { ...z.record(z.string(), z.unknown()).parse(wire), version: bodyVersion(wire) };
 }
 
 /** The card the server holds for a card a test lists on the wire. */
@@ -123,7 +128,7 @@ function storedCard(wire: unknown): Card {
     revision: card.revision,
     createdAt: card.createdAt,
     updatedAt,
-    changedAt: card.changedAt ?? contentStamp(wire),
+    changedAt: card.changedAt ?? updatedAt,
     workItem: {
       id: workItemId,
       orgId: card.orgId,
@@ -161,11 +166,10 @@ function queryValues(url: URL, name: string): string[] | undefined {
   return values.length > 0 ? values : undefined;
 }
 
-/** The columns read's answer for `request`, as the server gives it for `project`. */
-export function answerWorkItemColumns(request: Request, project: StubbedProject): Response {
+/** The answer of the read of `boardKey`'s phases for `request`, as the server gives it for `project`. */
+export function answerBoardPhases(request: Request, project: StubbedProject, boardKey: string): Response {
   const url = new URL(request.url);
-  const query = FACTORY_ROUTE_CONTRACTS.workItemColumns.querySchema.safeParse({
-    board: url.searchParams.get('board') ?? undefined,
+  const query = FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema.safeParse({
     sort: url.searchParams.get('sort') ?? undefined,
     q: url.searchParams.get('q') ?? undefined,
     source: queryValues(url, 'source'),
@@ -181,19 +185,26 @@ export function answerWorkItemColumns(request: Request, project: StubbedProject)
     item: url.searchParams.get('item') ?? undefined,
     cards: url.searchParams.get('cards') ?? undefined,
   });
-  if (!query.success) return HttpResponse.json({ error: 'invalid_columns_query' }, { status: 400 });
-  const { board: boardId, cards: withBodies, ...view } = query.data;
-  const board = project.boards.find(candidate => candidate.id === boardId);
+  if (!query.success) return HttpResponse.json({ error: 'invalid_phases_query' }, { status: 400 });
+  const { cards: withBodies, ...view } = query.data;
+  const board = project.boards.find(candidate => candidate.id === boardKey);
   if (!board) return HttpResponse.json({ error: 'board_not_found' }, { status: 404 });
   const phases = board.phases.map(phase => phase.id);
   const wireById = new Map<string, unknown>();
+  const versions = new Map<string, string>();
   const list = project.workItems.map(wire => {
     const card = storedCard(wire);
-    const body = z.record(z.string(), z.unknown()).parse(wire);
-    wireById.set(card.id, { ...body, changedAt: card.changedAt?.toISOString() ?? null });
+    versions.set(card.id, bodyVersion(wire));
+    wireById.set(card.id, versionedCard(wire));
     return card;
   });
-  const { body, named } = workItemColumns(list, { id: boardId, phases }, view, project.userId);
+  const { body, named } = boardPhases(
+    list,
+    { id: boardKey, phases },
+    view,
+    project.userId,
+    card => versions.get(card.id) ?? '',
+  );
   const namedSessionIds = new Set(
     named.flatMap(card => Object.values(card.sessions).map(session => session.sessionId)),
   );
@@ -256,9 +267,9 @@ async function stubbedProject(request: Request, factoryProjectId: string): Promi
 
 /** Ambient paged board reads, answered from whatever list of cards the running test stubs. */
 export const boardReadHandlers = [
-  http.get('*/web/factory/projects/:id/work-items/columns', async ({ request, params }) => {
+  http.get('*/web/factory/projects/:id/boards/:boardKey/phases', async ({ request, params }) => {
     const project = await stubbedProject(request, String(params.id));
-    return project instanceof Response ? project : answerWorkItemColumns(request, project);
+    return project instanceof Response ? project : answerBoardPhases(request, project, String(params.boardKey));
   }),
   http.get('*/web/factory/projects/:id/work-items/filter-options', async ({ request, params }) => {
     const project = await stubbedProject(request, String(params.id));

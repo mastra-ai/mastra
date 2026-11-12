@@ -28,26 +28,26 @@ export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate
 export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema>;
 export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
 export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
-export type WorkItemColumnsResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemColumns.responseSchema>;
+export type BoardPhasesResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema>;
 export type WorkItemFilterOptions = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.responseSchema>;
-type WorkItemColumnsQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.workItemColumns.querySchema>;
-export type WorkItemColumnsSort = WorkItemColumnsQuery['sort'];
+type BoardPhasesQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema>;
+export type BoardPhasesSort = BoardPhasesQuery['sort'];
 /** The filters of a board view: each is sent once per picked value. */
-export type WorkItemColumnsFilter = {
-  [Field in keyof WorkItemColumnsQuery]-?: WorkItemColumnsQuery[Field] extends Set<string> ? Field : never;
-}[keyof WorkItemColumnsQuery];
+export type BoardPhasesFilter = {
+  [Field in keyof BoardPhasesQuery]-?: BoardPhasesQuery[Field] extends Set<string> ? Field : never;
+}[keyof BoardPhasesQuery];
 
-/** What the columns read is asked: one view of a board, and how deep each of its columns is listed. */
-export interface WorkItemColumnsRequest {
+/** What the board read is asked: one view of a board, and how deep each of its phases is listed. */
+export interface BoardPhasesRequest {
   board: string;
-  sort: WorkItemColumnsSort;
+  sort: BoardPhasesSort;
   /** Empty searches nothing. */
   q: string;
   /** The picked values of each filter, sorted. A filter that picks nothing is left out. */
-  filters: Partial<Record<WorkItemColumnsFilter, readonly string[]>>;
-  /** How many cards a column lists, for the columns listed deeper than the server's first page. */
+  filters: Partial<Record<BoardPhasesFilter, readonly string[]>>;
+  /** How many cards a phase lists, for the phases listed deeper than the server's first page. */
   windows: Readonly<Record<string, number>>;
-  /** A card to list in every column that holds it, however deep it is there. */
+  /** A card to answer for apart from the listing: its body, and where each phase holding it places it. */
   item?: string;
 }
 

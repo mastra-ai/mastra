@@ -3,14 +3,14 @@ import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { answerWorkItemColumns } from '../../../e2e/ui/board-reads';
+import { answerBoardPhases, versionedCard } from '../../../e2e/ui/board-reads';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
-import type { WorkItemColumnsRequest } from '../../api/types';
+import type { BoardPhasesRequest } from '../../api/types';
 import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
 import {
-  useBoardColumnsQuery,
+  useBoardPhasesQuery,
   useDeleteWorkItemMutation,
   useSessionWorkItemsQuery,
   useSidebarWorkItemsQuery,
@@ -18,7 +18,7 @@ import {
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
 } from '../useWorkItems';
-import type { BoardColumnsSnapshot } from '../useWorkItems';
+import type { BoardPhasesSnapshot } from '../useWorkItems';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
 
@@ -322,44 +322,50 @@ describe('useSessionWorkItemsQuery', () => {
   });
 });
 
-describe('useBoardColumnsQuery', () => {
+describe('useBoardPhasesQuery', () => {
   const cardId = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
-  /** A card on the wire; a write stamps it, here with a day per version. */
-  const card = (number: number, title = `Card ${number}`, version = 1) => ({
+  /** A card on the wire. Every write here lands in the same millisecond: when a card changed says nothing of what it holds. */
+  const card = (number: number, title = `Card ${number}`) => ({
     ...wireItem,
     id: cardId(number),
     title,
     createdAt: new Date(Date.UTC(2026, 0, 1, 0, number)).toISOString(),
-    changedAt: `2026-08-${String(10 + version)}T00:00:00.000Z`,
+    changedAt: '2026-08-11T00:00:00.000Z',
   });
-  const VIEW: WorkItemColumnsRequest = { board: 'work', sort: 'recent', q: '', filters: {}, windows: {} };
+  const VIEW: BoardPhasesRequest = { board: 'work', sort: 'recent', q: '', filters: {}, windows: {} };
 
   /** Serves the project's paged reads from `project.cards`, and records what the tab asked for. */
   function serveProject(cards: Array<typeof wireItem & { changedAt: string }>) {
     const project = { cards, listings: new Array<URLSearchParams>(), cardReads: new Array<string[]>() };
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/columns`, ({ request }) => {
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`, ({ request, params }) => {
         project.listings.push(new URL(request.url).searchParams);
-        return answerWorkItemColumns(request, { workItems: project.cards, boards: [BOARD], userId: 'user-1' });
+        return answerBoardPhases(
+          request,
+          { workItems: project.cards, boards: [BOARD], userId: 'user-1' },
+          String(params.boardKey),
+        );
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, ({ request }) => {
         const ids = new URL(request.url).searchParams.getAll('workItemId');
         project.cardReads.push(ids);
-        return HttpResponse.json({ workItems: project.cards.filter(listed => ids.includes(listed.id)) });
+        return HttpResponse.json({
+          workItems: project.cards.filter(listed => ids.includes(listed.id)).map(versionedCard),
+        });
       }),
     );
     return project;
   }
   /** What a feed frame does to the board. */
   const refresh = (client: QueryClient) => client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
-  const column = (snapshot: BoardColumnsSnapshot | undefined, stage: string) =>
-    snapshot?.columns.find(listed => listed.stage === stage);
-  const titles = (snapshot: BoardColumnsSnapshot | undefined) =>
-    column(snapshot, 'execute')?.ids.map(id => snapshot?.workItems.find(held => held.id === id)?.title);
+  const listed = (snapshot: BoardPhasesSnapshot | undefined, phase: string) =>
+    snapshot?.phases.find(candidate => candidate.phase === phase);
+  const titles = (snapshot: BoardPhasesSnapshot | undefined) =>
+    listed(snapshot, 'execute')?.ids.map(id => snapshot?.workItems.find(held => held.id === id)?.title);
 
   it('reads a board it holds no card of in one request, then downloads nothing while nothing changes', async () => {
     const project = serveProject([card(1), card(2)]);
-    const { result, client } = renderHookWithProviders(() => useBoardColumnsQuery(PROJECT_ID, VIEW));
+    const { result, client } = renderHookWithProviders(() => useBoardPhasesQuery(PROJECT_ID, VIEW));
     await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 2', 'Card 1']));
     const snapshot = result.current.data;
 
@@ -373,24 +379,25 @@ describe('useBoardColumnsQuery', () => {
 
   it('downloads only the cards that changed or appeared, and keeps every other card the object it held', async () => {
     const project = serveProject([card(1), card(2), card(3)]);
-    const { result, client } = renderHookWithProviders(() => useBoardColumnsQuery(PROJECT_ID, VIEW));
+    const { result, client } = renderHookWithProviders(() => useBoardPhasesQuery(PROJECT_ID, VIEW));
     await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 3', 'Card 2', 'Card 1']));
     const held = (number: number) => result.current.data?.workItems.find(item => item.id === cardId(number));
     const [first, third] = [held(1), held(3)];
 
-    project.cards = [card(1), card(2, 'Renamed', 2), card(3), card(4)];
+    // Renamed in the millisecond it was last written in.
+    project.cards = [card(1), card(2, 'Renamed'), card(3), card(4)];
     await act(() => refresh(client));
 
     await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 4', 'Card 3', 'Renamed', 'Card 1']));
     expect(project.cardReads.map(ids => ids.toSorted())).toEqual([[cardId(2), cardId(4)]]);
     expect(held(1)).toBe(first);
     expect(held(3)).toBe(third);
-    expect(column(result.current.data, 'execute')?.total).toBe(4);
+    expect(listed(result.current.data, 'execute')?.total).toBe(4);
   });
 
   it('stops listing a card the server no longer holds, without asking for any card', async () => {
     const project = serveProject([card(1), card(2)]);
-    const { result, client } = renderHookWithProviders(() => useBoardColumnsQuery(PROJECT_ID, VIEW));
+    const { result, client } = renderHookWithProviders(() => useBoardPhasesQuery(PROJECT_ID, VIEW));
     await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 2', 'Card 1']));
 
     project.cards = [card(1)];
@@ -401,20 +408,20 @@ describe('useBoardColumnsQuery', () => {
     expect(result.current.data?.boardTotal).toBe(1);
   });
 
-  it('lists a column deeper by downloading only the cards past the ones it holds', async () => {
+  it('lists a phase deeper by downloading only the cards past the ones it holds', async () => {
     const project = serveProject(Array.from({ length: 60 }, (_, index) => card(index + 1)));
     const { result, rerender } = renderHookWithProviders(
-      (windows: WorkItemColumnsRequest['windows']) => useBoardColumnsQuery(PROJECT_ID, { ...VIEW, windows }),
+      (windows: BoardPhasesRequest['windows']) => useBoardPhasesQuery(PROJECT_ID, { ...VIEW, windows }),
       { initialProps: VIEW.windows },
     );
-    await waitFor(() => expect(column(result.current.data, 'execute')).toMatchObject({ total: 60 }));
-    expect(column(result.current.data, 'execute')?.ids).toHaveLength(50);
+    await waitFor(() => expect(listed(result.current.data, 'execute')).toMatchObject({ total: 60 }));
+    expect(listed(result.current.data, 'execute')?.ids).toHaveLength(50);
 
     rerender({ execute: 100 });
-    // The column keeps its cards while the deeper listing loads.
-    expect(column(result.current.data, 'execute')?.ids).toHaveLength(50);
+    // The phase keeps its cards while the deeper listing loads.
+    expect(listed(result.current.data, 'execute')?.ids).toHaveLength(50);
 
-    await waitFor(() => expect(column(result.current.data, 'execute')?.ids).toHaveLength(60));
+    await waitFor(() => expect(listed(result.current.data, 'execute')?.ids).toHaveLength(60));
     expect(project.listings.at(-1)?.getAll('window')).toEqual(['execute:100']);
     expect(project.listings.at(-1)?.has('cards')).toBe(false);
     expect(project.cardReads).toHaveLength(1);
@@ -424,7 +431,7 @@ describe('useBoardColumnsQuery', () => {
   it('asks the server for another view of a board it holds, and downloads no card it already has', async () => {
     const project = serveProject([card(1, 'Fix login'), card(2, 'Ship billing')]);
     const { result, rerender } = renderHookWithProviders(
-      (q: string) => useBoardColumnsQuery(PROJECT_ID, { ...VIEW, q }),
+      (q: string) => useBoardPhasesQuery(PROJECT_ID, { ...VIEW, q }),
       { initialProps: '' },
     );
     await waitFor(() => expect(titles(result.current.data)).toEqual(['Ship billing', 'Fix login']));
@@ -437,13 +444,15 @@ describe('useBoardColumnsQuery', () => {
     expect(result.current.data).toMatchObject({ matchingTotal: 1, boardTotal: 2 });
   });
 
-  it('keeps the open card listed when newer cards push it past the ones its column lists, and reads nothing to open it', async () => {
+  it('keeps the open card when newer cards push it past the ones its phase lists, without listing the phase down to it', async () => {
     const project = serveProject(Array.from({ length: 50 }, (_, index) => card(index + 1)));
     const { result, rerender, client } = renderHookWithProviders(
-      (openCard: string | undefined) => useBoardColumnsQuery(PROJECT_ID, VIEW, openCard),
+      (openCard: string | undefined) => useBoardPhasesQuery(PROJECT_ID, VIEW, openCard),
       { initialProps: undefined },
     );
-    await waitFor(() => expect(column(result.current.data, 'execute')?.ids.at(-1)).toBe(cardId(1)));
+    await waitFor(() => expect(listed(result.current.data, 'execute')?.ids.at(-1)).toBe(cardId(1)));
+    const held = () => result.current.data?.workItems.find(item => item.id === cardId(1));
+    const opened = held();
 
     rerender(cardId(1));
     expect(project.listings).toHaveLength(1);
@@ -451,17 +460,51 @@ describe('useBoardColumnsQuery', () => {
     project.cards = [...project.cards, card(51), card(52)];
     await act(() => refresh(client));
 
-    await waitFor(() => expect(column(result.current.data, 'execute')?.total).toBe(52));
+    await waitFor(() => expect(listed(result.current.data, 'execute')?.total).toBe(52));
     expect(project.listings.at(-1)?.get('item')).toBe(cardId(1));
-    expect(column(result.current.data, 'execute')?.ids.at(-1)).toBe(cardId(1));
+    // The phase lists its first cards, and the answer says apart that it holds the open one.
+    expect(listed(result.current.data, 'execute')?.ids).toHaveLength(50);
+    expect(listed(result.current.data, 'execute')?.ids).not.toContain(cardId(1));
+    expect(result.current.data?.asked).toEqual({ id: cardId(1), phases: ['execute'] });
+    expect(held()).toBe(opened);
+    expect(project.cardReads.map(ids => ids.toSorted())).toEqual([[cardId(51), cardId(52)]]);
 
-    // Closed, the card is listed like any other: the column goes back to its first cards.
+    // Closed, the card is listed like any other: the board lets go of it.
     rerender(undefined);
     await act(() => refresh(client));
 
-    await waitFor(() => expect(column(result.current.data, 'execute')?.ids).toHaveLength(50));
+    await waitFor(() => expect(result.current.data?.asked).toBeUndefined());
     expect(project.listings.at(-1)?.has('item')).toBe(false);
-    expect(column(result.current.data, 'execute')?.ids).not.toContain(cardId(1));
+    expect(held()).toBeUndefined();
+  });
+
+  it('reads a linked card deep in its phase with the first cards of the board, not with the cards above it', async () => {
+    const project = serveProject(Array.from({ length: 120 }, (_, index) => card(index + 1)));
+    const { result } = renderHookWithProviders(() => useBoardPhasesQuery(PROJECT_ID, { ...VIEW, item: cardId(1) }));
+
+    await waitFor(() => expect(result.current.data?.asked).toEqual({ id: cardId(1), phases: ['execute'] }));
+    expect(project.listings.map(asked => [asked.get('item'), asked.get('cards')])).toEqual([[cardId(1), 'true']]);
+    expect(project.cardReads).toEqual([]);
+    expect(listed(result.current.data, 'execute')).toMatchObject({ total: 120 });
+    expect(listed(result.current.data, 'execute')?.ids).toHaveLength(50);
+    // Fifty listed cards and the linked one: the sixty-nine cards between them stay on the server.
+    expect(result.current.data?.workItems).toHaveLength(51);
+    expect(result.current.data?.workItems.at(-1)?.title).toBe('Card 1');
+  });
+
+  it('reads the body of a card asked for on a board it holds, when it does not hold that card', async () => {
+    const project = serveProject(Array.from({ length: 120 }, (_, index) => card(index + 1)));
+    const { result, rerender } = renderHookWithProviders(
+      (item: string | undefined) => useBoardPhasesQuery(PROJECT_ID, { ...VIEW, ...(item ? { item } : {}) }),
+      { initialProps: undefined },
+    );
+    await waitFor(() => expect(listed(result.current.data, 'execute')?.ids).toHaveLength(50));
+
+    rerender(cardId(1));
+
+    await waitFor(() => expect(result.current.data?.asked).toEqual({ id: cardId(1), phases: ['execute'] }));
+    expect(project.cardReads).toEqual([[cardId(1)]]);
+    expect(result.current.data?.workItems.find(item => item.id === cardId(1))?.title).toBe('Card 1');
   });
 
   it('keeps a change the server has not answered through a refresh, and drops it once the server refuses', async () => {
@@ -477,7 +520,7 @@ describe('useBoardColumnsQuery', () => {
       }),
     );
     const { result, client } = renderHookWithProviders(() => ({
-      board: useBoardColumnsQuery(PROJECT_ID, VIEW),
+      board: useBoardPhasesQuery(PROJECT_ID, VIEW),
       update: useUpdateWorkItemMutation(PROJECT_ID),
     }));
     const parent = () => result.current.board.data?.workItems.find(item => item.id === cardId(1))?.parentWorkItemId;
@@ -493,7 +536,7 @@ describe('useBoardColumnsQuery', () => {
     expect(parent()).toBeNull();
   });
 
-  it('takes a deleted card out of its column and its counts before the server answers', async () => {
+  it('takes a deleted card out of its phase and its counts before the server answers', async () => {
     let finish = () => {};
     const finished = new Promise<void>(resolve => {
       finish = resolve;
@@ -507,7 +550,7 @@ describe('useBoardColumnsQuery', () => {
       }),
     );
     const { result, client } = renderHookWithProviders(() => ({
-      board: useBoardColumnsQuery(PROJECT_ID, VIEW),
+      board: useBoardPhasesQuery(PROJECT_ID, VIEW),
       remove: useDeleteWorkItemMutation(PROJECT_ID),
     }));
     await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Card 2', 'Card 1']));
@@ -516,13 +559,13 @@ describe('useBoardColumnsQuery', () => {
 
     await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Card 2']));
     expect(result.current.board.data).toMatchObject({ matchingTotal: 1, boardTotal: 1 });
-    expect(column(result.current.board.data, 'execute')?.total).toBe(1);
+    expect(listed(result.current.board.data, 'execute')?.total).toBe(1);
     finish();
     await waitForMutationsIdle(client);
     expect(titles(result.current.board.data)).toEqual(['Card 2']);
   });
 
-  it('shows a card created here on top of its column and counts it, without reading the board again', async () => {
+  it('shows a card created here on top of its phase and counts it, without reading the board again', async () => {
     const project = serveProject([card(1)]);
     server.use(
       http.post(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
@@ -530,7 +573,7 @@ describe('useBoardColumnsQuery', () => {
       ),
     );
     const { result, client } = renderHookWithProviders(() => ({
-      board: useBoardColumnsQuery(PROJECT_ID, VIEW),
+      board: useBoardPhasesQuery(PROJECT_ID, VIEW),
       create: useUpsertWorkItemMutation(PROJECT_ID),
     }));
     await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Card 1']));
@@ -538,7 +581,7 @@ describe('useBoardColumnsQuery', () => {
     act(() => result.current.create.mutate({ source: 'manual', sourceKey: null, title: 'New card' }));
     await waitForMutationsIdle(client);
 
-    expect(column(result.current.board.data, 'intake')).toEqual({ stage: 'intake', total: 1, ids: [cardId(2)] });
+    expect(listed(result.current.board.data, 'intake')).toEqual({ phase: 'intake', total: 1, ids: [cardId(2)] });
     expect(result.current.board.data).toMatchObject({ matchingTotal: 2, boardTotal: 2 });
     expect(project.listings).toHaveLength(1);
   });

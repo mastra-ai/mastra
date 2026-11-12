@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { z } from 'zod';
 
 import { isStubbedProjectRead } from '../../../e2e/ui/board-reads';
 import { server } from '../../../e2e/ui/msw-server';
@@ -14,14 +15,24 @@ import { largeBoard, largeCardId } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 const CARDS_PATH = `/web/factory/projects/${FACTORY_ID}/work-items`;
+const PHASES_PATH = `/web/factory/projects/${FACTORY_ID}/boards/work/phases`;
+
+const answeredCardsSchema = z.object({ workItems: z.array(z.unknown()).optional() });
 
 /**
  * Opens the Work board of a project holding `count` cards, in Triage unless `stageOf` says where,
  * none of them with a session, and records what the page then asks the server about its cards.
+ * `link` is the query of the address the board is opened from.
  */
-function openLargeBoard(count: number, stageOf: (index: number) => string = () => 'triage') {
+function openLargeBoard(count: number, stageOf: (index: number) => string = () => 'triage', link = '') {
   const project = { cards: largeBoard(count).map((card, index) => ({ ...card, stages: [stageOf(index)] })) };
-  const asked = { listings: new Array<URLSearchParams>(), cardReads: new Array<string[]>(), wholeBoards: 0 };
+  const asked = {
+    listings: new Array<URLSearchParams>(),
+    cardReads: new Array<string[]>(),
+    wholeBoards: 0,
+    /** How many card bodies the answers to the page carried. */
+    cardsDownloaded: 0,
+  };
   stubWorkBoard();
   server.use(
     http.get(`${TEST_BASE_URL}${CARDS_PATH}`, ({ request }) => {
@@ -37,19 +48,31 @@ function openLargeBoard(count: number, stageOf: (index: number) => string = () =
     // The ambient paged reads ask the stub above what the project holds: the page did not.
     if (request.method !== 'GET' || isStubbedProjectRead(request)) return;
     const url = new URL(request.url);
-    if (url.pathname === `${CARDS_PATH}/columns`) asked.listings.push(url.searchParams);
+    if (url.pathname === PHASES_PATH) asked.listings.push(url.searchParams);
     if (url.pathname !== CARDS_PATH) return;
     if (url.searchParams.has('workItemId')) asked.cardReads.push(url.searchParams.getAll('workItemId'));
     else if (url.search === '') asked.wholeBoards += 1;
   };
+  const countBodies = async ({ request, response }: { request: Request; response: Response }) => {
+    const { pathname } = new URL(request.url);
+    if (isStubbedProjectRead(request) || (pathname !== PHASES_PATH && pathname !== CARDS_PATH)) return;
+    asked.cardsDownloaded += answeredCardsSchema.parse(await response.clone().json()).workItems?.length ?? 0;
+  };
   server.events.on('request:start', record);
-  onTestFinished(() => server.events.removeListener('request:start', record));
+  server.events.on('response:mocked', countBodies);
+  onTestFinished(() => {
+    server.events.removeListener('request:start', record);
+    server.events.removeListener('response:mocked', countBodies);
+  });
 
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
+  const boardPath = `/factories/${FACTORY_ID}/work`;
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`${boardPath}${link}`] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
   /** What a feed frame does to the board. */
   const refresh = () => act(() => client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) }));
-  return { project, asked, refresh };
+  /** Leaves the link for the board's plain address. */
+  const dropLink = () => act(() => router.navigate(boardPath));
+  return { project, asked, refresh, dropLink };
 }
 
 const cardIds = (from: number, to: number) =>
@@ -59,7 +82,7 @@ describe('The board of a large project', () => {
   beforeEach(mockBoardRowLayout);
   afterEach(() => vi.restoreAllMocks());
 
-  it('opens on the count of every card of a column and its first cards only, in one read', async () => {
+  it('opens on the count of every card of a phase and its first cards only, in one read', async () => {
     const { asked } = openLargeBoard(250);
 
     expect(await screen.findByRole('button', { name: 'Triage, 250' })).toBeInTheDocument();
@@ -70,7 +93,7 @@ describe('The board of a large project', () => {
     expect(asked.wholeBoards).toBe(0);
   });
 
-  it('lists a column deeper on demand, and downloads only the cards it does not hold', async () => {
+  it('lists a phase deeper on demand, and downloads only the cards it does not hold', async () => {
     const { asked } = openLargeBoard(250);
     const user = userEvent.setup();
 
@@ -82,20 +105,20 @@ describe('The board of a large project', () => {
     expect(asked.listings.at(-1)?.getAll('window')).toEqual(['triage:100']);
     expect(asked.listings.at(-1)?.has('cards')).toBe(false);
     expect(screen.getByRole('button', { name: 'Triage, 250' })).toBeInTheDocument();
-    // The cards just downloaded are the rows the column now lists below its first fifty.
+    // The cards just downloaded are the rows the phase now lists below its first fifty.
     fireEvent.scroll(boardViewport(), { target: { scrollTop: 60 * 48 } });
     expect(await screen.findByRole('article', { name: 'Large task 189' })).toBeInTheDocument();
     expect(asked.wholeBoards).toBe(0);
   });
 
-  it('lists a second column deeper while the first one is still being read', async () => {
+  it('lists a second phase deeper while the first one is still being read', async () => {
     let answerTriage = () => {};
     const triageHeld = new Promise<void>(resolve => {
       answerTriage = resolve;
     });
     const { asked } = openLargeBoard(240, index => (index < 120 ? 'triage' : 'planning'));
     server.use(
-      http.get(`${TEST_BASE_URL}${CARDS_PATH}/columns`, async ({ request }) => {
+      http.get(`${TEST_BASE_URL}${PHASES_PATH}`, async ({ request }) => {
         const windows = new URL(request.url).searchParams.getAll('window');
         // Triage's deeper window alone is the read to hold; the ambient read answers every one.
         if (windows.length === 1) await triageHeld;
@@ -110,12 +133,41 @@ describe('The board of a large project', () => {
     await user.click(screen.getByRole('button', { name: 'Load more cards' }));
     answerTriage();
 
-    // Each column listed its newest fifty: the fifty-first of each follows.
+    // Each phase listed its newest fifty: the fifty-first of each follows.
     await waitFor(() => expect(asked.cardReads).not.toEqual([]));
     fireEvent.scroll(boardViewport(), { target: { scrollTop: 50 * 48 } });
     expect(await screen.findByRole('article', { name: 'Large task 69' })).toBeInTheDocument();
     expect(await screen.findByRole('article', { name: 'Large task 189' })).toBeInTheDocument();
     expect(asked.listings.at(-1)?.getAll('window').toSorted()).toEqual(['planning:100', 'triage:100']);
+  });
+
+  it('opens a link to the last card of a long phase on that card and the first cards, not the cards above it', async () => {
+    const linked = largeCardId(0);
+    const { asked } = openLargeBoard(2000, undefined, `?item=${linked}`);
+
+    expect(await screen.findByRole('article', { name: 'Large task 0' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Triage, 2000' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Large task 1999' })).toBeInTheDocument();
+    // The phase is not listed down to the card: the rest of it is still to load.
+    expect(screen.getByRole('button', { name: 'Load more cards' })).toBeInTheDocument();
+    expect(asked.listings.map(listing => [listing.get('item'), listing.getAll('window')])).toEqual([[linked, []]]);
+    expect(asked.cardReads).toEqual([]);
+    // The newest fifty, and the linked card.
+    await waitFor(() => expect(asked.cardsDownloaded).toBe(51));
+    expect(asked.wholeBoards).toBe(0);
+  });
+
+  it('asks for the linked card as long as the address names it, and no longer', async () => {
+    const linked = largeCardId(0);
+    const { asked, dropLink } = openLargeBoard(250, undefined, `?item=${linked}`);
+    expect(await screen.findByRole('article', { name: 'Large task 0' })).toBeInTheDocument();
+
+    await dropLink();
+
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'Large task 0' })).not.toBeInTheDocument());
+    expect(asked.listings.map(listing => listing.get('item'))).toEqual([linked, null]);
+    expect(screen.getByRole('article', { name: 'Large task 249' })).toBeInTheDocument();
+    expect(asked.cardReads).toEqual([]);
   });
 
   it('searches the whole project once typing stops, and finds a card it had not loaded', async () => {

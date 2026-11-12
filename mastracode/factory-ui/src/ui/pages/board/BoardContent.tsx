@@ -13,15 +13,15 @@ import { hasBoardSourceFilters } from '../../domains/factory/boardSourceFilters'
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import {
-  useBoardColumnsQuery,
+  useBoardPhasesQuery,
   useSidebarWorkItemsQuery,
   useWorkItemFilterOptionsQuery,
 } from '../../../hooks/useWorkItems';
 import { candidateMatchesView } from '../../domains/factory/boardCandidates';
 import type { BoardCandidate } from '../../domains/factory/boardCandidates';
-import { shownBoardColumns } from '../../domains/factory/boardColumns';
-import type { ShownBoardColumn } from '../../domains/factory/boardColumns';
-import { boardColumnsRequest, deeperColumnWindow, isCardId } from '../../domains/factory/boardColumnsRequest';
+import { shownBoardPhases } from '../../domains/factory/boardPhases';
+import type { ShownPhase } from '../../domains/factory/boardPhases';
+import { boardPhasesRequest, deeperPhaseWindow, isCardId } from '../../domains/factory/boardPhasesRequest';
 import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
@@ -67,7 +67,7 @@ const NO_SESSIONS: readonly string[] = [];
 const NO_ACTORS: string[] = [];
 const NO_PEOPLE: readonly ProviderPerson[] = [];
 const NO_LABELS: readonly string[] = [];
-const NO_COLUMN: ShownBoardColumn = { cards: NO_CARDS, total: 0, listedAll: true };
+const NO_PHASE: ShownPhase = { cards: NO_CARDS, total: 0, listed: 0, listedAll: true };
 
 function countUnfilteredCandidates({
   sourceFiltered,
@@ -123,22 +123,21 @@ export function BoardContent({
   // The server is asked once typing pauses. Clearing the box goes back to the empty search at once.
   const settledSearch = useDebouncedValue(boardView.search, 150);
   const storedFilters = withPeopleUnfolded(filters, personId);
-  const [linkedItemId, setLinkedItemId] = useState(targetItemId);
-  const view = boardColumnsRequest({
+  const view = boardPhasesRequest({
     board: kind,
     sort,
     search: boardView.search.trim() === '' ? '' : settledSearch,
     filters: storedFilters,
     windows: NO_WINDOWS,
-    item: linkedItemId,
+    item: targetItemId,
   });
-  // How deep each column was scrolled is forgotten when the view changes: its columns start over.
+  // How deep each phase was scrolled is forgotten when the view changes: its phases start over.
   const viewKey = JSON.stringify([view.sort, view.q, view.filters]);
   const [deepened, setDeepened] = useState({ viewKey, windows: NO_WINDOWS });
   const windows = deepened.viewKey === viewKey ? deepened.windows : NO_WINDOWS;
   const openCard = useOpenCardState();
-  const columns = useBoardColumnsQuery(factoryProjectId, { ...view, windows }, keyedCardId(openCard.openKey));
-  const snapshot = columns.data;
+  const phasesRead = useBoardPhasesQuery(factoryProjectId, { ...view, windows }, keyedCardId(openCard.openKey));
+  const snapshot = phasesRead.data;
   const cards = snapshot?.workItems ?? NO_CARDS;
   const sessionCards = useSidebarWorkItemsQuery(factoryProjectId).data?.workItems ?? NO_CARDS;
 
@@ -223,21 +222,19 @@ export function BoardContent({
   const filteredCandidates = intake.candidates.filter(candidate =>
     candidateMatchesView(candidate, storedFilters, searchedWords),
   );
-  const shownColumns = useMemo(() => shownBoardColumns(snapshot, definition.phases), [snapshot, definition.phases]);
+  const shownPhases = useMemo(() => shownBoardPhases(snapshot, definition.phases), [snapshot, definition.phases]);
   const targetStages = targetItemId
     ? stages
-        .filter(stage => shownColumns.get(stage.id)?.cards.some(item => item.id === targetItemId))
+        .filter(stage => shownPhases.get(stage.id)?.cards.some(item => item.id === targetItemId))
         .map(stage => stage.id)
     : [];
   const targetListed = targetStages.length > 0;
-  // A link to a card the columns do not list: ask the server to list its column down to it.
-  const viewAnswered = columns.data !== undefined && !columns.isPlaceholderData;
-  if (targetItemId && targetItemId !== linkedItemId && viewAnswered && !targetListed) setLinkedItemId(targetItemId);
-  const targetReady = !columns.isPending && (!targetItemId || targetListed);
+  const viewAnswered = phasesRead.data !== undefined && !phasesRead.isPlaceholderData;
+  const targetReady = !phasesRead.isPending && (!targetItemId || targetListed);
   const loadingStages = boardLoadingStages({
     board: definition,
     stages,
-    itemsPending: columns.isPending,
+    itemsPending: phasesRead.isPending,
     intakePending: intake.isPending,
     triagePending: intake.isTriagePending,
   });
@@ -250,11 +247,11 @@ export function BoardContent({
     targetItemId && targetListed ? { itemId: targetItemId, stages: targetStages } : undefined,
   );
 
-  if (columns.isError) {
+  if (phasesRead.isError) {
     return (
       <div className="p-4">
         <Notice variant="destructive" className="max-w-xl">
-          {columns.error instanceof Error ? columns.error.message : 'Failed to load the board'}
+          {phasesRead.error instanceof Error ? phasesRead.error.message : 'Failed to load the board'}
         </Notice>
       </div>
     );
@@ -270,23 +267,23 @@ export function BoardContent({
   });
   const unfilteredTaskCount = (snapshot?.boardTotal ?? 0) + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters) || view.q !== '';
-  // The columns of the view before a change stay up until the new ones answer: they say nothing of it.
+  // The phases of the view before a change stay up until the new ones answer: they say nothing of it.
   const filtersExcludeAll = viewAnswered && anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
   const intakeSetup = intake.fed ? undefined : intake.unrouted ? 'route' : 'source';
 
   const stageViews = stages.map(stage => {
     const isInitialPhase = stage.id === definition.initialPhase;
     const loading = loadingStages.has(stage.id);
-    const column = shownColumns.get(stage.id) ?? NO_COLUMN;
+    const shown = shownPhases.get(stage.id) ?? NO_PHASE;
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
-    const taskCount = column.total + stageCandidates.length;
+    const taskCount = shown.total + stageCandidates.length;
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
     // No card is created by hand on the retired Review board: its cards come from pull requests.
     const canCreate =
       !pullRequestsOnly &&
-      !columns.isPending &&
+      !phasesRead.isPending &&
       stage.kind !== 'terminal' &&
       (composer.stage === undefined || composerOpen);
     const stageIntakeSetup = isInitialPhase ? intakeSetup : undefined;
@@ -327,7 +324,7 @@ export function BoardContent({
           loading={loading}
           taskCount={taskCount}
           // The feed's notices and paging follow the candidates, after the column's last card.
-          feed={column.listedAll ? columnFeed : undefined}
+          feed={shown.listedAll ? columnFeed : undefined}
           intakeSource={intake.active}
           intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
@@ -354,7 +351,7 @@ export function BoardContent({
           }
         >
           <VirtualBoardItems
-            items={column.cards}
+            items={shown.cards}
             itemKey={item => workItemCardKey(stage.id, item.id)}
             layout={layout}
             pinnedKey={targetItemId && workItemCardKey(stage.id, targetItemId)}
@@ -398,11 +395,11 @@ export function BoardContent({
             )}
           />
           <LoadMoreSentinel
-            hasNextPage={!column.listedAll}
-            // A column waits for its own deeper window, and every column for a view not read yet.
-            // Another column's end coming into view meanwhile lists that one deeper too.
+            hasNextPage={!shown.listedAll}
+            // A phase waits for its own deeper window, and every phase for a view not read yet.
+            // Another phase's end coming into view meanwhile lists that one deeper too.
             isFetchingNextPage={
-              columns.isPlaceholderData && (windows === NO_WINDOWS || (windows[stage.id] ?? 0) > column.cards.length)
+              phasesRead.isPlaceholderData && (windows === NO_WINDOWS || (windows[stage.id] ?? 0) > shown.listed)
             }
             onLoadMore={() =>
               // From the windows as they stand: two ends coming into view together both list deeper.
@@ -410,17 +407,17 @@ export function BoardContent({
                 viewKey,
                 windows: {
                   ...(current.viewKey === viewKey ? current.windows : NO_WINDOWS),
-                  [stage.id]: deeperColumnWindow(column.cards.length),
+                  [stage.id]: deeperPhaseWindow(shown.listed),
                 },
               }))
             }
             label="Load more cards"
             loadingIndicator={<BoardItemsSkeleton label="Loading more cards" rows={1} layout={layout} />}
           />
-          {column.listedAll && (
+          {shown.listedAll && (
             <BoardStageCandidates
               candidates={stageCandidates}
-              afterWorkItems={column.cards.length > 0}
+              afterWorkItems={shown.cards.length > 0}
               layout={layout}
               projectRepositoryId={candidate =>
                 cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)

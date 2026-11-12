@@ -13,7 +13,7 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, cardWriteMutationKey, queryKeys } from '../api/keys';
-import type { WorkItemColumnsRequest } from '../api/types';
+import type { BoardPhasesRequest } from '../api/types';
 import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
 import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import { itemBoard } from '../ui/domains/factory/boardStages';
@@ -21,7 +21,7 @@ import {
   createWorkItem,
   deleteWorkItem,
   fetchWorkItemActivity,
-  fetchWorkItemColumns,
+  fetchBoardPhases,
   fetchWorkItemFilterOptions,
   fetchWorkItemStarters,
   listWorkItems,
@@ -80,19 +80,24 @@ export function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: stri
   });
 }
 
-/** A column of a board view: the cards it lists, in the view's order, of the `total` that match. */
-export interface BoardColumn {
-  stage: string;
+/** A phase of a board view: the cards it lists, in the view's order, of the `total` that match. */
+export interface ListedPhase {
+  phase: string;
   total: number;
   ids: string[];
 }
 
 /**
- * One view of a board as of one read: which cards each column lists, how many match, and in
- * `workItems` the body of every listed card and of the cards related to them.
+ * One view of a board as of one read: which cards each phase lists, how many match, and in
+ * `workItems` the body of every listed card, of the asked card and of the cards related to them.
  */
-export interface BoardColumnsSnapshot extends BoardSnapshot {
-  columns: BoardColumn[];
+export interface BoardPhasesSnapshot extends BoardSnapshot {
+  phases: ListedPhase[];
+  /**
+   * The card the read asked for, and the phases of the view that hold it, listed there or deeper.
+   * Absent when the board does not hold the card; in no phase when the view leaves it out.
+   */
+  asked?: { id: string; phases: string[] };
   /** How many of the board's cards match the view's search and filters. */
   matchingTotal: number;
   /** How many cards the board holds, whatever the view. */
@@ -113,81 +118,86 @@ async function readCards(baseUrl: string, factoryProjectId: string, ids: string[
 }
 
 /**
- * The card the tab holds for each id of `stamps`, from whichever read cached it. Where several
- * reads hold a card, the one last changed when its stamp says wins.
+ * The card the tab holds for each id of `versions`, from whichever read cached it. Where several
+ * reads hold a card, the one whose body is the version named wins.
  */
-function heldCards(client: QueryClient, factoryProjectId: string, stamps: ReadonlyMap<string, string | null>) {
+function heldCards(client: QueryClient, factoryProjectId: string, versions: ReadonlyMap<string, string>) {
   const held = new Map<string, WorkItem>();
   const snapshots = client.getQueriesData<BoardSnapshot>({ queryKey: queryKeys.workItems(factoryProjectId) });
   for (const [, snapshot] of snapshots) {
     for (const card of snapshot?.workItems ?? []) {
-      const stamp = stamps.get(card.id);
-      if (stamp === undefined) continue;
+      const version = versions.get(card.id);
+      if (version === undefined) continue;
       const holder = held.get(card.id);
-      if (!holder || ((card.changedAt ?? null) === stamp && (holder.changedAt ?? null) !== stamp)) {
-        held.set(card.id, card);
-      }
+      if (!holder || (card.version === version && holder.version !== version)) held.set(card.id, card);
     }
   }
   return held;
 }
 
 /**
- * Reads one view of a board. The server names the cards of each column with the moment each last
- * changed; only the cards the tab does not hold as of that moment are downloaded, by id. The first
- * read of a board holds none, so it asks for the bodies with the listing. A card the read leaves
- * equal stays the object held, so nothing showing it renders again, and a read that changes
- * nothing answers the snapshot held. `openCard` is listed in place of the card the view names.
+ * Reads one view of a board. The server names the cards of each phase with the version of the
+ * body it would send for each; only the cards the tab does not hold at that version are
+ * downloaded, by id. The first read of a board holds none, so it asks for the bodies with the
+ * listing. A card the read leaves equal stays the object held, so nothing showing it renders
+ * again, and a read that changes nothing answers the snapshot held. `openCard` is asked for in
+ * place of the card the view names: the answer says which phases hold it, however deep.
  */
-async function readBoardColumns(
+async function readBoardPhases(
   baseUrl: string,
   factoryProjectId: string,
-  request: WorkItemColumnsRequest,
+  request: BoardPhasesRequest,
   openCard: string | undefined,
   signal: AbortSignal,
   client: QueryClient,
-): Promise<BoardColumnsSnapshot> {
+): Promise<BoardPhasesSnapshot> {
   const boardHeld = client
-    .getQueriesData<BoardColumnsSnapshot>({ queryKey: queryKeys.boardColumns(factoryProjectId, request.board) })
+    .getQueriesData<BoardPhasesSnapshot>({ queryKey: queryKeys.boardPhases(factoryProjectId, request.board) })
     .some(([, snapshot]) => snapshot !== undefined);
   const asked = openCard ? { ...request, item: openCard } : request;
-  const answer = await fetchWorkItemColumns(baseUrl, factoryProjectId, asked, !boardHeld, signal);
-  const stamps = new Map(
-    [...answer.columns.flatMap(column => column.cards), ...answer.related].map(card => [card.id, card.changedAt]),
-  );
+  const answer = await fetchBoardPhases(baseUrl, factoryProjectId, asked, !boardHeld, signal);
+  const named = [
+    ...answer.phases.flatMap(phase => phase.cards),
+    ...(answer.item ? [answer.item] : []),
+    ...answer.related,
+  ];
+  const versions = new Map(named.map(card => [card.id, card.version]));
   const read = new Map(answer.workItems?.map(card => [card.id, card]));
-  const heldAtAnswer = heldCards(client, factoryProjectId, stamps);
-  const stale = [...stamps].flatMap(([id, stamp]) => {
-    const held = heldAtAnswer.get(id);
-    return read.has(id) || (held && (held.changedAt ?? null) === stamp) ? [] : [id];
-  });
+  const heldAtAnswer = heldCards(client, factoryProjectId, versions);
+  const stale = [...versions].flatMap(([id, version]) =>
+    read.has(id) || heldAtAnswer.get(id)?.version === version ? [] : [id],
+  );
   if (stale.length > 0) {
     for (const card of await readCards(baseUrl, factoryProjectId, stale, signal)) {
-      if (stamps.has(card.id)) read.set(card.id, card);
+      if (versions.has(card.id)) read.set(card.id, card);
     }
   }
   // Read again: the cards held carry the changes made here while the server answered.
-  const held = heldCards(client, factoryProjectId, stamps);
+  const held = heldCards(client, factoryProjectId, versions);
   const cards = new Map<string, WorkItem>();
-  for (const id of stamps.keys()) {
+  for (const id of versions.keys()) {
     const body = read.get(id);
     const card = body ? replaceEqualDeep(held.get(id), body) : held.get(id);
-    // A card deleted since the listing has no body: no column shows it.
+    // A card deleted since the listing has no body: no phase shows it.
     if (card) cards.set(id, card);
   }
+  const answered = answer.item;
   const listing = {
-    columns: answer.columns.map(column => ({
-      stage: column.stage,
-      total: column.total,
-      ids: column.cards.flatMap(({ id }) => (cards.has(id) ? [id] : [])),
+    phases: answer.phases.map(listed => ({
+      phase: listed.phase,
+      total: listed.total,
+      ids: listed.cards.flatMap(({ id }) => (cards.has(id) ? [id] : [])),
     })),
+    ...(answered && cards.has(answered.id)
+      ? { asked: { id: answered.id, phases: answered.places.map(place => place.phase) } }
+      : {}),
     matchingTotal: answer.matchingTotal,
     boardTotal: answer.boardTotal,
     runningSessionIds: answer.runningSessionIds,
     parkedSessionIds: answer.parkedSessionIds,
   };
   const workItems = [...cards.values()];
-  const previous = client.getQueryData<BoardColumnsSnapshot>(queryKeys.workItemColumns(factoryProjectId, request));
+  const previous = client.getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));
   if (!previous) return { ...listing, workItems };
   const { workItems: previousCards, ...previousListing } = previous;
   const sameCards =
@@ -198,25 +208,25 @@ async function readBoardColumns(
 }
 
 /**
- * One view of a board: its columns, and the cards they list. `openCard` is the card whose details
- * the page holds open: every read lists it however deep its column holds it, so a refresh or a new
- * order never takes it off the page. It stays out of the key, because the view is the same with a
- * card open: opening or closing one reads nothing.
+ * One view of a board: its phases, and the cards they list. `openCard` is the card whose details
+ * the page holds open: every read asks for it, so a refresh or a new order never takes it off the
+ * page, however deep its phase holds it. It stays out of the key, because the view is the same
+ * with a card open: opening or closing one reads nothing.
  */
-export function boardColumnsQueryOptions(
+export function boardPhasesQueryOptions(
   baseUrl: string,
   factoryProjectId: string | undefined,
-  request: WorkItemColumnsRequest,
+  request: BoardPhasesRequest,
   openCard?: string,
 ) {
   return queryOptions({
-    queryKey: queryKeys.workItemColumns(factoryProjectId, request),
+    queryKey: queryKeys.boardPhasesView(factoryProjectId, request),
     queryFn: factoryProjectId
-      ? ({ signal, client }) => readBoardColumns(baseUrl, factoryProjectId, request, openCard, signal, client)
+      ? ({ signal, client }) => readBoardPhases(baseUrl, factoryProjectId, request, openCard, signal, client)
       : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
-    // `readBoardColumns` shares cards by id. React Query shares by index, which would rebuild
+    // `readBoardPhases` shares cards by id. React Query shares by index, which would rebuild
     // every card after an added or removed one.
     structuralSharing: false,
   });
@@ -304,15 +314,15 @@ export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined) {
   return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
 }
 
-/** One view of a board. Changing the view keeps the columns shown until the new ones answer. */
-export function useBoardColumnsQuery(
+/** One view of a board. Changing the view keeps the phases shown until the new ones answer. */
+export function useBoardPhasesQuery(
   factoryProjectId: string | undefined,
-  request: WorkItemColumnsRequest,
+  request: BoardPhasesRequest,
   openCard?: string,
 ) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    ...boardColumnsQueryOptions(baseUrl, factoryProjectId, request, openCard),
+    ...boardPhasesQueryOptions(baseUrl, factoryProjectId, request, openCard),
     placeholderData: keepPreviousData,
   });
 }
@@ -323,37 +333,37 @@ export function useWorkItemFilterOptionsQuery(factoryProjectId: string | undefin
   return useQuery(workItemFilterOptionsQueryOptions(baseUrl, factoryProjectId));
 }
 
-/** The snapshot listing `item` on top of the columns it sits in, where it does not list it yet. */
-function withCardOnTop(snapshot: BoardColumnsSnapshot, item: WorkItem): BoardColumnsSnapshot {
-  if (snapshot.columns.some(column => column.ids.includes(item.id))) return snapshot;
-  const sitsInAColumn = snapshot.columns.some(column => item.stages.includes(column.stage));
+/** The snapshot listing `item` on top of the phases it sits in, where it does not list it yet. */
+function withCardOnTop(snapshot: BoardPhasesSnapshot, item: WorkItem): BoardPhasesSnapshot {
+  if (snapshot.phases.some(listed => listed.ids.includes(item.id))) return snapshot;
+  const sitsInAPhase = snapshot.phases.some(listed => item.stages.includes(listed.phase));
   return {
     ...snapshot,
     workItems: [item, ...snapshot.workItems.filter(card => card.id !== item.id)],
-    // A card in no column of its board shows in the first one, where cards start.
-    columns: snapshot.columns.map((column, index) =>
-      (sitsInAColumn ? item.stages.includes(column.stage) : index === 0)
-        ? { ...column, ids: [item.id, ...column.ids], total: column.total + 1 }
-        : column,
+    // A card in no phase of its board shows in the first one, where cards start.
+    phases: snapshot.phases.map((listed, index) =>
+      (sitsInAPhase ? item.stages.includes(listed.phase) : index === 0)
+        ? { ...listed, ids: [item.id, ...listed.ids], total: listed.total + 1 }
+        : listed,
     ),
     matchingTotal: snapshot.matchingTotal + 1,
     boardTotal: snapshot.boardTotal + 1,
   };
 }
 
-/** The cached cards without the card `id`, which the columns that listed it no longer count. */
-function withoutCard(cached: BoardSnapshot | BoardColumnsSnapshot, id: string): BoardSnapshot | BoardColumnsSnapshot {
+/** The cached cards without the card `id`, which the phases that listed it no longer count. */
+function withoutCard(cached: BoardSnapshot | BoardPhasesSnapshot, id: string): BoardSnapshot | BoardPhasesSnapshot {
   const workItems = cached.workItems.filter(card => card.id !== id);
-  if (!('columns' in cached) || !cached.columns.some(column => column.ids.includes(id))) {
+  if (!('phases' in cached) || !cached.phases.some(listed => listed.ids.includes(id))) {
     return { ...cached, workItems };
   }
   return {
     ...cached,
     workItems,
-    columns: cached.columns.map(column =>
-      column.ids.includes(id)
-        ? { ...column, ids: column.ids.filter(listed => listed !== id), total: column.total - 1 }
-        : column,
+    phases: cached.phases.map(listed =>
+      listed.ids.includes(id)
+        ? { ...listed, ids: listed.ids.filter(other => other !== id), total: listed.total - 1 }
+        : listed,
     ),
     matchingTotal: cached.matchingTotal - 1,
     boardTotal: cached.boardTotal - 1,
@@ -376,8 +386,8 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
       patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards =>
         cards.map(card => (card.id === item.id ? item : card)),
       );
-      queryClient.setQueriesData<BoardColumnsSnapshot>(
-        { queryKey: queryKeys.boardColumns(factoryProjectId, itemBoard(item)) },
+      queryClient.setQueriesData<BoardPhasesSnapshot>(
+        { queryKey: queryKeys.boardPhases(factoryProjectId, itemBoard(item)) },
         snapshot => snapshot && withCardOnTop(snapshot, item),
       );
       // Whoever asked which cards are filed from this one's source learns of it without asking again.
@@ -511,8 +521,8 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
               variables.reenter ?? false,
             ),
             revision: result.revision,
-            // The server changed more of the card than its stage: the next read downloads it whatever its stamp.
-            changedAt: undefined,
+            // The server changed more of the card than its stage: the next read downloads it whatever version it names.
+            version: undefined,
           };
         }),
       );
@@ -563,7 +573,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueriesData<BoardSnapshot>({ queryKey: listKey });
-      queryClient.setQueriesData<BoardSnapshot | BoardColumnsSnapshot>(
+      queryClient.setQueriesData<BoardSnapshot | BoardPhasesSnapshot>(
         { queryKey: listKey },
         cached => cached && withoutCard(cached, id),
       );

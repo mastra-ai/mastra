@@ -21,7 +21,7 @@ import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
 import {
-  boardColumnsQueryOptions,
+  boardPhasesQueryOptions,
   sessionCardsQueryOptions,
   workItemActivityQueryOptions,
   workItemFilterOptionsQueryOptions,
@@ -29,7 +29,7 @@ import {
 } from '../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
-import { boardColumnsRequest } from './domains/factory/boardColumnsRequest';
+import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
 import { boardFiltersFromParams } from './domains/factory/boardFilters';
 import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
 import { BOARD_SORT_QUERY, DEFAULT_BOARD_SORT, isBoardSort } from './domains/factory/boardSort';
@@ -115,7 +115,7 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
   const { searchParams } = new URL(request.url);
   if (!searchParams.has(BOARD_VIEW_QUERY)) {
     const sort = searchParams.get(BOARD_SORT_QUERY);
-    const view = boardColumnsRequest({
+    const view = boardPhasesRequest({
       board: params.boardId ?? DEFAULT_BOARD_ID,
       sort: sort && isBoardSort(sort) ? sort : DEFAULT_BOARD_SORT,
       search: searchParams.get(BOARD_SEARCH_QUERY) ?? '',
@@ -123,7 +123,7 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
       windows: {},
       item: searchParams.get('item') ?? undefined,
     });
-    void queryClient.query(boardColumnsQueryOptions(api.baseUrl, factoryId, view)).catch(noop);
+    void queryClient.query(boardPhasesQueryOptions(api.baseUrl, factoryId, view)).catch(noop);
   }
   void queryClient.query(workItemFilterOptionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   whenFactoryListed(services, factoryId, factory => {

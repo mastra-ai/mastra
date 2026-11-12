@@ -1,7 +1,7 @@
-import type { WorkItemColumnsSort } from '../../../api/types';
+import type { BoardPhasesSort } from '../../../api/types';
 
-/** The orders the server lists a column in. */
-export type BoardSort = WorkItemColumnsSort;
+/** The orders the server lists a phase in. */
+export type BoardSort = BoardPhasesSort;
 export const BOARD_SORTS = [
   'recent',
   'recent-mine',

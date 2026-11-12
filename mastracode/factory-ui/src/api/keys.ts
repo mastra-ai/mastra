@@ -1,4 +1,4 @@
-import type { WorkItemColumnsRequest, WorkspaceChangesScope } from './types';
+import type { BoardPhasesRequest, WorkspaceChangesScope } from './types';
 
 /**
  * Stable, scoped React Query keys for the settings API.
@@ -116,11 +116,11 @@ export const queryKeys = {
   workItemsFiledFrom: (factoryProjectId: string | undefined, sources: readonly string[]) =>
     [...queryKeys.workItemsFiledFromAny(factoryProjectId), sources] as const,
   /** Every view of one board the tab holds. */
-  boardColumns: (factoryProjectId: string | undefined, board: string) =>
-    [...queryKeys.workItems(factoryProjectId), 'columns', board] as const,
-  /** One view of a board; `windows` is how deep each of its columns is listed. */
-  workItemColumns: (factoryProjectId: string | undefined, { board, windows, ...view }: WorkItemColumnsRequest) =>
-    [...queryKeys.boardColumns(factoryProjectId, board), view, windows] as const,
+  boardPhases: (factoryProjectId: string | undefined, board: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'phases', board] as const,
+  /** One view of a board; `windows` is how deep each of its phases is listed. */
+  boardPhasesView: (factoryProjectId: string | undefined, { board, windows, ...view }: BoardPhasesRequest) =>
+    [...queryKeys.boardPhases(factoryProjectId, board), view, windows] as const,
   // Outside the board's key: these hold counts and dates, not cards, so a rewrite of the cached cards must not reach them.
   boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
   workItemStarters: (factoryProjectId: string | undefined) =>

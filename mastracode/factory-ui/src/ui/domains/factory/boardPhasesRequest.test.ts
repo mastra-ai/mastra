@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardColumnsRequest, deeperColumnWindow } from './boardColumnsRequest';
+import { boardPhasesRequest, deeperPhaseWindow } from './boardPhasesRequest';
 import { boardFiltersFromParams } from './boardFilters';
 
 const NO_FILTERS = boardFiltersFromParams(new URLSearchParams(), true);
 const CARD_ID = '3f2c1a9e-5b7d-4c1e-9a2f-0d6e8b4c7a15';
 
-function request(overrides: Partial<Parameters<typeof boardColumnsRequest>[0]> = {}) {
-  return boardColumnsRequest({
+function request(overrides: Partial<Parameters<typeof boardPhasesRequest>[0]> = {}) {
+  return boardPhasesRequest({
     board: 'work',
     sort: 'recent',
     search: '',
@@ -18,7 +18,7 @@ function request(overrides: Partial<Parameters<typeof boardColumnsRequest>[0]> =
   });
 }
 
-describe('boardColumnsRequest', () => {
+describe('boardPhasesRequest', () => {
   it('asks the same thing whatever order the filters were picked in, so one view is one cached read', () => {
     const first = request({
       filters: boardFiltersFromParams(new URLSearchParams('label=p1&label=bug&author=github%3Aada'), true),
@@ -47,15 +47,15 @@ describe('boardColumnsRequest', () => {
   });
 });
 
-describe('deeperColumnWindow', () => {
+describe('deeperPhaseWindow', () => {
   it('doubles what a column lists, starting from the first page', () => {
-    expect(deeperColumnWindow(50)).toBe(100);
-    expect(deeperColumnWindow(100)).toBe(200);
+    expect(deeperPhaseWindow(50)).toBe(100);
+    expect(deeperPhaseWindow(100)).toBe(200);
     // A column that lost cards since its read still deepens past its first page.
-    expect(deeperColumnWindow(48)).toBe(100);
+    expect(deeperPhaseWindow(48)).toBe(100);
   });
 
   it('never asks deeper than the server accepts', () => {
-    expect(deeperColumnWindow(900_000)).toBe(999_999);
+    expect(deeperPhaseWindow(900_000)).toBe(999_999);
   });
 });
