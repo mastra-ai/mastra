@@ -4,11 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { collectToolGroups } from '../tool-groups';
 import { WORKSPACE_TOOLS } from '../workspace-tool-constants';
 
-const call = (toolCallId: string, toolName = 'view'): ToolInvocationPart =>
-  ({
-    type: 'tool-invocation',
-    toolInvocation: { toolName, toolCallId, state: 'result', args: {}, result: {} },
-  }) as never;
+const invocation = (toolCallId: string, toolName: string, result: unknown): ToolInvocationPart => ({
+  type: 'tool-invocation',
+  toolInvocation: { toolName, toolCallId, state: 'result', args: {}, result },
+});
+
+const call = (toolCallId: string, toolName = 'view') => invocation(toolCallId, toolName, {});
 
 const groupKeys = (parts: MessageFactoryPart[], context = {}) => {
   const { byFirstKey, memberKeys } = collectToolGroups(parts, context);
@@ -50,13 +51,8 @@ describe('collectToolGroups', () => {
     });
 
     it('keeps background work out of the fold', () => {
-      const started = (toolCallId: string, toolName: string, result: string): ToolInvocationPart =>
-        ({
-          type: 'tool-invocation',
-          toolInvocation: { toolName, toolCallId, state: 'result', args: {}, result },
-        }) as never;
-      const process = started('b', WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, 'Started background process (PID: 42)');
-      const task = started('b', 'report', 'Background task started with id bg-1');
+      const process = invocation('b', WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, 'Started background process (PID: 42)');
+      const task = invocation('b', 'report', 'Background task started with id bg-1');
       for (const background of [process, task]) {
         expect(groupKeys([call('a'), background, call('c'), call('d')])).toEqual({ firsts: [], members: [] });
       }

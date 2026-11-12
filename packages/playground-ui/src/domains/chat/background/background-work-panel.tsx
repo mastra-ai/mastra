@@ -1,8 +1,8 @@
-import { useContext } from 'react';
 import { BackgroundProcessRows } from './background-process-rows';
 import { BackgroundTaskRows } from './background-task-rows';
-import { exitFor, threadBackgroundWork } from './thread-background-work';
-import { ChatAgentContext, useChatMessages } from '@/domains/chat/context/chat-context';
+import { exitFor } from './thread-background-work';
+import { useThreadBackgroundWork } from './use-thread-background-work';
+import { useChatThreadId } from '@/domains/chat/context/chat-context';
 import { TaskListContainer } from '@/ds/components/ai/task-list';
 
 /**
@@ -11,15 +11,12 @@ import { TaskListContainer } from '@/ds/components/ai/task-list';
  * work, and the panel stays hidden while nothing runs.
  */
 export function BackgroundWorkPanel() {
-  const messages = useChatMessages();
-  const threadId = useContext(ChatAgentContext)?.threadId;
+  const work = useThreadBackgroundWork();
+  const threadId = useChatThreadId();
   if (!threadId) return null;
 
-  const work = threadBackgroundWork(messages);
   const workspaceIds = new Set(
-    work.commands.flatMap(command =>
-      command.workspaceId && !exitFor(work.exits, command) ? [command.workspaceId] : [],
-    ),
+    work.commands.flatMap(command => (command.workspaceId && !exitFor(work, command) ? [command.workspaceId] : [])),
   );
   if (!work.hasDeferredCalls && workspaceIds.size === 0) return null;
 

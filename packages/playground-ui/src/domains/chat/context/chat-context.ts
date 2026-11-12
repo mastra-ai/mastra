@@ -82,3 +82,4 @@ export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendCo
 export const useChatModelContext = (): SendContextValue['setModelContext'] =>
   useContext(ChatSendContext).setModelContext;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;
+export const useChatThreadId = (): string | undefined => useContext(ChatAgentContext)?.threadId;

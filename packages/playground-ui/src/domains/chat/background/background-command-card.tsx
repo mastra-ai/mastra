@@ -15,8 +15,10 @@ export type BackgroundCommandState =
   | { phase: 'exited'; exitCode: number }
   /** Gone from the sandbox with no exit on record: its output was read, or the sandbox restarted. */
   | { phase: 'ended' }
-  /** Nothing to ask yet, or the sandbox couldn't be read. */
-  | { phase: 'unknown' };
+  /** The sandbox's process list is on its way. */
+  | { phase: 'pending' }
+  /** No sandbox to ask, or it couldn't be read. */
+  | { phase: 'unavailable' };
 
 export interface BackgroundCommandCardProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   args: Record<string, unknown> | string;
@@ -30,22 +32,29 @@ const cardStatus = (state: BackgroundCommandState): ActivityStatus => {
   return 'idle';
 };
 
-const showsBackgroundTag = (state: BackgroundCommandState) => state.phase === 'running' || state.phase === 'unknown';
+function StateTag({ state }: { state: BackgroundCommandState }) {
+  if (state.phase === 'running') return <BackgroundTag />;
+  if (state.phase === 'pending') return <BackgroundTag live={false} />;
+  return null;
+}
+
+const MutedMeta = ({ children }: { children: string }) => (
+  <Txt as="span" variant="meta" tone="muted" className="px-1">
+    {children}
+  </Txt>
+);
 
 function BackgroundCommandOutcome({ state }: { state: BackgroundCommandState }) {
   if (state.phase === 'running') {
     return state.startedAt === undefined ? null : <RunningFor startedAt={state.startedAt} />;
   }
   if (state.phase === 'exited') return <ExitCode exitCode={state.exitCode} />;
-  if (state.phase === 'ended') {
-    return (
-      <Txt as="span" variant="meta" tone="muted" className="px-1">
-        ended
-      </Txt>
-    );
-  }
+  if (state.phase === 'ended') return <MutedMeta>ended</MutedMeta>;
+  if (state.phase === 'unavailable') return <MutedMeta>status unavailable</MutedMeta>;
   return null;
 }
+
+const hasTag = (state: BackgroundCommandState) => state.phase === 'running' || state.phase === 'pending';
 
 /** An `execute_command` call that started a background process: drawn by how the process stands, not by the call. */
 export function BackgroundCommandCard({
@@ -72,7 +81,7 @@ export function BackgroundCommandCard({
       detail={detail}
       description={description}
       status={status}
-      badges={showsBackgroundTag(state) ? <BackgroundTag /> : undefined}
+      badges={hasTag(state) ? <StateTag state={state} /> : undefined}
       extraInfo={<BackgroundCommandOutcome state={state} />}
     >
       {toolCallHasBody(view) && <ToolCallBody {...view} />}

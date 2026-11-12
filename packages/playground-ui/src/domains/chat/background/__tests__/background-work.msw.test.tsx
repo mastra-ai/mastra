@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { SandboxProcess } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -6,11 +7,13 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BackgroundWorkPanel } from '../background-work-panel';
+import { BackgroundWorkProvider } from '../background-work-provider';
 import { ChatAgentContext, ChatMessagesContext } from '@/domains/chat/context/chat-context';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { MessageRow } from '@/domains/chat/messages/message-row';
 import {
   BACKGROUND_TASK_ID,
+  backgroundCommandTurn,
   backgroundTask,
   DEV_SERVER_PID,
   deferredReportTurn,
@@ -20,12 +23,14 @@ import {
   devServerOutput,
   devServerTurn,
   eventStream,
+  liveDevServerExitNotice,
   processList,
   reportTaskNotice,
   reportTaskStream,
   THREAD_ID,
   WORKSPACE_ID,
 } from '@/domains/chat/tools/__tests__/fixtures/background-task';
+import { foregroundSuspendedMetadata } from '@/domains/chat/tools/__tests__/fixtures/mcp-input-request';
 import { ToolCard } from '@/domains/chat/tools/tool-card';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { server } from '@/test/msw-server';
@@ -38,7 +43,7 @@ beforeEach(() => {
   server.use(http.get(`${API}/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })));
 });
 
-const ChatShell = ({ messages, children }: { messages: MastraDBMessage[]; children: ReactNode }) => (
+const ChatProviders = ({ messages, children }: { messages: MastraDBMessage[]; children: ReactNode }) => (
   <MemoryRouter>
     <TooltipProvider>
       <ToolCallProvider
@@ -53,7 +58,9 @@ const ChatShell = ({ messages, children }: { messages: MastraDBMessage[]; childr
         networkToolCallApprovals={{}}
       >
         <ChatAgentContext.Provider value={{ agentId: 'tasks-agent', threadId: THREAD_ID }}>
-          <ChatMessagesContext.Provider value={{ messages }}>{children}</ChatMessagesContext.Provider>
+          <ChatMessagesContext.Provider value={{ messages }}>
+            <BackgroundWorkProvider messages={messages}>{children}</BackgroundWorkProvider>
+          </ChatMessagesContext.Provider>
         </ChatAgentContext.Provider>
       </ToolCallProvider>
     </TooltipProvider>
@@ -63,22 +70,22 @@ const ChatShell = ({ messages, children }: { messages: MastraDBMessage[]; childr
 /** The transcript and the dock above the composer, as the agent chat lays them out. */
 const renderChat = (messages: MastraDBMessage[]) =>
   renderWithProviders(
-    <ChatShell messages={messages}>
+    <ChatProviders messages={messages}>
       {messages.map(message => (
         <MessageRow key={message.id} message={message} />
       ))}
       <BackgroundWorkPanel />
-    </ChatShell>,
+    </ChatProviders>,
   );
 
-/** The thread's sandbox: lists the dev server until it is killed, and records what Studio asked. */
-const serveSandbox = () => {
-  let running = true;
+/** The thread's sandbox: lists `processes` until one is killed, and records what Studio asked. */
+const serveSandbox = (processes: SandboxProcess[] = [devServer()]) => {
+  let listed = processes;
   const requests: string[] = [];
   server.use(
     http.get(PROCESSES, ({ request }) => {
       requests.push(`list ${new URL(request.url).search}`);
-      return HttpResponse.json(processList(...(running ? [devServer()] : [])));
+      return HttpResponse.json(processList(...listed));
     }),
     http.get(`${PROCESSES}/:pid`, ({ request, params }) => {
       requests.push(`read ${String(params.pid)} ${new URL(request.url).search}`);
@@ -86,7 +93,7 @@ const serveSandbox = () => {
     }),
     http.post(`${PROCESSES}/:pid/kill`, ({ request, params }) => {
       requests.push(`kill ${String(params.pid)} ${new URL(request.url).search}`);
-      running = false;
+      listed = listed.filter(process => process.pid !== params.pid);
       return HttpResponse.json(devServerKilled);
     }),
   );
@@ -127,19 +134,60 @@ describe('a background command in the chat', () => {
     });
   });
 
-  describe('when its exit notice reached the thread', () => {
-    it('shows the exit code on the call and a finished row, without asking the sandbox', async () => {
-      const requests = serveSandbox();
-      const { queryClient } = renderChat([devServerTurn, devServerExitNotice(1)]);
+  describe('when the sandbox lists the PID for another call', () => {
+    it('does not take that process for this call', async () => {
+      const other = devServer({ metadata: { ...devServer().metadata, toolCallId: 'call-other' } });
+      serveSandbox([other]);
+      renderChat([devServerTurn]);
 
-      const notice = await screen.findByRole('group', { name: 'Command finished: npm run dev' });
-      expect(within(notice).getByText('exit 1')).not.toBeNull();
+      const card = await screen.findByTestId('background-command-badge');
+      expect(await within(card).findByText('ended')).not.toBeNull();
+      expect(card.getAttribute('data-status')).toBe('idle');
+    });
+  });
+
+  describe('when the sandbox cannot be read', () => {
+    it('says the status is unavailable, without a Background tag', async () => {
+      server.use(http.get(PROCESSES, () => HttpResponse.json({ error: 'Sandbox not found' }, { status: 404 })));
+      renderChat([devServerTurn]);
+
+      const card = await screen.findByTestId('background-command-badge');
+      expect(await within(card).findByText('status unavailable')).not.toBeNull();
+      expect(within(card).queryByText('Background')).toBeNull();
+    });
+  });
+
+  describe('when its exit notice reached the thread', () => {
+    it.each([
+      ['read back from memory', devServerExitNotice(1)],
+      ['streamed live', liveDevServerExitNotice(1)],
+    ])('shows the exit code on the call and a finished row, without asking the sandbox (%s)', async (_, notice) => {
+      const requests = serveSandbox();
+      const { queryClient } = renderChat([devServerTurn, notice]);
+
+      const row = await screen.findByRole('group', { name: 'Command finished: npm run dev' });
+      expect(within(row).getByText('exit 1')).not.toBeNull();
       const card = screen.getByTestId('background-command-badge');
       expect(within(card).getByText('exit 1')).not.toBeNull();
       expect(within(card).queryByText('Background')).toBeNull();
       expect(screen.queryByTestId('background-work-panel')).toBeNull();
       await waitForMutationsIdle(queryClient);
       expect(requests).toEqual([]);
+    });
+  });
+
+  describe('when a later turn reuses the call id of a command that exited', () => {
+    it('keeps the later command running and in the dock', async () => {
+      const later = backgroundCommandTurn({ messageId: 'assistant-later', pid: '5151', command: 'npm run watch' });
+      serveSandbox([devServer({ pid: '5151', command: 'npm run watch' })]);
+      renderChat([devServerTurn, devServerExitNotice(1), later]);
+
+      const [exited, running] = screen.getAllByTestId('background-command-badge');
+      await waitFor(() => expect(running.getAttribute('data-status')).toBe('running'));
+      expect(within(exited).getByText('exit 1')).not.toBeNull();
+      expect(
+        await within(screen.getByTestId('background-work-panel')).findByRole('group', { name: 'Run: npm run watch' }),
+      ).not.toBeNull();
     });
   });
 });
@@ -159,9 +207,9 @@ describe('a deferred call in the chat', () => {
         }),
       );
       renderWithProviders(
-        <ChatShell messages={[deferredReportTurn]}>
+        <ChatProviders messages={[deferredReportTurn]}>
           <BackgroundWorkPanel />
-        </ChatShell>,
+        </ChatProviders>,
       );
 
       const row = await screen.findByRole('group', { name: 'Reports slow report' });
@@ -174,6 +222,21 @@ describe('a deferred call in the chat', () => {
   });
 
   describe('when its task was cancelled', () => {
+    const cancelledCall = (metadata?: ReturnType<typeof foregroundSuspendedMetadata>) => (
+      <ChatProviders messages={[]}>
+        <ToolCard
+          toolName="reports_slow_report"
+          input={{ topic: 'q3' }}
+          output={`Background task started with id ${BACKGROUND_TASK_ID}`}
+          toolCallId="call-1"
+          state="output-available"
+          backgroundTaskId={BACKGROUND_TASK_ID}
+          backgroundTaskStatus="cancelled"
+          metadata={metadata}
+        />
+      </ChatProviders>
+    );
+
     it('says so and never reads the task', async () => {
       const reads: string[] = [];
       server.use(
@@ -182,19 +245,7 @@ describe('a deferred call in the chat', () => {
           return HttpResponse.json(backgroundTask('cancelled'));
         }),
       );
-      const { queryClient } = renderWithProviders(
-        <ChatShell messages={[]}>
-          <ToolCard
-            toolName="reports_slow_report"
-            input={{ topic: 'q3' }}
-            output={`Background task started with id ${BACKGROUND_TASK_ID}`}
-            toolCallId="call-1"
-            state="output-available"
-            backgroundTaskId={BACKGROUND_TASK_ID}
-            backgroundTaskStatus="cancelled"
-          />
-        </ChatShell>,
-      );
+      const { queryClient } = renderWithProviders(cancelledCall());
 
       const card = await screen.findByTestId('tool-badge');
       expect(within(card).getByText('cancelled')).not.toBeNull();
@@ -202,12 +253,21 @@ describe('a deferred call in the chat', () => {
       await waitForMutationsIdle(queryClient);
       expect(reads).toEqual([]);
     });
+
+    it('offers no answer to a question its task asked before it stopped', async () => {
+      // The cancel reaches the chat as a stream chunk, which leaves the call's suspension in the message.
+      renderWithProviders(cancelledCall(foregroundSuspendedMetadata()));
+
+      const card = await screen.findByTestId('tool-badge');
+      expect(within(card).getByText('cancelled')).not.toBeNull();
+      expect(screen.queryByTestId('mcp-input-request')).toBeNull();
+    });
   });
 
   describe('when its task notice reached the thread', () => {
     it.each([
-      ['completed', 'Task finished: reports_slow_report'],
-      ['failed', 'Task failed: reports_slow_report'],
+      ['completed', 'Task finished: Reports slow report'],
+      ['failed', 'Task failed: Reports slow report'],
     ] as const)('draws a %s task as its own row', async (status, name) => {
       renderChat([reportTaskNotice(status)]);
 

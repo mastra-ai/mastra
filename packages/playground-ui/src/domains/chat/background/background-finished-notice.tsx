@@ -4,6 +4,8 @@ import type { SignalData } from '../messages/signal-data';
 import { WORKSPACE_TOOLS } from '../tools/workspace-tool-constants';
 import { processExitNotice, taskNotice } from './background-notices';
 import { ExitCode } from './exit-code';
+import { commandFor } from './thread-background-work';
+import { useThreadBackgroundWork } from './use-thread-background-work';
 import {
   Activity,
   ActivityContent,
@@ -64,6 +66,7 @@ function FinishedRow({ toolName, label, detail, status, outcome, message, defaul
  * from the call that started it. Undefined for any other signal.
  */
 export function BackgroundFinishedNotice({ signal, defaultOpen }: { signal: SignalData; defaultOpen?: boolean }) {
+  const work = useThreadBackgroundWork();
   const message = signalContentsToText(signal.contents);
   const exit = processExitNotice(signal);
   if (exit) {
@@ -71,7 +74,7 @@ export function BackgroundFinishedNotice({ signal, defaultOpen }: { signal: Sign
       <FinishedRow
         toolName={WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND}
         label="Command finished"
-        detail={exit.command ?? `PID ${exit.pid}`}
+        detail={commandFor(work, exit)?.command ?? exit.command ?? `PID ${exit.pid}`}
         status={exit.exitCode === 0 ? 'idle' : 'error'}
         outcome={<ExitCode exitCode={exit.exitCode} />}
         message={message}
@@ -82,11 +85,12 @@ export function BackgroundFinishedNotice({ signal, defaultOpen }: { signal: Sign
   const task = taskNotice(signal);
   if (!task) return null;
   const failed = task.status !== 'completed';
+  const toolName = task.toolName ?? '';
   return (
     <FinishedRow
-      toolName={task.toolName ?? ''}
+      toolName={toolName}
       label={failed ? 'Task failed' : 'Task finished'}
-      detail={task.toolName}
+      detail={toolName ? presentTool(toolName, {}).label : undefined}
       status={failed ? 'error' : 'idle'}
       message={message}
       defaultOpen={defaultOpen}

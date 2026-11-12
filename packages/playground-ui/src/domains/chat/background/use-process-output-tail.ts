@@ -19,6 +19,8 @@ export function useProcessOutputTail({
     threadId,
     pid,
     tail: PROCESS_OUTPUT_TAIL,
-    queryOptions: { refetchInterval: query => (query.state.data?.running ? BACKGROUND_POLL_MS : false) },
+    queryOptions: {
+      refetchInterval: ({ state }) => (state.status !== 'error' && state.data?.running ? BACKGROUND_POLL_MS : false),
+    },
   });
 }

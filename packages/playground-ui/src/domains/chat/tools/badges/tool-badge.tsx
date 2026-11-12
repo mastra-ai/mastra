@@ -1,6 +1,6 @@
 import { BackgroundTag } from '../../background/background-tag';
 import type { McpInputRequestPayload } from '../mcp-input-request';
-import { isDeferredCall, isStoppedBackgroundCall } from '../tool-card-kind';
+import { isDeferredCall, stoppedBackgroundLabel } from '../tool-card-kind';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BackgroundMcpTaskChip, McpTaskChip } from './mcp-task-chip';
 import { useMcpTaskProgress } from './use-mcp-task-progress';
@@ -21,8 +21,6 @@ import {
 import type { ToolCallView } from '@/ds/components/ai/tool-call';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
-
-const STOPPED_LABELS: Partial<Record<string, string>> = { cancelled: 'cancelled', timed_out: 'timed out' };
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
   try {
@@ -92,9 +90,7 @@ export const ToolBadge = ({
   const hasBody = toolCallHasBody(view) || Boolean(suspendPayload) || toolOutput.length > 0 || needsApproval;
 
   const deferred = isDeferredCall(backgroundTaskId, backgroundTaskStatus);
-  const stoppedLabel = isStoppedBackgroundCall(backgroundTaskId, backgroundTaskStatus)
-    ? STOPPED_LABELS[backgroundTaskStatus ?? '']
-    : undefined;
+  const stoppedLabel = stoppedBackgroundLabel(backgroundTaskId, backgroundTaskStatus);
   // A stopped call never gets its result, so how its MCP task ended comes from the background task too.
   const mcpTask = useMcpTaskProgress(result, status, {
     deferred: deferred || stoppedLabel !== undefined,

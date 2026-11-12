@@ -6,7 +6,7 @@ import type {
   SandboxProcess,
   SandboxProcessOutputResponse,
 } from '@mastra/client-js';
-import { signalToMastraDBMessage } from '@mastra/core/agent';
+import { signalToDataPartFormat, signalToMastraDBMessage } from '@mastra/core/agent';
 import type { AgentChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import { WORKSPACE_TOOLS } from '@/domains/chat/tools/workspace-tool-constants';
@@ -64,9 +64,21 @@ export const devServerKilled: KillSandboxProcessResponse = { pid: DEV_SERVER_PID
 
 type ThreadMessage = ListMemoryThreadMessagesResponse['messages'][number];
 
-/** The turn that started the dev server, as memory saves it: the call returned only the PID. */
-export const devServerTurn: ThreadMessage = {
-  id: 'assistant-dev',
+interface BackgroundCommandCall {
+  messageId: string;
+  pid: string;
+  command: string;
+  toolCallId?: string;
+}
+
+/** A turn that started a background command, as memory saves it: the call returned only the PID. */
+export const backgroundCommandTurn = ({
+  messageId,
+  pid,
+  command,
+  toolCallId = DEV_SERVER_CALL_ID,
+}: BackgroundCommandCall): ThreadMessage => ({
+  id: messageId,
   role: 'assistant',
   createdAt: new Date('2026-10-27T12:00:00Z'),
   threadId: THREAD_ID,
@@ -78,7 +90,7 @@ export const devServerTurn: ThreadMessage = {
         type: 'data-workspace-metadata',
         data: {
           toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-          toolCallId: DEV_SERVER_CALL_ID,
+          toolCallId,
           id: WORKSPACE_ID,
           name: 'Project',
           sandbox: { id: 'local', name: 'Local', provider: 'local', status: 'running' },
@@ -87,32 +99,61 @@ export const devServerTurn: ThreadMessage = {
       {
         type: 'tool-invocation',
         toolInvocation: {
-          toolCallId: DEV_SERVER_CALL_ID,
+          toolCallId,
           toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-          args: { command: 'npm run dev', background: true },
+          args: { command, background: true },
           state: 'result',
-          result: `Started background process (PID: ${DEV_SERVER_PID})`,
+          result: `Started background process (PID: ${pid})`,
         },
       },
     ],
   },
-};
+});
 
-/** What core sends the thread when the dev server exits, with `backgroundProcesses.notifyAgent` on. */
+export const devServerTurn = backgroundCommandTurn({
+  messageId: 'assistant-dev',
+  pid: DEV_SERVER_PID,
+  command: 'npm run dev',
+});
+
+interface ProcessExit {
+  pid: string;
+  exitCode: number;
+  command: string;
+  toolCallId?: string;
+}
+
+/** What core sends the thread when a background process exits, with `backgroundProcesses.notifyAgent` on. */
+export const exitNoticeSignal = ({ pid, exitCode, command, toolCallId = DEV_SERVER_CALL_ID }: ProcessExit) => ({
+  type: 'notification' as const,
+  tagName: 'background-process',
+  contents: [
+    `Background process ${pid} exited with code ${exitCode}: ${command}`,
+    'Error: listen EADDRINUSE: address already in use :::3000',
+    `Read the full output with ${WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT} (PID ${pid}). Tell the user the outcome if it matters to them.`,
+  ].join('\n\n'),
+  attributes: { pid, exitCode, toolCallId },
+});
+
+/** The exit notice as memory saves it: its own signal message. */
 export const devServerExitNotice = (exitCode: number): ThreadMessage =>
-  signalToMastraDBMessage(
-    {
-      type: 'notification',
-      tagName: 'background-process',
-      contents: [
-        `Background process ${DEV_SERVER_PID} exited with code ${exitCode}: npm run dev`,
-        'Error: listen EADDRINUSE: address already in use :::3000',
-        `Read the full output with ${WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT} (PID ${DEV_SERVER_PID}). Tell the user the outcome if it matters to them.`,
-      ].join('\n\n'),
-      attributes: { pid: DEV_SERVER_PID, exitCode, toolCallId: DEV_SERVER_CALL_ID },
-    },
-    { threadId: THREAD_ID, resourceId: RESOURCE_ID },
-  );
+  signalToMastraDBMessage(exitNoticeSignal({ pid: DEV_SERVER_PID, exitCode, command: 'npm run dev' }), {
+    threadId: THREAD_ID,
+    resourceId: RESOURCE_ID,
+  });
+
+/** The exit notice as a live chat holds it: a `data-signal` part streamed onto the assistant turn. */
+export const liveDevServerExitNotice = (exitCode: number): ThreadMessage => ({
+  id: 'assistant-live',
+  role: 'assistant',
+  createdAt: new Date('2026-10-27T12:05:00Z'),
+  threadId: THREAD_ID,
+  resourceId: RESOURCE_ID,
+  content: {
+    format: 2,
+    parts: [signalToDataPartFormat(exitNoticeSignal({ pid: DEV_SERVER_PID, exitCode, command: 'npm run dev' }))],
+  },
+});
 
 /** What core sends the thread when the deferred `reports_slow_report` call's task ends. */
 export const reportTaskNotice = (status: 'completed' | 'failed'): ThreadMessage =>

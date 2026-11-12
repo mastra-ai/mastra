@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import { BackgroundWorkProvider } from '@mastra/playground-ui/domains/chat/background/background-work-provider';
 import {
   ChatAgentContext,
   ChatMessagesContext,
@@ -370,7 +371,7 @@ export function ChatProvider({
                 toolCallApprovals={toolCallApprovals}
                 networkToolCallApprovals={networkToolCallApprovals}
               >
-                {children}
+                <BackgroundWorkProvider messages={renderMessages}>{children}</BackgroundWorkProvider>
               </ToolCallProvider>
             </ChatSendContext.Provider>
           </ChatTasksContext.Provider>

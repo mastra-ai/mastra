@@ -1,6 +1,11 @@
-import { PROCESS_OUTPUT_TAIL, useProcessOutputTail } from './use-process-output-tail';
+import { MastraClientError } from '@mastra/client-js';
+import { useProcessOutputTail } from './use-process-output-tail';
 import { stripAnsi, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { Txt } from '@/ds/components/Txt';
+
+// The sandbox forgets a process once its output is read after exit, or when the sandbox restarts.
+const outputErrorMessage = (error: Error) =>
+  error instanceof MastraClientError && error.status === 404 ? 'Process output is no longer available.' : error.message;
 
 /** The last lines a running process wrote, read only while its row is open. */
 export function BackgroundProcessOutput({
@@ -24,7 +29,7 @@ export function BackgroundProcessOutput({
   if (error) {
     return (
       <Txt variant="caption" tone="muted">
-        {error.message}
+        {outputErrorMessage(error)}
       </Txt>
     );
   }
@@ -40,7 +45,7 @@ export function BackgroundProcessOutput({
   return (
     <>
       <Txt variant="caption" tone="muted">
-        Last {PROCESS_OUTPUT_TAIL} lines
+        Latest output
       </Txt>
       {stdout && <ToolCallOutput text={stdout} />}
       {stderr && <ToolCallOutput text={stderr} error />}
