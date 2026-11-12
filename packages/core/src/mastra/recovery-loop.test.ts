@@ -225,9 +225,10 @@ describe('workflow recovery loop (#28712)', () => {
     const restartedAfter = Date.now() - killedAt;
 
     // A renewed the run's liveness at least every third of a lease TTL, so its key outlived the
-    // crash by two thirds of one at least. B's next pass after that and the grace period picks it up.
+    // crash by two thirds of one at least. The first of B's passes to see the key lapsed moves the
+    // next one to the end of the grace period, waiting at least a second and up to a fifth more.
     expect(restartedAfter).toBeGreaterThanOrEqual((WORKFLOW_RUN_LEASE_TTL_MS * 2) / 3 + GRACE_MS);
-    expect(restartedAfter).toBeLessThan(intervalMs * 1.2 + WORKFLOW_RUN_LEASE_TTL_MS + GRACE_MS + 500);
+    expect(restartedAfter).toBeLessThan(WORKFLOW_RUN_LEASE_TTL_MS + intervalMs * 1.2 + 1_200 + 500);
     await vi.waitFor(async () => expect(await statusOf(storage, run.runId)).toBe('success'));
     expect(executions).toEqual(['A:work', 'B:work']);
   }, 15_000);
@@ -320,6 +321,47 @@ describe('workflow recovery loop (#28712)', () => {
     expect(loopTimers.every(({ timer }) => !timer.hasRef())).toBe(true);
   });
 
+  const scanIntervalMs = 123_456;
+  it.each([
+    // Up to a fifth earlier or later than the interval.
+    ['no run', { stored: false }, 0, scanIntervalMs * 1.196],
+    // A live run's keys are renewed while it runs, so its lease expiry says nothing about when it stops.
+    ['a run that is live', { leaseMs: 300 }, 0, scanIntervalMs * 1.196],
+    // Up to a fifth after the run comes out of its grace period, so instances that saw it don't check at once.
+    ['a run in its grace period', {}, 1_500, 1_500 * 1.198],
+    // No sooner than a second out.
+    ['a run whose grace period ends within a second', {}, 600, 1_000 * 1.198],
+  ])('schedules the next pass after a pass that saw %s', async (_, run, workflowGraceMs, expectedDelay) => {
+    const { stored = true, leaseMs }: { stored?: boolean; leaseMs?: number } = run;
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = replica(storage, 'default', 'B', [], {
+      recovery: { workflowGraceMs, workflowScanIntervalMs: scanIntervalMs },
+    });
+    if (stored) {
+      await persistActiveRun(storage, 'run');
+    }
+    if (leaseMs) {
+      await store.claimRunOwnership({ runId: 'run', ownerId: 'other-process', leaseMs });
+    }
+    const delays: number[] = [];
+    const setTimer = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((callback: () => void, delay?: number) => {
+      delays.push(delay ?? 0);
+      return setTimer(callback, delay);
+    }) as typeof setTimeout);
+    // The latest each wait can be.
+    vi.spyOn(Math, 'random').mockReturnValue(0.99);
+
+    await mastra.startWorkers();
+    await mastra.restartAllActiveWorkflowRuns();
+
+    // The run's due time is counted from when it was stored, a few milliseconds before the pass.
+    await vi.waitFor(() =>
+      expect(delays.some(delay => delay > expectedDelay - 100 && delay < expectedDelay + 1)).toBe(true),
+    );
+  });
+
   it.each([
     ['stopWorkers()', (mastra: Mastra) => mastra.stopWorkers({ drainTimeout: 0 })],
     ['shutdown()', (mastra: Mastra) => mastra.shutdown({ drainTimeout: 0 })],
@@ -346,6 +388,54 @@ describe('workflow recovery loop (#28712)', () => {
     await sleep(scanning.workflowScanIntervalMs * 5);
 
     expect(listings.mock.calls.length).toBe(listed);
+  });
+
+  it('restarts nothing more from a pass in flight once stopWorkers() was called', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = replica(storage, 'default', 'B', [], { recovery: { workflowGraceMs: 0, ...scanning } });
+    const restarted = vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun');
+    await persistActiveRun(storage, 'stopped');
+    const list = store.listWorkflowRuns.bind(store);
+    const listing = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
+      listing.resolve();
+      await release.promise;
+      return list(args);
+    });
+    await mastra.startWorkers();
+    await listing.promise;
+
+    await mastra.stopWorkers({ drainTimeout: 0 });
+    release.resolve();
+    await sleep(scanning.workflowScanIntervalMs * 3);
+
+    expect(restarted).not.toHaveBeenCalled();
+  });
+
+  it('starts no loop from a startWorkers() call that stopWorkers() overtook', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const init = storage.init.bind(storage);
+    const initializing = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    vi.spyOn(storage, 'init').mockImplementation(async () => {
+      initializing.resolve();
+      await release.promise;
+      return init();
+    });
+    const mastra = replica(storage, 'default', 'B', [], { recovery: scanning });
+    const listings = vi.spyOn(store, 'listWorkflowRuns');
+
+    const starting = mastra.startWorkers();
+    await initializing.promise;
+    await mastra.stopWorkers({ drainTimeout: 0 });
+    release.resolve();
+    await starting;
+    await sleep(scanning.workflowScanIntervalMs * 5);
+
+    expect(listings).not.toHaveBeenCalled();
   });
 
   it('waits on shutdown for a pass in flight', async () => {
@@ -378,15 +468,15 @@ describe('workflow recovery loop (#28712)', () => {
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
     const mastra = replica(storage, 'default', 'B', executions, { recovery: { workflowGraceMs: 0, ...scanning } });
-    const supportsRunFencing = store.supportsRunFencing.bind(store);
+    const list = store.listWorkflowRuns.bind(store);
     let failures = 0;
-    vi.spyOn(store, 'supportsRunFencing').mockImplementation(async () => {
+    vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
       if (failures < 3) {
         failures++;
         throw new Error('connection reset');
       }
 
-      return supportsRunFencing();
+      return list(args);
     });
     await persistActiveRun(storage, 'stopped');
 
@@ -396,24 +486,40 @@ describe('workflow recovery loop (#28712)', () => {
     expect(failures).toBe(3);
   });
 
-  it.each([
-    // The loop asks the store once, and stops when it has no fencing.
-    ['the store has no run fencing', { workflowGraceMs: 0, ...scanning }, false, 1],
-    // The loop never starts, so it doesn't even ask.
-    ["recovery.workflows is 'off'", { workflows: 'off', workflowGraceMs: 0, ...scanning }, true, 0],
-  ] as const)('checks nothing on a timer when %s', async (_, recovery, fenced, probes) => {
+  it('restarts every active run once at boot and checks no more when the store has no run fencing', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
-    const fencing = vi.spyOn(store, 'supportsRunFencing').mockResolvedValue(fenced);
+    const fencing = vi.spyOn(store, 'supportsRunFencing').mockResolvedValue(false);
     const listings = vi.spyOn(store, 'listWorkflowRuns');
-    const mastra = replica(storage, 'default', 'B', executions, { recovery });
+    const mastra = replica(storage, 'default', 'B', executions, { recovery: { workflowGraceMs: 0, ...scanning } });
     await persistActiveRun(storage, 'stopped');
 
     await mastra.startWorkers();
     await sleep(scanning.workflowScanIntervalMs * 5);
 
-    expect(fencing).toHaveBeenCalledTimes(probes);
+    // The boot pass restarts every active run, as the server's boot call does on such a store, and
+    // no lease tells a stopped run from a running one after that.
+    expect(fencing).toHaveBeenCalled();
+    // One pass lists the running and the waiting runs.
+    const recoveredListings = listings.mock.calls.filter(([args]) => args?.workflowName === 'recovered-wf');
+    expect(recoveredListings).toHaveLength(2);
+    expect(executions).toEqual(['B:work']);
+  });
+
+  it("checks nothing when recovery.workflows is 'off'", async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const executions: string[] = [];
+    const listings = vi.spyOn(store, 'listWorkflowRuns');
+    const mastra = replica(storage, 'default', 'B', executions, {
+      recovery: { workflows: 'off', workflowGraceMs: 0, ...scanning },
+    });
+    await persistActiveRun(storage, 'stopped');
+
+    await mastra.startWorkers();
+    await sleep(scanning.workflowScanIntervalMs * 5);
+
     expect(listings).not.toHaveBeenCalled();
     expect(executions).toEqual([]);
   });
