@@ -149,10 +149,11 @@ export function describeRecoveryReadCases({ getStorage }: { getStorage: () => Ma
       expect(
         reads.listings.flatMap(listing => listing.snapshots).some(snapshot => 'context' in (snapshot as object)),
       ).toBe(false);
-      // The nested runs are left to their active parents, so 230 runs are checked, at most a hundred per read.
+      // The nested runs are left to their active parents, so 230 runs are checked, at most a hundred per read:
+      // the run lease of each of the 150 default-engine runs, and the liveness and wake keys of each of the
+      // 80 evented runs.
       expect(reads.ownershipReads).toHaveLength(3);
-      expect(reads.ownershipReads.every(count => count <= 100)).toBe(true);
-      expect(reads.ownershipReads.reduce((total, count) => total + count, 0)).toBe(230);
+      expect(reads.ownershipReads.reduce((total, count) => total + count, 0)).toBe(150 + 2 * 80);
       expect(executions).toEqual([]);
 
       // Another process crashed while running `stopped`: its lease lapsed.

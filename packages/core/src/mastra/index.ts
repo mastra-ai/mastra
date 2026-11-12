@@ -105,7 +105,7 @@ import {
   rehydrateWorkflow,
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
-import { endRunLiveness, runLivenessKey } from '../workflows/evented/leases';
+import { endRunLiveness, runLivenessKey, runWakeKey } from '../workflows/evented/leases';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { pauseSleepWakes, resumeSleepWakes } from '../workflows/evented/workflow-event-processor/sleep';
 import {
@@ -934,7 +934,7 @@ interface RecoveryCandidate {
 
 /** A recovery pass that handed out every restart it picked. */
 interface RecoveryPass {
-  /** The earliest time a run the pass left in its grace period becomes due. */
+  /** The earliest time a run the pass left in its grace period, or in a sleep, becomes due. */
   earliestDueAt?: number;
   /** Whether the store had run fencing; `undefined` when the store or the probe failed to answer. */
   runFencing: boolean | undefined;
@@ -947,7 +947,11 @@ interface RecoveryPass {
   settled: Promise<void>;
 }
 
-/** Whether the recovery rule restarts a run now, or when it should look at it again. */
+/**
+ * Whether the recovery rule restarts a run now, or when it should look at it
+ * again. `live` is set while a process keeps the run live; a run left alone
+ * only for its sleep is not.
+ */
 type RecoveryVerdict = { restart: true } | { restart: false; live: boolean; dueAt: number };
 
 /**
@@ -957,6 +961,15 @@ type RecoveryVerdict = { restart: true } | { restart: false; live: boolean; dueA
  */
 function livenessKeysOf(workflow: AnyWorkflow, runId: string): string[] {
   return workflow.engineType === 'evented' ? [runLivenessKey(runId)] : [runId];
+}
+
+/**
+ * The keys a recovery pass reads for `runId`: its liveness keys and, for an
+ * evented run, the wake key that stays live until the run's sleep is due.
+ */
+function recoveryKeysOf(workflow: AnyWorkflow, runId: string): string[] {
+  const keys = livenessKeysOf(workflow, runId);
+  return workflow.engineType === 'evented' ? [...keys, runWakeKey(runId)] : keys;
 }
 
 /** Identifies a run across the workflows of one recovery pass. */
@@ -972,14 +985,20 @@ function recoveryRunKey(workflowName: string, runId: string): string {
  * A released or missing key carries no expiry, so the run's own last write
  * anchors the grace then: a run between two long steps is not restarted while
  * its next event waits in the pubsub for another instance.
+ *
+ * `wake` is an evented run's wake key, live until its sleep is due. It counts
+ * like the liveness keys, but a run it alone keeps is not `live`: its expiry
+ * is the sleep's wake time, which no process moves, so `dueAt` stays put.
  */
 function recoveryVerdict({
   records,
+  wake,
   updatedAt,
   graceMs,
   now,
 }: {
   records: (RunOwnershipRecord | undefined)[];
+  wake?: RunOwnershipRecord;
   updatedAt: Date | string | number | undefined;
   graceMs: number;
   now: number;
@@ -988,16 +1007,39 @@ function recoveryVerdict({
   const anchor = Math.max(
     // A store that lost the timestamp leaves only the keys to go by.
     Number.isNaN(lastWrite) ? -Infinity : lastWrite,
-    ...records.map(record => record?.leaseExpiresAt?.getTime() ?? -Infinity),
+    ...[...records, wake].map(record => record?.leaseExpiresAt?.getTime() ?? -Infinity),
   );
   const dueAt = anchor + graceMs;
   const live = records.some(record => record?.live);
 
-  if (live || now < dueAt) {
+  if (live || wake?.live || now < dueAt) {
     return { restart: false, live, dueAt };
   }
 
   return { restart: true };
+}
+
+/** {@link recoveryVerdict} for `run`, from `owners`, the records of its keys (see `recoveryKeysOf`). */
+function recoveryVerdictOf({
+  workflow,
+  run,
+  owners,
+  graceMs,
+  now,
+}: {
+  workflow: AnyWorkflow;
+  run: WorkflowRun;
+  owners: Map<string, RunOwnershipRecord>;
+  graceMs: number;
+  now: number;
+}): RecoveryVerdict {
+  return recoveryVerdict({
+    records: livenessKeysOf(workflow, run.runId).map(key => owners.get(key)),
+    wake: workflow.engineType === 'evented' ? owners.get(runWakeKey(run.runId)) : undefined,
+    updatedAt: run.updatedAt,
+    graceMs,
+    now,
+  });
 }
 
 /**
@@ -4686,12 +4728,7 @@ export class Mastra<
             // read does not bring the next pass forward.
             verdict = { restart: false, live: true, dueAt: now + graceMs };
           } else {
-            verdict = recoveryVerdict({
-              records: livenessKeysOf(workflow, run.runId).map(key => owners.get(key)),
-              updatedAt: run.updatedAt,
-              graceMs,
-              now,
-            });
+            verdict = recoveryVerdictOf({ workflow, run, owners, graceMs, now });
           }
 
           if (verdict.restart) {
@@ -4720,9 +4757,11 @@ export class Mastra<
             continue;
           }
 
-          // A run left in its grace period moves the recovery loop's next pass up. A live run doesn't: its
-          // keys are renewed while it runs, so its due time keeps moving, and the loop's interval bounds
-          // how long a run whose process dies waits past it.
+          // A run left in its grace period moves the recovery loop's next pass up, and so does a run left
+          // alone only for its sleep, whose due time is its wake time plus the grace period, so a sleep whose
+          // process died is recovered at about that time. A live run doesn't: its keys are renewed while it
+          // runs, so its due time keeps moving, and the loop's interval bounds how long a run whose
+          // process dies waits past it.
           if (!verdict.live) {
             earliestDueAt = Math.min(earliestDueAt ?? Infinity, verdict.dueAt);
           }
@@ -4766,10 +4805,9 @@ export class Mastra<
       }
 
       if (runFencing) {
-        const keys = livenessKeysOf(workflow, run.runId);
         let owners: Map<string, RunOwnershipRecord>;
         try {
-          owners = await workflowsStore.getRunOwnerships({ runIds: keys });
+          owners = await workflowsStore.getRunOwnerships({ runIds: recoveryKeysOf(workflow, run.runId) });
         } catch (error) {
           this.#logger.warn('Failed to read workflow run liveness before restarting', {
             workflow: workflow.id,
@@ -4779,12 +4817,7 @@ export class Mastra<
           return;
         }
 
-        const verdict = recoveryVerdict({
-          records: keys.map(key => owners.get(key)),
-          updatedAt: run.updatedAt,
-          graceMs: this.#workflowGraceMs(),
-          now: Date.now(),
-        });
+        const verdict = recoveryVerdictOf({ workflow, run, owners, graceMs: this.#workflowGraceMs(), now: Date.now() });
         if (!verdict.restart) {
           return;
         }
@@ -4928,14 +4961,17 @@ export class Mastra<
     return candidates;
   }
 
-  /** The ownership records of one batch's liveness keys, read in one call; `undefined` when the read fails. */
+  /**
+   * The ownership records of one batch's liveness and wake keys (see `recoveryKeysOf`), read in one call;
+   * `undefined` when the read fails.
+   */
   async #readRunOwners(
     workflowsStore: WorkflowsStorage,
     batch: RecoveryCandidate[],
   ): Promise<Map<string, RunOwnershipRecord> | undefined> {
     try {
       return await workflowsStore.getRunOwnerships({
-        runIds: batch.flatMap(({ workflow, run }) => livenessKeysOf(workflow, run.runId)),
+        runIds: batch.flatMap(({ workflow, run }) => recoveryKeysOf(workflow, run.runId)),
       });
     } catch (error) {
       this.#logger.warn('Failed to read workflow run liveness before restarting', { runs: batch.length, error });

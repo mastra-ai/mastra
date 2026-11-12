@@ -1,7 +1,7 @@
 /**
  * Leases and stored state of `sleep` and `sleepUntil` steps: the lease that
- * sets a sleep up once, the lease that wakes it once, and the wake time a
- * sleep stores.
+ * sets a sleep up once, the lease that wakes it once, the wake time a sleep
+ * stores, and the `::wake` key recovery reads.
  */
 import type { IMastraLogger } from '../../../logger';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
@@ -11,6 +11,7 @@ import {
   WORKFLOW_RUN_LEASE_TTL_MS,
   repeatAfterSettled,
 } from '../../run-ownership';
+import { runWakeKey } from './keys';
 import type { LivenessScope } from './liveness';
 import { holdDelay, sleep as wait } from './step-lease';
 
@@ -210,4 +211,86 @@ export async function claimSleepWake({
 export function storedWakeAt(result: { metadata?: unknown } | undefined): number | undefined {
   const wakeAt = (result?.metadata as { wakeAt?: unknown } | undefined)?.wakeAt;
   return typeof wakeAt === 'number' && Number.isFinite(wakeAt) ? wakeAt : undefined;
+}
+
+/**
+ * Keeps `<runId>::wake` (see {@link runWakeKey}) live until `wakeAt` for each
+ * of `runs`, a sleeping run and its ancestors, so recovery leaves them alone
+ * until the sleep is due while no process writes anything for them. One write
+ * per run and sleep, skipped when the key is already live until `wakeAt` or
+ * later: of sleeps in parallel branches, the one that wakes last keeps the key,
+ * whichever writes first.
+ *
+ * Never rejects. A failed write is logged, and the run is then restarted once
+ * its liveness lapses, which resumes the sleep and writes the key again.
+ */
+export async function markRunAsleep({
+  runs,
+  wakeAt,
+  logger,
+}: {
+  runs: { runId: string; store: WorkflowsStorage }[];
+  wakeAt: number;
+  logger?: IMastraLogger;
+}): Promise<void> {
+  await Promise.all(
+    runs.map(async ({ runId, store }) => {
+      const key = runWakeKey(runId);
+      try {
+        let current = await store.getRunOwnership({ runId: key });
+        while (true) {
+          if (current?.live && (current.leaseExpiresAt?.getTime() ?? 0) >= wakeAt) {
+            return;
+          }
+
+          // A wake time that passed, as when a restart resumes an overdue sleep, wakes the run at once.
+          const leaseMs = wakeAt - Date.now();
+          if (leaseMs <= 0) {
+            return;
+          }
+
+          // Forced, but only over the record just read: a sleep that wrote a later wake time in
+          // between makes the claim fail, and the loop then finds that time later and stops.
+          const claim = await store.claimRunOwnership({
+            runId: key,
+            ownerId: globalThis.crypto.randomUUID(),
+            leaseMs,
+            force: true,
+            expectedGeneration: current?.generation ?? 0,
+          });
+          if (claim.acquired) {
+            return;
+          }
+
+          current = claim.record ?? (await store.getRunOwnership({ runId: key }));
+        }
+      } catch (error) {
+        logger?.warn('Failed to record the wake time of a sleeping workflow run', { runId, error });
+      }
+    }),
+  );
+}
+
+/**
+ * Releases a live `<runId>::wake` when a time travel or a new start of the
+ * run leaves the sleep it was in: that sleep must not keep recovery away from
+ * the run until its wake time. A sleep the run then enters writes the key
+ * again.
+ */
+export async function clearRunWake(store: WorkflowsStorage, runId: string): Promise<void> {
+  const key = runWakeKey(runId);
+  if (!(await store.getRunOwnership({ runId: key }))?.live) {
+    return;
+  }
+
+  const claim = await store.claimRunOwnership({
+    runId: key,
+    ownerId: globalThis.crypto.randomUUID(),
+    leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+    force: true,
+  });
+  if (claim.acquired) {
+    const { generation, ownerId } = claim.record;
+    await store.releaseRunOwnership({ runId: key, generation, ownerId });
+  }
 }

@@ -70,7 +70,7 @@ import {
   RunFailure,
   withoutAuthToken,
 } from '../helpers';
-import { acquireStepLease, enterRunLiveness, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
+import { acquireStepLease, clearRunWake, enterRunLiveness, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
 import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../leases';
 import { StepExecutor } from '../step-executor';
 import { DeferredDelivery } from './deferred-delivery';
@@ -1229,6 +1229,17 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
 
+    // A time travel, or a new run under the ID of an old one, leaves any sleep the stored run was in,
+    // and a stale wake key would keep recovery away from it until that sleep's wake time. A restart
+    // or a resume goes on from where the run was, so a sleep it is still in keeps its key. A run with
+    // no record has no key to clear.
+    if (existingRun && !restart && (timeTravel || !resumeSteps?.length)) {
+      const leaseStore = await this.#leaseStore(workflow);
+      if (leaseStore) {
+        await clearRunWake(leaseStore, runId);
+      }
+    }
+
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
     const requiresGuardedSnapshot =
       workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
@@ -2168,6 +2179,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepExecutor: this.stepExecutor,
           workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
           leaseStore: await this.#leaseStore(workflow),
+          wakeRuns: await this.#livenessRuns(workflow, { runId, parentWorkflow }),
           scope: this.mastra,
           logger: this.mastra.getLogger(),
           step,
@@ -2199,6 +2211,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepExecutor: this.stepExecutor,
           workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
           leaseStore: await this.#leaseStore(workflow),
+          wakeRuns: await this.#livenessRuns(workflow, { runId, parentWorkflow }),
           scope: this.mastra,
           logger: this.mastra.getLogger(),
           step,

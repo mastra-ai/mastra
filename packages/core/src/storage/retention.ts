@@ -146,10 +146,14 @@ export interface PruneResult {
  * row per run; pruning their released or expired rows is safe. Each evented
  * sleep adds two rows: one that sets the sleep up once, and one whose release
  * marks the sleep woken. Pruning a released wake row lets a restart that wrote
- * an older snapshot back over the run wake the sleep a second time.
- * `runOwnership` is anchored on the claim's `updatedAt`, which every claim,
- * renewal and release refreshes, so a live execution's row is never older
- * than its renewal interval; keep `maxAge` well above the lease. `runFences` is anchored on
+ * an older snapshot back over the run wake the sleep a second time. A sleeping
+ * run, and each run it is nested in, also has a `::wake` row, written once when
+ * the sleep starts and live until its wake time. Pruned earlier, it lets
+ * recovery restart the run before the sleep is due, and the restart resumes
+ * the rest of the sleep. `runOwnership` is anchored on the claim's
+ * `updatedAt`, which every claim, renewal and release refreshes, so a live
+ * execution's row is never older than its renewal interval; keep `maxAge` well
+ * above the lease and above the longest sleep. `runFences` is anchored on
  * `retiredAt`, which stays NULL until the execution holding the fence settles,
  * so a running execution's fence is never pruned.
  *

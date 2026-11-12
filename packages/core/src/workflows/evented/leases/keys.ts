@@ -29,6 +29,16 @@ export function runLivenessKey(runId: string): string {
 }
 
 /**
+ * Key that stays live until the latest wake time of the sleeps a run, or a run
+ * nested under it, is in. Recovery reads it next to the liveness key: a
+ * sleeping run handles no event, so its liveness lapses while its sleep timer
+ * still runs. Never renewed; cleared by a time travel or a new start of the run.
+ */
+export function runWakeKey(runId: string): string {
+  return `${runId}::wake`;
+}
+
+/**
  * Lease key of one sleep occurrence: the sleep's step key and the time the
  * occurrence started, so a sleep started again (time travel, a sleep recorded
  * without a wake time) gets a new key.

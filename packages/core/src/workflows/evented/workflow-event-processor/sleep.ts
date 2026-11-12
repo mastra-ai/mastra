@@ -8,6 +8,7 @@ import { withoutAuthToken } from '../helpers';
 import {
   claimSleepStart,
   claimSleepWake,
+  markRunAsleep,
   markRunLive,
   sleepOccurrenceKey,
   sleepStartKey,
@@ -79,6 +80,11 @@ interface SleepDeps {
   workflowsStore?: WorkflowsStorage;
   /** The store holding the run's step leases; `undefined` when the run's steps run unleased. */
   leaseStore?: WorkflowsStorage;
+  /**
+   * The run and its ancestors that take leases, each with its store: the runs
+   * whose wake key a sleep sets and whose liveness its wake marks.
+   */
+  wakeRuns: { runId: string; store: WorkflowsStorage }[];
   /** The process running the sleep. */
   scope: LivenessScope;
   logger?: IMastraLogger;
@@ -96,8 +102,11 @@ interface SleepOccurrence {
 
 type SleepEntry = Extract<StepFlowEntry, { type: 'sleep' | 'sleepUntil' }>;
 
-/** Resolves a sleep's duration in milliseconds; `state` is what the duration function's `setState()` changes. */
-type ResolveDuration = (requestContext: RequestContext, state: Record<string, any>) => Promise<number>;
+/**
+ * Resolves a sleep's duration in milliseconds. `state` is what the duration
+ * function's `setState()` changes; `input` is the sleep's input.
+ */
+type ResolveDuration = (requestContext: RequestContext, state: Record<string, any>, input: unknown) => Promise<number>;
 
 /** A wake this process set a timer for, or put aside while its workers are stopped. */
 interface PendingWake {
@@ -163,8 +172,8 @@ const movedPastSleep = (snapshot: WorkflowRunState, executionPath: number[]) =>
  * publishes, unless it already published; once stopped, it lets its lease
  * lapse and is kept the same way. A sleep that work the drain gave up on sets
  * up later is kept too. The sleeps stay `waiting`: the workers starting again
- * wake them, and so does the recovery loop of another instance once they are
- * overdue.
+ * wake them, and so does another instance's recovery once their wake time and
+ * the recovery grace period (`recovery.workflowGraceMs`) passed.
  */
 export function pauseSleepWakes(scope: LivenessScope): void {
   pausedScopes.add(scope);
@@ -200,7 +209,7 @@ export async function processWorkflowSleep(
   args: ProcessorArgs,
   deps: SleepDeps & { step: Extract<StepFlowEntry, { type: 'sleep' }> },
 ) {
-  return startSleep(args, deps, (requestContext, state) =>
+  return startSleep(args, deps, (requestContext, state, input) =>
     deps.stepExecutor.resolveSleep({
       workflowId: args.workflowId,
       step: deps.step,
@@ -208,7 +217,7 @@ export async function processWorkflowSleep(
       stepResults: args.stepResults,
       state,
       requestContext,
-      input: args.prevResult?.status === 'success' ? args.prevResult.output : undefined,
+      input,
       resumeData: args.resumeData,
       actor: args.actor,
     }),
@@ -220,7 +229,7 @@ export async function processWorkflowSleepUntil(
   args: ProcessorArgs,
   deps: SleepDeps & { step: Extract<StepFlowEntry, { type: 'sleepUntil' }> },
 ) {
-  return startSleep(args, deps, (requestContext, state) =>
+  return startSleep(args, deps, (requestContext, state, input) =>
     deps.stepExecutor.resolveSleepUntil({
       workflowId: args.workflowId,
       step: deps.step,
@@ -228,7 +237,7 @@ export async function processWorkflowSleepUntil(
       stepResults: args.stepResults,
       state,
       requestContext,
-      input: args.prevResult?.status === 'success' ? args.prevResult.output : undefined,
+      input,
       resumeData: args.resumeData,
       actor: args.actor,
     }),
@@ -242,8 +251,11 @@ export async function processWorkflowSleepUntil(
  * When the stored run is already in this sleep (a restart, or a redelivery of
  * the sleep's event), the stored wake time is kept and only the remaining wait
  * is timed, so the sleep is not replayed from the start and a wake time that
- * passed wakes the run at once. Time travel always starts the sleep afresh.
- * `resolveDuration` runs only for a fresh sleep.
+ * passed wakes the run at once. A sleep stored without a wake time starts
+ * over, under the id and with the input it was stored with. Time travel always
+ * starts the sleep afresh. `resolveDuration` runs only for a sleep that is not
+ * resumed. Every sleep then sets the wake key of its run and of the runs it is
+ * nested in (see `markRunAsleep`).
  *
  * A delivery that arrives after the run left the sleep (it finished, moved
  * past the sleep, or the sleep was woken and the next step is on its way) is
@@ -302,11 +314,13 @@ async function setUpSleep(
   const emitStepEvents = workflow.options.emitStepEvents !== false;
 
   const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-  const resumed = snapshot && !timeTravel ? sleepInProgress(snapshot, executionPath, step.id) : undefined;
+  const stored = snapshot && !timeTravel ? sleepInProgress(snapshot, executionPath, step.id) : undefined;
+  // A sleep stored without its wake time can't tell how long is left, so it starts over.
+  const resumed = stored?.wakeAt === undefined ? undefined : { ...stored, wakeAt: stored.wakeAt };
   // Once the next step moved the run on, only the delivery's own copy of the run shows the sleep.
   const delivered = timeTravel
     ? undefined
-    : (resumed ??
+    : (stored ??
       sleepInProgress(
         { context: args.stepResults, activeStepsPath: args.activeStepsPath } as WorkflowRunState,
         executionPath,
@@ -342,9 +356,9 @@ async function setUpSleep(
     return;
   }
 
-  // A resumed sleep keeps the id, input and start time it was stored with.
-  const stepId = resumed?.stepId ?? step.id;
-  const payload = resumed ? resumed.payload : prevResult.status === 'success' ? prevResult.output : undefined;
+  // A stored sleep keeps the id and input it was stored with; a resumed one its start time too.
+  const stepId = stored?.stepId ?? step.id;
+  const payload = stored ? stored.payload : prevResult.status === 'success' ? prevResult.output : undefined;
   const startedAt = resumed?.startedAt ?? Date.now();
 
   if (emitStepEvents) {
@@ -379,7 +393,13 @@ async function setUpSleep(
       },
     });
     // Create a proper RequestContext from the plain object passed in ProcessorArgs
-    const duration = await resolveDuration(new RequestContext(Object.entries(requestContext ?? {}) as any), tracked);
+    // `payload` is the stored input of a sleep stored without its wake time, which this process's
+    // copy of the run may not carry under the id it gives the sleep.
+    const duration = await resolveDuration(
+      new RequestContext(Object.entries(requestContext ?? {}) as any),
+      tracked,
+      payload,
+    );
     wakeAt = Date.now() + (Number.isFinite(duration) ? Math.max(0, duration) : 0);
     // Only a change is written: a parallel branch may have stored newer state than this delivery's copy.
     if (stateChanged) {
@@ -449,8 +469,13 @@ async function setUpSleep(
     },
   });
 
+  // The run handles no event until the wake, so its liveness lapses; the wake key keeps recovery
+  // away from it and its ancestors until then. Written after the run is stored at the sleep: a
+  // process that stops in between leaves a run that a restart resumes here.
+  await markRunAsleep({ runs: deps.wakeRuns, wakeAt, logger: deps.logger });
+
   // A restart derives the input from the sleep's id in this process, which may not be the stored one.
-  const wakeArgs: ProcessorArgs = resumed
+  const wakeArgs: ProcessorArgs = stored
     ? { ...args, prevResult: { ...prevResult, status: 'success', output: payload } as ProcessorArgs['prevResult'] }
     : args;
   scheduleWake(wakeArgs, deps, { stepId, payload, startedAt, wakeAt });
@@ -544,26 +569,26 @@ function leftSleep(snapshot: WorkflowRunState, executionPath: number[], timeTrav
 
 /**
  * The sleep occurrence the stored run is in at `executionPath`: a `waiting`
- * result with a stored wake time that the run lists as active at that path.
- * The result stored under `stepId` is preferred; otherwise one is matched by
- * path, because a sleep declared without an `id` gets a new generated id in
- * every process that builds the workflow. A result the run lists at no path is
- * matched by the path stored with it: its process stopped after storing the
- * result and before storing the run's path at the sleep. A sleep recorded
- * before wake times were stored is not resumed.
+ * result that the run lists as active at that path. The result stored under
+ * `stepId` is preferred; otherwise one is matched by path, because a sleep
+ * declared without an `id` gets a new generated id in every process that
+ * builds the workflow. A result the run lists at no path is matched by the
+ * path stored with it: its process stopped after storing the result and
+ * before storing the run's path at the sleep. `wakeAt` is `undefined` for a
+ * sleep recorded before wake times were stored.
  */
 function sleepInProgress(
   snapshot: WorkflowRunState,
   executionPath: number[],
   stepId: string,
-): SleepOccurrence | undefined {
+): (Omit<SleepOccurrence, 'wakeAt'> & { wakeAt?: number }) | undefined {
   const active = snapshot.activeStepsPath ?? {};
   const ids = [...new Set([stepId, ...Object.keys(active), ...Object.keys(snapshot.context ?? {})])];
 
   for (const id of ids) {
     const stored = snapshot.context?.[id];
     const wakeAt = storedWakeAt(stored);
-    if (stored?.status !== 'waiting' || wakeAt === undefined) {
+    if (stored?.status !== 'waiting') {
       continue;
     }
 
@@ -582,9 +607,10 @@ function sleepInProgress(
 
 /**
  * Ends the sleep `occurrence` and publishes the step after it. The sleep's
- * timer calls it. The recovery loop reaches it by restarting a run whose
- * sleep is overdue: the restart resumes the sleep in whichever process takes
- * it, and the timer it sets fires at once.
+ * timer calls it. Recovery reaches it by restarting the run once the run's
+ * wake key lapsed and the grace period passed, which happens when the timer
+ * died with its process: the restart resumes the sleep in whichever process
+ * takes it, and the timer it sets fires at once.
  *
  * Waking more than once is a no-op: the wake claims the occurrence's lease
  * (see `claimSleepWake`), and wakes only while the stored run is still active
@@ -592,7 +618,7 @@ function sleepInProgress(
  * publishing, so a restart is refused until the next step takes its own lease,
  * and releases the lease only once the next step was published. When
  * publishing fails, the sleep is put back to `waiting` and the lease left to
- * lapse, so an overdue check wakes it again.
+ * lapse, so a restart of the run wakes it again.
  *
  * Leases are advisory, so the wake checks that it still holds its lease before
  * marking the sleep `success` and again before publishing, and stops (putting
@@ -607,8 +633,8 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
   const { pubsub, workflowsStore, leaseStore, scope, logger } = deps;
   const { stepId, payload, startedAt } = occurrence;
 
-  // A process shutting down publishes to workers that are going away; the recovery loop of
-  // another instance wakes the sleep once it is overdue.
+  // A process shutting down publishes to workers that are going away; another instance's
+  // recovery restarts the run once the sleep is due and the grace period passed.
   if (scope.__shuttingDown) {
     return;
   }
@@ -687,9 +713,9 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
       }
     }
 
-    if (leaseStore) {
-      await markRunLive({ scope, store: leaseStore, runId, logger });
-    }
+    // The ancestors too: their own keys lapsed while this nested run slept, and the step after the
+    // sleep renews them only once a worker takes it up.
+    await Promise.all(deps.wakeRuns.map(run => markRunLive({ scope, store: run.store, runId: run.runId, logger })));
 
     if (await lost()) {
       return;
@@ -756,7 +782,7 @@ async function wakeSleep(args: ProcessorArgs, deps: SleepDeps, occurrence: Sleep
       });
       published = true;
     } catch (error) {
-      // Back in `waiting`, the sleep is woken by the next overdue check rather than the much later stall check.
+      // Back in `waiting`, the sleep is woken again by the restart recovery makes once the run's keys lapse.
       await revertWake(args, deps, occurrence, endedAt).catch(revertError =>
         logger?.error('Failed to put a workflow sleep back to waiting after its wake failed', {
           workflowId,
@@ -843,7 +869,11 @@ async function revertWake(args: ProcessorArgs, deps: SleepDeps, occurrence: Slee
  * but the stored result shows the occurrence `waiting` again, as it does after
  * a restart or a redelivery wrote back what it read before that wake.
  */
-async function markWokenSleepFinished(args: ProcessorArgs, deps: SleepDeps, occurrence: SleepOccurrence) {
+async function markWokenSleepFinished(
+  args: ProcessorArgs,
+  deps: SleepDeps,
+  occurrence: Pick<SleepOccurrence, 'stepId' | 'payload' | 'startedAt'>,
+) {
   const { workflowId, runId, requestContext } = args;
   const snapshot = await deps.workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId });
   const stored = snapshot?.context?.[occurrence.stepId];
