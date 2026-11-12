@@ -80,7 +80,7 @@ import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
-import { ensureRemoteAbortListener } from '../../abort-transport';
+import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
@@ -371,7 +371,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra);
+          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(requestContext));
         } catch (error) {
           ownership?.throwIfLost();
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {
@@ -713,6 +713,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       }
       // Mirror Agent: later iterations continue the same assistant message behind a step-start
       // boundary, so sequential tool steps aren't replayed as parallel calls (#26332).
+      // What a total deadline that cuts this step off saves: the list as it enters the step. That is the
+      // completed steps plus what was added between steps (completion-check feedback, signals).
+      const deadlineEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+      if (deadlineEntry?.timeoutTotalMs) {
+        deadlineEntry.completedStepsState = JSON.parse(JSON.stringify(messageList.serialize()));
+      }
       const iterationBoundary = previousSteps.length > 0 ? messageList.openStepBoundary().boundary : undefined;
       let terminalAttemptContext:
         | {
@@ -1611,6 +1617,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // including empty reasoning spans that carry providerMetadata
             // (e.g. OpenAI itemId) required by subsequent turns (#19365).
             const collectedChunks: CollectedChunk[] = [];
+            // What a total deadline saves of this attempt if it cuts the step off: the text as published.
+            if (registryEntry?.timeoutTotalMs) registryEntry.streamedStepText = [];
 
             // Materialize collected chunks into the messageList via the same
             // helper the regular Agent uses, preserving reasoning spans
@@ -2283,6 +2291,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     payload: 'payload' in persistedChunk ? persistedChunk.payload : undefined,
                     metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
                   });
+                  // The step's text is transcript, not internal state: build it from the same
+                  // chunk memory stores so a redacted reply is never returned unredacted.
+                  if (persistedChunk.type === 'text-delta') {
+                    const text = (persistedChunk.payload as TextDeltaPayload).text;
+                    textDeltas.push(text);
+                    registryEntry?.streamedStepText?.push(text);
+                  }
                 }
 
                 if (STEP_CONTENT_CHUNK_TYPES.has(rawChunk.type)) {
@@ -2293,12 +2308,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // internal state (tool args, finish reason, usage, metadata) is
                 // never affected by display-layer transforms.
                 switch (rawChunk.type) {
-                  case 'text-delta': {
-                    const payload = rawChunk.payload as TextDeltaPayload;
-                    textDeltas.push(payload.text);
-                    break;
-                  }
-
                   case 'tool-call-input-streaming-start': {
                     const tool = toolInputStartToolDef || resolveToolDef(rawChunk.payload.toolName);
                     if (tool && 'onInputStart' in tool) {
@@ -2577,6 +2586,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     payload: 'payload' in r.part ? r.part.payload : undefined,
                     metadata: (r.part as { metadata?: Record<string, unknown> }).metadata,
                   });
+                  if (r.part.type === 'text-delta') textDeltas.push(r.part.payload.text);
                 }
               }
               throwIfInterrupted();
@@ -2950,6 +2960,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 processOutputStepTripwire = error;
               }
             }
+            // The step processors ran over the streamed text and it is in the list; a deadline no longer cuts it off.
+            // Publish the accepted step first, in the same tick, so a deadline before the mapping step's snapshot
+            // still saves it (and never both the snapshot and the cut-off text). A rejected response is rolled
+            // back below, so the step-start snapshot stays.
+            if (registryEntry?.timeoutTotalMs && !processOutputStepTripwire) {
+              registryEntry.completedStepsState = JSON.parse(JSON.stringify(messageList.serialize()));
+            }
+            if (registryEntry) registryEntry.streamedStepText = undefined;
 
             const retryRequested = processOutputStepTripwire?.options?.retry === true;
             const canRetry =

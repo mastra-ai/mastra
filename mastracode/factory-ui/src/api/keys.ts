@@ -46,6 +46,8 @@ export const queryKeys = {
     ['factory', 'environment-builds', factoryProjectId ?? null] as const,
   factoryEnvironmentBuild: (factoryProjectId: string | undefined, buildId: string | undefined) =>
     ['factory', 'environment-build', factoryProjectId ?? null, buildId ?? null] as const,
+  factorySandboxEnvs: (factoryProjectId: string | undefined) =>
+    ['factory', 'sandbox-envs', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
@@ -102,17 +104,21 @@ export const queryKeys = {
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  /** Every comment read, all work items — the catch-up target after a stream drop. */
-  workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
-  /** Every comment read for a work item — the invalidation target for a feed event. */
-  workItemCommentsRoot: (workItemId: string | undefined) =>
-    [...queryKeys.workItemCommentsAll(), workItemId ?? null] as const,
-  // Page size is baked into the service, so feed surfaces share one cache entry
-  // per anchor: a deep link opens on a different first page than a plain read.
-  workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
-    [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
-  factoryMembers: (factoryProjectId: string | undefined) =>
-    ['factory', 'mention-roster', factoryProjectId ?? null] as const,
+  // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
+  sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
+  workItemsWithSessions: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
+  unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
+  workItemsFiledFrom: (factoryProjectId: string | undefined, sources: readonly string[]) =>
+    [...queryKeys.workItems(factoryProjectId), 'sources', sources] as const,
+  // Outside the board's key: these hold counts and dates, not cards, so a rewrite of the cached cards must not reach them.
+  boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
+  workItemStarters: (factoryProjectId: string | undefined) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'starters'] as const,
+  workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
@@ -133,6 +139,7 @@ export const queryKeys = {
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
+  mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
@@ -212,3 +219,10 @@ export const queryKeys = {
       ...(limit === undefined ? [] : [limit]),
     ] as const,
 } as const;
+
+/** Every mutation that writes a card of this Factory's board. */
+export const cardWriteMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'write-work-item', factoryProjectId] as const;
+
+export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
+  [...cardWriteMutationKey(factoryProjectId), 'transition'] as const;

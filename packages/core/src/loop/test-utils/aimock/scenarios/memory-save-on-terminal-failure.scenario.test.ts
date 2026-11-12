@@ -84,10 +84,29 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['durable', 'evented', 'inngest'];
+  const deadlineSavePending: EngineVariant[] = ['inngest'];
   const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
   // Inngest already keeps the user message when the deadline lands during the input save.
   const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
+  // Inngest already saves a turn whose tool step is cut off: the deadline stops that step on its worker
+  // and the turn ends through the finish path.
+  const itStoppedStep = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
+
+  // On Inngest the caller reports the timeout at the deadline and the worker saves the stopped step shortly after.
+  async function settleDeadlineSave(memory: MastraMemory, threadId: string) {
+    if (engine !== 'inngest') {
+      // Let any late, fire-and-forget save land before reading memory.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return;
+    }
+    await vi.waitFor(
+      async () => {
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(toolResultIds(messages)).toContain('call_hang');
+      },
+      { timeout: 5_000, interval: 100 },
+    );
+  }
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -144,7 +163,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     expect(sent, `${label}: follow-up sees the tool result`).toContain('call_echo');
   }
 
-  itDeadline(
+  itStoppedStep(
     'total-timeout after a completed tool step',
     async () => {
       const memory = new MockMemory();
@@ -185,8 +204,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           },
         });
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
-        // Let any late, fire-and-forget save land before reading memory.
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await settleDeadlineSave(memory, threadId);
 
         // The deadline aborts the hanging call; its step is saved with the abort notice, like a tool that returns late.
         await expectTurnSavedAndRecalled(memory, 'total-timeout', threadId, undefined, ['call_echo', 'call_hang']);
@@ -485,7 +503,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
   // A processor that writes a data part when the turn ends must see it saved at the deadline too,
   // as it is on a normal finish, so the UI can re-render it from history.
-  itDeadline(
+  itStoppedStep(
     'total-timeout saves the data part an output processor writes at the end of the turn',
     async () => {
       const memory = new MockMemory();
@@ -522,18 +540,24 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         },
       });
 
-      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      const dataParts = messages
-        .flatMap(message => message.content.parts)
-        .filter(part => part.type === 'data-turn-summary');
-      expect(dataParts).toEqual([expect.objectContaining({ data: { status: 'timed-out' } })]);
+      // On Inngest the worker runs the output processors when it finishes the stopped turn, after the caller's error.
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const dataParts = messages
+            .flatMap(message => message.content.parts)
+            .filter(part => part.type === 'data-turn-summary');
+          expect(dataParts).toEqual([expect.objectContaining({ data: { status: 'timed-out' } })]);
+        },
+        { timeout: engine === 'inngest' ? 5_000 : 1_000, interval: 100 },
+      );
     },
     TEST_TIMEOUT_MS,
   );
 
   // A failed completion check moves the answer to a new message. The deadline save must put the
   // processor's data part on the answer still streaming, not on the rejected one, as a finish does.
-  itDeadline(
+  itStoppedStep(
     'total-timeout saves the data part with the answer after a failed completion check',
     async () => {
       const memory = new MockMemory();
@@ -568,11 +592,17 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         },
       });
 
-      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      const withPart = messages.filter(message => message.content.parts.some(p => p.type === 'data-turn-summary'));
-      expect(withPart).toHaveLength(1);
-      expect(JSON.stringify(withPart[0]!.content.parts)).toContain('PARTIAL');
-      expect(JSON.stringify(withPart[0]!.content.parts)).not.toContain('Let me check.');
+      // On Inngest the worker saves the stopped turn when it finishes it, after the caller's error.
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const withPart = messages.filter(message => message.content.parts.some(p => p.type === 'data-turn-summary'));
+          expect(withPart).toHaveLength(1);
+          expect(JSON.stringify(withPart[0]!.content.parts)).toContain('PARTIAL');
+          expect(JSON.stringify(withPart[0]!.content.parts)).not.toContain('Let me check.');
+        },
+        { timeout: engine === 'inngest' ? 5_000 : 1_000, interval: 100 },
+      );
     },
     TEST_TIMEOUT_MS,
   );
@@ -604,15 +634,22 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         },
       });
       expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+      if (engine === 'inngest') {
+        // The deadline stops the model step on its worker, which saves the streamed text when it finishes the turn.
+        await vi.waitFor(
+          async () => {
+            const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+            expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+            expect(messages[1]!.content.content).toMatch(/^(PARTIAL )+/);
+          },
+          { timeout: 5_000, interval: 100 },
+        );
+        return;
+      }
       // Absence can't be polled for; give a late write time to land.
       await new Promise(resolve => setTimeout(resolve, 300));
 
       const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      // Durable engines save the input up front but have no deadline pass yet (#29036).
-      if (deadlineSavePending.includes(engine)) {
-        expect(messages.map(message => message.role)).toEqual(['user']);
-        return;
-      }
       expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
       expect(messages[1]!.content.content).toMatch(/^(PARTIAL )+/);
     },
@@ -621,7 +658,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
   // The step streamed text, then its only call was cut off: the step is kept whole, text and all,
   // so its text must not be added a second time as streamed text of an unfinished step.
-  itDeadline(
+  itStoppedStep(
     'total-timeout saves the text of a step whose call was cut off once',
     async () => {
       const memory = new MockMemory();
@@ -671,12 +708,15 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
-  // A step whose calls all settled, one with an error and one with the abort notice, is saved whole.
-  itDeadline(
-    'total-timeout saves a step whose tool call failed alongside one cut off at the deadline',
-    async () => {
+  // A step whose calls all settled, one in time and one with the abort notice, is saved whole.
+  itStoppedStep.each([
+    ['failed', 'lookup failed'],
+    ['succeeded', 'order shipped'],
+  ] as const)(
+    'total-timeout saves a step whose tool call %s alongside one cut off at the deadline',
+    async (outcome, expected) => {
       const memory = new MockMemory();
-      const threadId = `${THREAD}-timeout-failed-call-${engine}`;
+      const threadId = `${THREAD}-timeout-${outcome}-call-${engine}`;
       const hang = Promise.withResolvers<unknown>();
       try {
         const result = await runLoopScenario({
@@ -693,10 +733,11 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           tools: {
             failing: createTool({
               id: 'failing',
-              description: 'Always throws.',
+              description: 'Looks up the order.',
               inputSchema: z.object({}),
               execute: async () => {
-                throw new Error('lookup failed');
+                if (outcome === 'failed') throw new Error('lookup failed');
+                return { status: 'order shipped' };
               },
             }),
             hanging: createTool({
@@ -723,8 +764,9 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         await vi.waitFor(async () => {
           const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
           const saved = JSON.stringify(messages);
-          expect(saved).toContain('lookup failed');
-          expect(saved).toContain(TOOL_ABORT_NOTICE);
+          expect(saved).toContain(expected);
+          // Only the hanging call carries the abort notice.
+          expect(saved.split(TOOL_ABORT_NOTICE)).toHaveLength(2);
         });
       } finally {
         hang.resolve({});
@@ -732,6 +774,206 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     },
     TEST_TIMEOUT_MS,
   );
+
+  // A tool's transcript transform applies to its saved result, also when the deadline save writes it.
+  itStoppedStep.each(['in time', 'just after the deadline'] as const)(
+    'total-timeout saves the transcript-transformed result of a call that finished %s alongside one cut off',
+    async when => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-transcript-${when.length}-${engine}`;
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Run both tools.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            secretive: createTool({
+              id: 'secretive',
+              description: 'Reads the vault.',
+              inputSchema: z.object({}),
+              execute: async () => {
+                if (when !== 'in time') await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 150));
+                return { secret: 'RAW-VAULT-SECRET' };
+              },
+              transform: { transcript: { output: () => ({ secret: 'REDACTED-FOR-TRANSCRIPT' }) } },
+            }),
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              {
+                toolCalls: [
+                  { id: 'call_secret', name: 'secretive', arguments: {} },
+                  { id: 'call_hang', name: 'hanging', arguments: {} },
+                ],
+              },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const saved = JSON.stringify(messages);
+          expect(saved).toContain('REDACTED-FOR-TRANSCRIPT');
+          // Only the hanging call carries the abort notice.
+          expect(saved.split(TOOL_ABORT_NOTICE)).toHaveLength(2);
+        });
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(JSON.stringify(messages)).not.toContain('RAW-VAULT-SECRET');
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A tool result hidden by a stream processor is still saved by the deadline pass.
+  itStoppedStep(
+    'total-timeout saves a tool result a stream processor hid alongside a call cut off',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-hidden-result-${engine}`;
+      const hang = Promise.withResolvers<unknown>();
+      const hide: Processor = {
+        id: 'hide-tool-result',
+        processOutputStream: async ({ part }) =>
+          part.type === 'tool-result' && part.payload.toolCallId === 'call_quiet' ? null : part,
+      };
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Run both tools.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          outputProcessors: [hide],
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            quiet: createTool({
+              id: 'quiet',
+              description: 'Returns a value.',
+              inputSchema: z.object({}),
+              execute: async () => ({ value: 'QUIET-RESULT' }),
+            }),
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              {
+                toolCalls: [
+                  { id: 'call_quiet', name: 'quiet', arguments: {} },
+                  { id: 'call_hang', name: 'hanging', arguments: {} },
+                ],
+              },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const saved = JSON.stringify(messages);
+          expect(saved).toContain('QUIET-RESULT');
+          // Only the hanging call carries the abort notice.
+          expect(saved.split(TOOL_ABORT_NOTICE)).toHaveLength(2);
+        });
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Inngest saves the mapped output of a call that finished in time; one that finishes after the deadline is not saved yet.
+  for (const when of ['in time', 'just after the deadline'] as const) {
+    (when === 'in time' ? itStoppedStep : itDeadline)(
+      `total-timeout saves the model output of a call that finished ${when} alongside one cut off`,
+      async () => {
+        const memory = new MockMemory();
+        const threadId = `${THREAD}-timeout-model-output-${when.length}-${engine}`;
+        const hang = Promise.withResolvers<unknown>();
+        try {
+          const result = await runLoopScenario({
+            engine,
+            llm: getMock(),
+            prompt: 'Run both tools.',
+            memory,
+            threadId,
+            resourceId: RESOURCE,
+            stopWhen: stepCountIs(5),
+            modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+            expectStreamError: true,
+            collectChunks: true,
+            tools: {
+              mapped: createTool({
+                id: 'mapped',
+                description: 'Reads a large file.',
+                inputSchema: z.object({}),
+                execute: async () => {
+                  if (when !== 'in time') await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 150));
+                  return { contents: 'RAW-FILE-CONTENTS' };
+                },
+                toModelOutput: () => ({ type: 'text', value: 'MAPPED-FOR-MODEL' }),
+              }),
+              hanging: createTool({
+                id: 'hanging',
+                description: 'Never returns.',
+                inputSchema: z.object({}),
+                execute: async () => hang.promise,
+              }),
+            },
+            fixtures: llm => {
+              llm.on(
+                { endpoint: 'chat', sequenceIndex: 0 },
+                {
+                  toolCalls: [
+                    { id: 'call_mapped', name: 'mapped', arguments: {} },
+                    { id: 'call_hang', name: 'hanging', arguments: {} },
+                  ],
+                },
+              );
+            },
+          });
+          expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+          await vi.waitFor(async () => {
+            const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+            const saved = JSON.stringify(messages);
+            expect(saved).toContain('RAW-FILE-CONTENTS');
+            expect(saved).toContain('MAPPED-FOR-MODEL');
+          });
+        } finally {
+          hang.resolve({});
+        }
+      },
+      TEST_TIMEOUT_MS,
+    );
+  }
 
   it(
     'provider-error after a completed tool step',
@@ -939,7 +1181,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   );
 
   // With observational memory on, its processor owns history writes instead of MessageHistory.
-  itDeadline(
+  itStoppedStep(
     'total-timeout after a completed tool step, observational memory',
     async () => {
       const memory = createObservationalMemory();
@@ -981,7 +1223,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           },
         });
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await settleDeadlineSave(memory, threadId);
 
         await expectTurnSavedAndRecalled(memory, 'total-timeout-om', threadId, { observationalMemory: true }, [
           'call_echo',
@@ -1064,8 +1306,90 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // A tool can point the run's memory context at another thread, which MessageHistory then writes to.
+  // The deadline save checks write access to that thread too.
+  it.skipIf(engine === 'inngest')(
+    'total-timeout does not save the turn when a tool points memory at a thread the caller cannot write',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-fga-redirect-${engine}`;
+      const otherThreadId = `${threadId}-other`;
+      await memory.createThread({ threadId, resourceId: RESOURCE });
+      await memory.createThread({ threadId: otherThreadId, resourceId: RESOURCE });
+      let toolStarted = false;
+      const denies = (permission: unknown, id: string) =>
+        String(permission) === 'memory:write' && toolStarted && id === otherThreadId;
+      const denied: string[] = [];
+      const fga: IFGAProvider = {
+        check: async (_user, { resource, permission }) => !denies(permission, resource.id),
+        require: async (user, { resource, permission }) => {
+          if (denies(permission, resource.id)) {
+            denied.push(resource.id);
+            throw new FGADeniedError(user, resource, permission);
+          }
+        },
+        filterAccessible: async (_user, resources) => resources,
+      };
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'reader' });
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Wait for the courier.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          server: { fga },
+          requestContext,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async (_input, context) => {
+                toolStarted = true;
+                const memoryContext = context?.requestContext?.get('MastraMemory') as Record<string, any>;
+                context?.requestContext?.set('MastraMemory', {
+                  ...memoryContext,
+                  thread: { ...memoryContext.thread, id: otherThreadId },
+                });
+                return hang.promise;
+              },
+            }),
+          },
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] });
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        // Absence can't be polled for; give the deadline save time to land.
+        await new Promise(resolve => setTimeout(resolve, 1_500));
+
+        // Evented tools run with a copy of the request context, so there the change never reaches the save,
+        // which writes the run's own thread.
+        const redirected = engine !== 'evented';
+        expect(denied.includes(otherThreadId)).toBe(redirected);
+        const saved = async (id: string) =>
+          (await memory.recall({ threadId: id, resourceId: RESOURCE })).messages.some(
+            message => message.role === 'assistant',
+          );
+        expect(await saved(otherThreadId)).toBe(false);
+        expect(await saved(threadId)).toBe(!redirected);
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // The finish path undoes per-step saves when an output processor trips, so the deadline pass must too.
-  itDeadline(
+  itStoppedStep(
     'total-timeout removes per-step saves when an output processor trips',
     async () => {
       const memory = new MockMemory();
@@ -1111,6 +1435,17 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         });
         expect(result.chunks!.some(chunk => chunk.type === 'tool-result')).toBe(true);
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        if (engine === 'inngest') {
+          // The worker undoes the per-step saves when it finishes the stopped turn, after the caller's error.
+          await vi.waitFor(
+            async () => {
+              const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+              expect(messages.map(message => message.role)).toEqual(['user']);
+            },
+            { timeout: 5_000, interval: 100 },
+          );
+          return;
+        }
         // Absence can't be polled for; give a late write time to land.
         await new Promise(resolve => setTimeout(resolve, 1_000));
 

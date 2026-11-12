@@ -39,6 +39,9 @@ async function startServer(route: ServerRoute<any, any, any>, beforeContext?: ()
 
 createStreamDisconnectTestSuite({
   startServer: (route, { beforeContext } = {}) => startServer(route, beforeContext),
+  // The adapter hands the route's Response to @hono/node-server unchanged, and its response error handler destroys
+  // the socket when the body errors after the headers went out.
+  datastreamUpstreamErrorDropsConnection: true,
 });
 
 // The deployer serves @mastra/hono, and its default CORS exposes Content-Length to browsers. A small, complete

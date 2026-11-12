@@ -25,6 +25,9 @@ export type IntakeRouteInfo = IntakeRouteListResponse['intakeRoutes'][number];
 export type IntakeRouteInput = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema>;
 export type IntakeRoutePatch = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema>;
 export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate.bodySchema>;
+export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema>;
+export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
+export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
 
 import type {
   CustomProviderInfo,
@@ -50,9 +53,10 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
 import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
-export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
   ArtifactEntry,
   ArtifactListing,

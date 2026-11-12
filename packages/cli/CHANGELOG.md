@@ -1,5 +1,159 @@
 # mastra
 
+## 1.39.0-alpha.14
+
+### Patch Changes
+
+- Added `mastra api factory work-item starters` and `mastra api factory work-item activity`. The first counts the cards behind each new-session starter on a project's default board. The second lists when a project's cards were created and completed since an instant: ([#30097](https://github.com/mastra-ai/mastra/pull/30097))
+
+  ```bash
+  mastra api factory work-item starters <project-id>
+  mastra api factory work-item activity <project-id> '{"since":"2026-06-01T00:00:00.000Z"}'
+  ```
+
+- Added a "Join the issue's card instead" switch to intake routes in the Factory UI. A route for pull requests that close an issue can now put the pull request on that issue's card instead of giving it a card of its own; until now only the route Factory seeds could do this. The switch shows on new and saved routes whose conditions include "Source kind is Pull request" and "Pull request closes an issue is Yes". ([#30197](https://github.com/mastra-ai/mastra/pull/30197))
+
+- Improved the Factory new session page on large boards. Its starters and its activity band now load the counts and dates they show instead of downloading every card of the project. They show the same content as before. ([#30097](https://github.com/mastra-ai/mastra/pull/30097))
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+  - @mastra/deployer@1.83.0-alpha.12
+
+## 1.39.0-alpha.13
+
+### Patch Changes
+
+- Fixed `mastra api factory work-item list` ignoring its filters. The command now accepts JSON input, so `sessionId`, `scope`, `started`, `q`, `limit` and `source` reach the server, for example `mastra api factory work-item list <project-id> '{"started":"false","q":"login flow"}'`. ([#30153](https://github.com/mastra-ai/mastra/pull/30153))
+
+  Fixed list filters on Factory commands. A list such as `{"source":["a","b"]}` or `{"kind":["automation-failed","agent-waiting"]}` on `mastra api factory attention list` is now sent the way Factory reads it, instead of being rejected or matched as one literal value.
+
+## 1.39.0-alpha.12
+
+### Patch Changes
+
+- Fixed Factory search (⌘K) refusing to start a listed card with "This card no longer exists" after a more recent card took its place in the results, and its Retry button leaving the failure notice up when the intake had nothing to offer. Search now also lists a card found by its number alone, and an intake item found by its source label. ([#30154](https://github.com/mastra-ai/mastra/pull/30154))
+
+- Factory search (Cmd/Ctrl+K) now shows which phase each work session belongs to, such as **Triage** or **Work**, and marks the session for the card's current phase as **current**. Before, a card's sessions all showed the same title, branch, and issue number, so they looked like duplicates. You can also search by phase name, for example `triage 30123`. ([#30142](https://github.com/mastra-ai/mastra/pull/30142))
+
+- Updated dependencies [[`a0cd52c`](https://github.com/mastra-ai/mastra/commit/a0cd52cdc15c67c5e3d225b90428efde1c15d8a3), [`c1fb13f`](https://github.com/mastra-ai/mastra/commit/c1fb13f325096d244285907d0dd4b0ad35d2cfca), [`6f7eb69`](https://github.com/mastra-ai/mastra/commit/6f7eb696e9c629f5659072947fbed0e09d5e02d3)]:
+  - @mastra/core@1.83.0-alpha.11
+  - @mastra/deployer@1.83.0-alpha.11
+
+## 1.39.0-alpha.11
+
+### Patch Changes
+
+- Improved Factory boards with thousands of cards. An open board now downloads only the cards that changed when something moves, instead of the whole board, so large boards update faster and use far less data. ([#30099](https://github.com/mastra-ai/mastra/pull/30099))
+
+- Improved Factory search (⌘K) on large boards. Opening it no longer downloads every card of the project: it loads the 20 most recently updated cards nobody has started, and asks the server for the cards matching what you type once you pause typing. ([#30081](https://github.com/mastra-ai/mastra/pull/30081))
+
+  What changes when you search:
+
+  - A card nobody has started is found by its title, key, number or source id. Typing a stage name, a source label, a URL or a branch no longer finds it.
+  - A card that holds a session is still found the way it was, through its session row.
+  - Up to 20 matching unstarted cards are listed. The "Work items" count still counts every one of them.
+  - Up to 20 open issues and pull requests that have no card yet are offered, the best matches for what you typed first.
+
+  `mastra api` can also pass the work-item list route's new filters: `started`, `q`, `limit` and `source`.
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83)]:
+  - @mastra/core@1.83.0-alpha.10
+  - @mastra/deployer@1.83.0-alpha.10
+
+## 1.39.0-alpha.10
+
+### Minor Changes
+
+- Add CLI commands for creating, reading, replacing, reviewing, and analyzing feedback, plus score analytics. Score and feedback creates preserve IDs and timestamps across bounded retries. ([#30089](https://github.com/mastra-ai/mastra/pull/30089))
+
+### Patch Changes
+
+- Improved Factory session pages on large boards. The tab title, the card breadcrumb with its related work, and the pull request links now load from the session's own cards instead of waiting for the whole board to download. ([#30080](https://github.com/mastra-ai/mastra/pull/30080))
+
+- Factory tabs no longer ask the server for running sessions every 5 seconds. Running markers now update from the board's live connection, like cards and decisions: once a minute as a safety net, and every 5 seconds only while the live connection is down. ([#30077](https://github.com/mastra-ai/mastra/pull/30077))
+
+- Improved the Factory sidebar on large boards. The session list now loads only the cards its sessions hold, so opening a session no longer downloads the whole board. ([#30087](https://github.com/mastra-ai/mastra/pull/30087))
+
+- Updated dependencies [[`1689ce3`](https://github.com/mastra-ai/mastra/commit/1689ce38e1d66df6f474acd5db65f46315a02c23), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`38327de`](https://github.com/mastra-ai/mastra/commit/38327de07a169a6d5ce8ab8fc2075caec112d6f3), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`2053c88`](https://github.com/mastra-ai/mastra/commit/2053c881ed7a13c43d3932e1938e2f94ef226b4f), [`4884ee0`](https://github.com/mastra-ai/mastra/commit/4884ee08a067dd82176c57ca54bdfec02eda97ea), [`49e7108`](https://github.com/mastra-ai/mastra/commit/49e71082bd2c36cd20d7f4ba62bb3666e108968b), [`4cfa256`](https://github.com/mastra-ai/mastra/commit/4cfa256801f6b7e909daa5ed5d14c77b9fb24197), [`7f0d2fd`](https://github.com/mastra-ai/mastra/commit/7f0d2fd4b6c304ad851232b5969d96fdb20aa06a), [`b0ef22e`](https://github.com/mastra-ai/mastra/commit/b0ef22e7bfeb309c456d5c54528d579c4ac9e863), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`eb683b4`](https://github.com/mastra-ai/mastra/commit/eb683b45fe2ad645ae81c419d405aa2327a053e3)]:
+  - @mastra/core@1.83.0-alpha.9
+  - @mastra/deployer@1.83.0-alpha.9
+
+## 1.39.0-alpha.9
+
+### Patch Changes
+
+- Add shared contracts for opt-in aggregated trace roots. OSS readers remain unsupported. ([#30054](https://github.com/mastra-ai/mastra/pull/30054))
+
+- Add `PUT /api/observability/feedback/:feedbackId` for complete feedback replacement. Preserve the original ID, trace ID, and timestamp, and include every field to retain. Delayed POST retries keep existing feedback. Unsupported storage versions return 501. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```json
+  {
+    "feedback": {
+      "feedbackId": "feedback-1",
+      "traceId": "trace-123",
+      "timestamp": "2026-11-11T12:00:00.123Z",
+      "feedbackType": "thumbs",
+      "value": -1
+    }
+  }
+  ```
+
+- Updated Studio's browser tab icon to a rounded tile, matching the rounded corners used across the rest of the UI. `mastra studio` now serves the icon file instead of the page HTML, so the tab shows it. ([#30040](https://github.com/mastra-ai/mastra/pull/30040))
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/deployer@1.83.0-alpha.8
+
+## 1.39.0-alpha.8
+
+### Patch Changes
+
+- The toggle on pinned Knowledge listings in Studio chat now says how many pages the listing covers: "Show N pages ▾" when collapsed ("Show N+ pages ▾" when the total is unknown), "Hide pages ▴" when open. ([#29987](https://github.com/mastra-ai/mastra/pull/29987))
+
+## 1.39.0-alpha.7
+
+### Minor Changes
+
+- Added `mastra api factory project environment variables` commands to list, set, update and delete a Factory project's sandbox environment variables. Values are never returned. ([#29923](https://github.com/mastra-ai/mastra/pull/29923))
+
+  ```bash
+  mastra api factory project environment variables set <project-id> NPM_TOKEN '{"value":"<token>","appliesTo":"runtime"}'
+  ```
+
+### Patch Changes
+
+- Fixed `mastra dev` loading the deployer from `src/mastra/index.ts` when the project has file-based agents. The dev server now leaves it out, as it does for projects without file-based agents. ([#30003](https://github.com/mastra-ai/mastra/pull/30003))
+
+- Updated dependencies [[`4e7dbf9`](https://github.com/mastra-ai/mastra/commit/4e7dbf9cc3f10f8ae4d93f4cd4c2892bd2cd6554), [`d41d7ac`](https://github.com/mastra-ai/mastra/commit/d41d7ac33d29fa71ae8cd37d3af5e52b31b5c277), [`2d16c84`](https://github.com/mastra-ai/mastra/commit/2d16c84823139420e6757f9e247d5a3f5061d37b), [`bd1fca8`](https://github.com/mastra-ai/mastra/commit/bd1fca831d15654d3802f7d957533234e125ca9a), [`69f5d83`](https://github.com/mastra-ai/mastra/commit/69f5d8314707700ca48b38bcdea0d31580618cdc), [`42bc816`](https://github.com/mastra-ai/mastra/commit/42bc816c076197c376b0502cec85c9b8a2e22a43), [`bdd8fee`](https://github.com/mastra-ai/mastra/commit/bdd8fee1e28a3b23d2f62fa740e10bc771ea2fc8), [`ebbea50`](https://github.com/mastra-ai/mastra/commit/ebbea50d38f2f4996675fbf33c047d1fd63dfd05), [`a30ee08`](https://github.com/mastra-ai/mastra/commit/a30ee08ccd27aa8c6ff8721640ff0b8df9baae67), [`79906e7`](https://github.com/mastra-ai/mastra/commit/79906e7b9facd00c8745ea7fdeb3eb83a7e2308b), [`ce03237`](https://github.com/mastra-ai/mastra/commit/ce03237b34fa0db44de087b367a429c83e75e3b3)]:
+  - @mastra/core@1.83.0-alpha.7
+  - @mastra/deployer@1.83.0-alpha.7
+
+## 1.39.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/deployer@1.83.0-alpha.6
+
+## 1.39.0-alpha.5
+
+### Patch Changes
+
+- Factory boards now update from the live connection instead of a fixed 2 to 5 second poll. ([#29777](https://github.com/mastra-ai/mastra/pull/29777))
+
+  - **Faster updates.** On a connected board, a change typically shows within a second when the board hasn't refreshed in the last 5 seconds, and at the 5 second mark otherwise. While you are moving a card, the card list waits for the move to finish before it refreshes.
+  - **Fewer requests.** A connected board no longer asks for its cards and decisions every 2 to 5 seconds. It checks once a minute as a safety net, and every 5 seconds if the live connection drops. Running sessions are still checked every 5 seconds.
+  - **Self-healing connection.** A live connection that goes silent, for example after a server restart behind a proxy, is reopened within about a minute instead of staying dead until the page is reloaded, so comments and boards pick up live updates again.
+
+- Improved Studio page navigation: pages now switch instantly. Clicking a sidebar item no longer freezes the old page and fades it into the new one, so the selected item and the page content update together right away. ([#29918](https://github.com/mastra-ai/mastra/pull/29918))
+
+- Fixed the "g" in Studio. Studio switched on a Mona Sans stylistic set that drew an old-style double-storey "g", so Studio didn't match Factory, Platform or GitHub. Studio now uses Mona Sans's default letters and downloads smaller font files. ([#29915](https://github.com/mastra-ai/mastra/pull/29915))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/deployer@1.83.0-alpha.5
+
 ## 1.39.0-alpha.4
 
 ### Minor Changes

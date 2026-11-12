@@ -1,5 +1,143 @@
 # @mastra/mcp-apps-components
 
+## 0.1.0-alpha.7
+
+### Minor Changes
+
+- Dashboards authored in chat now accept the same widgets as the dashboard editor: KPIs that combine values (ratio, difference, max, fallback), read trace, span or score aggregates (for example p95 span duration) and use duration, percent or score formats; line charts of scores; six more chart colors (blue, orange, pink, yellow, red, purple); and optional KPI icon and detail, series color and table empty message. ([#30192](https://github.com/mastra-ai/mastra/pull/30192))
+
+### Patch Changes
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+
+## 0.1.0-alpha.6
+
+### Minor Changes
+
+- Added an optional `onConfigure` callback to `observabilityWidgetHost`. When a host passes it, each widget in the observability widget app shows a settings button. Clicking it hands the host the widget along with the date preset, custom range and filters it is drawn with, so the host can open its own settings dialog for that widget. ([#30043](https://github.com/mastra-ai/mastra/pull/30043))
+
+  ```tsx
+  import { observabilityWidgetHost } from '@mastra/mcp-apps-components/host';
+
+  const host = observabilityWidgetHost({
+    resourceUri: 'ui://mastra/observability-widget',
+    onConfigure: ({ widget, datePreset, filters }) => openWidgetSettings(widget, datePreset, filters),
+  });
+  ```
+
+### Patch Changes
+
+- Replaced the `onPin` and `isPinned` props on `DashboardRenderer`, and the `pin` prop on `StatelessWidget`, with a host `actions` slot. `DashboardRenderer` takes a `widgetActions` callback that returns each widget's buttons, and `StatelessWidget` takes them as `actions`. This lets a host add any buttons to widget cards, not just a pin button, without changing the renderer. Host buttons sit after the card's own drilldown and alert buttons. ([#30043](https://github.com/mastra-ai/mastra/pull/30043))
+
+  Compose the buttons with the new `MetricsCard.Action`. The card is a `group/metrics-card`, so each button sets its own visibility with classes. The exported `onCardHover` class makes a button wait for the card's hover, keyboard focus or open menu: until then it takes no room but stays in the tab order, so keyboard users can still reach it. Touch screens can't hover, so there it always shows. Without it, the button stays in view, e.g. for a pinned card's unpin. `PinAction` and the `WidgetPin` type are removed: a pin button is a `MetricsCard.Action` like any other.
+
+  `ChartCard` now has a single `actions` slot: `persistentActions` is removed, and `MetricsCard.Actions` no longer takes `reveal`. Set `className={onCardHover}` on each `MetricsCard.Action` that should wait for hover instead.
+
+  **Before**
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    isPinned={id => pinnedIds.includes(id)}
+    onPin={(widget, isPinned) => savePin(widget, isPinned)}
+  />
+  ```
+
+  **After**
+
+  ```tsx
+  import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
+  import { DashboardRenderer } from '@mastra/playground-ui/domains/dashboards';
+  import { PinIcon, PinOffIcon } from 'lucide-react';
+
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    widgetActions={widget => {
+      const isPinned = pinnedIds.includes(widget.id);
+      return (
+        <MetricsCard.Action
+          label={`${isPinned ? 'Unpin' : 'Pin'} ${widget.title ?? 'widget'}`}
+          onClick={() => savePin(widget, !isPinned)}
+          className={isPinned ? undefined : onCardHover}
+        >
+          {isPinned ? <PinOffIcon /> : <PinIcon />}
+        </MetricsCard.Action>
+      );
+    }}
+  />;
+  ```
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
+## 0.1.0-alpha.5
+
+### Minor Changes
+
+- Added `createObservabilityDraftSchemas`, so tools that save dashboards can build the widget and dashboard schemas from one catalog, and offer a model only the choices they accept. ([#29832](https://github.com/mastra-ai/mastra/pull/29832))
+
+  `createObservabilityDraftSchemas(catalog, options)` returns a `widget` and a `dashboard` schema. Pass `kinds` to offer only some widget kinds, and `dashboardFilters: false` to leave `defaults.filters` out. What you leave out is missing from the JSON schema the model sees, and rejected if the model writes it anyway. The draft schemas and converters are also exported from `@mastra/mcp-apps-components/dashboards`, which doesn't load the bundled apps.
+
+  ```ts
+  import { createObservabilityDraftSchemas, toObservabilityWidget } from '@mastra/mcp-apps-components/dashboards';
+
+  const schemas = createObservabilityDraftSchemas({ metricNames }, { kinds: ['kpis', 'timeseries', 'table'] });
+
+  const addWidget = createTool({
+    id: 'addWidget',
+    inputSchema: schemas.widget,
+    // Keeps the widget's id when the model gives one
+    execute: async widget => saveWidget(toObservabilityWidget(widget)),
+  });
+  ```
+
+  Invalid widgets are rejected with paths into what the model wrote, such as `timeseries.series.1.value`. When `toObservabilityWidget` throws, the error's `cause` is the `ZodError` with those paths. Converted widgets pass `strictDashboardWidgetSchema`.
+
+  The widget and dashboard input schemas are about 28% smaller, because metric and score filters are written out once instead of at every read. They also now reject a widget whose tabs share a label, which used to open as an error card.
+
+- Added `createObservabilityWidgetInputSchema`, `observabilityWidgetInputSchema` and `toObservabilityWidget`, so a tool that adds one widget to a saved dashboard accepts the same widget a model writes for `showObservabilityDashboard`, checked and converted the same way. ([#29913](https://github.com/mastra-ai/mastra/pull/29913))
+
+  ```ts
+  import { createObservabilityWidgetInputSchema, toObservabilityWidget } from '@mastra/mcp-apps-components';
+
+  const widgetSchema = createObservabilityWidgetInputSchema({ metricNames });
+  const widget = toObservabilityWidget({
+    title: 'Model spend',
+    table: { groupBy: ['model'], columns: [/* ... */] },
+  });
+  ```
+
+- Added `@mastra/mcp-apps-components/dashboards`, a strict schema for storing dashboard definitions. Unlike core's `dashboardDefinitionSchema`, it only accepts definitions the dashboard renderer can draw: built-in widget kinds only, each view's options checked against its kind, `columns` only on table views, and each kind's own checks run at both org and project scope. Every problem is a zod issue with a path. Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have, point at the view, such as `rows.0.widgets.1.views.0`, and their message says what's wrong. ([#29802](https://github.com/mastra-ai/mastra/pull/29802))
+
+  **Before**
+
+  ```ts
+  import { dashboardDefinitionEnvelopeSchema } from '@mastra/core/storage/dashboards';
+
+  dashboardDefinitionEnvelopeSchema.parse(body.definition);
+  const definition = body.definition as Record<string, unknown>;
+  ```
+
+  **After**
+
+  ```ts
+  import { strictDashboardDefinitionSchema } from '@mastra/mcp-apps-components/dashboards';
+  import type { StrictDashboardDefinition } from '@mastra/mcp-apps-components/dashboards';
+
+  // In the service that stores dashboards, on every write
+  const definition: StrictDashboardDefinition = strictDashboardDefinitionSchema.parse(body.definition);
+  ```
+
+  Use `strictDashboardWidgetSchema` to check a single widget. Call both in the code that stores dashboards, not in a request-body schema: their input type is `unknown` and their JSON schema is empty, so keep core's schema there for request types and API docs. The subpath doesn't load the package's bundled apps.
+
+### Patch Changes
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
 ## 0.1.0-alpha.4
 
 ### Patch Changes

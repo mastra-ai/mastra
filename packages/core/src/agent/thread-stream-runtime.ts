@@ -2381,11 +2381,10 @@ export class AgentThreadStreamRuntime {
       const advertisedLoopWorkflowName = (agent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>>)
         .durableLoopWorkflowName;
       if (typeof advertisedLoopWorkflowName === 'string') workflowNames.add(advertisedLoopWorkflowName);
+      // Status only: the full run would pull a multi-megabyte snapshot into memory.
       for (const workflowName of workflowNames) {
-        const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
-        if (!run) continue;
-        const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
-        return typeof snapshot?.status === 'string' ? (snapshot.status as WorkflowRunStatus) : undefined;
+        const status = await workflowsStore.loadWorkflowRunStatus({ runId, workflowName });
+        if (typeof status === 'string') return status;
       }
       return 'missing';
     } catch {

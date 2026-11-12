@@ -5,8 +5,7 @@
  * the built-in Work board and app boards in each project once, and they are edited under their own
  * key; their code behaviour stays attached, so an edit it can't honour is refused
  * (`code_behaviour`), and reset rewrites Factory's current definition at the next revision. They
- * can't be created over, and Work can't be deleted. The retired Review board's key is reserved. The
- * writes themselves are `BoardWrites`.
+ * can't be created over, and Work can't be deleted. The writes themselves are `BoardWrites`.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
@@ -29,7 +28,7 @@ export interface BoardRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   projects: FactoryProjectsStorage;
   /** Read to refuse edits that would strand cards. */
-  workItems: Pick<WorkItemsStorage, 'list'>;
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'releaseReviewCards'>;
   storage: StoredBoardsStorage;
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
   boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;

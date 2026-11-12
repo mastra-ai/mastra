@@ -14,7 +14,7 @@ import { codeBoardOf, compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { ProjectBoardCache, toBoardSource } from './project-boards.js';
 import type { ProjectBoardCacheOptions } from './project-boards.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
 import { boardDefinitionOf } from './stored-board.js';
@@ -368,12 +368,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(served.name).toBe('Stored release');
     expect(codeBoardOf(served)).toBe(release);
     expect(served.tools.ship_it?.onResult).toBe(shipped);
-    expect(described.registry.has('review')).toBe(false);
+    expect(described.registry.get('review')!.name).toBe('Stored review');
+    expect(described.details.get('review')).toEqual({ source: 'stored', editable: true, problems: [] });
     expect(described.details.get('release')).toEqual({ source: 'app', editable: true, problems: [] });
     expect(described.registry.has('bugs')).toBe(true);
-    expect(described.problems).toEqual([
-      'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
-    ]);
+    expect(described.problems).toEqual([]);
     expect((await a.boards.get(scope, 'release'))!).toMatchObject({ name: 'Stored release', revision: 1 });
   });
 
@@ -402,7 +401,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
   );
 
   it.each([false, true])(
-    'reports a non-Review board stored under the review key by Factory (Review in use: %s)',
+    'serves a board stored under the review key that is not the seed, whoever stored it (Review in use: %s)',
     async reviewInUse => {
       const { a, scope } = await setup();
       // Factory's actor alone doesn't make a row the Review seed: its board isn't Review's.
@@ -415,16 +414,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
         reviewBoardInUse: async () => reviewInUse,
       }).describe(scope);
 
-      expect(described.problems).toEqual([
-        reviewInUse
-          ? 'Stored board "review" is hidden by the code board with the same key.'
-          : 'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
-      ]);
+      expect(described.problems).toEqual([]);
+      expect(described.registry.get('review')!.initialPhase).toBe('reported');
+      expect(described.details.get('review')).toEqual({ source: 'stored', editable: true, problems: [] });
     },
   );
 
   it('skips a stored board that no longer compiles and still loads the code boards and the other stored boards', async () => {
     const { a, scope } = await setup();
+    // Factory stores its boards on the project's first load, before anyone adds one.
+    await cache(a.boards).load(scope);
     await a.boards.create(scope, bugsBoard(), 'user-1');
     await a.boards.create(scope, { ...bugsBoard('Chores'), key: 'chores' }, 'user-1');
     // A row written outside the boards API: a terminal phase cannot be where cards start.
@@ -455,10 +454,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
   it('serves no built-in boards when the app turns them off', async () => {
     const { a, scope } = await setup();
-    const registry = await cache(
-      a.boards,
-      createBoardRegistry({ boards: [appBoard('release')], includeDefaultBoards: false }),
-    ).load(scope);
+    const registry = await cache(a.boards, boardRegistryOf([appBoard('release')])).load(scope);
 
     expect([...registry.keys()]).toEqual(['release']);
     expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['release']);

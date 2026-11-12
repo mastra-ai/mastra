@@ -130,7 +130,7 @@ export function createDestructurableOutput<OUTPUT = undefined>(
 export function persistProcessorDataChunk(
   messageList: MessageList,
   messageId: string,
-  chunk: { type: string; data?: unknown; transient?: boolean },
+  chunk: { type: string; data?: unknown; id?: string; transient?: boolean },
 ): void {
   if (!isDataChunk(chunk) || chunk.transient) return;
 
@@ -139,7 +139,9 @@ export function persistProcessorDataChunk(
     role: 'assistant',
     content: {
       format: 2,
-      parts: [{ type: chunk.type as `data-${string}`, data: chunk.data }],
+      parts: [
+        { type: chunk.type as `data-${string}`, data: chunk.data, ...(chunk.id !== undefined ? { id: chunk.id } : {}) },
+      ],
     },
     createdAt: new Date(),
   };
@@ -279,7 +281,7 @@ export function resolveOutputMessageSkippingCompletionChecks(messageList: Messag
  * A failed completion check moves the answer to a new message, but this output keeps the id it
  * was built with. Resolve at write time so processor data lands on the answer that is returned.
  */
-function resolveProcessorWriterMessageId(
+export function resolveProcessorWriterMessageId(
   messageList: MessageList,
   fallbackMessageId: string,
   explicitMessageId?: string,
@@ -1929,8 +1931,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
                   // A step rejected by a tripwire keeps its empty text, so durable runs don't
                   // return a rejected reply (#26048).
+                  let rewrittenText: string | undefined;
+                  if (chunk.payload.textRewritten === true && self.#status !== 'canceled') {
+                    // Durable producers run processOutputResult after the last step-finish was
+                    // streamed. When it changed the reply, they write the result onto the run's
+                    // last step; otherwise the buffered text stands (a failed step's record is
+                    // empty while the stream already delivered its partial text). Like the
+                    // processed path above, the rewritten reply is the run's text, also after
+                    // a resume, where the buffered aggregate still holds pre-approval text.
+                    const finalizedText = chunk.payload.output?.steps?.at(-1)?.text;
+                    const lastStep = self.#bufferedSteps.at(-1);
+                    if (lastStep && typeof finalizedText === 'string') {
+                      lastStep.text = finalizedText;
+                      rewrittenText = finalizedText;
+                    }
+                  }
                   this.resolvePromises({
-                    text: self.#producedText(),
+                    text: rewrittenText ?? self.#producedText(),
                     finishReason: self.#finishReason,
                   });
                 }

@@ -36,7 +36,7 @@
     "mongodb": "^7.8.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0",
-    "undici": "^7.30.1",
+    "undici": "^7.30.2",
     "vitest": "^5.1.0"
   },
   "overrides": {
@@ -51,6 +51,12 @@
       "@hono/node-server": "2.1.6"
     },
     "@hono/node-server": "2.1.6",
-    "chat": "4.44.0"
+    "chat": "4.44.0",
+    "rimraf": {
+      "glob": "14.0.4"
+    },
+    "readdir-glob": {
+      "minimatch": "11.0.5"
+    }
   }
 }

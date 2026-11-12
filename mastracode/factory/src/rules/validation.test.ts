@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
-import { createBoardRegistry } from '../boards/registry.js';
+import { boardRegistryOf, createBoardRegistry } from '../boards/registry.js';
 import type { FactoryRuleDecision } from './types.js';
 import {
   assertFactoryConfigVersion,
@@ -87,23 +87,20 @@ describe('Factory rule validation', () => {
   );
 
   describe('installed decision targets', () => {
-    const boards = createBoardRegistry({
-      includeDefaultBoards: false,
-      boards: [
-        defineBoard({
-          id: 'release',
-          title: 'Release',
-          initialPhase: 'queued',
-          phases: { queued: { title: 'Queued', kind: 'resting' }, shipped: { title: 'Shipped', kind: 'terminal' } },
-        }),
-        defineBoard({
-          id: 'archive',
-          title: 'Archive',
-          initialPhase: 'waiting',
-          phases: { waiting: { title: 'Waiting', kind: 'resting' } },
-        }),
-      ],
-    });
+    const boards = boardRegistryOf([
+      defineBoard({
+        id: 'release',
+        title: 'Release',
+        initialPhase: 'queued',
+        phases: { queued: { title: 'Queued', kind: 'resting' }, shipped: { title: 'Shipped', kind: 'terminal' } },
+      }),
+      defineBoard({
+        id: 'archive',
+        title: 'Archive',
+        initialPhase: 'waiting',
+        phases: { waiting: { title: 'Waiting', kind: 'resting' } },
+      }),
+    ]);
     const transition: FactoryRuleDecision = {
       type: 'transition',
       idempotencyKey: 'target',
