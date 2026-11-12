@@ -157,7 +157,7 @@ async function notifyAgentOfExit(
         contents: [
           `Background process ${pid} exited with code ${exitCode}: ${command}`,
           output || '(no output)',
-          `Read the full output with ${outputTool} (PID ${pid}). Tell the user the outcome if it matters to them.`,
+          `Read the rest of its retained output with ${outputTool} (PID ${pid}). Tell the user the outcome if it matters to them.`,
         ].join('\n\n'),
         attributes: { pid, exitCode, ...(meta.toolCallId ? { toolCallId: meta.toolCallId } : {}) },
       },
@@ -305,7 +305,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
             toolCallId,
             ...owner,
           };
-          if (bgConfig?.onExit) {
+          const runOnExit = async () => {
+            if (!bgConfig?.onExit) return;
             try {
               await bgConfig.onExit(exitMeta);
             } catch (callbackError) {
@@ -315,13 +316,17 @@ async function executeCommand(input: Record<string, any>, context: any) {
                 toolCallId,
               });
             }
-          }
+          };
           // Killed on purpose, by the run's abort or a sandbox shutting down: nothing for the agent to act on.
           const stopped =
             exitMeta.killedByAbort || exitMeta.killedOnRequest || SANDBOX_TEARDOWN_STATUSES.has(sandbox.status);
-          if (notifyAgent && !stopped) {
-            await notifyAgentOfExit(exitMeta, { command, context, workspace, tokenLimit });
-          }
+          // Run side by side, so a slow or hanging onExit doesn't hold back the agent's notice.
+          await Promise.all([
+            runOnExit(),
+            notifyAgent && !stopped
+              ? notifyAgentOfExit(exitMeta, { command, context, workspace, tokenLimit })
+              : undefined,
+          ]);
         })
         .catch(observeError => {
           workspace.logger?.error('Failed to observe background process exit', {

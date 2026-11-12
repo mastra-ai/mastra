@@ -954,6 +954,27 @@ describe('BackgroundTaskManager', () => {
       expect(after[0]!.cancelledAt).toBeInstanceOf(Date);
     });
 
+    it('still tells the dispatcher a task was cancelled when the cancelled event fails to publish', async () => {
+      const updates: Array<{ cancelledAt?: Date }> = [];
+      const { task } = await manager.enqueue(
+        { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1' },
+        { executor: { execute: () => new Promise(() => {}) }, onExecution: params => void updates.push(params) },
+      );
+      await vi.waitFor(() => expect(manager.activeAbortControllers.has(task.id)).toBe(true));
+      const publish = pubsub.publish.bind(pubsub);
+      vi.spyOn(pubsub, 'publish').mockImplementation((topic, event) =>
+        event.type === 'task.cancelled' ? Promise.reject(new Error('broker down')) : publish(topic, event),
+      );
+      const beforeCancel = updates.length;
+
+      await manager.cancel(task.id);
+
+      expect((await manager.getTask(task.id))?.status).toBe('cancelled');
+      const after = updates.slice(beforeCancel);
+      expect(after).toHaveLength(1);
+      expect(after[0]!.cancelledAt).toBeInstanceOf(Date);
+    });
+
     it('cancels a pending task', async () => {
       const resolvers: Array<() => void> = [];
       const executeFn = vi.fn().mockImplementation(
