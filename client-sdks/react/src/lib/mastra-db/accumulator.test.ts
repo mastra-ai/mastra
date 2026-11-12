@@ -1336,7 +1336,7 @@ describe('accumulateChunk - background tasks', () => {
   });
 
   // Providers reuse tool-call ids across turns, so the newest call with the id can be a later one.
-  it('background-task-cancelled marks the cancelled task’s call when a later call reused its id', () => {
+  it("background-task-cancelled marks the cancelled task's call when a later call reused its id", () => {
     const placeholder = (taskId: string) =>
       ({
         type: 'tool-result',
