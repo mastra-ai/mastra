@@ -10,8 +10,9 @@
  * the sandbox is recreated, the plans directory moves, or the file is edited after
  * submission (which would make the approved plan differ from the reviewed one).
  *
- * Registered through the AgentController's `tools` option, whose `controller` toolset is
- * flattened after `controllerBuiltIn`, so a tool with the same name replaces the builtin.
+ * Registered through the AgentController's `tools` option, with `submit_plan` added to its
+ * `disableBuiltinTools` so the filesystem-free builtin is removed rather than left to be
+ * replaced by name in the toolset merge.
  */
 
 import * as path from 'node:path';
@@ -140,7 +141,17 @@ export function createSubmitPlanTool(options: SubmitPlanToolOptions = {}) {
           | AgentControllerRequestContext<MastraCodeState>
           | undefined;
         const state = agentControllerCtx?.getState();
-        const projectPath = state?.projectPath ?? process.cwd();
+        // Fail closed without a workspace root: a chat-only Factory session starts with an
+        // empty `projectPath`, and falling back to the server's cwd would validate the plan
+        // against the host's own directories and leak that host path into the model's error.
+        const projectPath = state?.projectPath?.trim();
+        if (!projectPath) {
+          return {
+            content:
+              'Cannot submit plan: this session has no workspace root, so the plan path cannot be resolved. Submit the plan once the session has a workspace, with the file inside the plans directory your instructions name.',
+            isError: true,
+          };
+        }
         const planOptions = { factoryProjectId: state?.factoryProjectId, plansDir: options.plansDir };
         const plansDir = getLocalPlansRelativeDir(planOptions);
         const plansDirAbs = getLocalPlansDir(projectPath, planOptions);
