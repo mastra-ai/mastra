@@ -146,6 +146,47 @@ describe('run id ownership', () => {
     expect(await agent.__getRunRecord('finished-run')).toMatchObject({ resourceId: 'tenant-a' });
   });
 
+  // The ownership check must not run before the run's setup has resolved: a run admitted
+  // early can hold that admission across a paused setup, let another run take and finish
+  // on the same id, and then claim it, overwriting the finished run's record.
+  it('refuses a run whose setup outlives another run of the same id', async () => {
+    const pubsub = new RecordingPubSub();
+    let releaseSetup = () => {};
+    const setupReleased = new Promise<void>(resolve => {
+      releaseSetup = resolve;
+    });
+    let enterSetup = () => {};
+    const setupEntered = new Promise<void>(resolve => {
+      enterSetup = resolve;
+    });
+    let setupCalls = 0;
+    const agent = makeAgent({
+      instructions: async () => {
+        setupCalls += 1;
+        if (setupCalls === 1) {
+          enterSetup();
+          await setupReleased;
+        }
+        return 'Be brief.';
+      },
+    });
+    new Mastra({ agents: { agent }, pubsub, logger: false });
+
+    // Tenant A is parked inside its own setup and has not claimed the id yet.
+    const parked = agent.stream('Say hello.', { runId: 'gated-run', requestContext: resource('tenant-a') });
+    await setupEntered;
+
+    // Tenant B takes the same id and runs it to completion while A is still setting up.
+    const finished = await agent.stream('Say hello.', { runId: 'gated-run', requestContext: resource('tenant-b') });
+    await finished.consumeStream();
+
+    releaseSetup();
+
+    // A must not take the id from the run that finished on it, and B keeps the record.
+    await expect(parked).rejects.toMatchObject(RUN_ID_CLAIMED);
+    expect(await agent.__getRunRecord('gated-run')).toMatchObject({ resourceId: 'tenant-b' });
+  });
+
   it('refuses a scoped run id to a caller without a resource id', async () => {
     const agent = makeAgent();
     new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), logger: false });

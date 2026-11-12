@@ -9333,9 +9333,28 @@ export class Agent<
       }) ||
       globalThis.crypto.randomUUID();
 
-    // Admit the run before any of its state is set up. A refused run must not open a span
-    // or consume the output processors a resume is holding, or the retry it is told to make
-    // would start without them.
+    const instructions = options.instructions || (await this.getInstructions({ requestContext }));
+    const mcpServerGuidance = await this.getMcpServerGuidance({
+      requestContext,
+      toolsets: options.toolsets,
+      clientTools: options.clientTools,
+    });
+
+    const memory = await this.getMemory({ requestContext });
+    // Reuse early workspace (resolved earlier for browser context) to avoid
+    // duplicate factory resolution which could create different instances
+    const workspace = earlyWorkspace;
+
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
+    // Admit the run once its setup has resolved, and before any of its state is claimed.
+    // The check must not run before the setup awaits: a run admitted early can hold that
+    // admission through a paused setup, let another run finish on the same id, and then
+    // claim it. A refused run must not open a span or consume the output processors a
+    // resume is holding either, or the retry it is told to make would start without them.
     const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
       resuming: Boolean(resumeContext?.claim),
     });
@@ -9345,12 +9364,6 @@ export class Agent<
     if (resumeContext && options.outputProcessors === undefined && keptOutputProcessors) {
       options = { ...options, outputProcessors: keptOutputProcessors };
     }
-    const instructions = options.instructions || (await this.getInstructions({ requestContext }));
-    const mcpServerGuidance = await this.getMcpServerGuidance({
-      requestContext,
-      toolsets: options.toolsets,
-      clientTools: options.clientTools,
-    });
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
@@ -9401,16 +9414,6 @@ export class Agent<
       requestContext,
       mastra: this.#mastra,
       resumeFrom: persistedTracingContext,
-    });
-
-    const memory = await this.getMemory({ requestContext });
-    // Reuse early workspace (resolved earlier for browser context) to avoid
-    // duplicate factory resolution which could create different instances
-    const workspace = earlyWorkspace;
-
-    const saveQueueManager = new SaveQueueManager({
-      logger: this.logger,
-      memory,
     });
 
     // Create a capabilities object with bound methods
