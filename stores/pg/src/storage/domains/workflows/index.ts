@@ -190,16 +190,26 @@ function stateBaseIndexSQL(indexName: string, schemaName?: string, concurrently 
 
 /**
  * The summary snapshot `listWorkflowRuns({ summary: true })` returns, built from the jsonb
- * expression `state` (a v1 snapshot or a storage v2 header): `status`, `timestamp`, and for a
- * nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths are read,
- * so `context` is never sent.
+ * expression `state` (a v1 snapshot or a storage v2 header): `status` and `timestamp` when set,
+ * and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty strings.
+ * Only these paths are read, so `context` is never sent.
+ *
+ * `OFFSET 0` keeps the planner from inlining `state` at each use, so an expression such as the
+ * legacy text column's sanitizing cast runs once per row, and `jsonb_to_record` reads the fields
+ * in one pass. A `state` that isn't an object (`jsonb_to_record` throws on one) lists as `{}`.
  */
 function summarySnapshotSql(state: string): string {
-  const parent = `${state} -> 'parentWorkflow'`;
-  return `(jsonb_build_object('status', ${state} -> 'status', 'timestamp', ${state} -> 'timestamp')
-    || CASE WHEN jsonb_typeof(${parent}) = 'object'
-      THEN jsonb_build_object('parentWorkflow', jsonb_build_object('workflowId', ${parent} -> 'workflowId', 'runId', ${parent} -> 'runId'))
-      ELSE '{}'::jsonb END)`;
+  const parent = `r."parentWorkflow"`;
+  const hasParent = `jsonb_typeof(${parent} -> 'workflowId') = 'string' AND jsonb_typeof(${parent} -> 'runId') = 'string'
+      AND ${parent} ->> 'workflowId' <> '' AND ${parent} ->> 'runId' <> ''`;
+  return `(SELECT jsonb_strip_nulls(jsonb_build_object(
+      'status', r.status,
+      'timestamp', r."timestamp",
+      'parentWorkflow', CASE WHEN ${hasParent}
+        THEN jsonb_build_object('workflowId', ${parent} -> 'workflowId', 'runId', ${parent} -> 'runId') END))
+    FROM (SELECT ${state} AS state OFFSET 0) AS summary_source,
+      jsonb_to_record(CASE WHEN jsonb_typeof(summary_source.state) = 'object' THEN summary_source.state END)
+        AS r(status jsonb, "timestamp" jsonb, "parentWorkflow" jsonb))`;
 }
 
 /** A storage v2 entry as written: one element of the jsonb array the write statements unpack. */
@@ -1866,6 +1876,10 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists v1 and storage v2 runs newest first, with optional filters and pagination. With
+   * `summary`, each run's snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
