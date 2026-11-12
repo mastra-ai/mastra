@@ -62,15 +62,27 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
 }
 
 /**
- * Reduces a snapshot to what `listWorkflowRuns({ summary: true })` returns: `status`,
- * `timestamp`, and `parentWorkflow` only for nested runs.
+ * A snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status` and
+ * `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot reduces to `{}`.
  */
-function summarySnapshot(snapshot: WorkflowRunState): WorkflowRunState {
-  const summary: Record<string, unknown> = { status: snapshot?.status, timestamp: snapshot?.timestamp };
-  const parent = snapshot?.parentWorkflow;
+function summarySnapshot(snapshot: unknown): WorkflowRunState {
+  const source = (snapshot !== null && typeof snapshot === 'object' ? snapshot : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
 
-  if (parent?.workflowId && parent.runId) {
-    summary.parentWorkflow = { workflowId: parent.workflowId, runId: parent.runId };
+  if (status !== undefined && status !== null) {
+    summary.status = status;
+  }
+
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
   }
 
   return summary as unknown as WorkflowRunState;
