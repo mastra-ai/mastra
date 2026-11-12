@@ -211,6 +211,24 @@ describe('The board of a large project', () => {
     expect(asked.wholeBoards).toBe(0);
   });
 
+  it('offers to read the board again when its read fails, and shows the board once the server answers', async () => {
+    let down = true;
+    openLargeBoard(60);
+    server.use(
+      http.get(`${TEST_BASE_URL}${PHASES_PATH}`, () =>
+        down ? HttpResponse.json({ error: 'Board unavailable' }, { status: 500 }) : undefined,
+      ),
+    );
+    const retry = await screen.findByRole('button', { name: 'Retry' });
+    expect(screen.getByText('Board unavailable')).toBeInTheDocument();
+
+    down = false;
+    await userEvent.click(retry);
+
+    expect(await screen.findByRole('button', { name: 'Triage, 60' })).toBeInTheDocument();
+    expect(screen.queryByText('Board unavailable')).not.toBeInTheDocument();
+  });
+
   it('keeps a card open, with what is typed in it, when the order changes to one the page holds that lists the card deeper', async () => {
     const { asked, show } = openLargeBoard(120, undefined, '?sort=created-newest');
     const user = userEvent.setup();

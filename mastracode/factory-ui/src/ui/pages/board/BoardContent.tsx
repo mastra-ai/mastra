@@ -250,7 +250,11 @@ export function BoardContent({
   if (phasesRead.isError) {
     return (
       <div className="p-4">
-        <Notice variant="destructive" className="max-w-xl">
+        <Notice
+          variant="destructive"
+          className="max-w-xl"
+          action={<Notice.Button onClick={() => void phasesRead.refetch()}>Retry</Notice.Button>}
+        >
           {phasesRead.error instanceof Error ? phasesRead.error.message : 'Failed to load the board'}
         </Notice>
       </div>
