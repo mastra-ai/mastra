@@ -150,6 +150,14 @@ export function mergeBodyRequestContext(serverRequestContext: RequestContext, bo
   }
 }
 
+export function sanitizeBodyRequestContext(bodyRequestContext: unknown): Record<string, unknown> | undefined {
+  if (!bodyRequestContext || typeof bodyRequestContext !== 'object' || Array.isArray(bodyRequestContext)) {
+    return undefined;
+  }
+
+  return Object.fromEntries(Object.entries(bodyRequestContext).filter(([key]) => !isReservedRequestContextKey(key)));
+}
+
 // ============================================================================
 // Authorization Utilities
 // ============================================================================

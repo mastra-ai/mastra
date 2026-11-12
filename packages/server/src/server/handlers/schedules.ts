@@ -16,7 +16,7 @@ import {
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredWorkflowExecuteAccess } from './stored-workflow-access';
-import { getPublicWorkflowById } from './utils';
+import { getPublicWorkflowById, sanitizeBodyRequestContext } from './utils';
 
 type RunSummary = {
   status: WorkflowRunState['status'];
@@ -167,8 +167,9 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext, requestBody, ...body }) => {
-    const persistedRequestContext = (requestBody as { requestContext?: Record<string, unknown> } | undefined)
-      ?.requestContext;
+    const persistedRequestContext = sanitizeBodyRequestContext(
+      (requestBody as { requestContext?: Record<string, unknown> } | undefined)?.requestContext,
+    );
     // getAgentById throws a MastraError (status 404) when the target is
     // unknown; translate that into a clean HTTP 404 instead of letting it
     // surface as 500. Hidden internal workflows are treated as unknown.
@@ -248,8 +249,9 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
   handler: async ({ mastra, scheduleId, requestContext, requestBody, ...body }) => {
     const schedule = await loadSchedule(mastra, scheduleId);
     await assertScheduleWorkflowAccess({ mastra, schedule, requestContext });
-    const persistedRequestContext = (requestBody as { requestContext?: Record<string, unknown> } | undefined)
-      ?.requestContext;
+    const persistedRequestContext = sanitizeBodyRequestContext(
+      (requestBody as { requestContext?: Record<string, unknown> } | undefined)?.requestContext,
+    );
     return await mastra.schedules.update(scheduleId, {
       ...(body.cron !== undefined ? { cron: body.cron } : {}),
       ...(body.runAt !== undefined ? { runAt: body.runAt } : {}),

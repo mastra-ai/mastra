@@ -381,14 +381,20 @@ describe('Schedules handlers', () => {
         requestBody: {
           workflowId: 'test',
           cron: '0 * * * *',
-          requestContext: { tenantId: 'scheduled-tenant' },
+          requestContext: {
+            tenantId: 'scheduled-tenant',
+            [MASTRA_RESOURCE_ID_KEY]: 'spoofed-resource',
+            organizationId: 'spoofed-organization',
+          },
         },
         abortSignal: new AbortController().signal,
       } as any);
 
       const schedulesStore = (await storage.getStore('schedules'))!;
       const created = await schedulesStore.getSchedule(result.id);
-      expect(created!.target).toMatchObject({ requestContext: { tenantId: 'scheduled-tenant' } });
+      expect((created!.target as { requestContext?: Record<string, unknown> }).requestContext).toEqual({
+        tenantId: 'scheduled-tenant',
+      });
     });
 
     it('rejects scheduling a dynamic workflow owned by another caller', async () => {
@@ -666,6 +672,29 @@ describe('Schedules handlers', () => {
 
       const persisted = await schedulesStore.getSchedule('wf_context');
       expect(persisted!.target).toMatchObject({ requestContext: { tenantId: 'scheduled-tenant' } });
+    });
+
+    it('removes reserved keys when updating workflow execution context', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(makeWorkflowSchedule({ id: 'wf_context_update' }));
+
+      await UPDATE_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_context_update',
+        requestBody: {
+          requestContext: {
+            locale: 'en-US',
+            [MASTRA_RESOURCE_ID_KEY]: 'spoofed-resource',
+            organizationId: 'spoofed-organization',
+          },
+        },
+        ...baseCtx(),
+      } as any);
+
+      const persisted = await schedulesStore.getSchedule('wf_context_update');
+      expect((persisted!.target as { requestContext?: Record<string, unknown> }).requestContext).toEqual({
+        locale: 'en-US',
+      });
     });
 
     it('updates workflow schedule resourceId', async () => {
