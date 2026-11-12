@@ -141,6 +141,20 @@ describe('submit_plan (host tool)', () => {
     expect(result.content).toContain('is empty, so there is nothing to review');
   });
 
+  it('fails fast when the session has no workspace root instead of falling back to cwd', async () => {
+    // Factory chat-only sessions start with an empty `projectPath`; resolving against the host
+    // server's cwd would validate the path against the host and put that host path in the error.
+    const filesystem = createFilesystem({ [`${PLANS_DIR}/issue-5.md`]: PLAN_MARKDOWN });
+    const { context, suspend } = suspendPass(createAgentControllerCtx({ projectPath: '' }), filesystem);
+
+    const result = await tool().execute({ path: `${PLANS_DIR}/issue-5.md` }, context);
+
+    expect(suspend).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ isError: true });
+    expect(result.content).toContain('has no workspace root');
+    expect(result.content).not.toContain(process.cwd());
+  });
+
   it('fails fast when the session has no workspace filesystem', async () => {
     const { context, suspend } = suspendPass(createAgentControllerCtx());
 
