@@ -48,6 +48,9 @@ import type {
   SourceControlStorageHandle,
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { attachDependabotRules } from '../../dependabot/rules.js';
+import { createDependabotSync } from '../../dependabot/sync.js';
+import type { DependabotSync, GithubDependabotAlert } from '../../dependabot/sync.js';
 import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
 import { resolveGithubRules } from '../../github/default-rules.js';
@@ -399,6 +402,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                 sourceId,
                 title: pullRequest.title,
                 status: pullRequest.state,
+                labels: pullRequest.labels,
                 createdAt: pullRequest.createdAt,
                 updatedAt: pullRequest.updatedAt,
                 metadata: {
@@ -946,6 +950,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         discoverPullRequests: this.#pullRequestReconcileEnabled
           ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
           : undefined,
+        syncDependabotAlerts: this.#issueReconcileEnabled ? this.#dependabotSync(ctx) : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(
               this,
@@ -973,6 +978,42 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         },
       }),
     ];
+  }
+
+  #dependabotSync(ctx: IntegrationContext): DependabotSync | undefined {
+    const DEPENDABOT_INTAKE_ID = 'dependabot';
+    const ingest = attachDependabotRules(ctx);
+    if (!ingest) return undefined;
+    return createDependabotSync({
+      listAlerts: input => this.listDependabotAlerts(input),
+      listProjects: args => this.storage.projectRepositories.listByExternalRepository(args),
+      // Opt-in per repo: the org's `dependabot` intake config must be enabled and list the repo.
+      repositoryEnabled: async ({ orgId, repository }) => {
+        const config = (await ctx.storage.intake.getConfig({ orgId, integrationIds: [DEPENDABOT_INTAKE_ID] }))[
+          DEPENDABOT_INTAKE_ID
+        ];
+        return Boolean(config?.enabled && config.sourceIds?.includes(repository));
+      },
+      ingest,
+      userId: 'factory-rule-dispatcher',
+    });
+  }
+
+  /** Lists a repository's Dependabot alerts in one state through the Platform GitHub proxy. */
+  async listDependabotAlerts(input: {
+    installationId: number;
+    repository: string;
+    state: 'open' | 'closed';
+  }): Promise<GithubDependabotAlert[]> {
+    const { owner, repo } = splitRepository(input.repository);
+    // GitHub has no "closed" alert state; closed covers the three terminal states. Newest 100 per
+    // state is enough to close cards for recently fixed or dismissed alerts.
+    const state = input.state === 'open' ? 'open' : 'fixed,dismissed,auto_dismissed';
+    const result = await this.#client.request<{ alerts: GithubDependabotAlert[] }>(
+      'GET',
+      `${API_PREFIX}/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?${new URLSearchParams({ state, per_page: '100' })}`,
+    );
+    return result.alerts;
   }
 
   /**

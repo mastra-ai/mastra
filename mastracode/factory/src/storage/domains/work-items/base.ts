@@ -98,6 +98,7 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'linear-issue' ||
     value === 'jira-issue' ||
     value === 'incidentio-follow-up' ||
+    value === 'github-dependabot-alert' ||
     value === 'manual'
   );
 }

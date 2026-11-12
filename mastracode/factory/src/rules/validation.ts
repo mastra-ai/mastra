@@ -47,6 +47,7 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'linear-issue',
   'jira-issue',
   'incidentio-follow-up',
+  'github-dependabot-alert',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
