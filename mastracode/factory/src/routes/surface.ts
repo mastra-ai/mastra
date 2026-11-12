@@ -39,6 +39,7 @@ import type { EnsuredFactorySourceSession } from '../session/factory-session.js'
 import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
+import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -49,8 +50,8 @@ import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryPrincipalId, isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import {
@@ -60,7 +61,6 @@ import {
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
-import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
   legacyGithubWorkItemBranch,
@@ -321,6 +321,64 @@ function restingExitLane(board: InstalledBoard | undefined, role: string, hasPul
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
+/** What the autonomous start reads to decide who a phase session runs as. */
+export interface PhaseSessionOwnerSources {
+  workItems?: Pick<WorkItemsStorage, 'findRunBindingById'>;
+  modelCredentials?: Pick<ModelCredentialsStorage, 'listCredentials'>;
+  /** Providers that run on the server process's own credentials, so need no stored key. */
+  deploymentModelProviders?: ReadonlySet<string>;
+}
+
+/**
+ * Who a newly minted phase session runs as. A person who started the move into the
+ * phase owns it: whoever moved or approved the card, or the user of the session whose
+ * agent moved it. Work nobody started (a webhook, an automatic phase, a rule) belongs
+ * to the Factory itself wherever runs use the Factory's credentials. A Factory whose
+ * runs use personal credentials has no keys of its own, so there such work falls to
+ * whoever created the Factory; `undefined` leaves the last resort to the caller:
+ * whoever connected the repository.
+ */
+async function phaseSessionOwner(args: {
+  sourceControl: SourceControlStorageHandle;
+  workItems: Pick<WorkItemsStorage, 'findRunBindingById'> | undefined;
+  project: FactoryProject;
+  approver: string | undefined;
+}): Promise<string | undefined> {
+  const { sourceControl, workItems, project, approver } = args;
+  if (approver?.startsWith('agent:')) {
+    // `agent:session:<sessionId>` is a person's own session; `agent:<bindingId>` a phase run.
+    const ref = approver.slice('agent:'.length);
+    const sessionId = ref.startsWith('session:')
+      ? ref.slice('session:'.length)
+      : (await workItems?.findRunBindingById({ orgId: project.orgId, factoryProjectId: project.id, id: ref }))
+          ?.sessionId;
+    const session = sessionId ? await sourceControl.sessions.getBySessionId(sessionId) : null;
+    if (session && session.orgId === project.orgId && isHumanActorId(session.userId)) return session.userId;
+  } else if (isHumanActorId(approver)) {
+    return approver;
+  }
+  if (effectiveModelScope(project.modelScope, 'run') === 'factory') return factoryPrincipalId(project.id);
+  return isHumanActorId(project.createdBy) ? project.createdBy : undefined;
+}
+
+/**
+ * A run owned by the Factory resolves the organization's model keys and nothing else.
+ * With none stored it cannot run however often it is retried, so say what to add
+ * instead of starting a run that dies on its first model call.
+ */
+async function requireOrganizationModelKey(
+  sources: PhaseSessionOwnerSources | undefined,
+  project: FactoryProject,
+): Promise<void> {
+  if (!sources?.modelCredentials || sources.deploymentModelProviders?.size) return;
+  const credentials = await sources.modelCredentials.listCredentials(project.orgId, factoryPrincipalId(project.id));
+  if (credentials.some(credential => credential.scope === 'org')) return;
+  throw new FactoryDispatchError(
+    'factory_org_key_missing',
+    "This Factory runs automatic work on the organization's model keys, and none is set. Add an organization key under Settings → Models, then retry.",
+  );
+}
+
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -335,6 +393,7 @@ export async function prepareFactoryRuleBinding(
   boards: BoardRegistry | ProjectBoardSource,
   input: FactoryBindingPreparationInput,
   intake?: Pick<IntakeStorage, 'getConfig'>,
+  owner?: PhaseSessionOwnerSources,
 ): Promise<void> {
   try {
     const sourceControl =
@@ -426,18 +485,21 @@ export async function prepareFactoryRuleBinding(
     // The session is filed under the card's repository: the sandbox holds
     // every environment repository, but the coordinator, the PR tools and the
     // subscriptions follow the session's link, and the card names which one.
+    const existingSession =
+      boundSession ?? (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId));
+    const ownerUserId =
+      existingSession?.userId ??
+      (await phaseSessionOwner({ sourceControl, workItems: owner?.workItems, project, approver }));
+    if (isFactoryPrincipalId(ownerUserId)) await requireOrganizationModelKey(owner, project);
     const preparedSession =
-      boundSession ??
-      (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId)) ??
+      existingSession ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
         projectRepositoryId: repository.projectRepositoryId,
         branch,
-        // A person who approved the run is its interactive user: attribute it to
-        // them, not the repo connector. An agent's pre-approval names no person.
-        attributeToUserId: isAgentActor(approver) ? undefined : approver,
+        attributeToUserId: ownerUserId,
       }).catch(error => {
         if (error instanceof FactorySourceSessionResolutionError && error.reason === 'repository') {
           // The card resolved to a linked repository the sandbox will not check out.
@@ -857,6 +919,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                 deps.boardRegistry,
                 input,
                 deps.domains.intake,
+                {
+                  workItems: deps.domains.workItems,
+                  modelCredentials: deps.domains.modelCredentials,
+                  deploymentModelProviders: deps.deploymentModelProviders,
+                },
               );
             },
           }

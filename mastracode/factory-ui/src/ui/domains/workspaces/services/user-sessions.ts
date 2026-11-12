@@ -39,6 +39,8 @@ export interface FactoryUserSession {
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
   capabilities?: { recreateSandbox: boolean; takeOwnership: boolean; switchModel?: boolean };
+  /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
+  followedWorkItemIds?: readonly string[];
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
@@ -156,6 +158,23 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
   const body: { title?: string; error?: string } = await res.json().catch(() => ({}));
   if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);
   return body.title;
+}
+
+/** Approve or decline the plan a card's phase session waits on. Its owner, an admin, or anyone following the card may. */
+export async function answerParkedPlan(
+  baseUrl: string,
+  sessionId: string,
+  decision: 'approve' | 'decline',
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/parked-plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ decision }),
+  });
+  if (res.ok) return;
+  const body: { error?: string } = await res.json().catch(() => ({}));
+  throw new Error(body.error ?? `Failed to answer the plan (${res.status})`);
 }
 
 export type UserSessionVisibility = FactoryUserSession['visibility'];

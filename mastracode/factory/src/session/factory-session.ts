@@ -268,10 +268,9 @@ export async function resolvePrimaryEnvironmentRepository(args: {
  * repository's pinned or default branch as the base. The sandbox itself boots
  * every environment repository.
  *
- * The run is attributed to `attributeToUserId` when the caller has an
- * interactive user (e.g. the approver of a proposed run), and otherwise falls
- * back to whoever connected the repository (`connection.createdByUserId`),
- * because a genuinely autonomous run has no interactive user of its own.
+ * The run is attributed to `attributeToUserId` when the caller names a person
+ * for it, and only otherwise falls back to whoever connected the repository
+ * (`connection.createdByUserId`).
  */
 export async function ensureFactorySourceSession(
   args: EnsureFactorySourceSessionArgs,

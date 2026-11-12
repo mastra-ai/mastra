@@ -32,6 +32,8 @@ const FAILURE_METADATA = {
   run_credentials_unavailable: { canRetry: true, label: 'Model credentials unavailable for the run' },
   // The run's request carries no user, so every retry fails the same way; a person has to start it.
   run_user_unauthenticated: { canRetry: false, label: 'Run started without an authenticated user' },
+  // Automatic work runs as the Factory, on the organization's keys only; retrying cannot add one.
+  factory_org_key_missing: { canRetry: false, label: 'Add an organization model key to run this automatically' },
   run_failed: { canRetry: true, label: 'Agent run ended in error' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.

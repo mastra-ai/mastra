@@ -2,6 +2,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
+import { useAnswerParkedPlan } from '../hooks/useAnswerParkedPlan';
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
 import { useSessionVisibility } from '../hooks/useSessionVisibility';
@@ -37,6 +38,7 @@ export function SessionListItem({
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
   const { changeVisibility, changing } = useSessionVisibility(factoryId, row.session.sessionId);
+  const { answer, answering } = useAnswerParkedPlan(factoryId, row.waitingSessionId);
   const ownUserSession = row.origin === 'user' && row.ownedByViewer;
 
   async function handleVisibilityChange(visibility: UserSessionVisibility) {
@@ -68,6 +70,8 @@ export function SessionListItem({
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
+      onAnswerPlan={answer}
+      answeringPlan={answering}
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
       // Slack threads keep the visibility they were created with; the server refuses a change.
       onVisibilityChange={

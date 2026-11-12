@@ -23,6 +23,7 @@ interface ApprovalGateSession {
   respondToToolApproval(input: {
     decision: 'approve' | 'decline';
     toolCallId: string;
+    requestContext?: RequestContext;
     declineContext?: { reason?: string };
   }): { accepted: true } | { accepted: false; reason: string };
   suspensions: { resolve(filter: { toolCallId: string }): { toolName: string } | undefined };
@@ -31,6 +32,50 @@ interface ApprovalGateSession {
     toolCallId: string;
     requestContext?: RequestContext;
   }): Promise<void>;
+}
+
+/**
+ * Answer the call a live session waits on, for a caller already allowed to. The answered
+ * run carries on as the session's owner whoever answers: a phase session keeps one identity
+ * from kickoff to finish, and a resume never runs with no user.
+ */
+export async function answerParkedCall(
+  deps: Pick<FactoryApprovalToolDependencies, 'messaging'>,
+  input: {
+    session: { sessionId: string; userId: string; orgId: string };
+    toolCallId: string;
+    decision: 'approve' | 'decline';
+    declineReason: string;
+  },
+): Promise<void> {
+  const { session, toolCallId, decision, declineReason } = input;
+  const messaging = await deps.messaging();
+  if (!messaging) throw new Error('Answering approvals is not available on this server.');
+  const live = (await messaging.controller.getSession(session.sessionId)) as ApprovalGateSession | null;
+  const parkedPlan = live?.suspensions.resolve({ toolCallId })?.toolName === 'submit_plan';
+  if (!live || (!parkedPlan && !live.approval.isArmed({ toolCallId }))) {
+    throw new Error(
+      'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +
+        'Message the session with factory_signal_session if it should try again.',
+    );
+  }
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
+  if (parkedPlan) {
+    await live.respondToToolSuspension({
+      resumeData: decision === 'approve' ? { action: 'approved' } : { action: 'rejected', feedback: declineReason },
+      toolCallId,
+      requestContext,
+    });
+    return;
+  }
+  const result = live.respondToToolApproval({
+    decision,
+    toolCallId,
+    requestContext,
+    ...(decision === 'decline' ? { declineContext: { reason: declineReason } } : {}),
+  });
+  if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
 }
 
 /** Answers a tool call another session holds for approval. Only a signed-in person's turn may answer. */
@@ -86,38 +131,12 @@ export function createFactoryApprovalTools(
         );
       }
 
-      const messaging = await deps.messaging();
-      if (!messaging) throw new Error('Answering approvals is not available on this server.');
-      const live = (await messaging.controller.getSession(sessionId)) as ApprovalGateSession | null;
-      const parkedPlan = live?.suspensions.resolve({ toolCallId })?.toolName === 'submit_plan';
-      if (!live || (!parkedPlan && !live.approval.isArmed({ toolCallId }))) {
-        throw new Error(
-          'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +
-            'Message the session with factory_signal_session if it should try again.',
-        );
-      }
-      if (parkedPlan) {
-        // The resumed run acts for the person answering, so it can resolve their model credentials.
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
-        await live.respondToToolSuspension({
-          resumeData:
-            decision === 'approve'
-              ? { action: 'approved' }
-              : { action: 'rejected', feedback: reason ?? 'Declined by a session following it.' },
-          toolCallId,
-          requestContext,
-        });
-      } else {
-        const result = live.respondToToolApproval({
-          decision,
-          toolCallId,
-          ...(decision === 'decline'
-            ? { declineContext: { reason: reason ?? 'Declined by a session following it.' } }
-            : {}),
-        });
-        if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
-      }
+      await answerParkedCall(deps, {
+        session: row,
+        toolCallId,
+        decision,
+        declineReason: reason ?? 'Declined by a session following it.',
+      });
 
       deps.auditRecorder.record({
         orgId: scope.orgId,

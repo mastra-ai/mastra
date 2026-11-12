@@ -90,6 +90,8 @@ export interface SessionListRow {
   cardStatus?: SessionActivityStatus;
   /** What a child row is named in the sidebar: the phase its session ran in. */
   phaseLabel?: string;
+  /** A followed card's phase session that waits on a person, answerable from this row. */
+  waitingSessionId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -263,6 +265,44 @@ function orderCardRows(
   return cardRows
     .toSorted((a, b) => rank(a) - rank(b))
     .map((row, index) => (index === 0 ? row : { ...row, phaseLabel: phaseLabel(row) }));
+}
+
+/**
+ * Ties each session to the phase sessions of the cards it follows. Those sessions stay the
+ * card's: the row links to them, takes on "waiting on you" while one is parked, and lists
+ * them under itself when child sessions are revealed.
+ */
+export function linkFollowedCards(
+  rows: readonly SessionListRow[],
+  cardRows: readonly SessionListRow[],
+  parkedSessions: ReadonlySet<string>,
+  { revealChildSessions = false }: OneRowPerCardOptions = {},
+): SessionListRow[] {
+  return rows.map(row => {
+    const followed = new Set(row.session.followedWorkItemIds);
+    if (followed.size === 0) return row;
+    const linked = cardRows.filter(
+      cardRow =>
+        cardRow.itemId !== undefined &&
+        followed.has(cardRow.itemId) &&
+        cardRow.session.sessionId !== row.session.sessionId,
+    );
+    if (linked.length === 0) return row;
+    const waiting = linked.find(cardRow => parkedSessions.has(cardRow.session.sessionId));
+    return {
+      ...row,
+      ...(waiting ? { status: 'waiting' as const, waitingSessionId: waiting.session.sessionId } : {}),
+      ...(revealChildSessions
+        ? {
+            childRows: linked.map(cardRow =>
+              parkedSessions.has(cardRow.session.sessionId)
+                ? { ...cardRow, waitingSessionId: cardRow.session.sessionId }
+                : cardRow,
+            ),
+          }
+        : {}),
+    };
+  });
 }
 
 export interface OneRowPerCardOptions {

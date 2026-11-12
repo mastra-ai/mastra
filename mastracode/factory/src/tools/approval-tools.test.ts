@@ -70,7 +70,7 @@ function setup({
 }
 
 describe('factory_answer_approval', () => {
-  it('approves a plan the session is parked on with submit_plan, as the person', async () => {
+  it("approves a plan the session is parked on with submit_plan, resuming as the session's owner", async () => {
     const { answer, respondToToolApproval, respondToToolSuspension, record } = setup({
       armed: false,
       parkedTool: 'submit_plan',
@@ -85,7 +85,7 @@ describe('factory_answer_approval', () => {
     const { requestContext } = respondToToolSuspension.mock.calls[0]![0] as {
       requestContext: { get(key: string): unknown };
     };
-    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext.get('user')).toEqual({ workosId: 'someone-else', organizationId: 'org-1' });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.approved' }));
   });
 
@@ -116,7 +116,9 @@ describe('factory_answer_approval', () => {
     });
 
     expect(session.approval.isArmed).toHaveBeenCalledWith({ toolCallId: 'call-1' });
-    expect(respondToToolApproval).toHaveBeenCalledWith({ decision: 'approve', toolCallId: 'call-1' });
+    expect(respondToToolApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: 'approve', toolCallId: 'call-1' }),
+    );
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'user-1',
@@ -136,11 +138,13 @@ describe('factory_answer_approval', () => {
     const { answer, respondToToolApproval, record } = setup();
     await answer({ decision: 'decline', reason: 'Keep it in triage.' });
 
-    expect(respondToToolApproval).toHaveBeenCalledWith({
-      decision: 'decline',
-      toolCallId: 'call-1',
-      declineContext: { reason: 'Keep it in triage.' },
-    });
+    expect(respondToToolApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: 'decline',
+        toolCallId: 'call-1',
+        declineContext: { reason: 'Keep it in triage.' },
+      }),
+    );
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.dismissed' }));
   });
 

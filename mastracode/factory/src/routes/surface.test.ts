@@ -3,17 +3,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createTestBoard, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
-import { FactoryDispatchError } from '../rules/dispatch-errors.js';
+import { FactoryDispatchError, factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
-async function seedFactoryWithRepository(options?: { defaultModelId?: string; modelScope?: 'factory' | 'user' }) {
+async function seedFactoryWithRepository(options?: {
+  defaultModelId?: string;
+  modelScope?: 'factory' | 'user' | 'hybrid';
+  /** Who set the Factory up; the repository is always connected by `user-1`. */
+  createdBy?: string;
+}) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('github');
-  const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+  const project = await seeded.projects.create({
+    orgId: 'org-1',
+    userId: options?.createdBy ?? 'user-1',
+    input: { name: 'Mastra' },
+  });
   if (options?.defaultModelId || options?.modelScope) {
     await seeded.projects.update({
       orgId: 'org-1',
@@ -171,9 +180,10 @@ describe('prepareFactoryRuleBinding', () => {
     );
 
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
-    expect(userId).toBe('user-1');
+    // Nobody started this run, so the session is the Factory's own.
+    expect(userId).toBe(`factory-project:${project.id}`);
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
-      expect.objectContaining({ branch: 'factory/issue-49-item1', baseBranch: 'main', userId: 'user-1' }),
+      expect.objectContaining({ branch: 'factory/issue-49-item1', baseBranch: 'main', userId }),
     );
   });
 
@@ -232,25 +242,160 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it("keeps a run an agent pre-approved on the repo connector, never on the agent's id", async () => {
-    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
-    const prepare = vi.fn(async () => ({}) as never);
-    const input = bindingInput(project.id);
-    (input.record as { approvedBy?: string | null }).approvedBy = 'agent:binding-1';
+  describe('who owns a phase session nobody approved in person', () => {
+    type Seed = Awaited<ReturnType<typeof seedFactoryWithRepository>>;
 
-    await prepareFactoryRuleBinding(
-      github,
-      { prepare } as unknown as FactoryStartCoordinator,
-      seeded.projects,
-      boards,
-      input,
+    function start(seed: Seed, approvedBy: string | undefined) {
+      const prepare = vi.fn(async () => ({}) as never);
+      const input = bindingInput(seed.project.id);
+      if (approvedBy) (input.record as { approvedBy?: string | null }).approvedBy = approvedBy;
+      const started = prepareFactoryRuleBinding(
+        seed.github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seed.seeded.projects,
+        boards,
+        input,
+        undefined,
+        { workItems: seed.seeded.workItems, modelCredentials: seed.seeded.credentials },
+      );
+      return { prepare, started };
+    }
+
+    async function ownerOfPreparedSession(seed: Seed, approvedBy: string | undefined) {
+      const { prepare, started } = start(seed, approvedBy);
+      await started;
+      const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+      const row = await seed.sourceControl.sessions.getBySessionId(sessionId);
+      expect(row?.userId).toBe(userId);
+      return userId;
+    }
+
+    async function sessionOf(seed: Seed, userId: string) {
+      return seed.sourceControl.sessions.create({
+        sessionId: crypto.randomUUID(),
+        projectRepositoryId: seed.projectRepository.id,
+        factoryProjectId: seed.project.id,
+        orgId: 'org-1',
+        userId,
+        branch: `sessions/${userId}`,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    }
+
+    function addOrganizationKey(seed: Seed) {
+      return seed.seeded.credentials.setCredential({ orgId: 'org-1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    }
+
+    describe.each(['factory', 'hybrid', 'user'] as const)('in a Factory on %s credentials', modelScope => {
+      // The triage agent of a card a teammate asked for moves it on to Planning: the next
+      // phase runs for that teammate, not for whoever connected the repository.
+      it("runs the next phase for the person whose phase session's agent moved the card", async () => {
+        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+        const triage = await sessionOf(seed, 'requester-1');
+        const { binding } = await seed.seeded.workItems.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'requester-1',
+          factoryProjectId: seed.project.id,
+          workItem: {
+            input: {
+              board: 'work',
+              externalSource: { integrationId: 'github', type: 'issue', externalId: '49' },
+              title: 'Broken login',
+              stages: ['triage'],
+              sessions: {},
+              metadata: {},
+            },
+          },
+          role: 'triage',
+          session: { sessionId: triage.sessionId, branch: triage.branch, threadId: triage.sessionId },
+          resourceId: triage.sessionId,
+          kickoffKey: 'kickoff-1',
+          kickoffMessage: null,
+        });
+
+        await expect(ownerOfPreparedSession(seed, `agent:${binding.id}`)).resolves.toBe('requester-1');
+      });
+
+      it("runs the phase for the person whose own session's agent moved the card", async () => {
+        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+        const chat = await sessionOf(seed, 'requester-1');
+
+        await expect(ownerOfPreparedSession(seed, `agent:session:${chat.sessionId}`)).resolves.toBe('requester-1');
+      });
+
+      it('runs the phase for the person who approved it', async () => {
+        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+
+        await expect(ownerOfPreparedSession(seed, 'approver-1')).resolves.toBe('approver-1');
+      });
+    });
+
+    // A card a webhook filed, or one an automatic phase picked up, has nobody behind its move.
+    describe.each(['factory', 'hybrid'] as const)(
+      'in a Factory on %s credentials, with nobody behind the move',
+      modelScope => {
+        it('runs the phase as the Factory, not as whoever set it up or connected the repository', async () => {
+          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+          await addOrganizationKey(seed);
+
+          await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe(`factory-project:${seed.project.id}`);
+        });
+
+        it('runs as the Factory when the agent that moved the card can no longer be traced to a person', async () => {
+          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+          await addOrganizationKey(seed);
+
+          await expect(ownerOfPreparedSession(seed, 'agent:binding-that-is-gone')).resolves.toBe(
+            `factory-project:${seed.project.id}`,
+          );
+        });
+
+        it('says to add an organization key instead of starting a run that cannot reach a model', async () => {
+          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+          // A personal key is not the Factory's to spend.
+          await seed.seeded.credentials.setCredential({ orgId: 'org-1', userId: 'factory-creator' }, 'openai', {
+            type: 'api_key',
+            key: 'sk-personal',
+          });
+          const createSession = vi.spyOn(seed.sourceControl.sessions, 'create');
+          const { prepare, started } = start(seed, undefined);
+
+          const error = await started.catch((caught: unknown) => caught);
+
+          expect(error).toBeInstanceOf(FactoryDispatchError);
+          expect(error).toMatchObject({
+            code: 'factory_org_key_missing',
+            message: expect.stringContaining('Add an organization key'),
+          });
+          expect(factoryDispatchFailureMetadata('factory_org_key_missing').canRetry).toBe(false);
+          expect(prepare).not.toHaveBeenCalled();
+          expect(createSession).not.toHaveBeenCalled();
+        });
+
+        it('starts a run a person is behind without an organization key check on their behalf', async () => {
+          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+
+          await expect(ownerOfPreparedSession(seed, 'approver-1')).resolves.toBe('approver-1');
+        });
+      },
     );
 
-    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
-    expect(userId).toBe('user-1');
-    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
-      expect.objectContaining({ userId: 'user-1' }),
-    );
+    describe('in a Factory on personal credentials, with nobody behind the move', () => {
+      it('runs the phase for whoever set the Factory up', async () => {
+        const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope: 'user' });
+
+        await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe('factory-creator');
+        const second = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope: 'user' });
+        await expect(ownerOfPreparedSession(second, 'agent:binding-that-is-gone')).resolves.toBe('factory-creator');
+      });
+
+      it('falls back to whoever connected the repository only when the Factory names no person', async () => {
+        const seed = await seedFactoryWithRepository({ createdBy: 'system', modelScope: 'user' });
+
+        await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe('user-1');
+      });
+    });
   });
 
   it('reuses the role session the work item already holds instead of minting a replacement', async () => {

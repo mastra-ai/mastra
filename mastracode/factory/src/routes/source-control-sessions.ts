@@ -6,6 +6,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import { z } from 'zod';
 
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
@@ -25,6 +26,7 @@ import { SESSION_OWNER_SIGNAL_TAG } from '../session-owner-signal.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -32,6 +34,7 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { answerParkedCall } from '../tools/approval-tools.js';
 import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from './session-access.js';
@@ -69,7 +72,13 @@ export interface SourceControlSessionRoutesOptions {
   filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
+    Partial<
+      Pick<
+        WorkItemsStorage,
+        'listProjectSubscriptions' | 'listWorkItemSubscribers' | 'findActiveRunBindingForSession' | 'get'
+      >
+    >;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
 }
@@ -95,6 +104,25 @@ async function sessionManagePermission(
   if (session.visibility === 'private' && !isOwner) return 'not-found';
   if (isOwner) return 'allowed';
   return (await auth.isOrganizationAdmin(c, session.orgId)) ? 'allowed' : 'forbidden';
+}
+
+const parkedPlanAnswerSchema = z
+  .object({ decision: z.enum(['approve', 'decline']), reason: z.string().trim().min(1).max(1000).optional() })
+  .strict();
+
+/** Whether the viewer asked for the card's work: they filed it, or a session of theirs follows it. */
+async function followsCard(
+  options: SourceControlSessionRoutesOptions,
+  workItemId: string | undefined,
+  tenant: { orgId: string; userId: string },
+): Promise<boolean> {
+  const workItems = options.workItems;
+  if (!workItemId || !workItems?.get || !workItems.listWorkItemSubscribers) return false;
+  const item = await workItems.get({ orgId: tenant.orgId, id: workItemId });
+  if (!item) return false;
+  if (item.createdBy === tenant.userId) return true;
+  const followers = await workItems.listWorkItemSubscribers({ orgId: tenant.orgId, workItemId });
+  return followers.some(follower => follower.userId === tenant.userId);
 }
 
 function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean {
@@ -338,9 +366,15 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 
   return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    if (!users) return new Map();
-    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
     const profiles = new Map<string, SessionOwnerProfile>();
+    // A session the Factory owns has no person to look up; it is named for what it is.
+    for (const userId of userIds) {
+      if (isFactoryPrincipalId(userId)) profiles.set(userId, { id: userId, name: 'Factory' });
+    }
+    if (!users) return profiles;
+    const requestedUserIds = [...new Set(userIds)]
+      .filter(userId => !isFactoryPrincipalId(userId))
+      .slice(0, MAX_SESSION_OWNER_PROFILES);
     const unresolvedUserIds: string[] = [];
     const now = Date.now();
 
@@ -554,7 +588,84 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           )
         ).flat();
         const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
+        // The follow link is the only tie between a person's session and a card's phase sessions.
+        const followed = new Map<string, string[]>();
+        for (const link of (await options.workItems?.listProjectSubscriptions?.({
+          orgId,
+          factoryProjectId: project.id,
+        })) ?? []) {
+          followed.set(link.sessionId, [...(followed.get(link.sessionId) ?? []), link.workItemId]);
+        }
+        return c.json({
+          sessions: sessions.map(session => ({
+            ...withOwnerProfile(session, owners),
+            followedWorkItemIds: followed.get(session.sessionId) ?? [],
+          })),
+        });
+      },
+    }),
+    // Approve or decline the plan a card's phase session is parked on, from the card or a
+    // session following it. The session's owner and org admins may; so may the person who
+    // filed the card and anyone whose session follows it. The run carries on as its owner.
+    registerApiRoute('/web/user-sessions/:sessionId/parked-plan', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body = parkedPlanAnswerSchema.safeParse(await c.req.json().catch(() => null));
+        if (!body.success) return c.json({ error: 'decision must be "approve" or "decline".' }, 400);
+        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
+        const session = match?.session;
+        if (!session) return c.json({ error: 'Session not found' }, 404);
+        const permission = await sessionManagePermission(loose(c), options.auth, resolved.tenant, session);
+        if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
+        const binding =
+          session.factoryProjectId && options.workItems?.findActiveRunBindingForSession
+            ? await options.workItems.findActiveRunBindingForSession({
+                orgId: session.orgId,
+                factoryProjectId: session.factoryProjectId,
+                sessionId: session.sessionId,
+              })
+            : null;
+        if (permission !== 'allowed' && !(await followsCard(options, binding?.workItemId, resolved.tenant))) {
+          return c.json(
+            { error: "Only the session's owner, an organization admin, or someone following its card can answer." },
+            403,
+          );
+        }
+        const controller = options.controller;
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+        const live = await controller.getSession(session.sessionId);
+        // Keyed by run address, not tool call id: read the id off the entry.
+        const parked = [...(live?.displayState.get().pendingSuspensions.values() ?? [])].find(
+          suspension => suspension.toolName === 'submit_plan',
+        );
+        if (!parked)
+          return c.json({ error: 'This session is not waiting on a plan. Open it to see what it needs.' }, 409);
+        const { toolCallId } = parked;
+        const { decision, reason } = body.data;
+        try {
+          await answerParkedCall(
+            { messaging: async () => ({ controller }) as never },
+            { session, toolCallId, decision, declineReason: reason ?? 'Declined from the card.' },
+          );
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 409);
+        }
+        options.audit?.record({
+          orgId: session.orgId,
+          actorId: resolved.tenant.userId,
+          actorType: 'human',
+          action: decision === 'approve' ? 'factory.run.approved' : 'factory.run.dismissed',
+          ...(session.factoryProjectId ? { factoryProjectId: session.factoryProjectId } : {}),
+          targets: [
+            { type: 'session', id: session.sessionId },
+            ...(binding ? [{ type: 'work_item' as const, id: binding.workItemId }] : []),
+          ],
+          metadata: { toolCallId, sessionId: session.sessionId, decision, cause: 'web' },
+        });
+        return c.json({ answered: decision, sessionId: session.sessionId, toolCallId });
       },
     }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),

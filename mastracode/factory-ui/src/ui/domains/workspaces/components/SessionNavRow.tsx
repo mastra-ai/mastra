@@ -56,6 +56,8 @@ export function SessionNavRow({
   onPinChange,
   onDelete,
   onRegenerateTitle,
+  onAnswerPlan,
+  answeringPlan,
   regeneratingTitle,
   visibility,
   onVisibilityChange,
@@ -94,6 +96,9 @@ export function SessionNavRow({
   onDelete?: () => void;
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
+  /** Set while a followed card's phase session waits on a plan approval this viewer may give. */
+  onAnswerPlan?: (decision: 'approve' | 'decline') => void;
+  answeringPlan?: boolean;
   regeneratingTitle?: boolean;
   /** Private rows show a sharing popover; shared rows have no visibility badge. */
   visibility?: 'org' | 'private';
@@ -183,6 +188,8 @@ export function SessionNavRow({
     onDelete,
     onRegenerateTitle,
     regeneratingTitle,
+    onAnswerPlan,
+    answeringPlan,
     visibility,
     onVisibilityChange,
     changingVisibility,
