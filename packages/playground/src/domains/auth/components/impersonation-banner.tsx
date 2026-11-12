@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useRoleImpersonation } from '@mastra/playground-ui/domains/auth/hooks/use-role-impersonation';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
-import { useRoleImpersonation } from '../hooks/use-role-impersonation';
 
 /**
  * Banner shown when an admin is previewing the Studio as another role.

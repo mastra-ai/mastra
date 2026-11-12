@@ -1,6 +1,8 @@
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useAgentBuilderAllowedModels } from '@mastra/playground-ui/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm/hooks/use-filtered-models';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
@@ -13,8 +15,6 @@ import { AgentSelectableCard } from '../agent-selectable-card';
 import { FilterableList } from './filterable-list';
 import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
-import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 export interface Modelprops {
   editable?: boolean;

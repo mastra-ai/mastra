@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { LLMProviders, LLMModels } from '@mastra/playground-ui/domains/llm';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
@@ -38,7 +39,6 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ProposalTag } from './proposal-tag';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
-import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
 const REVIEW_LIST_COLUMNS = [

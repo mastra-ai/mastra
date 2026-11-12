@@ -1,5 +1,5 @@
-import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useBuilderSettings } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 
 export type DenialReason = 'permission-denied' | 'not-configured' | 'error' | null;
 

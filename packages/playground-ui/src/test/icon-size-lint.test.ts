@@ -11,7 +11,7 @@ RuleTester.describe = (name, run) => {
 RuleTester.it = it;
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: 'tsx' } } });
-const iconImport = "import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';";
+const iconImport = "import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';";
 
 tester.run('icon-size-from-parent', plugin.rules['icon-size-from-parent'], {
   valid: [

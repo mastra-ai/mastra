@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PlaygroundModelProvider } from '@mastra/playground-ui/domains/agents/context/playground-model-context';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import {
@@ -16,7 +17,6 @@ import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-deta
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
-import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';

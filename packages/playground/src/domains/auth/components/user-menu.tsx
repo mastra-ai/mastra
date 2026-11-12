@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useRoleImpersonation } from '@mastra/playground-ui/domains/auth/hooks/use-role-impersonation';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
@@ -10,7 +11,6 @@ import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useLogout } from '../hooks';
-import { useRoleImpersonation } from '../hooks/use-role-impersonation';
 import { UserAvatar } from './user-avatar';
 
 export type UserMenuProps = {

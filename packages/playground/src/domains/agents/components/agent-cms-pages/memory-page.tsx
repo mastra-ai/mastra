@@ -6,15 +6,15 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { LLMProviders, LLMModels } from '@mastra/playground-ui/domains/llm';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { useEmbedders } from '@mastra/react/hooks/embedders';
 import { useVectors } from '@mastra/react/hooks/vectors';
-import { Controller, useWatch } from 'react-hook-form';
 
+import { Controller, useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { RegisteredMemoryNotice } from '../registered-memory-notice';
 import { SectionHeader, SubSectionHeader } from '@/domains/cms';
-import { LLMProviders, LLMModels } from '@/domains/llm';
 
 export function MemoryPage() {
   const { form, readOnly } = useAgentEditFormContext();

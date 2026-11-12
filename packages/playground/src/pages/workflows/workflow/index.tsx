@@ -1,6 +1,7 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { WorkflowStepDetailContent } from '@mastra/playground-ui/domains/workflows/components/workflow-step-detail';
 import { useWorkflowStepDetail } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-context';
@@ -14,7 +15,6 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Panel } from 'react-resizable-panels';
 import { useParams } from 'react-router';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 interface WorkflowContentProps {
   workflowId: string;

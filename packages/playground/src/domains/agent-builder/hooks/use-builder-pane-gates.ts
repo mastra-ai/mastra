@@ -1,7 +1,7 @@
+import { useBuilderModelPolicy } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
 import { useChannelPlatforms } from '@mastra/react/hooks/agents';
 import { useMemo } from 'react';
 import { useBuilderAgentFeatures } from './use-builder-agent-features';
-import { useBuilderModelPolicy } from './use-builder-settings';
 
 export interface BuilderPaneGatesInput {
   /**

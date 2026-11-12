@@ -2,11 +2,11 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { startViewTransition } from '@mastra/playground-ui/lib/view-transition';
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentStepContainer } from './agent-step-container';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
-import { startViewTransition } from '@/lib/routing';
 
 export const AgentProfileReadyStep = () => {
   const { next } = useWizard();

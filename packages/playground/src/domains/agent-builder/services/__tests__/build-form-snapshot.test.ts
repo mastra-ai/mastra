@@ -1,12 +1,12 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { describe, expect, it } from 'vitest';
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm';
 
+import { describe, expect, it } from 'vitest';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { MAX_GENERATED_INSTRUCTIONS_CHARS, buildFormSnapshotInstructions } from '../build-form-snapshot';
 import type { AvailableWorkspaceLike, BuildFormSnapshotOptions } from '../build-form-snapshot';
-import type { ModelInfo } from '@/domains/llm';
 
 type Features = ReturnType<typeof useBuilderAgentFeatures>;
 

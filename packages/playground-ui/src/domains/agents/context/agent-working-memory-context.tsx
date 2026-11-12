@@ -1,0 +1,43 @@
+/* eslint-disable react-refresh/only-export-components -- context and hooks intentionally co-located with their provider */
+import { useAgentWorkingMemory } from '@mastra/react/hooks/agents';
+import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
+
+type AgentWorkingMemoryContextType = {
+  threadExists: boolean;
+  workingMemoryData: string | null;
+  workingMemorySource: 'thread' | 'resource';
+  isLoading: boolean;
+  isUpdating: boolean;
+  updateWorkingMemory: (newMemory: string) => Promise<void>;
+  refetch: () => Promise<void>;
+};
+
+export const WorkingMemoryContext = createContext<AgentWorkingMemoryContextType>({
+  threadExists: false,
+  workingMemoryData: null,
+  workingMemorySource: 'thread',
+  isLoading: false,
+  isUpdating: false,
+  updateWorkingMemory: () => Promise.resolve(),
+  refetch: () => Promise.resolve(),
+});
+
+export interface AgentWorkingMemoryProviderProps {
+  children: ReactNode;
+  agentId: string;
+  threadId: string;
+  resourceId: string;
+}
+
+export function WorkingMemoryProvider({ agentId, threadId, resourceId, children }: AgentWorkingMemoryProviderProps) {
+  const value = useAgentWorkingMemory(agentId, threadId, resourceId, useEntityRequestContext('agent', agentId)[0]);
+  return <WorkingMemoryContext.Provider value={value}>{children}</WorkingMemoryContext.Provider>;
+}
+
+export function useWorkingMemory() {
+  const ctx = useContext(WorkingMemoryContext);
+  if (!ctx) throw new Error('useWorkingMemory must be used within a WorkingMemoryProvider');
+  return ctx;
+}
