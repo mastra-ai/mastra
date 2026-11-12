@@ -2454,6 +2454,42 @@ describe('run activity on the work-item listing', () => {
       expect(body.workItems.map((card: { title: string }) => card.title)).toEqual(['Renamed']);
     });
 
+    it('leaves a card deleted after the list was read for the next read to remove', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      const listed = await read();
+      const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+      let deleting: Promise<unknown> | undefined;
+      vi.spyOn(seed.storage.ops, 'findMany').mockImplementation(async (collection, ...rest) => {
+        // The delete lands between this read's list and its read of the deleted ids.
+        if (collection === 'factory_board_item_tombstones') {
+          await (deleting ??= json('DELETE', `/web/factory/work-items/${cards[1]!.id}`));
+        }
+        return findMany(collection, ...rest);
+      });
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(next).toMatchObject({ removedIds: [], check: boardCheck(listed.workItems) });
+      later();
+      expect((await read(next.cursor)).removedIds).toEqual([cards[1]!.id]);
+    });
+
+    it('sends a board showing Review cards whole, without a cursor', async () => {
+      const card = await createCard('pull-request');
+      await createCard('issue');
+      // A row as the retired Review board left it.
+      await seed.storage.ops.updateMany('factory_board_items', { id: card.id }, { board: 'review' });
+
+      const answer = await read('1');
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toBeUndefined();
+      expect(answer.removedIds).toBeUndefined();
+    });
+
     it('answers a narrowed list as it does without a cursor', async () => {
       const held = await startRun('session-mine');
       await startRun('session-other');
