@@ -46,6 +46,42 @@ const OWNER_ID = quoteIdent('ownerId', 'column name');
 const LEASE_EXPIRES_AT = quoteIdent('leaseExpiresAt', 'column name');
 const UPDATED_AT = quoteIdent('updatedAt', 'column name');
 
+const SNAPSHOT = quoteIdent('snapshot', 'column name');
+
+/**
+ * Columns of a `listWorkflowRuns({ summary: true })` row: the snapshot fields a summary returns
+ * are read in SQL, so the snapshot itself is never sent.
+ */
+const WORKFLOW_SUMMARY_COLUMNS = [
+  quoteIdent('workflow_name', 'column name'),
+  quoteIdent('run_id', 'column name'),
+  quoteIdent('resourceId', 'column name'),
+  quoteIdent('createdAt', 'column name'),
+  quoteIdent('updatedAt', 'column name'),
+  `JSON_VALUE(${SNAPSHOT}, '$.status') AS summaryStatus`,
+  `JSON_VALUE(${SNAPSHOT}, '$.timestamp') AS summaryTimestamp`,
+  `JSON_VALUE(${SNAPSHOT}, '$.parentWorkflow.workflowId') AS summaryParentWorkflowId`,
+  `JSON_VALUE(${SNAPSHOT}, '$.parentWorkflow.runId') AS summaryParentRunId`,
+].join(', ');
+
+/**
+ * Builds the reduced snapshot of a summary row: `status`, `timestamp`, and `parentWorkflow`
+ * only for nested runs. Callers of `summary: true` read no other snapshot field.
+ */
+function summarySnapshot(row: Record<string, any>): WorkflowRunState {
+  const snapshot: Record<string, unknown> = {
+    status: row.summaryStatus ?? undefined,
+    timestamp:
+      row.summaryTimestamp === null || row.summaryTimestamp === undefined ? undefined : Number(row.summaryTimestamp),
+  };
+
+  if (row.summaryParentWorkflowId && row.summaryParentRunId) {
+    snapshot.parentWorkflow = { workflowId: row.summaryParentWorkflowId, runId: row.summaryParentRunId };
+  }
+
+  return snapshot as unknown as WorkflowRunState;
+}
+
 type RunOwnerRow = {
   generation: number | string;
   ownerId: string;
@@ -367,10 +403,13 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     }
   }
 
-  /** Decodes a raw Spanner snapshot row into the public `WorkflowRun` shape. */
-  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+  /**
+   * Decodes a raw Spanner snapshot row into the public `WorkflowRun` shape. With `summary`, the
+   * row has the `WORKFLOW_SUMMARY_COLUMNS` columns instead of the snapshot.
+   */
+  private parseWorkflowRun(row: Record<string, any>, { summary }: { summary?: boolean } = {}): WorkflowRun {
     const transformed = transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_WORKFLOW_SNAPSHOT, row });
-    let snapshot: WorkflowRunState | string = transformed.snapshot;
+    let snapshot: WorkflowRunState | string = summary ? summarySnapshot(transformed) : transformed.snapshot;
     if (typeof snapshot === 'string') {
       try {
         snapshot = JSON.parse(snapshot) as WorkflowRunState;
@@ -762,7 +801,10 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     }
   }
 
-  /** Paginated listing with optional workflowName, status, resourceId, and date-range filters. */
+  /**
+   * Paginated listing with optional workflowName, status, resourceId, and date-range filters.
+   * With `summary`, each run's snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -771,6 +813,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     perPage,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -833,7 +876,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
         total = Number((countRows as Array<{ count: number | string }>)[0]?.count ?? 0);
       }
 
-      let sql = `SELECT * FROM ${tableName} ${whereSql} ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('run_id', 'column name')} DESC`;
+      let sql = `SELECT ${summary ? WORKFLOW_SUMMARY_COLUMNS : '*'} FROM ${tableName} ${whereSql} ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('run_id', 'column name')} DESC`;
       if (usePagination) {
         const normalized = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
         const offset = page! * normalized;
@@ -842,7 +885,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
         params.offset = offset;
       }
       const [rows] = await this.database.run({ sql, params, types, json: true });
-      const runs = (rows as Array<Record<string, any>>).map(r => this.parseWorkflowRun(r));
+      const runs = (rows as Array<Record<string, any>>).map(r => this.parseWorkflowRun(r, { summary }));
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(
