@@ -412,6 +412,22 @@ describe('api command executor', () => {
     );
   });
 
+  it('sends the filters of Factory work-item list in the request URL', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ workItems: [{ id: 'work-item-1' }], runningSessionIds: [] }));
+
+    await executeDescriptor(
+      API_COMMANDS['factoryWork-itemList'],
+      ['project-1'],
+      '{"started":"false","q":"login flow","limit":10}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/web/factory/projects/project-1/work-items?started=false&q=login+flow&limit=10',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('executes Factory decision actions at the resolved origin', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 
