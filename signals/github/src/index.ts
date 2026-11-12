@@ -1281,7 +1281,7 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
       line?: number;
       review_thread_id?: string;
     }>(`select * from (
-          select c.author_login, c.author_type, c.is_bot, substr(c.body, 1, 4000) as body,
+          select c.author_login, c.author_type, c.is_bot, substr(c.body, 1, 200000) as body,
                  json_extract(c.raw_json, '$.html_url') as html_url,
                  coalesce(c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as created_at,
                  coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as updated_at,
@@ -1292,8 +1292,11 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
           union all
-          select json_extract(c.value, '$.author.login'), json_extract(c.value, '$.author.__typename'),
-                 json_extract(c.value, '$.author.__typename')='Bot', substr(json_extract(c.value, '$.body'), 1, 4000),
+          select case when json_extract(c.value, '$.author.__typename')='Bot' and substr(json_extract(c.value, '$.author.login'), -5) != '[bot]'
+                      then json_extract(c.value, '$.author.login') || '[bot]'
+                      else json_extract(c.value, '$.author.login') end,
+                 json_extract(c.value, '$.author.__typename'),
+                 json_extract(c.value, '$.author.__typename')='Bot', substr(json_extract(c.value, '$.body'), 1, 200000),
                  json_extract(c.value, '$.url'), json_extract(c.value, '$.createdAt'),
                  coalesce(json_extract(c.value, '$.updatedAt'), json_extract(c.value, '$.createdAt')),
                  rt.path, rt.line, rt.review_thread_id
@@ -2113,7 +2116,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             previousGithubUpdatedAt,
             previousContentHash,
             latestCommentChanged,
-            comments: perCommentDelivery ? (isFirstObservation ? [] : comments) : undefined,
+            comments: perCommentDelivery && !isFirstObservation ? comments : undefined,
             headChanged,
             reviewStateChanged,
             terminalState,
@@ -2604,6 +2607,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         ? { lastObservedReviewStateHash: existing.lastObservedReviewStateHash }
         : {}),
       ...(existing?.lastObservedCommentUrl ? { lastObservedCommentUrl: existing.lastObservedCommentUrl } : {}),
+      ...(existing?.lastObservedCommentsAt ? { lastObservedCommentsAt: existing.lastObservedCommentsAt } : {}),
+      ...(existing?.lastObservedCommentKeys ? { lastObservedCommentKeys: existing.lastObservedCommentKeys } : {}),
       ...(existing?.lastObservedCommentAuthor ? { lastObservedCommentAuthor: existing.lastObservedCommentAuthor } : {}),
       ...(typeof existing?.lastObservedCommentIsBot === 'boolean'
         ? { lastObservedCommentIsBot: existing.lastObservedCommentIsBot }

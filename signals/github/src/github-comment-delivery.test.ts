@@ -122,7 +122,7 @@ else console.log('{}');
     const nodes = comments.map(c => ({
       id: c.id,
       body: c.body,
-      author: { login: c.author ?? 'coderabbitai[bot]', __typename: c.author ? 'User' : 'Bot' },
+      author: { login: c.author ?? 'coderabbitai', __typename: c.author ? 'User' : 'Bot' },
       path: 'src/index.ts',
       createdAt: c.at ?? '2026-11-12T20:41:53Z',
       updatedAt: c.at ?? '2026-11-12T20:41:53Z',
@@ -141,6 +141,14 @@ else console.log('{}');
     permissionLookups,
     restart() {
       provider = createProvider();
+    },
+    async resubscribe(nextMode: 'working' | 'review' = mode) {
+      await provider.subscribeThreadToPR({
+        threadId: thread.id,
+        resourceId: thread.resourceId!,
+        pr: { owner: 'mastra-ai', repo: 'mastra', number: 29096 },
+        mode: nextMode,
+      });
     },
   };
 }
@@ -260,5 +268,45 @@ describe.each(['working', 'review'] as const)('%s subscriber receives every find
     f.comment('new', 'Fix this bug before merging.');
     await f.poll();
     expect(f.delivered.map(n => n.summary).join('\n')).toContain('Fix this bug before merging.');
+  }, 30_000);
+
+  it('shows a finding that follows a long hidden block instead of a blank excerpt', async () => {
+    const f = fixture(mode);
+    await f.poll();
+    f.delivered.length = 0;
+    f.comment('long', `<!-- ${'x'.repeat(5000)} -->\n\nFix the race in the retry loop.`);
+    await f.poll();
+    expect(f.delivered.map(n => n.summary).join('\n')).toContain('Fix the race in the retry loop.');
+  }, 30_000);
+
+  it('keeps hiding CodeRabbit boilerplate whose marker follows a long prefix', async () => {
+    const f = fixture(mode);
+    await f.poll();
+    f.delivered.length = 0;
+    f.comment(
+      'noise',
+      `${'Walkthrough text. '.repeat(400)}\nstorage.googleapis.com/coderabbit_public_assets/review-stack`,
+    );
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity')).toHaveLength(0);
+  }, 30_000);
+
+  it('keeps the comment cursor when the PR is subscribed again', async () => {
+    const f = fixture(mode);
+    await f.poll();
+    f.comment('seen', 'Already delivered finding.');
+    await f.poll();
+    await f.resubscribe();
+    f.delivered.length = 0;
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity')).toHaveLength(0);
+  }, 30_000);
+
+  it('still reports the first observation of a working subscription', async () => {
+    const f = fixture(mode);
+    f.comment('existing', 'Existing finding at subscribe time.', undefined, 'maintainer');
+    await f.poll();
+    const activity = f.delivered.filter(n => n.kind === 'pull-request-activity');
+    expect(activity).toHaveLength(mode === 'working' ? 1 : 0);
   }, 30_000);
 });
