@@ -97,7 +97,7 @@ export default function SchedulePage() {
                 Open workflow
               </Button>
             ) : null}
-            {schedule ? (
+            {schedule && schedule.status !== 'completed' ? (
               <Button
                 onClick={() => {
                   const action = schedule.status === 'active' ? 'pause' : 'resume';
@@ -143,10 +143,15 @@ export default function SchedulePage() {
                 '—'
               )}
             </MetaItem>
-            <MetaItem label="Cron">
+            <MetaItem label={schedule.cron ? 'Cron' : 'Runs at'}>
               <Txt as="span" variant="body" font="mono">
-                {schedule.cron}
+                {schedule.cron ?? (schedule.runAt ? new Date(schedule.runAt).toLocaleString() : '—')}
               </Txt>
+              {schedule.endAt ? (
+                <span className="ml-2 text-caption text-muted-foreground">
+                  until {new Date(schedule.endAt).toLocaleString()}
+                </span>
+              ) : null}
               {schedule.timezone ? (
                 <Txt as="span" variant="caption" tone="muted" className="ml-2">
                   {schedule.timezone}

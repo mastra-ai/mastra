@@ -1,5 +1,84 @@
 # @mastra/observability
 
+## 1.24.0-alpha.7
+
+### Minor Changes
+
+- Add span-local error counts. ([#30088](https://github.com/mastra-ai/mastra/pull/30088))
+
+### Patch Changes
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+
+## 1.24.0-alpha.6
+
+### Minor Changes
+
+- Add feedback review-status delivery to storage and Platform exporters. Each supporting destination handles its own update, without depending on local storage. Flush and shutdown wait for pending updates. ([#30075](https://github.com/mastra-ai/mastra/pull/30075))
+
+  ```typescript
+  await mastra.observability.updateFeedbackReviewStatus?.({
+    feedbackId: 'feedback-123',
+    reviewStatus: 'reviewed',
+  });
+  await mastra.observability.flush();
+  ```
+
+### Patch Changes
+
+- Fixed span errors exposing data on traces that use `tracingOptions.hideInput` or `tracingOptions.hideOutput`. Error messages, stack headers, and error details often quote the input or output these flags hide, such as a tool rejecting a user's value or a provider echoing a refused prompt. On these traces, exported span errors now replace the message with `[REDACTED]` and omit free-form error details. The error id, name, domain, category, and safely correlated stack frames are kept, so failures can still be traced to code; unrecognized stack formats are dropped rather than risking disclosure. Traces without these flags are unchanged. ([#29716](https://github.com/mastra-ai/mastra/pull/29716))
+
+- Updated dependencies [[`1689ce3`](https://github.com/mastra-ai/mastra/commit/1689ce38e1d66df6f474acd5db65f46315a02c23), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`38327de`](https://github.com/mastra-ai/mastra/commit/38327de07a169a6d5ce8ab8fc2075caec112d6f3), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`2053c88`](https://github.com/mastra-ai/mastra/commit/2053c881ed7a13c43d3932e1938e2f94ef226b4f), [`4884ee0`](https://github.com/mastra-ai/mastra/commit/4884ee08a067dd82176c57ca54bdfec02eda97ea), [`49e7108`](https://github.com/mastra-ai/mastra/commit/49e71082bd2c36cd20d7f4ba62bb3666e108968b), [`4cfa256`](https://github.com/mastra-ai/mastra/commit/4cfa256801f6b7e909daa5ed5d14c77b9fb24197), [`7f0d2fd`](https://github.com/mastra-ai/mastra/commit/7f0d2fd4b6c304ad851232b5969d96fdb20aa06a), [`b0ef22e`](https://github.com/mastra-ai/mastra/commit/b0ef22e7bfeb309c456d5c54528d579c4ac9e863), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`eb683b4`](https://github.com/mastra-ai/mastra/commit/eb683b45fe2ad645ae81c419d405aa2327a053e3)]:
+  - @mastra/core@1.83.0-alpha.9
+
+## 1.24.0-alpha.5
+
+### Minor Changes
+
+- Add feedback replacement delivery through supporting exporters. `MastraPlatformExporter` sends PUT requests, while storage exporters persist their copies independently. Flush and shutdown drain pending replacements. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```typescript
+  await observability.replaceFeedback({
+    traceId: 'trace-123',
+    feedback: {
+      feedbackId: 'feedback-1',
+      timestamp: new Date('2026-11-11T12:00:00.123Z'),
+      feedbackType: 'thumbs',
+      value: -1,
+    },
+  });
+  ```
+
+- Added support for exporting feedback and scores that need trace details from Platform. The exporter retries while waiting for a trace to arrive, and `flush()` and `shutdown()` wait for pending deliveries to finish. ([#30048](https://github.com/mastra-ai/mastra/pull/30048))
+
+  ```typescript
+  import { MastraPlatformExporter } from '@mastra/observability';
+
+  const exporter = new MastraPlatformExporter();
+  await exporter.onFeedbackEvent({
+    type: 'feedback',
+    feedback: {
+      feedbackId: crypto.randomUUID(),
+      timestamp: new Date(),
+      traceId: 'existing-trace-id',
+      feedbackType: 'comment',
+      feedbackSource: 'user',
+      value: 'actionable',
+    },
+  });
+  await exporter.flush();
+  ```
+
+### Patch Changes
+
+- Fix feedback and score delivery so each exporter handles its own destination. Missing local traces no longer prevent remote export, and storage lookup retries are included in flush and shutdown. ([#30052](https://github.com/mastra-ai/mastra/pull/30052))
+
+  Keep HTTP create responses independent of custom exporter delivery while including pending delivery in flush and shutdown.
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae)]:
+  - @mastra/core@1.83.0-alpha.8
+
 ## 1.24.0-alpha.4
 
 ### Patch Changes

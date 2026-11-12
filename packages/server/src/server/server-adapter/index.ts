@@ -1843,6 +1843,7 @@ export async function invokeRoute(route: ServerRoute, options: InvokeRouteOption
   try {
     const result = await route.handler({
       ...params,
+      requestBody: body.value,
       requestContext,
       mastra,
       abortSignal: options.abortSignal ?? new AbortController().signal,

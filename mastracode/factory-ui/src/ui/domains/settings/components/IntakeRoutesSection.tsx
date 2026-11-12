@@ -39,6 +39,7 @@ import type { InstalledBoardInfo, IntakeRouteInfo, IntakeRouteListResponse } fro
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
@@ -57,6 +58,7 @@ import {
   triggerLabel,
 } from './intakeRoutes';
 import { SettingsSubsection } from './SettingsSubsection';
+import type { SourceOption } from './sourceSuggestions';
 import { useRowDrag } from './useRowDrag';
 
 const ROUTE_WHEN_SCHEMA = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
@@ -139,9 +141,48 @@ function stepLabel(index: number, catchAllAt: number): string {
   return index === 0 ? 'If' : 'Else if';
 }
 
-function destinationLabelFor(scope: RouteScope, route: IntakeRouteInfo): string {
+function destinationLabelFor(scope: RouteScope, joining: boolean): string {
   if (scope.kind === 'moves') return 'Move to';
-  return route.target.joinClosedIssue ? 'Join the issue’s card, move to' : 'Send to';
+  return joining ? 'Join the issue’s card, move to' : 'Send to';
+}
+
+/**
+ * Whether a route can join a pull request to the card of the issue it closes: it handles arrivals alone, and
+ * every card it matches is a pull request that closes an issue.
+ */
+function canJoinIssueCard(on: IntakeRouteInfo['on'], when: RuleGroup | null): boolean {
+  if (on.length !== 1 || on[0] !== 'work_item.created' || when?.operator !== 'AND') return false;
+  const requires = (field: string, value: unknown) =>
+    when.conditions.some(
+      condition =>
+        !('conditions' in condition) &&
+        condition.field === field &&
+        condition.operator === 'equals' &&
+        condition.value === value,
+    );
+  return requires('source.kind', 'pull_request') && requires('pullRequest.closesIssue', true);
+}
+
+/** The phase a route keeps when what it does with cards changes: its own if cards can still be there. */
+function phaseStillOffered(board: InstalledBoardInfo | undefined, phaseKey: string, joining: boolean): string {
+  if (targetPhases(board, true, joining).some(phase => phase.id === phaseKey)) return phaseKey;
+  return board?.initialPhase ?? phaseKey;
+}
+
+function JoinIssueCard({ checked, onChange }: { checked: boolean; onChange: (joining: boolean) => void }) {
+  return (
+    <div className="flex items-start gap-2 pr-2 pl-4">
+      <Switch aria-label="Join the issue’s card instead" checked={checked} onCheckedChange={onChange} />
+      <div className="flex min-w-0 flex-col">
+        <Txt as="span" variant="caption">
+          Join the issue’s card instead
+        </Txt>
+        <Txt as="span" variant="caption" tone="muted">
+          Only trusted authors’ pull requests join; others get their own card.
+        </Txt>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -349,12 +390,15 @@ function RouteName({ name, onRename }: { name: string; onRename: (name: string) 
 function RouteConditions({
   route,
   board,
+  sources,
   readOnly,
   needsOne,
   onSave,
 }: {
   route: IntakeRouteInfo;
   board: InstalledBoardInfo | undefined;
+  /** The project's repositories, teams and projects, offered for `source.repository`. */
+  sources: SourceOption[];
   readOnly: boolean;
   /** A new-card route with no conditions would take every new card, hiding the routes below it. */
   needsOne: boolean;
@@ -393,7 +437,7 @@ function RouteConditions({
         label={`${route.name} conditions`}
         rule={route.when}
         facts={intakeRouteFacts(route.on)}
-        options={phaseOptions(board)}
+        options={{ ...phaseOptions(board), 'source.repository': sources }}
         emptyHint={needsOne ? 'Add at least one.' : 'Matches every card.'}
         onChange={(when, incomplete) => {
           // An empty new-card route isn't saved, and the empty rows already say why.
@@ -418,6 +462,7 @@ function RouteCard({
   route,
   scope,
   boards,
+  sources,
   readOnly,
   isCatchAll,
   unreachable,
@@ -433,6 +478,7 @@ function RouteCard({
   route: IntakeRouteInfo;
   scope: RouteScope;
   boards: InstalledBoardInfo[];
+  sources: SourceOption[];
   readOnly: boolean;
   isCatchAll: boolean;
   unreachable: boolean;
@@ -452,7 +498,11 @@ function RouteCard({
   const setTarget = (target: Partial<IntakeRouteInfo['target']>) =>
     onUpdate({ target: { ...route.target, ...target } });
 
-  const destinationLabel = destinationLabelFor(scope, route);
+  const joining = route.target.joinClosedIssue === true;
+  const destinationLabel = destinationLabelFor(scope, joining);
+  // A route already joining keeps the switch whatever its conditions say now, so it can be turned off.
+  const offersJoin =
+    scope.kind === 'arrivals' && !readOnly && !isCatchAll && (joining || canJoinIssueCard(route.on, route.when));
 
   return (
     <RuleCard inactive={!route.enabled}>
@@ -512,11 +562,18 @@ function RouteCard({
             key={route.on.join()}
             route={route}
             board={board}
+            sources={sources}
             readOnly={readOnly}
             needsOne={scope.kind === 'arrivals'}
             onSave={when => onUpdate({ when })}
           />
         </RuleCardBody>
+      )}
+      {offersJoin && (
+        <JoinIssueCard
+          checked={joining}
+          onChange={next => setTarget({ joinClosedIssue: next, phaseKey: phaseStillOffered(board, phaseKey, next) })}
+        />
       )}
       <RuleCardOutcome label={destinationLabel}>
         {readOnly ? (
@@ -549,7 +606,7 @@ function RouteCard({
                 board={board}
                 value={phaseKey}
                 placesNew={placesNew}
-                joining={route.target.joinClosedIssue === true}
+                joining={joining}
                 label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
                 onChange={next => setTarget({ phaseKey: next })}
               />
@@ -575,12 +632,14 @@ function RouteCard({
 function NewRoute({
   scope,
   boards,
+  sources,
   initialBoard,
   onAdd,
   onCancel,
 }: {
   scope: RouteScope;
   boards: InstalledBoardInfo[];
+  sources: SourceOption[];
   initialBoard: InstalledBoardInfo | undefined;
   /** Resolves to whether the route was added. */
   onAdd: (route: NewRouteValue) => Promise<boolean>;
@@ -599,6 +658,11 @@ function NewRoute({
       ? (scope.board.flow?.completed ?? scope.board.initialPhase)
       : (initialBoard?.initialPhase ?? ''),
   );
+  const [wantsJoin, setWantsJoin] = useState(false);
+  const offersJoin = scope.kind === 'arrivals' && canJoinIssueCard(on, when);
+  const joining = offersJoin && wantsJoin;
+  // Leaving joining can leave a phase new cards can't land in picked.
+  const targetPhase = scope.kind === 'arrivals' ? phaseStillOffered(board, phaseKey, joining) : phaseKey;
   const problem = whenProblem(on, when);
   const needsCondition = scope.kind === 'arrivals' && when === null;
   const [adding, setAdding] = useState(false);
@@ -606,7 +670,7 @@ function NewRoute({
     !adding &&
     name.trim() !== '' &&
     board !== undefined &&
-    phaseKey !== '' &&
+    targetPhase !== '' &&
     !incomplete &&
     !problem &&
     !needsCondition;
@@ -638,7 +702,7 @@ function NewRoute({
           label="New route conditions"
           rule={when}
           facts={intakeRouteFacts(on)}
-          options={phaseOptions(board)}
+          options={{ ...phaseOptions(board), 'source.repository': sources }}
           emptyHint={needsCondition ? 'Add at least one.' : 'Matches every card.'}
           onChange={(next, unfinished) => {
             setWhen(next);
@@ -651,7 +715,8 @@ function NewRoute({
           </Txt>
         )}
       </RuleCardBody>
-      <RuleCardOutcome label={scope.kind === 'moves' ? 'Move to' : 'Send to'}>
+      {offersJoin && <JoinIssueCard checked={wantsJoin} onChange={setWantsJoin} />}
+      <RuleCardOutcome label={destinationLabelFor(scope, joining)}>
         {scope.kind === 'arrivals' && (
           <>
             <BoardPicker
@@ -671,8 +736,9 @@ function NewRoute({
         {board && (
           <PhasePicker
             board={board}
-            value={phaseKey}
+            value={targetPhase}
             placesNew={scope.kind === 'arrivals'}
+            joining={joining}
             label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
             onChange={setPhaseKey}
           />
@@ -691,7 +757,7 @@ function NewRoute({
                 name: name.trim(),
                 on,
                 when,
-                target: { boardKey: board.id, phaseKey, joinClosedIssue: false },
+                target: { boardKey: board.id, phaseKey: targetPhase, joinClosedIssue: joining },
               });
               // An added route closes this form; a failed one leaves it to try again.
               if (!added) setAdding(false);
@@ -722,6 +788,7 @@ function RouteList({
   noun: string;
 }) {
   const query = useIntakeRoutesQuery(factoryId);
+  const sources = useSourceSuggestions(factoryId);
   const { latest, show, save, failures } = useRouteSaves(factoryId);
   const [adding, setAdding] = useState(false);
   const routes = (query.data?.intakeRoutes ?? []).filter(route => inScope(route, scope));
@@ -850,7 +917,11 @@ function RouteList({
             name: route.name,
             when: route.when,
             ...(scope.kind === 'moves' ? { on: route.on } : {}),
-            target: { boardKey: route.target.boardKey, phaseKey: route.target.phaseKey },
+            target: {
+              boardKey: route.target.boardKey,
+              phaseKey: route.target.phaseKey,
+              ...(route.target.joinClosedIssue ? { joinClosedIssue: true } : {}),
+            },
           },
         },
       ]);
@@ -901,6 +972,7 @@ function RouteList({
                   route={route}
                   scope={scope}
                   boards={boards}
+                  sources={sources}
                   readOnly={readOnly}
                   isCatchAll={index === catchAllAt}
                   unreachable={catchAllAt >= 0 && index > catchAllAt}
@@ -953,6 +1025,7 @@ function RouteList({
             <NewRoute
               scope={scope}
               boards={boards}
+              sources={sources}
               initialBoard={scope.kind === 'moves' ? scope.board : defaultBoard}
               onAdd={add}
               onCancel={() => setAdding(false)}

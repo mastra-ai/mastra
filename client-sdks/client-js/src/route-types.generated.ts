@@ -182,7 +182,7 @@ type InputShared_Auxiliary_278 =
           };
     };
 
-type InputShared_Auxiliary_734 =
+type InputShared_Auxiliary_737 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,19 +227,19 @@ type InputShared_Auxiliary_734 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_734[];
+      args: InputShared_Auxiliary_737[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_734;
+      arg: InputShared_Auxiliary_737;
     };
 
-type InputShared_Auxiliary_808 = {
+type InputShared_Auxiliary_811 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_808[] | undefined;
+  children?: InputShared_Auxiliary_811[] | undefined;
 };
 
 type Shared_Auxiliary_795 = {
@@ -1890,7 +1890,7 @@ type InputShared_Type_92 = {
       }
     | undefined;
   steps: InputShared_Type_86[];
-  predicates: InputShared_Auxiliary_734[];
+  predicates: InputShared_Auxiliary_737[];
 };
 
 type InputShared_Type_93 = {
@@ -1904,7 +1904,7 @@ type InputShared_Type_93 = {
     | undefined;
   step: InputShared_Type_86;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_734;
+  predicate: InputShared_Auxiliary_737;
 };
 
 type InputShared_Type_94 =
@@ -3609,7 +3609,7 @@ type Shared_Type_63 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3748,7 +3748,7 @@ type Shared_Type_65 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3759,6 +3759,9 @@ type Shared_Type_65 = {
 type Shared_Type_66 = {
   traceId: string;
   rootSpanId: string;
+  rootKind?: ('native' | 'external') | undefined;
+  runtimeDurationMs?: (number | null) | undefined;
+  errorCount?: (number | null) | undefined;
   name: string;
   entityId: string | null;
   parentSpanId: string | null;
@@ -3937,6 +3940,8 @@ type Shared_Type_70 = {
   deltaPolling: boolean;
   /** Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead. */
   traceQuery: boolean;
+  /** Supports explicit `rootSource: 'aggregated'` trace queries */
+  traceQueryAggregatedRoots: boolean;
   /** Literal substring search across any span in a trace */
   traceQueryTextSearch: boolean;
   /** Literal substring search within individual spans */
@@ -3973,6 +3978,10 @@ type Shared_Type_70 = {
   threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Whether completed spans can be sorted by duration */
+  spanQueryDurationSort: boolean;
+  /** Whether spans can be sorted by model and provider */
+  spanQueryModelProviderSort: boolean;
   /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
   spanQueryContextFields: boolean;
   /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
@@ -3987,6 +3996,8 @@ type Shared_Type_70 = {
   traceQueryOutcomeFields: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
+  /** Full feedback replacement with PUT */
+  feedbackReplacement: boolean;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
@@ -4960,7 +4971,9 @@ type Shared_Type_106 = {
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -5012,7 +5025,9 @@ type Shared_Type_108 = {
   id: string;
   workflowId: string;
   agentId?: undefined | undefined;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -10737,6 +10752,8 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'SCORER'
+          | 'PROCESSOR'
           | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
@@ -10824,6 +10841,7 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 // Route: POST /observability/traces/query
 // ============================================================================
 export type PostObservabilityTracesQuery_Body = {
+  rootSource?: ('legacy' | 'aggregated') | undefined;
   textSearch?: string | undefined;
   timeRange: {
     from: string;
@@ -11170,7 +11188,7 @@ export type PostObservabilitySpansQuery_Body = {
   where?: InputShared_Auxiliary_231 | undefined;
   textSearch?: string | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'durationMs' | 'model' | 'provider';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -12286,6 +12304,94 @@ export interface PostObservabilityFeedback_RouteContract {
   body: PostObservabilityFeedback_Body;
   request: PostObservabilityFeedback_Request;
   response: PostObservabilityFeedback_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /observability/feedback/:feedbackId
+// ============================================================================
+export type PutObservabilityFeedbackFeedbackId_PathParams = GetObservabilityFeedbackFeedbackId_PathParams;
+
+export type PutObservabilityFeedbackFeedbackId_Body = {
+  /** Context handling; defaults to provided on OSS and resolve on Platform */
+  contextMode?: ('resolve' | 'provided') | undefined;
+  feedback: {
+    feedbackId: string;
+    /** Unique trace identifier */
+    traceId: string;
+    /** Span ID this feedback applies to */
+    spanId?: (string | null) | undefined;
+    feedbackSource?: (string | null) | undefined;
+    source?: (string | null) | undefined;
+    /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
+    feedbackType: string;
+    /** Feedback value (rating number or correction text) */
+    value: number | string;
+    comment?: (string | null) | undefined;
+    feedbackUserId?: (string | null) | undefined;
+    entityType?: (InputShared_Type_15 | null) | undefined;
+    entityId?: (string | null) | undefined;
+    entityName?: (string | null) | undefined;
+    parentEntityType?: (InputShared_Type_15 | null) | undefined;
+    parentEntityId?: (string | null) | undefined;
+    parentEntityName?: (string | null) | undefined;
+    rootEntityType?: (InputShared_Type_15 | null) | undefined;
+    rootEntityId?: (string | null) | undefined;
+    rootEntityName?: (string | null) | undefined;
+    userId?: (string | null) | undefined;
+    organizationId?: (string | null) | undefined;
+    resourceId?: (string | null) | undefined;
+    runId?: (string | null) | undefined;
+    sessionId?: (string | null) | undefined;
+    threadId?: (string | null) | undefined;
+    requestId?: (string | null) | undefined;
+    environment?: (string | null) | undefined;
+    serviceName?: (string | null) | undefined;
+    scope?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    entityVersionId?: (string | null) | undefined;
+    parentEntityVersionId?: (string | null) | undefined;
+    rootEntityVersionId?: (string | null) | undefined;
+    experimentId?: (string | null) | undefined;
+    executionSource?: (string | null) | undefined;
+    tags?: (string[] | null) | undefined;
+    /** ID of the source record this feedback is linked to (e.g. experiment result ID) */
+    sourceId?: (string | null) | undefined;
+    /** User-defined metadata */
+    metadata?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    /** Feedback review workflow status */
+    reviewStatus?: ('needs-review' | 'reviewed') | undefined;
+    timestamp: string;
+  };
+};
+
+export type PutObservabilityFeedbackFeedbackId_Response = PostObservabilityFeedback_Response;
+
+export type PutObservabilityFeedbackFeedbackId_Request = Simplify<
+  (PutObservabilityFeedbackFeedbackId_PathParams extends never
+    ? {}
+    : { params: PutObservabilityFeedbackFeedbackId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutObservabilityFeedbackFeedbackId_Body extends never
+      ? {}
+      : {} extends PutObservabilityFeedbackFeedbackId_Body
+        ? { body?: PutObservabilityFeedbackFeedbackId_Body }
+        : { body: PutObservabilityFeedbackFeedbackId_Body })
+>;
+
+export interface PutObservabilityFeedbackFeedbackId_RouteContract {
+  pathParams: PutObservabilityFeedbackFeedbackId_PathParams;
+  queryParams: never;
+  body: PutObservabilityFeedbackFeedbackId_Body;
+  request: PutObservabilityFeedbackFeedbackId_Request;
+  response: PutObservabilityFeedbackFeedbackId_Response;
   responseType: 'json';
 }
 
@@ -19793,7 +19899,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_808[] | undefined;
+  files?: InputShared_Auxiliary_811[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19851,7 +19957,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_808[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_811[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22037,6 +22143,8 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
   perPage?: number | undefined;
   /** Only return results that have all of these tags */
   tags?: string[] | undefined;
+  /** Only return results with this review status */
+  status?: ('needs-review' | 'reviewed' | 'complete') | undefined;
   orderBy?:
     | (
         | {
@@ -23418,7 +23526,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       agentId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       prompt: string;
       name?: string | undefined;
@@ -23447,7 +23557,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       workflowId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       inputData?: unknown | undefined;
       initialState?: unknown | undefined;
@@ -23492,6 +23604,8 @@ export type PatchSchedulesScheduleId_PathParams = GetSchedulesScheduleId_PathPar
 
 export type PatchSchedulesScheduleId_Body = {
   cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: (number | null) | undefined;
   timezone?: string | undefined;
   status?: ('active' | 'paused') | undefined;
   metadata?:
@@ -25581,6 +25695,7 @@ export interface RouteTypes {
   'GET /observability/feedback': GetObservabilityFeedback_RouteContract;
   'GET /observability/feedback/:feedbackId': GetObservabilityFeedbackFeedbackId_RouteContract;
   'POST /observability/feedback': PostObservabilityFeedback_RouteContract;
+  'PUT /observability/feedback/:feedbackId': PutObservabilityFeedbackFeedbackId_RouteContract;
   'DELETE /observability/feedback': DeleteObservabilityFeedback_RouteContract;
   'PATCH /observability/feedback/:feedbackId/review-status': PatchObservabilityFeedbackFeedbackIdReviewStatus_RouteContract;
   'POST /observability/feedback/aggregate': PostObservabilityFeedbackAggregate_RouteContract;
@@ -26541,6 +26656,7 @@ export interface Client {
   };
   '/observability/feedback/:feedbackId': {
     GET: GetObservabilityFeedbackFeedbackId_RouteContract;
+    PUT: PutObservabilityFeedbackFeedbackId_RouteContract;
   };
   '/observability/feedback/:feedbackId/review-status': {
     PATCH: PatchObservabilityFeedbackFeedbackIdReviewStatus_RouteContract;

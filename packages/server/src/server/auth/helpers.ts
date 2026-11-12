@@ -718,19 +718,16 @@ export const checkRules = async (
       continue;
     }
 
-    // Rule matches, check conditions
+    // Rule matches, so it decides. A failed condition denies instead of
+    // falling through to a broader rule further down the list.
     const condition = rule.condition;
     if (typeof condition === 'function') {
-      const allowed = await Promise.resolve()
+      return await Promise.resolve()
         .then(() => condition(user))
+        .then(result => !!result)
         .catch(() => false);
-
-      if (allowed) {
-        return true;
-      }
-    } else if (rule.allow) {
-      return true;
     }
+    return !!rule.allow;
   }
 
   // No matching rules, deny by default

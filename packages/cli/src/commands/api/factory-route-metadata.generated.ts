@@ -358,6 +358,49 @@ export const FACTORY_API_ROUTE_METADATA = {
     "pathParams": [
       "id"
     ],
+    "queryParams": [
+      "limit",
+      "q",
+      "scope",
+      "sessionId",
+      "since",
+      "source",
+      "started",
+      "workItemId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/activity": {
+    "contractKey": "workItemActivity",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/activity",
+    "description": "List when cards were created and completed since an instant",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "since"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/starters": {
+    "contractKey": "workItemStarters",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/starters",
+    "description": "Count the cards behind each new-session starter on the default board",
+    "pathParams": [
+      "id"
+    ],
     "queryParams": [],
     "bodyParams": [],
     "hasQuery": false,
@@ -3416,6 +3459,94 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "id"
       ]
     },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "scope": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "started": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "q": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "limit": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "source": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "workItemId": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "since": {
+          "$ref": "#/$defs/__schema9"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "__schema1": {
+          "type": "string",
+          "enum": [
+            "sessions"
+          ]
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "false"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "__schema4": {
+          "type": "string"
+        },
+        "__schema5": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema6"
+          }
+        },
+        "__schema6": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "__schema7": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema8"
+          }
+        },
+        "__schema8": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "__schema9": {
+          "type": "string",
+          "pattern": "^\\d{1,15}$"
+        }
+      }
+    },
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -3491,6 +3622,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "type": "string"
           }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "removedIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "check": {
+          "type": "string"
         }
       },
       "required": [
@@ -3498,6 +3646,147 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "runningSessionIds",
         "parkedSessionIds"
       ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/activity": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        }
+      },
+      "required": [
+        "since"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "createdAt": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "doneAt": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "total",
+        "createdAt",
+        "doneAt"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/starters": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "failed": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "changesRequested": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "review": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "oldestOpenedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "count"
+          ]
+        },
+        "undecided": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "untriaged": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "unplannedBugs": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "sweep": {
+          "type": "object",
+          "properties": {
+            "area": {
+              "type": "string"
+            },
+            "count": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "area",
+            "count"
+          ]
+        },
+        "stale": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "failed",
+        "changesRequested",
+        "review",
+        "undecided",
+        "untriaged",
+        "unplannedBugs",
+        "stale"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
     }
   },
   "GET /web/factory/skills": {
@@ -9060,6 +9349,8 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
   "workItemList": "GET /web/factory/projects/:id/work-items",
+  "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
+  "workItemStarters": "GET /web/factory/projects/:id/work-items/starters",
   "skillList": "GET /web/factory/skills",
   "projectUpdate": "PATCH /web/factory/projects/:id",
   "boardReplace": "PATCH /web/factory/projects/:id/boards/:boardKey",

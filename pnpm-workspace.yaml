@@ -476,6 +476,10 @@ overrides:
   # effect 4.0.0-beta (via @opencode-ai/plugin, dev-only in integrations/opencode), which declares ^4.1.1 on every
   # beta; 5.x keeps the same parse(input) API (new opt-in options only). Floor raised from <4.1.2 -> 4.2.0.
   toml@<5.0.1: 5.0.1
+  # Vanta 2026-11-11 (Dependabot #3443, effect >=4.0.0-beta.0 <4.0.0-beta.103, fixed in beta.103): @opencode-ai/plugin
+  # pins effect exactly (1.14.48 -> beta.59; even latest 1.19.5 -> beta.83), dev-only in integrations/opencode.
+  # Same 4.0.0-beta prerelease line; parent-scoped so nothing else is affected.
+  '@opencode-ai/plugin>effect': 4.0.0-beta.103
   postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   # Vanta 2026-10-20 (CVE-2026-104844 / GHSA-rj75-hqrm-r3gf, fixed only in 7.1.6): these parents are on their

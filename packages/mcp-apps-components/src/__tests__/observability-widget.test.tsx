@@ -156,6 +156,205 @@ it('shows the widget as failed, without retrying, when the tool fails the read',
   expect(mcp.calls).toHaveLength(1);
 });
 
+/** Whether `call` reads the window before the page's, which ends where the page's starts. */
+const readsPreviousWindow = (call: { args: Record<string, unknown> }) =>
+  Date.parse((call.args as { timeRange: { to: string } }).timeRange.to) < Date.now() - 60_000;
+
+it('draws KPIs combining trace measures, each compared with the window before', async () => {
+  const mcp = observabilityServer({
+    answers: {
+      aggregateTraces: call => ({
+        data: {
+          rows: [
+            {
+              measures: readsPreviousWindow(call)
+                ? { count: 100, errorCount: 10, 'duration.p95': 1200 }
+                : { count: 200, errorCount: 10, 'duration.p95': 1500 },
+            },
+          ],
+          truncated: false,
+        },
+      }),
+    },
+  });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Health',
+              kpis: {
+                items: [
+                  {
+                    label: 'p95 latency',
+                    format: 'duration',
+                    value: { traceAggregate: { measure: 'duration.p95', compare: 'previousWindow' } },
+                  },
+                  {
+                    label: 'Error rate',
+                    format: 'percent',
+                    lowerIsBetter: true,
+                    value: {
+                      ratio: {
+                        of: { traceAggregate: { measure: 'errorCount', compare: 'previousWindow' } },
+                        over: { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  expect(await screen.findByText('1.50s')).toBeTruthy();
+  expect(screen.getByText('5.00%')).toBeTruthy();
+  // The p95 rose from 1.2s, the error rate fell from 10%: each change is its own figure's.
+  await waitFor(() => expect(document.body.textContent).toContain('+25% vs previous 24h (1.20s)'));
+  expect(document.body.textContent).toContain('-50% vs previous 24h (10.0%)');
+  // Both KPIs read one ungrouped trace aggregate, once per window.
+  expect(mcp.calls.map(call => call.action)).toEqual(['aggregateTraces', 'aggregateTraces']);
+  expect(mcp.calls[0]!.args).toMatchObject({ measures: ['duration.p95', 'errorCount', 'count'] });
+  expect(mcp.calls.filter(readsPreviousWindow)).toHaveLength(1);
+});
+
+it('shows no change for a KPI whose parts do not all compare with the window before', async () => {
+  const mcp = observabilityServer({
+    answers: {
+      aggregateTraces: call => ({
+        data: {
+          rows: [{ measures: readsPreviousWindow(call) ? { count: 100 } : { count: 200, errorCount: 10 } }],
+          truncated: false,
+        },
+      }),
+    },
+  });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Runs',
+              kpis: {
+                items: [
+                  {
+                    label: 'Runs',
+                    format: 'count',
+                    value: { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                  },
+                  {
+                    label: 'Successful runs',
+                    format: 'count',
+                    value: {
+                      minus: [
+                        { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                        // Read over the page's window only: nothing to set against the 100 runs before.
+                        { traceAggregate: { measure: 'errorCount' } },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  // Runs' change shows once the previous window has answered, so Successful runs has it too.
+  await waitFor(() => expect(document.body.textContent).toContain('+100% vs previous 24h (100)'));
+  expect(screen.getByText('190')).toBeTruthy();
+  expect(document.body.textContent?.match(/vs previous/g)).toHaveLength(1);
+});
+
+it('counts a window with no traces as 0, and leaves its percentiles without a figure', async () => {
+  const mcp = observabilityServer({ answers: { aggregateTraces: { data: { rows: [], truncated: false } } } });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Quiet',
+              kpis: {
+                items: [
+                  { label: 'Errors', format: 'count', value: { traceAggregate: { measure: 'errorCount' } } },
+                  { label: 'p95 latency', format: 'duration', value: { traceAggregate: { measure: 'duration.p95' } } },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  await waitFor(() => expect(document.body.textContent).toContain('Errors0'));
+  expect(document.body.textContent).toContain('p95 latency—');
+});
+
+it('draws a line chart of scores and a table, with the colors and empty message they leave out', async () => {
+  const mcp = observabilityServer({
+    answers: {
+      getScoreTimeSeries: { data: { series: [{ name: 'relevance', points: [] }] } },
+      aggregateTraces: { data: { rows: [], truncated: false } },
+    },
+  });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Relevance over time',
+              timeseries: {
+                chart: 'line',
+                format: 'score',
+                series: [
+                  {
+                    label: 'Relevance',
+                    value: { scoreTimeSeries: { scorerId: 'relevance', aggregation: 'avg' } },
+                  },
+                ],
+              },
+            },
+            {
+              title: 'Runs by agent',
+              table: {
+                groupBy: ['entityName'],
+                columns: [
+                  { dimension: { dimension: 'entityName' } },
+                  { label: 'Runs', value: { format: 'count', traceAggregate: {} } },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  expect(await screen.findByText('Relevance over time')).toBeTruthy();
+  expect(await screen.findByText('No data')).toBeTruthy();
+  expect(screen.queryByText("Couldn't load")).toBeNull();
+  await waitFor(() =>
+    expect(mcp.calls.find(call => call.action === 'getScoreTimeSeries')?.args).toMatchObject({
+      scorerId: 'relevance',
+      aggregation: 'avg',
+    }),
+  );
+});
+
 it('says so when the tool returns no dashboard, e.g. because it rejected the one it was given', async () => {
   await openWidget(observabilityServer(), {
     dashboard: { rows: [{ widgets: [{ id: 'broken', kpis: {} } as never] }] },

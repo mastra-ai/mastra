@@ -10,6 +10,7 @@ import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../../../loop/shared/termi
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../../../observability/error-count';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
@@ -247,6 +248,8 @@ export function createDurableLLMMappingStep() {
             const mappingError = new Error(toolResult.mappingError.message);
             mappingError.name = toolResult.mappingError.name;
             mappingError.stack = toolResult.mappingError.stack;
+            const origin = getSpanErrorOrigin(toolResult.mappingError);
+            if (origin) setSpanErrorOrigin(mappingError, origin);
             throw mappingError;
           }
 
@@ -452,8 +455,17 @@ export function createDurableLLMMappingStep() {
         : undefined;
 
       // 5. Build the output
+      const serializedMessageList = messageList.serialize();
+      // This step and its tool results are complete; a total deadline from here on saves up to this point.
+      // A copy, since the serialized state shares parts with the live list the next step appends to.
+      // JSON rather than structuredClone: message metadata can hold callbacks, which have no place in memory.
+      // Only runs with a total deadline read it, so others skip the copy.
+      if (registryEntry?.timeoutTotalMs) {
+        registryEntry.completedStepsState = JSON.parse(JSON.stringify(serializedMessageList));
+        registryEntry.settledToolResults = undefined;
+      }
       const output: DurableAgenticExecutionOutput = {
-        ...(await storeMessageListState(params, messageList.serialize())),
+        ...(await storeMessageListState(params, serializedMessageList)),
         messageId,
         stepResult: {
           ...llmOutput.stepResult,
