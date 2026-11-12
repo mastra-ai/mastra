@@ -599,6 +599,41 @@ describe('workflow recovery rule (#28712)', () => {
     await vi.waitFor(() => expect(workflow.runs.has('stopped')).toBe(false));
   });
 
+  it('settles an evented run it restarted as failed, and drops it from the workflow, when its finish fails to publish', async () => {
+    const storage = new InMemoryStore();
+    const inner = new EventEmitterPubSub();
+    // The workers never get the restart, so the only finish is the failed publish below.
+    const pubsub: PubSub = new Proxy(inner, {
+      get(target, prop) {
+        if (prop === 'publish') {
+          return (topic: string, event: Event, options?: { localOnly?: boolean }) =>
+            topic === 'workflows' && event.type === 'workflow.start'
+              ? Promise.resolve()
+              : target.publish(topic, event, options);
+        }
+
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const b = startReplica(storage, 'evented', 'B', [], { pubsub });
+    await b.startWorkers();
+    await persistActiveRun(storage, 'stuck');
+    const workflow = b.getWorkflow('recovered-wf');
+    const run = await workflow.createRun({ runId: 'stuck' });
+
+    expect(await run.restartInBackground()).toBe(true);
+    // What a worker publishes when the run's result is too large for the broker.
+    await inner.publish('workflows-finish', {
+      type: 'workflow.publish-failed',
+      runId: 'stuck',
+      data: { message: 'result too large', workflowId: 'recovered-wf', runId: 'stuck' },
+    } as Event);
+
+    await vi.waitFor(() => expect(workflow.runs.has('stuck')).toBe(false));
+    expect(run.workflowRunStatus).toBe('failed');
+  });
+
   it('ends the trace span of an evented run it restarted with its final status', async () => {
     const storage = new InMemoryStore();
     const observability = new NoOpObservability();

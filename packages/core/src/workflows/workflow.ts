@@ -6267,7 +6267,14 @@ export class Run<
         onDetachedSettled: outcome => {
           if ('result' in outcome) {
             this.#settleRestart(outcome.result);
+            return;
           }
+
+          // No caller is left to see the error, for example a result too large for the pubsub.
+          this.#mastra
+            ?.getLogger()
+            ?.error(`[Workflow ${this.workflowId}] Restarted run ${this.runId} ended without a result`, outcome.error);
+          this.#settleRestart({ status: 'failed' });
         },
       });
     } finally {
