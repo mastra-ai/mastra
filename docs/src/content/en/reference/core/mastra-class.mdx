@@ -391,9 +391,10 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'recovery',
     type: 'MastraRecoveryConfig',
     description:
-      'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
+      'Recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery) and the workflow [recovery loop](/docs/workflows/overview#recovery-loop).',
     isOptional: true,
-    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2000 }",
+    defaultValue:
+      "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2000, workflowScanIntervalMs: 60000 }",
     properties: [
       {
         type: 'object',
@@ -412,7 +413,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'auto'",
             description:
-              "Set to `'off'` to skip restarting active workflow runs on server boot. Individual workflows can also opt out with `autoRestartActiveRuns: false`.",
+              "Set to `'off'` to skip restarting active workflow runs on server boot and to run no workflow recovery loop. Individual workflows can also opt out with `autoRestartActiveRuns: false`.",
           },
           {
             name: 'workflowConcurrency',
@@ -420,7 +421,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '5',
             description:
-              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. A default-engine run holds its slot until it finishes. An evented run holds it until its restart is published to the workers. Workflow and durable agent recovery run in parallel.',
+              'Maximum number of workflow runs restarted at the same time by boot recovery and the recovery loop. Use `Infinity` for no limit. A default-engine run holds its slot until it finishes. An evented run holds it until its restart is published to the workers. Workflow and durable agent recovery run in parallel.',
           },
           {
             name: 'workflowGraceMs',
@@ -428,7 +429,15 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '2000 with the default in-process pubsub, 60000 with any other pubsub',
             description:
-              'How long a `running` or `waiting` workflow run must go without an instance running it, and without any change, before `restartAllActiveWorkflowRuns()` restarts it. A run that stopped more recently is checked again once this period ends. Set it above the longest time your pubsub can hold an event before a worker takes it.',
+              'How long a `running` or `waiting` workflow run must go without an instance running it, and without any change, before boot recovery or the recovery loop restarts it. Set it above the longest time your pubsub can hold an event before a worker takes it.',
+          },
+          {
+            name: 'workflowScanIntervalMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '60000',
+            description:
+              "How often, in milliseconds, the [recovery loop](/docs/workflows/overview#recovery-loop) checks storage for workflow runs whose instance stopped. The loop runs on an instance that called `startWorkers()` with the orchestration worker. Each check runs up to 20% earlier or later, and sooner when a run the last check saw can be restarted earlier. Raise it when you run many instances or keep many runs active. Values are capped at 2147483647; set `workflows` to `'off'` to turn the loop off.",
           },
         ],
       },
