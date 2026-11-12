@@ -20,7 +20,14 @@ import { MastraVector } from '@mastra/core/vector';
 import { CompositeVoice } from '@mastra/core/voice';
 import type { Workflow } from '@mastra/core/workflows';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import {
+  Workspace,
+  LocalFilesystem,
+  MastraSandbox,
+  ProcessHandle,
+  SandboxProcessManager,
+} from '@mastra/core/workspace';
+import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import { defineEvent, MCPServer } from '@mastra/mcp';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { WorkflowRegistry } from '@mastra/server/server-adapter';
@@ -1125,9 +1132,11 @@ Follow these instructions for the test skill.
   // Create the workspace with local filesystem and BM25 search
   // Use 'test-workspace' as the ID to match test utilities' getDefaultValidPathParams
   const filesystem = new LocalFilesystem({ basePath: tempDir });
+  const sandbox = new TestSandbox();
   const workspace = new Workspace({
     id: 'test-workspace',
     filesystem,
+    sandbox,
     skills: ['skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
   });
@@ -1135,7 +1144,66 @@ Follow these instructions for the test skill.
   // Initialize the workspace
   await workspace.init();
 
+  // A running background process for the sandbox process routes, at the PID
+  // getDefaultValidPathParams uses.
+  await sandbox.processes!.spawn('npm run dev', { metadata: { toolCallId: 'test-tool-call-id' } });
+
   return workspace;
+}
+
+/** A background process that runs until it is killed. */
+class TestProcessHandle extends ProcessHandle {
+  exitCode: number | undefined;
+  readonly #exited: Promise<CommandResult>;
+  #exit!: (result: CommandResult) => void;
+
+  constructor(
+    readonly pid: string,
+    options?: SpawnProcessOptions,
+  ) {
+    super(options);
+    this.#exited = new Promise(resolve => (this.#exit = resolve));
+    this.emitStdout('ready\n');
+  }
+
+  async kill(): Promise<boolean> {
+    if (this.exitCode !== undefined) return false;
+    this.exitCode = 137;
+    this.#exit({ success: false, exitCode: 137, stdout: this.stdout, stderr: this.stderr, executionTimeMs: 0 });
+    return true;
+  }
+
+  async wait(): Promise<CommandResult> {
+    return this.#exited;
+  }
+
+  async sendStdin(): Promise<void> {}
+}
+
+class TestProcessManager extends SandboxProcessManager {
+  async spawn(_command: string, options?: SpawnProcessOptions): Promise<ProcessHandle> {
+    const handle = new TestProcessHandle('test-pid', options);
+    this._tracked.set(handle.pid, handle);
+    return handle;
+  }
+
+  async list(): Promise<ProcessInfo[]> {
+    return [...this._tracked.values()].map(handle => ({ pid: handle.pid, running: handle.exitCode === undefined }));
+  }
+}
+
+/** An in-memory sandbox whose only capability is background processes. */
+class TestSandbox extends MastraSandbox {
+  readonly id = 'test-sandbox';
+  readonly name = 'TestSandbox';
+  readonly provider = 'test';
+  status: MastraSandbox['status'] = 'pending';
+
+  constructor() {
+    super({ name: 'TestSandbox', processes: new TestProcessManager() });
+  }
+
+  async start(): Promise<void> {}
 }
 
 /**
