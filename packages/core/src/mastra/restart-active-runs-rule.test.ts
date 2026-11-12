@@ -159,9 +159,13 @@ describe('workflow recovery rule (#28712)', () => {
     expect(executions).toEqual(['B:work']);
   });
 
-  /** A replica whose default-engine `recovered-wf` records each run it runs, and holds `blocked` until `release`. */
+  /**
+   * A replica whose default-engine `recovered-wf` records each run it runs, and holds `blocked` until
+   * `release`. `order` gets `'step-done'` once the held step resumes.
+   */
   function startBlockingReplica(storage: InMemoryStore, blocked: string, recovery: MastraRecoveryConfig) {
     const executions: string[] = [];
+    const order: string[] = [];
     const started = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const workflow = createWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
@@ -175,6 +179,7 @@ describe('workflow recovery rule (#28712)', () => {
             if (runId === blocked) {
               started.resolve();
               await release.promise;
+              order.push('step-done');
             }
 
             return {};
@@ -184,7 +189,7 @@ describe('workflow recovery rule (#28712)', () => {
       .commit();
     const mastra = new Mastra({ logger: false, storage, workflows: { 'recovered-wf': workflow }, recovery });
     replicas.push({ mastra });
-    return { mastra, executions, started: started.promise, release: release.resolve };
+    return { mastra, executions, order, started: started.promise, release: release.resolve };
   }
 
   it("reads a queued restart's keys again, and leaves the run alone when another instance restarted it meanwhile", async () => {
@@ -250,14 +255,11 @@ describe('workflow recovery rule (#28712)', () => {
     void b.mastra.restartAllActiveWorkflowRuns();
     await b.started;
 
-    let shutDown = false;
-    const shutdown = b.mastra.shutdown({ drainTimeout: 5_000 }).then(() => {
-      shutDown = true;
-    });
-    await sleep(50);
-    expect(shutDown).toBe(false);
+    const shutdown = b.mastra.shutdown({ drainTimeout: 5_000 }).then(() => b.order.push('shutdown'));
     b.release();
     await shutdown;
+
+    expect(b.order).toEqual(['step-done', 'shutdown']);
     expect(await statusOf(storage, 'run-1')).toBe('success');
   }, 10_000);
 
