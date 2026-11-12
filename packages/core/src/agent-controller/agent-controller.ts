@@ -417,12 +417,7 @@ export class AgentController<TState = {}> {
       setOn: (threadId, key, value) => session.thread.setSettingOn({ threadId, key, value }),
       setModelOn: (threadId, settings) => this.writeThreadMetadataValues(threadId, settings),
     });
-    // Only an explicit `null` from a configured resolver marks a tool always allowed.
-    // Without a resolver, or for a tool it leaves `undefined`, the tool keeps asking.
-    const toolCategoryResolver = this.config.toolCategoryResolver;
-    if (toolCategoryResolver) {
-      session.setCategoryResolver(toolName => toolCategoryResolver(toolName));
-    }
+    session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({

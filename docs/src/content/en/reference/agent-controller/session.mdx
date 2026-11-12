@@ -285,7 +285,7 @@ Returns: `boolean`
 
 #### `resolveToolApproval(toolName, scope?)`
 
-Return the effective policy after applying explicit tool rules, session grants, and category rules. A tool the controller's `toolCategoryResolver` maps to `null` has no category and resolves to `allow`. Without a resolver, uncategorized tools resolve to `ask`.
+Return the effective policy after applying explicit tool rules, session grants, and category rules.
 
 Rules belong to each thread. Pass a run's `RequestContext` as `scope` to use the rules and grants of the thread that run belongs to. A thread ID as `scope` checks that thread's grants against the current thread's rules. Without `scope`, the current thread is used.
 

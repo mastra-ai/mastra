@@ -4804,10 +4804,8 @@ export class Session<TState = unknown> {
   /**
    * Resolve the effective approval policy for a tool: explicit per-tool deny
    * wins, then session-wide yolo, then an explicit per-tool policy, then a
-   * grant, then the tool's category grant/policy, falling back to "ask". A tool
-   * the category resolver maps to `null` has no category and is always allowed;
-   * without a resolver every tool falls back to "ask". Pure session state plus
-   * the injected category resolver.
+   * grant, then the tool's category grant/policy, falling back to "ask". Pure
+   * session state plus the injected category resolver.
    *
    * `scope` names the thread whose rules and grants apply. Pass a thread id to
    * read that thread's grants against the session's current rules, or a run's
@@ -4834,7 +4832,6 @@ export class Session<TState = unknown> {
     if (this.hasToolGrant(toolName, threadId)) return 'allow';
 
     const category = this.#resolveCategory?.(toolName);
-    if (category === null) return 'allow';
     if (category) {
       if (this.hasCategoryGrant(category, threadId)) return 'allow';
       const categoryPolicy = rules.categories[category];

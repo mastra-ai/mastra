@@ -25,18 +25,14 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
 
   async function setup({
     tools,
-    // Like Mastra Code: built-ins such as ask_user have no category and are always allowed.
     toolCategoryResolver = name => (name.startsWith('read') ? 'read' : name.startsWith('write') ? 'edit' : null),
   }: {
     tools: Record<string, ReturnType<typeof createTool>>;
-    toolCategoryResolver?: AgentControllerConfig['toolCategoryResolver'] | null;
+    toolCategoryResolver?: AgentControllerConfig['toolCategoryResolver'];
   }) {
     const llm = getMock();
     const { agent } = await createSharedAgent(llm, { engine, tools });
-    const { controller, session } = await createTestSession({
-      agent,
-      ...(toolCategoryResolver ? { toolCategoryResolver } : {}),
-    });
+    const { controller, session } = await createTestSession({ agent, toolCategoryResolver });
     await session.thread.create();
     await session.permissions.setForCategory({ category: 'read', policy: 'allow' });
     await session.permissions.setForCategory({ category: 'edit', policy: 'ask' });
@@ -192,6 +188,7 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
   it('still asks before a later call after the user answers ask_user', async () => {
     const calls: string[] = [];
     const env = await setup({ tools: { write_value: recordingTool('write_value', calls) } });
+    await env.session.permissions.setForTool({ toolName: 'ask_user', policy: 'allow' });
     env.session.subscribe(event => {
       if (event.type === 'tool_suspended' && event.toolName === 'ask_user') {
         queueMicrotask(() => env.session.respondToToolSuspension({ resumeData: 'the blue one' }));
@@ -214,7 +211,6 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
         { timeout: 15_000 },
       );
 
-      // ask_user has no category, so it asks the user without an approval card first.
       expect(env.approvalCards()).toEqual(['call-write']);
       expect(calls).toEqual([]);
       expect(JSON.stringify(env.requests()[1]?.body)).toContain('the blue one');
@@ -360,38 +356,6 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
         answered,
         new Promise((_, reject) => setTimeout(() => reject(new Error('The answer did not return')), 5_000)),
       ]);
-    } finally {
-      await env.controller.destroy();
-    }
-  });
-
-  it.each([
-    { label: 'runs a tool the category resolver maps to null', resolver: () => null, cards: [] },
-    {
-      label: 'asks for a tool the category resolver does not map',
-      resolver: () => undefined as unknown as null,
-      cards: ['call-note'],
-    },
-    {
-      label: 'asks for an uncategorized tool when there is no category resolver',
-      resolver: null,
-      cards: ['call-note'],
-    },
-  ])('$label', async ({ resolver, cards }) => {
-    const calls: string[] = [];
-    const env = await setup({ tools: { note: recordingTool('note', calls) }, toolCategoryResolver: resolver });
-    env.session.subscribe(event => {
-      if (event.type === 'tool_approval_required') {
-        queueMicrotask(() => env.session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId }));
-      }
-    });
-    env.script([{ toolCalls: [{ id: 'call-note', name: 'note', arguments: { name: 'a' } }] }, { content: 'done' }]);
-
-    try {
-      await env.send('Take a note.');
-      await vi.waitFor(() => expect(calls).toEqual(['note:a']), { timeout: 15_000 });
-
-      expect(env.approvalCards()).toEqual(cards);
     } finally {
       await env.controller.destroy();
     }

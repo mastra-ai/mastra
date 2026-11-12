@@ -379,8 +379,7 @@ export interface AgentControllerConfig<TState = {}> {
   /**
    * Maps tool names to permission categories.
    * Used by the permission system to resolve category-level policies.
-   * Return `null` for tools that never need approval, such as `ask_user`.
-   * Without a resolver, every tool asks unless a rule or grant allows it.
+   * If not provided, all tools default to the "other" category.
    */
   toolCategoryResolver?: (toolName: string) => ToolCategory | null;
 
