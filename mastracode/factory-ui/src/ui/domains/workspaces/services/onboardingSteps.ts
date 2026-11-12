@@ -25,6 +25,11 @@ export const ONBOARDING_SECTIONS: Record<OnboardingSection, { index: number; lab
   model: { index: 4, label: 'Model' },
 };
 
+/** Local mode leaves out the Accounts card, so Model moves up to third; otherwise it keeps its own number. */
+export function modelSectionIndex(local: boolean): number | undefined {
+  return local ? ONBOARDING_SECTIONS.accounts.index : undefined;
+}
+
 /** First section still missing a choice; Model once Codebase and Work are settled. */
 export function nextOnboardingStep(draft: OnboardingDraft): OnboardingStep {
   if (!draft.repository) return 'vcs';

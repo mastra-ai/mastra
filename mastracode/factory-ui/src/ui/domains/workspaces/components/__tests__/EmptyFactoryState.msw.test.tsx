@@ -279,7 +279,7 @@ describe('Draft Factory onboarding', () => {
     renderOnboarding();
     await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    const modelSection = await findActiveSection('Model');
+    await findActiveSection('Model');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
     expect(readOnboardingDraft().repository?.fullName).toBe('octo/other');
     expect(writes).toEqual([]);
@@ -306,7 +306,7 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Change work' }));
     const work = await findActiveSection('Work');
     await user.click(await work.findByRole('button', { name: 'Skip for now' }));
-    const reopened = await findActiveSection('Model');
+    await findActiveSection('Model');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
     expect(writes).toEqual([]);
   });
@@ -836,8 +836,6 @@ describe('Account presets', () => {
     const modelSection = await findActiveSection('Model');
     expect(screen.queryByRole('region', { name: 'Accounts' })).not.toBeInTheDocument();
     expect(modelSection.getByText('Local connection')).toBeInTheDocument();
-    expect(modelSection.queryByRole('radio', { name: 'Company account' })).not.toBeInTheDocument();
-    expect(modelSection.queryByRole('switch')).not.toBeInTheDocument();
     await chooseProvider(user, 'OpenAI', modelSection);
     await modelSection.findByRole('combobox');
     await user.click(await enabledCreateButton());
@@ -872,17 +870,31 @@ describe('Account presets', () => {
         await createReleased;
         return HttpResponse.json({ project: { id: 'fp-1', name: 'hello', modelScope: 'factory' } });
       }),
+      // The gateway gives the company account a provider-source switch, which the creating fieldset can't lock.
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          orgKeyAdmin: true,
+          providers: [
+            { provider: 'mastra', source: 'none', orgKey: false, connectWithMastraAccount: true },
+            { provider: 'openai', source: 'stored-org', orgCredential: 'api_key', userCredential: 'api_key' },
+            { provider: 'anthropic', source: 'stored-org', orgCredential: 'api_key', userCredential: 'api_key' },
+          ],
+        }),
+      ),
     );
     seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'factory', model });
     const user = userEvent.setup();
     renderOnboarding();
-    const modelSection = await findActiveSection('Model');
+    await findActiveSection('Model');
     await user.click(await enabledCreateButton());
     expect(await screen.findByRole('button', { name: 'Creating your factory…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Change codebase' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Change work' })).toBeDisabled();
     const accounts = within(screen.getByRole('region', { name: 'Accounts' }));
     expect(accounts.getByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
+    const modelSection = within(screen.getByRole('region', { name: 'Model' }));
+    await user.click(modelSection.getByRole('radio', { name: 'Mastra Gateway' }));
+    expect(modelSection.getByRole('radio', { name: 'Your own provider' })).toBeChecked();
     releaseCreate();
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([

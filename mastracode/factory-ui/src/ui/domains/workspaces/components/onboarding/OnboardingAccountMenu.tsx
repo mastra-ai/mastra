@@ -6,14 +6,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogOut, SunMoon } from 'lucide-react';
 import { useApiConfig } from '../../../../../api/config';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
-import { clearMastraCodeStorage, redirectToLogout } from '../../../auth/services/auth';
-import { clearOnboardingFlow } from '../../services/onboardingFlow';
-
-function accountDisplayName(user: { name?: string; email?: string }): string {
-  if (user.name) return user.name;
-  if (user.email) return user.email;
-  return 'Account';
-}
+import { accountName } from '../../../auth/services/accountName';
+import { signOutOfOnboarding } from '../../services/onboardingSignOut';
 
 /**
  * Who is setting up this Factory, the theme, and a way out. With sign-in off there is no account, so the
@@ -37,7 +31,7 @@ export function OnboardingAccountMenu() {
         </DropdownMenu.Content>
       </DropdownMenu>
     );
-  const displayName = accountDisplayName(user);
+  const displayName = accountName(user) ?? 'Account';
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger variant="ghost" aria-label={`Account menu for ${displayName}`}>
@@ -56,14 +50,7 @@ export function OnboardingAccountMenu() {
           onValueChange={setTheme}
         />
         <DropdownMenu.Separator />
-        <DropdownMenu.Item
-          onClick={() => {
-            clearMastraCodeStorage();
-            // The draft lives in sessionStorage; the next account in this tab must not inherit it.
-            clearOnboardingFlow();
-            redirectToLogout(baseUrl);
-          }}
-        >
+        <DropdownMenu.Item onClick={() => signOutOfOnboarding(baseUrl)}>
           <LogOut aria-hidden="true" />
           Sign out
         </DropdownMenu.Item>

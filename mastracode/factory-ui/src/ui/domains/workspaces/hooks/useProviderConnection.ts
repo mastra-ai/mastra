@@ -30,12 +30,16 @@ export interface ActiveProviderOAuth {
 export interface ProviderConnection {
   isPending: boolean;
   catalogError?: Error;
+  /** The provider list (or auth) is being fetched again, e.g. after Retry. */
+  retrying: boolean;
   authEnabled: boolean;
   orgKeyAdmin: boolean;
   signInProviders: ProviderInfo[];
   keyProviders: ProviderInfo[];
   gatewayProvider?: ProviderInfo;
   provider?: ProviderInfo;
+  /** The selected provider id, even when it is gone from the provider list. */
+  selectedProviderId?: string;
   connected: boolean;
   method?: ProviderConnectionMethod;
   hasConfiguredProvider: boolean;
@@ -48,7 +52,10 @@ export interface ProviderConnection {
   canConfigure: (provider: ProviderInfo, method?: ProviderConnectionMethod) => boolean;
   retry: () => void;
   clear: () => void;
-  chooseSignInProvider: (provider: ProviderInfo) => void;
+  /** Drops a connect error once the user has moved on from the action that failed. */
+  clearError: () => void;
+  /** `onFailedToStart` runs when the sign-in could not start, so a caller can undo what it showed for it. */
+  chooseSignInProvider: (provider: ProviderInfo, onFailedToStart?: () => void) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
   chooseCustomProvider: (providerId: string) => void;
   chooseGateway: () => void;
@@ -154,7 +161,7 @@ export function useProviderConnection({
     onSelectionChange?.(nextSelection);
   };
 
-  const startOAuth = async (chosen: ProviderInfo) => {
+  const startOAuth = async (chosen: ProviderInfo, onFailedToStart?: () => void) => {
     setError(undefined);
     try {
       const session = await startOAuthMutation.mutateAsync(signInRequest(chosen, credentialScope));
@@ -165,6 +172,7 @@ export function useProviderConnection({
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to start provider sign in');
+      onFailedToStart?.();
     }
   };
 
@@ -191,6 +199,7 @@ export function useProviderConnection({
       (scope !== undefined && authQuery.isPending) ||
       (scope === 'org' && authEnabled && orgKeyAdminQuery.isPending),
     catalogError: providersQuery.error ?? (scope !== undefined ? authQuery.error : undefined) ?? undefined,
+    retrying: providersQuery.isFetching || (scope !== undefined && authQuery.isFetching),
     authEnabled,
     orgKeyAdmin,
     signInProviders: providerChoices.filter(candidate => candidate.oauth?.supported === true),
@@ -198,6 +207,7 @@ export function useProviderConnection({
       candidate => !(hidesDeploymentKeys && candidate.source === 'deployment') && offersApiKey(candidate),
     ),
     provider,
+    selectedProviderId: selection?.providerId,
     connected: provider ? isConfigured(provider, selection?.method) : false,
     method: selection?.method,
     hasConfiguredProvider: providers.some(candidate => isConfigured(candidate)),
@@ -214,15 +224,21 @@ export function useProviderConnection({
       if (scope !== undefined) void authQuery.refetch();
     },
     clear: () => select(undefined),
-    chooseSignInProvider: chosen => {
+    clearError: () => setError(undefined),
+    chooseSignInProvider: (chosen, onFailedToStart) => {
       if (!canConfigure(chosen, 'oauth')) return;
       if (isConfigured(chosen, 'oauth')) select({ providerId: chosen.provider, method: 'oauth' });
-      else void startOAuth(chosen);
+      else void startOAuth(chosen, onFailedToStart);
     },
     chooseKeyProvider: chosen => {
       if (!canConfigure(chosen, 'api_key')) return;
-      if (isConfigured(chosen, 'api_key')) select({ providerId: chosen.provider, method: 'api_key' });
-      else setKeyDialogProvider(chosen);
+      if (isConfigured(chosen, 'api_key')) {
+        select({ providerId: chosen.provider, method: 'api_key' });
+        return;
+      }
+      // An earlier failure belongs to another attempt; the dialog shows its own.
+      setError(undefined);
+      setKeyDialogProvider(chosen);
     },
     chooseCustomProvider: providerId => select({ providerId, method: 'api_key' }),
     chooseGateway: () => {

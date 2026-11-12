@@ -98,7 +98,7 @@ type PlatformHiddenPersonalInstallReason = 'personal_install_requires_single_mem
  */
 function githubStatusReason(
   hasUsableInstallation: boolean,
-  hiddenPersonalInstallReason: PlatformHiddenPersonalInstallReason | null,
+  hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason,
 ): 'ready' | 'personal_install_hidden' | 'not_connected' {
   if (hasUsableInstallation) return 'ready';
   return hiddenPersonalInstallReason ? 'personal_install_hidden' : 'not_connected';
@@ -902,10 +902,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     userId: string,
   ): Promise<{
     installations: SourceControlInstallation[];
-    hiddenPersonalInstallReason: PlatformHiddenPersonalInstallReason | null;
+    hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason;
   }> {
     const result = await this.#client.request<{
       installations: PlatformGithubInstallation[];
+      /** Platform sends null when it withholds nothing. */
       hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason | null;
     }>('GET', `${API_PREFIX}/github-app/installations`);
     const usableInstallations = result.installations.filter(
@@ -924,7 +925,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }),
       ),
     );
-    return { installations, hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? null };
+    return { installations, hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? undefined };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

@@ -22,18 +22,17 @@ import type { OnboardingDraft, OnboardingStep } from '../services/onboardingFlow
 import { nextOnboardingStep, restoredOnboardingStep } from '../services/onboardingSteps';
 import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
 import { OnboardingAccountMenu } from './onboarding/OnboardingAccountMenu';
+import { OnboardingAccountsRow } from './onboarding/OnboardingAccountsRow';
+import { OnboardingCodebaseRow } from './onboarding/OnboardingCodebaseRow';
+import { OnboardingModelRow } from './onboarding/OnboardingModelRow';
 import { OnboardingModelSection } from './onboarding/OnboardingModelSection';
 import { OnboardingSlot } from './onboarding/OnboardingSlot';
 import type { OnboardingModelPreview } from './onboarding/OnboardingModelSection';
-import {
-  OnboardingAccountsRow,
-  OnboardingCodebaseRow,
-  OnboardingModelRow,
-  OnboardingWorkRow,
-} from './onboarding/OnboardingStepRow';
+import { OnboardingWorkRow } from './onboarding/OnboardingWorkRow';
 import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
+import './onboarding/onboarding.css';
 
 interface SectionPreview extends OnboardingModelPreview {
   repository?: SourceControlRepository;
@@ -117,7 +116,7 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
   };
   const finish = (patch: Partial<OnboardingDraft>) => {
     updateDraft(patch);
-    open(nextOnboardingStep({ ...draft, ...patch }));
+    open(nextOnboardingStep(latestDraft.current));
   };
   const setup = useOnboardingModelSetup({ draft, local, onDraftChange: updateDraft });
   const change = (step: OnboardingStep) => ({ onChange: () => open(step), changeDisabled: complete.isPending });

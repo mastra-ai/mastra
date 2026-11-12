@@ -17,12 +17,16 @@ export function OnboardingLaneStatus({
   scope: 'org' | 'user';
   onCancel: () => void;
 }) {
-  const { connection } = lane;
+  const { connection, lostConnection } = lane;
+  const lostName = lostConnection && providerDisplayName(lostConnection.providerId);
   return (
     <>
-      {lane.lostConnection && connection.provider && (
+      {lostConnection?.removed && (
+        <Notice variant="warning">{`${lostName} is no longer available. Choose another provider.`}</Notice>
+      )}
+      {lostConnection && !lostConnection.removed && (
         <Notice variant="warning">
-          {`Your ${providerDisplayName(connection.provider.provider)} connection changed since you chose it. Connect it again or choose another provider.`}
+          {`Your ${lostName} connection changed since you chose it. Connect it again or choose another provider.`}
         </Notice>
       )}
       {connection.error && (

@@ -1,7 +1,12 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 
+import { useApiConfig } from '../../../../../api/config';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { MASTRA_PLATFORM_URL } from '../../../factory/services/platformConnect';
+import type { GithubStatusReason } from '../../services/github';
+import { githubCallbackRecovery } from '../../services/githubCallbackRecovery';
+import type { GithubCallbackRecovery } from '../../services/githubCallbackRecovery';
+import { signOutOfOnboarding } from '../../services/onboardingSignOut';
 import type { GitHubAppCallbackResult } from '../GitHubAppCallbackHandler';
 
 /**
@@ -14,61 +19,38 @@ function platformAccountsUrl(organizationId?: string): string {
     : MASTRA_PLATFORM_URL;
 }
 
-interface Recovery {
-  /** A Mastra Platform page where the refusal is fixed first. */
-  platformHref?: string;
-  /** What picks the fix up here: a status refresh, or a new GitHub connect. */
-  next: 'refresh' | 'connect';
-}
-
-function recoveryFor(code: string | undefined, organizationId: string | undefined): Recovery {
-  // Refresh accounts links the older install in Platform; a refresh here then sees it.
-  if (code === 'github_app_installation_preexisting') {
-    return { platformHref: platformAccountsUrl(organizationId), next: 'refresh' };
-  }
-  // Disconnecting the other GitHub account in Platform links nothing; only a new connect does.
-  if (code === 'github_app_connection_mismatch') return { platformHref: MASTRA_PLATFORM_URL, next: 'connect' };
-  // An already-used link usually means the install went through.
-  if (code === 'github_app_link_already_used') return { next: 'refresh' };
-  return { next: 'connect' };
-}
-
 export interface OnboardingGithubNoticeProps {
   callback?: GitHubAppCallbackResult;
-  /** GitHub status has settled with a usable installation. */
-  connected: boolean;
-  /** GitHub status has settled since the callback, so `connected` reflects the install it reported. */
-  statusSettled: boolean;
-  /** Platform says it withholds a personal-account install from this organization. */
-  personalInstallHidden: boolean;
+  /** The latest GitHub status reason, kept while a refresh runs. */
+  statusReason?: GithubStatusReason;
+  /** Status has been read since this page loaded, so it reflects the install the callback reported. */
+  statusChecked: boolean;
+  /** Connect is on its way to GitHub; a second click would start another round trip. */
+  redirecting: boolean;
   refreshing: boolean;
   onConnect: () => void;
   onRefresh: () => void;
   onDismiss: () => void;
 }
 
-/** What the last GitHub App round trip did, with the step that gets the user unstuck. */
+/** What the last GitHub App round trip did, or what Platform says about it, with the step that gets the user unstuck. */
 export function OnboardingGithubNotice({
   callback,
-  connected,
-  statusSettled,
-  personalInstallHidden,
+  statusReason,
+  statusChecked,
+  redirecting,
   refreshing,
   onConnect,
   onRefresh,
   onDismiss,
 }: OnboardingGithubNoticeProps) {
   const auth = useFactoryAuth();
-  const refresh = (
-    <Notice.Button disabled={refreshing} onClick={onRefresh}>
-      Refresh
-    </Notice.Button>
-  );
-  const connectAgain = <Notice.Button onClick={onConnect}>Connect GitHub again</Notice.Button>;
 
   if (callback?.kind === 'error') {
-    const recovery = recoveryFor(callback.code, auth.data?.user?.organizationId);
-    const informational = !recovery.platformHref && recovery.next === 'refresh';
+    const recovery = githubCallbackRecovery(callback.code);
+    const informational = recovery.platformPage === undefined && recovery.next === 'refresh';
+    const platformHref =
+      recovery.platformPage === 'accounts' ? platformAccountsUrl(auth.data?.user?.organizationId) : MASTRA_PLATFORM_URL;
     return (
       <Notice
         variant={informational ? 'info' : 'destructive'}
@@ -76,12 +58,18 @@ export function OnboardingGithubNotice({
         onDismiss={onDismiss}
         action={
           <>
-            {recovery.platformHref && (
-              <Notice.Button render={<a href={recovery.platformHref} target="_blank" rel="noopener noreferrer" />}>
+            {recovery.platformPage && (
+              <Notice.Button render={<a href={platformHref} target="_blank" rel="noopener noreferrer" />}>
                 Open Mastra Platform
               </Notice.Button>
             )}
-            {recovery.next === 'refresh' ? refresh : connectAgain}
+            <CallbackNextAction
+              next={recovery.next}
+              redirecting={redirecting}
+              refreshing={refreshing}
+              onConnect={onConnect}
+              onRefresh={onRefresh}
+            />
           </>
         }
       >
@@ -92,26 +80,31 @@ export function OnboardingGithubNotice({
   // Kept up even when other repositories already list: the request is for another account, still pending.
   if (callback?.kind === 'requested') {
     return (
-      <Notice variant="warning" title="GitHub App installation requested" onDismiss={onDismiss} action={refresh}>
+      <Notice
+        variant="warning"
+        title="GitHub App installation requested"
+        onDismiss={onDismiss}
+        action={<RefreshButton refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         An organization owner needs to approve it before repositories appear here.
       </Notice>
     );
   }
   // Platform hides a personal-account install from organizations with more than one member, so the install
-  // succeeds on GitHub and Factory still sees nothing. Platform says so in status; an install it reported that
-  // still isn't usable gets the same explanation. Either way, say why instead of offering the same Connect again.
-  if (personalInstallHidden || (callback?.kind === 'installed' && statusSettled && !connected)) {
+  // succeeds on GitHub and Factory still sees nothing. That holds until the organization changes, so it can't be
+  // dismissed, and it shows on every visit.
+  if (statusReason === 'personal_install_hidden') {
     return (
       <Notice
         variant="warning"
         role="alert"
         title="Factory can’t use this GitHub installation"
-        // Platform's reason holds until the organization changes, so only a callback-based guess can be dismissed.
-        onDismiss={personalInstallHidden ? undefined : onDismiss}
         action={
           <>
-            <Notice.Button onClick={onConnect}>Choose another account</Notice.Button>
-            {refresh}
+            <Notice.Button disabled={redirecting} onClick={onConnect}>
+              Choose another account
+            </Notice.Button>
+            <RefreshButton refreshing={refreshing} onRefresh={onRefresh} />
           </>
         }
       >
@@ -120,5 +113,61 @@ export function OnboardingGithubNotice({
       </Notice>
     );
   }
+  // GitHub reported an install, yet status (read since) has no usable one and no reason for it, e.g. a suspended
+  // installation. Without a known cause, say what was seen and offer both ways forward.
+  if (callback?.kind === 'installed' && statusChecked && statusReason === 'not_connected') {
+    return (
+      <Notice
+        variant="warning"
+        role="alert"
+        title="Factory can’t see this GitHub installation yet"
+        onDismiss={onDismiss}
+        action={
+          <>
+            <Notice.Button disabled={redirecting} onClick={onConnect}>
+              Choose another account
+            </Notice.Button>
+            <RefreshButton refreshing={refreshing} onRefresh={onRefresh} />
+          </>
+        }
+      >
+        GitHub reported the install, but Mastra Platform hasn’t shared a usable installation with this organization.
+        Refresh in a moment, or install the app on another account.
+      </Notice>
+    );
+  }
   return null;
+}
+
+function RefreshButton({ refreshing, onRefresh }: { refreshing: boolean; onRefresh: () => void }) {
+  return (
+    <Notice.Button disabled={refreshing} onClick={onRefresh}>
+      Refresh
+    </Notice.Button>
+  );
+}
+
+function CallbackNextAction({
+  next,
+  redirecting,
+  refreshing,
+  onConnect,
+  onRefresh,
+}: {
+  next: GithubCallbackRecovery['next'];
+  redirecting: boolean;
+  refreshing: boolean;
+  onConnect: () => void;
+  onRefresh: () => void;
+}) {
+  const { baseUrl } = useApiConfig();
+  if (next === 'refresh') return <RefreshButton refreshing={refreshing} onRefresh={onRefresh} />;
+  if (next === 'sign_out') {
+    return <Notice.Button onClick={() => signOutOfOnboarding(baseUrl)}>Sign out</Notice.Button>;
+  }
+  return (
+    <Notice.Button disabled={redirecting} onClick={onConnect}>
+      Connect GitHub again
+    </Notice.Button>
+  );
 }

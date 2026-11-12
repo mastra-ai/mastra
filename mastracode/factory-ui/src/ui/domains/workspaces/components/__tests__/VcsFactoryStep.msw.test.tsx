@@ -1,11 +1,14 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { GitLabRepository } from '../../../factory/services/gitlab';
+import type { GitHubAppCallbackResult } from '../GitHubAppCallbackHandler';
 import { VcsFactoryStep } from '../VcsFactoryStep';
 import type { VcsFactoryStepProps } from '../VcsFactoryStep';
 
@@ -30,6 +33,19 @@ const repo = {
   sandboxWorkdir: '/workspace/hello',
 };
 
+const gitlabRepository: GitLabRepository = {
+  provider: 'gitlab',
+  id: 'gitlab:123',
+  externalId: '123',
+  fullName: 'group/project',
+  name: 'project',
+  owner: 'group',
+  defaultBranch: 'main',
+  private: true,
+  sandboxProvider: 'local',
+  sandboxWorkdir: '/workspace/project',
+};
+
 function renderStep(props: Partial<VcsFactoryStepProps> = {}) {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/onboarding']}>
@@ -42,6 +58,21 @@ function renderStep(props: Partial<VcsFactoryStepProps> = {}) {
         {...props}
       />
     </MemoryRouter>,
+  );
+}
+
+/** Owns the callback the way the onboarding page does, so dismissing it really removes it. */
+function StepWithDismissableCallback({ callback }: { callback: GitHubAppCallbackResult }) {
+  const [current, setCurrent] = useState<GitHubAppCallbackResult | undefined>(callback);
+  return (
+    <VcsFactoryStep
+      githubRedirecting={false}
+      githubCallback={current}
+      onDismissGithubCallback={() => setCurrent(undefined)}
+      onConnect={vi.fn()}
+      onManageConnection={vi.fn()}
+      onSelectRepository={vi.fn()}
+    />
   );
 }
 
@@ -150,8 +181,7 @@ describe('VCS Factory step', () => {
     expect(calls).toBe(2);
   });
 
-  it('says why an install on a teammate-shared personal GitHub account shows nothing, even with GitLab ready', async () => {
-    // Platform hides a personal-account install from an org with more than one member, so status stays not_connected.
+  it('says an install GitHub reported is not usable yet instead of a bare Connect, even with GitLab ready', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
@@ -164,10 +194,69 @@ describe('VCS Factory step', () => {
     renderStep({ githubCallback: { kind: 'installed' }, onConnect });
 
     const notice = await screen.findByRole('alert');
-    expect(notice).toHaveTextContent('Factory can’t use this GitHub installation');
+    expect(notice).toHaveTextContent('Factory can’t see this GitHub installation yet');
     expect(screen.getByRole('radio', { name: 'GitHub' })).toBeChecked();
-    await userEvent.click(screen.getByRole('button', { name: 'Choose another account' }));
+    await userEvent.click(within(notice).getByRole('button', { name: 'Choose another account' }));
     expect(onConnect).toHaveBeenCalledOnce();
+  });
+
+  it('blames a failed status load, not the install, when status cannot be read after an install', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ error: 'Temporary outage' }, { status: 503 }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+      ),
+    );
+    renderStep({ githubCallback: { kind: 'installed' } });
+
+    expect(await screen.findByText("Couldn't load GitHub status.")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry GitHub' })).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows a GitHub refusal even when the drafted repository is on GitLab', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+    );
+    renderStep({
+      initialRepository: gitlabRepository,
+      githubCallback: { kind: 'error', code: 'github_app_installation_not_owned', message: 'Only the owner can link.' },
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Only the owner can link.');
+    expect(await screen.findByRole('radio', { name: 'GitHub' })).toBeChecked();
+  });
+
+  it('stays on GitHub after its notice is dismissed, so Connect is still there', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/onboarding']}>
+        <StepWithDismissableCallback
+          callback={{ kind: 'error', code: 'github_app_installation_not_owned', message: 'Only the owner can link.' }}
+        />
+      </MemoryRouter>,
+    );
+
+    const notice = await screen.findByRole('alert');
+    await userEvent.click(within(notice).getByRole('button', { name: 'Dismiss notice' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'GitHub' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
   });
 
   it('keeps explaining a personal install Platform withholds when the user comes back later', async () => {
@@ -184,6 +273,24 @@ describe('VCS Factory step', () => {
     const notice = await screen.findByRole('alert');
     expect(notice).toHaveTextContent('Factory can’t use this GitHub installation');
     expect(within(notice).getByRole('button', { name: 'Choose another account' })).toBeInTheDocument();
+    // Platform's reason holds until the organization changes; dismissing it would hide the only explanation.
+    expect(within(notice).queryByRole('button', { name: 'Dismiss notice' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a ready GitLab user on GitLab when Platform withholds a personal GitHub install', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'personal_install_hidden' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => HttpResponse.json({ projects: [] })),
+    );
+    renderStep();
+
+    expect(await screen.findByRole('radio', { name: 'GitLab' })).toBeChecked();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('shows nothing extra when an install is usable right away', async () => {
@@ -275,8 +382,49 @@ describe('VCS Factory step', () => {
     );
     renderStep();
 
-    expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/signin');
+    expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute(
+      'href',
+      '/signin?returnTo=%2Fonboarding',
+    );
     expect(screen.queryByRole('button', { name: /Connect GitHub/ })).not.toBeInTheDocument();
+  });
+
+  it('sends a Factory account Platform cannot link to sign out, since connecting again fails the same way', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+    );
+    renderStep({
+      githubCallback: {
+        kind: 'error',
+        code: 'github_app_person_not_platform_user',
+        message: 'This GitHub link was started for an account that isn’t a Mastra account.',
+      },
+    });
+
+    const notice = await screen.findByRole('alert');
+    expect(within(notice).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(within(notice).queryByRole('button', { name: 'Connect GitHub again' })).not.toBeInTheDocument();
+  });
+
+  it('treats an already-used GitHub link as likely done: informs instead of alarming, and offers Refresh', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+    );
+    renderStep({
+      githubCallback: {
+        kind: 'error',
+        code: 'github_app_link_already_used',
+        message: 'This GitHub link was already used.',
+      },
+    });
+
+    expect(await screen.findByText('This GitHub link was already used.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled());
   });
 
   it('opens connected repositories directly and lets the user switch providers', async () => {
@@ -503,28 +651,48 @@ describe('VCS Factory step', () => {
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN_TYPE')).not.toBeInTheDocument();
   });
 
-  it('re-checks GitHub when an approval was requested', async () => {
-    let statusCalls = 0;
+  it('lists repositories and clears the request once an approval lands and Refresh finds it', async () => {
+    let approved = false;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/status`, () => {
-        statusCalls += 1;
-        return HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' });
-      }),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json(
+          approved ? connectedGithub : { enabled: true, connected: false, installations: [], reason: 'not_connected' },
+        ),
+      ),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
         HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
       ),
     );
-
-    const { client } = renderStep({ githubCallback: { kind: 'requested' } });
+    const onDismissGithubCallback = vi.fn();
+    renderStep({ githubCallback: { kind: 'requested' }, onDismissGithubCallback });
 
     expect(await screen.findByText('GitHub App installation requested')).toBeInTheDocument();
-    await waitForMutationsIdle(client);
-    const before = statusCalls;
-
+    approved = true;
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    await waitForMutationsIdle(client);
 
-    expect(statusCalls).toBe(before + 1);
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(onDismissGithubCallback).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a refusal up when a refresh lists repositories it was not waiting on', async () => {
+    let refreshed = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('refresh')) refreshed = true;
+        return HttpResponse.json({ repos: refreshed ? [repo, { ...repo, id: 100, fullName: 'octo/new' }] : [repo] });
+      }),
+    );
+    const onDismissGithubCallback = vi.fn();
+    const { client } = renderStep({
+      githubCallback: { kind: 'error', code: 'github_app_connection_mismatch', message: 'Different GitHub account.' },
+      onDismissGithubCallback,
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Refresh GitHub repositories' }));
+    expect(await screen.findByRole('radio', { name: 'octo/new' })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(onDismissGithubCallback).not.toHaveBeenCalled();
   });
 
   it('lists repositories once an approval requested from a connected GitHub account is granted', async () => {

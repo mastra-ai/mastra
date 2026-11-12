@@ -1,27 +1,15 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
-import { Metadata } from '@mastra/playground-ui/components/Metadata';
-import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
-import type { ReactNode } from 'react';
 
-import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import type { ProviderInfo } from '../../../../../api/types';
+import type { AccountSourceChoice } from '../../hooks/useAccountSource';
 import type { OnboardingModelLane } from '../../hooks/useOnboardingModelLane';
 import type { PreviewProvider } from '../../hooks/useProviderConnection';
 import { FactoryDefaultModelForm } from '../FactoryDefaultModelForm';
-import { MastraGatewayBilling } from '../MastraGatewayBilling';
-import { ProviderBrandIcon } from '../ProviderBrandIcon';
-import { pendingGateway } from './OnboardingAccountSource';
-import type { AccountSourceChoice } from './OnboardingAccountSource';
 import { OnboardingAccountHeading } from './OnboardingAccountHeading';
-import { OnboardingLaneStatus } from './OnboardingLaneStatus';
 import { OnboardingInset } from './OnboardingInset';
-import { OnboardingProviderPicker } from './OnboardingProviderPicker';
-import { OnboardingProviderSummary, RecommendedBadge } from './OnboardingProviderSummary';
+import { OnboardingLaneProvider } from './OnboardingLaneProvider';
+import { OnboardingLaneStatus } from './OnboardingLaneStatus';
 
 /**
  * One account the Factory runs on, inside the Model card, as its own inset. When the account can use the
@@ -36,6 +24,7 @@ export function OnboardingAccountLane({
   lane,
   choice,
   offersGateway = true,
+  creating,
   onPreviewProvider,
 }: {
   scope: 'org' | 'user';
@@ -47,6 +36,8 @@ export function OnboardingAccountLane({
   choice: AccountSourceChoice;
   /** False when this account pays itself, so the organization-billed gateway doesn't fit it. */
   offersGateway?: boolean;
+  /** The factory is being created: every control locks. */
+  creating: boolean;
   onPreviewProvider: PreviewProvider;
 }) {
   const labelId = useId();
@@ -70,10 +61,11 @@ export function OnboardingAccountLane({
             their own, so the Model card stays two layers deep (frame, inset) whether it holds one account or two. */}
         <OnboardingInset className="gap-0 p-3">
           <div className="flex min-w-0 flex-col gap-3">
-            <LaneProvider
+            <OnboardingLaneProvider
               lane={lane}
               choice={choice}
               offersGateway={offersGateway}
+              creating={creating}
               onPreviewProvider={onPreviewProvider}
             />
           </div>
@@ -91,162 +83,6 @@ export function OnboardingAccountLane({
         </OnboardingInset>
         <OnboardingLaneStatus lane={lane} scope={scope} onCancel={() => onPreviewProvider(undefined)} />
       </div>
-    </div>
-  );
-}
-
-function LaneProvider({
-  lane,
-  choice,
-  offersGateway,
-  onPreviewProvider,
-}: {
-  lane: OnboardingModelLane;
-  choice: AccountSourceChoice;
-  offersGateway: boolean;
-  onPreviewProvider: PreviewProvider;
-}) {
-  const { connection } = lane;
-  const gateway = offersGateway ? connection.gatewayProvider : undefined;
-
-  if (connection.isPending)
-    return (
-      <div role="status" aria-label="Loading model providers" className="flex items-center gap-3">
-        <Skeleton className="size-5 rounded-full motion-reduce:before:animate-none" />
-        <Skeleton className="h-4 w-40 rounded-full motion-reduce:before:animate-none" />
-      </div>
-    );
-  if (connection.catalogError)
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <Txt variant="caption" role="alert">
-          {connection.catalogError.message}
-        </Txt>
-        <Button onClick={connection.retry}>Retry</Button>
-      </div>
-    );
-  if (!gateway) return <OnboardingProviderPicker lane={lane} onPreviewProvider={onPreviewProvider} />;
-
-  return (
-    <>
-      <SegmentedControl
-        aria-label="Provider source"
-        size="sm"
-        value={choice.source}
-        // A gateway connect selects the gateway once it returns; switching mid-request would land it on the wrong tab.
-        disabled={connection.pending}
-        onValueChange={next => {
-          choice.choose(next);
-          if (next === 'gateway') onPreviewProvider(gateway.provider, 'api_key');
-          else onPreviewProvider(undefined);
-        }}
-        className="w-auto"
-      >
-        <SegmentedControlItem value="gateway" className="min-w-0 flex-1">
-          Mastra Gateway
-        </SegmentedControlItem>
-        <SegmentedControlItem value="own" className="min-w-0 flex-1">
-          Your own provider
-        </SegmentedControlItem>
-      </SegmentedControl>
-      {choice.source === 'gateway' ? (
-        <GatewaySummary key="gateway" gateway={gateway} connected={lane.connectedProvider === gateway}>
-          {pendingGateway(lane, choice.source) && (
-            <ConnectGatewayButton lane={lane} gateway={gateway} onPreviewProvider={onPreviewProvider} />
-          )}
-        </GatewaySummary>
-      ) : (
-        // A flex column, like the lane's own, so the picker trigger stretches to the full width.
-        <div key="own" className="onboarding-enter flex min-w-0 flex-col">
-          <OnboardingProviderPicker lane={lane} onPreviewProvider={onPreviewProvider} />
-        </div>
-      )}
-    </>
-  );
-}
-
-/** The gateway as the lane's provider: nothing to pick, one button connects it. */
-function GatewaySummary({
-  gateway,
-  connected,
-  children,
-}: {
-  gateway: ProviderInfo;
-  connected: boolean;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="onboarding-enter flex min-w-0 flex-col gap-3">
-      <div className="flex min-w-0 items-start gap-3">
-        <OnboardingProviderSummary
-          icon={<ProviderBrandIcon provider={gateway.provider} />}
-          title={providerDisplayName(gateway.provider)}
-          badge={<RecommendedBadge />}
-          meta={
-            <Metadata>
-              {connected && <Metadata.Item>Connected</Metadata.Item>}
-              <Metadata.Item>
-                <MastraGatewayBilling />
-              </Metadata.Item>
-            </Metadata>
-          }
-        />
-      </div>
-      {/* Lined up with the title, past the icon column. */}
-      {children && <div className="ps-8">{children}</div>}
-    </div>
-  );
-}
-
-/**
- * Creates the lane's gateway key, or picks the one the account already has, and starts the lane on the
- * gateway's default model. Previews the gateway while pointed at.
- */
-function ConnectGatewayButton({
-  lane,
-  gateway,
-  onPreviewProvider,
-}: {
-  lane: OnboardingModelLane;
-  gateway: ProviderInfo;
-  onPreviewProvider: PreviewProvider;
-}) {
-  const { connection } = lane;
-  const preview = () => onPreviewProvider(gateway.provider, 'api_key');
-  const restore = () => onPreviewProvider(undefined);
-  const verb = connection.isConfigured(gateway, 'api_key') ? 'Use' : 'Connect';
-  const allowed = connection.canConfigure(gateway, 'api_key');
-  const reasonId = useId();
-  return (
-    <div className="flex flex-col items-start gap-2">
-      <Button
-        variant="primary"
-        disabled={connection.pending || !allowed}
-        aria-describedby={allowed ? undefined : reasonId}
-        onMouseEnter={preview}
-        onMouseLeave={restore}
-        onFocus={preview}
-        onBlur={restore}
-        onClick={() => {
-          connection.chooseGateway();
-          preview();
-        }}
-      >
-        {connection.connectingGateway ? (
-          <>
-            <Spinner size="sm" aria-hidden="true" />
-            Connecting…
-          </>
-        ) : (
-          `${verb} Mastra Gateway`
-        )}
-      </Button>
-      {!allowed && (
-        <Txt id={reasonId} variant="meta" tone="muted">
-          Only an organization admin can connect Mastra Gateway for the company account. Choose Your own provider to use
-          one that is already connected.
-        </Txt>
-      )}
     </div>
   );
 }

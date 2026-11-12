@@ -1,15 +1,12 @@
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, ChevronsUpDown, Plug, Plus } from 'lucide-react';
-import { useId, useState } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
+import { ChevronsUpDown, Plug, Plus } from 'lucide-react';
+import { useState } from 'react';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderInfo } from '../../../../../api/types';
@@ -18,6 +15,8 @@ import type { OnboardingModelLane } from '../../hooks/useOnboardingModelLane';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../../hooks/useProviderConnection';
 import type { PreviewProvider, ProviderConnectionMethod } from '../../hooks/useProviderConnection';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
+import { OnboardingProviderOption } from './OnboardingProviderOption';
+import { OnboardingProviderOptions } from './OnboardingProviderOptions';
 import { OnboardingProviderSummary } from './OnboardingProviderSummary';
 
 /**
@@ -42,12 +41,14 @@ export function OnboardingProviderPicker({
     setOpen(false);
     setSearch('');
   };
-  const pick = (provider: ProviderInfo, method: ProviderConnectionMethod, connect: () => void) => {
-    close();
-    connect();
-    onPreviewProvider(provider.provider, method);
-  };
   const restorePreview = () => onPreviewProvider(connection.provider?.provider, connection.method);
+  const pick = (provider: ProviderInfo, method: ProviderConnectionMethod) => {
+    close();
+    onPreviewProvider(provider.provider, method);
+    // A sign-in that fails to start leaves the lane as it was, so the preview goes back with it.
+    if (method === 'oauth') connection.chooseSignInProvider(provider, restorePreview);
+    else connection.chooseKeyProvider(provider);
+  };
   const keyProviders = connection.keyProviders.filter(provider => matchesProviderQuery(provider, search));
   const signInProviders = connection.signInProviders.filter(provider => matchesProviderQuery(provider, search));
   const offersSignIn = connection.signInProviders.length > 0;
@@ -56,7 +57,7 @@ export function OnboardingProviderPicker({
   const otherTab = tab === 'api_key' ? 'oauth' : 'api_key';
   // A search with no match in this tab but some in the other shows the other, so a match is never hidden.
   const shownTab = query && matches[tab] === 0 && matches[otherTab] > 0 ? otherTab : tab;
-  const nothingMatches = Boolean(query) && matches.api_key + matches.oauth === 0;
+  const unmatchedQuery = query && matches.api_key + matches.oauth === 0 ? query : undefined;
 
   return (
     <>
@@ -76,6 +77,8 @@ export function OnboardingProviderPicker({
           aria-label={
             connectedProvider ? `Provider: ${providerDisplayName(connectedProvider.provider)}` : 'Choose a provider'
           }
+          // A plain button rather than the DS `Button`: that one is a fixed-height, single-line pill, and this
+          // trigger is the lane's two-line provider summary at full width.
           render={
             <button
               type="button"
@@ -121,7 +124,7 @@ export function OnboardingProviderPicker({
             value={search}
             onValueChange={setSearch}
           />
-          {offersSignIn && !nothingMatches && (
+          {offersSignIn && !unmatchedQuery && (
             <SegmentedControl
               aria-label="Connection type"
               size="sm"
@@ -137,51 +140,16 @@ export function OnboardingProviderPicker({
               </SegmentedControlItem>
             </SegmentedControl>
           )}
-          {nothingMatches ? (
-            <EmptyLine>{`No providers match “${query}”.`}</EmptyLine>
-          ) : (
-            <ScrollArea maxHeight="15rem">
-              <ScrollAreaViewport className="overscroll-y-contain">
-                {shownTab === 'api_key' ? (
-                  <div role="group" aria-label="API key providers" className="flex flex-col">
-                    {keyProviders.map(provider => (
-                      <ProviderOption
-                        key={provider.provider}
-                        provider={provider.provider}
-                        title={providerDisplayName(provider.provider)}
-                        meta={connection.isConfigured(provider, 'api_key') ? 'Connected' : undefined}
-                        selected={connectedProvider === provider && connection.method === 'api_key'}
-                        disabled={connection.pending || !connection.canConfigure(provider, 'api_key')}
-                        onPreview={() => onPreviewProvider(provider.provider, 'api_key')}
-                        onClick={() => pick(provider, 'api_key', () => connection.chooseKeyProvider(provider))}
-                      />
-                    ))}
-                    {connection.keyProviders.length === 0 && <EmptyLine>No API key providers available.</EmptyLine>}
-                  </div>
-                ) : (
-                  <div role="group" aria-label="Sign in with a provider" className="flex flex-col">
-                    {signInProviders.map(provider => (
-                      <ProviderOption
-                        key={provider.provider}
-                        provider={provider.provider}
-                        title={
-                          connection.isConfigured(provider, 'oauth')
-                            ? `Use ${providerDisplayName(provider.provider)} connection`
-                            : `Continue with ${providerDisplayName(provider.provider)}`
-                        }
-                        selected={connectedProvider === provider && connection.method === 'oauth'}
-                        disabled={connection.pending || !connection.canConfigure(provider, 'oauth')}
-                        onPreview={() => onPreviewProvider(provider.provider, 'oauth')}
-                        onClick={() => pick(provider, 'oauth', () => connection.chooseSignInProvider(provider))}
-                      />
-                    ))}
-                  </div>
-                )}
-              </ScrollAreaViewport>
-            </ScrollArea>
-          )}
+          <OnboardingProviderOptions
+            lane={lane}
+            method={shownTab}
+            providers={shownTab === 'api_key' ? keyProviders : signInProviders}
+            unmatchedQuery={unmatchedQuery}
+            onPreviewProvider={onPreviewProvider}
+            onPick={pick}
+          />
           {shownTab === 'api_key' && (
-            <ProviderOption
+            <OnboardingProviderOption
               icon={<Plus aria-hidden="true" />}
               title="Add a custom provider"
               onClick={() => {
@@ -211,64 +179,5 @@ export function OnboardingProviderPicker({
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function EmptyLine({ children }: { children: ReactNode }) {
-  return (
-    <Txt variant="caption" tone="muted" className="px-2 py-1.5">
-      {children}
-    </Txt>
-  );
-}
-
-/** One provider in the list: instant subtle hover like the repositories, a check on the lane's provider. */
-function ProviderOption({
-  provider,
-  icon,
-  title,
-  meta,
-  selected = false,
-  onPreview,
-  ...props
-}: Omit<ComponentProps<'button'>, 'title'> & {
-  provider?: string;
-  icon?: ReactNode;
-  title: string;
-  meta?: ReactNode;
-  selected?: boolean;
-  onPreview?: () => void;
-}) {
-  const metaId = useId();
-  return (
-    <button
-      type="button"
-      aria-label={title}
-      aria-describedby={meta ? metaId : undefined}
-      aria-current={selected || undefined}
-      className={cn(
-        'flex min-h-9 w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-start',
-        'not-disabled:hover:bg-fill-subtle disabled:cursor-not-allowed disabled:opacity-50',
-        focusRingInset,
-      )}
-      onMouseEnter={onPreview}
-      onFocus={onPreview}
-      {...props}
-    >
-      <span className="text-muted-foreground flex size-5 shrink-0 items-center justify-center [&_svg]:size-4">
-        {provider ? <ProviderBrandIcon provider={provider} /> : icon}
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="label" className="truncate">
-          {title}
-        </Txt>
-        {meta && (
-          <Txt as="span" id={metaId} variant="meta" tone="muted" className="truncate">
-            {meta}
-          </Txt>
-        )}
-      </span>
-      {selected && <Check aria-hidden="true" className="size-4 shrink-0" />}
-    </button>
   );
 }

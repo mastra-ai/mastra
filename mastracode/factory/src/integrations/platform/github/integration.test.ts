@@ -1575,13 +1575,26 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('says Platform withheld a personal install instead of reporting nothing installed', async () => {
+  it.each([
+    {
+      scenario: 'says Platform withheld a personal install instead of reporting nothing installed',
+      installations: [],
+      expected: { connected: false, reason: 'personal_install_hidden' },
+    },
+    {
+      scenario: 'stays ready when another installation is usable beside the withheld personal one',
+      installations: [
+        { installationId: 7, accountLogin: 'acme', accountType: 'Organization', suspendedAt: null, usable: true },
+      ],
+      expected: { connected: true, reason: 'ready' },
+    },
+  ])('$scenario', async ({ installations, expected }) => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/github-app/installations')) {
         return json({
-          installations: [],
+          installations,
           pendingRequests: [],
           hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
         });
@@ -1615,7 +1628,7 @@ describe('PlatformGithubIntegration', () => {
     mountApiRoutes(app as never, integration.routes(context));
 
     const status = await app.request('/web/github/status');
-    await expect(status.json()).resolves.toMatchObject({ connected: false, reason: 'personal_install_hidden' });
+    await expect(status.json()).resolves.toMatchObject(expected);
   });
 
   it('defaults the integrations API URL and requires a platform credential', () => {

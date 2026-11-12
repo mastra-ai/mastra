@@ -1,25 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Collapsible, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RadioGroup } from '@mastra/playground-ui/components/RadioGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Building2, Split, UserRound } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import type { OnboardingModelLane } from '../../hooks/useOnboardingModelLane';
+import { useAccountSource } from '../../hooks/useAccountSource';
 import type { OnboardingModelSetup } from '../../hooks/useOnboardingModelSetup';
 import type { PreviewProvider, ProviderConnectionMethod } from '../../hooks/useProviderConnection';
 import type { OnboardingModelScope } from '../../services/onboardingFlow';
-import { SETUP_LABELS } from '../../services/onboardingSteps';
-import { useAccountSource } from './OnboardingAccountSource';
-import type { AccountSourceChoice } from './OnboardingAccountSource';
-import { OnboardingAccountLane } from './OnboardingAccountLane';
-import { OnboardingChoiceRow } from './OnboardingChoiceRow';
+import { createBlockedReason } from '../../services/createBlockedReason';
+import { modelSectionIndex } from '../../services/onboardingSteps';
+import { OnboardingAccountLanes } from './OnboardingAccountLanes';
+import { OnboardingCreateNotice } from './OnboardingCreateNotice';
 import { OnboardingInset } from './OnboardingInset';
-import { OnboardingPageAction, OnboardingStepCard } from './OnboardingStepCard';
+import { OnboardingPageAction } from './OnboardingPageAction';
+import { OnboardingScopeChoice } from './OnboardingScopeChoice';
+import { OnboardingStepCard } from './OnboardingStepCard';
 
 export interface OnboardingModelPreview {
   providerId?: string;
@@ -59,7 +57,7 @@ export function OnboardingModelSection({
   const personalChoice = useAccountSource(setup.personal.connection);
   const loading = setup.company.connection.isPending;
   const blockedReasonId = useId();
-  const blockedReason = setup.canCreate || loading || creating ? undefined : createBlockedReason(setup, local);
+  const blockedReason = loading || creating ? undefined : createBlockedReason(setup, local);
 
   return (
     <>
@@ -78,7 +76,7 @@ export function OnboardingModelSection({
           {loading ? (
             <LoadingInset label="Loading account options" rows={3} />
           ) : (
-            <ScopeChoice
+            <OnboardingScopeChoice
               scope={setup.scope}
               companyLocked={setup.companyLocked}
               disabled={creating}
@@ -99,7 +97,7 @@ export function OnboardingModelSection({
       )}
       <OnboardingStepCard
         section="model"
-        index={local ? 3 : undefined}
+        index={modelSectionIndex(local)}
         headerEnd={
           <SectionDetail key={local ? 'local' : setup.scope}>
             {local ? 'Local connection' : ACCOUNT_DETAILS[setup.scope]}
@@ -111,9 +109,10 @@ export function OnboardingModelSection({
         ) : (
           <fieldset disabled={creating} className="m-0 min-w-0 border-0 p-0">
             {/* Each account is its own inset; in hybrid its heading sits on the card above it. */}
-            <AccountLanes
+            <OnboardingAccountLanes
               setup={setup}
               local={local}
+              creating={creating}
               companyChoice={companyChoice}
               personalChoice={personalChoice}
               onPreviewCompany={previewCompany}
@@ -124,13 +123,15 @@ export function OnboardingModelSection({
       </OnboardingStepCard>
       <OnboardingPageAction
         notice={
-          (error || blockedReason) && <CreateNotice error={error} blockedReason={blockedReason} id={blockedReasonId} />
+          (error || blockedReason) && (
+            <OnboardingCreateNotice error={error} blockedReason={blockedReason} id={blockedReasonId} />
+          )
         }
       >
         <Button
           variant="primary"
           disabled={!setup.canCreate || creating}
-          aria-describedby={blockedReason ? blockedReasonId : undefined}
+          aria-describedby={!error && blockedReason ? blockedReasonId : undefined}
           onClick={onCreate}
         >
           <CreateFactoryLabel creating={creating} />
@@ -149,90 +150,10 @@ function SectionDetail({ children }: { children: ReactNode }) {
   );
 }
 
-/** A create failure wins; otherwise, while Create is off, the one thing still missing. */
-function CreateNotice({ error, blockedReason, id }: { error?: string; blockedReason?: string; id: string }) {
-  if (error)
-    return (
-      <Notice variant="destructive" role="alert">
-        {error}
-      </Notice>
-    );
-  if (!blockedReason) return null;
-  return (
-    <Txt id={id} as="p" variant="meta" tone="muted" className="m-0 text-end max-[899px]:text-center">
-      {blockedReason}
-    </Txt>
-  );
-}
-
-/** Why Create is off, in the words of the lanes above, so a disabled button never leaves the user guessing. */
-function createBlockedReason({ missing, scope }: OnboardingModelSetup, local: boolean): string {
-  if (missing.includes('repository')) return 'Choose a repository in Codebase to create your factory.';
-  if (local) return 'Connect a provider and pick a model to create your factory.';
-  if (scope === 'user') return 'Connect your account and pick a model to create your factory.';
-  if (scope === 'factory') return 'Connect the company account and pick a model to create your factory.';
-  const work = missing.includes('model');
-  const sessions = missing.includes('personal');
-  if (work && !sessions) return 'Pick a model for Factory work to create your factory.';
-  if (sessions && !work) return 'Pick a model for your sessions to create your factory.';
-  return 'Pick a model for Factory work and for your sessions to create your factory.';
-}
-
 function LoadingInset({ label, rows }: { label: string; rows: number }) {
   return (
     <OnboardingInset>
       <SkeletonRows label={label} rows={rows} rowClassName="h-14 w-full" />
-    </OnboardingInset>
-  );
-}
-
-/** Short enough for one line each; the account blocks below and the preview carry the detail. */
-const SCOPES: { value: OnboardingModelScope; icon: ReactNode; meta: string }[] = [
-  { value: 'factory', icon: <Building2 aria-hidden="true" />, meta: 'Pays for all Factory work and sessions.' },
-  {
-    value: 'hybrid',
-    icon: <Split aria-hidden="true" />,
-    meta: 'Company pays for work, each person for their sessions.',
-  },
-  { value: 'user', icon: <UserRound aria-hidden="true" />, meta: 'Each person pays for their own work and sessions.' },
-];
-
-/** The choice everything below depends on, asked first and in terms of who pays. */
-function ScopeChoice({
-  scope,
-  companyLocked,
-  disabled,
-  onScopeChange,
-}: {
-  scope: OnboardingModelScope;
-  companyLocked: boolean;
-  disabled: boolean;
-  onScopeChange: (scope: OnboardingModelScope) => void;
-}) {
-  return (
-    <OnboardingInset>
-      <RadioGroup
-        aria-label="Who pays for model usage?"
-        value={scope}
-        disabled={disabled}
-        onValueChange={value => {
-          const next = SCOPES.find(item => item.value === value);
-          if (next) onScopeChange(next.value);
-        }}
-        className="gap-0.5"
-      >
-        {SCOPES.map(({ value, icon, meta }) => (
-          <OnboardingChoiceRow
-            key={value}
-            value={value}
-            selected={scope === value}
-            disabled={companyLocked && value !== 'user'}
-            icon={icon}
-            title={SETUP_LABELS[value]}
-            meta={meta}
-          />
-        ))}
-      </RadioGroup>
     </OnboardingInset>
   );
 }
@@ -250,67 +171,6 @@ function CreateFactoryLabel({ creating }: { creating: boolean }) {
     <>
       <Spinner size="sm" aria-hidden="true" />
       Creating your factory…
-    </>
-  );
-}
-
-/** The accounts the answer needs, each with its provider and default model. */
-function AccountLanes({
-  setup,
-  local,
-  companyChoice,
-  personalChoice,
-  onPreviewCompany,
-  onPreviewPersonal,
-}: {
-  setup: OnboardingModelSetup;
-  local: boolean;
-  companyChoice: AccountSourceChoice;
-  personalChoice: AccountSourceChoice;
-  onPreviewCompany: PreviewProvider;
-  onPreviewPersonal: PreviewProvider;
-}) {
-  const { scope, company, personal } = setup;
-  if (local)
-    return (
-      <OnboardingAccountLane
-        scope="org"
-        name="Factory default"
-        lane={company}
-        choice={companyChoice}
-        onPreviewProvider={onPreviewCompany}
-      />
-    );
-
-  // Both accounts stay rendered so switching the answer folds one away and opens the other in place.
-  const hybrid = scope === 'hybrid';
-  return (
-    <>
-      <Collapsible open={scope !== 'user'} className="onboarding-collapse">
-        <CollapsibleContent>
-          <OnboardingAccountLane
-            scope="org"
-            name="Company account"
-            heading={{ label: 'Factory work', detail: 'Company account', shown: hybrid }}
-            lane={company}
-            choice={companyChoice}
-            onPreviewProvider={onPreviewCompany}
-          />
-        </CollapsibleContent>
-      </Collapsible>
-      <Collapsible open={scope !== 'factory'} className="onboarding-collapse">
-        <CollapsibleContent>
-          <OnboardingAccountLane
-            scope="user"
-            name="Your account"
-            heading={{ label: 'Your sessions', detail: 'Your own account', shown: hybrid }}
-            lane={personal}
-            choice={personalChoice}
-            offersGateway={!hybrid}
-            onPreviewProvider={onPreviewPersonal}
-          />
-        </CollapsibleContent>
-      </Collapsible>
     </>
   );
 }

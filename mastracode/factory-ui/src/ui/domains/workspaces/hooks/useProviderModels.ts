@@ -5,6 +5,8 @@ import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 export interface ProviderModels {
   isPending: boolean;
   catalogError?: Error;
+  /** The catalog is being fetched again, e.g. after Retry. */
+  retrying: boolean;
   models: AvailableModelOption[];
   /** What the Factory starts on unless the user picks another model. */
   suggestedModelId?: string;
@@ -44,6 +46,7 @@ export function useProviderModels(providerId: string | undefined, scope?: 'org' 
   return {
     isPending: enabled && (modelsQuery.isPending || (scope === 'user' && personalDefault.isPending)),
     catalogError: modelsQuery.error ?? undefined,
+    retrying: modelsQuery.isFetching,
     models,
     suggestedModelId: models.find(model => model.id === preferredModelId)?.id ?? models[0]?.id,
     retry: () => {

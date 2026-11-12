@@ -61,7 +61,7 @@ export function OnboardingAccountsPreview({
         </Txt>
       </SketchLabel>
       {showModels && (
-        <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
+        <div className="absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
           <div role="group" aria-label="Factory work model" className="min-w-0">
             <Txt variant="meta" className="mb-2">
               {accountLabel}

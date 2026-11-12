@@ -144,7 +144,7 @@ function writeOnboardingMarker(key: string, value: string): void {
   try {
     sessionStorage.setItem(key, value);
   } catch {
-    // Storage quota or a private window must never block the wizard; markers only aid resume.
+    // Storage quota or a private window must never block onboarding; markers only aid resume.
   }
 }
 
@@ -204,7 +204,7 @@ export function clearOnboardingFlow(): void {
  * the only case where `/onboarding` may stay open (and `/` must route back
  * into it) even though a factory exists. A failed final confirmation can leave
  * a Factory to finish configuring. GitHub/Linear OAuth callbacks land on `/`, so
- * without this check the wizard would be abandoned at the factory home.
+ * without this check onboarding would be abandoned at the factory home.
  *
  * Three gates, all required:
  * - a step is stored (a step from the old wizard still counts: `/onboarding`

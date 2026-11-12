@@ -1,8 +1,7 @@
 import { useState } from 'react';
 
-import type { ProviderInfo } from '../../../../../api/types';
-import type { OnboardingModelLane } from '../../hooks/useOnboardingModelLane';
-import type { ProviderConnection } from '../../hooks/useProviderConnection';
+import type { ProviderInfo } from '../../../../api/types';
+import type { ProviderConnection } from './useProviderConnection';
 
 export type AccountSource = 'gateway' | 'own';
 
@@ -31,6 +30,8 @@ export function useAccountSource(connection: ProviderConnection): AccountSourceC
     source: sourceOf(connection.provider, gateway) ?? picked ?? (gatewayAllowed ? 'gateway' : 'own'),
     choose: next => {
       setPicked(next);
+      // A failure from the other source's attempt no longer applies.
+      connection.clearError();
       if (next === 'own') {
         if (gateway && connection.provider === gateway) connection.clear();
         return;
@@ -39,12 +40,4 @@ export function useAccountSource(connection: ProviderConnection): AccountSourceC
       else connection.clear();
     },
   };
-}
-
-/** The gateway a lane still has to connect: it is the lane's pick but the lane isn't on it yet. */
-export function pendingGateway(lane: OnboardingModelLane, source: AccountSource): ProviderInfo | undefined {
-  const gateway = lane.connection.gatewayProvider;
-  if (!gateway || source !== 'gateway') return undefined;
-  if (lane.connectedProvider?.provider === gateway.provider) return undefined;
-  return gateway;
 }

@@ -1,104 +1,29 @@
-import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { RefreshCw } from 'lucide-react';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { useState } from 'react';
-import { Link } from 'react-router';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { isGitLabRepository } from '../services/github';
-import type { GithubStatusReason, SourceControlRepository } from '../services/github';
-import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
-import { GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { gitLabProjectRepository } from '../../factory/services/gitlab';
+import type { SourceControlRepository } from '../services/github';
+import { githubCallbackAwaitsAccess } from '../services/githubCallbackRecovery';
+import { gitLabUnavailableReason, githubUnavailableReason, repositoryHost } from '../services/sourceControlHosts';
+import type { SourceControlHost } from '../services/sourceControlHosts';
 import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
-import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';
+import { OnboardingGithubHostRow } from './onboarding/OnboardingGithubHostRow';
 import { OnboardingGithubNotice } from './onboarding/OnboardingGithubNotice';
+import { OnboardingGitlabHostRow } from './onboarding/OnboardingGitlabHostRow';
 import { OnboardingInset } from './onboarding/OnboardingInset';
+import { OnboardingRepositoryError } from './onboarding/OnboardingRepositoryError';
+import { OnboardingRepositoryRows } from './onboarding/OnboardingRepositoryRows';
 import { OnboardingSearchInset } from './onboarding/OnboardingSearchInset';
 import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
-
-type SourceControlHost = 'github' | 'gitlab';
-
-/**
- * Why a host can't be connected: `unavailable` means its status couldn't be read, so Retry may help;
- * `auth_required` means the Factory session expired, so only signing in again helps.
- */
-type HostUnavailableReason = 'missing_config' | 'organization_required' | 'unavailable' | 'auth_required';
-
-const HOST_NAMES = { github: 'GitHub', gitlab: 'GitLab' } as const;
-
-function hostUnavailableDescription(host: SourceControlHost, reason: HostUnavailableReason): string {
-  if (reason === 'organization_required') return `Join an organization to connect ${HOST_NAMES[host]}.`;
-  if (reason === 'unavailable') return `Couldn't load ${HOST_NAMES[host]} status.`;
-  if (reason === 'auth_required') return `Your session expired. Sign in again to connect ${HOST_NAMES[host]}.`;
-  return 'Unavailable for this deployment.';
-}
-
-function gitLabUnavailableReason(status?: { enabled: boolean; reason?: string }): HostUnavailableReason | undefined {
-  if (status?.reason === 'unavailable') return 'unavailable';
-  // An enabled GitLab with `auth_required` needs its own reauthorization, which Connect GitLab does.
-  if (!status?.enabled && status?.reason === 'auth_required') return 'auth_required';
-  if (!status?.enabled) return 'missing_config';
-  if (status.reason === 'organization_required') return 'organization_required';
-  return undefined;
-}
-
-function githubUnavailableReason(reason?: GithubStatusReason): HostUnavailableReason | undefined {
-  if (
-    reason === 'unavailable' ||
-    reason === 'organization_required' ||
-    reason === 'missing_config' ||
-    reason === 'auth_required'
-  )
-    return reason;
-  return undefined;
-}
-
-/** The way out of a host problem that Connect can't fix: Retry a failed status, or sign in again. */
-function HostRecoveryAction({
-  host,
-  reason,
-  onRetry,
-}: {
-  host: SourceControlHost;
-  reason?: HostUnavailableReason;
-  onRetry: () => void;
-}) {
-  if (reason === 'unavailable') {
-    return (
-      <Button variant="ghost" aria-label={`Retry ${HOST_NAMES[host]}`} onClick={onRetry}>
-        Retry
-      </Button>
-    );
-  }
-  if (reason === 'auth_required') {
-    return (
-      <Button variant="default" render={<Link to="/signin" />}>
-        Sign in
-      </Button>
-    );
-  }
-  return null;
-}
-
-function needsRecovery(reason?: HostUnavailableReason): boolean {
-  return reason === 'unavailable' || reason === 'auth_required';
-}
-
-function repositoryHost(repository: SourceControlRepository): SourceControlHost {
-  return isGitLabRepository(repository) ? 'gitlab' : 'github';
-}
 
 export interface VcsFactoryStepProps {
   initialRepository?: SourceControlRepository;
@@ -121,25 +46,28 @@ export function VcsFactoryStep({
   onSelectRepository,
   onPreviewRepository,
 }: VcsFactoryStepProps) {
-  // Undefined follows the connection status, so an OAuth return lands on the connected host.
-  const [pinnedHost, setPinnedHost] = useState<SourceControlHost | undefined>(
-    initialRepository && repositoryHost(initialRepository),
-  );
+  // Decided once on arrival: a GitHub App result is about GitHub, so it opens there even over a GitLab
+  // repository or a ready GitLab, and stays there when the result is dismissed. Undefined follows the
+  // connection status, so an OAuth return lands on the connected host.
+  const [pinnedHost, setPinnedHost] = useState<SourceControlHost | undefined>(() => {
+    if (githubCallback) return 'github';
+    return initialRepository && repositoryHost(initialRepository);
+  });
   const [chosenRepository, setChosenRepository] = useState(initialRepository);
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 750);
+  // Clearing the box shows the full list at once; only typing waits for the debounce.
+  const search = query === '' ? '' : debouncedQuery;
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
   const anyHostReady = connected || gitlabConfigured;
-  // A GitHub App result is about GitHub, so it opens there even when GitLab is the ready host.
-  const defaultHost: SourceControlHost = connected || githubCallback ? 'github' : 'gitlab';
-  const host = pinnedHost ?? defaultHost;
+  const host = pinnedHost ?? (connected ? 'github' : 'gitlab');
   const hostReady = host === 'github' ? connected : gitlabConfigured;
   const repositoryForProvider =
     chosenRepository && repositoryHost(chosenRepository) === host ? chosenRepository : undefined;
-  const repositorySearch = debouncedQuery || undefined;
+  const repositorySearch = search || undefined;
   const repos = useGithubReposQuery(repositorySearch, connected && host === 'github');
   const refreshRepos = useRefreshGithubReposMutation(repositorySearch);
   const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured && host === 'gitlab');
@@ -150,11 +78,17 @@ export function VcsFactoryStep({
   const repositoryQuery = host === 'gitlab' ? gitlabProjects : repos;
   // A failed first load has no list; its empty-list text would wrongly blame repository access.
   const repositoriesFailed = repositoryQuery.isError && repositoryQuery.data === undefined;
+  const refreshFailed = host === 'github' && refreshRepos.isError;
   const statusPending = githubStatus.isPending || gitlabStatus.isPending;
-  const githubUnavailable = githubUnavailableReason(githubStatus.data?.reason);
   const chooseRepository = (repository: SourceControlRepository) => {
     setChosenRepository(repository);
     onPreviewRepository?.(repository);
+  };
+  const resetChoice = () => {
+    setChosenRepository(undefined);
+    onPreviewRepository?.(undefined);
+    // A refresh failure was about the list it refreshed.
+    refreshRepos.reset();
   };
   const showRepositories = !statusPending && hostReady;
   // With no host ready both rows show; otherwise only the selected host's row, so it can be connected.
@@ -165,9 +99,9 @@ export function VcsFactoryStep({
     if (connected) {
       const before = repos.data?.length ?? 0;
       refreshRepos.mutate(undefined, {
-        // New repositories mean the access a request or a Platform fix waited on has landed.
+        // New repositories mean the access an approval or a Platform fix waited on has landed.
         onSuccess: next => {
-          if (next.length > before) onDismissGithubCallback();
+          if (githubCallbackAwaitsAccess(githubCallback) && next.length > before) onDismissGithubCallback();
         },
       });
       return;
@@ -190,8 +124,7 @@ export function VcsFactoryStep({
             onValueChange={next => {
               setPinnedHost(next);
               setQuery('');
-              setChosenRepository(undefined);
-              onPreviewRepository?.(undefined);
+              resetChoice();
             }}
             className="max-[899px]:w-full"
           >
@@ -209,9 +142,9 @@ export function VcsFactoryStep({
         (host === 'github' || !anyHostReady) && (
           <OnboardingGithubNotice
             callback={githubCallback}
-            connected={connected}
-            statusSettled={githubStatus.isSuccess && !githubStatus.isFetching}
-            personalInstallHidden={githubStatus.data?.reason === 'personal_install_hidden'}
+            statusReason={githubStatus.data?.reason}
+            statusChecked={githubStatus.isFetchedAfterMount}
+            redirecting={githubRedirecting}
             refreshing={githubStatus.isFetching || refreshRepos.isPending}
             onConnect={onConnect}
             onRefresh={refreshGithub}
@@ -261,16 +194,18 @@ export function VcsFactoryStep({
       {(showGithubRow || showGitlabRow) && (
         <OnboardingInset>
           {showGithubRow && (
-            <GitHubHostRow
+            <OnboardingGithubHostRow
               redirecting={githubRedirecting}
-              unavailableReason={githubUnavailable}
+              unavailableReason={githubUnavailableReason(githubStatus.data?.reason)}
+              retrying={githubStatus.isFetching}
               onConnect={onConnect}
               onRetry={() => void githubStatus.refetch()}
             />
           )}
           {showGitlabRow && (
-            <GitLabHostRow
+            <OnboardingGitlabHostRow
               unavailableReason={gitLabUnavailableReason(gitlabStatus.data)}
+              retrying={gitlabStatus.isFetching}
               onConnected={() => {
                 setPinnedHost('gitlab');
                 void gitlabStatus.refetch();
@@ -289,17 +224,25 @@ export function VcsFactoryStep({
               value={query}
               onValueChange={value => {
                 setQuery(value);
-                setChosenRepository(undefined);
-                onPreviewRepository?.(undefined);
+                resetChoice();
               }}
             />
           }
         >
-          {repositoryQuery.isError && (
-            <RepositoryError message={repositoryQuery.error.message} onRetry={() => void repositoryQuery.refetch()} />
-          )}
-          {host === 'github' && refreshRepos.isError && (
-            <RepositoryError message={refreshRepos.error.message} onRetry={refreshGithub} />
+          {refreshFailed ? (
+            <OnboardingRepositoryError
+              message={refreshRepos.error.message}
+              retrying={refreshRepos.isPending}
+              onRetry={refreshGithub}
+            />
+          ) : (
+            repositoryQuery.isError && (
+              <OnboardingRepositoryError
+                message={repositoryQuery.error.message}
+                retrying={repositoryQuery.isFetching}
+                onRetry={() => void repositoryQuery.refetch()}
+              />
+            )
           )}
           {!repositoriesFailed && (
             <div
@@ -308,13 +251,12 @@ export function VcsFactoryStep({
                 if (!event.currentTarget.contains(event.relatedTarget)) onPreviewRepository?.(repositoryForProvider);
               }}
             >
-              <RepositoryRows
+              <OnboardingRepositoryRows
                 repositories={host === 'github' ? (repos.data ?? []) : gitlabRepos}
-                searched={debouncedQuery !== ''}
-                filter={host === 'gitlab' ? debouncedQuery : ''}
+                host={host}
+                search={search}
                 pending={repositoryQuery.isPending}
                 selectedRepositoryId={repositoryForProvider?.id}
-                provider={host}
                 onSelectRepository={chooseRepository}
                 onPreviewRepository={onPreviewRepository}
               />
@@ -323,182 +265,5 @@ export function VcsFactoryStep({
         </OnboardingSearchInset>
       )}
     </OnboardingStepCard>
-  );
-}
-
-function GitHubHostRow({
-  redirecting,
-  unavailableReason,
-  onConnect,
-  onRetry,
-}: {
-  redirecting: boolean;
-  unavailableReason?: HostUnavailableReason;
-  onConnect: () => void;
-  onRetry: () => void;
-}) {
-  return (
-    <OnboardingConnectionRow
-      name="GitHub"
-      icon={<GithubIcon />}
-      description={
-        unavailableReason
-          ? hostUnavailableDescription('github', unavailableReason)
-          : 'Repositories, branches, and pull requests.'
-      }
-      tone={unavailableReason === 'unavailable' ? 'error' : 'muted'}
-      action={
-        needsRecovery(unavailableReason) ? (
-          <HostRecoveryAction host="github" reason={unavailableReason} onRetry={onRetry} />
-        ) : (
-          <Button variant="default" disabled={redirecting || unavailableReason !== undefined} onClick={onConnect}>
-            {redirecting && <Spinner size="sm" aria-label="Connecting to GitHub" />}
-            Connect GitHub
-          </Button>
-        )
-      }
-    />
-  );
-}
-
-function GitLabHostRow({
-  unavailableReason,
-  onConnected,
-  onRetry,
-}: {
-  unavailableReason?: HostUnavailableReason;
-  onConnected: () => void;
-  onRetry: () => void;
-}) {
-  return (
-    <OnboardingConnectionRow
-      name="GitLab"
-      icon={<GitLabIcon />}
-      description={
-        unavailableReason
-          ? hostUnavailableDescription('gitlab', unavailableReason)
-          : 'Projects, branches, and merge requests.'
-      }
-      tone={unavailableReason === 'unavailable' ? 'error' : 'muted'}
-      action={<GitLabAction unavailableReason={unavailableReason} onConnected={onConnected} onRetry={onRetry} />}
-    />
-  );
-}
-
-function GitLabAction({
-  unavailableReason,
-  onConnected,
-  onRetry,
-}: {
-  unavailableReason?: HostUnavailableReason;
-  onConnected: () => void;
-  onRetry: () => void;
-}) {
-  if (needsRecovery(unavailableReason)) {
-    return <HostRecoveryAction host="gitlab" reason={unavailableReason} onRetry={onRetry} />;
-  }
-  if (unavailableReason) {
-    return (
-      <Button variant="default" disabled>
-        Connect GitLab
-      </Button>
-    );
-  }
-  return (
-    <ProviderConnectControl
-      provider="gitlab"
-      label="Connect GitLab"
-      variant="default"
-      size="md"
-      onCompleted={onConnected}
-    />
-  );
-}
-
-function RepositoryError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 ps-3">
-      <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
-        {message}
-      </Txt>
-      <Button variant="ghost" size="sm" onClick={onRetry}>
-        Retry
-      </Button>
-    </div>
-  );
-}
-
-const EMPTY_REPOSITORIES = {
-  github: 'No repositories are shared with the Mastra GitHub App yet. Use Manage access to add some.',
-  gitlab: 'No GitLab projects found.',
-} as const;
-
-function RepositoryRows({
-  repositories,
-  searched,
-  filter,
-  pending,
-  selectedRepositoryId,
-  provider,
-  onSelectRepository,
-  onPreviewRepository,
-}: {
-  repositories: SourceControlRepository[];
-  searched: boolean;
-  /** Filters the list here, for hosts whose search isn't done by the server. */
-  filter: string;
-  pending: boolean;
-  selectedRepositoryId?: number | string;
-  provider: 'github' | 'gitlab';
-  onSelectRepository: (repository: SourceControlRepository) => void;
-  onPreviewRepository?: (repository: SourceControlRepository | undefined) => void;
-}) {
-  if (pending) return <SkeletonRows label={`Loading ${provider} repositories`} rows={3} rowClassName="h-12 w-full" />;
-  const normalizedFilter = filter.trim().toLowerCase();
-  const visible = normalizedFilter
-    ? repositories.filter(repository => repository.fullName.toLowerCase().includes(normalizedFilter))
-    : repositories;
-  if (visible.length === 0) {
-    return (
-      <Txt tone="muted" as="p" variant="caption" className="m-0 px-3 py-4">
-        {searched ? 'No matching repositories.' : EMPTY_REPOSITORIES[provider]}
-      </Txt>
-    );
-  }
-  return (
-    <RadioGroup
-      aria-label="Choose a repository"
-      value={selectedRepositoryId === undefined ? null : String(selectedRepositoryId)}
-      onValueChange={value => {
-        const repository = visible.find(repo => String(repo.id) === value);
-        if (repository) onSelectRepository(repository);
-      }}
-      className="gap-0.5"
-    >
-      {visible.map(repo => (
-        <label
-          key={repo.id}
-          className={cn(
-            'group/onboarding-repo flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5',
-            selectedRepositoryId === repo.id ? 'bg-fill' : 'hover:bg-fill-subtle focus-within:bg-fill-subtle',
-          )}
-          onMouseEnter={() => onPreviewRepository?.(repo)}
-          onFocus={() => onPreviewRepository?.(repo)}
-        >
-          <RadioGroupItem value={String(repo.id)} aria-label={repo.fullName} className="shrink-0" />
-          <span className="min-w-0 flex-1 motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-repo:translate-x-0.5">
-            <Txt as="span" variant="caption" className="block truncate">
-              {repo.fullName}
-            </Txt>
-            <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
-              <Metadata>
-                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
-                {repo.private && <Metadata.Item>Private</Metadata.Item>}
-              </Metadata>
-            </Txt>
-          </span>
-        </label>
-      ))}
-    </RadioGroup>
   );
 }

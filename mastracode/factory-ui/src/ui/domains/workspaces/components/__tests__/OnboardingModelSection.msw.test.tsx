@@ -320,14 +320,15 @@ describe('Model provider onboarding', () => {
 
       renderModelSection();
 
-      expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
       await openProviderList(user);
       expect(screen.getByRole('button', { name: 'Mastra Gateway' })).toBeInTheDocument();
+      // Checked with the list open too, so the one-click card can't hide anywhere on the page.
+      expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
     });
   });
 
   describe('when creating a custom provider', () => {
-    function registerCustomProviderHandlers() {
+    function registerCustomProviderHandlers({ orgKeyAdmin = true }: { orgKeyAdmin?: boolean } = {}) {
       let created = false;
       const provider = {
         id: 'my-llm',
@@ -339,6 +340,7 @@ describe('Model provider onboarding', () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
           HttpResponse.json({
+            orgKeyAdmin,
             providers: created ? [{ provider: 'my-llm', source: 'stored-org', custom: true }] : [],
           }),
         ),
@@ -362,9 +364,17 @@ describe('Model provider onboarding', () => {
       );
     }
 
-    async function createCustomProvider() {
+    function registerNoPersonalDefault() {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        ),
+      );
+    }
+
+    async function createCustomProvider(lane?: Parameters<typeof openProviderList>[1]) {
       const user = userEvent.setup();
-      await openProviderList(user);
+      await openProviderList(user, lane);
       await user.click(screen.getByRole('button', { name: 'Add a custom provider' }));
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
@@ -409,17 +419,36 @@ describe('Model provider onboarding', () => {
     it('continues to personal model selection with the stored custom provider', async () => {
       registerAuthHandler();
       registerCustomProviderHandlers();
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-          HttpResponse.json({ modelId: null, thinkingLevel: null }),
-        ),
-      );
+      registerNoPersonalDefault();
       const { client, onCreate } = renderModelSection({ draft: { modelScope: 'user' } });
 
       const user = await createCustomProvider();
       await waitForMutationsIdle(client);
 
       expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'user',
+        personal: { providerId: 'my-llm', method: 'api_key', modelId: 'my-llm/model-a' },
+      });
+    });
+
+    it('keeps a member on personal accounts after their custom provider unlocks the company account', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers({ orgKeyAdmin: false });
+      registerNoPersonalDefault();
+      // No stored scope: the member lands on personal accounts only because the company account is locked.
+      const { client, onCreate } = renderModelSection();
+      const yourAccount = within(await screen.findByRole('group', { name: 'Your account' }));
+
+      const user = await createCustomProvider(yourAccount);
+      await waitForMutationsIdle(client);
+
+      expect(screen.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
+      expect(await within(screen.getByRole('group', { name: 'Your account' })).findByRole('combobox')).toHaveValue(
+        'Model A',
+      );
       await user.click(screen.getByRole('button', { name: 'Create factory' }));
       expect(onCreate).toHaveBeenCalledWith({
         repository: modelSectionRepository,
@@ -532,18 +561,107 @@ describe('Model provider onboarding', () => {
       );
     });
 
-    it('says what is missing while Create factory is disabled', async () => {
+    it('keeps OpenAI and its model when a subscription sign-in is cancelled', async () => {
       registerAuthHandler();
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-          HttpResponse.json({ providers: [{ provider: 'groq', source: 'none' }] }),
+          HttpResponse.json({
+            providers: [
+              { provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true },
+              { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
+        http.post(`${TEST_BASE_URL}/web/config/providers/anthropic/oauth/start`, () =>
+          HttpResponse.json({
+            sessionId: 'session-1',
+            kind: 'paste-code',
+            url: 'https://claude.ai/oauth/authorize',
+            instructions: 'Open the link, authorize, then paste the code shown on the final page.',
+            expiresAt: Date.now() + 600_000,
+          }),
+        ),
+        http.delete(`${TEST_BASE_URL}/web/config/providers/anthropic/oauth/session/:session`, () =>
+          HttpResponse.json({ ok: true }),
         ),
       );
+      const user = userEvent.setup();
 
-      renderModelSection();
+      const { onCreate } = renderModelSection();
+      await chooseProvider(user, 'OpenAI');
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+
+      await chooseSubscription(user, 'Continue with Anthropic');
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.getByRole('button', { name: 'Provider: OpenAI' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' } }),
+      );
+    });
+  });
+
+  describe('when Create factory is disabled', () => {
+    const groqOnly: ProviderInfo[] = [{ provider: 'groq', source: 'none' }];
+    const openaiOrg: ProviderInfo[] = [
+      { provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true },
+    ];
+    const savedOpenai = { providerId: 'openai', method: 'api_key' as const, modelId: 'openai/gpt-5.6-sol' };
+
+    it.each([
+      {
+        name: 'the company account has no provider',
+        providers: groqOnly,
+        draft: { modelScope: 'factory' as const },
+        reason: 'Connect the company account to create your factory.',
+      },
+      {
+        name: 'the personal account has no provider',
+        providers: groqOnly,
+        draft: { modelScope: 'user' as const },
+        reason: 'Connect your account to create your factory.',
+      },
+      {
+        name: 'neither hybrid account has a provider',
+        providers: groqOnly,
+        draft: { modelScope: 'hybrid' as const },
+        reason: 'Connect an account for Factory work and connect your account for sessions to create your factory.',
+      },
+      {
+        name: 'only the sessions account is missing in hybrid',
+        providers: openaiOrg,
+        draft: { modelScope: 'hybrid' as const, model: savedOpenai },
+        reason: 'Connect your account for sessions to create your factory.',
+      },
+      {
+        name: 'the company model was retired',
+        providers: openaiOrg,
+        draft: { modelScope: 'factory' as const, model: { ...savedOpenai, modelId: 'openai/retired-model' } },
+        reason: 'Pick a model for the company account to create your factory.',
+      },
+    ])('names the missing step when $name', async ({ providers, draft, reason }) => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
+      );
+
+      renderModelSection({ draft });
 
       const create = await screen.findByRole('button', { name: 'Create factory' });
-      await waitFor(() => expect(create).toHaveAccessibleDescription(/company account/));
+      await waitFor(() => expect(create).toHaveAccessibleDescription(reason));
+      expect(create).toBeDisabled();
+    });
+
+    it('names the missing provider in local mode', async () => {
+      server.use(http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: groqOnly })));
+
+      renderModelSection({ local: true });
+
+      const create = await screen.findByRole('button', { name: 'Create factory' });
+      await waitFor(() => expect(create).toHaveAccessibleDescription('Connect a provider to create your factory.'));
       expect(create).toBeDisabled();
     });
   });
@@ -752,7 +870,7 @@ describe('Model provider onboarding', () => {
       expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     });
 
-    it('reopens the picker without a warning when a saved provider was never connected', async () => {
+    it('explains a saved provider whose connection is gone', async () => {
       registerAuthHandler();
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -760,14 +878,35 @@ describe('Model provider onboarding', () => {
         ),
       );
 
-      // Picking Groq and closing its key dialog persists the provider without a model.
+      // A choice is saved only once its provider connected, so a saved Groq that no longer connects (its key
+      // was removed since) must be explained rather than reopen as a blank picker.
       renderModelSection({
         draft: { modelScope: 'factory', model: { providerId: 'groq', method: 'api_key', modelId: '' } },
       });
 
-      await openProviderList(userEvent.setup());
-      expect(screen.getByRole('button', { name: 'Groq' })).toBeEnabled();
-      expect(screen.queryByText(/connection changed since you chose it/)).not.toBeInTheDocument();
+      expect(
+        await screen.findByText(
+          'Your Groq connection changed since you chose it. Connect it again or choose another provider.',
+        ),
+      ).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+    });
+
+    it('explains a saved provider that left the provider list', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [{ provider: 'groq', source: 'none' }] }),
+        ),
+      );
+
+      // A deleted custom provider can't be connected again, so the notice must not offer that.
+      renderModelSection({
+        draft: { modelScope: 'factory', model: { providerId: 'my-llm', method: 'api_key', modelId: 'my-llm/model-a' } },
+      });
+
+      expect(await screen.findByText(/is no longer available\. Choose another provider\./)).toBeVisible();
+      expect(screen.queryByText(/Connect it again/)).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     });
 

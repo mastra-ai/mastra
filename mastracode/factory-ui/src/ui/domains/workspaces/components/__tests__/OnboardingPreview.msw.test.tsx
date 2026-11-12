@@ -7,7 +7,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { OnboardingPreview } from '../onboarding/preview/OnboardingPreview';
 
 describe('contextual onboarding previews', () => {
-  it('shows the personal Factory model in review when shared access is absent', async () => {
+  it('shows the personal Factory model when shared access is absent', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -35,7 +35,6 @@ describe('contextual onboarding previews', () => {
     const personal = within(personalScene);
     expect(within(personal.getByLabelText('Factory work model')).getByText('anthropic/claude-fable-5')).toBeVisible();
     expect(await personal.findByText('Your account is connected')).toBeVisible();
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
   it('shows the selected tracker’s issue becoming a backlog card and uses its connection state', async () => {

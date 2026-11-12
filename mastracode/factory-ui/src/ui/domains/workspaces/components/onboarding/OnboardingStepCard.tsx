@@ -4,16 +4,7 @@ import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { ONBOARDING_SECTIONS } from '../../services/onboardingSteps';
 import type { OnboardingSection } from '../../services/onboardingSteps';
-
-/**
- * Below 900px the primary action is pinned to a bottom bar. `position: fixed` resolves against the
- * viewport only while no ancestor carries a `transform` or `filter`, so section transitions fade opacity only.
- */
-const PINNED_PRIMARY =
-  'max-[899px]:fixed max-[899px]:inset-x-0 max-[899px]:bottom-0 max-[899px]:z-20 max-[899px]:bg-linear-to-b max-[899px]:from-transparent max-[899px]:to-background max-[899px]:to-40% max-[899px]:px-4 max-[899px]:pt-8 max-[899px]:pb-[max(1rem,env(safe-area-inset-bottom))] max-[899px]:[&>button]:h-12 max-[899px]:[&>button]:w-full';
-
-/** The frame's corners: the inset's `rounded-xl` plus the frame's 4px padding, shared by the section rows. */
-export const ONBOARDING_FRAME_RADIUS = 'rounded-[calc(var(--radius-xl)+--spacing(1))]';
+import { ONBOARDING_FRAME_RADIUS, ONBOARDING_PINNED_PRIMARY } from './onboardingLayout';
 
 /**
  * The open section, framed like the chat model picker: the numbered header and the footer (a note or
@@ -74,23 +65,9 @@ export function OnboardingStepCard({
               {note}
             </Txt>
           )}
-          {primary && <div className={cn('ms-auto', PINNED_PRIMARY)}>{primary}</div>}
+          {primary && <div className={cn('ms-auto', ONBOARDING_PINNED_PRIMARY)}>{primary}</div>}
         </div>
       )}
     </section>
-  );
-}
-
-/**
- * The action that finishes the whole setup, under the cards rather than in one: it commits every section,
- * not just the last. `notice` (a create failure, or why Create is off) sits right above it, inside the
- * mobile pinned bar so it is seen where the button was tapped.
- */
-export function OnboardingPageAction({ notice, children }: { notice?: ReactNode; children: ReactNode }) {
-  return (
-    <div className={cn('flex flex-col items-end gap-2 pt-2', PINNED_PRIMARY)}>
-      {notice && <div className="w-full">{notice}</div>}
-      {children}
-    </div>
   );
 }

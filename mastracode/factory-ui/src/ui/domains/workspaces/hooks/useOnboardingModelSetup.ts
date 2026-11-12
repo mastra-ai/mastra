@@ -46,12 +46,15 @@ export function useOnboardingModelSetup({
     saved: draft.model,
     onSave: model => onDraftChange({ model }),
   });
+  const companyLocked = !local && companyAccountNeedsAdmin(company.connection);
   const personal = useOnboardingModelLane({
     scope: 'user',
     saved: draft.personal,
-    onSave: next => onDraftChange({ personal: next }),
+    // Personal accounts are a locked member's only way forward, so it is stored with their choice: a
+    // provider they add (a custom one counts for every scope) can unlock the company account, and the
+    // scope must not then fall back to it.
+    onSave: next => onDraftChange(companyLocked ? { personal: next, modelScope: 'user' } : { personal: next }),
   });
-  const companyLocked = !local && companyAccountNeedsAdmin(company.connection);
   const scope = resolveScope({ local, companyLocked, stored: draft.modelScope });
   const effective: OnboardingDraft = {
     repository: draft.repository,
