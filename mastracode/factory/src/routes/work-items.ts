@@ -638,10 +638,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const board = boards.get(boardId);
           if (!board) return c.json({ error: 'board_not_found' }, 404);
           const phases = Object.keys(board.phases);
-          // A window deepens a column of this board; one for no column is a mistake, not an empty answer.
-          for (const stage of view.window.keys()) {
-            if (!phases.includes(stage)) return c.json({ error: 'unknown_stage' }, 400);
-          }
           const { body, named } = workItemColumns(list, { id: boardId, phases }, view, resolved.userId);
           // The board asks again on each feed frame; most frames change nothing it shows.
           return sendRevalidated(

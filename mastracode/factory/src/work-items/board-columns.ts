@@ -147,7 +147,8 @@ function stamp(card: Card): { id: string; changedAt: string | null } {
 
 /**
  * The columns of `board` as `view` shows them to `userId`, read from the project's whole `list`.
- * A window for a stage the board has no phase for is ignored: the route refuses it first.
+ * A window for a stage the board has no phase for deepens nothing: a reader may still hold a
+ * column deeper after the board lost that phase, and keeps its board.
  */
 export function workItemColumns(
   list: readonly Card[],

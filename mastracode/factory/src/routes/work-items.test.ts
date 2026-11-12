@@ -3285,6 +3285,15 @@ describe('GET /web/factory/projects/:id/work-items/columns', () => {
       expect(column(body, 'intake')).toEqual({ total: 3, ids: intake });
       expect(column(body, 'planning')).toEqual({ total: 2, ids: planning.slice(0, 1) });
     });
+
+    it('ignores a window for a phase the board no longer has, so a reader that deepened it keeps its board', async () => {
+      const { intake, planning } = await fileTwoColumns();
+
+      const body = await read('&limit=1&window=retired-phase:5&window=planning:2');
+
+      expect(column(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 1) });
+      expect(column(body, 'planning')).toEqual({ total: 2, ids: planning });
+    });
   });
 
   it.each([
@@ -3293,7 +3302,6 @@ describe('GET /web/factory/projects/:id/work-items/columns', () => {
     ['a window without a count', `/columns?board=work&window=intake`],
     ['a window of no card', `/columns?board=work&window=intake:0`],
     ['two windows for one column', `/columns?board=work&window=intake:2&window=intake:3`],
-    ['a window for a stage the board does not have', `/columns?board=work&window=nowhere:5`],
     ['an asked card that is not an id', `/columns?board=work&item=first`],
     ['a card bodies flag other than true', `/columns?board=work&cards=yes`],
   ])('refuses %s rather than answering another view', async (_case, path) => {

@@ -592,7 +592,10 @@ export const workItemColumnsQuerySchema = z.object({
   worked: pickedValuesSchema,
   /** How many cards each column lists. */
   limit: boundedLimitSchema(50, 200),
-  /** Repeatable `<stage>:<count>`: lists that column's first `count` cards instead of `limit`. */
+  /**
+   * Repeatable `<stage>:<count>`: lists that column's first `count` cards instead of `limit`.
+   * One for a stage the board does not have is ignored.
+   */
   window: z
     .array(columnWindowSchema)
     .max(64)
