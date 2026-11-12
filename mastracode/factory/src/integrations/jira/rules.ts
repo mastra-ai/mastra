@@ -109,12 +109,14 @@ export class JiraRules {
       factoryProjectId: input.factoryProjectId,
       sources: input.issues.map(issue => ({ integrationId: 'jira', type: 'issue', externalId: issue.id })),
     });
-    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    // The shared list is the cache itself: only the card handed on to rules is cloned.
+    const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Jira issue per project; other projects may file their own.
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(issue.id)));
+      const relatedItem = itemsBySourceKey.get(issue.id);
+      statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };

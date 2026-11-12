@@ -3,17 +3,19 @@
  * build (`runEnvironmentBuild`), step two polls the provider until the build
  * settles and pins the active template on the project row. Registered by
  * `MastraFactory.prepare()` only when the sandbox has `builds`, and driven by
- * the Build now route, the per-project cron schedule and the GitHub push
- * hand-off. Saving settings never starts it.
+ * the Build now route, the per-project cron schedule, the GitHub push
+ * hand-off and saved template inputs.
  */
 
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
 import { resolveProjectEnvironment } from '../workspace.js';
 import {
   ENVIRONMENT_BUILD_TRIGGERS,
-  environmentBuildContext,
+  environmentBuildContextWithEnv,
   errorReason,
+  MAX_BUILD_WAIT_MS,
   redactCredentials,
   runEnvironmentBuild,
 } from './build.js';
@@ -21,7 +23,6 @@ import type { EnvironmentBuildDeps, EnvironmentBuildOutcome } from './build.js';
 
 export const ENVIRONMENT_BUILD_WORKFLOW_ID = 'factory-environment-build';
 export const DEFAULT_BUILD_POLL_MS = 15_000;
-export const MAX_BUILD_WAIT_MS = 30 * 60_000;
 
 export const environmentBuildInputSchema = z.object({
   projectId: z.string().min(1),
@@ -54,6 +55,8 @@ export interface EnvironmentBuildWorkflowOptions {
   maxWaitMs?: number;
   /** Called with the first step's answer so a caller can return it without waiting for the poll. */
   onStart?: (runId: string, outcome: EnvironmentBuildOutcome) => void;
+  /** Called once a run is over, whoever started it (a route, the scheduler or a hand-off). */
+  onSettled?: (projectId: string, result: EnvironmentBuildWorkflowResult) => void;
 }
 
 export function createEnvironmentBuildWorkflow(
@@ -76,61 +79,76 @@ export function createEnvironmentBuildWorkflow(
     },
   });
 
+  // Polls a started build until it settles and pins its template.
+  const pollUntilSettled = async (
+    inputData: z.infer<typeof startOutputSchema>,
+  ): Promise<EnvironmentBuildWorkflowResult> => {
+    const { projectId, heads, ...result } = inputData;
+    if (result.outcome !== 'started' || !result.buildId || !heads) return result;
+    const builds = deps.sandbox?.builds;
+    const project = await deps.projects.getById({ id: projectId });
+    if (!builds || !deps.sourceControl || !project) return { ...result, status: 'unknown' };
+    const environment = await resolveProjectEnvironment(deps.sourceControl.storage, project);
+    const { ctx } = await environmentBuildContextWithEnv(
+      project,
+      environment,
+      heads,
+      deps.sourceControl.versionControl,
+      deps.sandboxEnvs,
+    );
+    const startedAt = now().getTime();
+    try {
+      for (;;) {
+        const build = await builds.get(ctx, environment.settings, result.buildId);
+        if (build.status === 'ready') {
+          const templateId = build.templateId ?? result.templateId ?? result.buildId;
+          // A newer run may have replaced `last_build_id` while this one
+          // polled; the pin is skipped then so the stale image never wins.
+          const pinned = await deps.projects.pinActiveTemplate({
+            id: project.id,
+            buildId: result.buildId,
+            templateId,
+            heads,
+          });
+          deps.logger?.info(pinned ? 'environment build ready' : 'environment build ready but superseded', {
+            factoryProjectId: project.id,
+            templateId,
+          });
+          return { ...result, templateId, status: 'ready' };
+        }
+        if (build.status === 'failed' || build.status === 'unknown') {
+          deps.logger?.info('environment build did not complete', {
+            factoryProjectId: project.id,
+            buildId: result.buildId,
+            status: build.status,
+            ...(build.error ? { reason: maskSandboxEnvValues(redactCredentials(build.error), ctx.buildEnv) } : {}),
+          });
+          return {
+            ...result,
+            status: build.status,
+            ...(build.error ? { reason: maskSandboxEnvValues(redactCredentials(build.error), ctx.buildEnv) } : {}),
+          };
+        }
+        if (now().getTime() - startedAt >= maxWaitMs) {
+          return { ...result, status: 'unknown', reason: 'Build wait timed out.' };
+        }
+        await sleep(pollMs);
+      }
+    } catch (error) {
+      const reason = maskSandboxEnvValues(errorReason(error), ctx.buildEnv);
+      deps.logger?.info('environment build status read failed', { factoryProjectId: project.id, reason });
+      return { ...result, status: 'unknown', reason };
+    }
+  };
+
   const awaitBuild = createStep({
     id: 'await-build',
     inputSchema: startOutputSchema,
     outputSchema: environmentBuildOutputSchema,
     execute: async ({ inputData }): Promise<EnvironmentBuildWorkflowResult> => {
-      const { projectId, heads, ...result } = inputData;
-      if (result.outcome !== 'started' || !result.buildId || !heads) return result;
-      const builds = deps.sandbox?.builds;
-      const project = await deps.projects.getById({ id: projectId });
-      if (!builds || !deps.sourceControl || !project) return { ...result, status: 'unknown' };
-      const environment = await resolveProjectEnvironment(deps.sourceControl.storage, project);
-      const ctx = environmentBuildContext(project, environment, heads, deps.sourceControl.versionControl);
-      const startedAt = now().getTime();
-      try {
-        for (;;) {
-          const build = await builds.get(ctx, environment.settings, result.buildId);
-          if (build.status === 'ready') {
-            const templateId = build.templateId ?? result.templateId ?? result.buildId;
-            // A newer run may have replaced `last_build_id` while this one
-            // polled; the pin is skipped then so the stale image never wins.
-            const pinned = await deps.projects.pinActiveTemplate({
-              id: project.id,
-              buildId: result.buildId,
-              templateId,
-              heads,
-            });
-            deps.logger?.info(pinned ? 'environment build ready' : 'environment build ready but superseded', {
-              factoryProjectId: project.id,
-              templateId,
-            });
-            return { ...result, templateId, status: 'ready' };
-          }
-          if (build.status === 'failed' || build.status === 'unknown') {
-            deps.logger?.info('environment build did not complete', {
-              factoryProjectId: project.id,
-              buildId: result.buildId,
-              status: build.status,
-              ...(build.error ? { reason: redactCredentials(build.error) } : {}),
-            });
-            return {
-              ...result,
-              status: build.status,
-              ...(build.error ? { reason: redactCredentials(build.error) } : {}),
-            };
-          }
-          if (now().getTime() - startedAt >= maxWaitMs) {
-            return { ...result, status: 'unknown', reason: 'Build wait timed out.' };
-          }
-          await sleep(pollMs);
-        }
-      } catch (error) {
-        const reason = errorReason(error);
-        deps.logger?.info('environment build status read failed', { factoryProjectId: project.id, reason });
-        return { ...result, status: 'unknown', reason };
-      }
+      const settled = await pollUntilSettled(inputData);
+      options.onSettled?.(inputData.projectId, settled);
+      return settled;
     },
   });
 

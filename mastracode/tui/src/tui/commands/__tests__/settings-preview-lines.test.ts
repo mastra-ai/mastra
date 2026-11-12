@@ -93,6 +93,12 @@ describe('/settings preview lines callbacks', () => {
     mocks.loadSettings.mockImplementation(() => createSettings());
   });
 
+  it('defaults absent legacy mouse preferences to Off when opening settings', () => {
+    void handleSettingsCommand(createCtx().ctx);
+
+    expect(mocks.config.mouse).toEqual({ dialogs: false, input: false });
+  });
+
   it('narrows an invalid persisted experimental agent value for the settings UI', () => {
     mocks.loadSettings.mockReturnValue({ ...createSettings(), experimentalAgent: { invalid: true } });
 

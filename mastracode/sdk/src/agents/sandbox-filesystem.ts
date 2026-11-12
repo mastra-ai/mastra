@@ -41,6 +41,7 @@ import {
   FileNotFoundError,
   getMimeType,
   IsDirectoryError,
+  LocalFilesystem,
   NotDirectoryError,
   UnsupportedGrepPatternError,
 } from '@mastra/core/workspace';
@@ -99,6 +100,13 @@ export interface SandboxFilesystemOptions {
    * short-lived. Without a native filesystem the shell path always checks.
    */
   verifySymlinks?: boolean;
+  /**
+   * Additional file extensions to treat as text, extending (not replacing) the
+   * built-in set. Affects which files tools like `grep` will search. Values are
+   * normalized like `LocalFilesystem`'s option, so `'sas'`, `'.sas'` and
+   * `'.SAS'` are equivalent.
+   */
+  textExtensions?: string[];
 }
 
 type ContainmentCheck = 'target' | 'dest' | 'parent';
@@ -210,6 +218,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   private resolvedBase?: string;
   private resolvingBase?: Promise<string>;
   private readonly verifySymlinks: boolean;
+  /**
+   * Classifies file names as text: the built-in extensions plus
+   * `textExtensions`, normalized exactly as `LocalFilesystem` does. Only its
+   * `isTextFile` is ever called; it never touches a file.
+   */
+  private readonly textClassifier: LocalFilesystem;
   /** `check:absolutePath` keys that passed while the entry existed. */
   private readonly verified = new Set<string>();
 
@@ -217,6 +231,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     this.sandbox = options.sandbox;
     this.workdirSource = options.workdir;
     this.verifySymlinks = options.verifySymlinks ?? false;
+    this.textClassifier = new LocalFilesystem({ basePath: '/', textExtensions: options.textExtensions });
     if (typeof options.workdir === 'string') this.resolvedBase = options.workdir;
     // Include the workdir when known: one sandbox can back several
     // filesystems rooted at different checkouts, and each needs a distinct
@@ -231,6 +246,14 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   /** The resolved workspace root; empty until a lazy workdir first resolves. */
   get basePath(): string {
     return this.resolvedBase ?? '';
+  }
+
+  /**
+   * Whether tools like `grep` should treat a file as text: the built-in text
+   * extensions plus any `textExtensions` passed to the constructor.
+   */
+  isTextFile(filename: string): boolean {
+    return this.textClassifier.isTextFile(filename);
   }
 
   /** Await (and memoize) the workspace root, resolving a lazy workdir once. */

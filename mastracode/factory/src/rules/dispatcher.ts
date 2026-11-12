@@ -49,8 +49,6 @@ import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvo
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
-import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -67,6 +65,7 @@ import type {
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
+import { withWorkItemDescription } from '../work-items/description-context.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
@@ -189,7 +188,10 @@ function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
+  return (
+    attempts >= (failureCode === 'run_incomplete' ? 2 : MAX_ATTEMPTS) ||
+    !factoryDispatchFailureMetadata(failureCode).canRetry
+  );
 }
 
 /**
@@ -478,6 +480,7 @@ export interface FactoryDecisionDispatcherOptions {
   intakeRoutes?: IntakeRoutesReader;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
+  reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /**
@@ -486,8 +489,6 @@ export interface FactoryDecisionDispatcherOptions {
    * per-session listener (`observeSessionRunReports`). Never throws.
    */
   reportRunEnd?: FactoryRunEndReporter;
-  /** Injects the work item's recent comments into skill-invocation kickoffs. */
-  feedReader?: FactoryFeedReader;
   /**
    * Told each step of a pull request review run: accepted, started, retrying,
    * and how it ended. Driven by the dispatcher rather than the agent, so a run
@@ -693,10 +694,10 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #reconcileToolResults?: () => Promise<void>;
+  readonly #reconcileRunBinding?: FactoryDecisionDispatcherOptions['reconcileRunBinding'];
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #reportRunEnd?: FactoryRunEndReporter;
-  readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #reportReviewStatus?: FactoryReviewStatusReporter;
   /** Review attempts that already said `queued`, and those that watched their run start. */
@@ -751,10 +752,10 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
+    this.#reconcileRunBinding = options.reconcileRunBinding;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
     this.#reportRunEnd = options.reportRunEnd;
-    this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#reportReviewStatus = options.reportReviewStatus;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
@@ -1469,11 +1470,11 @@ export class FactoryDecisionDispatcher {
           }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
-          const kickoffContents = await withWorkItemFeed(
-            this.#feedReader,
-            { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.contents,
-          );
+          // Re-read: the description may have been edited while the open run drained.
+          const current = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const kickoffContents = withWorkItemDescription(resolved.contents, current?.description);
           // A skill kickoff is system-generated, not something the human typed: send it
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces
           // record the skill name. Plain-prompt kickoffs stay user messages.
@@ -1485,7 +1486,7 @@ export class FactoryDecisionDispatcher {
                   attributes: { name: resolved.skillName },
                 }
               : { type: 'user' as const, tagName: 'user' };
-          // The feed read is async storage I/O; the card can move while it runs.
+          // The description read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) {
             if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
             return this.#replayLanded(record, decision, session, runStillActive);
@@ -1522,6 +1523,24 @@ export class FactoryDecisionDispatcher {
           // cancelled mid-flight; without this the decision reports success and
           // the break is invisible on the card.
           const since = new Date();
+          const runItem = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const boards = runItem ? await this.#boards.load(record) : null;
+          const stage = runItem?.stages.length === 1 ? runItem.stages[0] : undefined;
+          const phase = stage && runItem ? boards?.get(boardForWorkItem(runItem))?.phases[stage] : undefined;
+          const workingRevision =
+            phase?.kind === 'working' &&
+            (phase.runner.goal || phase.exitTool) &&
+            phase.runner.context === decision.role &&
+            phase.runner.skill === decision.skillName
+              ? runItem!.revision
+              : null;
+          const existingLinkedReviewIds = new Set(
+            workingRevision === null || !runItem
+              ? []
+              : (await this.#storage.listLinked({ item: runItem, limit: 100 })).map(card => card.id),
+          );
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
@@ -1613,7 +1632,35 @@ export class FactoryDecisionDispatcher {
                   superseded: async () =>
                     (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role)),
                 },
-                () => this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle()),
+                async () => {
+                  await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
+                  if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
+                    return;
+                  // A final tool result can persist after agent_end. Read this binding's trailing
+                  // results before deciding the unchanged card means the run did no work.
+                  await this.#reconcileRunBinding?.(binding);
+                  const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
+                  if (after?.revision === workingRevision && !(await kickoffStale())) {
+                    const linked = await this.#storage.listLinked({ item: after, limit: 100 });
+                    const ownCardHandOff = linked.some(card => {
+                      if (
+                        card.parentWorkItemId !== after.id ||
+                        existingLinkedReviewIds.has(card.id) ||
+                        card.externalSource?.integrationId !== 'github' ||
+                        card.externalSource.type !== 'pull-request' ||
+                        card.stages.length !== 1
+                      )
+                        return false;
+                      const review = boards?.get(boardForWorkItem(card))?.phases[card.stages[0]!];
+                      return review?.kind === 'working' && review.runner.context === 'review';
+                    });
+                    if (ownCardHandOff) return;
+                    throw new FactoryDispatchError(
+                      'run_incomplete',
+                      'Factory skill run ended before completing the working phase.',
+                    );
+                  }
+                },
               );
               // Handed on before the turn ended: the run's clean end is the successor's, not
               // a finished review. A move after the turn ended (a merge) keeps the completion.
@@ -1722,11 +1769,13 @@ export class FactoryDecisionDispatcher {
   ) {
     const issueId = decision.metadata?.linearIssueId;
     if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
-    const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
+    const items = await this.#storage.listShared({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
     const cards = items.filter(
       item => item.externalSource?.integrationId === 'linear' && item.workItem.metadata?.linearIssueId === issueId,
     );
-    return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
+    const card = cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0];
+    // The shared list is the cache itself: hand on a copy of the card.
+    return card ? structuredClone(card) : null;
   }
 
   async #upsertLinkedItem(

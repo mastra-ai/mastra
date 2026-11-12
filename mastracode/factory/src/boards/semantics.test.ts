@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { workItemBranch } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import {
   awaitsAcceptance,
   boardFlow,
@@ -56,7 +56,7 @@ describe('resolvePhaseSemantics', () => {
     expect(resolvePhaseSemantics(boards, 'missing', 'done')).toBeUndefined();
     expect(resolvePhaseSemantics(boards, 'release', 'done')).toBeUndefined();
     expect(resolvePhaseSemantics(boards, 'release', 'intake')).toBeUndefined();
-    const only = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+    const only = boardRegistryOf([createTestBoard()]);
     expect(resolvePhaseSemantics(only, 'work', 'done')).toBeUndefined();
   });
 
@@ -169,9 +169,7 @@ describe('resolveBoardToolRule', () => {
     expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'work', 'ship_it')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'missing', 'ship_it')).toBeUndefined();
-    expect(
-      resolveBoardToolRule(createBoardRegistry({ boards: [], includeDefaultBoards: false }), 'work', 'submit_plan'),
-    ).toBeUndefined();
+    expect(resolveBoardToolRule(boardRegistryOf([]), 'work', 'submit_plan')).toBeUndefined();
   });
 });
 
@@ -186,7 +184,7 @@ describe('isTerminalWorkItem', () => {
   });
 
   it('falls back to the built-in names only for Work and Review rows on uninstalled boards', () => {
-    const none = createBoardRegistry({ includeDefaultBoards: false });
+    const none = boardRegistryOf([]);
     expect(isTerminalWorkItem(none, { board: 'work', externalSource: null, stages: ['done'] })).toBe(true);
     expect(isTerminalWorkItem(none, { board: null, externalSource: null, stages: ['canceled'] })).toBe(true);
     expect(isTerminalWorkItem(none, { board: 'ghost', externalSource: null, stages: ['done'] })).toBe(false);

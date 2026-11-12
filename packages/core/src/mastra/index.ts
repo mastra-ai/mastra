@@ -113,7 +113,7 @@ import {
 } from '../workflows/nested-run-recovery';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import { computeNextFire } from '../workflows/scheduler/cron';
+import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -871,6 +871,7 @@ export class Mastra<
 > {
   #vectors?: TVectors;
   #agents: TAgents;
+  #toolLoopRegistrations = new WeakMap<ToolLoopAgentLike, Map<string, Agent<any>>>();
   #logger: TLogger;
   #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
   #wiredLoggers = new WeakSet<IMastraLogger>();
@@ -2351,14 +2352,19 @@ export class Mastra<
         const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
-        // A declarative cadence can outlive its final occurrence (e.g. a
-        // year-pinned cron that has already passed). Compute the timing before
-        // writing: the row is registered as `completed` rather than skipped, so
-        // the deployment stays self-consistent instead of retrying a doomed
-        // write on every boot.
-        const computeTiming = () => {
-          const next = computeNextFire({ cron: cfg.cron, timezone: cfg.timezone, nextFireAt: now }, now);
-          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' } as const;
+        const runAt = cfg.runAt !== undefined ? toEpochMs(cfg.runAt) : undefined;
+        const endAt = cfg.endAt !== undefined ? toEpochMs(cfg.endAt) : undefined;
+        const cron = cfg.cron ?? '';
+        // A one-off whose `runAt` has already passed is recorded as completed
+        // rather than fired, so a fresh deploy never runs a stale one-off. A
+        // declarative cadence can outlive its final occurrence (e.g. a
+        // year-pinned cron that has already passed): that row is registered as
+        // `completed` rather than skipped, so the deployment stays
+        // self-consistent instead of retrying a doomed write on every boot.
+        const computeTiming = (): { nextFireAt: number; status: 'active' | 'completed' } => {
+          if (runAt !== undefined) return { nextFireAt: runAt, status: runAt > now ? 'active' : 'completed' };
+          const next = computeNextFire({ cron, timezone: cfg.timezone, endAt, nextFireAt: now }, now);
+          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' };
         };
 
         if (!existing) {
@@ -2366,8 +2372,10 @@ export class Mastra<
           await schedulesStore.createSchedule({
             id: scheduleId,
             target,
-            cron: cfg.cron,
+            cron,
             timezone: cfg.timezone,
+            ...(runAt !== undefined ? { runAt } : {}),
+            ...(endAt !== undefined ? { endAt } : {}),
             status: timing.status,
             nextFireAt: timing.nextFireAt,
             createdAt: now,
@@ -2383,17 +2391,23 @@ export class Mastra<
         // recomputed cadence is the exception: it re-arms a completed row when
         // it has future occurrences, and completes it when it does not.
         const patch: ScheduleUpdate = {};
-        const cronChanged = existing.cron !== cfg.cron;
+        const cronChanged = existing.cron !== cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
+        const runAtChanged = (existing.runAt ?? undefined) !== runAt;
+        const endAtChanged = (existing.endAt ?? undefined) !== endAt;
 
-        if (cronChanged) patch.cron = cfg.cron;
+        if (cronChanged) patch.cron = cron;
         if (timezoneChanged) patch.timezone = cfg.timezone;
+        // Adapters clear the column when the key is present but undefined.
+        if (runAtChanged) patch.runAt = runAt;
+        if (endAtChanged) patch.endAt = endAt;
         if (!targetsEqual(existing.target, target)) patch.target = target;
         if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
 
-        // Cron or timezone change invalidates the stored nextFireAt — recompute
-        // from now so we don't fire on the old schedule.
-        if (cronChanged || timezoneChanged) {
+        // Any timing change invalidates the stored nextFireAt — recompute from
+        // now so we don't fire on the old schedule, and re-arm or complete the
+        // row per the recomputed cadence.
+        if (cronChanged || timezoneChanged || runAtChanged || endAtChanged) {
           const timing = computeTiming();
           patch.nextFireAt = timing.nextFireAt;
           if (timing.status === 'completed') patch.status = 'completed';
@@ -2821,8 +2835,12 @@ export class Mastra<
    *
    * This method allows dynamic registration of agents after the Mastra instance
    * has been created. The agent will be initialized with the current logger.
+   * Re-registering the same instance under the same key is a no-op. Rehydrating
+   * a stored agent under an existing stored-agent key also leaves the original
+   * registration unchanged.
    *
-   * @throws {MastraError} When an agent with the same key already exists
+   * @throws {MastraError} When a different agent with the same key already exists,
+   *   except when both registrations have source 'stored'
    *
    * @example
    * ```typescript
@@ -2857,12 +2875,19 @@ export class Mastra<
       const underlyingAgent = durableAgent.agent;
       const agentKey = key || durableAgent.id;
 
-      // Check if already registered
+      // Only re-registering the same wrapper is idempotent.
       const agents = this.#agents as Record<string, Agent<any>>;
       if (agents[agentKey]) {
-        const logger = this.getLogger();
-        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
-        return;
+        if (Object.is(agents[agentKey], durableAgent)) {
+          return;
+        }
+        throw new MastraError({
+          id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Agent with key ${agentKey} already exists`,
+          details: { status: 409, key: agentKey },
+        });
       }
 
       // Set the Mastra instance on the durable agent for observability
@@ -3000,16 +3025,30 @@ export class Mastra<
     }
 
     let mastraAgent: Agent<any, any, any>;
-    if (isToolLoopAgentLike(agent)) {
+    const toolLoopInput = isToolLoopAgentLike(agent) ? agent : undefined;
+    if (toolLoopInput) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
-      mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
+      mastraAgent = toolLoopAgentToMastraAgent(toolLoopInput, { fallbackName: key });
     } else {
       mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      return;
+      if (
+        agents[agentKey] === mastraAgent ||
+        (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
+        (agents[agentKey].source === 'stored' && options?.source === 'stored')
+      ) {
+        return;
+      }
+      throw new MastraError({
+        id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with key ${agentKey} already exists`,
+        details: { status: 409, key: agentKey },
+      });
     }
 
     // Initialize the agent
@@ -3029,6 +3068,14 @@ export class Mastra<
     }
 
     agents[agentKey] = mastraAgent;
+    if (toolLoopInput) {
+      let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
+      if (!registrations) {
+        registrations = new Map();
+        this.#toolLoopRegistrations.set(toolLoopInput, registrations);
+      }
+      registrations.set(agentKey, mastraAgent);
+    }
 
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor

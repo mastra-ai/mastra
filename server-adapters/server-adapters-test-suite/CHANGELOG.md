@@ -1,5 +1,69 @@
 # @mastra/server-adapters-test-suite
 
+## 0.3.0-alpha.4
+
+### Patch Changes
+
+- Add `PUT /api/observability/feedback/:feedbackId` for complete feedback replacement. Preserve the original ID, trace ID, and timestamp, and include every field to retain. Delayed POST retries keep existing feedback. Unsupported storage versions return 501. ([#30059](https://github.com/mastra-ai/mastra/pull/30059))
+
+  ```json
+  {
+    "feedback": {
+      "feedbackId": "feedback-1",
+      "traceId": "trace-123",
+      "timestamp": "2026-11-11T12:00:00.123Z",
+      "feedbackType": "thumbs",
+      "value": -1
+    }
+  }
+  ```
+
+- Cover feedback and score export delivery in the shared HTTP adapter tests. ([#30052](https://github.com/mastra-ai/mastra/pull/30052))
+
+  Declare `@mastra/observability` as a peer dependency for these tests.
+
+- Added shared tests for server adapters. They check that when a client disconnects, a custom route's agent run stops, even after garbage collection, and that a custom route's request is freed once its streamed response ends or fails. ([#29617](https://github.com/mastra-ai/mastra/pull/29617))
+
+  ```ts
+  import { createCustomRouteDisconnectTestSuite } from '@mastra/server-adapters-test-suite';
+
+  createCustomRouteDisconnectTestSuite({
+    suiteName: 'My adapter: custom route disconnect',
+    startServer: async mastra => {
+      const { baseUrl, close } = await serveMyAdapter(mastra);
+      return { baseUrl, close };
+    },
+  });
+  ```
+
+- Updated dependencies [[`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`d0cc2fd`](https://github.com/mastra-ai/mastra/commit/d0cc2fdc13d09179e9747d8067e8e23ed1c5a2a2), [`b621401`](https://github.com/mastra-ai/mastra/commit/b62140115989dc564709a5f94c41357eb26bc778), [`59a60e4`](https://github.com/mastra-ai/mastra/commit/59a60e42d5985980d1a36cf0bcddeead09283703), [`9751742`](https://github.com/mastra-ai/mastra/commit/9751742c445864f42c400d235310bfc160342e44), [`7082623`](https://github.com/mastra-ai/mastra/commit/708262393a15c45a03bf2f58ea8c14b42aa1a2a4), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`afa19de`](https://github.com/mastra-ai/mastra/commit/afa19de57d0c578cb01ddc648baacddb6a5a87ae), [`166ad37`](https://github.com/mastra-ai/mastra/commit/166ad37debf0266fad6121c2f939f8575aba1512), [`c860b9b`](https://github.com/mastra-ai/mastra/commit/c860b9bb438d16fc8dcd81dbfabf1e481725cb6f), [`4473677`](https://github.com/mastra-ai/mastra/commit/447367781ce5127a4945dcce95b6372d54d728ff), [`8896651`](https://github.com/mastra-ai/mastra/commit/8896651bd1191a30f0b4247ad8f865d31ed7cc2c)]:
+  - @mastra/core@1.83.0-alpha.8
+  - @mastra/observability@1.24.0-alpha.5
+  - @mastra/server@1.83.0-alpha.8
+  - @mastra/mcp@2.9.0-alpha.3
+
+## 0.3.0-alpha.3
+
+### Patch Changes
+
+- Added stream disconnect cases that check a stream failing partway still delivers what was sent before the failure and ends the response. Adapters that still drop the connection for `datastream-response` routes can pin those cases with the `datastreamUpstreamErrorDropsConnection` option. ([#29944](https://github.com/mastra-ai/mastra/pull/29944))
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`94bf876`](https://github.com/mastra-ai/mastra/commit/94bf8761f4db6650c95f59fc51481e662c0d3436), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/mcp@2.9.0-alpha.3
+  - @mastra/server@1.83.0-alpha.6
+
+## 0.3.0-alpha.2
+
+### Patch Changes
+
+- Added conformance tests for custom route auth: auth and FGA checks must follow the route that handles the request, including its path params, for overlapping routes, `HEAD` requests, letter case and percent-encoded paths. ([#29325](https://github.com/mastra-ai/mastra/pull/29325))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`ce76df9`](https://github.com/mastra-ai/mastra/commit/ce76df95d5d942940de7d5453fcbd38b7df5ea83), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd), [`92f9771`](https://github.com/mastra-ai/mastra/commit/92f9771a0fefaf6e23541ac702850da63bfe4ef9)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/server@1.83.0-alpha.5
+  - @mastra/mcp@2.9.0-alpha.2
+
 ## 0.3.0-alpha.1
 
 ### Minor Changes

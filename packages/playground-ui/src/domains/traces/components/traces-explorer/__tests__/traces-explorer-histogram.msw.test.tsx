@@ -93,9 +93,11 @@ const METRICS_SUPPORTED = { supported: true, isLoading: false };
 function Harness({
   initialFilters = DEFAULT_TRACES_FILTERS,
   features,
+  rootSource,
 }: {
   initialFilters?: TracesFilters;
   features?: TracesExplorerFeatures;
+  rootSource?: 'legacy' | 'aggregated';
 }) {
   const [selection, setSelection] = useState(EMPTY_TRACES_SELECTION);
   const [filters, setFilters] = useState(initialFilters);
@@ -116,6 +118,7 @@ function Harness({
         onSortChange={setSort}
         metricsSupport={METRICS_SUPPORTED}
         features={features}
+        rootSource={rootSource}
       >
         <TracesExplorer.FilterBar />
         <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
@@ -184,6 +187,14 @@ beforeEach(() => {
 
 describe('TracesExplorer.Histogram', () => {
   useFixedChartSize(1200, 800);
+
+  it('does not show legacy histogram counts for aggregated roots', async () => {
+    setHandlers();
+    await renderExplorer({ rootSource: 'aggregated' });
+    expect(screen.getByText('What is the weather in Paris?')).toBeTruthy();
+    expect(chart()).toBeNull();
+    expect(onAggregate).not.toHaveBeenCalled();
+  });
 
   describe('when the server cannot aggregate traces', () => {
     it('does not render the chart', async () => {

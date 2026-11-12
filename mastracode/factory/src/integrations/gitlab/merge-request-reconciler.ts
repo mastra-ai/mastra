@@ -185,7 +185,7 @@ export function attachGitLabMergeRequestReconciler(
     for (const project of await context.storage.projects.listAll()) {
       await toBoardSource(boards).load({ orgId: project.orgId, factoryProjectId: project.id });
       const items = (
-        await context.runtime!.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })
+        await context.runtime!.workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id })
       ).filter(item => {
         if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
           return false;

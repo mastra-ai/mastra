@@ -77,6 +77,14 @@ interface EditorInternals {
   /** Grapheme segmentation that keeps paste markers as one segment. */
   segment(text: string, mode: 'grapheme' | 'word'): Iterable<{ segment: string; index: number }>;
   setCursorCol(col: number): void;
+  /** Cursor movement the editor's own ↑↓←→, Home/End and word keys use. */
+  moveCursor(deltaLine: number, deltaCol: number): void;
+  moveToLineStart(): void;
+  moveToLineEnd(): void;
+  moveWordBackwards(): void;
+  moveWordForwards(): void;
+  isOnFirstVisualLine(): boolean;
+  isOnLastVisualLine(): boolean;
   pushUndoSnapshot(): void;
   expandPasteMarkers(text: string): string;
 }

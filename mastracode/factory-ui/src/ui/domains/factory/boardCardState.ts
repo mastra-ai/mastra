@@ -138,7 +138,7 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.held) {
-    return { kind: 'held', label: 'Triaged and waiting for you' };
+    return { kind: 'held', label: 'Held for your go-ahead' };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };

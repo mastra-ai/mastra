@@ -356,6 +356,86 @@ describe('UpstashFilterTranslator', () => {
         }),
       ).toBe("(field IN ('a', 'b') OR field > 100)");
     });
+
+    it('negates every operator of a field-level $not', () => {
+      expect(translator.translate({ price: { $not: { $gte: 10, $lte: 20 } } })).toBe('(price < 10 OR price > 20)');
+    });
+
+    it('negates every field of a top-level $not', () => {
+      expect(translator.translate({ $not: { a: 1, b: 2 } })).toBe('(a != 1 OR b != 2)');
+    });
+
+    it('negates every operator of a field inside a top-level $not', () => {
+      expect(translator.translate({ $not: { a: { $gt: 1, $lt: 5 } } })).toBe('(a <= 1 OR a >= 5)');
+    });
+
+    it('negates every key of each $nor element', () => {
+      expect(translator.translate({ $nor: [{ a: 1, b: 2 }] })).toBe('((a != 1 OR b != 2))');
+      expect(translator.translate({ $nor: [{ a: 1, b: 2 }, { c: 3 }] })).toBe('((a != 1 OR b != 2) AND c != 3)');
+    });
+
+    it('negates every key of each element of $not with $or and $and', () => {
+      expect(translator.translate({ $not: { $or: [{ a: 1, b: 2 }, { c: 3 }] } })).toBe(
+        '((a != 1 OR b != 2) AND c != 3)',
+      );
+      expect(translator.translate({ $not: { $and: [{ a: 1, b: 2 }, { c: 3 }] } })).toBe(
+        '((a != 1 OR b != 2) OR c != 3)',
+      );
+    });
+
+    it('negates nested logical elements under $not', () => {
+      expect(translator.translate({ $not: { $or: [{ $and: [{ a: 1 }, { b: 2 }] }, { c: 3 }] } })).toBe(
+        '((a != 1 OR b != 2) AND c != 3)',
+      );
+    });
+
+    it('negates $contains inside a top-level $not field', () => {
+      expect(translator.translate({ $not: { f: { $contains: 'x' } } })).toBe("f NOT CONTAINS 'x'");
+    });
+
+    it('negates mixed field and logical keys of a top-level $not', () => {
+      expect(translator.translate({ $not: { a: 1, $or: [{ b: 2 }] } })).toBe('(a != 1 OR (b != 2))');
+      expect(translator.translate({ $not: { $and: [{ b: 2 }], a: 1 } })).toBe('((b != 2) OR a != 1)');
+    });
+
+    it('negates array and nested object fields of a top-level $not', () => {
+      expect(translator.translate({ $not: { a: 1, tags: ['x', 'y'] } })).toBe("(a != 1 OR tags NOT IN ('x', 'y'))");
+      expect(translator.translate({ $not: { tags: [] } })).toBe('(HAS FIELD empty OR HAS NOT FIELD empty)');
+      expect(translator.translate({ $not: { meta: { x: 1, y: { $gt: 2 } } } })).toBe('(meta.x != 1 OR meta.y <= 2)');
+    });
+
+    it('keeps the outer field path for plain keys inside a field-level $not', () => {
+      expect(translator.translate({ address: { $not: { $exists: true, city: 'Boston' } } })).toBe(
+        "(HAS NOT FIELD address OR address.city != 'Boston')",
+      );
+      expect(translator.translate({ a: { $not: { b: { $gt: 1 } } } })).toBe('a.b <= 1');
+    });
+
+    it('keeps the outer field path for $and, $or and $nor inside a field-level $not', () => {
+      expect(translator.translate({ price: { $not: { $gt: 10, $and: [{ $lt: 20 }, { $gt: 5 }] } } })).toBe(
+        '(price <= 10 OR (price >= 20 OR price <= 5))',
+      );
+      expect(translator.translate({ price: { $not: { $or: [{ $lt: 5 }, { $gt: 20 }] } } })).toBe(
+        '(price >= 5 AND price <= 20)',
+      );
+      expect(translator.translate({ price: { $not: { $nor: [{ $lt: 5 }, { $gt: 20 }] } } })).toBe(
+        '(price < 5 OR price > 20)',
+      );
+    });
+
+    it('negates $all as an OR of NOT CONTAINS', () => {
+      expect(translator.translate({ $not: { a: { $all: ['x', 'y'] } } })).toBe(
+        "(a NOT CONTAINS 'x' OR a NOT CONTAINS 'y')",
+      );
+      expect(translator.translate({ a: { $not: { $all: ['x'] } } })).toBe("a NOT CONTAINS 'x'");
+      expect(translator.translate({ a: { $not: { $all: [] } } })).toBe('(HAS FIELD empty AND HAS NOT FIELD empty)');
+    });
+
+    it('throws for operators it cannot negate instead of emitting a != comparison', () => {
+      expect(() => translator.translate({ $not: { a: { $not: { $eq: 1 } } } } as any)).toThrow(
+        'Unsupported operator in NOT: $not',
+      );
+    });
   });
 
   describe('array access', () => {

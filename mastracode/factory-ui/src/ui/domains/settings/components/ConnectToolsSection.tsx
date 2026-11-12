@@ -1,12 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsEmptyRow,
+  SettingsItem,
+  SettingsItemIcon,
+  SettingsListHeader,
+  SettingsRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
 import { ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { isConnectToolsOffError, MASTRA_PLATFORM_URL } from '../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -23,11 +31,10 @@ export function ConnectToolsSection() {
       scope="deployment"
       title="Mastra Connect tools"
       description="Sessions can use the Mastra Connect tools of every connection attached to this Factory's Platform project. They run without asking for approval. Tools named for deleting or archiving, and GitHub and GitLab tools, are left out."
-      action={!unavailable && <ManageLink />}
     >
       {query.isPending ? (
         <SettingsContainer>
-          <SettingsRowsSkeleton label="Loading Mastra Connect tools" />
+          <SettingsSkeleton variant="item" label="Loading Mastra Connect tools" />
         </SettingsContainer>
       ) : unavailable ? (
         <SettingsContainer>
@@ -50,18 +57,22 @@ export function ConnectToolsSection() {
           />
         </SettingsContainer>
       ) : query.data.length === 0 ? (
-        <Txt as="p" variant="caption" tone="muted">
-          No connections are attached to this Factory's project yet. Attach one in Mastra Platform, on your project's
-          Connect page.
-        </Txt>
+        <SettingsContainer>
+          <SettingsEmptyRow action={<ManageLink />}>
+            No connections are attached to this Factory's project yet.
+          </SettingsEmptyRow>
+        </SettingsContainer>
       ) : (
         <SettingsContainer>
+          <SettingsListHeader action={<ManageLink />}>
+            {query.data.length === 1 ? '1 connection' : `${query.data.length} connections`}
+          </SettingsListHeader>
           {query.data.map(connection => (
-            <SettingsRow
+            <SettingsItem
               key={connection.id}
-              label={<ProviderLabel connection={connection} />}
-              description={connection.accountLabel ?? undefined}
-              errorMsg={statusLabel(connection.status)}
+              media={<ProviderLogo connection={connection} />}
+              title={connection.providerName}
+              description={<ConnectionDescription connection={connection} />}
             />
           ))}
         </SettingsContainer>
@@ -88,22 +99,29 @@ function ManageLink() {
   );
 }
 
-function ProviderLabel({ connection }: { connection: ConnectToolConnection }) {
+function ConnectionDescription({ connection }: { connection: ConnectToolConnection }) {
+  const status = statusLabel(connection.status);
+  if (!status) return connection.accountLabel ?? undefined;
+  return (
+    <Metadata>
+      {connection.accountLabel && <Metadata.Item>{connection.accountLabel}</Metadata.Item>}
+      <Metadata.Item className="text-destructive-foreground">{status}</Metadata.Item>
+    </Metadata>
+  );
+}
+
+function ProviderLogo({ connection }: { connection: ConnectToolConnection }) {
   const [failedSrc, setFailedSrc] = useState<string>();
   const { logoUrl, providerName } = connection;
   return (
-    <span className="flex items-center gap-2">
+    <SettingsItemIcon>
       {logoUrl && failedSrc !== logoUrl ? (
         <img src={logoUrl} alt="" className="size-4 shrink-0 object-contain" onError={() => setFailedSrc(logoUrl)} />
       ) : (
-        <span
-          aria-hidden
-          className="bg-muted text-muted-foreground flex size-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-medium uppercase"
-        >
+        <Txt as="span" variant="column" className="uppercase">
           {providerName.charAt(0)}
-        </span>
+        </Txt>
       )}
-      {providerName}
-    </span>
+    </SettingsItemIcon>
   );
 }

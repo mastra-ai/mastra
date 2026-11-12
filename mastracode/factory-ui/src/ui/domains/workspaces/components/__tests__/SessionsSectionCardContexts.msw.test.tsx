@@ -1,3 +1,4 @@
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -12,6 +13,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { WorkItem, WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
+import { closeSessionProperties, openSessionProperties } from './fixtures/sessionProperties';
 import { LIVE_SESSION, stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 
 const factoryId = 'fp-1';
@@ -70,7 +72,7 @@ function card(id: string, title: string, sessions: WorkItem['sessions']): WireWo
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-09-04T08:00:00.000Z',
     updatedAt: '2026-09-04T10:00:00.000Z',
@@ -116,32 +118,33 @@ function runningSessions(sessionIds: string[]) {
   );
 }
 
-function renderSection() {
+function renderSection({
+  path = `/factories/${factoryId}`,
+  sidebar = 'default',
+}: { path?: string; sidebar?: 'default' | 'collapsed' } = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
-      <ChatSessionContext.Provider value={testChatSession(factoryId, projectRepositoryId, LIVE_SESSION)}>
-        <Routes>
-          <Route path="/factories/:factoryId" element={<SessionsSection />} />
-        </Routes>
-      </ChatSessionContext.Provider>
-    </MemoryRouter>,
+    <Sidebar.Provider defaultState={sidebar} collapsedWidth={0} storageKey="card-contexts-test">
+      <MemoryRouter initialEntries={[path]}>
+        <ChatSessionContext.Provider value={testChatSession(factoryId, projectRepositoryId, LIVE_SESSION)}>
+          <Routes>
+            <Route path="/factories/:factoryId" element={<SessionsSection />} />
+            <Route path="/factories/:factoryId/sessions/:sessionId" element={<SessionsSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>
+    </Sidebar.Provider>,
   );
 }
 
-const visibleRowLabels = (list: HTMLElement) =>
-  within(list)
-    .getAllByRole('link')
-    .map(link => link.textContent);
-
 describe('Sessions sidebar lists one row per card', () => {
-  it("lists only the session of the card's current phase under the card", async () => {
+  it("lists only the session of the card's current phase, as a flat row named by the session", async () => {
     renderSection();
 
-    const cardList = await screen.findByRole('list', { name: 'Fix login' });
-    expect(visibleRowLabels(cardList)).toEqual(['Work']);
-    expect(within(cardList).getByRole('link', { name: 'Work: Build fix login' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Triage: Triage fix login' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Review: Review fix login' })).not.toBeInTheDocument();
+    const row = await screen.findByRole('link', { name: 'Build fix login' });
+    expect(row).toHaveTextContent('Build fix login');
+    expect(screen.queryByRole('list', { name: 'Fix login' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Triage fix login' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Review fix login' })).not.toBeInTheDocument();
   });
 
   it("shows the card's row running while a session in another context runs", async () => {
@@ -165,11 +168,14 @@ describe('Sessions sidebar lists one row per card', () => {
     expect(JSON.parse(localStorage.getItem('mastracode.pinnedSessions') ?? '[]')).toEqual([]);
   });
 
-  it('still gives a card with one session its heading and a context row', async () => {
+  it('renders a card row the same way as a plain user session', async () => {
     renderSection();
 
-    const cardList = await screen.findByRole('list', { name: 'Write docs card' });
-    expect(visibleRowLabels(cardList)).toEqual(['Work']);
+    const cardRow = await screen.findByRole('link', { name: 'Write docs' });
+    const userRow = screen.getByRole('link', { name: 'Scratch notes' });
+    expect(cardRow).toHaveTextContent('Write docs');
+    expect(screen.queryByRole('list', { name: 'Write docs card' })).not.toBeInTheDocument();
+    expect(cardRow.closest('ul')).toBe(userRow.closest('ul'));
   });
 
   it('keeps a plain user session as a flat row', async () => {
@@ -178,5 +184,58 @@ describe('Sessions sidebar lists one row per card', () => {
     const row = await screen.findByRole('link', { name: 'Scratch notes' });
     expect(row).toHaveTextContent('Scratch notes');
     expect(screen.queryByRole('list', { name: 'Scratch notes' })).not.toBeInTheDocument();
+  });
+});
+
+async function toggleSessionView(user: ReturnType<typeof userEvent.setup>, option: string) {
+  await openSessionProperties(user);
+  await user.click(await screen.findByRole('menuitemcheckbox', { name: option }));
+  await closeSessionProperties(user);
+}
+
+describe('Sessions sidebar view options', () => {
+  it("lists a card's other sessions under its row, named by phase, and keeps that after a reload", async () => {
+    const user = userEvent.setup();
+    const first = renderSection();
+    await screen.findByRole('link', { name: 'Build fix login' });
+
+    await toggleSessionView(user, 'Reveal child sessions');
+
+    const triage = await screen.findByRole('link', { name: /^Triage.*: Triage fix login$/ });
+    const review = screen.getByRole('link', { name: /^Review.*: Review fix login$/ });
+    expect(triage).not.toHaveTextContent('Triage fix login');
+    expect(review).not.toHaveTextContent('Review fix login');
+    expect(screen.queryByRole('link', { name: /: Write docs$/ })).not.toBeInTheDocument();
+    // Nested in the card's list item, so screen readers hear them as one level down.
+    const cardItem = screen.getByRole('link', { name: 'Build fix login' }).closest('li');
+    if (!cardItem) throw new Error('The card row is not a list item');
+    expect(within(cardItem).getByRole('list')).toContainElement(review);
+    first.unmount();
+    renderSection();
+    expect(await screen.findByRole('link', { name: /^Review.*: Review fix login$/ })).toBeInTheDocument();
+  });
+
+  it('folds the card back into one row while the sidebar is collapsed, highlighting it for an open child session', async () => {
+    const user = userEvent.setup();
+    const expanded = renderSection();
+    await screen.findByRole('link', { name: 'Build fix login' });
+    await toggleSessionView(user, 'Reveal child sessions');
+    expanded.unmount();
+
+    renderSection({ path: `/factories/${factoryId}/sessions/review-session`, sidebar: 'collapsed' });
+
+    expect(await screen.findByRole('link', { name: 'Build fix login' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('shows when a session last moved under its name once compact view is off', async () => {
+    const user = userEvent.setup();
+    renderSection();
+    const row = await screen.findByRole('link', { name: 'Build fix login' });
+    expect(row.querySelector('time')).toBeNull();
+
+    await toggleSessionView(user, 'Compact view');
+
+    const time = within(screen.getByRole('link', { name: 'Build fix login' })).getByText('Sep 4');
+    expect(time).toHaveAttribute('dateTime', '2026-09-04T10:00:00.000Z');
   });
 });

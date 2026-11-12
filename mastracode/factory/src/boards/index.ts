@@ -63,7 +63,7 @@ export type {
   BoardTransitionPolicyContext,
   BoardTransitionPolicyResult,
 } from './transition-policy.js';
-export { createBoardRegistry, defaultBoards } from './registry.js';
+export { boardRegistryOf, createBoardRegistry, defaultBoards } from './registry.js';
 export type { BoardRegistry, InstalledBoard } from './registry.js';
 export { workBoard } from './work.js';
 export type { WorkBoardPhase } from './work.js';
