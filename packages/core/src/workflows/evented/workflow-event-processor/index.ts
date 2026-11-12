@@ -23,7 +23,7 @@ import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { SpanType, getResumeTracingContext } from '../../../observability';
+import { SpanType, getWorkflowResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import {
   coverNestedRun,
@@ -678,7 +678,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * events), so we resolve it via runId here.
    */
   private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
-    return getResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
+    return getWorkflowResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
   }
 
   /**
@@ -1199,6 +1199,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
     const resourceId = existingRun?.resourceId ?? eventResourceId;
+    // The process that started the run saved its resume tracing context with the run record. This
+    // worker may have no live span for the run, so a suspend here can only save what it carries over.
+    const existingSnapshot =
+      typeof existingRun?.snapshot === 'string'
+        ? (JSON.parse(existingRun.snapshot) as WorkflowRunState)
+        : existingRun?.snapshot;
+    const tracingContext = existingSnapshot?.tracingContext;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -1236,6 +1243,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),
+        ...(tracingContext ? { tracingContext } : {}),
       };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflow.id,

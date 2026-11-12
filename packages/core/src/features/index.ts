@@ -54,4 +54,8 @@ export const coreFeatures = new Set<string>([
   // `@mastra/core/features` is itself a recent subpath, so importing it raises
   // the oldest core the dependent can load against.
   'processor-span-types',
+  // A suspending workflow run saves its sampling decision and trace state
+  // (`getWorkflowResumeTracingContext`), and its resume repeats that decision
+  // instead of sampling again.
+  'workflow-resume-sampling',
 ]);

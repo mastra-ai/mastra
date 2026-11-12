@@ -104,11 +104,14 @@ async function drain(output: { fullStream: AsyncIterable<{ type: string; payload
   return approvalToolCallId;
 }
 
-async function scoreOf(storage: InMemoryStore, runId: string) {
+async function listScores(storage: InMemoryStore, runId: string) {
   const scores = await storage.getStore('scores');
-  const list = async () => (await scores!.listScoresByRunId({ runId, pagination: { page: 0, perPage: 10 } })).scores;
-  await expect.poll(async () => (await list()).length, { timeout: 5_000 }).toBe(1);
-  return (await list())[0]!;
+  return (await scores!.listScoresByRunId({ runId, pagination: { page: 0, perPage: 10 } })).scores;
+}
+
+async function scoreOf(storage: InMemoryStore, runId: string) {
+  await expect.poll(async () => (await listScores(storage, runId)).length, { timeout: 5_000 }).toBe(1);
+  return (await listScores(storage, runId))[0]!;
 }
 
 /** Copies every workflow snapshot into fresh storage, the way a new process finds a crashed run. */
@@ -217,7 +220,9 @@ describe('a durable agent run resumed by another process', () => {
         toolCallId: toolCallId!,
       }),
     );
-    await scoreOf(storage, started.runId);
+    // Not scored either: `runScorer` declines a span that was never sampled, since its score
+    // would point at a trace that was never stored.
+    expect(await listScores(storage, started.runId)).toEqual([]);
 
     const inputProcessorSpans = exporter.getAllSpans().filter(span => span.name === 'input processor: pass-through');
     expect(inputProcessorSpans).toEqual([]);

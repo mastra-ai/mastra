@@ -1,4 +1,5 @@
 import type { ActorSignal } from '@mastra/core/auth/ee';
+import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { TracingOptions } from '@mastra/core/observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -92,6 +93,8 @@ export function buildDurableTriggerEventData(
     initialState?: any;
     outputOptions?: Record<string, any>;
     tracingOptions?: TracingOptions;
+    /** The session's run-level budget, so the worker running each step stops at it too. */
+    executionDeadline?: ExecutionDeadline;
     format?: string;
     workflowId?: string;
   },
@@ -123,6 +126,7 @@ export function buildDurableResumeEventData(
       claim?: RunFence;
     };
     tracingOptions?: TracingOptions;
+    executionDeadline?: ExecutionDeadline;
     workflowId?: string;
   },
 ): Record<string, any> {

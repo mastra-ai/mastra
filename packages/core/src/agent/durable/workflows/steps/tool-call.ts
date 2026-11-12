@@ -21,7 +21,7 @@ import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/s
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
-import { isMastraTimeoutError } from '../../../../loop/timeout';
+import { anyAbortSignal, isMastraTimeoutError } from '../../../../loop/timeout';
 import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
@@ -47,7 +47,8 @@ import { ToolStream } from '../../../../tools/stream';
 import { getToolTitle } from '../../../../tools/tool-title';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
-import type { SuspendOptions } from '../../../../workflows/step';
+import type { ExecuteFunctionParams, SuspendOptions } from '../../../../workflows/step';
+import type { DefaultEngineType } from '../../../../workflows/types';
 import { defineLazyWriter } from '../../../../workflows/utils';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
@@ -85,6 +86,7 @@ import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
+import { withStepLifetime } from './step-lifetime';
 
 /**
  * Input schema for the durable tool call step.
@@ -372,12 +374,21 @@ async function processChunkThroughOutputProcessors(
  * this step and resumes with the decision/result — so none of main's
  * pending-tool plumbing applies here.
  */
+type ToolCallParams = ExecuteFunctionParams<
+  unknown,
+  z.infer<typeof durableToolCallInputSchema>,
+  z.infer<typeof durableToolCallOutputSchema>,
+  unknown,
+  unknown,
+  DefaultEngineType
+>;
+
 export function createDurableToolCallStep() {
   return createStep({
     id: DurableStepIds.TOOL_CALL,
     inputSchema: durableToolCallInputSchema,
     outputSchema: durableToolCallOutputSchema,
-    execute: async params => {
+    execute: withStepLifetime(async (params: ToolCallParams, stepLifetime) => {
       const {
         inputData,
         mastra,
@@ -1444,8 +1455,10 @@ export function createDurableToolCallStep() {
       let wasSuspended = false;
 
       // Forward abort signal from the run registry so tools can observe
-      // cancellation (mirrors the non-durable tool-call-step).
-      const toolAbortSignal = ownership?.composeSignal(registryEntry?.abortSignal) ?? registryEntry?.abortSignal;
+      // cancellation (mirrors the non-durable tool-call-step). The step's deadline signal
+      // carries the budget a cross-process engine handed to the worker running this step.
+      const runAbortSignal = anyAbortSignal(registryEntry?.abortSignal, stepLifetime.deadlineSignal);
+      const toolAbortSignal = ownership?.composeSignal(runAbortSignal) ?? runAbortSignal;
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
@@ -2549,6 +2562,6 @@ export function createDurableToolCallStep() {
         stepEnded = true;
         if (recordedAtStepEnd) settleRunTool();
       }
-    },
+    }),
   });
 }

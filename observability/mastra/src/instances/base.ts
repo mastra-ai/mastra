@@ -739,8 +739,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const configuredKeys = this.config.requestContextKeys ?? [];
     const additionalKeys = tracingOptions?.requestContextKeys ?? [];
 
-    // Merge: configured + additional
-    const allKeys = [...configuredKeys, ...additionalKeys];
+    // Merge: configured + additional. A resume passes the saved trace state's keys back in, which
+    // already hold the configured ones.
+    const allKeys = [...new Set([...configuredKeys, ...additionalKeys])];
 
     const hideInput = tracingOptions?.hideInput;
     const hideOutput = tracingOptions?.hideOutput;

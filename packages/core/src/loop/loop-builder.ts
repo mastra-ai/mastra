@@ -724,7 +724,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         agentSpan.traceId === previousContext.traceId &&
         agentSpan.getParentSpanId() === previousContext.spanId;
 
-      const own = getResumeTracingContext(agentSpan);
+      // An unsampled agent run saves no trace and decides again on resume; the empty context
+      // keeps the loop from saving its own span's decision instead.
+      const own = getResumeTracingContext(agentSpan) ?? {};
       resumeTracingContext = continuesSavedLineage
         ? { ...own, spanId: previousContext.spanId, parentSpanId: previousContext.parentSpanId }
         : own;

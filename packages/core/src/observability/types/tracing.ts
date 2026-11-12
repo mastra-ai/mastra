@@ -2106,6 +2106,17 @@ export interface ResumeTracingContext {
   resumedFromSpanId?: string;
   /** External parent of the suspended invocation, kept by a resume that gives none of its own */
   externalParentSpanId?: string;
+  /**
+   * Whether the suspended invocation was sampled. Workflow runs save it (see
+   * `getWorkflowResumeTracingContext`) and their resumes repeat the decision instead of sampling
+   * again. Agent runs and snapshots from older versions lack it, so those resumes decide as before.
+   */
+  sampled?: boolean;
+  /**
+   * Trace-level state of the suspended invocation. A resume keeps its hidden input/output and keys
+   * where the resume call sets none of its own.
+   */
+  traceState?: TraceState;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */

@@ -51,6 +51,44 @@ export function isMastraTimeoutError(error: unknown): error is MastraTimeoutErro
   return error instanceof MastraTimeoutError;
 }
 
+/** A signal that aborts with the first of `signals` to abort, carrying its reason. */
+export function anyAbortSignal(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const present = signals.filter((signal): signal is AbortSignal => signal !== undefined);
+  return present.length > 1 ? AbortSignal.any(present) : present[0];
+}
+
+/**
+ * The run-level budget (`modelSettings.timeout.totalMs`) of one execution session as an absolute
+ * clock, so a worker that runs the session's steps in another process can arm it after the caller did.
+ */
+export interface ExecutionDeadline {
+  /** Epoch milliseconds at which the budget expires. */
+  at: number;
+  /** The budget itself, for the timeout error the worker reports. */
+  totalMs: number;
+}
+
+/**
+ * A signal that aborts with a total `MastraTimeoutError` when `deadline` passes; already aborted
+ * when it has passed. Undefined without a deadline. `cleanup` clears the timer.
+ */
+export function createDeadlineAbortSignal(deadline: ExecutionDeadline | undefined): {
+  signal: AbortSignal | undefined;
+  cleanup: () => void;
+} {
+  if (!deadline) return { signal: undefined, cleanup: () => {} };
+  const controller = new AbortController();
+  const expire = () => controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: deadline.totalMs }));
+  const remaining = deadline.at - Date.now();
+  if (remaining <= 0) {
+    expire();
+    return { signal: controller.signal, cleanup: () => {} };
+  }
+  const timer = setTimeout(expire, remaining);
+  timer.unref?.();
+  return { signal: controller.signal, cleanup: () => clearTimeout(timer) };
+}
+
 /**
  * Returns the abort reason of a signal, if it has been aborted.
  */

@@ -25,6 +25,7 @@ import {
   createObservabilityContext,
   getOrCreateSpan,
   getRootExportSpan,
+  getWorkflowResumeTracingContext,
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
@@ -2040,32 +2041,6 @@ export class EventedRun<
     });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    // Always persist the initial run record regardless of shouldPersistSnapshot.
-    // The evented engine relies on this record for parallel branch result
-    // aggregation (aggregateBranchResults reads stepResults via storage).
-    const initialRunSnapshot: WorkflowRunState = {
-      runId: this.runId,
-      serializedStepGraph: this.serializedStepGraph,
-      status: 'running',
-      value: {},
-      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: withoutAuthToken(requestContext.toJSON()),
-      activePaths: [],
-      activeStepsPath: {},
-      suspendedPaths: {},
-      resumeLabels: {},
-      waitingPaths: {},
-      timestamp: Date.now(),
-    };
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
-    });
-
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
@@ -2095,8 +2070,38 @@ export class EventedRun<
       this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
 
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
+    // It also carries the resume tracing context from the start: a worker in
+    // another process that suspends this run has no live span to save it from.
+    const initialRunSnapshot: WorkflowRunState = {
+      runId: this.runId,
+      serializedStepGraph: this.serializedStepGraph,
+      status: 'running',
+      value: {},
+      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+      requestContext: withoutAuthToken(requestContext.toJSON()),
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      tracingContext:
+        this.executionEngine.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan),
+      timestamp: Date.now(),
+    };
+
     let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
     try {
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: this.executionEngine.options?.pruneSnapshot
+          ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+          : initialRunSnapshot,
+      });
       result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
@@ -2662,6 +2667,23 @@ export class EventedRun<
     });
     this.workflowRunSpan = workflowSpan;
     if (workflowSpan) this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
+    // A worker in another process that suspends this segment has no live span to save, so
+    // save the resumed root's context now; its next resume then continues this segment.
+    // A failed save only costs that next resume its link, so it never fails this one.
+    const resumeTracingContext = getWorkflowResumeTracingContext(workflowSpan);
+    if (resumeTracingContext) {
+      await workflowsStore
+        .updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: 'running', expectedStatus: 'running', tracingContext: resumeTracingContext },
+        })
+        .catch(error => {
+          this.mastra
+            ?.getLogger()
+            ?.warn(`[Workflow ${this.workflowId}] Failed to save resume tracing context for run ${this.runId}`, error);
+        });
+    }
 
     const releaseClaimIfUnused = async () => {
       try {

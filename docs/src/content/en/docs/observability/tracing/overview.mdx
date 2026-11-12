@@ -67,6 +67,8 @@ If the configured failure policy lets the main execution continue, it can still 
 
 Model inference spans (`MODEL_INFERENCE`) measure provider execution and record usage. Model chunk spans (`MODEL_CHUNK`) capture content after output processors have accepted or transformed it. Chunks belong to the logical step (`MODEL_STEP`), so buffered output can arrive after provider execution ends without outliving its parent. In the agent streaming paths, inference spans no longer capture response output; use the processed chunk spans or the generation output instead.
 
+A resumed workflow run continues the suspended run's trace on every engine: it keeps the original sampling decision and trace-level settings such as `hideInput`, except those the resume call sets itself, and it nests under the suspended run span. A run that wasn't sampled stays unrecorded when it resumes. Snapshots written before this change carry only the trace and span ids. Their resumes sample again.
+
 ## Sampling strategies
 
 Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs.

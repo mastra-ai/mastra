@@ -76,6 +76,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
+import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { matchesRunFence } from '@mastra/core/storage';
@@ -996,14 +997,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * deadline the run is reported failed: the stream gets one
    * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
-   * Returns the timer teardown; a no-op when no budget is configured.
+   * Returns the timer teardown and the deadline the session's events carry so
+   * the step worker stops at it too; both no-ops when no budget is configured.
    */
   function armTotalTimeout(
     entry: { abortSignal?: AbortSignal },
     abortController: AbortController,
     runId: string,
     timeoutMs: number | undefined,
-  ): () => void {
+  ): { clear: () => void; deadline?: ExecutionDeadline } {
+    const deadline =
+      timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? { at: Date.now() + timeoutMs, totalMs: timeoutMs }
+        : undefined;
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
       timeoutMs,
@@ -1019,7 +1025,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });
-    return totalTimeout.cleanup;
+    return { clear: totalTimeout.cleanup, deadline };
   }
 
   async function deleteRunSnapshots(runId: string): Promise<void> {
@@ -1250,6 +1256,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     workflowInput: any,
     tracingOptions?: { traceId: string; parentSpanId: string },
     actor?: ActorSignal,
+    executionDeadline?: ExecutionDeadline,
   ): Promise<void> {
     const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
@@ -1261,6 +1268,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         resourceId: workflowInput.state?.resourceId,
         requestContext: workflowInput.requestContextEntries ?? {},
         tracingOptions,
+        executionDeadline,
         actor,
       }),
     });
@@ -1457,7 +1465,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         { onExternalAbort: () => void requestRemoteAbort(runId) },
       );
       registryEntry.abortController = abortController;
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: executionDeadline } = armTotalTimeout(
         registryEntry,
         abortController,
         runId,
@@ -1594,7 +1602,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             return;
           }
           try {
-            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor, executionDeadline);
           } catch (error) {
             if (persistedRunning) await deleteRunSnapshots(runId);
             throw error;
@@ -1912,7 +1920,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: executionDeadline } = armTotalTimeout(
         existingEntry,
         abortController,
         runId,
@@ -2126,6 +2134,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             resourceId: resumeOptions?.resourceId,
             requestContext,
             tracingOptions,
+            executionDeadline,
             actor: resumeOptions?.actor,
             resume: {
               steps,
