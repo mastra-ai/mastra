@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Event } from '../../../events/types';
 import type { MastraStorage } from '../../../storage';
-import { nestedHandOffKey, stepOccurrenceKey } from '../leases';
+import { nestedHandOffKey, runLivenessKey, stepOccurrenceKey } from '../leases';
 import { abandonLease } from './abandon-lease';
 import {
   copyEvent,
@@ -483,6 +483,48 @@ export function describeLateEndCases({
 
       expect((await storedRun(run.runId))?.status).toBe('success');
       expect(checks).toEqual([1, 2]);
+    }, 20_000);
+
+    it('leaves a nested hand-off in progress to its holder when a restart reaches the finished child', async () => {
+      const slow = deferred<void>();
+      const conditionRuns = deferred<void>();
+      let evaluations = 0;
+      // Only the first evaluation is slow.
+      const { checks, iterations, build } = nestedLoop({
+        condition: async () => {
+          if (++evaluations > 1) {
+            return;
+          }
+
+          conditionRuns.resolve();
+          await slow.promise;
+        },
+      });
+      const fromA = heldQueue(() => false);
+      const a = await startReplica(build(), fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 0 });
+      await conditionRuns.promise;
+
+      // A's liveness lapses while it still evaluates the condition, so B's restart is accepted and
+      // reaches the finished child.
+      await abandonLease(getStorage(), runLivenessKey(run.runId));
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      (await b.workflow.createRun({ runId: run.runId }))
+        .restart()
+        .catch(error => console.error('The restart rejected', error));
+      await fromB.firstHeld;
+      await fromB.drain(b);
+
+      fromA.holdAll();
+      slow.resolve();
+      await expect.poll(() => fromA.queue.length).toBeGreaterThan(0);
+      await fromA.drain(a);
+
+      expect(checks).toEqual([1, 2]);
+      expect(iterations).toEqual([1, 2]);
+      expect((await storedRun(run.runId))?.status).toBe('success');
     }, 20_000);
 
     it('evaluates a dountil condition once per iteration when a restart hands off a nested iteration whose end is held', async () => {

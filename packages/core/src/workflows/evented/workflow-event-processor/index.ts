@@ -1820,8 +1820,10 @@ export class WorkflowEventProcessor extends EventProcessor {
    * run, with a new claim.
    *
    * A restart hands the child's result off again while the parent's record
-   * shows it unhandled, so it takes the claim by force: the child's original
-   * end, still queued, then finds it held. Time travel, per-step runs and
+   * shows it unhandled. It takes a free or expired claim, so the child's
+   * original end, still queued, then finds it held, and takes over a claim
+   * kept after a published hand-off. It leaves a claim whose hand-off is in
+   * progress to its holder. Time travel, per-step runs and
    * resumes hand the same child's result off again on purpose and are not
    * checked, nor are parents whose workflow takes no step leases. The record
    * check and the claim are separate calls, so two ends racing past the check
@@ -1866,12 +1868,27 @@ export class WorkflowEventProcessor extends EventProcessor {
       return 'done';
     }
 
-    const claim = await store.claimRunOwnership({
-      runId: nestedHandOffKey(parentWorkflow.runId, parentWorkflow.executionPath, args.runId),
-      ownerId: globalThis.crypto.randomUUID(),
-      leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
-      force: !!args.restart,
-    });
+    const key = nestedHandOffKey(parentWorkflow.runId, parentWorkflow.executionPath, args.runId);
+    const ownerId = globalThis.crypto.randomUUID();
+    let claim = await store.claimRunOwnership({ runId: key, ownerId, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
+
+    // A claim kept for hours belongs to a hand-off that was published, and a restart that still
+    // finds the parent unhandled takes it over. A claim at one lease TTL is a hand-off in progress,
+    // whose holder continues the parent: the restart leaves it.
+    const handedOff =
+      !claim.acquired && claim.record?.live && claim.record.leaseExpiresAt
+        ? claim.record.leaseExpiresAt.getTime() - Date.now() > WORKFLOW_RUN_LEASE_TTL_MS
+        : false;
+    if (args.restart && handedOff) {
+      claim = await store.claimRunOwnership({
+        runId: key,
+        ownerId,
+        leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+        force: true,
+        expectedGeneration: claim.record!.generation,
+      });
+    }
+
     if (!claim.acquired) {
       return 'done';
     }
