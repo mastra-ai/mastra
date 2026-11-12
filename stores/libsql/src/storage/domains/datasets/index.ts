@@ -90,7 +90,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'memorySeed', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'unmockedToolPolicy', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMockMatchMode', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'scorerIds', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'externalId', 'TEXT');
 
@@ -199,7 +201,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      memorySeed: row.memorySeed ? safelyParseJSON(row.memorySeed) : emptyValue,
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      toolMockMatchMode: row.toolMockMatchMode ?? emptyValue,
       scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
       metadata,
@@ -225,7 +229,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      memorySeed: row.memorySeed ? safelyParseJSON(row.memorySeed) : emptyValue,
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      toolMockMatchMode: row.toolMockMatchMode ?? emptyValue,
       scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
       metadata,
@@ -600,7 +606,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,(SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?),(SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?),NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,toolMockMatchMode,memorySeed,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,(SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?),(SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?),NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
             args: [
               id,
               args.datasetId,
@@ -613,6 +619,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
               jsonDataArg(args.expectedTrajectory),
               jsonbArg(args.toolMocks),
               args.unmockedToolPolicy ?? null,
+              args.toolMockMatchMode ?? null,
+              jsonbArg(args.memorySeed),
               jsonbArg(args.scorerIds),
               jsonbArg(args.requestContext),
               jsonbArg(args.metadata),
@@ -642,7 +650,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
+        memorySeed: args.memorySeed,
         unmockedToolPolicy: args.unmockedToolPolicy,
+        toolMockMatchMode: args.toolMockMatchMode,
         scorerIds: args.scorerIds,
         requestContext: args.requestContext,
         metadata: args.metadata,
@@ -716,8 +726,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
           const mergedExpectedTrajectory =
             args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
           const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+          const mergedMemorySeed = args.memorySeed !== undefined ? args.memorySeed : existing.memorySeed;
           const mergedUnmockedToolPolicy =
             args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
+          const mergedToolMockMatchMode =
+            args.toolMockMatchMode !== undefined ? args.toolMockMatchMode : existing.toolMockMatchMode;
           const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
           const mergedRequestContext =
             args.requestContext !== undefined ? args.requestContext : existing.requestContext;
@@ -734,7 +747,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [newVersion, args.id],
           });
           await tx.execute({
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,toolMockMatchMode,memorySeed,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
             args: [
               args.id,
               args.datasetId,
@@ -747,6 +760,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
               jsonDataArg(mergedExpectedTrajectory),
               jsonbArg(mergedToolMocks),
               mergedUnmockedToolPolicy ?? null,
+              mergedToolMockMatchMode ?? null,
+              jsonbArg(mergedMemorySeed),
               jsonbArg(mergedScorerIds),
               jsonbArg(mergedRequestContext),
               jsonbArg(mergedMetadata),
@@ -770,7 +785,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
             groundTruth: mergedGroundTruth,
             expectedTrajectory: mergedExpectedTrajectory,
             toolMocks: mergedToolMocks,
+            memorySeed: mergedMemorySeed,
             unmockedToolPolicy: mergedUnmockedToolPolicy,
+            toolMockMatchMode: mergedToolMockMatchMode,
             scorerIds: mergedScorerIds,
             requestContext: mergedRequestContext,
             metadata: mergedMetadata,
@@ -836,7 +853,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [newVersion, id],
           });
           await tx.execute({
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,toolMockMatchMode,memorySeed,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
             args: [
               id,
               datasetId,
@@ -849,6 +866,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
               jsonDataArg(existing.expectedTrajectory),
               jsonbArg(existing.toolMocks),
               existing.unmockedToolPolicy ?? null,
+              existing.toolMockMatchMode ?? null,
+              jsonbArg(existing.memorySeed),
               jsonbArg(existing.scorerIds),
               jsonbArg(existing.requestContext),
               jsonbArg(existing.metadata),
@@ -902,7 +921,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
           const purgedAt = new Date().toISOString();
           const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
           await tx.execute({
-            sql: `UPDATE ${TABLE_DATASET_ITEMS} SET input = jsonb('null'), groundTruth = NULL, expectedTrajectory = NULL, toolMocks = NULL, unmockedToolPolicy = NULL, scorerIds = NULL, requestContext = NULL, metadata = jsonb(?), source = NULL WHERE id = ? AND datasetId = ?`,
+            sql: `UPDATE ${TABLE_DATASET_ITEMS} SET input = jsonb('null'), groundTruth = NULL, expectedTrajectory = NULL, toolMocks = NULL, unmockedToolPolicy = NULL, toolMockMatchMode = NULL, memorySeed = NULL, scorerIds = NULL, requestContext = NULL, metadata = jsonb(?), source = NULL WHERE id = ? AND datasetId = ?`,
             args: [purgedMetadata, id, datasetId],
           });
 
@@ -1248,7 +1267,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
           const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
           const historyResult = externalIds.length
             ? await tx.execute({
-                sql: `SELECT id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, json(input) AS input, json(groundTruth) AS groundTruth, json(expectedTrajectory) AS expectedTrajectory, json(toolMocks) AS toolMocks, unmockedToolPolicy, json(scorerIds) AS scorerIds, json(requestContext) AS requestContext, json(metadata) AS metadata, json(source) AS source, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ? AND externalId IN (${externalIds.map(() => '?').join(',')}) ORDER BY datasetVersion`,
+                sql: `SELECT id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, json(input) AS input, json(groundTruth) AS groundTruth, json(expectedTrajectory) AS expectedTrajectory, json(toolMocks) AS toolMocks, unmockedToolPolicy, toolMockMatchMode, json(memorySeed) AS memorySeed, json(scorerIds) AS scorerIds, json(requestContext) AS requestContext, json(metadata) AS metadata, json(source) AS source, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ? AND externalId IN (${externalIds.map(() => '?').join(',')}) ORDER BY datasetVersion`,
                 args: [input.datasetId, ...externalIds],
               })
             : { rows: [] };
@@ -1270,7 +1289,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             });
             for (const { id, item } of plan.inserts) {
               await tx.execute({
-                sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+                sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,toolMockMatchMode,memorySeed,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
                 args: [
                   id,
                   input.datasetId,
@@ -1283,6 +1302,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
                   jsonDataArg(item.expectedTrajectory),
                   jsonbArg(item.toolMocks),
                   item.unmockedToolPolicy ?? null,
+                  item.toolMockMatchMode ?? null,
+                  jsonbArg(item.memorySeed),
                   jsonbArg(item.scorerIds),
                   jsonbArg(item.requestContext),
                   jsonbArg(item.metadata),
@@ -1302,7 +1323,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
                 groundTruth: item.groundTruth,
                 expectedTrajectory: item.expectedTrajectory,
                 toolMocks: item.toolMocks,
+                memorySeed: item.memorySeed,
                 unmockedToolPolicy: item.unmockedToolPolicy,
+                toolMockMatchMode: item.toolMockMatchMode,
                 scorerIds: item.scorerIds,
                 requestContext: item.requestContext,
                 metadata: item.metadata,
@@ -1389,7 +1412,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             });
             // Insert tombstone
             statements.push({
-              sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,?,?,NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+              sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,toolMockMatchMode,memorySeed,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,?,?,NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
               args: [
                 item.id,
                 input.datasetId,
@@ -1402,6 +1425,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
                 jsonDataArg(item.expectedTrajectory),
                 jsonbArg(item.toolMocks),
                 item.unmockedToolPolicy ?? null,
+                item.toolMockMatchMode ?? null,
+                jsonbArg(item.memorySeed),
                 jsonbArg(item.scorerIds),
                 jsonbArg(item.requestContext),
                 jsonbArg(item.metadata),

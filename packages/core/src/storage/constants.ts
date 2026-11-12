@@ -626,6 +626,8 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'jsonb', nullable: true },
   expectedTrajectory: { type: 'jsonb', nullable: true },
   toolMocks: { type: 'jsonb', nullable: true },
+  memorySeed: { type: 'jsonb', nullable: true },
+  toolMockMatchMode: { type: 'text', nullable: true },
   unmockedToolPolicy: { type: 'text', nullable: true },
   scorerIds: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },

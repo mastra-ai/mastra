@@ -10,10 +10,10 @@ import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
   experimentScoreKey,
-  flushForTrajectoryScorers,
   resolveScorers,
-  runScorersForItem,
+  runScorersForExecution,
 } from './scorer';
+import type { ItemToolMock, ToolMockMatchMode, UnmockedToolPolicy } from './tool-mocks';
 import type { ScorerResult } from './types';
 
 /** Item shape consumed by {@link executeExperimentItem}. */
@@ -28,6 +28,10 @@ export interface ExperimentItemInput {
   metadata?: Record<string, unknown>;
   /** Item-level scorer IDs. An empty array explicitly disables scoring. */
   scorerIds?: string[];
+  memorySeed?: { workingMemory?: string };
+  toolMocks?: ItemToolMock[];
+  unmockedToolPolicy?: UnmockedToolPolicy;
+  toolMockMatchMode?: ToolMockMatchMode;
 }
 
 export interface ExecuteExperimentItemArgs {
@@ -64,7 +68,7 @@ export interface ExecuteExperimentItemOutput {
  * the error is recorded on the row.
  *
  * Deliberately excludes the runner's loop-level concerns: hooks, event
- * dispatch, tool mocks, and internal retries — retries/timeouts belong to the
+ * dispatch and internal retries — retries/timeouts belong to the
  * caller's orchestrator.
  */
 export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Promise<ExecuteExperimentItemOutput> {
@@ -137,38 +141,25 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
     : await executeTarget(resolved.target, experiment.targetType, item, {
         requestContext: mergedRequestContext,
         experimentId: experiment.id,
+        toolMocks: item.toolMocks,
+        unmockedToolPolicy: item.unmockedToolPolicy,
+        toolMockMatchMode: item.toolMockMatchMode,
       });
 
   const completedAt = new Date();
 
   let scores: ScorerResult[] = [];
   if (!scorerConfigError) {
-    const workflowData =
-      execResult.stepResults || execResult.stepExecutionPath
-        ? {
-            stepResults: execResult.stepResults,
-            stepExecutionPath: execResult.stepExecutionPath,
-            spanId: execResult.spanId,
-          }
-        : undefined;
-
-    await flushForTrajectoryScorers(mastra, scorers, execResult.traceId);
-    scores = await runScorersForItem(
+    scores = await runScorersForExecution(
       scorers,
       item,
-      execResult.output,
+      execResult,
+      mastra,
       storage ?? null,
       experiment.id,
       experiment.targetType,
       experiment.targetId,
-      item.id,
-      execResult.scorerInput,
-      execResult.scorerOutput,
-      execResult.traceId ?? undefined,
-      workflowData,
       true,
-      // Retried runs of the same (experiment, item, attempt) overwrite their
-      // previous score rows instead of accumulating duplicates.
       experimentScoreKey(experiment.id, item.id, attempt),
     );
   }
@@ -186,6 +177,7 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
     completedAt,
     retryCount: 0,
     traceId: execResult.traceId,
+    toolMockReport: execResult.toolMockReport,
     organizationId: args.organizationId ?? null,
     projectId: args.projectId ?? null,
   });

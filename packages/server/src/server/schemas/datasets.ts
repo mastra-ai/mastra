@@ -28,7 +28,7 @@ const expectedToolCallStepSchema = z.object({
   ...expectedStepBase,
   stepType: z.literal('tool_call'),
   toolArgs: z.record(z.string(), z.unknown()).optional(),
-  toolResult: z.record(z.string(), z.unknown()).optional(),
+  toolResult: z.unknown().optional(),
   success: z.boolean().optional(),
 });
 
@@ -36,7 +36,7 @@ const expectedMcpToolCallStepSchema = z.object({
   ...expectedStepBase,
   stepType: z.literal('mcp_tool_call'),
   toolArgs: z.record(z.string(), z.unknown()).optional(),
-  toolResult: z.record(z.string(), z.unknown()).optional(),
+  toolResult: z.unknown().optional(),
   mcpServer: z.string().optional(),
   success: z.boolean().optional(),
 });
@@ -175,7 +175,7 @@ const trajectoryExpectationSchema = z
 const datasetItemSourceSchema = z
   .object({
     type: z
-      .enum(['csv', 'json', 'trace', 'llm', 'experiment-result', 'candidate-screener'])
+      .enum(['csv', 'json', 'thread', 'trace', 'llm', 'experiment-result', 'candidate-screener'])
       .describe('How this item was created'),
     referenceId: z.string().optional().describe('Reference identifier (e.g., trace id, csv filename)'),
   })
@@ -206,7 +206,25 @@ const unmockedToolPolicySchema = z
 // Diagnostic receipt for item-level tool mocks, persisted on experiment results.
 const toolMockReportSchema = z
   .object({
-    served: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    served: z.array(
+      z.object({
+        mockIndex: z.number().int(),
+        callIndex: z.number().int().optional(),
+        toolName: z.string(),
+        args: z.unknown(),
+      }),
+    ),
+    matchMode: z.enum(['ordered', 'lookup']).optional(),
+    misses: z
+      .array(
+        z.object({
+          toolName: z.string(),
+          args: z.unknown(),
+          reason: z.enum(['not-recorded', 'args-mismatch', 'exhausted']),
+          closestArgs: z.record(z.string(), z.unknown()).optional(),
+        }),
+      )
+      .optional(),
     unconsumed: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
     liveCalls: z.array(z.object({ toolName: z.string(), args: z.unknown() })),
     failure: z
@@ -394,6 +412,8 @@ export const addItemBodySchema = z.object({
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
   toolMocks: toolMocksSchema,
+  memorySeed: z.object({ workingMemory: z.string().optional() }).optional(),
+  toolMockMatchMode: z.enum(['ordered', 'lookup']).optional(),
   unmockedToolPolicy: unmockedToolPolicySchema,
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers selected for this item'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
@@ -401,11 +421,34 @@ export const addItemBodySchema = z.object({
   source: datasetItemSourceSchema,
 });
 
+export const itemsFromThreadBodySchema = z
+  .object({
+    agentId: z.string().min(1),
+    threadId: z.string().min(1),
+    resourceId: z.string().min(1).optional(),
+    historyLimit: z.union([z.number().int().nonnegative(), z.literal(false)]).optional(),
+    mode: z.enum(['turns', 'conversation']).optional(),
+  })
+  .refine(body => body.mode !== 'conversation' || body.historyLimit === undefined, {
+    path: ['historyLimit'],
+    message: 'historyLimit is only supported for independent turns.',
+  });
+export const itemsFromThreadResponseSchema = z.object({
+  itemIds: z.array(z.string()),
+  turnCount: z.number().int().nonnegative(),
+});
+export const replayPreviewResponseSchema = z.object({
+  turnCount: z.number().int().nonnegative(),
+  historyLimit: z.union([z.number(), z.literal(false)]).optional(),
+});
+
 export const updateItemBodySchema = z.object({
   input: z.unknown().optional().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
   toolMocks: toolMocksSchema,
+  memorySeed: z.object({ workingMemory: z.string().optional() }).nullable().optional(),
+  toolMockMatchMode: z.enum(['ordered', 'lookup']).nullable().optional(),
   unmockedToolPolicy: unmockedToolPolicySchema,
   scorerIds: z.array(z.string()).optional().nullable().describe('IDs of scorers selected for this item'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
@@ -445,6 +488,8 @@ export const triggerExperimentBodySchema = z
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
     scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
     version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+    toolMockMatchMode: z.enum(['ordered', 'lookup']).optional(),
+    unmockedToolPolicy: unmockedToolPolicySchema,
     agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
     agentModel: z
       .object({ provider: z.string().min(1), modelId: z.string().min(1) })
@@ -602,6 +647,8 @@ export const datasetItemResponseSchema = z.object({
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
   toolMocks: toolMocksSchema.nullable(),
+  memorySeed: z.object({ workingMemory: z.string().optional() }).nullable().optional(),
+  toolMockMatchMode: z.enum(['ordered', 'lookup']).nullable().optional(),
   unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
   scorerIds: z.array(z.string()).optional().nullable(),
   requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
@@ -662,13 +709,29 @@ export const scorerResultSchema = z.object({
   score: z.number().nullable(),
   reason: z.string().nullable(),
   error: z.string().nullable(),
+  notScorable: z.object({ step: z.string(), reason: z.string().optional() }).optional(),
+  targetScope: z.enum(['span', 'trajectory']).optional(),
+  failedStep: z.string().optional(),
+  completedSteps: z.array(z.string()).optional(),
 });
 
 // Agent target output. Lenient: legacy rows persisted `error` as `{}` and arbitrary extra fields.
-export const agentExperimentOutputSchema = z
+const agentTurnOutputSchema = z
   .object({
     text: z.string().optional(),
     reasoningText: z.string().optional(),
+    workingMemory: z.string().nullable().optional(),
+    durationMs: z.number().nonnegative().optional(),
+    replay: z
+      .object({
+        mode: z.enum(['turns', 'conversation']).optional(),
+        sourceThreadId: z.string().optional(),
+        turnIndex: z.number().int().optional(),
+        turnCount: z.number().int(),
+        expectedTrajectory: trajectoryExpectationSchema,
+        memorySeed: z.object({ workingMemory: z.string().optional() }).optional(),
+      })
+      .optional(),
     object: z.unknown().optional(),
     toolCalls: z.array(z.record(z.string(), z.unknown())).optional(),
     toolResults: z.array(z.record(z.string(), z.unknown())).optional(),
@@ -683,6 +746,28 @@ export const agentExperimentOutputSchema = z
       .optional(),
   })
   .passthrough();
+
+export const agentExperimentOutputSchema = agentTurnOutputSchema.extend({
+  turns: z
+    .array(
+      z.object({
+        turnIndex: z.number().int().nonnegative(),
+        sourceMessageId: z.string().optional(),
+        unresolvedToolCalls: z.array(z.string()).optional(),
+        input: z.unknown(),
+        groundTruth: z.unknown().optional(),
+        expectedTrajectory: trajectoryExpectationSchema,
+        output: agentTurnOutputSchema.nullable(),
+        workingMemoryBefore: z.string().nullable().optional(),
+        toolMockReport: toolMockReportSchema,
+        scores: z.array(scorerResultSchema),
+        traceId: z.string().nullable(),
+        durationMs: z.number().nonnegative(),
+        error: z.object({ message: z.string(), stack: z.string().optional(), code: z.string().optional() }).nullable(),
+      }),
+    )
+    .optional(),
+});
 
 export const scorerExperimentOutputSchema = z
   .object({
@@ -880,6 +965,8 @@ export const itemVersionResponseSchema = z.object({
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
   toolMocks: toolMocksSchema.nullable(),
+  memorySeed: z.object({ workingMemory: z.string().optional() }).nullable().optional(),
+  toolMockMatchMode: z.enum(['ordered', 'lookup']).nullable().optional(),
   unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
   scorerIds: z.array(z.string()).optional().nullable(),
   requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
@@ -919,6 +1006,8 @@ export const batchInsertItemsBodySchema = z.object({
       groundTruth: z.unknown().optional(),
       expectedTrajectory: trajectoryExpectationSchema,
       toolMocks: toolMocksSchema,
+      memorySeed: z.object({ workingMemory: z.string().optional() }).optional(),
+      toolMockMatchMode: z.enum(['ordered', 'lookup']).optional(),
       unmockedToolPolicy: unmockedToolPolicySchema,
       scorerIds: z.array(z.string()).optional(),
       requestContext: z.record(z.string(), z.unknown()).optional(),

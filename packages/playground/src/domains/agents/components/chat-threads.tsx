@@ -13,6 +13,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { CreateReplayDatasetDialog } from '@mastra/playground-ui/domains/threads/components/create-replay-dataset-dialog';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -51,7 +52,9 @@ export const ChatThreads = ({
   isLoading = false,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
-  const [dialog, setDialog] = useState<{ type: 'rename' | 'delete'; thread: StorageThreadType } | null>(null);
+  const [dialog, setDialog] = useState<{ type: 'rename' | 'delete' | 'replay'; thread: StorageThreadType } | null>(
+    null,
+  );
   const { canDelete, canEdit } = usePermissions();
   const { pinnedIds, pin, unpin } = usePinnedThreads(resourceType, resourceId);
   const pinnedLabelId = useId();
@@ -85,6 +88,11 @@ export const ChatThreads = ({
           isActive={thread.id === threadId}
           actions={
             <ThreadActionsMenu
+              onReplay={
+                resourceType === 'agent' && canEdit('datasets')
+                  ? () => setDialog({ type: 'replay', thread })
+                  : undefined
+              }
               onPin={() => pin(thread.id)}
               onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
               onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
@@ -99,6 +107,12 @@ export const ChatThreads = ({
 
   return (
     <>
+      {dialog?.type === 'replay' && (
+        <CreateReplayDatasetDialog
+          source={{ agentId: resourceId, threadId: dialog.thread.id, resourceId: dialog.thread.resourceId }}
+          onClose={closeDialog}
+        />
+      )}
       <ThreadList embedded={embedded}>
         {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
         <div className="flex items-center gap-1 pt-[3px]">
@@ -152,6 +166,11 @@ export const ChatThreads = ({
                       isActive={thread.id === threadId}
                       actions={
                         <ThreadActionsMenu
+                          onReplay={
+                            resourceType === 'agent' && canEdit('datasets')
+                              ? () => setDialog({ type: 'replay', thread })
+                              : undefined
+                          }
                           onUnpin={() => unpin(thread.id)}
                           onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
                           onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}

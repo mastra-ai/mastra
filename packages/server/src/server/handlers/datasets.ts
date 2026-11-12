@@ -1,16 +1,22 @@
 import { Agent } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
+import * as coreDatasets from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
-import { isReservedRequestContextKey } from '../constants';
+import { isReservedRequestContextKey, MASTRA_AUTH_MODE_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import type { MastraAuthMode } from '../constants';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
+  itemsFromThreadBodySchema,
+  itemsFromThreadResponseSchema,
+  replayPreviewResponseSchema,
   datasetAndExperimentIdPathParams,
   experimentIdPathParams,
   datasetExperimentAndItemIdPathParams,
@@ -57,7 +63,126 @@ import {
   submitExperimentResultBodySchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import type { Context } from '../types';
 import { handleError } from './error';
+import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
+
+async function replaySource({
+  mastra,
+  requestContext,
+  agentId,
+  threadId,
+  resourceId,
+  historyLimit,
+  mode,
+}: Context & { requestContext: RequestContext } & z.infer<typeof itemsFromThreadBodySchema>) {
+  if (
+    typeof coreDatasets.datasetItemsFromThread !== 'function' ||
+    typeof coreDatasets.defaultReplayHistoryLimit !== 'function'
+  )
+    throw new HTTPException(501, {
+      message: 'Replay datasets require a newer @mastra/core with thread replay support.',
+    });
+  // These routes derive `datasets:write`, but they read a whole thread transcript, which the memory
+  // routes gate behind `memory:read`. Require it too when an RBAC provider is configured.
+  const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
+  const rbac = (authMode === 'studio' ? mastra.getStudio?.()?.rbac : undefined) ?? mastra.getServer()?.rbac;
+  if (rbac) {
+    const callerPermissions = (requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined) ?? [];
+    if (!hasPermission(callerPermissions, 'memory:read')) {
+      throw new HTTPException(403, { message: 'Missing required permission: memory:read' });
+    }
+  }
+  let agent: Agent;
+  try {
+    agent = mastra.getAgent(agentId);
+  } catch (error) {
+    if (error instanceof MastraError && error.id === 'MASTRA_GET_AGENT_BY_NAME_NOT_FOUND') {
+      throw new HTTPException(404, { message: `Agent "${agentId}" not found.` });
+    }
+    throw error;
+  }
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) throw new HTTPException(400, { message: 'This agent has no memory to replay.' });
+  const effectiveThreadId = getEffectiveThreadId(requestContext, threadId)!;
+  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+  if (!thread) throw new HTTPException(404, { message: 'Replay source thread not found.' });
+  await enforceThreadAccess({ mastra, requestContext, threadId: effectiveThreadId, thread, effectiveResourceId });
+  const items = await coreDatasets.datasetItemsFromThread({
+    memory,
+    threadId: effectiveThreadId,
+    resourceId: effectiveResourceId,
+    historyLimit,
+    mode,
+  });
+  return {
+    items,
+    turnCount: items[0]?.metadata.replay.turnCount ?? 0,
+    // Memory `lastMessages: false` means no recall, which replay reports as 0 rather than "all".
+    ...(mode === 'conversation'
+      ? {}
+      : { historyLimit: historyLimit ?? coreDatasets.defaultReplayHistoryLimit(memory) }),
+  };
+}
+
+export const PREVIEW_REPLAY_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/replay/preview',
+  responseType: 'json',
+  bodySchema: itemsFromThreadBodySchema,
+  responseSchema: replayPreviewResponseSchema,
+  summary: 'Preview replay turns',
+  description: 'Counts completed turns without creating dataset items',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async params => {
+    assertDatasetsAvailable();
+    const { turnCount, historyLimit } = await replaySource(params);
+    return { turnCount, ...(historyLimit !== undefined ? { historyLimit } : {}) };
+  },
+});
+
+export const ITEMS_FROM_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/items/from-thread',
+  responseType: 'json',
+  pathParamSchema: datasetIdPathParams,
+  bodySchema: itemsFromThreadBodySchema,
+  responseSchema: itemsFromThreadResponseSchema,
+  summary: 'Create replay items from a thread',
+  description: 'Creates replay items from completed turns, optionally grouped into one conversation',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async params => {
+    assertDatasetsAvailable();
+    try {
+      const dataset = await params.mastra.datasets.get({ id: params.datasetId });
+      // Replay items are agent inputs; a workflow experiment would pass them through as workflow input.
+      // Datasets without a target stay eligible: their experiments choose the target at run time.
+      const { targetType } = await dataset.getDetails();
+      if (targetType && targetType !== 'agent') {
+        throw new HTTPException(400, {
+          message: `Replay items can only be added to agent datasets; this dataset targets ${targetType}.`,
+        });
+      }
+      const { items, turnCount } = await replaySource(params);
+      const added = items.length ? await dataset.addItems({ items }) : [];
+      return { itemIds: added.map(item => item.id), turnCount };
+    } catch (error) {
+      if (isSchemaValidationError(error)) {
+        throw new HTTPException(400, {
+          message: error.message,
+          cause: { field: error.field, errors: error.errors },
+        });
+      }
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error creating replay items from thread');
+    }
+  },
+});
 
 // Result rows don't store targetType; attach the parent experiment's so clients can narrow `output`.
 type ExperimentResultResponse = z.infer<typeof experimentResultResponseSchema>;
@@ -485,6 +610,8 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       } = params as {
         externalId?: string | null;
@@ -496,6 +623,8 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory?: unknown;
         toolMocks?: DatasetItemToolMock[];
         unmockedToolPolicy?: 'allow' | 'deny';
+        toolMockMatchMode?: 'ordered' | 'lookup';
+        memorySeed?: { workingMemory?: string };
         scorerIds?: string[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -509,6 +638,8 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       });
     } catch (error) {
@@ -585,6 +716,8 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       } = params as {
         input?: unknown;
@@ -594,6 +727,8 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory?: unknown;
         toolMocks?: DatasetItemToolMock[];
         unmockedToolPolicy?: 'allow' | 'deny';
+        toolMockMatchMode?: 'ordered' | 'lookup';
+        memorySeed?: { workingMemory?: string };
         scorerIds?: string[] | null;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -611,6 +746,8 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       });
     } catch (error) {
@@ -913,6 +1050,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        toolMockMatchMode,
+        unmockedToolPolicy,
         agentModel,
         maxConcurrency,
         provenance,
@@ -930,6 +1069,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        toolMockMatchMode?: 'ordered' | 'lookup';
+        unmockedToolPolicy?: 'allow' | 'deny';
         agentModel?: { provider: string; modelId: string };
         maxConcurrency?: number;
         provenance?: {
@@ -988,6 +1129,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        toolMockMatchMode,
+        unmockedToolPolicy,
         agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
         maxConcurrency,
         provenance,
@@ -1462,6 +1605,8 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
           expectedTrajectory?: unknown;
           toolMocks?: DatasetItemToolMock[];
           unmockedToolPolicy?: 'allow' | 'deny';
+          toolMockMatchMode?: 'ordered' | 'lookup';
+          memorySeed?: { workingMemory?: string };
           scorerIds?: string[];
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;

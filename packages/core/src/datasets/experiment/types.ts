@@ -12,6 +12,7 @@ import type {
   ExperimentStatus,
   TargetType,
 } from '../../storage/types';
+import type { ConversationReplayTurn } from '../replay/conversation';
 import type { ExperimentEventObserver } from './events';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
@@ -68,6 +69,9 @@ export interface DataItem<I = unknown, E = unknown> {
   toolMocks?: ItemToolMock[];
   /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
   unmockedToolPolicy?: UnmockedToolPolicy;
+  toolMockMatchMode?: 'ordered' | 'lookup';
+  /** Working memory restored only into an experiment-owned thread and resource. */
+  memorySeed?: { workingMemory?: string };
 }
 
 /**
@@ -259,6 +263,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   persistence?: ExperimentPersistencePolicy;
   /** Default handling for agent tool calls not declared in an item's `toolMocks` (default: `allow`). */
   unmockedToolPolicy?: UnmockedToolPolicy;
+  toolMockMatchMode?: 'ordered' | 'lookup';
   /** Pre-created experiment ID (for async trigger — skips experiment creation). */
   experimentId?: string;
   /** Experiment name (used for display / grouping) */
@@ -307,6 +312,20 @@ export type StartExperimentConfig<I = unknown, O = unknown, E = unknown> = Omit<
  * (structured output, tool payloads, provider usage) are kept loose.
  */
 export interface AgentExperimentOutput {
+  /** Sequential replay evidence, including a failed turn when execution stopped. */
+  turns?: ConversationTurnResult[];
+  durationMs?: number;
+  /** Frozen production context used by Studio's turn comparison. */
+  replay?: {
+    mode?: 'turns' | 'conversation';
+    sourceThreadId?: string;
+    turnIndex?: number;
+    turnCount: number;
+    expectedTrajectory?: TrajectoryExpectation;
+    memorySeed?: { workingMemory?: string };
+  };
+  /** Working memory after a replay turn, for comparison with the item's seed. */
+  workingMemory?: string | null;
   text?: string;
   reasoningText?: string;
   object?: unknown;
@@ -318,6 +337,23 @@ export interface AgentExperimentOutput {
   usage?: Record<string, unknown>;
   traceId?: string | null;
   error?: { message: string; stack?: string } | null;
+}
+
+/** One executed conversation turn. Original references are frozen with the result. */
+export interface ConversationTurnResult extends Pick<
+  ConversationReplayTurn,
+  'input' | 'groundTruth' | 'expectedTrajectory'
+> {
+  turnIndex: number;
+  sourceMessageId?: string;
+  unresolvedToolCalls?: string[];
+  output: Omit<AgentExperimentOutput, 'turns'> | null;
+  workingMemoryBefore?: string | null;
+  toolMockReport?: ToolMockReport;
+  scores: ScorerResult[];
+  traceId: string | null;
+  durationMs: number;
+  error: { message: string; stack?: string; code?: string } | null;
 }
 
 /**

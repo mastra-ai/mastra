@@ -1,4 +1,12 @@
 export * from './experiment';
+export {
+  datasetItemsFromThread,
+  defaultReplayHistoryLimit,
+  replayHistoryLimitSchema,
+  type ReplayItemInput,
+  type ConversationReplayItemInput,
+} from './replay/from-thread';
+export { rebuildWorkingMemory } from './replay/working-memory';
 export * from './validation';
 export {
   createDatasetSnapshot,
@@ -12,3 +20,5 @@ export type { DatasetSnapshot, DatasetSnapshotContent, DatasetSnapshotOptions } 
 export { Dataset } from './dataset.js';
 export { DatasetsManager } from './manager.js';
 export type { StartExperimentConfig } from './experiment/types.js';
+
+export type { ConversationReplayInput, ConversationReplayTurn } from './replay/conversation';

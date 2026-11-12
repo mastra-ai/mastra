@@ -13,6 +13,8 @@ import { formatCostValue, formatTokenCount, totalTokens } from './comparison/com
 
 export interface ExperimentKpisProps {
   experiment: DatasetExperiment;
+  /** Override generation averages when one item contains multiple agent turns. */
+  itemDurationMs?: number | null;
   metrics?: {
     data?: ExperimentMetrics;
     isLoading: boolean;
@@ -21,7 +23,7 @@ export interface ExperimentKpisProps {
 }
 
 /** Headline numbers for a run, shown above its results like the Metrics page KPIs. */
-export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
+export function ExperimentKpis({ experiment, metrics, itemDurationMs }: ExperimentKpisProps) {
   const { data: scoresByItemId } = useScoresByExperimentId({
     experimentId: experiment.id,
     experimentStatus: experiment.status,
@@ -65,7 +67,8 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
         <Metadata.Item>{formatTokenCount(usage.outputTokens ?? 0)} out</Metadata.Item>
       </Metadata>
     );
-  const avgItemDuration = metrics?.isEnabled ? metrics.data?.avgAgentDurationMs : undefined;
+  const avgItemDuration =
+    itemDurationMs !== undefined ? itemDurationMs : metrics?.isEnabled ? metrics.data?.avgAgentDurationMs : undefined;
   const formattedAvgItemDuration = avgItemDuration == null ? undefined : formatDuration(Math.round(avgItemDuration));
 
   const runDurationDetail = (() => {

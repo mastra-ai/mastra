@@ -2608,7 +2608,7 @@ export interface DatasetRecord {
 }
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+  type: 'csv' | 'json' | 'thread' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
 }
 
@@ -2632,7 +2632,14 @@ export interface DatasetItemToolMock {
 export type DatasetUnmockedToolPolicy = 'allow' | 'deny';
 
 export interface DatasetToolMockReport {
-  served: { mockIndex: number; toolName: string; args: unknown }[];
+  served: { mockIndex: number; callIndex?: number; toolName: string; args: unknown }[];
+  matchMode?: 'ordered' | 'lookup';
+  misses?: {
+    toolName: string;
+    args: unknown;
+    reason: 'not-recorded' | 'args-mismatch' | 'exhausted';
+    closestArgs?: Record<string, unknown>;
+  }[];
   unconsumed: { mockIndex: number; toolName: string; args: unknown }[];
   liveCalls: { toolName: string; args: unknown }[];
   failure?: {
@@ -2656,6 +2663,8 @@ export interface DatasetItem {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[] | null;
+  memorySeed?: { workingMemory?: string } | null;
+  toolMockMatchMode?: 'ordered' | 'lookup' | null;
   unmockedToolPolicy?: DatasetUnmockedToolPolicy | null;
   scorerIds?: string[] | null;
   requestContext?: Record<string, unknown> | null;
@@ -2681,6 +2690,8 @@ export interface DatasetItemRow {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[] | null;
+  memorySeed?: { workingMemory?: string } | null;
+  toolMockMatchMode?: 'ordered' | 'lookup' | null;
   unmockedToolPolicy?: DatasetUnmockedToolPolicy | null;
   scorerIds?: string[] | null;
   requestContext?: Record<string, unknown> | null;
@@ -2799,6 +2810,8 @@ export interface DatasetItemPayload {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  memorySeed?: { workingMemory?: string };
+  toolMockMatchMode?: 'ordered' | 'lookup';
   /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   scorerIds?: string[];
@@ -2824,10 +2837,14 @@ export interface AddDatasetItemInput extends DatasetItemPayload {
  * The optional `filters` field is a tenancy read-scope for the parent dataset;
  * see {@link AddDatasetItemInput.filters}.
  */
-export interface UpdateDatasetItemInput extends Partial<Omit<DatasetItemPayload, 'externalId' | 'scorerIds'>> {
+export interface UpdateDatasetItemInput extends Partial<
+  Omit<DatasetItemPayload, 'externalId' | 'scorerIds' | 'memorySeed' | 'toolMockMatchMode'>
+> {
   id: string;
   datasetId: string;
   scorerIds?: string[] | null;
+  memorySeed?: { workingMemory?: string } | null;
+  toolMockMatchMode?: 'ordered' | 'lookup' | null;
   filters?: DatasetTenancyFilters;
 }
 

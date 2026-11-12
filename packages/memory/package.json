@@ -71,6 +71,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@internal/core": "workspace:*",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.139",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/ai-sdk-v4": "workspace:*",

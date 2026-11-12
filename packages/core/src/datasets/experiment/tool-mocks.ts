@@ -49,6 +49,14 @@ export const TOOL_MOCK_EXHAUSTED = 'TOOL_MOCK_EXHAUSTED';
 export const TOOL_MOCK_NOT_DECLARED = 'TOOL_MOCK_NOT_DECLARED';
 
 export type UnmockedToolPolicy = 'allow' | 'deny';
+export type ToolMockMatchMode = 'ordered' | 'lookup';
+
+export interface ToolMockMiss {
+  toolName: string;
+  args: unknown;
+  reason: 'not-recorded' | 'args-mismatch' | 'exhausted';
+  closestArgs?: Record<string, unknown>;
+}
 
 export type ToolMockFailureCode =
   | typeof TOOL_MOCK_MISMATCH
@@ -58,7 +66,10 @@ export type ToolMockFailureCode =
 /** Diagnostic receipt produced for a single item run. Persisted on experiment results. */
 export interface ToolMockReport {
   /** Mocks that were matched and served, in consumption order. */
-  served: { mockIndex: number; toolName: string; args: unknown }[];
+  served: { mockIndex: number; callIndex?: number; toolName: string; args: unknown }[];
+  /** Optional for receipts persisted before lookup mode was introduced. */
+  matchMode?: ToolMockMatchMode;
+  misses?: ToolMockMiss[];
   /** Mocks declared on the item that the agent never consumed (report-only — does NOT fail the item). */
   unconsumed: { mockIndex: number; toolName: string; args: unknown }[];
   /** Unmocked tools that ran live — flags that the item was not fully deterministic. */
@@ -71,6 +82,7 @@ export interface ToolMockReport {
 export type ToolMockResolution =
   | { kind: 'serve'; output: unknown }
   | { kind: 'live' }
+  | { kind: 'miss'; output: { error: string } }
   | { kind: 'fail'; code: ToolMockFailureCode };
 
 interface MockEntry {
@@ -93,11 +105,14 @@ export class ToolMockMatcher {
   readonly #entries: MockEntry[];
   readonly #served: ToolMockReport['served'] = [];
   readonly #liveCalls: ToolMockReport['liveCalls'] = [];
+  readonly #misses: ToolMockMiss[] = [];
+  #callIndex = 0;
   #failure: ToolMockReport['failure'];
 
   constructor(
     mocks: ItemToolMock[] | undefined,
     readonly unmockedToolPolicy: UnmockedToolPolicy = 'allow',
+    readonly matchMode: ToolMockMatchMode = 'ordered',
   ) {
     this.#entries = (mocks ?? []).map((mock, mockIndex) => ({
       mockIndex,
@@ -123,6 +138,7 @@ export class ToolMockMatcher {
    *   (`TOOL_MOCK_EXHAUSTED` if args matched but all consumed, else `TOOL_MOCK_MISMATCH`)
    */
   resolve(toolName: string, args: unknown): ToolMockResolution {
+    const callIndex = this.#callIndex++;
     // Once any mock has failed, the item is already doomed and being aborted.
     // Fail every subsequent resolution so no further tool runs live/serves
     // during the abort-propagation race.
@@ -134,6 +150,7 @@ export class ToolMockMatcher {
 
     if (candidates.length === 0) {
       if (this.unmockedToolPolicy === 'deny') {
+        if (this.matchMode === 'lookup') return this.#miss({ toolName, args, reason: 'not-recorded' });
         this.#failure = { code: TOOL_MOCK_NOT_DECLARED, toolName, args };
         return { kind: 'fail', code: TOOL_MOCK_NOT_DECLARED };
       }
@@ -146,8 +163,23 @@ export class ToolMockMatcher {
     const next = candidates.find(entry => !entry.consumed && argsMatch(entry));
     if (next) {
       next.consumed = true;
-      this.#served.push({ mockIndex: next.mockIndex, toolName, args });
+      this.#served.push({ mockIndex: next.mockIndex, callIndex, toolName, args });
       return { kind: 'serve', output: next.output };
+    }
+
+    if (this.matchMode === 'lookup') {
+      const remaining = candidates.filter(entry => !entry.consumed);
+      if (!remaining.length || candidates.some(argsMatch)) return this.#miss({ toolName, args, reason: 'exhausted' });
+      // Prefer the available recording sharing the most argument values; ties
+      // retain recorded order. This is diagnostic only, never a fuzzy match.
+      const similarity = (entry: MockEntry) =>
+        args && typeof args === 'object'
+          ? Object.entries(entry.args).filter(([key, value]) =>
+              deepEqual(value, (args as Record<string, unknown>)[key]),
+            ).length
+          : 0;
+      const closest = remaining.reduce((best, entry) => (similarity(entry) > similarity(best) ? entry : best));
+      return this.#miss({ toolName, args, reason: 'args-mismatch', closestArgs: closest.args });
     }
 
     const argsMatchedButConsumed = candidates.some(entry => argsMatch(entry));
@@ -157,6 +189,11 @@ export class ToolMockMatcher {
     return { kind: 'fail', code };
   }
 
+  #miss(miss: ToolMockMiss): ToolMockResolution {
+    this.#misses.push(miss);
+    return { kind: 'miss', output: { error: 'No recorded result for this call in the replayed conversation.' } };
+  }
+
   /** Build the diagnostic report for this item run. */
   report(): ToolMockReport {
     const unconsumed = this.#entries
@@ -164,6 +201,8 @@ export class ToolMockMatcher {
       .map(entry => ({ mockIndex: entry.mockIndex, toolName: entry.toolName, args: entry.args }));
 
     return {
+      matchMode: this.matchMode,
+      misses: this.#misses,
       served: this.#served,
       unconsumed,
       liveCalls: this.#liveCalls,

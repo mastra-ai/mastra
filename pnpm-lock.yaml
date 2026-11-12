@@ -5738,6 +5738,9 @@ importers:
       '@internal/ai-v7':
         specifier: workspace:*
         version: link:../_vendored/ai_v7
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../_internal-core
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6989,6 +6992,9 @@ importers:
       '@hono/swagger-ui':
         specifier: ^0.5.3
         version: 0.5.3(hono@4.13.16)
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../../packages/_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7004,6 +7010,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql

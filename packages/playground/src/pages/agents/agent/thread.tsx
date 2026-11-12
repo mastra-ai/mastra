@@ -6,6 +6,7 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { CreateReplayDatasetButton } from '@mastra/playground-ui/domains/threads/components/create-replay-dataset-button';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useMastraClient } from '@mastra/react';
 import { useAgent } from '@mastra/react/hooks/agents';
@@ -33,6 +34,7 @@ import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-con
 import { useThreadsPanel } from '@/domains/agents/context/use-threads-panel';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
@@ -40,6 +42,7 @@ import { AgentRunActions } from '@/domains/run-options/components/agent-run-acti
 function AgentThread() {
   const { agentId, threadId } = useParams();
   const client = useMastraClient();
+  const { canEdit } = usePermissions();
   const { data: auth, error: authError } = useAuthCapabilities();
   const signedIn = auth && isAuthenticated(auth);
   const userId = signedIn ? auth.user.id : undefined;
@@ -196,6 +199,11 @@ function AgentThread() {
                       leftDrawerLabel="Threads"
                     >
                       <div key={actualThreadId} className="relative flex h-full min-h-0 flex-col">
+                        {!isNewThread && hasMemory && canEdit('datasets') && (
+                          <div className="flex justify-end px-4 py-2">
+                            <CreateReplayDatasetButton source={{ agentId: agentId!, threadId: actualThreadId }} />
+                          </div>
+                        )}
                         <div className="relative grid min-h-0 flex-1">
                           <AgentChat
                             agentId={agentId!}

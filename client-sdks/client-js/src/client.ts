@@ -2328,6 +2328,22 @@ export class MastraClient extends BaseResource {
     });
   }
 
+  /** Create independent replay items, or one conversation item with mode: "conversation". */
+  public addDatasetItemsFromThread(
+    params: PathParams<'POST /datasets/:datasetId/items/from-thread'> &
+      Body<'POST /datasets/:datasetId/items/from-thread'>,
+  ): Promise<SerializedRouteResponse<'POST /datasets/:datasetId/items/from-thread'>> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/from-thread`, { method: 'POST', body });
+  }
+
+  /** Preview the completed turn count without creating a dataset. */
+  public previewReplayDataset(
+    params: Body<'POST /datasets/replay/preview'>,
+  ): Promise<SerializedRouteResponse<'POST /datasets/replay/preview'>> {
+    return this.request('/datasets/replay/preview', { method: 'POST', body: params });
+  }
+
   /**
    * Updates a dataset item
    */

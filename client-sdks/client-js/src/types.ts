@@ -2034,7 +2034,7 @@ export class MastraClientError extends Error {
 // ============================================
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+  type: 'csv' | 'json' | 'thread' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
 }
 
