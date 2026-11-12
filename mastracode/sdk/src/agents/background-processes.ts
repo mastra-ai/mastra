@@ -12,6 +12,7 @@ import type { BackgroundCompletionEvents } from './background-completion-events.
 import type { BackgroundNoticeDelivery, BackgroundNoticeTarget } from './background-completion.js';
 
 const SANDBOX_TEARDOWN_STATUSES = new Set(['stopping', 'stopped', 'destroying', 'destroyed']);
+const isTornDown = (sandbox: WorkspaceSandbox | undefined) => SANDBOX_TEARDOWN_STATUSES.has(String(sandbox?.status));
 const BACKGROUND_PROCESS_RESULT = /^Started background process \(PID: ([^)]+)\)/;
 
 interface Launch {
@@ -114,7 +115,6 @@ export function createBackgroundProcessNotices(options: {
   const killed = new Set<string>();
   // Nothing reports a sandbox's teardown here, so torn-down entries are dropped
   // when next touched, and all of them whenever a new shell starts.
-  const isTornDown = (sandbox: WorkspaceSandbox | undefined) => SANDBOX_TEARDOWN_STATUSES.has(String(sandbox?.status));
   const liveSandbox = (pid: string) => {
     const sandbox = sandboxes.get(pid);
     if (!isTornDown(sandbox)) return sandbox;
@@ -169,7 +169,8 @@ export function createBackgroundProcessNotices(options: {
       const launch = meta.toolCallId ? launches.get(meta.toolCallId) : undefined;
       if (meta.toolCallId) launches.delete(meta.toolCallId);
       const shuttingDown = isTornDown(launch?.sandbox);
-      // Kept after the exit, so the output stays readable until it is released.
+      // A torn-down sandbox has no output left; otherwise keep the entry so the
+      // output stays readable until it is released.
       if (shuttingDown) sandboxes.delete(meta.pid);
       else if (launch?.sandbox) sandboxes.set(meta.pid, launch.sandbox);
       const killedOnPurpose = killed.delete(meta.pid);
