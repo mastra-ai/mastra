@@ -28,11 +28,6 @@ export function recordReconcileSweep(
   else metrics.count('intake', 'mastra_factory_intake_sweep_failures_total', { source, kind });
 }
 
-/** One poll of a Platform-connected source. */
-export function recordIntakePoll(source: IntakeSource, ms: number): void {
-  factoryMetrics().observe('intake', 'mastra_factory_intake_poll_ms', ms, { source });
-}
-
 /**
  * Age of each source's last clean reconcile sweep. Growing without bound means the sweep has
  * stalled, and webhooks it would have caught stay missed.
