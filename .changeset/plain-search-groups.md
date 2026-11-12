@@ -4,7 +4,7 @@
 
 `InputGroupAddon` now insets its icon like a Button does (the group's `--control-px` and `--control-gap`), so a leading or trailing icon in any field lines up with the icons of the controls beside it. A field built from `InputGroup` parts by hand gets the same inset as `SearchInput`. An icon `InputGroupButton` is now a chip inset in the field (8px shorter than it, with an even ring around it) instead of a full-height circle.
 
-`SearchInput` is now plain `InputGroup` composition (a search icon, the input and a clear button) with no styling of its own. Its clear button keeps its space while hidden, so the field doesn't resize when text appears. It takes over `ListSearch`'s behaviour. It is either controlled (`value`, reported on every keystroke) or keeps its own text (`defaultValue`, optionally reported after `debounceMs`); `shortcut` turns on the Cmd/Ctrl+Shift+F focus shortcut. `ListSearch` and `SearchFieldBlock` are removed.
+`SearchInput` is now plain `InputGroup` composition (a search icon, the input and a clear button) with no styling of its own. Its clear button keeps its space while hidden, so the field doesn't resize when text appears. It takes over `ListSearch`'s behaviour. It is either controlled (`value`, following every change the parent makes, such as a Reset or a URL change) or keeps its own text (`defaultValue`). Both modes accept `debounceMs`, which delays `onValueChange` while typing; clearing reports right away. `shortcut` turns on the Cmd/Ctrl+Shift+F focus shortcut, and `listSearchProps` bundles a list page's `size`, `debounceMs` and `shortcut`. `ListSearch` and `SearchFieldBlock` are removed.
 
 **Migrating**
 

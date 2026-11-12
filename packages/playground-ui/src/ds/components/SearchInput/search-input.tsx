@@ -62,14 +62,17 @@ export function SearchInput({
 }: SearchInputProps) {
   const [ownText, setOwnText] = useState(defaultValue);
   // Typed text waiting on the debounce, and the parent's value it was typed over. It shows only
-  // while that value hasn't moved: once the parent takes the text, or changes it some other way,
-  // the field follows the parent again.
+  // while its search is still pending and that value hasn't moved: once the search is applied,
+  // cancelled, or the parent changes the value some other way, the field follows the parent.
   const [draft, setDraft] = useState<Draft>();
-  const text = shownText({ value, ownText, draft });
+  const debouncedChange = useDebouncedCallback((next: string) => {
+    setDraft(undefined);
+    onValueChange(next);
+  }, debounceMs);
+  const text = shownText({ value, ownText, draft: debouncedChange.isPending() ? draft : undefined });
   const editable = !inputProps.disabled && !inputProps.readOnly;
   const hasButton = Boolean(onClose || (text && editable));
   const inputRef = useRef<HTMLInputElement>(null);
-  const debouncedChange = useDebouncedCallback(onValueChange, debounceMs);
 
   useKeydown(
     {

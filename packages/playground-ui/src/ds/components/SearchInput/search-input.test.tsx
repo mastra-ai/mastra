@@ -224,6 +224,61 @@ describe('SearchInput controlled and debounced', () => {
     vi.useRealTimers();
   });
 
+  it('shows an empty field after a search is applied and then reset', () => {
+    vi.useFakeTimers();
+    function Resettable() {
+      const [value, setValue] = useState('');
+      return (
+        <>
+          <SearchInput label="Search agents" value={value} onValueChange={setValue} debounceMs={300} />
+          <button type="button" onClick={() => setValue('')}>
+            Reset
+          </button>
+          <output>{value}</output>
+        </>
+      );
+    }
+    render(<Resettable />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
+
+    fireEvent.change(input, { target: { value: 'chef' } });
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.getByRole('status').textContent).toBe('chef');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(input.value).toBe('');
+    vi.useRealTimers();
+  });
+
+  it('does not bring back a cancelled draft when the value returns', () => {
+    vi.useFakeTimers();
+    function Navigable() {
+      const [value, setValue] = useState('');
+      return (
+        <>
+          <SearchInput label="Search agents" value={value} onValueChange={setValue} debounceMs={300} />
+          <button type="button" onClick={() => setValue('nav')}>
+            Navigate
+          </button>
+          <button type="button" onClick={() => setValue('')}>
+            Back
+          </button>
+        </>
+      );
+    }
+    render(<Navigable />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
+
+    fireEvent.change(input, { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Navigate' }));
+    expect(input.value).toBe('nav');
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    act(() => vi.advanceTimersByTime(300));
+
+    expect(input.value).toBe('');
+    vi.useRealTimers();
+  });
+
   it('follows a change the parent makes, such as a URL change', () => {
     render(<UrlSearch initial="chef" />);
     const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
