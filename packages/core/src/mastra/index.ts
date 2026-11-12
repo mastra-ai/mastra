@@ -941,6 +941,8 @@ interface RecoveryPass {
    * the probe failed: the pass then did as without fencing, or nothing when called with `whenUnprobed: 'skip'`.
    */
   runFencing: boolean | undefined;
+  /** Whether a shutdown or a `stopWorkers()` call stopped the pass before it handed out every restart. */
+  stopped: boolean;
   /** Settles once every restart the pass handed out settled; never rejects. */
   settled: Promise<void>;
 }
@@ -4630,12 +4632,12 @@ export class Mastra<
       const workflowsStore = await this.#storage?.getStore('workflows');
       if (!workflowsStore) {
         this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
-        return { runFencing, settled: Promise.resolve() };
+        return { runFencing, stopped: stopped(), settled: Promise.resolve() };
       }
 
       runFencing = await this.#supportsRunFencing(workflowsStore);
       if (runFencing === undefined && whenUnprobed === 'skip') {
-        return { runFencing, settled: Promise.resolve() };
+        return { runFencing, stopped: stopped(), settled: Promise.resolve() };
       }
 
       const listed = await this.#listActiveRunSummaries(workflowsStore);
@@ -4724,7 +4726,7 @@ export class Mastra<
     }
 
     // Each restart logs its own failure and never rejects.
-    return { earliestDueAt, runFencing, settled: Promise.all(restarts).then(() => {}) };
+    return { earliestDueAt, runFencing, stopped: stopped(), settled: Promise.all(restarts).then(() => {}) };
   }
 
   /**
@@ -5006,6 +5008,7 @@ export class Mastra<
 
     let dueAt: number | undefined;
     let bootPass = true;
+    const loopStops = this.#workerStops;
     // Never rejects, as `repeatAfterSettled` requires: the pass reports its own failures. Tracked so
     // shutdown() waits for a pass in flight and for the restarts it handed out, but the tick only waits
     // for the handing out: a long default-engine restart never holds up the next pass.
@@ -5015,7 +5018,13 @@ export class Mastra<
       // instances still run.
       const whenUnprobed = bootPass ? 'restart' : 'skip';
       bootPass = false;
-      const pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ whenUnprobed }));
+      let pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ whenUnprobed }));
+      // A pass that started before the last stopWorkers() call, and that this loop joined, stopped
+      // without doing its work; this loop's workers run, so it does that work in a pass of its own.
+      if (pass.stopped && this.#workerStops === loopStops && !this.#shuttingDown) {
+        pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ whenUnprobed }));
+      }
+
       // `settled` never rejects.
       void this.#trackDurableRecovery(pass.settled);
       // No lease tells a stopped run from a running one without run fencing, so the loop stops;

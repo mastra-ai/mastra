@@ -420,6 +420,31 @@ describe('workflow recovery loop (#28712)', () => {
     expect(restarted).not.toHaveBeenCalled();
   });
 
+  it('restarts a stopped run from the boot pass of workers started again while the stopped pass still ran', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    // The default scan interval: only a boot pass restarts the run within the test.
+    const mastra = replica(storage, 'default', 'B', [], { recovery: { workflowGraceMs: 0 } });
+    const restarted = vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun');
+    await persistActiveRun(storage, 'stopped');
+    const list = store.listWorkflowRuns.bind(store);
+    const listing = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
+      listing.resolve();
+      await release.promise;
+      return list(args);
+    });
+    await mastra.startWorkers();
+    await listing.promise;
+
+    await mastra.stopWorkers({ drainTimeout: 0 });
+    await mastra.startWorkers();
+    release.resolve();
+
+    await vi.waitFor(() => expect(restarted).toHaveBeenCalledTimes(1));
+  });
+
   it('starts no loop from a startWorkers() call that stopWorkers() overtook', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
