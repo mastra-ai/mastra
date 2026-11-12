@@ -725,6 +725,44 @@ describe('Global search', () => {
     expect(within(results).getAllByRole('option')).toHaveLength(1);
   });
 
+  // Technical: only the 20 best candidates are looked up, ranked on the text their rows are filtered on.
+  it('lists the one candidate matching a typed source label when it is the oldest of more than 20', async () => {
+    const issues: GithubIssue[] = Array.from({ length: 21 }, (_, index) => {
+      const at = `2026-07-${String(index + 1).padStart(2, '0')}T08:00:00.000Z`;
+      return {
+        number: 31000 + index,
+        title: `Flaky check ${index}`,
+        url: `https://github.com/mastra-ai/mastra/issues/${31000 + index}`,
+        author: 'cleo',
+        labels: [],
+        comments: 0,
+        createdAt: at,
+        updatedAt: at,
+      };
+    });
+    const pullRequest: GithubPullRequest = {
+      number: 30001,
+      title: 'Tighten the upload size limit',
+      url: 'https://github.com/mastra-ai/mastra/pull/30001',
+      author: 'ana',
+      baseBranch: 'main',
+      headBranch: 'fix/upload-size',
+      createdAt: '2026-06-01T08:00:00.000Z',
+      updatedAt: '2026-06-01T08:00:00.000Z',
+    };
+    stubSearchApi({ intake: { issues, pullRequests: [pullRequest] } });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+    await within(results).findByText('Flaky check 20');
+
+    // Its row reads "PR Review"; nothing else about it, and nothing about any issue, has the word.
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'review');
+
+    expect(await within(results).findByRole('option', { name: /not filed/ })).toHaveTextContent(pullRequest.title);
+  });
+
   it.each([
     ['a server that searches the cards itself', false],
     ['a server that sends the whole board whatever is asked', true],

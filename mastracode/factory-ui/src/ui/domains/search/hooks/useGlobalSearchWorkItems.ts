@@ -11,6 +11,7 @@ import { isPersistedCandidate, persistedSourceKeys } from '../../factory/boardIt
 import { pageLoadsBoard } from '../../factory/pageLoadsBoard';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { BoardSnapshot, WorkItem } from '../../factory/services/workItems';
+import { candidateSearchValue } from '../services/searchResults';
 
 type Candidate = { candidate: BoardCandidate; updatedAt: string };
 
@@ -25,13 +26,15 @@ function selectUnstarted(board: BoardSnapshot) {
   return { cards, total: board.total ?? cards.length };
 }
 
-/** The candidates that best match `search`: the most words found, then the most recently updated. */
+/**
+ * The candidates that best match `search`: the most words found, then the most recently updated.
+ * Words are looked for in the text the palette filters a candidate's row on.
+ */
 function bestCandidates(candidates: Candidate[], search: string): Candidate[] {
   const words = search.toLowerCase().split(/\s+/).filter(Boolean);
   return candidates
     .map(entry => {
-      const { title, sourceKey, url, meta } = entry.candidate;
-      const text = [title, sourceKey, url, ...meta].join(' ').toLowerCase();
+      const text = candidateSearchValue(entry.candidate).toLowerCase();
       return { entry, found: words.filter(word => text.includes(word)).length };
     })
     .toSorted((a, b) => b.found - a.found || b.entry.updatedAt.localeCompare(a.entry.updatedAt))

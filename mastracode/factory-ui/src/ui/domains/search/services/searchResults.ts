@@ -173,6 +173,21 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
   };
 }
 
+/**
+ * The text a candidate's row is filtered on. The search ranks candidates on it too before looking
+ * up the best ones, so it never cuts a candidate the palette would list.
+ */
+export function candidateSearchValue(candidate: BoardCandidate): string {
+  return joinValue([
+    candidate.title,
+    'work item',
+    SOURCE_LABELS[candidate.source],
+    stageLabel(candidate.column),
+    workItemIdentifier(candidate),
+    candidate.sourceKey,
+  ]);
+}
+
 function createCandidateResult(factoryId: string, candidate: BoardCandidate, updatedAt: string): WorkItemSearchResult {
   const identifier = workItemIdentifier(candidate);
   const sourceLabel = SOURCE_LABELS[candidate.source];
@@ -183,7 +198,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
     title: candidate.title,
     context: [sourceLabel, stage, 'not filed'],
     identifier,
-    value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
+    value: candidateSearchValue(candidate),
     path: relationshipPath(candidate, factoryId),
     updatedAt,
     target: { kind: 'candidate', candidate },
