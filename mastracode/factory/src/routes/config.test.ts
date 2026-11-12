@@ -841,6 +841,52 @@ describe('Mastra Gateway routes with a tenant', () => {
     });
   });
 
+  describe('with a gateway key on the server', () => {
+    // The Mastra platform hands a deploy its gateway key through this variable.
+    beforeEach(() => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk-gateway-deploy');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    const gatewayRow = async (app: Hono) => {
+      const { providers } = (await (await app.request('/web/config/providers')).json()) as {
+        providers: Array<{ provider: string; source: string; connectWithMastraAccount?: true }>;
+      };
+      return providers.find(p => p.provider === 'mastra');
+    };
+
+    it('lists the gateway as already connected and offers no one-click connect', async () => {
+      const row = await gatewayRow(buildApp(fakePlatform()));
+
+      expect(row).toMatchObject({ provider: 'mastra', source: 'deployment' });
+      expect(row).not.toHaveProperty('connectWithMastraAccount');
+    });
+
+    it('keeps a key someone connected earlier, still without the one-click connect', async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', { type: 'api_key', key: 'msk_old' });
+
+      const row = await gatewayRow(buildApp(fakePlatform()));
+
+      expect(row).toMatchObject({ provider: 'mastra', source: 'stored-org', orgCredential: 'api_key' });
+      expect(row).not.toHaveProperty('connectWithMastraAccount');
+    });
+
+    it.each(['org', 'user'] as const)('creates no key when a client still calls connect for %s', async scope => {
+      const platform = fakePlatform({
+        [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_factory' }, { status: 201 }),
+      });
+
+      const res = await connect(buildApp(platform), scope);
+
+      expect(res.status).toBe(200);
+      expect(platform.requests).toEqual([]);
+      expect(await seed.credentials.listCredentials('org1', 'user-a')).toEqual([]);
+    });
+  });
+
   it("creates no key while the user's Mastra session is on another organization than the Factory", async () => {
     const platform = fakePlatform(
       { [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_other_org' }, { status: 201 }) },
