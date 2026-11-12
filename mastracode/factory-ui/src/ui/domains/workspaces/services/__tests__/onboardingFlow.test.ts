@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   hasResumableFactoryOnboarding,
+  onboardingCreateReadiness,
   ONBOARDING_FACTORY_KEY,
   ONBOARDING_LINKED_REPOSITORY_KEY,
   ONBOARDING_STEP_KEY,
@@ -77,6 +78,28 @@ describe('Factory onboarding flow', () => {
 
     expect(readOnboardingStep()).toBeUndefined();
     expect(hasResumableFactoryOnboarding([{ id: 'factory-1' }])).toBe(true);
+  });
+
+  it('counts a connected provider without a model as missing for Create', () => {
+    const readiness = onboardingCreateReadiness({
+      repository: {
+        id: 1,
+        fullName: 'octo/hello',
+        name: 'hello',
+        owner: 'octo',
+        defaultBranch: 'main',
+        private: false,
+        installationId: 7,
+        installationStorageId: 'inst-7',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace/hello',
+      },
+      modelScope: 'hybrid',
+      model: { providerId: 'openai', method: 'api_key', modelId: '' },
+      personal: { providerId: 'anthropic', method: 'oauth', modelId: 'anthropic/claude-opus-5.5' },
+    });
+
+    expect(readiness).toEqual({ ready: false, missing: ['model'] });
   });
 
   it('keeps a connected personal provider without a model across reads', () => {

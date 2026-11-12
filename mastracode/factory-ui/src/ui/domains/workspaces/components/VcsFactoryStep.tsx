@@ -10,6 +10,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { useState } from 'react';
+import { Link } from 'react-router';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
@@ -29,27 +30,70 @@ import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 
 type SourceControlHost = 'github' | 'gitlab';
 
-/** Why a host can't be connected; `unavailable` means its status couldn't be read, so Retry may help. */
-type HostUnavailableReason = 'missing_config' | 'organization_required' | 'unavailable';
+/**
+ * Why a host can't be connected: `unavailable` means its status couldn't be read, so Retry may help;
+ * `auth_required` means the Factory session expired, so only signing in again helps.
+ */
+type HostUnavailableReason = 'missing_config' | 'organization_required' | 'unavailable' | 'auth_required';
 
 const HOST_NAMES = { github: 'GitHub', gitlab: 'GitLab' } as const;
 
 function hostUnavailableDescription(host: SourceControlHost, reason: HostUnavailableReason): string {
   if (reason === 'organization_required') return `Join an organization to connect ${HOST_NAMES[host]}.`;
   if (reason === 'unavailable') return `Couldn't load ${HOST_NAMES[host]} status.`;
+  if (reason === 'auth_required') return `Your session expired. Sign in again to connect ${HOST_NAMES[host]}.`;
   return 'Unavailable for this deployment.';
 }
 
 function gitLabUnavailableReason(status?: { enabled: boolean; reason?: string }): HostUnavailableReason | undefined {
   if (status?.reason === 'unavailable') return 'unavailable';
+  // An enabled GitLab with `auth_required` needs its own reauthorization, which Connect GitLab does.
+  if (!status?.enabled && status?.reason === 'auth_required') return 'auth_required';
   if (!status?.enabled) return 'missing_config';
   if (status.reason === 'organization_required') return 'organization_required';
   return undefined;
 }
 
 function githubUnavailableReason(reason?: GithubStatusReason): HostUnavailableReason | undefined {
-  if (reason === 'unavailable' || reason === 'organization_required' || reason === 'missing_config') return reason;
+  if (
+    reason === 'unavailable' ||
+    reason === 'organization_required' ||
+    reason === 'missing_config' ||
+    reason === 'auth_required'
+  )
+    return reason;
   return undefined;
+}
+
+/** The way out of a host problem that Connect can't fix: Retry a failed status, or sign in again. */
+function HostRecoveryAction({
+  host,
+  reason,
+  onRetry,
+}: {
+  host: SourceControlHost;
+  reason?: HostUnavailableReason;
+  onRetry: () => void;
+}) {
+  if (reason === 'unavailable') {
+    return (
+      <Button variant="ghost" aria-label={`Retry ${HOST_NAMES[host]}`} onClick={onRetry}>
+        Retry
+      </Button>
+    );
+  }
+  if (reason === 'auth_required') {
+    return (
+      <Button variant="default" render={<Link to="/signin" />}>
+        Sign in
+      </Button>
+    );
+  }
+  return null;
+}
+
+function needsRecovery(reason?: HostUnavailableReason): boolean {
+  return reason === 'unavailable' || reason === 'auth_required';
 }
 
 function repositoryHost(repository: SourceControlRepository): SourceControlHost {
@@ -302,10 +346,8 @@ function GitHubHostRow({
       }
       tone={unavailableReason === 'unavailable' ? 'error' : 'muted'}
       action={
-        unavailableReason === 'unavailable' ? (
-          <Button variant="ghost" aria-label="Retry GitHub" onClick={onRetry}>
-            Retry
-          </Button>
+        needsRecovery(unavailableReason) ? (
+          <HostRecoveryAction host="github" reason={unavailableReason} onRetry={onRetry} />
         ) : (
           <Button variant="default" disabled={redirecting || unavailableReason !== undefined} onClick={onConnect}>
             {redirecting && <Spinner size="sm" aria-label="Connecting to GitHub" />}
@@ -350,12 +392,8 @@ function GitLabAction({
   onConnected: () => void;
   onRetry: () => void;
 }) {
-  if (unavailableReason === 'unavailable') {
-    return (
-      <Button variant="ghost" aria-label="Retry GitLab" onClick={onRetry}>
-        Retry
-      </Button>
-    );
+  if (needsRecovery(unavailableReason)) {
+    return <HostRecoveryAction host="gitlab" reason={unavailableReason} onRetry={onRetry} />;
   }
   if (unavailableReason) {
     return (

@@ -166,17 +166,16 @@ function CreateNotice({ error, blockedReason, id }: { error?: string; blockedRea
 }
 
 /** Why Create is off, in the words of the lanes above, so a disabled button never leaves the user guessing. */
-function createBlockedReason(setup: OnboardingModelSetup, local: boolean): string {
-  if (!setup.draft.repository) return 'Choose a repository in Codebase to create your factory.';
+function createBlockedReason({ missing, scope }: OnboardingModelSetup, local: boolean): string {
+  if (missing.includes('repository')) return 'Choose a repository in Codebase to create your factory.';
   if (local) return 'Connect a provider and pick a model to create your factory.';
-  const companyMissing = !setup.company.choice;
-  const personalMissing = !setup.personal.choice;
-  if (setup.scope === 'user') return 'Connect your account and pick a model to create your factory.';
-  if (setup.scope === 'factory') return 'Connect the company account and pick a model to create your factory.';
-  if (companyMissing && personalMissing)
-    return 'Pick a model for Factory work and for your sessions to create your factory.';
-  if (companyMissing) return 'Pick a model for Factory work to create your factory.';
-  return 'Pick a model for your sessions to create your factory.';
+  if (scope === 'user') return 'Connect your account and pick a model to create your factory.';
+  if (scope === 'factory') return 'Connect the company account and pick a model to create your factory.';
+  const work = missing.includes('model');
+  const sessions = missing.includes('personal');
+  if (work && !sessions) return 'Pick a model for Factory work to create your factory.';
+  if (sessions && !work) return 'Pick a model for your sessions to create your factory.';
+  return 'Pick a model for Factory work and for your sessions to create your factory.';
 }
 
 function LoadingInset({ label, rows }: { label: string; rows: number }) {

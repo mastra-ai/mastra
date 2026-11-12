@@ -1,5 +1,5 @@
-import { completeOnboardingSchema } from '../services/onboardingFlow';
-import type { OnboardingDraft, OnboardingModelScope } from '../services/onboardingFlow';
+import { onboardingCreateReadiness } from '../services/onboardingFlow';
+import type { OnboardingDraft, OnboardingMissingField, OnboardingModelScope } from '../services/onboardingFlow';
 import { useOnboardingModelLane } from './useOnboardingModelLane';
 import type { OnboardingModelLane } from './useOnboardingModelLane';
 import { companyAccountNeedsAdmin } from './useProviderConnection';
@@ -13,6 +13,8 @@ export interface OnboardingModelSetup {
   /** The draft Create submits: the active scope with each lane's resolved choice. */
   draft: OnboardingDraft;
   canCreate: boolean;
+  /** The fields that keep Create disabled; empty once it can run. */
+  missing: OnboardingMissingField[];
 }
 
 /** Local mode has one connection; a locked company account leaves personal accounts; otherwise the stored choice. */
@@ -57,12 +59,14 @@ export function useOnboardingModelSetup({
     model: company.choice,
     personal: personal.choice,
   };
+  const readiness = onboardingCreateReadiness(effective);
   return {
     scope,
     companyLocked,
     company,
     personal,
     draft: effective,
-    canCreate: completeOnboardingSchema.safeParse(effective).success,
+    canCreate: readiness.ready,
+    missing: readiness.missing,
   };
 }

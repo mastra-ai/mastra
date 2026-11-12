@@ -79,6 +79,26 @@ export const completeOnboardingSchema = z.discriminatedUnion('modelScope', [
 
 export type CompleteOnboardingSetup = z.infer<typeof completeOnboardingSchema>;
 
+/** A draft field Create still needs: the repository, the company model, or the personal model. */
+export type OnboardingMissingField = 'repository' | 'model' | 'personal';
+
+function isMissingField(key: unknown): key is OnboardingMissingField {
+  return key === 'repository' || key === 'model' || key === 'personal';
+}
+
+/** Whether Create can run and, if not, which fields block it, read from the schema that gates it. */
+export function onboardingCreateReadiness(draft: OnboardingDraft): {
+  ready: boolean;
+  missing: OnboardingMissingField[];
+} {
+  const parsed = completeOnboardingSchema.safeParse(draft);
+  if (parsed.success) return { ready: true, missing: [] };
+  return {
+    ready: false,
+    missing: [...new Set(parsed.error.issues.map(issue => issue.path[0]))].filter(isMissingField),
+  };
+}
+
 interface ModelCheck {
   scope: 'org' | 'user';
   choice: OnboardingDraftModel;

@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -31,14 +32,16 @@ const repo = {
 
 function renderStep(props: Partial<VcsFactoryStepProps> = {}) {
   return renderWithProviders(
-    <VcsFactoryStep
-      githubRedirecting={false}
-      onDismissGithubCallback={vi.fn()}
-      onConnect={vi.fn()}
-      onManageConnection={vi.fn()}
-      onSelectRepository={vi.fn()}
-      {...props}
-    />,
+    <MemoryRouter initialEntries={['/onboarding']}>
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onDismissGithubCallback={vi.fn()}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+        {...props}
+      />
+    </MemoryRouter>,
   );
 }
 
@@ -198,7 +201,7 @@ describe('VCS Factory step', () => {
 
     expect(await screen.findByRole('link', { name: 'Open Mastra Platform' })).toHaveAttribute(
       'href',
-      'https://projects.mastra.ai',
+      'https://projects.mastra.ai/settings/general',
     );
     linkedInPlatform = true;
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
@@ -221,6 +224,36 @@ describe('VCS Factory step', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Connect GitHub again' }));
     expect(onConnect).toHaveBeenCalledOnce();
+  });
+
+  it('pairs a GitHub account mismatch with Platform and a new connect, since a refresh links nothing', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+    );
+    const onConnect = vi.fn();
+    renderStep({
+      githubCallback: { kind: 'error', code: 'github_app_connection_mismatch', message: 'Different GitHub account.' },
+      onConnect,
+    });
+
+    expect(await screen.findByRole('link', { name: 'Open Mastra Platform' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Connect GitHub again' }));
+    expect(onConnect).toHaveBeenCalledOnce();
+  });
+
+  it('sends an expired session to sign in instead of offering a GitHub connect that would fail', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ error: 'auth_required' }, { status: 401 }),
+      ),
+    );
+    renderStep();
+
+    expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/signin');
+    expect(screen.queryByRole('button', { name: /Connect GitHub/ })).not.toBeInTheDocument();
   });
 
   it('opens connected repositories directly and lets the user switch providers', async () => {

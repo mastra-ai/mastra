@@ -1,19 +1,26 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import type { ReactNode } from 'react';
 
 import { MASTRA_PLATFORM_URL } from '../../../factory/services/platformConnect';
 import type { GitHubAppCallbackResult } from '../GitHubAppCallbackHandler';
 
-type Recovery = 'platform' | 'refresh' | 'connect';
+/** Where Platform's Refresh accounts lives; the Accounts section there shows only to organization admins. */
+const PLATFORM_ACCOUNTS_URL = `${MASTRA_PLATFORM_URL}/settings/general`;
 
-/**
- * The step that clears a refusal: some are fixed in Mastra Platform, then picked up by a refresh here;
- * an already-used link means the install went through; the rest need a new connect.
- */
+interface Recovery {
+  /** A Mastra Platform page where the refusal is fixed first. */
+  platformHref?: string;
+  /** What picks the fix up here: a status refresh, or a new GitHub connect. */
+  next: 'refresh' | 'connect';
+}
+
 function recoveryFor(code?: string): Recovery {
-  if (code === 'github_app_installation_preexisting' || code === 'github_app_connection_mismatch') return 'platform';
-  if (code === 'github_app_link_already_used') return 'refresh';
-  return 'connect';
+  // Refresh accounts links the older install in Platform; a refresh here then sees it.
+  if (code === 'github_app_installation_preexisting') return { platformHref: PLATFORM_ACCOUNTS_URL, next: 'refresh' };
+  // Disconnecting the other GitHub account in Platform links nothing; only a new connect does.
+  if (code === 'github_app_connection_mismatch') return { platformHref: MASTRA_PLATFORM_URL, next: 'connect' };
+  // An already-used link usually means the install went through.
+  if (code === 'github_app_link_already_used') return { next: 'refresh' };
+  return { next: 'connect' };
 }
 
 export interface OnboardingGithubNoticeProps {
@@ -47,12 +54,22 @@ export function OnboardingGithubNotice({
 
   if (callback?.kind === 'error') {
     const recovery = recoveryFor(callback.code);
+    const informational = !recovery.platformHref && recovery.next === 'refresh';
     return (
       <Notice
-        variant={recovery === 'refresh' ? 'info' : 'destructive'}
-        role={recovery === 'refresh' ? undefined : 'alert'}
+        variant={informational ? 'info' : 'destructive'}
+        role={informational ? undefined : 'alert'}
         onDismiss={onDismiss}
-        action={<RecoveryActions recovery={recovery} refresh={refresh} connectAgain={connectAgain} />}
+        action={
+          <>
+            {recovery.platformHref && (
+              <Notice.Button render={<a href={recovery.platformHref} target="_blank" rel="noopener noreferrer" />}>
+                Open Mastra Platform
+              </Notice.Button>
+            )}
+            {recovery.next === 'refresh' ? refresh : connectAgain}
+          </>
+        }
       >
         {callback.message}
       </Notice>
@@ -88,25 +105,4 @@ export function OnboardingGithubNotice({
     );
   }
   return null;
-}
-
-function RecoveryActions({
-  recovery,
-  refresh,
-  connectAgain,
-}: {
-  recovery: Recovery;
-  refresh: ReactNode;
-  connectAgain: ReactNode;
-}) {
-  if (recovery === 'connect') return connectAgain;
-  if (recovery === 'refresh') return refresh;
-  return (
-    <>
-      <Notice.Button render={<a href={MASTRA_PLATFORM_URL} target="_blank" rel="noopener noreferrer" />}>
-        Open Mastra Platform
-      </Notice.Button>
-      {refresh}
-    </>
-  );
 }

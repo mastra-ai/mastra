@@ -18,9 +18,9 @@ const callbackParamNames = [
 // Codes Mastra Platform's GitHub App callback redirects back with when it
 // refuses to link an installation or a GitHub account.
 const callbackErrorMessages: Record<string, string> = {
-  // Platform links an install made before the link only from its own Accounts page, in the user's session.
+  // Platform links an install made before the link only from its Accounts settings, shown to organization admins.
   github_app_installation_preexisting:
-    'This GitHub account already had the Mastra GitHub App, so this link didn’t connect it. In Mastra Platform, open your organization settings and choose Refresh accounts under Accounts, then refresh here.',
+    'This GitHub account already had the Mastra GitHub App, so this link didn’t connect it. In Mastra Platform, an organization admin needs to open Settings → General and choose Refresh accounts under Accounts. Then refresh here.',
   github_app_installation_not_owned:
     'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation. Ask them to connect GitHub, or choose an account you own.',
   github_app_installation_linked_elsewhere:
