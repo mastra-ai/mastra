@@ -768,8 +768,8 @@ describe('CachingPubSub replay over ConvexServerCache', () => {
     // offset instead of reading it from the start. (`[key, 0, 0]` is the
     // single-entry read of frame 0's id for restart detection.)
     expect(listFromTo.mock.calls).toEqual([
-      ['pubsub:{workflow.events.v2.run-1}', 0, 0],
-      ['pubsub:{workflow.events.v2.run-1}', 4],
+      ['pubsub:workflow.events.v2.run-1', 0, 0],
+      ['pubsub:workflow.events.v2.run-1', 4],
     ]);
   });
 
@@ -783,8 +783,8 @@ describe('CachingPubSub replay over ConvexServerCache', () => {
     });
 
     // The retained log expires and the run publishes a new segment.
-    await cache.delete('pubsub:{workflow.events.v2.run-1}');
-    await cache.delete('pubsub:{workflow.events.v2.run-1}:counter');
+    await cache.delete('pubsub:workflow.events.v2.run-1');
+    await cache.delete('pubsub:workflow.events.v2.run-1:counter');
     await publish(100);
 
     await vi.waitFor(() => expect(frames(received)).toEqual([{ index: 0, n: 100 }]));

@@ -22,7 +22,7 @@ const makeAgent = () =>
     model: new MockLanguageModelV2({}),
   });
 
-const cacheKeyFor = (topic: string) => `pubsub:{${topic}}`;
+const cacheKeyFor = (topic: string) => `pubsub:${topic}`;
 
 describe('DurableAgent shouldCache', () => {
   it('caches every non-run-local topic by default', async () => {

@@ -20,6 +20,11 @@ export interface CachingPubSubOptions {
    */
   logger?: IMastraLogger;
   /**
+   * Use Redis Cluster hash tags for replay keys. Opt in only for new logs or
+   * after existing logs have expired; the default preserves legacy keys.
+   */
+  keyFormat?: 'redis-cluster';
+  /**
    * Optional per-topic caching policy. Defaults to caching every topic.
    *
    * Returning `false` takes the same path as a `localOnly` publish: no list
@@ -121,6 +126,7 @@ const EMPTY_INDICES: ReadonlySet<number> = new Set();
  */
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
+  private readonly keyFormat: 'legacy' | 'redis-cluster';
   private readonly logger?: IMastraLogger;
   private readonly shouldCache?: (topic: string) => boolean;
   private readonly extendExistingLogsOnly: boolean;
@@ -143,6 +149,7 @@ export class CachingPubSub extends PubSub {
   ) {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
+    this.keyFormat = options.keyFormat ?? 'legacy';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
     this.extendExistingLogsOnly = options.extendExistingLogsOnly ?? false;
@@ -201,8 +208,9 @@ export class CachingPubSub extends PubSub {
     }
   }
 
-  /** Get the cache key for a topic's event list in a Redis Cluster slot shared with its counter. */
+  /** Get the cache key for a topic's event list. */
   private getCacheKey(topic: string): string {
+    if (this.keyFormat === 'legacy') return `${this.keyPrefix}${topic}`;
     // Encode braces and percent signs so topics cannot create nested tags or collide with one another.
     const tag = encodeURIComponent(topic) || '%EMPTY';
     return `${this.keyPrefix}{${tag}}`;

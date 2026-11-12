@@ -259,8 +259,8 @@ export class RedisServerCache extends MastraServerCache {
       );
       return Number(result);
     } catch (error) {
-      // Callers supplying untagged keys can still hit CROSSSLOT. CachingPubSub
-      // supplies co-located keys, but keep the fallback for other cache users.
+      // Untagged list and counter keys can still hit CROSSSLOT. Keep the
+      // fallback for callers that have not opted into tagged cache keys.
       if (error instanceof Error && error.message.includes('CROSSSLOT')) {
         this.scriptingDisabled = true;
         this.logger.warn(

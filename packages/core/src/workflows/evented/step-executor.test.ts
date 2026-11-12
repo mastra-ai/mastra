@@ -635,7 +635,7 @@ describe('StepExecutor', () => {
         } as any);
       }
 
-      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
       expect(cached.map(event => event.index)).toEqual([0, 1]);
     });
 
@@ -658,7 +658,7 @@ describe('StepExecutor', () => {
       } as any);
 
       expect(live).toHaveLength(1);
-      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
       expect(cached.map(event => event.index)).toEqual([0]);
       expect(live[0]?.index).toBe(0);
       expect(stepPubsub).toBe(target.pubsub);
@@ -698,7 +698,7 @@ describe('StepExecutor', () => {
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
       await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-caller', data: { n: 0 } } as any);
 
-      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
       expect(cached.map(event => [event.type, event.index])).toEqual([
         ['start', 0],
         ['chunk', 1],
@@ -728,7 +728,7 @@ describe('StepExecutor', () => {
 
       expect(live).toHaveLength(2);
       expect(live.map(event => event.index)).toEqual([undefined, undefined]);
-      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(0);
+      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
       const warnings = warn.mock.calls.filter(([message]) => String(message).includes('RedisServerCache'));
       expect(warnings).toHaveLength(1);
     });
