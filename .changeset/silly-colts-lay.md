@@ -21,6 +21,8 @@ Some cases keep the earlier behavior:
 - A nested workflow's hand-off checks that its claim is still its own right before it continues the parent, in a separate storage call from the publish. A worker that stalls between the two, after another worker took the claim over, can continue the parent a second time. Step leases have the same window.
 - When `shouldPersistSnapshot` declined a run's final snapshot, the marker that keeps a late event from running its steps again lasts six hours. An event a broker redelivers later than that, for example from a Redis Streams consumer group that had no running member for that long, can run its step again.
 
+If you prune `workflows.runOwnership` with `retention`, set its `maxAge` to at least six hours. The markers that keep late deliveries from repeating finished work live that long, and a shorter `maxAge` can delete them early.
+
 This needs a storage adapter with run-ownership support. Workflows with `autoRestartActiveRuns: false`, including durable agent workflows, are unchanged.
 
 If an evented workflow sets `pruneSnapshot`, keep each step result's `status`, `startedAt` and `endedAt`, a loop step's `metadata.iterationCount`, a foreach step's `suspendPayload.__workflow_meta.foreachOutput`, and the snapshot's `activePaths`. Without them, a late event can run its step a second time.
