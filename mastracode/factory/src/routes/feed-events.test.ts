@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { SSEStreamingApi } from 'hono/streaming';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic, touchFeed } from '../feed-events.js';
+import { feedTopic, touchFeed, touchIntake } from '../feed-events.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { buildFeedEventsRoutes } from './feed-events.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
@@ -147,6 +147,37 @@ describe('board feed stream', () => {
 
     await vi.waitFor(() => expect(otherFeed.frames).toHaveLength(1));
     expect(feed.frames).toHaveLength(1);
+
+    await feed.stop();
+    await otherFeed.stop();
+  });
+
+  it('tells a board that its intake candidates changed in a frame of its own, and that a card moved in the other', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const { project: other } = await seedProjectItem(seed);
+    const pubsub = new EventEmitterPubSub();
+    seed.workItems.onBoardChanged(scope => touchFeed(pubsub, scope));
+    seed.workItems.onIntakeChanged(scope => touchIntake(pubsub, scope));
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    const otherFeed = openFeed(await app.request(`/web/factory/projects/${other.id}/feed-events`));
+    const source = { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:7' };
+    const scope = { orgId: ORG, factoryProjectId: project.id };
+
+    await seed.workItems.storeIntakeCandidate({ ...scope, source, title: 'Issue 7', metadata: { state: 'open' } });
+    await vi.waitFor(() => expect(feed.frames).toEqual([{ event: 'intake', data: '{}' }]));
+
+    await seed.workItems.storeIntakeCandidate({ ...scope, source, title: 'Issue 7', metadata: { state: 'open' } });
+    await seed.workItems.upsert({
+      ...scope,
+      userId: 'user-alice',
+      input: { title: 'Issue 7', stages: ['intake'], sessions: {}, metadata: {}, externalSource: source },
+    });
+
+    await vi.waitFor(() => expect(feed.frames).toHaveLength(3));
+    expect(feed.frames.map(frame => frame.event).sort()).toEqual(['feed', 'intake', 'intake']);
+    expect(otherFeed.frames).toEqual([]);
 
     await feed.stop();
     await otherFeed.stop();

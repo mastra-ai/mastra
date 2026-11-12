@@ -114,6 +114,10 @@ async function setup() {
     sandboxWorkdir: '/workspace',
   });
 
+  const select = (sourceIds: string[] | null, enabled = true) =>
+    seeded.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled, sourceIds } } });
+  await select(['acme/repo']);
+
   const open = { issues: [] as IntakeIssue[], pullRequests: [] as PullRequest[] };
   const github = {
     rules: resolveGithubRules(),
@@ -128,6 +132,7 @@ async function setup() {
       sourceControl,
       generic: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
+      intake: seeded.intake,
     },
     runtime: { configVersion: 'factory-config-v1', workItems, boards },
   } as unknown as IntegrationContext;
@@ -141,7 +146,9 @@ async function setup() {
     open,
     github,
     offered,
-    pass: () => runIntakePasses(passes),
+    select,
+    seeded,
+    pass: (only?: { orgId: string }) => runIntakePasses(passes, only),
     event: attachGithubRules(github as never, context)!,
     candidates: async (kind?: 'issue' | 'pull-request') =>
       (await workItems.listIntakeCandidates({ ...scope, ...(kind ? { kind } : {}), limit: 100 })).candidates,
@@ -366,5 +373,92 @@ describe('a GitHub event and the Intake candidates', () => {
     await t.event(issueEvent('closed', 1, BEFORE_LINK));
 
     expect(await t.candidates()).toEqual([]);
+  });
+});
+
+describe('the repositories an organization takes issues from', () => {
+  it('offers no issue of a linked repository nobody picked as an issue source, and still its pull requests', async () => {
+    const t = await setup();
+    await t.select(null);
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
+    t.open.pullRequests = [listedPullRequest(2, BEFORE_LINK)];
+
+    expect(await t.pass()).toMatchObject({ failed: 0, stored: 1 });
+
+    expect(t.github.intake.listIssues).not.toHaveBeenCalled();
+    expect((await t.candidates()).map(candidate => candidate.title)).toEqual(['Pull request 2']);
+  });
+
+  it('offers no issue while GitHub intake is switched off', async () => {
+    const t = await setup();
+    await t.select(['acme/repo'], false);
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
+
+    await t.pass();
+    await t.event(issueEvent('opened', 42));
+
+    expect(await t.candidates('issue')).toEqual([]);
+  });
+
+  it('stops offering the issues of a repository once it is no longer picked', async () => {
+    const t = await setup();
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
+    await t.pass();
+    expect(await t.candidates('issue')).toHaveLength(1);
+
+    await t.select([]);
+
+    expect(await t.pass()).toMatchObject({ failed: 0, removed: 1 });
+    expect(await t.candidates('issue')).toEqual([]);
+  });
+
+  it('offers nothing for an event on an issue of a repository nobody picked', async () => {
+    const t = await setup();
+    await t.select(['acme/other']);
+
+    await t.event(issueEvent('opened', 42));
+
+    expect(await t.candidates()).toEqual([]);
+  });
+});
+
+describe('a pass asked for by one organization', () => {
+  it('reads the repositories of that organization and of no other', async () => {
+    const t = await setup();
+    const sourceControl = t.seeded.sourceControl.forIntegration('github');
+    const project = await t.seeded.projects.create({ orgId: 'org-2', userId: 'user-2', input: { name: 'Project 2' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-2',
+      connectedByUserId: 'user-2',
+      externalId: '8',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-2',
+      input: { installationId: installation.id, externalId: '20', slug: 'other/repo', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-2',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-2',
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-2',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-2',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace',
+    });
+    const read = () =>
+      (t.github.versionControl.listPullRequests.mock.calls as unknown as Array<[{ sourceId: string }]>).map(
+        ([input]) => input.sourceId,
+      );
+
+    await t.pass({ orgId: 'org-1' });
+    expect(read()).toEqual(['acme/repo']);
+
+    await t.pass();
+    expect(read().sort()).toEqual(['acme/repo', 'acme/repo', 'other/repo']);
   });
 });

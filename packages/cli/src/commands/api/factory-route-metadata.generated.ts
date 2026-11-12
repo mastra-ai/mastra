@@ -314,6 +314,27 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/intake/candidates": {
+    "contractKey": "intakeCandidateList",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake/candidates",
+    "description": "List the open provider records of a Factory project that have no card, newest first, as the server last read them",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "cursor",
+      "kind",
+      "limit",
+      "source"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/metrics": {
     "contractKey": "metricsGet",
     "method": "GET",
@@ -3341,6 +3362,189 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         }
       }
+    }
+  },
+  "GET /web/factory/projects/:id/intake/candidates": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "issue",
+            "pull-request"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "limit": {
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "workItemId": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "title": {
+                "type": "string"
+              },
+              "externalSource": {
+                "type": "object",
+                "properties": {
+                  "integrationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "type": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "externalId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "integrationId",
+                  "type",
+                  "externalId"
+                ]
+              },
+              "key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "state": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "author": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "createdAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workItemId",
+              "title",
+              "externalSource",
+              "key",
+              "url",
+              "state",
+              "labels",
+              "author",
+              "metadata",
+              "createdAt"
+            ]
+          }
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "passes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "integrationId": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "issue",
+                  "pull-request"
+                ]
+              },
+              "completeAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "failed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "integrationId",
+              "kind",
+              "completeAt",
+              "failed"
+            ]
+          }
+        }
+      },
+      "required": [
+        "candidates",
+        "passes"
+      ]
     }
   },
   "GET /web/factory/projects/:id/metrics": {
@@ -9346,6 +9550,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "intakeRouteList": "GET /web/factory/projects/:id/intake-routes",
   "intakeRouteGet": "GET /web/factory/projects/:id/intake-routes/:routeId",
+  "intakeCandidateList": "GET /web/factory/projects/:id/intake/candidates",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
   "workItemList": "GET /web/factory/projects/:id/work-items",

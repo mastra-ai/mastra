@@ -1,3 +1,4 @@
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntakeKind, IntakeRecord } from '../intake-pass.js';
@@ -17,6 +18,23 @@ export interface GithubIntakePullRequest extends GithubIntakeIssue {
   requestedReviewers: string[];
   headBranch: string;
   baseBranch: string;
+}
+
+export type GithubIssueSelection = Pick<IntakeStorage, 'ensureReady' | 'getConfig'>;
+
+/**
+ * Which repositories an organization takes issues from: the ones picked in Settings › Intake.
+ * Pull requests are offered for every linked repository, so only issues ask this.
+ */
+export async function githubIssueRepositories(
+  intake: GithubIssueSelection | undefined,
+  orgId: string,
+): Promise<(slug: string) => boolean> {
+  if (!intake) return () => true;
+  await intake.ensureReady();
+  const selection = (await intake.getConfig({ orgId, integrationIds: ['github'] })).github;
+  const slugs = new Set(selection?.enabled ? selection.sourceIds : []);
+  return slug => slugs.has(slug);
 }
 
 function createdAt(value: string | null): Date | null {
@@ -82,6 +100,9 @@ function names(value: unknown, key: 'login' | 'name'): string[] {
 }
 
 interface GithubEventItem {
+  kind: IntakeKind;
+  /** `owner/name`, which is how Settings › Intake names an issue source. */
+  slug: string | null;
   installationId: number;
   repositoryId: number;
   source: ExternalWorkItemSource;
@@ -137,6 +158,8 @@ function githubEventItem(parsed: ParsedGithubWebhook): GithubEventItem | null {
   // An open record the event does not describe well enough to list is left to the next pass.
   if (open && !record) return null;
   return {
+    kind,
+    slug: string(object(parsed.payload.repository)?.full_name) ?? null,
     installationId,
     repositoryId,
     source: githubIntakeSource(repositoryId, kind, itemNumber),
@@ -154,6 +177,7 @@ export async function settleGithubIntakeEvent(
   deps: {
     storage: Pick<WorkItemsStorage, 'getByProjectSource' | 'storeIntakeCandidate' | 'removeIntakeCandidate'>;
     sourceControl: Pick<SourceControlStorageHandle, 'projectRepositories'>;
+    intake?: GithubIssueSelection;
   },
   parsed: ParsedGithubWebhook,
 ): Promise<void> {
@@ -165,7 +189,10 @@ export async function settleGithubIntakeEvent(
   });
   for (const project of projects) {
     const scope = { orgId: project.orgId, factoryProjectId: project.factoryProjectId };
-    if (!item.record) {
+    const taken =
+      item.kind !== 'issue' ||
+      (item.slug !== null && (await githubIssueRepositories(deps.intake, project.orgId))(item.slug));
+    if (!item.record || !taken) {
       await deps.storage.removeIntakeCandidate({ ...scope, source: item.source });
       continue;
     }

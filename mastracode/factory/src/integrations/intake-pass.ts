@@ -1,5 +1,5 @@
 import type { IntakeSourceBinding, IntakeStorage } from '../storage/domains/intake/base.js';
-import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
+import type { IntegrationStorage, IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
@@ -183,6 +183,44 @@ export async function readIntakePassStatus(
   return { ...NO_STATUS, ...(value as Partial<IntakePassStatus>) };
 }
 
+/** Every pass a project can have: the provider and the kind of record it lists. */
+export const INTAKE_PASSES = [
+  { integrationId: 'github', kind: 'issue' },
+  { integrationId: 'github', kind: 'pull-request' },
+  { integrationId: 'gitlab', kind: 'issue' },
+  { integrationId: 'gitlab', kind: 'pull-request' },
+  { integrationId: 'linear', kind: 'issue' },
+  { integrationId: 'jira', kind: 'issue' },
+  { integrationId: 'incidentio', kind: 'issue' },
+] as const satisfies ReadonlyArray<{ integrationId: string; kind: IntakeKind }>;
+
+export interface IntakePassReport {
+  integrationId: string;
+  kind: IntakeKind;
+  /** When the provider's open records were last read to the end; `null` before the first such pass. */
+  completeAt: string | null;
+  /** Whether the latest pass failed, which leaves the list as the pass before it left it. */
+  failed: boolean;
+}
+
+/** How fresh a project's candidates are, for every pass that has run over it: one read. */
+export async function readIntakePassReports(
+  settings: Pick<IntegrationStorage, 'listSettings'>,
+  scope: { orgId: string; factoryProjectId: string },
+): Promise<IntakePassReport[]> {
+  const rows = await settings.listSettings<Partial<IntakePassStatus>>({
+    orgId: scope.orgId,
+    integrationIds: [...new Set(INTAKE_PASSES.map(pass => pass.integrationId))],
+    userIds: [...new Set(INTAKE_PASSES.map(pass => intakePassStatusKey(scope.factoryProjectId, pass.kind)))],
+  });
+  return INTAKE_PASSES.flatMap(pass => {
+    const key = intakePassStatusKey(scope.factoryProjectId, pass.kind);
+    const status = rows.find(row => row.integrationId === pass.integrationId && row.userId === key)?.config;
+    if (!status) return [];
+    return [{ ...pass, completeAt: status.completeAt ?? null, failed: Boolean(status.failedAt) }];
+  });
+}
+
 function saveIntakePassStatus(
   store: IntakePassStatusStore,
   scope: { orgId: string; factoryProjectId: string; kind: IntakeKind },
@@ -225,8 +263,14 @@ export interface IntakePassOptions<T> {
   now?: () => Date;
 }
 
-/** Runs over every project, or over the one named: the project a source was just linked to. */
-export type IntakePass = (only?: { orgId: string; factoryProjectId: string }) => Promise<IntakePassSummary>;
+/** What a scoped run covers: one project, or every project of the organization. */
+export interface IntakePassScope {
+  orgId: string;
+  factoryProjectId?: string;
+}
+
+/** Runs over every project, or over the ones named: where a source was just linked or selected. */
+export type IntakePass = (only?: IntakePassScope) => Promise<IntakePassSummary>;
 
 export interface IntakePassSummary extends IntakeSettleSummary {
   projects: number;
@@ -250,9 +294,10 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
   return async function pass(only): Promise<IntakePassSummary> {
     const summary: IntakePassSummary = { projects: 0, offered: 0, stored: 0, removed: 0, failed: 0, errors: [] };
     const byOrg = new Map<string, string[]>();
-    for (const project of only
+    const projects = only?.factoryProjectId
       ? [{ orgId: only.orgId, id: only.factoryProjectId }]
-      : await options.projects.listAll()) {
+      : (await options.projects.listAll()).filter(project => !only || project.orgId === only.orgId);
+    for (const project of projects) {
       byOrg.set(project.orgId, [...(byOrg.get(project.orgId) ?? []), project.id]);
     }
 
@@ -407,7 +452,7 @@ export function withIntakePass(
 /** Run passes one after the other and add up what they did. */
 export async function runIntakePasses(
   passes: readonly IntakePass[],
-  only?: { orgId: string; factoryProjectId: string },
+  only?: IntakePassScope,
 ): Promise<IntakePassSummary> {
   const total: IntakePassSummary = { projects: 0, offered: 0, stored: 0, removed: 0, failed: 0, errors: [] };
   for (const pass of passes) {

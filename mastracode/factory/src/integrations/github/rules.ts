@@ -54,6 +54,7 @@ import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import { settleGithubIntakeEvent } from './intake-candidates.js';
+import type { GithubIssueSelection } from './intake-candidates.js';
 import type { GithubRepositoryPermission } from './integration.js';
 import { isRepositoryPullRequest } from './pull-request-source.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -448,6 +449,8 @@ export interface GithubRulesOptions {
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /** The issue sources picked in Settings › Intake, which decide whose open issues are offered there. */
+  intake?: GithubIssueSelection;
   /** Hands a push to a linked repository off for an environment build. */
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
 }
@@ -2321,6 +2324,7 @@ export function githubRulesOptions(
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    intake: context.storage.intake,
     ...(context.hooks?.onRepositoryPush ? { onRepositoryPush: context.hooks.onRepositoryPush } : {}),
   };
 }

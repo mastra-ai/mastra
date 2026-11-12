@@ -68,7 +68,7 @@ import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
-import { touchFeed } from './feed-events.js';
+import { touchFeed, touchIntake } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubRuleOverrides } from './integrations/github/default-rules.js';
@@ -98,6 +98,7 @@ import {
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
 import { buildFeedEventsRoutes } from './routes/feed-events.js';
+import { buildIntakeCandidateRoutes } from './routes/intake-candidates.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
 import { SandboxEnvRoutes } from './routes/sandbox-envs.js';
@@ -854,6 +855,7 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onBoardChanged(scope => touchFeed(eventBus, scope));
+    workItemsStorage.onIntakeChanged(scope => touchIntake(eventBus, scope));
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
     workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
@@ -2188,6 +2190,12 @@ export class MastraFactory {
             audit: auditDomain,
           }).routes(),
           ...buildFeedEventsRoutes({ auth: routeAuth, projects: factoryProjectsStorage, pubsub: eventBus }),
+          ...buildIntakeCandidateRoutes({
+            auth: routeAuth,
+            projects: factoryProjectsStorage,
+            workItems: workItemsStorage,
+            settings: integrationStorage,
+          }),
           ...auditDomain.routes(),
           // Connect/reconnect session minting for Platform-managed providers.
           // Server-side because only the deploy holds Platform machine

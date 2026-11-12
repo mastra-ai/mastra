@@ -24,6 +24,7 @@ import {
   transitionBodySchema,
   updateProjectBodySchema,
 } from './contracts.js';
+import { buildIntakeCandidateRoutes } from './intake-candidates.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { ProjectRoutes } from './projects.js';
 import { SandboxEnvRoutes } from './sandbox-envs.js';
@@ -85,7 +86,18 @@ function registeredFactoryRoutes() {
     sandboxEnvs: {},
     writable: true,
   } as never).routes();
-  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes, ...sandboxEnvs];
+  const intakeCandidates = buildIntakeCandidateRoutes({ auth: {}, projects: {}, workItems: {}, settings: {} } as never);
+  return [
+    ...projects,
+    ...work,
+    ...attention,
+    ...automationRuns,
+    ...boards,
+    ...skills,
+    ...intakeRoutes,
+    ...intakeCandidates,
+    ...sandboxEnvs,
+  ];
 }
 
 describe('Factory route contracts', () => {

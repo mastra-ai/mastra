@@ -78,7 +78,7 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
-import { runIntakePassesForLink } from '../../intake-pass.js';
+import { runIntakePasses, runIntakePassesForLink } from '../../intake-pass.js';
 import type { IntakePass } from '../../intake-pass.js';
 import {
   logPlatformInfo,
@@ -760,6 +760,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       ingestFactoryEvent: this.#ingestFactoryEvent,
     });
     await runIntakePassesForLink(this.#intakePasses, this.storage, args);
+  }
+
+  /** Selecting an issue source offers its open issues now, not at the hourly pass. */
+  async syncIntake(scope: { orgId: string }): Promise<void> {
+    const summary = await runIntakePasses(this.#intakePasses, scope);
+    if (summary.failed > 0) throw new Error(summary.errors[0]?.error ?? 'The intake pass failed.');
   }
 
   #statusRoute(ctx: IntegrationContext): ApiRoute {

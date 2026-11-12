@@ -48,7 +48,7 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
-import { runIntakePassesForLink } from '../intake-pass.js';
+import { runIntakePasses, runIntakePassesForLink } from '../intake-pass.js';
 import type { IntakePass } from '../intake-pass.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
@@ -1328,6 +1328,12 @@ export class GithubIntegration implements FactoryIntegration {
   async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
     await ingestLinkedRepositoryBacklog({ github: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
     await runIntakePassesForLink(this.#intakePasses, this.sourceControlStorage, args);
+  }
+
+  /** Selecting an issue source offers its open issues now, not at the hourly pass. */
+  async syncIntake(scope: { orgId: string }): Promise<void> {
+    const summary = await runIntakePasses(this.#intakePasses, scope);
+    if (summary.failed > 0) throw new Error(summary.errors[0]?.error ?? 'The intake pass failed.');
   }
 
   /**

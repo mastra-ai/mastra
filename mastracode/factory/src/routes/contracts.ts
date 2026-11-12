@@ -793,6 +793,54 @@ export const skillOverrideSaveRequestSchema = skillPathSchema
   .extend({ content: skillContentSchema })
   .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
+const intakeCandidateSchema = z.object({
+  /** The work item a card filed for the record keeps. */
+  workItemId: uuidSchema,
+  title: z.string(),
+  externalSource: externalSourceSchema.unwrap(),
+  /** The provider's own name for the record, such as `owner/repo#12` or `ENG-42`. */
+  key: z.string().nullable(),
+  url: z.string().nullable(),
+  state: z.string().nullable(),
+  labels: z.array(z.string()),
+  author: z.string().nullable(),
+  /** The provider facts a card filed for the record starts with. */
+  metadata: z.record(z.string(), z.unknown()),
+  /** When the provider created the record; the list is ordered by it, newest first. */
+  createdAt: z.string(),
+});
+const intakeCandidateList = {
+  method: 'GET',
+  path: '/web/factory/projects/:id/intake/candidates',
+  description:
+    'List the open provider records of a Factory project that have no card, newest first, as the server last read them',
+  pathSchema: projectPathSchema,
+  querySchema: z.object({
+    kind: z.enum(['issue', 'pull-request']).optional(),
+    /** The integration to list for, such as `github` or `linear`. */
+    source: z.string().min(1).max(128).optional(),
+    /** The `nextCursor` of the page before. */
+    cursor: z.string().min(1).max(512).optional(),
+    limit: boundedLimitSchema(50, 100),
+  }),
+  responseSchema: z.object({
+    candidates: z.array(intakeCandidateSchema),
+    /** Absent on the last page. */
+    nextCursor: z.string().optional(),
+    /** How fresh the list is: one entry for each provider pass that has run over the project. */
+    passes: z.array(
+      z.object({
+        integrationId: z.string(),
+        kind: z.enum(['issue', 'pull-request']),
+        /** When the provider's open records were last read to the end. */
+        completeAt: z.string().nullable(),
+        /** Whether the latest pass failed, which leaves the list as the pass before it left it. */
+        failed: z.boolean(),
+      }),
+    ),
+  }),
+} as const;
+
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
@@ -1079,6 +1127,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     bodySchema: intakeRouteReorderBodySchema,
     responseSchema: intakeRouteListResponseSchema,
   },
+  intakeCandidateList,
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',

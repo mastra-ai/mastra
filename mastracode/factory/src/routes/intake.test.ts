@@ -123,6 +123,49 @@ describe('intake configuration', () => {
     ]);
   });
 
+  it('brings the candidates of each integration whose selection it saved in step, and of no other', async () => {
+    const syncGithub = vi.fn(async () => {});
+    const syncLinear = vi.fn(async () => {});
+    const app = buildApp(orgUser, [
+      { id: 'github', intake: github, syncIntake: syncGithub },
+      { id: 'linear', intake: linear, syncIntake: syncLinear },
+    ]);
+
+    const response = await app.request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ github: { enabled: true, sourceIds: ['acme/app'] } }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(syncGithub.mock.calls).toEqual([[{ orgId: 'org1' }]]);
+    expect(syncLinear).not.toHaveBeenCalled();
+  });
+
+  it('saves the selection even when the candidates cannot be brought in step', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const app = buildApp(orgUser, [
+      {
+        id: 'github',
+        intake: github,
+        syncIntake: async () => {
+          throw new Error('GitHub is down');
+        },
+      },
+    ]);
+
+    const response = await app.request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ github: { enabled: true, sourceIds: ['acme/app'] } }),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await seed.intake.getConfig({ orgId: 'org1' })).github).toEqual({ enabled: true, sourceIds: ['acme/app'] });
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+    warn.mockRestore();
+  });
+
   describe('source bindings', () => {
     const put = (body: unknown, user: typeof orgUser | null = orgUser) =>
       buildApp(user).request('/web/intake/bindings', {

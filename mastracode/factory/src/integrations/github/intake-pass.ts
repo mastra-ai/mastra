@@ -18,7 +18,8 @@ import type {
   LinkedIntakeRepository,
   OrgIntakeListing,
 } from '../intake-pass.js';
-import { githubIssueRecord, githubPullRequestRecord } from './intake-candidates.js';
+import { githubIssueRecord, githubIssueRepositories, githubPullRequestRecord } from './intake-candidates.js';
+import type { GithubIssueSelection } from './intake-candidates.js';
 import type { GithubIssueReconciler } from './issue-reconciler.js';
 import {
   GithubRules,
@@ -46,6 +47,8 @@ export interface GithubIntakePassOptions {
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   storage: CandidateStore;
   status: IntakePassStatusStore;
+  /** The issue sources picked in Settings › Intake; without it every linked repository is one. */
+  intake?: GithubIssueSelection;
   ingest(event: ParsedGithubWebhook): Promise<unknown>;
 }
 
@@ -81,9 +84,19 @@ export function createGithubIntakePasses(options: GithubIntakePassOptions): Inta
         repository: LinkedIntakeRepository,
         cursor: string | undefined,
       ) => Promise<{ items: T[]; nextCursor: string | null }>,
+      taken: (orgId: string) => Promise<(slug: string) => boolean> = async () => () => true,
     ) =>
     async (orgId: string, factoryProjectIds: string[]): Promise<OrgIntakeListing<Listed<T>>> => {
-      const linked = await linkedIntakeRepositories(options.sourceControl, orgId, factoryProjectIds);
+      const [every, takes] = await Promise.all([
+        linkedIntakeRepositories(options.sourceControl, orgId, factoryProjectIds),
+        taken(orgId),
+      ]);
+      const linked = new Map(
+        [...every].map(([projectId, repositories]) => [
+          projectId,
+          repositories.filter(repository => takes(repository.slug)),
+        ]),
+      );
       return {
         sources: factoryProjectId =>
           new Map((linked.get(factoryProjectId) ?? []).map(repository => [repository.id, repository.linkedAt])),
@@ -107,14 +120,17 @@ export function createGithubIntakePasses(options: GithubIntakePassOptions): Inta
     createIntakePass<Listed<IntakeIssue>>({
       ...shared,
       kind: 'issue',
-      open: open(async (repository, cursor) => {
-        const page = await github.intake.listIssues({
-          connection: connectionOf(repository),
-          sourceIds: [repository.slug],
-          ...(cursor ? { cursor } : {}),
-        });
-        return { items: page.issues, nextCursor: page.nextCursor };
-      }),
+      open: open(
+        async (repository, cursor) => {
+          const page = await github.intake.listIssues({
+            connection: connectionOf(repository),
+            sourceIds: [repository.slug],
+            ...(cursor ? { cursor } : {}),
+          });
+          return { items: page.issues, nextCursor: page.nextCursor };
+        },
+        orgId => githubIssueRepositories(options.intake, orgId),
+      ),
       record: ({ repository, item }) =>
         githubIssueRecord(Number(repository.externalId), {
           number: Number(item.id),
@@ -194,6 +210,7 @@ export function attachGithubIntakePasses(
     projects: options.projects,
     storage: options.storage,
     status: options.integrationStorage.settings,
+    ...(options.intake ? { intake: options.intake } : {}),
     ingest: event => rules.ingest(event),
   });
 }

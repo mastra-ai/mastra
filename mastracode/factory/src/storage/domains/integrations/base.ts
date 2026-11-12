@@ -227,6 +227,33 @@ export class IntegrationStorage extends FactoryStorageDomain {
     );
   }
 
+  /**
+   * The settings several integrations keep under the same `(org, user)` keys, in one read. For a
+   * reader that reports on all of them at once, where a handle per integration would be a read each.
+   */
+  async listSettings<TSettings = Record<string, unknown>>(input: {
+    orgId: string;
+    integrationIds: readonly string[];
+    userIds: readonly string[];
+  }): Promise<Array<{ integrationId: string; userId: string; config: TSettings }>> {
+    if (input.integrationIds.length === 0 || input.userIds.length === 0) return [];
+    const rows = await this.ops.findMany<{ integration_id: string; user_id: string; config: unknown }>(
+      'integration_settings',
+      {
+        integration_id: { in: [...input.integrationIds] },
+        org_id: input.orgId,
+        user_id: { in: [...input.userIds] },
+      },
+    );
+    return Promise.all(
+      rows.map(async row => ({
+        integrationId: row.integration_id,
+        userId: row.user_id,
+        config: (await this.encryption.decrypt<TSettings>(row.config)).value,
+      })),
+    );
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('integration_subscriptions', {});
     await this.ops.deleteMany('integration_settings', {});
