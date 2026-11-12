@@ -587,6 +587,16 @@ phases: {
 
 **Remaining limitations:** `factory-ui` still renders the built-in stage and role pipeline.
 
+#### Card sandboxes
+
+Each session context a card uses (`triage`, `work`, `review`, or a custom board's `runner.context`) is its own session with its own sandbox, so a card can hold one sandbox per context. Factory stops a context's sandbox as soon as the card no longer needs it:
+
+- **Leaving a context.** When a move takes the card out of the last phase of a context into a phase that runs in another context (or none), Factory stops that context's sandbox, for example Triage → Planning stops the triage sandbox. Moves within one context stop nothing: Planning → Building keeps the `work` sandbox running. A run still in flight on the left session in this process, such as the agent whose own tool call made the move or a person chatting in it, keeps the sandbox until it ends, and Factory stops it then unless the card is back in that context.
+- **Finishing.** Entering a terminal phase stops every sandbox the card holds. A Factory process that never opened a sandbox stops it by identity through the configured sandbox provider, so a card finished on any replica stops its sandboxes.
+- **Coming back.** Stopping keeps the session, its branch and its files. A card that comes back to a context (PR review → Triage) resumes the same sandbox: E2B resumes the paused VM, Docker restarts the container, and the local sandbox reuses its directory. Platform sandboxes are not stopped remotely; they idle out under the environment's policy and the next run reattaches.
+
+Stopping is best-effort: a committed move never fails because a sandbox did not stop, and a card moved again before the stop runs keeps its sandbox. Deleting a session still destroys its sandbox.
+
 #### The pull request loop on any board
 
 Nothing in Factory's runtime reads Work's board key or phase keys. Each part of the issue → build → self-review → pull request → review → merge loop is found by what a board's phases declare, so a board you create in the UI, through the API or in code runs the same loop under its own key and phase names:
