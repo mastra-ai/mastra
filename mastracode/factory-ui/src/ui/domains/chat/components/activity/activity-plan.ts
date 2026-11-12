@@ -2,6 +2,7 @@ import { groupConsecutive } from '@mastra/playground-ui/components/ai/tool-call'
 import type { ReasoningPart } from '@mastra/react/ui';
 
 import type { MessageEntry, SuspensionPrompt, TimelineEntry, ToolCall } from '../../services/transcript';
+import { isBackgroundCall } from '../background/background-work';
 import { messageEntryView } from '../message-entry-view';
 import { draws, hasVisibleText, renderableParts, toolFromInvocationPart } from '../transcript-parts';
 import type { MessagePart, ToolPart } from '../transcript-parts';
@@ -70,7 +71,9 @@ function classifyPart(
       return 'ends';
     case 'tool-invocation': {
       const { toolName, toolCallId } = part.toolInvocation;
-      return TOOLS_DRAWN_AS_MESSAGES.has(toolName) || suspensions.has(toolCallId) ? 'ends' : 'joins';
+      if (TOOLS_DRAWN_AS_MESSAGES.has(toolName) || suspensions.has(toolCallId)) return 'ends';
+      // Work that outlives its call is never folded in with calls that finished.
+      return isBackgroundCall(part) ? 'ends' : 'joins';
     }
     default:
       return 'ignored';

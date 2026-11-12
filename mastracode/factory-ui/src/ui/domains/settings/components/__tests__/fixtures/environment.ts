@@ -57,6 +57,7 @@ export function environmentPayload(overrides: Partial<FactoryEnvironmentPayload>
     settings: { cpuCount: 2 },
     sandboxWorkingDirectory: '/workspace',
     workspaceSetupCommand: null,
+    backgroundToolsEnabled: false,
     activeTemplateId: null,
     activeTemplateHeads: null,
     repositories: [

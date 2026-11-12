@@ -76,6 +76,8 @@ export interface FactoryEnvironmentPayload {
   settings: Record<string, unknown>;
   sandboxWorkingDirectory: string | null;
   workspaceSetupCommand: string | null;
+  /** Background commands outlive a stopped run, and the agent hears when they exit. */
+  backgroundToolsEnabled: boolean;
   activeTemplateId: string | null;
   activeTemplateHeads: Record<string, string> | null;
   repositories: FactoryEnvironmentRepository[];
@@ -100,6 +102,7 @@ export interface FactoryEnvironmentPatch {
   /** Merged onto the stored settings; null removes a key. */
   settings?: Record<string, unknown | null>;
   workspaceSetupCommand?: string | null;
+  backgroundToolsEnabled?: boolean;
   /** Only accepted when the sandbox can build. */
   buildTriggers?: {
     schedule?: { enabled: boolean; cron?: string; timezone?: string };

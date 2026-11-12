@@ -44,6 +44,8 @@ import {
 } from './transcript-parts';
 import type { MessagePart } from './transcript-parts';
 import { HostedStretch } from './activity/HostedStretch';
+import { backgroundTaskOf, isBackgroundLaunch, isDeferredTask } from './background/background-work';
+import { BackgroundCommandRow, BackgroundFinishedRow, BackgroundTaskRow } from './background/BackgroundRows';
 import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
@@ -233,6 +235,20 @@ export function MessageBubble({
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime, entry.message.createdAt);
       const suspension = suspensions.get(tool.toolCallId);
+      if (!suspension && isBackgroundLaunch(tool.toolName, tool.args)) {
+        return (
+          <Arriving>
+            <BackgroundCommandRow tool={tool} />
+          </Arriving>
+        );
+      }
+      if (!suspension && isDeferredTask(backgroundTaskOf(part))) {
+        return (
+          <Arriving>
+            <BackgroundTaskRow tool={tool} />
+          </Arriving>
+        );
+      }
       return (
         <Arriving>
           <ToolFactory
@@ -259,6 +275,8 @@ export function MessageBubble({
       return <SkillMessage activation={view.activation} appearance="inline" />;
     case 'hidden':
       return null;
+    case 'background-finished':
+      return <BackgroundFinishedRow notice={view.notice} />;
     case 'notifications':
       return (
         <div className="flex flex-col">
