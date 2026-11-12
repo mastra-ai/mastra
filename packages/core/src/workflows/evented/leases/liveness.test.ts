@@ -83,7 +83,7 @@ describe('evented run liveness (#28712)', () => {
       (event: Event) => isStepRunAt(event, [0]) && (event.data as { workflowId?: string }).workflowId === 'child',
     ],
   ] as const)(
-    'keeps a run live while its replica handles %s between steps',
+    'keeps a run live and refuses its restart while its replica handles %s between steps',
     async (_, build, inGap) => {
       const storage = new InMemoryStore();
       const handling = Promise.withResolvers<string>();
@@ -98,12 +98,14 @@ describe('evented run liveness (#28712)', () => {
         return { hold: deliver.promise };
       });
       const a = await startReplica(storage, build(async () => {}) as unknown as Built, { pubsub });
+      const b = await startReplica(storage, build(async () => {}) as unknown as Built);
       const run = await a.workflow.createRun();
       const result = run.start({ inputData: { n: 1 } });
       await handling.promise;
 
       await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 2);
       expect(await runIsLive(storage, run.runId)).toBe(true);
+      expect((await restartOutcome(b, run.runId)).id).toBe('WORKFLOW_RESTART_RUN_OWNED');
 
       deliver.resolve();
       expect((await result).status).toBe('success');

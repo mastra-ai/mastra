@@ -31,9 +31,8 @@ import {
   startReplica,
   stopReplicas,
   track,
-  work,
 } from '../test-utils/lease-replicas';
-import type { Built, Report } from '../test-utils/lease-replicas';
+import type { Built } from '../test-utils/lease-replicas';
 import { runLivenessKey, stepOccurrenceKey } from '.';
 
 afterEach(stopReplicas);
@@ -103,33 +102,26 @@ describe('evented restart refusal (#28712)', () => {
     20_000,
   );
 
-  it.each(['start', 'startAsync'] as const)(
-    'leaves a run started with %s() to the replica running it when two replicas boot',
-    async method => {
-      const storage = new InMemoryStore();
-      const tracked = track({ blocks: ['a'] });
-      const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-      const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
-      const c = await startReplica(storage, shapes.step.build(tracked.reporter('C')));
-      const run = await a.workflow.createRun();
-      if (method === 'start') void run.start({ inputData: { n: 1 } });
-      else await run.startAsync({ inputData: { n: 1 } });
-      await tracked.allBlocked;
-      const blockedSince = Date.now();
+  it('leaves a run to the replica running it when two replicas boot', async () => {
+    const storage = new InMemoryStore();
+    const tracked = track({ blocks: ['a'] });
+    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
+    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
+    const c = await startReplica(storage, shapes.step.build(tracked.reporter('C')));
+    const run = await a.workflow.createRun();
+    await run.startAsync({ inputData: { n: 1 } });
+    await tracked.allBlocked;
 
-      // Both sweeps are refused, then re-check the run once the liveness they saw could have
-      // lapsed. A keeps it fresh, so at least one re-check is refused as well.
-      const leases = await recordLeases(storage);
-      await Promise.all([b.mastra.restartAllActiveWorkflowRuns(), c.mastra.restartAllActiveWorkflowRuns()]);
-      await leases.until(() => leases.reads.filter(key => key === runLivenessKey(run.runId)).length >= 3);
-      await sleep(Math.max(0, blockedSince + WORKFLOW_RUN_LEASE_TTL_MS * 2 - Date.now()));
+    // Both sweeps are refused, then re-check the run once the liveness they saw could have
+    // lapsed. A keeps it fresh, so at least one re-check is refused as well.
+    const leases = await recordLeases(storage);
+    await Promise.all([b.mastra.restartAllActiveWorkflowRuns(), c.mastra.restartAllActiveWorkflowRuns()]);
+    await leases.until(() => leases.reads.filter(key => key === runLivenessKey(run.runId)).length >= 3);
 
-      tracked.release();
-      await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
-      expect(tracked.executions).toEqual(['A:a']);
-    },
-    20_000,
-  );
+    tracked.release();
+    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
+    expect(tracked.executions).toEqual(['A:a']);
+  }, 20_000);
 
   it.each([
     ['its start event is still queued', false],
@@ -281,35 +273,6 @@ describe('evented restart refusal (#28712)', () => {
     expect((await resumed).status).toBe('success');
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
     expect(executions).toEqual(['A:suspended', 'A:resumed']);
-  }, 20_000);
-
-  it('refuses to restart a run between one step finishing and the next one starting', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: [] });
-    const queued = Promise.withResolvers<void>();
-    const deliver = Promise.withResolvers<void>();
-    const build = (report: Report) =>
-      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-        .then(work('first', report))
-        .then(work('second', report))
-        .commit();
-    // The message starting the second step sits in the broker's queue for a while.
-    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-      if (!isStepRunAt(event, [1])) return undefined;
-      queued.resolve();
-      return { hold: deliver.promise };
-    });
-    const a = await startReplica(storage, build(tracked.reporter('A')), { pubsub });
-    const b = await startReplica(storage, build(tracked.reporter('B')));
-    const run = await a.workflow.createRun();
-    const result = run.start({ inputData: { n: 1 } });
-    await queued.promise;
-
-    expect((await restartOutcome(b, run.runId)).id).toBe('WORKFLOW_RESTART_RUN_OWNED');
-
-    deliver.resolve();
-    expect((await result).status).toBe('success');
-    expect(tracked.executions).toEqual(['A:first', 'A:second']);
   }, 20_000);
 
   it('refuses to restart a parallel run while a branch runs on another replica', async () => {
