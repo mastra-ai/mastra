@@ -72,7 +72,13 @@ function useToolApproval(request: ToolApprovalRequest) {
 
 type ToolApprovalBadgeProps = BadgeWrapperProps & { approval: ToolApprovalRequest };
 
-export function ToolApprovalBadge({ approval: request, children, collapsible, ...props }: ToolApprovalBadgeProps) {
+export function ToolApprovalBadge({
+  approval: request,
+  children,
+  collapsible,
+  badges,
+  ...props
+}: ToolApprovalBadgeProps) {
   const approval = useToolApproval(request);
   const pendingActions = approval && !approval.status ? approval.actions : undefined;
 
@@ -80,7 +86,14 @@ export function ToolApprovalBadge({ approval: request, children, collapsible, ..
     <BadgeWrapper
       {...props}
       collapsible={pendingActions ? false : collapsible}
-      badges={approval && <ToolApprovalStatus status={approval.status} />}
+      badges={
+        approval || badges ? (
+          <>
+            {badges}
+            {approval && <ToolApprovalStatus status={approval.status} />}
+          </>
+        ) : undefined
+      }
     >
       {pendingActions ? (
         <>

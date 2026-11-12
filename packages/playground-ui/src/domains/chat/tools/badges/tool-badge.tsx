@@ -1,5 +1,6 @@
+import { BackgroundTag } from '../../background/background-tag';
 import type { McpInputRequestPayload } from '../mcp-input-request';
-import { isDeferredCall } from '../tool-card-kind';
+import { isDeferredCall, isStoppedBackgroundCall } from '../tool-card-kind';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BackgroundMcpTaskChip, McpTaskChip } from './mcp-task-chip';
 import { useMcpTaskProgress } from './use-mcp-task-progress';
@@ -19,6 +20,9 @@ import {
 } from '@/ds/components/ai/tool-call';
 import type { ToolCallView } from '@/ds/components/ai/tool-call';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Txt } from '@/ds/components/Txt';
+
+const STOPPED_LABELS: Partial<Record<string, string>> = { cancelled: 'cancelled', timed_out: 'timed out' };
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
   try {
@@ -41,7 +45,10 @@ export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> 
   status?: ActivityStatus;
   /** The Mastra background task running the call, when it was deferred. */
   backgroundTaskId?: string;
-  /** `running` while the part holds a deferred call's placeholder; `completed`/`failed` once it holds the result. */
+  /**
+   * `running` while the part holds a deferred call's placeholder; `completed`/`failed` once it holds the result;
+   * `cancelled`/`timed_out` when the task was stopped and the placeholder stays.
+   */
   backgroundTaskStatus?: string;
   /** The MCP task question the call is waiting on, if it is. */
   mcpInputRequest?: McpInputRequestPayload;
@@ -85,12 +92,20 @@ export const ToolBadge = ({
   const hasBody = toolCallHasBody(view) || Boolean(suspendPayload) || toolOutput.length > 0 || needsApproval;
 
   const deferred = isDeferredCall(backgroundTaskId, backgroundTaskStatus);
-  const mcpTask = useMcpTaskProgress(result, status, { deferred, request: mcpInputRequest });
+  const stoppedLabel = isStoppedBackgroundCall(backgroundTaskId, backgroundTaskStatus)
+    ? STOPPED_LABELS[backgroundTaskStatus ?? '']
+    : undefined;
+  // A stopped call never gets its result, so how its MCP task ended comes from the background task too.
+  const mcpTask = useMcpTaskProgress(result, status, {
+    deferred: deferred || stoppedLabel !== undefined,
+    request: mcpInputRequest,
+  });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
       ? metadata.backgroundTasks[toolCallId]
       : undefined;
+  const bgStarted = Boolean(bgEntry?.taskId && bgEntry?.startedAt);
 
   return (
     <ToolApprovalBadge
@@ -108,14 +123,20 @@ export const ToolBadge = ({
       detail={detail}
       description={description}
       status={status}
+      badges={deferred ? <BackgroundTag /> : undefined}
       extraInfo={
         metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : mcpTask || (bgEntry?.taskId && bgEntry?.startedAt) ? (
+        ) : mcpTask || bgStarted || stoppedLabel ? (
           <>
+            {stoppedLabel && (
+              <Txt as="span" variant="meta" className="px-1 text-warning-foreground">
+                {stoppedLabel}
+              </Txt>
+            )}
             {mcpTask &&
               (backgroundTaskId ? (
                 <BackgroundMcpTaskChip task={mcpTask} backgroundTaskId={backgroundTaskId} />

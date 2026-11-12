@@ -349,8 +349,8 @@ export function ChatProvider({
   const sendValue = useMemo<SendContextValue>(() => ({ send, setModelContext }), [send, setModelContext]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
   const agentValue = useMemo<AgentContextValue>(
-    () => ({ agentId, agentVersionId, requestContext }),
-    [agentId, agentVersionId, requestContext],
+    () => ({ agentId, agentVersionId, requestContext, threadId }),
+    [agentId, agentVersionId, requestContext, threadId],
   );
 
   return (

@@ -31,6 +31,7 @@ import {
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
+import { BackgroundWorkPanel } from '@mastra/playground-ui/domains/chat/background/background-work-panel';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
@@ -290,6 +291,7 @@ const ThreadContent = ({
                   <>
                     {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
                     <TaskPanel />
+                    <BackgroundWorkPanel />
                   </>
                 )}
                 <div className={landingShown ? 'starter-prompt' : undefined}>

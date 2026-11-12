@@ -58,6 +58,8 @@ export interface AgentContextValue {
   agentId: string;
   agentVersionId?: string;
   requestContext?: Record<string, unknown>;
+  /** The chat's memory thread; absent before the first message creates it. */
+  threadId?: string;
 }
 
 // NOTE: Tool/network approvals are NOT exposed here. They live in a separate

@@ -1,3 +1,4 @@
+import { backgroundProcessPid } from '../background/background-process';
 import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '../messages/message-metadata';
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
@@ -26,6 +27,7 @@ export type ToolCardKind =
   | 'workflow'
   | 'file_tree'
   | 'sandbox'
+  | 'background_command'
   | 'code_mode'
   | 'mcp_app'
   | 'knowledge'
@@ -61,9 +63,22 @@ export const isWorkflowCall = (metadata: MessageMetadata | undefined, toolName: 
 export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
 
+const BACKGROUND_TASK_ENDED: ReadonlySet<string | undefined> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'timed_out',
+]);
+
 /** A call running as a Mastra background task. An awaited call's part also names its task, but holds the final result. */
 export const isDeferredCall = (backgroundTaskId: string | undefined, backgroundTaskStatus: string | undefined) =>
-  backgroundTaskId !== undefined && backgroundTaskStatus !== 'completed' && backgroundTaskStatus !== 'failed';
+  backgroundTaskId !== undefined && !BACKGROUND_TASK_ENDED.has(backgroundTaskStatus);
+
+/** A deferred call whose task was stopped before it returned: its part keeps the placeholder, never a result. */
+export const isStoppedBackgroundCall = (
+  backgroundTaskId: string | undefined,
+  backgroundTaskStatus: string | undefined,
+) => backgroundTaskId !== undefined && (backgroundTaskStatus === 'cancelled' || backgroundTaskStatus === 'timed_out');
 
 interface StatusCall {
   toolName: string;
@@ -149,6 +164,7 @@ export function toolCardKind(
   if (isAgentCall(metadata, toolName)) return 'agent';
   if (isWorkflowCall(metadata, toolName)) return 'workflow';
   if (toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES) return 'file_tree';
+  if (backgroundProcessPid(toolName, output)) return 'background_command';
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
   if (mcpAppTools?.[toolName]) return 'mcp_app';

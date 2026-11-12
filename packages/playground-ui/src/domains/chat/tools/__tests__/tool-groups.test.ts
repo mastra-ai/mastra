@@ -2,6 +2,7 @@ import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react/ui';
 import { describe, expect, it } from 'vitest';
 
 import { collectToolGroups } from '../tool-groups';
+import { WORKSPACE_TOOLS } from '../workspace-tool-constants';
 
 const call = (toolCallId: string, toolName = 'view'): ToolInvocationPart =>
   ({
@@ -46,6 +47,19 @@ describe('collectToolGroups', () => {
 
     it('keeps a question out of the fold', () => {
       expect(groupKeys([call('a'), call('b', 'ask_user'), call('c'), call('d')])).toEqual({ firsts: [], members: [] });
+    });
+
+    it('keeps background work out of the fold', () => {
+      const started = (toolCallId: string, toolName: string, result: string): ToolInvocationPart =>
+        ({
+          type: 'tool-invocation',
+          toolInvocation: { toolName, toolCallId, state: 'result', args: {}, result },
+        }) as never;
+      const process = started('b', WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, 'Started background process (PID: 42)');
+      const task = started('b', 'report', 'Background task started with id bg-1');
+      for (const background of [process, task]) {
+        expect(groupKeys([call('a'), background, call('c'), call('d')])).toEqual({ firsts: [], members: [] });
+      }
     });
 
     it('keeps an app result out of the fold', () => {

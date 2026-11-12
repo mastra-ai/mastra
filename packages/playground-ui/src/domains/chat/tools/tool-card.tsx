@@ -1,5 +1,7 @@
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext, useMemo } from 'react';
+import { BackgroundCommandBadge } from '../background/background-command-badge';
+import { backgroundProcessPid } from '../background/background-process';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge';
@@ -293,6 +295,23 @@ export const ToolCardInner = ({
             status={status}
           />
         );
+      case 'background_command': {
+        const pid = backgroundProcessPid(toolName, output);
+        if (!pid) break;
+        return (
+          <BackgroundCommandBadge
+            toolName={toolName}
+            toolCallId={toolCallId}
+            args={input}
+            result={output}
+            pid={pid}
+            dataParts={dataParts}
+            toolApprovalMetadata={toolApprovalMetadata}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        );
+      }
       case 'code_mode': {
         const call = codeModeCall(input, output);
         if (call) {
