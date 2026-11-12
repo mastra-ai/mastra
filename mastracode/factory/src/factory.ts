@@ -2431,6 +2431,8 @@ export class MastraFactory {
               boardRegistry: this.#projectBoards ?? this.#boards,
               factoryReady,
               domains,
+              // The Platform GitHub lane only receives pushes through its polling worker.
+              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
