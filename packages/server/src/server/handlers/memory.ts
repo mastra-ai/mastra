@@ -1413,6 +1413,12 @@ export const LIST_MESSAGES_ROUTE = createRoute({
 export const GET_WORKING_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads/:threadId/working-memory',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_working_memory',
+    description: "Inspect an agent's working memory for a thread or resource without modifying it.",
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: getWorkingMemoryQuerySchema,
@@ -1470,15 +1476,58 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
   },
 });
 
+export const GET_RESOURCE_WORKING_MEMORY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/memory/working-memory',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_working_memory',
+    description: "Inspect an agent's working memory for a thread or resource without modifying it.",
+    requires: capabilities => capabilities.memory,
+  },
+  responseType: 'json',
+  queryParamSchema: getWorkingMemoryQuerySchema,
+  responseSchema: getWorkingMemoryResponseSchema,
+  summary: 'Get resource working memory',
+  description: 'Returns resource-scoped working memory without requiring a thread',
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, resourceId, requestContext, memoryConfig }) => {
+    try {
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      validateBody({ resourceId: effectiveResourceId });
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      if (!memory) {
+        return { workingMemory: null, source: 'resource' as const, workingMemoryTemplate: null, threadExists: false };
+      }
+      const config = memory.getMergedThreadConfig(memoryConfig || {});
+      if (config.workingMemory?.scope === 'thread') {
+        throw new HTTPException(400, { message: 'threadId is required for thread-scoped working memory' });
+      }
+      const template = await memory.getWorkingMemoryTemplate({ memoryConfig });
+      const workingMemoryTemplate =
+        template?.format === 'json'
+          ? { ...template, content: JSON.stringify(generateEmptyFromSchema(template.content)) }
+          : template;
+      const store = await memory.storage.getStore('memory');
+      const resource = config.workingMemory?.enabled
+        ? await store?.getResourceById({ resourceId: effectiveResourceId! })
+        : null;
+      return {
+        workingMemory: resource?.workingMemory || null,
+        source: 'resource' as const,
+        workingMemoryTemplate,
+        threadExists: false,
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting resource working memory');
+    }
+  },
+});
+
 export const SAVE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/save-messages',
-  mcp: {
-    toolset: 'memory',
-    name: 'save_messages',
-    description: 'Save messages to threads you own.',
-    requires: capabilities => capabilities.memory,
-  },
   responseType: 'json',
   queryParamSchema: agentIdQuerySchema,
   bodySchema: saveMessagesBodySchema,
@@ -2172,12 +2221,6 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
 export const SEARCH_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/search',
-  mcp: {
-    toolset: 'memory',
-    name: 'search_memory',
-    description: "Semantic search over an agent's memory for a resource, optionally within one thread.",
-    requires: capabilities => capabilities.memory,
-  },
   responseType: 'json',
   queryParamSchema: searchMemoryQuerySchema,
   responseSchema: searchMemoryResponseSchema,

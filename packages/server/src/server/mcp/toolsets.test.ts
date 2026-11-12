@@ -3,11 +3,13 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
+import { SimpleAuth } from '@mastra/core/server';
 import type { ServerMCPConfig } from '@mastra/core/server';
 import { InMemoryStore, MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
 import type { MastraStorage } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { buildBuiltinMCPTools } from './catalogue';
 import { resolveBuiltinMCPConfig } from './config';
 import { MAX_RESULT_CHARS } from './result-size';
@@ -20,11 +22,17 @@ function setup({
   memory = true,
   agentIds = ['helper'],
   store = new InMemoryStore(),
+  requestContext = new RequestContext(),
+  workingMemory = false,
+  server = {},
 }: {
   mcp?: ServerMCPConfig;
   memory?: boolean;
   agentIds?: string[];
   store?: MastraStorage;
+  requestContext?: RequestContext;
+  workingMemory?: boolean;
+  server?: ReturnType<Mastra['getServer']>;
 }) {
   const agent = (id: string) =>
     new Agent({
@@ -32,21 +40,25 @@ function setup({
       name: id,
       instructions: 'test',
       model: 'openai/gpt-4o-mini',
-      ...(memory ? { memory: new MockMemory({ storage: store as InMemoryStore }) } : {}),
+      ...(memory
+        ? { memory: new MockMemory({ storage: store as InMemoryStore, enableWorkingMemory: workingMemory }) }
+        : {}),
     });
   const mastra = new Mastra({
     logger: false,
     storage: store,
     agents: Object.fromEntries(agentIds.map(id => [id, agent(id)])),
-    server: { mcp },
+    server: { ...server, mcp },
   });
   return (query = '') =>
     buildBuiltinMCPTools(
       {
         mastra,
-        requestContext: new RequestContext(),
+        requestContext,
         abortSignal: new AbortController().signal,
         mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
+        routePrefix: '/api',
+        request: new Request('http://localhost/api/mcp', { headers: { Authorization: 'Bearer test-token' } }),
       },
       resolveBuiltinMCPConfig(mastra, new Request(`http://localhost/api/mcp${query}`)),
     );
@@ -67,13 +79,93 @@ describe('built-in MCP memory and observability toolsets', () => {
       'get_memory_status',
       'get_observations',
       'get_thread',
+      'get_working_memory',
       'list_messages',
       'list_threads',
-      'save_messages',
-      'search_memory',
       'update_thread',
     ]);
     expect(Object.keys(jsonSchemaOf(tools.get_observations!).properties)).toContain('waitForPending');
+  });
+
+  it('inspects resource working memory in read-only mode without changing stored state', async () => {
+    const store = new InMemoryStore();
+    const storage = (await store.getStore('memory'))!;
+    const now = new Date('2026-01-01T00:00:00Z');
+    const own = { id: 'r1', workingMemory: 'Favorite color: blue', createdAt: now, updatedAt: now };
+    await storage.saveResource({ resource: own });
+    await storage.saveResource({ resource: { ...own, id: 'r2', workingMemory: 'Private document' } });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    const tools = await setup({ store, requestContext, workingMemory: true, mcp: { toolsets: ['memory'] } })(
+      '?readonly=1',
+    );
+    const result = await tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'r2' }, {} as any);
+    expect(result).toMatchObject({ workingMemory: 'Favorite color: blue', source: 'resource' });
+    expect(tools.get_working_memory!.mcp?.annotations?.readOnlyHint).toBe(true);
+    expect(await storage.getResourceById({ resourceId: 'r1' })).toEqual(own);
+    expect(await storage.listThreads({ filter: { resourceId: 'r1' }, perPage: false })).toMatchObject({ threads: [] });
+  });
+
+  it("rejects another owner's thread through working-memory inspection", async () => {
+    const store = new InMemoryStore();
+    const storage = (await store.getStore('memory'))!;
+    const now = new Date();
+    await storage.saveThread({
+      thread: { id: 'secret-thread', resourceId: 'r2', title: '', metadata: {}, createdAt: now, updatedAt: now },
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    const tools = await setup({ store, requestContext, workingMemory: true, mcp: { toolsets: ['memory'] } })();
+    await expect(
+      tools.get_working_memory!.execute!({ agentId: 'helper', threadId: 'secret-thread' }, {} as any),
+    ).rejects.toThrow(/403/);
+  });
+
+  it('reads working memory through an owned thread and returns null for a missing resource without creating it', async () => {
+    const store = new InMemoryStore();
+    const storage = (await store.getStore('memory'))!;
+    const now = new Date();
+    const thread = { id: 'own-thread', resourceId: 'r1', title: '', metadata: {}, createdAt: now, updatedAt: now };
+    await storage.saveThread({ thread });
+    await storage.saveResource({ resource: { id: 'r1', workingMemory: 'Likes tea', createdAt: now, updatedAt: now } });
+    const tools = await setup({ store, workingMemory: true, mcp: { toolsets: ['memory'] } })('?readonly=1');
+    expect(
+      await tools.get_working_memory!.execute!({ agentId: 'helper', threadId: thread.id, resourceId: 'r1' }, {} as any),
+    ).toMatchObject({ workingMemory: 'Likes tea', source: 'resource', threadExists: true });
+    expect(
+      await tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'missing' }, {} as any),
+    ).toMatchObject({ workingMemory: null, source: 'resource' });
+    expect(await storage.getResourceById({ resourceId: 'missing' })).toBeNull();
+    expect(await storage.getThreadById({ threadId: thread.id })).toEqual(thread);
+  });
+
+  it('requires memory:read when listing and calling working-memory inspection', async () => {
+    const requestContext = new RequestContext();
+    const user = { id: 'u1' };
+    requestContext.set(MASTRA_USER_KEY, user);
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['mcp:execute']);
+    const build = setup({
+      requestContext,
+      workingMemory: true,
+      mcp: { toolsets: ['memory'] },
+      server: {
+        auth: new SimpleAuth({ tokens: { 'test-token': user } }),
+        rbac: {
+          getRoles: async () => [],
+          getPermissions: async () => requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[],
+        },
+      },
+    });
+    expect((await build()).get_working_memory).toBeUndefined();
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['mcp:execute', 'memory:read']);
+    const tools = await build();
+    expect(
+      await tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'missing' }, {} as any),
+    ).toMatchObject({ workingMemory: null });
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['mcp:execute']);
+    await expect(
+      tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'missing' }, {} as any),
+    ).rejects.toThrow(/403/);
   });
 
   it('offers list_traces (not query_traces) and the analytics the in-memory store supports', async () => {
@@ -156,7 +248,7 @@ describe('built-in MCP memory and observability toolsets', () => {
         ['list_messages', { agentId: 'secret', threadId: thread.id }],
         ['get_observations', { agentId: 'secret', resourceId: 'r1' }],
         ['get_memory_status', { agentId: 'secret', resourceId: 'r1' }],
-        ['save_messages', { agentId: 'secret', messages: [] }],
+        ['get_working_memory', { agentId: 'secret', resourceId: 'r1' }],
       ];
       for (const [name, args] of calls) {
         const run = tools[name]!.execute!(args as any, {} as any);

@@ -9,14 +9,13 @@ import {
   GET_THREAD_BY_ID_ROUTE,
   LIST_MESSAGES_ROUTE,
   LIST_THREADS_ROUTE,
-  SAVE_MESSAGES_ROUTE,
-  SEARCH_MEMORY_ROUTE,
+  GET_WORKING_MEMORY_ROUTE,
+  GET_RESOURCE_WORKING_MEMORY_ROUTE,
   UPDATE_THREAD_ROUTE,
 } from '../../handlers/memory';
-import { saveMessagesBodySchema } from '../../schemas/memory';
 import type { Args, CatalogueKit } from '../catalogue';
 import { fitRows, fitValue } from '../result-size';
-import { object, str, toJSONSchema } from '../schema';
+import { object, str } from '../schema';
 
 const PER_PAGE_HINT = 'Call again with a smaller perPage to page through every item.';
 // `hasMore` would be wrong once rows are cut; the caller pages again with a smaller perPage.
@@ -105,20 +104,16 @@ export async function addMemoryTools(kit: CatalogueKit) {
       return fitRows(result, 'messages', PER_PAGE_HINT, { cursors: PAGINATION, views: ['uiMessages'] });
     },
   );
-  addOperation(
-    SEARCH_MEMORY_ROUTE,
-    object(
-      {
-        agentId,
-        searchQuery: str('What to search for.'),
-        resourceId,
-        threadId: str('Only search this thread.'),
-        limit: int('Maximum results. Defaults to 20.'),
-      },
-      ['agentId', 'searchQuery'],
-    ),
-    (args, signal) =>
-      call(SEARCH_MEMORY_ROUTE, { query: defined({ ...args, resourceId: contextResource(args) }) }, signal),
+  addCombined(
+    [GET_RESOURCE_WORKING_MEMORY_ROUTE, GET_WORKING_MEMORY_ROUTE],
+    object({ agentId, threadId, resourceId }, ['agentId']),
+    async (args, signal) => {
+      const query = defined({ agentId: args.agentId, resourceId: contextResource(args) });
+      const result = args.threadId
+        ? await call(GET_WORKING_MEMORY_ROUTE, { pathParams: { threadId: args.threadId }, query }, signal)
+        : await call(GET_RESOURCE_WORKING_MEMORY_ROUTE, { query }, signal);
+      return fitValue(result);
+    },
   );
   addCombined(
     [GET_MEMORY_STATUS_ROUTE, GET_MEMORY_CONFIG_ROUTE],
@@ -193,18 +188,5 @@ export async function addMemoryTools(kit: CatalogueKit) {
         },
         signal,
       ),
-  );
-  const messages = toJSONSchema(saveMessagesBodySchema)?.properties?.messages;
-  addOperation(
-    SAVE_MESSAGES_ROUTE,
-    object(
-      {
-        agentId,
-        messages: typeof messages === 'object' ? messages : { type: 'array', items: { type: 'object' } },
-      },
-      ['agentId', 'messages'],
-    ),
-    (args, signal) =>
-      call(SAVE_MESSAGES_ROUTE, { query: { agentId: args.agentId }, body: { messages: args.messages } }, signal),
   );
 }
