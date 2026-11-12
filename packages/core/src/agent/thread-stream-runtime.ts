@@ -369,7 +369,7 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
  * The caller's signed-in user is dropped too: the owner's run acts as the owner's own user.
  */
 function snapshotWireRequestContext(requestContext: RequestContext | undefined): Record<string, unknown> | undefined {
-  const entries = snapshotRequestContextEntries(requestContext);
+  const entries = snapshotRequestContextEntries(getRequestContextInputSource(requestContext) ?? requestContext);
   if (!entries) return undefined;
   const { [MASTRA_SCOPES_KEY]: _scopes, ...rest } = withoutLiveRequestKeys(entries);
   return Object.keys(rest).length > 0 ? rest : undefined;

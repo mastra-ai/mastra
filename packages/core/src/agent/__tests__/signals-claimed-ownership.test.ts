@@ -1,5 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { EventCallback } from '../../events/types';
@@ -11,6 +12,7 @@ import {
   MASTRA_VERSIONS_KEY,
   RequestContext,
 } from '../../request-context';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -439,6 +441,65 @@ describe('Agent signals: claimed thread ownership', () => {
 
         const { messages } = await owner.memory.recall({ ...ids });
         expect(JSON.stringify(messages.filter(message => message.role === 'assistant'))).toContain('report for acme');
+      } finally {
+        claim.unsubscribe();
+        subscription.unsubscribe();
+      }
+    });
+
+    it('sends the input form of a context a tool schema transformed', async () => {
+      // A tool's requestContextSchema hands its execute transformed values, keeping the caller's
+      // input form behind them. The owner validates the input form, so that's what must cross.
+      let toolContext: RequestContext | undefined;
+      const tool = createTool({
+        id: 'tenant-tool',
+        description: 'Reads the tenant',
+        inputSchema: z.object({}),
+        requestContextSchema: z.object({ tenant: z.string().transform(tenant => ({ name: tenant })) }),
+        execute: async (_input, context) => {
+          toolContext = context.requestContext;
+          return {};
+        },
+      });
+      await tool.execute!({}, { requestContext: new RequestContext([['tenant', 'acme']]) } as any);
+      expect(toolContext?.get('tenant')).toEqual({ name: 'acme' });
+
+      const pubsub = new ControlledLeasePubSub();
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const senderRuntime = new AgentThreadStreamRuntime();
+      const owner = createTenantOwner('transformed-tenant-owner', pubsub);
+      const senderAgent = new Agent({
+        id: 'transformed-tenant-sender',
+        name: 'Transformed Tenant Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+      const ids = { resourceId: 'transformed-tenant-user', threadId: 'transformed-tenant-thread' };
+      const subscription = await ownerRuntime.subscribeToThread(owner.agent, ids, pubsub);
+      const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+      const claim = await ownerRuntime.claimThreadOwnership(
+        owner.agent,
+        { ...ids, streamOptions: { memory: { resource: ids.resourceId, thread: ids.threadId } } },
+        pubsub,
+      );
+
+      try {
+        const signalResult = senderRuntime.sendSignal(
+          senderAgent,
+          { type: 'user-message', contents: 'how did the export go?' },
+          {
+            ...ids,
+            ifIdle: { behavior: 'wake', requireClaimedOwner: true, streamOptions: { requestContext: toolContext } },
+          },
+          pubsub,
+        );
+
+        await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
+        const run = await withTimeout(nextRun, 'Timed out waiting for the claimed owner run');
+        expect(run.value.text).toBe('report for acme');
+        const request = pubsub.publishedData.find(data => data?.type === 'idle-signal-enqueued');
+        expect(request.requestContextEntries).toEqual({ tenant: 'acme' });
       } finally {
         claim.unsubscribe();
         subscription.unsubscribe();
