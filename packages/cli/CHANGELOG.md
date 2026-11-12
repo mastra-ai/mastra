@@ -1,5 +1,26 @@
 # mastra
 
+## 1.39.0-alpha.15
+
+### Patch Changes
+
+- Studio's MCP Servers page now shows the built-in Mastra MCP server, with its endpoint URL, auth status, toolsets, and copyable setup for Claude Code, Cursor, VS Code, and the MCP Inspector. It also explains when the server is turned off or `@mastra/mcp` needs to be installed. ([#29932](https://github.com/mastra-ai/mastra/pull/29932))
+
+- Raised the `@mastra/core` peer dependency floor to 1.83.0. These packages depend on `@mastra/server` (directly or through `@mastra/deployer`), which now requires `@mastra/core` 1.83.0 or later. Upgrade `@mastra/core` together with these packages. ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+- Redesigned Factory onboarding as one page, so setting up a factory no longer feels like a wizard and every dead end says why and what to do next. ([#30173](https://github.com/mastra-ai/mastra/pull/30173))
+
+  - **One page, four sections.** Codebase, Work, Accounts and Model sit on one page (three in local mode). Finished sections collapse to a summary you can change in place, and Create factory sits below them.
+  - **Accounts says who pays for model usage.** Pick one company account, company for Factory work with personal accounts for sessions, or everyone's own account. Model, right below, shows only the accounts that answer needs.
+  - **Gateway or your own provider.** Each account switches between the recommended Mastra Gateway and your own provider, picked from one searchable list of API key and subscription providers. Cancelling a key or sign-in dialog keeps the provider you already had.
+  - **GitHub problems explained in place.** GitHub App results show in the Codebase section with the matching way out: Mastra Platform settings, Refresh, Connect GitHub again, Sign in or Sign out. A GitHub App installed on a personal account that a team shares explains why Factory can't use it, on every visit.
+  - **Create factory says what is missing.** While it is disabled, a line above it names the account to connect or the model to pick.
+  - **Theme and account menu.** The onboarding page has an account menu with System, Light and Dark themes and Sign out.
+
+- Updated dependencies [[`4fcc168`](https://github.com/mastra-ai/mastra/commit/4fcc168fa1b65b77e622a3d6d7a88041cd3d0843), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`4ba2bde`](https://github.com/mastra-ai/mastra/commit/4ba2bdef8973889c664c14ff1e221016c94eb3f4), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781), [`e58a7d5`](https://github.com/mastra-ai/mastra/commit/e58a7d5cd68b8b7b4fc34051eb5593bbbee63f01), [`5ff479a`](https://github.com/mastra-ai/mastra/commit/5ff479a34b6b0151da2699a347f8e680b8d558ae), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`5251e71`](https://github.com/mastra-ai/mastra/commit/5251e7199e71278ccfde7ca2d33320b3ea681731), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781), [`0b24f9c`](https://github.com/mastra-ai/mastra/commit/0b24f9cdb0b0835289acbc860c4bb29934845534)]:
+  - @mastra/core@1.83.0-alpha.13
+  - @mastra/deployer@1.83.0-alpha.13
+
 ## 1.39.0-alpha.14
 
 ### Patch Changes

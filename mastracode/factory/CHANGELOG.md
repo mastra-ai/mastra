@@ -1,5 +1,42 @@
 # @mastra/factory
 
+## 0.28.0-alpha.15
+
+### Patch Changes
+
+- Factory now switches a bound session onto its card's thread as the session owner. Previously the switch carried no signed-in user, so loading the thread's memory failed with "the request has no authenticated user" and the card's run never started. ([#30179](https://github.com/mastra-ai/mastra/pull/30179))
+
+- GitHub status (`/web/github/status`) now returns `reason: 'personal_install_hidden'` when Mastra Platform withholds a GitHub App installed on a personal account from an organization with more than one member, instead of `not_connected`. Any other usable installation still reports `ready`. ([#30173](https://github.com/mastra-ai/mastra/pull/30173))
+
+- Fixed boards under the key `review` being refused. The key is no longer reserved: a project can create, edit and delete a board under it through the boards API or `factory.upsertBoard()`, an app can pass one in `boards`, and a second create is refused with `409 board_exists` like any other key. Such a board is served in place of the retired Review board and keeps the cards put on it. Cards the retired board left stored on `review` stay on Work: the write that creates the board stores their Work placement. A create, upsert or edit by the project is refused with `409 board_in_use` while one of those cards is still open. A `review` board the app defines is never refused: its open cards from the retired board move to Work's `pr-review` phase. The `review` row an earlier release seeded stays hidden until someone edits it or creates a board under the key, which is written over it, or the app defines a `review` board. ([#29903](https://github.com/mastra-ai/mastra/pull/29903))
+
+  ```ts
+  await factory.upsertBoard(
+    {
+      key: 'review',
+      name: 'Review',
+      phases: [
+        { key: 'waiting', name: 'Waiting', kind: 'resting', nextPhases: ['reviewed'] },
+        { key: 'reviewed', name: 'Reviewed', kind: 'terminal' },
+      ],
+    },
+    { projects: 'all' },
+  );
+  ```
+
+  With `projects: 'all'` the call stops at the first project where the retired Review board still has an open card. The projects before it keep the board, so finish or move those cards and run it again.
+
+- Reduced database reads on every agent step for work sessions started from the board. When nobody follows the work item, the Factory no longer loads the item card just to decide there is nothing to show, cutting about a third of the per-step cost for these sessions. ([#29992](https://github.com/mastra-ai/mastra/pull/29992))
+
+- Fixed the Jira issue detail endpoint so it only returns issues from the project named in the issue reference. Before, a hand-edited `issueRef` could point a bound project at an issue in an unbound Jira project and read its title and description. An issue reference that names a different connection or project than its source is now rejected too. ([#29326](https://github.com/mastra-ai/mastra/pull/29326))
+
+- Updated dependencies [[`4fcc168`](https://github.com/mastra-ai/mastra/commit/4fcc168fa1b65b77e622a3d6d7a88041cd3d0843), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`4ba2bde`](https://github.com/mastra-ai/mastra/commit/4ba2bdef8973889c664c14ff1e221016c94eb3f4), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`e58a7d5`](https://github.com/mastra-ai/mastra/commit/e58a7d5cd68b8b7b4fc34051eb5593bbbee63f01), [`5ff479a`](https://github.com/mastra-ai/mastra/commit/5ff479a34b6b0151da2699a347f8e680b8d558ae), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`5251e71`](https://github.com/mastra-ai/mastra/commit/5251e7199e71278ccfde7ca2d33320b3ea681731), [`171e273`](https://github.com/mastra-ai/mastra/commit/171e27355f6d785bdd3f5db7721c908248ebadc0), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781), [`0b24f9c`](https://github.com/mastra-ai/mastra/commit/0b24f9cdb0b0835289acbc860c4bb29934845534)]:
+  - @mastra/core@1.83.0-alpha.13
+  - @mastra/mcp@2.9.0-alpha.5
+  - @mastra/code-sdk@1.19.0-alpha.15
+  - @mastra/auth-workos@1.6.9-alpha.0
+  - @mastra/connect@1.4.0-alpha.6
+
 ## 0.28.0-alpha.14
 
 ### Minor Changes
