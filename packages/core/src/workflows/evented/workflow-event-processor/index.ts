@@ -1270,12 +1270,18 @@ export class WorkflowEventProcessor extends EventProcessor {
             : undefined;
         successorActiveStepsPath = {};
         stepResults = { ...stepResults };
+        // A loop that runs again keeps counting its iterations.
+        const iterationCount: number | undefined =
+          successor === captured && successor.type === 'loop'
+            ? restart!.stepResults[getEntryId(successor.step)]?.metadata?.iterationCount
+            : undefined;
         for (const [branchIndex, id] of ids.entries()) {
           stepResults[id] = {
             status: 'running',
             payload: completed.output,
             startedAt: Date.now(),
             metadata: {
+              ...(iterationCount === undefined ? {} : { iterationCount }),
               startedBy: eventId,
               // The successor delivery receives its own ID from pubsub when published.
               __restartPending: true,

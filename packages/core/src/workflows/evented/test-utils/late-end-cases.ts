@@ -358,15 +358,7 @@ export function describeLateEndCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
-    it('evaluates a dountil condition once per iteration when a restart reads the loop before its next nested iteration starts', async ({
-      skip,
-    }) => {
-      // A store with step guards commits the body's success with the loop decision instead of the
-      // next iteration's start, and a restart reads that success as a finished loop.
-      if ((await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards()) {
-        skip();
-      }
-
+    it('evaluates a dountil condition once per iteration when a restart reads the loop before its next nested iteration starts', async () => {
       const { checks, iterations, build } = nestedLoop();
       let parentRunId = '';
       let loopRuns = 0;

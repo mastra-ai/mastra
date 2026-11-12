@@ -61,9 +61,25 @@ export function resolveCompletedRestartEntry(
         if (!(i in items) || records?.[i]?.status !== 'success') return;
       }
       output = items;
+    } else if (entry.type === 'loop' && loopRunsAgain(entry, result)) {
+      // A store with step guards saves the body's success with the loop's decision before the
+      // next iteration starts. The loop is then the boundary's successor, started from the body's
+      // output, which re-enters it as its next iteration.
+      return { executionPath: [index], output: result.output, state: nextState, stepResults };
     } else {
       output = result.output;
     }
   }
   return { executionPath: [index + 1], output, state: nextState, stepResults };
+}
+
+/** Whether a loop body's saved success carries a decision to run the loop again. */
+function loopRunsAgain(entry: Extract<StepFlowEntry, { type: 'loop' }>, result: StepResult<any, any, any, any>) {
+  const condition: unknown = result.metadata?.loopCondition;
+  if (condition === undefined) {
+    return false;
+  }
+
+  // dountil runs again while its condition is false, dowhile while it is true.
+  return entry.loopType === 'dountil' ? !condition : !!condition;
 }
