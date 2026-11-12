@@ -92,17 +92,26 @@ async function persistActiveRun(
   });
 }
 
-/** Records the restart start events a pubsub publishes. */
-function recordRestarts(inner: PubSub, restarts: string[]): PubSub {
+/**
+ * `inner`, recording the run ID of each restart start event it publishes in `restarts`. With `drop`,
+ * it never delivers a start event, as a broker that holds them or a worker that crashed with them.
+ */
+function interceptStarts(inner: PubSub, { restarts, drop = false }: { restarts?: string[]; drop?: boolean }): PubSub {
   return new Proxy(inner, {
     get(target, prop) {
       if (prop === 'publish') {
-        return (topic: string, event: Event, options?: { localOnly?: boolean }) => {
-          if (topic === 'workflows' && event.type === 'workflow.start' && event.data?.restart) {
-            restarts.push(event.runId);
+        return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
+          if (topic !== 'workflows' || event.type !== 'workflow.start') {
+            return target.publish(topic, event, options);
           }
 
-          return target.publish(topic, event, options);
+          if (event.data?.restart) {
+            restarts?.push(event.runId);
+          }
+
+          if (!drop) {
+            return target.publish(topic, event, options);
+          }
         };
       }
 
@@ -336,7 +345,9 @@ describe('workflow recovery rule (#28712)', () => {
   it('resolves a background restart of an evented run that ended with a stored result to false, without publishing', async () => {
     const storage = new InMemoryStore();
     const restarts: string[] = [];
-    const b = startReplica(storage, 'evented', 'B', [], { pubsub: recordRestarts(new EventEmitterPubSub(), restarts) });
+    const b = startReplica(storage, 'evented', 'B', [], {
+      pubsub: interceptStarts(new EventEmitterPubSub(), { restarts }),
+    });
     await b.startWorkers();
     await persistActiveRun(storage, 'finished', { status: 'success' });
 
@@ -455,11 +466,11 @@ describe('workflow recovery rule (#28712)', () => {
     const restarts: string[] = [];
     const b = startReplica(storage, 'evented', 'B', executions, {
       recovery: { workflowGraceMs: 0 },
-      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
+      pubsub: interceptStarts(new EventEmitterPubSub(), { restarts }),
     });
     const c = startReplica(storage, 'evented', 'C', executions, {
       recovery: { workflowGraceMs: 0 },
-      pubsub: recordRestarts(new EventEmitterPubSub(), restarts),
+      pubsub: interceptStarts(new EventEmitterPubSub(), { restarts }),
     });
     await Promise.all([b.startWorkers(), c.startWorkers()]);
     await persistActiveRun(storage, 'stopped');
@@ -482,20 +493,7 @@ describe('workflow recovery rule (#28712)', () => {
     const storage = new InMemoryStore();
     const inner = new EventEmitterPubSub();
     // The workers never get the restarts, as when a broker holds them: the run never finishes.
-    const pubsub: PubSub = new Proxy(inner, {
-      get(target, prop) {
-        if (prop === 'publish') {
-          return (topic: string, event: Event, options?: { localOnly?: boolean }) =>
-            topic === 'workflows' && event.type === 'workflow.start'
-              ? Promise.resolve()
-              : target.publish(topic, event, options);
-        }
-
-        const value = Reflect.get(target, prop, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-    const b = startReplica(storage, 'evented', 'B', [], { pubsub });
+    const b = startReplica(storage, 'evented', 'B', [], { pubsub: interceptStarts(inner, { drop: true }) });
     await b.startWorkers();
     await persistActiveRun(storage, 'stuck');
     const subscribe = vi.spyOn(inner, 'subscribe');
@@ -583,20 +581,7 @@ describe('workflow recovery rule (#28712)', () => {
     const storage = new InMemoryStore();
     const inner = new EventEmitterPubSub();
     // The workers never get the restart, so the only finish is the failed publish below.
-    const pubsub: PubSub = new Proxy(inner, {
-      get(target, prop) {
-        if (prop === 'publish') {
-          return (topic: string, event: Event, options?: { localOnly?: boolean }) =>
-            topic === 'workflows' && event.type === 'workflow.start'
-              ? Promise.resolve()
-              : target.publish(topic, event, options);
-        }
-
-        const value = Reflect.get(target, prop, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-    const b = startReplica(storage, 'evented', 'B', [], { pubsub });
+    const b = startReplica(storage, 'evented', 'B', [], { pubsub: interceptStarts(inner, { drop: true }) });
     await b.startWorkers();
     await persistActiveRun(storage, 'stuck');
     const workflow = b.getWorkflow('recovered-wf');
