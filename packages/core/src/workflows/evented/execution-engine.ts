@@ -19,6 +19,7 @@ import type {
   NestedWorkflowParent,
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
+import { runEndedKey } from './leases';
 import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
 import { getStepId } from './workflow-event-processor/utils';
 
@@ -96,6 +97,81 @@ export class EventedExecutionEngine extends ExecutionEngine {
         this.mastra.__unregisterRunTracingContext(runId);
       }
     }
+  }
+
+  /**
+   * How run `runId` ended, when it ended after a restart read it: the stored
+   * success or failure in the shape a finish event carries, or an error when
+   * the run's end already went out but its result is not stored (the final
+   * snapshot was declined). `undefined` while the run still has to be driven.
+   */
+  async #endedBeforeRestart(
+    workflowId: string,
+    runId: string,
+  ): Promise<{ result: any } | { error: Error } | undefined> {
+    const store = await this.mastra?.getStorage()?.getStore('workflows');
+    if (!store) {
+      return undefined;
+    }
+
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+    if (snapshot?.status === 'success' || snapshot?.status === 'failed') {
+      return {
+        result: {
+          prevResult: snapshot.status === 'success' ? snapshot.result : { status: 'failed', error: snapshot.error },
+          stepResults: hydrateSerializedStepErrors(snapshot.context),
+          state: snapshot.value,
+        },
+      };
+    }
+
+    const markedEnded =
+      (await store.supportsRunFencing()) && !!(await store.getRunOwnership({ runId: runEndedKey(runId) }))?.live;
+    if (!snapshot || markedEnded) {
+      return { error: new Error(`Workflow run ${runId} ended before its restart started; its result is not stored`) };
+    }
+
+    return undefined;
+  }
+
+  /** Publishes the `workflow.start` of a restart. */
+  async #publishRestart(
+    pubsub: PubSub,
+    params: {
+      workflowId: string;
+      runId: string;
+      restart?: RestartExecutionParams;
+      restartReadUpdatedAt?: number;
+      requestContext: RequestContext;
+      actor?: ActorSignal;
+      format?: 'legacy' | 'vnext' | undefined;
+      perStep?: boolean;
+    },
+  ): Promise<void> {
+    const restart = params.restart!;
+    const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), restart.activePaths);
+    const prevResult = restart.stepResults[restart.isPreFirstStepRestart ? 'input' : (prevStepId ?? 'input')];
+    await pubsub.publish('workflows', {
+      type: 'workflow.start',
+      runId: params.runId,
+      data: {
+        workflowId: params.workflowId,
+        runId: params.runId,
+        executionPath: restart.activePaths,
+        stepResults: restart.stepResults,
+        restart,
+        ...(params.restartReadUpdatedAt === undefined ? {} : { restartReadUpdatedAt: params.restartReadUpdatedAt }),
+        prevResult: {
+          status: 'success',
+          output: restart.isPreFirstStepRestart ? prevResult : prevResult?.payload,
+        },
+        requestContext: params.requestContext.toJSON(),
+        actor: params.actor,
+        format: params.format,
+        perStep: params.perStep,
+        state: restart.state,
+      },
+    });
   }
 
   /**
@@ -255,6 +331,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
     });
     if (stopWatchingLoss) void resultPromise.then(stopWatchingLoss, stopWatchingLoss);
 
+    // A restart of a run that ended meanwhile settles from the stored run, whose own execution
+    // already ran the lifecycle callbacks.
+    let settledFromStore = false;
+
     // NOW safe to publish - listener is guaranteed to be registered
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
     try {
@@ -319,30 +399,21 @@ export class EventedExecutionEngine extends ExecutionEngine {
         // run stalled forever with no error and no rejection. Starting them here
         // is a no-op when they are already running or are disabled.
         await this.mastra?.__ensureExecutionWorkersStarted();
-        const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
-        const prevResult =
-          params.restart.stepResults[params.restart.isPreFirstStepRestart ? 'input' : (prevStepId ?? 'input')];
-        await pubsub.publish('workflows', {
-          type: 'workflow.start',
-          runId: params.runId,
-          data: {
-            workflowId: params.workflowId,
-            runId: params.runId,
-            executionPath: params.restart.activePaths,
-            stepResults: params.restart.stepResults,
-            restart: params.restart,
-            ...(params.restartReadUpdatedAt === undefined ? {} : { restartReadUpdatedAt: params.restartReadUpdatedAt }),
-            prevResult: {
-              status: 'success',
-              output: params.restart.isPreFirstStepRestart ? prevResult : prevResult?.payload,
-            },
-            requestContext: params.requestContext.toJSON(),
-            actor: params.actor,
-            format: params.format,
-            perStep: params.perStep,
-            state: params.restart.state,
-          },
-        });
+
+        // The run can end after the restart read it and before the subscription above: its finish
+        // is gone then, and a worker drops the restart. Settle from what the run stored instead.
+        const ended = await this.#endedBeforeRestart(params.workflowId, params.runId);
+        if (ended) {
+          await pubsub.unsubscribe('workflows-finish', finishCb);
+          if ('error' in ended) {
+            rejectResult(ended.error);
+          } else {
+            settledFromStore = true;
+            resolveResult(ended.result);
+          }
+        } else {
+          await this.#publishRestart(pubsub, params);
+        }
       } else {
         await pubsub.publish('workflows', {
           type: 'workflow.start',
@@ -451,7 +522,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
     }
 
-    if (callbackArg.status !== 'paused') {
+    if (callbackArg.status !== 'paused' && !settledFromStore) {
       // Invoke lifecycle callbacks before returning
       await this.invokeLifecycleCallbacks({
         status: callbackArg.status,
