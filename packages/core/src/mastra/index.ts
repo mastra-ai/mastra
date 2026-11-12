@@ -1036,6 +1036,8 @@ export class Mastra<
   #recoveryRestarts!: ConcurrencyLimiter;
   /** The runs a recovery pass handed to `#recoveryRestarts` whose restart has not settled. */
   #queuedRecoveryRestarts = new Set<string>();
+  /** The runs whose last recovery restart threw. */
+  #failedRecoveryRestarts = new Set<string>();
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
   #tools?: TTools;
@@ -4623,12 +4625,18 @@ export class Mastra<
             this.#queuedRecoveryRestarts.add(key);
             const restart = this.#recoveryRestarts
               .run(() => this.#trackDurableRecovery(restartIfStopped(candidate)))
-              .catch(error =>
-                this.#logger.error('Failed to restart workflow run', {
-                  workflow: workflow.id,
-                  runId: run.runId,
-                  error,
-                }),
+              .then(
+                () => void this.#failedRecoveryRestarts.delete(key),
+                error => {
+                  // Every pass retries a run whose restart throws, so only its first failure is an error.
+                  const context = { workflow: workflow.id, runId: run.runId, error };
+                  if (this.#failedRecoveryRestarts.has(key)) {
+                    this.#logger.debug('Failed to restart workflow run again', context);
+                  } else {
+                    this.#failedRecoveryRestarts.add(key);
+                    this.#logger.error('Failed to restart workflow run', context);
+                  }
+                },
               )
               .finally(() => this.#queuedRecoveryRestarts.delete(key));
             restarts.push(restart);
