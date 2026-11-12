@@ -76,6 +76,7 @@ import {
   enterRunLiveness,
   LATE_DELIVERY_MARKER_TTL_MS,
   nestedHandOffKey,
+  runEndedKey,
   stepOccurrenceKey,
   UNLEASED_STEP,
 } from '../leases';
@@ -1260,6 +1261,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
 
+    // Only starts pass here (liveness is entered for every event). A run that reuses the ID of a
+    // run whose end deleted its snapshot must not be read as that ended run.
+    const leaseStore = await this.#leaseStore(workflow);
+    if (leaseStore) {
+      await this.#clearRunEnded(leaseStore, runId);
+    }
+
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
     const requiresGuardedSnapshot =
       workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
@@ -1626,6 +1634,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         // Declined terminal snapshots must not outlive completed runs (#22209),
         // but remain recoverable until parent/loop and finish publications succeed.
         try {
+          await this.#markRunEnded(workflowId, runId, args.workflow);
           const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
           await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
         } catch (e) {
@@ -2062,6 +2071,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (!ownershipLost && !shouldPersist) {
       // As with successful runs, cleanup must wait for every terminal publication.
       try {
+        await this.#markRunEnded(workflowId, runId, workflow);
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
@@ -2483,6 +2493,50 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * Claims `<runId>::ended` right before an end deletes the run's snapshot,
+   * because `shouldPersistSnapshot` declined the final one. A late step
+   * delivery then finds no snapshot and reads this claim instead, so it doesn't
+   * run the step again (see {@link #finishedOccurrence}). Only for workflows
+   * that take step leases. A failed claim throws, and the caller then keeps the
+   * snapshot rather than lose both.
+   */
+  async #markRunEnded(workflowId: string, runId: string, workflow: Workflow | undefined): Promise<void> {
+    const store = await this.#leaseStore(workflow ?? this.#tryResolveWorkflow(workflowId));
+    if (!store) {
+      return;
+    }
+
+    await store.claimRunOwnership({
+      runId: runEndedKey(runId),
+      ownerId: globalThis.crypto.randomUUID(),
+      leaseMs: LATE_DELIVERY_MARKER_TTL_MS,
+      force: true,
+    });
+  }
+
+  /**
+   * Releases a live `<runId>::ended` claim when a run starts, so an app that
+   * reuses a run ID after that run ended runs the new run's steps.
+   */
+  async #clearRunEnded(store: WorkflowsStorage, runId: string): Promise<void> {
+    const key = runEndedKey(runId);
+    if (!(await store.getRunOwnership({ runId: key }))?.live) {
+      return;
+    }
+
+    const claim = await store.claimRunOwnership({
+      runId: key,
+      ownerId: globalThis.crypto.randomUUID(),
+      leaseMs: LATE_DELIVERY_MARKER_TTL_MS,
+      force: true,
+    });
+    if (claim.acquired) {
+      const { generation, ownerId } = claim.record;
+      await store.releaseRunOwnership({ runId: key, generation, ownerId });
+    }
+  }
+
+  /**
    * Takes the lease of the leaf step occurrence `args` delivers, so a step
    * runs on one worker at a time even when several deliveries of it are in
    * flight (a restart from another replica, a broker redelivery). See
@@ -2658,7 +2712,9 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Checks whether the stored run shows the occurrence already finished.
    * Returns `'run'` when the step still has to run, `'drop'` when the delivery
    * is a duplicate, or the step end arguments that continue the run from the
-   * saved result. See {@link finishedOccurrence}.
+   * saved result. See {@link finishedOccurrence}. A run without a snapshot
+   * whose `<runId>::ended` claim is live ended already, and its deliveries are
+   * dropped.
    *
    * A resume of the step and time travel run it again on purpose and skip the
    * check. With `deferToGuards` (the default), records the store's step guards
@@ -2680,6 +2736,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+
+    // No snapshot also means a run that saves none while running. One that ended and had its
+    // declined snapshot deleted left `::ended` behind.
+    if (!snapshot && (await this.#leaseStore(args.workflow))) {
+      const ended = await store.getRunOwnership({ runId: runEndedKey(args.runId) });
+      if (ended?.live) {
+        return 'drop';
+      }
+    }
+
     const outcome = finishedOccurrence({
       step,
       executionPath: args.executionPath,

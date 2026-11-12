@@ -82,9 +82,14 @@ export function describeLateDeliveryCases({
         .toBe(false);
     }
 
-    /** The `workflows-finish` events the replicas published for `runId`: one per end of the run. */
+    /**
+     * The `workflows-finish` events the replicas published for `runId`: one per end of the run.
+     * The note that a deleted snapshot was cleaned up after the end is left out.
+     */
     const finishesOf = (runId: string, ...replicas: { finished: Event[] }[]) =>
-      replicas.flatMap(replica => replica.finished).filter(event => event.runId === runId);
+      replicas
+        .flatMap(replica => replica.finished)
+        .filter(event => event.runId === runId && event.type !== 'workflow.finish-cleanup-complete');
 
     it('runs each step once when a step end is held past a lease TTL, a restart goes on and the step end arrives twice', async () => {
       const executions: string[] = [];
@@ -277,6 +282,46 @@ export function describeLateDeliveryCases({
 
       expect(checks).toBe(2);
       expect(finishesOf(run.runId, a)).toHaveLength(1);
+    }, 20_000);
+
+    /** A two-step workflow that keeps no snapshot, so its run's end deletes it. */
+    const keepsNoSnapshot = (executions: string[]) =>
+      createWorkflow({
+        id: 'finished',
+        inputSchema: Num,
+        outputSchema: Num,
+        options: { shouldPersistSnapshot: () => false },
+      })
+        .then(work('first', async id => void executions.push(id)))
+        .then(work('second', async id => void executions.push(id)))
+        .commit();
+
+    it('does not run a step again when it arrives late for a run whose end deleted its snapshot', async () => {
+      const executions: string[] = [];
+      const a = await startReplica(keepsNoSnapshot(executions));
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+      await expect.poll(async () => await storedRun(run.runId)).toBeNull();
+      const lastStep = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [1]))!;
+
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(keepsNoSnapshot(executions), fromB.intercept);
+      expect(await redeliver(b, lastStep)).toEqual({ ok: true });
+      await fromB.drain(b);
+
+      expect(executions).toEqual(['first', 'second']);
+      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+    }, 20_000);
+
+    it('runs a new run that reuses the run ID of a run whose end deleted its snapshot (guard)', async () => {
+      const executions: string[] = [];
+      const a = await startReplica(keepsNoSnapshot(executions));
+      const runId = uniqueRunId();
+      expect((await (await a.workflow.createRun({ runId })).start({ inputData: { n: 1 } })).status).toBe('success');
+      await expect.poll(async () => await storedRun(runId)).toBeNull();
+
+      expect((await (await a.workflow.createRun({ runId })).start({ inputData: { n: 2 } })).status).toBe('success');
+      expect(executions).toEqual(['first', 'second', 'first', 'second']);
     }, 20_000);
 
     it('still runs every attempt of a step that fails before it succeeds', async () => {
