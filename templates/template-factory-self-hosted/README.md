@@ -51,7 +51,7 @@ Open the local URL printed by the server and sign in. The onboarding wizard asks
 
 ## Run your first issue
 
-1. Open **Settings → Work Intake → GitHub issues**. Enable **Sync GitHub issues** and select your repository.
+1. Open **Settings → Work Intake → GitHub issues**. Enable **Sync GitHub issues** and select your repository. The selection is organization-wide: every member reads the same sources.
 1. Create a small GitHub issue, such as adding contribution guidance to the repository's README.
 1. Find the issue in **Work → Intake**, select **Investigate**, and open its session to follow the agent's work.
 
@@ -62,7 +62,7 @@ Continue with the [issue-to-pull-request walkthrough](https://factory.mastra.ai/
 | Configuration                                              | What you can change                                                       |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [Models](https://factory.mastra.ai/configure/models)       | Provider access, personal or organization credentials, and default model. |
-| [GitHub](https://factory.mastra.ai/configure/github)       | Repository access and personal issue intake.                              |
+| [GitHub](https://factory.mastra.ai/configure/github)       | Repository access and organization-wide issue intake.                     |
 | [Linear](https://factory.mastra.ai/configure/linear)       | Add a `LinearIntegration` to `integrations`.                              |
 | [Jira](https://factory.mastra.ai/configure/jira)           | Add a `JiraIntegration` to `integrations`.                                |
 | [Slack](https://factory.mastra.ai/configure/slack)         | Add a `SlackIntegration` to `integrations`.                               |

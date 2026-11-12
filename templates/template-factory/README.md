@@ -28,7 +28,7 @@ With the default setup, open the local URL printed by the server and sign in thr
 
 ## Run your first issue
 
-1. Open **Settings → Work Intake → GitHub issues**. Enable **Sync GitHub issues** and select your repository. Each teammate chooses their own issue sources.
+1. Open **Settings → Work Intake → GitHub issues**. Enable **Sync GitHub issues** and select your repository. The selection is organization-wide: every member reads the same sources.
 1. Create a small GitHub issue, such as adding contribution guidance to the repository's README.
 1. Find the issue in **Work → Intake**, select **Investigate**, and open its session to follow the agent's work.
 
@@ -38,16 +38,16 @@ Continue with the [issue-to-pull-request walkthrough](https://factory.mastra.ai/
 
 Choose authentication, storage, and sandboxes independently. Model providers and issue sources are configured through the Factory UI. Server settings live in `.env`; restart the server after changing them.
 
-| Configuration                                              | What you can change                                                           |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [Models](https://factory.mastra.ai/configure/models)       | Provider access, personal or organization credentials, and the default model. |
-| [GitHub](https://factory.mastra.ai/configure/github)       | Repository access and personal issue intake.                                  |
-| [Linear](https://factory.mastra.ai/configure/linear)       | Workspace connection, project selection, and routing issues to a Factory.     |
-| [Jira](https://factory.mastra.ai/configure/jira)           | Site connections, project selection, and routing issues to a Factory.         |
-| [Slack](https://factory.mastra.ai/configure/slack)         | App setup, account linking, and starting sessions from Slack.                 |
-| [Auth](https://factory.mastra.ai/configure/auth)           | Mastra platform sign-in or another provider with Server and Studio support.   |
-| [Storage](https://factory.mastra.ai/configure/storage)     | The database connection or Factory storage adapter.                           |
-| [Sandboxes](https://factory.mastra.ai/configure/sandboxes) | Mastra platform, local execution, or another Mastra sandbox provider.         |
+| Configuration                                              | What you can change                                                            |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [Models](https://factory.mastra.ai/configure/models)       | Provider access, personal or organization credentials, and the default model.  |
+| [GitHub](https://factory.mastra.ai/configure/github)       | Repository access and organization-wide issue intake.                          |
+| [Linear](https://factory.mastra.ai/configure/linear)       | Workspace connection, project or team intake, and routing issues to a Factory. |
+| [Jira](https://factory.mastra.ai/configure/jira)           | Site connections, project selection, and routing issues to a Factory.          |
+| [Slack](https://factory.mastra.ai/configure/slack)         | App setup, account linking, and starting sessions from Slack.                  |
+| [Auth](https://factory.mastra.ai/configure/auth)           | Mastra platform sign-in or another provider with Server and Studio support.    |
+| [Storage](https://factory.mastra.ai/configure/storage)     | The database connection or Factory storage adapter.                            |
+| [Sandboxes](https://factory.mastra.ai/configure/sandboxes) | Mastra platform, local execution, or another Mastra sandbox provider.          |
 
 The server requires `DATABASE_URL`, a PostgreSQL database with pgvector. Deployments to Mastra platform receive it from the project's attached database.
 
