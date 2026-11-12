@@ -162,6 +162,41 @@ export function describeLateEndCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
+    it('ends the run once when a restart reads it while its end waits and its final snapshot is declined', async () => {
+      const executions: string[] = [];
+      const build = () =>
+        createWorkflow({
+          id: 'finished',
+          inputSchema: Num,
+          outputSchema: Num,
+          options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'success' },
+        })
+          .then(work('first', async id => void executions.push(id)))
+          .then(work('second', async id => void executions.push(id)))
+          .commit();
+      // The run's `workflow.end` sits in A's broker queue past a lease TTL, the stored run still
+      // reads running, and the run looks stopped.
+      const fromA = heldQueue(event => event.type === 'workflow.end');
+      const a = await startReplica(build(), fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await fromA.firstHeld;
+      await waitUntilOrphaned(run.runId);
+
+      const fromB = heldQueue(() => true);
+      const b = await startReplica(build(), fromB.intercept);
+      (await b.workflow.createRun({ runId: run.runId }))
+        .restart()
+        .catch(error => console.error('The restart rejected', error));
+      await fromB.firstHeld;
+      await fromB.drain(b);
+      fromA.holdAll();
+      await fromA.drain(a);
+
+      expect(executions).toEqual(['first', 'second']);
+      expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+    }, 20_000);
+
     it('ends the run once when the last step end arrives twice', async () => {
       const { executions, fromA, a, run } = await holdLastStepEnd();
 

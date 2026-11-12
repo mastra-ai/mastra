@@ -1216,6 +1216,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
+    // The run's end was already published: a run whose final snapshot `shouldPersistSnapshot`
+    // declined still reads running until its end deletes it, and a restart then would end it again.
+    const leaseStore = await this.#leaseStore(workflow);
+    if (restart && leaseStore && (await leaseStore.getRunOwnership({ runId: runEndedKey(runId) }))?.live) {
+      this.mastra.getLogger()?.info('Dropping a workflow restart: the run already ended', { workflowId, runId });
+      return;
+    }
+
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     let initialState = (arguments[0] as any).initialState ?? state ?? {};
     const completed = restart && resolveCompletedRestartEntry(workflow.stepGraph, restart, initialState);
@@ -1308,12 +1316,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
 
-    // Only starts pass here (liveness is entered for every event). A run that reuses the ID of a
-    // run whose end deleted its snapshot must not be read as that ended run: its `start()` saved a
-    // new run record first. A late copy of the ended run's own start finds no record and keeps
-    // the marker, so its steps are dropped.
-    const leaseStore = existingRun ? await this.#leaseStore(workflow) : undefined;
-    if (leaseStore) {
+    // Only starts pass here (liveness is entered for every event). A time travel, a resume or a
+    // run that reuses the ID of an ended run must not be read as that ended run: `start()` saved
+    // a new run record first. A late copy of the ended run's own start finds no record and keeps
+    // the marker, so its steps are dropped. A restart of an ended run was dropped above.
+    if (leaseStore && existingRun && !restart) {
       await this.#clearRunEnded(leaseStore, runId);
     }
 
@@ -1454,8 +1461,9 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Whether top-level run `args.runId` already ended: its end took the
    * `::ended` claim after publishing it. A late or duplicate continuation
    * reaches the run's end after another one ended it, and ending again would
-   * publish a second finish. Time travel, restart and resume clear the claim
-   * when they start. A nested run is never reported ended: its end hands its
+   * publish a second finish. Time travel and resume clear the claim when they
+   * start, and a restart of an ended run is dropped. A nested run is never
+   * reported ended: its end hands its
    * result to the parent, which a redelivery may still have to do, and the
    * hand-off drops duplicates itself. Only for workflows that take step
    * leases. An end that published and stopped before taking the claim is
