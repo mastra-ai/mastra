@@ -385,6 +385,12 @@ function withoutCard(cached: BoardSnapshot | BoardPhasesSnapshot, id: string): B
   };
 }
 
+/** Whether a session is parked; `undefined` until the cards holding sessions have been read. */
+export function useSessionParked(factoryProjectId: string | undefined, sessionId: string): boolean | undefined {
+  const { data } = useSidebarWorkItemsQuery(factoryProjectId);
+  return data?.parkedSessionIds.includes(sessionId);
+}
+
 /**
  * Materialize a work item (the server upserts on `sourceKey`, so acting twice
  * on the same issue reuses the card). The cached cards are patched in place.
