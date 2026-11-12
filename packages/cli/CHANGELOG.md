@@ -1,5 +1,26 @@
 # mastra
 
+## 1.39.0-alpha.11
+
+### Patch Changes
+
+- Improved Factory boards with thousands of cards. An open board now downloads only the cards that changed when something moves, instead of the whole board, so large boards update faster and use far less data. ([#30099](https://github.com/mastra-ai/mastra/pull/30099))
+
+- Improved Factory search (⌘K) on large boards. Opening it no longer downloads every card of the project: it loads the 20 most recently updated cards nobody has started, and asks the server for the cards matching what you type once you pause typing. ([#30081](https://github.com/mastra-ai/mastra/pull/30081))
+
+  What changes when you search:
+
+  - A card nobody has started is found by its title, key, number or source id. Typing a stage name, a source label, a URL or a branch no longer finds it.
+  - A card that holds a session is still found the way it was, through its session row.
+  - Up to 20 matching unstarted cards are listed. The "Work items" count still counts every one of them.
+  - Up to 20 open issues and pull requests that have no card yet are offered, the best matches for what you typed first.
+
+  `mastra api` can also pass the work-item list route's new filters: `started`, `q`, `limit` and `source`.
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83)]:
+  - @mastra/core@1.83.0-alpha.10
+  - @mastra/deployer@1.83.0-alpha.10
+
 ## 1.39.0-alpha.10
 
 ### Minor Changes

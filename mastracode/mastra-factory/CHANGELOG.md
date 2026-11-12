@@ -1,5 +1,12 @@
 # create-factory
 
+## 0.4.3-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`b961040`](https://github.com/mastra-ai/mastra/commit/b9610409abf26c839d0391e205fd8d1d99c03057), [`ddf1c08`](https://github.com/mastra-ai/mastra/commit/ddf1c08cf68f58b5552987257dc7f3c3c4fa8996)]:
+  - mastra@1.39.0-alpha.11
+
 ## 0.4.3-alpha.10
 
 ### Patch Changes
