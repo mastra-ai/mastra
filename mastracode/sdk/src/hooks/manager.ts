@@ -40,8 +40,11 @@ export class HookManager {
   private worktree?: SessionWorktreeInfo;
   /** True once SessionStart has fired, so later thread binds announce themselves. */
   private sessionStarted = false;
-  /** A thread-change SessionStart still running; other events wait for it so hooks see the new session first. */
-  private pendingSessionStart?: Promise<unknown>;
+  /**
+   * The latest queued SessionStart, settled or not. SessionStart runs one after another,
+   * and other events wait for it, so hooks see each session in order and before its events.
+   */
+  private pendingSessionStart?: Promise<void>;
 
   constructor(
     projectDir: string,
@@ -72,15 +75,11 @@ export class HookManager {
     if (sessionId === this.sessionId) return;
     this.sessionId = sessionId;
     if (this.sessionStarted) {
-      const run = this.runSessionStart('thread_change').catch(() => {});
-      this.pendingSessionStart = run;
-      void run.finally(() => {
-        if (this.pendingSessionStart === run) this.pendingSessionStart = undefined;
-      });
+      this.runSessionStart('thread_change').catch(() => {});
     }
   }
 
-  /** Dispatch an event's hooks once a pending thread-change SessionStart has finished. */
+  /** Dispatch an event's hooks once any queued SessionStart has finished. */
   private async dispatch(...args: Parameters<typeof runHooksForEvent>): Promise<HookEventResult> {
     if (this.pendingSessionStart) await this.pendingSessionStart;
     return runHooksForEvent(...args);
@@ -236,9 +235,19 @@ export class HookManager {
       return emptyResult();
     }
 
+    // Captured now, so a queued run still reports the session it was queued for.
     const stdin: HookStdinSession = this.sessionStdin('SessionStart', source);
-
-    return runHooksForEvent(hooks, stdin);
+    const previous = this.pendingSessionStart;
+    const run = previous ? previous.then(() => runHooksForEvent(hooks, stdin)) : runHooksForEvent(hooks, stdin);
+    const settled = run.then(
+      () => {},
+      () => {},
+    );
+    this.pendingSessionStart = settled;
+    void settled.then(() => {
+      if (this.pendingSessionStart === settled) this.pendingSessionStart = undefined;
+    });
+    return run;
   }
   async runSessionEnd(): Promise<HookEventResult> {
     const hooks = this.config.SessionEnd;
