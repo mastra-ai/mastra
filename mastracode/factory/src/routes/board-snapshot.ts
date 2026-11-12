@@ -55,6 +55,12 @@ export function scopedSnapshot(
   return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, { total });
 }
 
+/** What moved on a board, for the one reader whose cursor it answers: nothing of it is kept. */
+export function movedBody(body: unknown): Pick<BoardSnapshot, 'json' | 'gzipped'> {
+  const json = JSON.stringify(body);
+  return { json, gzipped: () => gzip(json) };
+}
+
 function snapshot(
   items: readonly Card[],
   toWire: (item: Card) => unknown,

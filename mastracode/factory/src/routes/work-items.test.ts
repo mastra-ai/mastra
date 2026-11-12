@@ -2329,6 +2329,16 @@ describe('run activity on the work-item listing', () => {
       return { cards, board: await read() };
     };
 
+    /** The card tables read from here on, and the table of deleted ids. */
+    const cardReads = () => {
+      const tables = ['factory_board_items', 'factory_work_items', 'factory_work_item_sources', 'work_items'];
+      const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+      return () =>
+        findMany.mock.calls
+          .map(([collection]) => collection)
+          .filter(collection => [...tables, 'factory_board_item_tombstones'].includes(collection));
+    };
+
     beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }));
 
     it('sends only the cards written and the ids removed since the cursor', async () => {
@@ -2379,6 +2389,51 @@ describe('run activity on the work-item listing', () => {
 
       expect(bytes[1]).toBe(bytes[0]);
     }, 60_000);
+
+    it.each([50, 2_000])(
+      'reads no card to answer a reader that holds the cached board of %i cards',
+      async count => {
+        const { board } = await boardOf(count);
+        const reads = cardReads();
+
+        for (let poll = 0; poll < 3; poll++) {
+          expect(await read(board.cursor)).toMatchObject({ workItems: [], removedIds: [], cursor: board.cursor });
+        }
+
+        expect(reads()).toEqual([]);
+      },
+      60_000,
+    );
+
+    it('reads only the deleted ids to answer a cursor older than the cached board', async () => {
+      const { cards, board } = await boardOf(3);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      await read(board.cursor);
+      const reads = cardReads();
+
+      const next = await read(board.cursor);
+      const all = await read('1');
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(all.workItems).toHaveLength(3);
+      expect(reads()).toEqual(['factory_board_item_tombstones', 'factory_board_item_tombstones']);
+    });
+
+    it('gzips what moved for a reader that accepts it', async () => {
+      const { cards, board } = await boardOf(1);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+
+      const res = await buildApp(orgUser).request(`${boardPath()}?since=${board.cursor}`, {
+        headers: { 'accept-encoding': 'gzip, br' },
+      });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      expect(res.headers.get('vary')).toBe('Accept-Encoding');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
+      expect(body.workItems.map((card: { title: string }) => card.title)).toEqual(['Renamed']);
+    });
   });
 
   describe('one session’s cards (?sessionId=)', () => {

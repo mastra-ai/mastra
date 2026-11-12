@@ -53,7 +53,8 @@ import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/deci
 import { relatedCardIndex } from '../work-items/related-cards.js';
 import type { PullRequestFacts } from '../work-items/related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { boardSnapshot, matchesEtag, scopedSnapshot } from './board-snapshot.js';
+import { boardSnapshot, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
+import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
@@ -486,29 +487,30 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const items = part ?? board;
           const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
           const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
+          const send = async (body: Pick<BoardSnapshot, 'json' | 'gzipped'>, headers: Record<string, string>) => {
+            headers['Content-Type'] = 'application/json; charset=UTF-8';
+            headers.Vary = 'Accept-Encoding';
+            if (!/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) return c.body(body.json, 200, headers);
+            headers['Content-Encoding'] = 'gzip';
+            return c.body(new Uint8Array(await body.gzipped()), 200, headers);
+          };
           // A tab that kept the board gets what moved since its cursor: a body the size of the change.
           if (list.changed) {
             const workItems = list.changed.map(toWireWorkItem);
             const moved = { workItems, removedIds: list.removed, total: board.length, cursor: list.cursor };
-            const body = { ...moved, runningSessionIds: running, parkedSessionIds: parked };
-            return c.json(body, 200, { 'Cache-Control': 'no-store' });
+            return send(movedBody({ ...moved, runningSessionIds: running, parkedSessionIds: parked }), {
+              'Cache-Control': 'no-store',
+            });
           }
           const snapshot = part
             ? scopedSnapshot(part, toWireWorkItem, running, parked, unstarted?.total)
             : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
-          const headers: Record<string, string> = {
-            ETag: snapshot.etag,
-            'Cache-Control': 'private, no-cache',
-            Vary: 'Accept-Encoding',
-          };
-          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) return c.body(null, 304, headers);
-          headers['Content-Type'] = 'application/json; charset=UTF-8';
-          if (/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) {
-            headers['Content-Encoding'] = 'gzip';
-            return c.body(new Uint8Array(await snapshot.gzipped()), 200, headers);
+          const headers = { ETag: snapshot.etag, 'Cache-Control': 'private, no-cache' };
+          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) {
+            return c.body(null, 304, { ...headers, Vary: 'Accept-Encoding' });
           }
-          return c.body(snapshot.json, 200, headers);
+          return send(snapshot, headers);
         },
       }),
 

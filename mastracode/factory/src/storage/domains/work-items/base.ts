@@ -547,6 +547,8 @@ export interface BoardItemRow {
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /** When the card last changed. A reader that keeps the board tells its copy of the card by it. */
+  changedAt?: Date | null;
   /** Authoritative verdict written by the bound triage run. */
   triageType: FactoryTriageType | null;
   /**
@@ -706,6 +708,7 @@ export interface WorkItemDbRow extends Record<string, unknown> {
   created_by: string;
   created_at: Date;
   updated_at: Date;
+  changed_at?: Date | null;
 }
 
 /**
@@ -789,6 +792,7 @@ function toWorkItem(row: WorkItemDbRow): Card {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    changedAt: row.changed_at ?? null,
   };
 }
 
@@ -1569,7 +1573,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: WorkItemSourceSyncPatch | ((current: WorkItemSourceDbRecord) => WorkItemSourceSyncPatch | null);
     expectedRevision?: number;
   }): Promise<void> {
-    await this.#withTransaction(ops => this.#syncWorkItemSource(ops, params));
+    await this.#withTransaction(async ops => {
+      await this.#syncWorkItemSource(ops, params);
+    });
   }
 
   async #syncWorkItemSource(
@@ -1582,7 +1588,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       patch,
       expectedRevision,
     }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
-  ): Promise<void> {
+  ): Promise<Date | undefined> {
     const where = { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId };
     const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, where);
     const card = source && { work_item_id: source.work_item_id };
@@ -1628,7 +1634,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     // The card shows these facts but its own row did not move: stamp it so a board reload rereads it.
-    if (card && synced) await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, card, { changed_at: new Date() });
+    if (!card || !synced) return undefined;
+    const changed_at = new Date();
+    await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, card, { changed_at });
+    return changed_at;
   }
 
   /**
@@ -1708,6 +1717,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     return this.#withTransaction(async ops => {
       let previous = emptyPrior();
+      let stamped: Date | undefined;
       const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         previous = priorState(current);
         const item = toWorkItem(current);
@@ -1724,7 +1734,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const adapter = workItemProviderAdapter(item.externalSource);
         const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
         if (Object.keys(split.provider ?? {}).length > 0) {
-          await this.#syncWorkItemSource(ops, {
+          stamped = await this.#syncWorkItemSource(ops, {
             orgId,
             factoryProjectId: item.factoryProjectId,
             provider: source.provider,
@@ -1764,7 +1774,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           input: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
         });
       });
-      return row ? { item: toWorkItem(row), previous } : null;
+      if (!row) return null;
+      const item = toWorkItem(row);
+      // `row` was read before the source's sync stamped it; a write of the card itself stamps later.
+      const changedAt = stamped && !(item.changedAt && item.changedAt > stamped) ? stamped : item.changedAt;
+      return { item: { ...item, changedAt }, previous };
     });
   }
 
@@ -2017,28 +2031,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItem);
   }
 
+  /** The ids deleted after `from`. */
+  #removedSince(scope: CollectionWhere, from: Date) {
+    return super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
+      orderBy: [['deleted_at', 'asc']],
+      cursor: { values: [from] },
+    });
+  }
+
   /**
-   * The cards written and the cards deleted since `since`. Reads from a few seconds earlier so a
-   * writer whose clock runs behind this one is still caught.
+   * `previous` updated with the cards changed or deleted since `since`. Reads from a few seconds
+   * earlier so a writer whose clock runs behind this one is still caught.
    */
-  #movedSince(orgId: string, factoryProjectId: string, since: number) {
+  async #listDelta(orgId: string, factoryProjectId: string, previous: readonly Card[], since: number): Promise<Card[]> {
     const from = new Date(since - LIST_DELTA_CLOCK_SKEW_MS);
     const scope = { org_id: orgId, factory_project_id: factoryProjectId };
-    return Promise.all([
+    const [rows, tombstones] = await Promise.all([
       this.#cards(super.ops, { transaction: true }).findMany(scope, {
         orderBy: [['changed_at', 'asc']],
         cursor: { values: [from] },
       }),
-      super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
-        orderBy: [['deleted_at', 'asc']],
-        cursor: { values: [from] },
-      }),
+      this.#removedSince(scope, from),
     ]);
-  }
-
-  /** `previous` updated with the cards changed or deleted since `since`. */
-  async #listDelta(orgId: string, factoryProjectId: string, previous: readonly Card[], since: number): Promise<Card[]> {
-    const [rows, tombstones] = await this.#movedSince(orgId, factoryProjectId, since);
     if (rows.length === 0 && tombstones.length === 0) return [...previous];
     const changed = new Map(rows.map(row => [row.id, toWorkItem(row)]));
     const deleted = new Set(tombstones.map(row => row.id));
@@ -2091,12 +2105,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (readFrom === undefined || items.some(card => card.board === LEGACY_REVIEW_BOARD)) return { items };
     const cursor = String(readFrom);
     if (!/^\d{1,15}$/.test(scope.since ?? '')) return { items, cursor };
-    const [rows, tombstones] = await this.#movedSince(scope.orgId, scope.factoryProjectId, Number(scope.since));
+    // The reader holds this very list.
+    if (scope.since === cursor) return { items, cursor, changed: [], removed: [] };
     // Answered from `items`, the list `cursor` names, so the two agree: a write that list doesn't
     // hold yet is left for the read that sends `cursor` back.
-    const moved = new Set([...rows, ...tombstones].map(row => row.id));
-    const changed = items.filter(card => moved.delete(card.id));
-    return { items, cursor, changed, removed: tombstones.map(row => row.id).filter(id => moved.has(id)) };
+    const from = new Date(Number(scope.since) - LIST_DELTA_CLOCK_SKEW_MS);
+    const gone = await this.#removedSince({ org_id: scope.orgId, factory_project_id: scope.factoryProjectId }, from);
+    const removed = new Set(gone.map(row => row.id));
+    const changed = items.filter(card => {
+      removed.delete(card.id);
+      return card.changedAt && new Date(card.changedAt) > from;
+    });
+    return { items, cursor, changed, removed: [...removed] };
   }
 
   /**
