@@ -225,20 +225,29 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
   }
   // Keep the released generation as the retry barrier before dropping the thread token.
   await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
-  if (claim.threadId && event.type !== 'workflow.suspend') {
-    // Stop renewing this process's hold on the thread as well as releasing it.
-    // The pre-persist claim is held (see `holdDurableThreadLease`) for a run that
-    // never registers a thread run — an evented `generate()` — and nothing else
-    // ends it here. A process that does not hold the timer is a no-op and still
-    // releases.
-    await agentThreadStreamRuntime.abandonDurableThreadLease(
-      mastra.pubsub,
-      event.runId,
-      claim.threadId,
-      claim.resourceId,
-      claim.generation,
-      claim.executionId,
-    );
+  if (claim.threadId) {
+    if (event.type === 'workflow.suspend') {
+      // A suspended run keeps its lease so a resume can take the thread back, but
+      // only a registered run is bounded by the suspended-run sweep. Bound the
+      // renewal an unregistered one — an evented `generate()` — holds from before
+      // its input write, so the thread is free once the suspended-run TTL passes
+      // instead of staying claimed for the process lifetime.
+      agentThreadStreamRuntime.boundSuspendedRunLeaseRenewal(mastra.pubsub, event.runId);
+    } else {
+      // Stop renewing this process's hold on the thread as well as releasing it.
+      // The pre-persist claim is held (see `holdDurableThreadLease`) for a run that
+      // never registers a thread run — an evented `generate()` — and nothing else
+      // ends it here. A process that does not hold the timer is a no-op and still
+      // releases.
+      await agentThreadStreamRuntime.abandonDurableThreadLease(
+        mastra.pubsub,
+        event.runId,
+        claim.threadId,
+        claim.resourceId,
+        claim.generation,
+        claim.executionId,
+      );
+    }
   }
   if (claim.memoryFenced && fence) await (await mastra.getStorage()?.getStore('memory'))?.retireRunFence(fence);
   await mastra.__getRunScope(event.runId)?.get(PARTICIPANTS)?.get(claim.executionId)?.stop();

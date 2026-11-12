@@ -1238,6 +1238,31 @@ export class AgentThreadStreamRuntime {
     );
   }
 
+  /**
+   * @internal Bound how long an unregistered suspended run keeps its thread
+   * lease. The lease itself is not given back: renewal just stops after
+   * {@link AGENT_SUSPENDED_RUN_TTL_MS}, so the lease lapses a TTL later.
+   *
+   * A run that parks without registering — an evented `generate()` that
+   * suspends — keeps renewing the lease it claimed before persisting its input,
+   * and the suspended-run sweep only walks registered records, so nothing else
+   * would ever stop that renewal. The window matches what the sweep gives a
+   * registered suspended run: a resume arriving inside it can still take the
+   * thread, and after it the thread is free instead of claimed for the process
+   * lifetime.
+   *
+   * The stop is skipped when the run registered in the meantime — a resumed run
+   * owns its lease through registration, which the sweep bounds instead.
+   */
+  boundSuspendedRunLeaseRenewal(pubsub: PubSub, runId: string): void {
+    const timer = setTimeout(() => {
+      if (this.#getState(pubsub).threadRunsById.has(runId)) return;
+      this.#stopLeaseRenewal(pubsub, runId);
+    }, AGENT_SUSPENDED_RUN_TTL_MS);
+    // A parked run must never hold the process open.
+    timer.unref?.();
+  }
+
   /** @internal Stop this process renewing an abandoned execution's thread lease, then release it. */
   async abandonDurableThreadLease(
     pubsub: PubSub,

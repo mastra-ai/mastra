@@ -215,6 +215,30 @@ export class EventedAgent<
   }
 
   /**
+   * Give back the thread lease a run claimed before it persisted its input. The
+   * run never reached the engine, so nothing else settles that claim and this
+   * process would keep renewing a lease on a thread no run holds.
+   */
+  async #abandonHeldThreadLease(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+    failure: string,
+  ): Promise<void> {
+    const target = this.#threadClaimTarget(runId, workflowInput);
+    if (!target) return;
+    await agentThreadStreamRuntime
+      .abandonDurableThreadLease(
+        target.pubsub,
+        runId,
+        target.threadId,
+        target.resourceId,
+        target.executionFence.generation,
+        target.executionFence.executionId,
+      )
+      .catch(leaseError => this.logger.warn(failure, { runId, error: leaseError }));
+  }
+
+  /**
    * Claim the cross-process thread lease before the initial input is persisted,
    * so a run that loses the race rejects without writing a user message to the
    * thread (see #30069).
@@ -256,9 +280,8 @@ export class EventedAgent<
   }
 
   /**
-   * Give the thread lease back when the input write fails. The run claimed the
-   * thread but never starts, so nothing else settles that claim and this process
-   * would keep renewing a lease on a thread no run holds.
+   * Give the thread lease back when the input write fails, before the run ever
+   * reaches `executeWorkflow`.
    * @internal
    */
   protected override async persistInitialInput(
@@ -268,24 +291,11 @@ export class EventedAgent<
     try {
       await super.persistInitialInput(runId, workflowInput);
     } catch (error) {
-      const target = this.#threadClaimTarget(runId, workflowInput);
-      if (target) {
-        await agentThreadStreamRuntime
-          .abandonDurableThreadLease(
-            target.pubsub,
-            runId,
-            target.threadId,
-            target.resourceId,
-            target.executionFence.generation,
-            target.executionFence.executionId,
-          )
-          .catch(leaseError =>
-            this.logger.warn('Failed to release the thread lease of a run that could not save its input', {
-              runId,
-              error: leaseError,
-            }),
-          );
-      }
+      await this.#abandonHeldThreadLease(
+        runId,
+        workflowInput,
+        'Failed to release the thread lease of a run that could not save its input',
+      );
       throw error;
     }
   }
@@ -393,6 +403,14 @@ export class EventedAgent<
           },
         );
     } catch (error) {
+      // The engine never took ownership of this run, so the thread lease held
+      // since before the input write has no successor: give it back, or this
+      // process keeps renewing a lease on a thread no run holds.
+      await this.#abandonHeldThreadLease(
+        runId,
+        workflowInput,
+        'Failed to release the thread lease of a run that never started',
+      );
       await this.settleExecution(runId, executionFence, {
         error: this.workflowExecutionError(error, 'Workflow execution failed'),
       });

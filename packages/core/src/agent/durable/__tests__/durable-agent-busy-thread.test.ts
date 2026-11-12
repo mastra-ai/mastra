@@ -26,6 +26,7 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import type { LeaseProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
@@ -68,11 +69,57 @@ function createGatedModel() {
   return { model, calls: () => calls, releaseFirst: () => releaseFirst?.() };
 }
 
+/**
+ * A model that asks for the suspending tool on its first call instead of
+ * answering, so the first run parks, and answers on later calls. Used to
+ * observe what a suspended run does with its thread lease.
+ */
+function createSuspendingToolCallModel() {
+  let calls = 0;
+  const model = new MockLanguageModelV2({
+    doStream: async () => {
+      calls += 1;
+      const parts =
+        calls === 1
+          ? [
+              {
+                type: 'tool-call',
+                toolCallType: 'function',
+                toolCallId: 'call-1',
+                toolName: 'request_approval',
+                input: JSON.stringify({ question: 'Proceed?' }),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]
+          : [
+              { type: 'text-delta', id: `text-${calls}`, delta: 'done' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ];
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: `id-${calls}`, modelId: 'mock', timestamp: new Date(0) },
+          ...parts,
+        ] as any[]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  });
+
+  return { model, calls: () => calls, releaseFirst: () => {} };
+}
+
 type StartOptions = {
   engine: 'durable' | 'evented';
   holdThreadLease?: boolean;
   sharedTransport?: boolean;
   failThreadControlSubscribe?: boolean;
+  suspendingTool?: boolean;
 };
 
 async function startProcess({
@@ -80,6 +127,7 @@ async function startProcess({
   holdThreadLease = false,
   sharedTransport = false,
   failThreadControlSubscribe = false,
+  suspendingTool = false,
 }: StartOptions) {
   vi.resetModules();
   const [
@@ -94,6 +142,7 @@ async function startProcess({
     { agentThreadStreamTopic },
     { agentThreadStreamRuntime },
     { ExtendedRunRegistry },
+    { createTool },
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -106,6 +155,7 @@ async function startProcess({
     import('../../thread-stream-topic'),
     import('../../thread-stream-runtime'),
     import('../run-registry'),
+    import('../../../tools'),
   ]);
 
   const storage = new InMemoryStore();
@@ -117,13 +167,29 @@ async function startProcess({
   const threadKey = [resourceId, threadId].join(THREAD_KEY_SEPARATOR);
   const threadControlTopic = agentThreadStreamTopic(resourceId, threadId);
 
-  const gated = createGatedModel();
+  const gated = suspendingTool ? createSuspendingToolCallModel() : createGatedModel();
+  const approvalTool = suspendingTool
+    ? createTool({
+        id: 'request_approval',
+        description: 'Ask the user to approve before continuing',
+        inputSchema: z.object({ question: z.string() }),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (input: any, context: any) => {
+          const agentCtx = context?.agent ?? context ?? {};
+          if (agentCtx.resumeData != null) return { approved: agentCtx.resumeData.approved };
+          await agentCtx.suspend?.({ question: input.question });
+          return { approved: false };
+        },
+      })
+    : undefined;
   const agent = new Agent({
     id: `busy-agent-${engine}`,
     name: `busy-agent-${engine}`,
     instructions: 'Answer with a single word.',
     model: gated.model,
     memory,
+    ...(approvalTool ? { tools: { request_approval: approvalTool } } : {}),
   });
 
   // A lease-capable pubsub that is not an EventEmitterPubSub, so the evented
@@ -449,6 +515,36 @@ describe('run ownership around the initial input write', () => {
     }
   }, 30_000);
 
+  it('gives the thread lease back when a run fails before the engine takes it', async () => {
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');
+    const proc = await startProcess({ engine: 'evented', sharedTransport: true });
+    try {
+      const { durableAgent, options } = proc;
+      const lease = proc.pubsub as unknown as LeaseDouble;
+      const ensureWorkers = vi
+        .spyOn(Object.getPrototypeOf(durableAgent) as any, 'ensureEngineWorkersStarted')
+        .mockRejectedValueOnce(new Error('engine workers unavailable'));
+
+      // The run writes its input, then fails before the engine owns it, so the
+      // lease held since before the input write has no successor.
+      await expect(durableAgent.generate('first message', options)).rejects.toThrow('engine workers unavailable');
+      ensureWorkers.mockRestore();
+
+      await vi.waitFor(async () => {
+        expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
+      });
+
+      // The thread is usable again rather than being held by a run that never
+      // started.
+      proc.releaseFirstModelCall();
+      expect((await durableAgent.generate('second message', options)).text).toBe('done');
+    } finally {
+      vi.unstubAllEnvs();
+      await proc.stop();
+    }
+  }, 30_000);
+
   it('releases the thread reservation when run setup fails before the workflow starts', async () => {
     const proc = await startProcess({ engine: 'durable' });
     try {
@@ -527,13 +623,14 @@ describe('run ownership around the initial input write', () => {
         return await realSaveMessages(...args);
       });
 
-      const streamPromise = durableAgent.stream('held message', options);
+      const resultPromise = durableAgent.generate('held message', options);
 
       const reachedPersist = await Promise.race([persistEntered.then(() => true), sleep(5000).then(() => false)]);
       expect(reachedPersist).toBe(true);
 
       // The run holds the lease while it writes its input. No workflow worker has
       // started yet, so only its own renewal can keep the lease alive across a TTL.
+      // generate() never registers a thread run, so nothing else renews it.
       expect(await lease.getLeaseOwner(proc.threadKey)).toBeDefined();
       await sleep(900);
       expect(await lease.getLeaseOwner(proc.threadKey)).toBeDefined();
@@ -542,7 +639,46 @@ describe('run ownership around the initial input write', () => {
       releasePersist?.();
       // The run reaches the model only after the input write completes.
       proc.releaseFirstModelCall();
-      expect(await collectText(await streamPromise)).toBe('done');
+      expect((await resultPromise).text).toBe('done');
+    } finally {
+      vi.unstubAllEnvs();
+      await proc.stop();
+    }
+  }, 30_000);
+});
+
+describe('thread lease of a suspended run', () => {
+  it('stops renewing a parked run once the suspended-run window passes', async () => {
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');
+    vi.stubEnv('MASTRA_SUSPENDED_RUN_TTL_MS', '1500');
+    const proc = await startProcess({ engine: 'evented', sharedTransport: true, suspendingTool: true });
+    try {
+      const { durableAgent, options } = proc;
+      const lease = proc.pubsub as unknown as LeaseDouble;
+
+      const parked = await durableAgent.generate('please approve', options);
+      expect(parked.finishReason).toBe('suspended');
+
+      // The parked run never registers a thread run, so the suspended-run sweep
+      // cannot reach it. Its own renewal keeps the lease alive through the window
+      // that sweep gives a parked run, so a resume arriving right after the
+      // suspension still finds the thread.
+      await sleep(900);
+      expect(await lease.getLeaseOwner(proc.threadKey)).toBeDefined();
+      expect(await lease.acquireLease(proc.threadKey, 'rival-replica', 900)).toMatchObject({ acquired: false });
+
+      // Once that window passes the lease is let go instead of pinning the thread
+      // for the lifetime of the process.
+      await vi.waitFor(
+        async () => {
+          expect(await lease.getLeaseOwner(proc.threadKey)).toBeUndefined();
+        },
+        { timeout: 5000 },
+      );
+
+      // The thread is free again, so a later message runs on it.
+      expect((await durableAgent.generate('second message', options)).text).toBe('done');
     } finally {
       vi.unstubAllEnvs();
       await proc.stop();
