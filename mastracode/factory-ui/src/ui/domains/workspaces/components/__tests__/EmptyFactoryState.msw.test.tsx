@@ -336,6 +336,27 @@ describe('Draft Factory onboarding', () => {
     expect(writes).toEqual([]);
   });
 
+  it('summarizes both models, work then sessions, when company work and personal sessions are set up', async () => {
+    registerSetup();
+    seedOnboarding('model', {
+      modelScope: 'hybrid',
+      repository: repo,
+      workConfirmed: true,
+      model,
+      personal: personalModel,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await findActiveSection('Model');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
+
+    await user.click(screen.getByRole('button', { name: 'Change work' }));
+    await findActiveSection('Work');
+    expect(
+      within(screen.getByRole('region', { name: 'Model' })).getByText(`${model.modelId} · ${personalModel.modelId}`),
+    ).toBeInTheDocument();
+  });
+
   it('says connections could not be checked, not "Set up later", while Linear status is down', async () => {
     registerSetup();
     server.use(
