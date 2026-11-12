@@ -8079,22 +8079,9 @@ export class Mastra<
    * best-effort: if an aborted run doesn't stop in time (for example, a tool
    * call that ignores the abort), or the lease backend doesn't answer or
    * fails the release, the lease is kept until it expires. Handing runs back can take up to about 1.5 seconds past
-   * `drainTimeout`.
+   * `drainTimeout`, and letting other instances restart this instance's evented runs up to half a second more.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
-    try {
-      await this.#shutdown(options);
-    } finally {
-      // A shutdown that failed before its drain finished must not keep vouching for the evented
-      // runs it drove. Ending the liveness twice changes nothing.
-      if (this.#shuttingDown) {
-        await endRunLiveness(this);
-      }
-    }
-  }
-
-  /** The teardown {@link shutdown} runs. */
-  async #shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
 
     // `drainTimeout` is a single deadline shared by every drain in this method
@@ -8175,8 +8162,9 @@ export class Mastra<
     } finally {
       // The evented runs this process drove were kept live through the drain above, so no instance
       // restarted one it still drove. Their keys expire now, while storage is still open, so the
-      // time this process stopped is recorded for recovery to measure from.
-      await endRunLiveness(this);
+      // time this process stopped is recorded for recovery to measure from. A shutdown that fails
+      // before this point leaves the workers running, so the process keeps vouching for its runs.
+      await endRunLiveness(this, { deadline });
     }
 
     // Stop — don't destroy — registered workspaces. Remote sandboxes

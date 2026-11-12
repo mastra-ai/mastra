@@ -15,7 +15,7 @@ import {
 import { forEachBounded } from './bounded';
 import { runLivenessKey } from './keys';
 
-/** The process a step runs in, as seen by the liveness bookkeeping. */
+/** The process handling an event, as seen by the liveness bookkeeping. */
 export interface LivenessScope {
   /** True once the process started shutting down; it stops waiting for other workers' leases then. */
   readonly __shuttingDown: boolean;
@@ -28,13 +28,15 @@ const LIVENESS_RENEW_INTERVAL_MS = Math.max(
   1,
   Math.min(WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, Math.floor(WORKFLOW_RUN_LEASE_TTL_MS / 3)),
 );
+// A shutdown whose drain already used up its deadline still gets this long to expire its keys.
+const LIVENESS_EXPIRY_MIN_WAIT_MS = 500;
 
 /**
  * Keeps the liveness key of every run this process handles an event of fresh,
  * writing each key about once per renew interval however many of the run's
  * events the process handles. A single unref'd timer renews all of them.
  */
-export class ProcessRunLiveness {
+class ProcessRunLiveness {
   readonly #ownerId = globalThis.crypto.randomUUID();
   /** Event handlers running in this process per run, and the store the run's handlers last used. */
   readonly #active = new Map<string, { count: number; store: WorkflowsStorage }>();
@@ -52,10 +54,7 @@ export class ProcessRunLiveness {
   /** Stops the renewal timer; set while it runs. */
   #stopTimer?: () => void;
 
-  constructor(
-    readonly scope: LivenessScope,
-    readonly logger?: IMastraLogger,
-  ) {}
+  constructor(readonly logger?: IMastraLogger) {}
 
   /**
    * Marks `runId` live and waits for the write, unless this process wrote it
@@ -130,12 +129,14 @@ export class ProcessRunLiveness {
    * recovery can tell how long a run has been left alone.
    *
    * Each key is expired by its fence, so a key another process wrote since
-   * stays live. Waits at most one renew interval, so a slow store cannot hold
-   * up the rest of shutdown; a key not expired by then lapses one lease TTL
-   * after its last write, as it would have without this. Runs once; later
-   * calls do nothing.
+   * stays live. Waits until `deadline`, the end of the shutdown's drain
+   * budget, and at most one renew interval, so a slow store cannot hold up the
+   * rest of shutdown; a drain that used up its deadline still gets
+   * {@link LIVENESS_EXPIRY_MIN_WAIT_MS}. A key not expired by then lapses one
+   * lease TTL after its last write, as it would have without this. Runs once;
+   * later calls do nothing.
    */
-  async end(): Promise<void> {
+  async end({ deadline }: { deadline: number }): Promise<void> {
     if (!this.#vouching) {
       return;
     }
@@ -147,40 +148,45 @@ export class ProcessRunLiveness {
     this.#lastWriteAt.clear();
 
     // Never rejects: each expiry logs its own failure.
-    const expiring = (async () => {
-      // A write in flight lands after this, so its claim must be known before expiring.
+    const expiring = (async (): Promise<'expired'> => {
+      // A write still in flight expires its own key once it lands (see #write); waiting for it
+      // keeps that expiry inside this wait.
       await Promise.allSettled([...this.#writing.values()]);
 
       const claims = [...this.#claims.values()].filter(claim => claim.expiresAt > Date.now());
       this.#claims.clear();
-      await forEachBounded(claims, LIVENESS_RENEW_CONCURRENCY, async ({ store, fence }) => {
-        try {
-          await store.renewRunOwnership({ ...fence, leaseMs: 1 });
-        } catch (error) {
-          this.logger?.warn('Failed to expire the liveness of a workflow run during shutdown', {
-            runId: fence.runId,
-            error,
-          });
-        }
-      });
+      await forEachBounded(claims, LIVENESS_RENEW_CONCURRENCY, claim => this.#expire(claim));
 
-      return false;
+      return 'expired';
     })();
 
+    const waitMs = Math.min(LIVENESS_RENEW_INTERVAL_MS, Math.max(LIVENESS_EXPIRY_MIN_WAIT_MS, deadline - Date.now()));
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timedOut = new Promise<boolean>(resolve => {
-      timer = setTimeout(() => resolve(true), LIVENESS_RENEW_INTERVAL_MS);
+    const timedOut = new Promise<'timed-out'>(resolve => {
+      timer = setTimeout(() => resolve('timed-out'), waitMs);
       timer.unref?.();
     });
 
     try {
-      if (await Promise.race([expiring, timedOut])) {
+      if ((await Promise.race([expiring, timedOut])) === 'timed-out') {
         this.logger?.warn('Stopped waiting for the liveness of workflow runs to expire during shutdown', {
-          timeoutMs: LIVENESS_RENEW_INTERVAL_MS,
+          timeoutMs: waitMs,
         });
       }
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  /** Expires a liveness key this process wrote, by its fence. Never rejects: a failure is logged here. */
+  async #expire({ store, fence }: { store: WorkflowsStorage; fence: RunFence }): Promise<void> {
+    try {
+      await store.renewRunOwnership({ ...fence, leaseMs: 1 });
+    } catch (error) {
+      this.logger?.warn('Failed to expire the liveness of a workflow run during shutdown', {
+        runId: fence.runId,
+        error,
+      });
     }
   }
 
@@ -233,15 +239,24 @@ export class ProcessRunLiveness {
           leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
           force: true,
         });
-        this.#lastWriteAt.set(runId, startedAt);
-
-        if (record) {
-          const fence = { runId: record.runId, ownerId: record.ownerId, generation: record.generation };
-          // Counted from when the write returned when the store reports no expiry: a slow write
-          // still holds a full TTL from about then, which end() must not skip.
-          const expiresAt = record.leaseExpiresAt?.getTime() ?? Date.now() + WORKFLOW_RUN_LEASE_TTL_MS;
-          this.#claims.set(runId, { store, fence, expiresAt });
+        if (!record) {
+          this.#lastWriteAt.set(runId, startedAt);
+          return;
         }
+
+        const fence = { runId: record.runId, ownerId: record.ownerId, generation: record.generation };
+
+        // end() stopped waiting for this write before it landed, so nothing else will expire it.
+        if (!this.#vouching) {
+          await this.#expire({ store, fence });
+          return;
+        }
+
+        this.#lastWriteAt.set(runId, startedAt);
+        // Counted from when the write returned when the store reports no expiry: a slow write
+        // still holds a full TTL from about then, which end() must not skip.
+        const expiresAt = record.leaseExpiresAt?.getTime() ?? Date.now() + WORKFLOW_RUN_LEASE_TTL_MS;
+        this.#claims.set(runId, { store, fence, expiresAt });
       } catch (error) {
         this.logger?.warn('Failed to mark a workflow run live', { runId, error });
       } finally {
@@ -298,10 +313,10 @@ export class ProcessRunLiveness {
 const livenessByProcess = new WeakMap<LivenessScope, ProcessRunLiveness>();
 
 /** The liveness bookkeeping of the process `scope` stands for. */
-export function processLiveness(scope: LivenessScope, logger?: IMastraLogger): ProcessRunLiveness {
+function processLiveness(scope: LivenessScope, logger?: IMastraLogger): ProcessRunLiveness {
   let liveness = livenessByProcess.get(scope);
   if (!liveness) {
-    liveness = new ProcessRunLiveness(scope, logger);
+    liveness = new ProcessRunLiveness(logger);
     livenessByProcess.set(scope, liveness);
   }
 
@@ -348,9 +363,9 @@ export function enterRunLiveness({
 
 /**
  * Stops the process `scope` stands for from vouching for its runs once its
- * shutdown drained them, and expires the liveness keys it holds. See
- * {@link ProcessRunLiveness.end}.
+ * shutdown drained them, and expires the liveness keys it holds, waiting
+ * until about `deadline`. See {@link ProcessRunLiveness.end}.
  */
-export async function endRunLiveness(scope: LivenessScope): Promise<void> {
-  await livenessByProcess.get(scope)?.end();
+export async function endRunLiveness(scope: LivenessScope, { deadline }: { deadline: number }): Promise<void> {
+  await livenessByProcess.get(scope)?.end({ deadline });
 }

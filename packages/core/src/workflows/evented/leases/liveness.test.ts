@@ -288,11 +288,13 @@ describe('evented run liveness (#28712)', () => {
 
       const shutdownStartedAt = Date.now();
       await a.mastra.shutdown({ drainTimeout: 0 });
-      // Expiry is set one millisecond out.
-      await sleep(5);
 
-      const expired = await store.getRunOwnership({ runId: runLivenessKey(ours.runId) });
-      expect(expired).toMatchObject({ live: false });
+      // Expiry is set one millisecond out.
+      const expired = await vi.waitFor(async () => {
+        const record = await store.getRunOwnership({ runId: runLivenessKey(ours.runId) });
+        expect(record).toMatchObject({ live: false });
+        return record;
+      });
       // Expired at shutdown rather than released: the record keeps the time this instance stopped.
       expect(expired!.leaseExpiresAt!.getTime()).toBeGreaterThanOrEqual(shutdownStartedAt);
       expect(expired!.leaseExpiresAt!.getTime()).toBeLessThanOrEqual(Date.now());
