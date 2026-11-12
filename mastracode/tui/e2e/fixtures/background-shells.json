@@ -1,0 +1,56 @@
+{
+  "fixtures": [
+    {
+      "match": { "endpoint": "chat", "userMessage": "exited with code 3" },
+      "response": { "content": "SAW_BUILD_EXIT" }
+    },
+    {
+      "match": { "endpoint": "chat", "userMessage": "Start the build in the background", "hasToolResult": false },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_build",
+            "name": "execute_command",
+            "arguments": {
+              "description": "Running the slow build",
+              "command": "node -e \"setTimeout(() => { console.log('BUILD_OUTPUT_MARKER'); process.exit(3); }, 3000)\"",
+              "background": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": { "endpoint": "chat", "userMessage": "Start the build in the background", "hasToolResult": true },
+      "response": { "content": "PARENT_CONTINUED" }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "userMessage": "Start the dev server in the background",
+        "toolResultContains": "Started background process"
+      },
+      "response": { "toolCalls": [{ "id": "call_slow", "name": "slow_probe", "arguments": {} }] }
+    },
+    {
+      "match": { "endpoint": "chat", "userMessage": "Start the dev server in the background" },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_server",
+            "name": "execute_command",
+            "arguments": {
+              "description": "Starting the dev server",
+              "command": "node -e \"console.log('SERVER_READY'); setInterval(() => {}, 1000)\"",
+              "background": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": { "endpoint": "chat" },
+      "response": { "content": "UNEXPECTED_MODEL_CALL" }
+    }
+  ]
+}

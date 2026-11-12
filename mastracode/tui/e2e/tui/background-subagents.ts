@@ -109,7 +109,7 @@ export const backgroundSubagentsScenario = {
       );
     }
 
-    await runtime.waitForOutputText(/background_probe failed in background/i, terminal, 10_000);
+    await runtime.waitForOutputText(/↳ background_probe failed/i, terminal, 10_000);
     const compactOutput = terminal.serialize().view;
     check(
       !compactOutput.includes('invocation · {"label":"failed","fail":true}') &&

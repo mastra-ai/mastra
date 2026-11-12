@@ -110,7 +110,7 @@ function adoptionScenario(mode: 'deferred' | 'awaited' | 'cancel' | 'failure'): 
           await runtime.waitForOutputText(/PARENT_DONE/, terminal, 20_000);
           expect(events).toEqual(['started', 'parent-action']);
         }
-        expect(terminal.serialize().view).not.toContain('adopted_probe completed in background');
+        expect(terminal.serialize().view).not.toContain('↳ adopted_probe');
         if (!awaited) {
           terminal.write('\x07');
           await runtime.waitForScreenText(/Background activity/i, terminal);
@@ -127,10 +127,11 @@ function adoptionScenario(mode: 'deferred' | 'awaited' | 'cancel' | 'failure'): 
         expect(events).not.toContain('completed');
         if (awaited) expect(events).not.toContain('parent-action');
         else terminal.write('\x1b');
-        expect(terminal.serialize().view).not.toContain('adopted_probe completed in background');
+        expect(terminal.serialize().view).not.toContain('↳ adopted_probe');
         cleanup.resolve();
         const status = mode === 'cancel' ? 'cancelled' : mode === 'failure' ? 'failed' : 'completed';
-        await runtime.waitForOutputText(new RegExp(`adopted_probe ${status} in background`, 'i'), terminal, 15_000);
+        const verb = status === 'completed' ? 'finished' : status;
+        await runtime.waitForOutputText(new RegExp(`↳ adopted_probe ${verb}`, 'i'), terminal, 15_000);
         if (awaited) {
           await runtime.waitForOutputText(/PARENT_DONE/, terminal, 15_000);
           expect(events.at(-1)).toBe('parent-action');
@@ -138,7 +139,7 @@ function adoptionScenario(mode: 'deferred' | 'awaited' | 'cancel' | 'failure'): 
         if (mode === 'cancel') {
           // Even an uncooperative operation resolving successfully after cancellation cannot win.
           await vi.waitFor(() => expect(events).toContain('completed'));
-          expect(terminal.serialize().view).not.toContain('adopted_probe completed in background');
+          expect(terminal.serialize().view).not.toContain('adopted_probe finished');
         }
         terminal.write('\x07');
         await runtime.waitForScreenText(/Background activity/i, terminal);
