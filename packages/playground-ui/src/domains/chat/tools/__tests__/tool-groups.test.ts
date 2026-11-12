@@ -4,9 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { collectToolGroups } from '../tool-groups';
 import { WORKSPACE_TOOLS } from '../workspace-tool-constants';
 
-const invocation = (toolCallId: string, toolName: string, result: unknown): ToolInvocationPart => ({
+const invocation = (
+  toolCallId: string,
+  toolName: string,
+  result: unknown,
+  args: Record<string, unknown> = {},
+): ToolInvocationPart => ({
   type: 'tool-invocation',
-  toolInvocation: { toolName, toolCallId, state: 'result', args: {}, result },
+  toolInvocation: { toolName, toolCallId, state: 'result', args, result },
 });
 
 const call = (toolCallId: string, toolName = 'view') => invocation(toolCallId, toolName, {});
@@ -51,7 +56,10 @@ describe('collectToolGroups', () => {
     });
 
     it('keeps background work out of the fold', () => {
-      const process = invocation('b', WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, 'Started background process (PID: 42)');
+      const process = invocation('b', WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, 'Started background process (PID: 42)', {
+        command: 'npm run dev',
+        background: true,
+      });
       const task = invocation('b', 'report', 'Background task started with id bg-1');
       for (const background of [process, task]) {
         expect(groupKeys([call('a'), background, call('c'), call('d')])).toEqual({ firsts: [], members: [] });

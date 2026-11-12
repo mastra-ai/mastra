@@ -95,6 +95,13 @@ describe('toolCardKind', () => {
       expect(toolCardKind(fields(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES), {})).toBe('file_tree');
     });
 
+    it('draws a background command apart, but not a foreground one that printed the same line', () => {
+      const started = (input: Record<string, unknown>) =>
+        fields(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, { input, output: 'Started background process (PID: 42)' });
+      expect(toolCardKind(started({ command: 'npm run dev', background: true }), {})).toBe('background_command');
+      expect(toolCardKind(started({ command: 'echo "Started background process (PID: 42)"' }), {})).toBe('sandbox');
+    });
+
     it('draws the three sandbox tools as sandbox', () => {
       for (const name of Object.values(WORKSPACE_TOOLS.SANDBOX)) {
         expect(toolCardKind(fields(name), {})).toBe('sandbox');
