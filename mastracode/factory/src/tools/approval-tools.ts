@@ -45,16 +45,23 @@ interface WaitingApproval {
 }
 
 /**
- * Whether a paused tool asks for a decision rather than a typed answer: its resume
- * data is an object whose `action` is `approved` or `rejected`. A question to the
- * person (free text, a choice) does not fit, and is answered in the session itself.
+ * Whether a bare yes or no is all a paused tool needs to carry on: its resume data is an
+ * object whose `action` is `approved` or `rejected`, and nothing else is required. A
+ * question to the person (free text, a choice, a decision plus a required detail) does
+ * not fit, and is answered in the session itself.
  */
 function resumesOnDecision(resumeSchema: string | undefined): boolean {
   if (!resumeSchema) return false;
   try {
-    const actions: unknown = (JSON.parse(resumeSchema) as { properties?: { action?: { enum?: unknown } } }).properties
-      ?.action?.enum;
-    return Array.isArray(actions) && actions.includes('approved') && actions.includes('rejected');
+    const schema = JSON.parse(resumeSchema) as { properties?: { action?: { enum?: unknown } }; required?: unknown };
+    const actions = schema.properties?.action?.enum;
+    const required = Array.isArray(schema.required) ? schema.required : [];
+    return (
+      Array.isArray(actions) &&
+      actions.includes('approved') &&
+      actions.includes('rejected') &&
+      required.every(field => field === 'action')
+    );
   } catch {
     return false;
   }

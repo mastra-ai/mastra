@@ -603,7 +603,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           orgId,
           factoryProjectId: project.id,
         })) ?? []) {
-          followed.set(link.sessionId, [...(followed.get(link.sessionId) ?? []), link.workItemId]);
+          const workItemIds = followed.get(link.sessionId);
+          if (workItemIds) workItemIds.push(link.workItemId);
+          else followed.set(link.sessionId, [link.workItemId]);
         }
         return c.json({
           sessions: sessions.map(session => ({

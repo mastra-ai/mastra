@@ -18,6 +18,12 @@ const RESUME_SCHEMAS: Record<string, string> = {
     properties: { action: { type: 'string', enum: ['approved', 'rejected'] } },
     required: ['action'],
   }),
+  // Asks for a decision and a ticket number: a bare yes or no cannot finish this call.
+  sign_off_with_ticket: JSON.stringify({
+    type: 'object',
+    properties: { action: { type: 'string', enum: ['approved', 'rejected'] }, ticket: { type: 'string' } },
+    required: ['action', 'ticket'],
+  }),
   ask_user: JSON.stringify({ anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] }),
 };
 
@@ -136,6 +142,18 @@ describe('factory_answer_approval', () => {
     expect(respondToToolSuspension).toHaveBeenCalledWith(
       expect.objectContaining({ resumeData: { action: 'approved' }, toolCallId: 'call-1' }),
     );
+  });
+
+  it('does not approve a tool that needs more than a yes or no to carry on', async () => {
+    const { answer, respondToToolApproval, respondToToolSuspension } = setup({
+      armed: false,
+      parkedTool: 'sign_off_with_ticket',
+    });
+
+    await expect(answer({ decision: 'approve' })).rejects.toThrow('Nothing is waiting on that tool call');
+
+    expect(respondToToolApproval).not.toHaveBeenCalled();
+    expect(respondToToolSuspension).not.toHaveBeenCalled();
   });
 
   it('does not answer a tool waiting on a typed answer, like ask_user', async () => {
