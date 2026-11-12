@@ -16,6 +16,9 @@
 //   the same worker allocates into.
 // - timers: asserts vi.getTimerCount() is 0, or runs every fake timer (runAllTimersAsync), which
 //   a timer scheduled by work an earlier file left running in the same worker breaks.
+// - lease: a run must keep its execution lease until it publishes a terminal event. Background
+//   work an earlier file left running in the same worker can take the lease over, so the run
+//   ends with "lost its lease before publishing a terminal event".
 //
 // The list comes from scanning test sources for those patterns, then checking the rest
 // with a leak probe that diffs worker state between files.
@@ -38,6 +41,7 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
   'src/agent/durable/__tests__/agreement-memory.test.ts', // reset-modules
+  'src/agent/durable/__tests__/durable-agent-background-tasks.test.ts', // lease
   'src/agent/durable/__tests__/durable-agent-background-transform.test.ts', // vi.mock
   'src/agent/durable/__tests__/durable-agent-concurrent-runs.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-crash-recovery.test.ts', // vi.mock,reset-modules

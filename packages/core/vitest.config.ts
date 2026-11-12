@@ -114,6 +114,7 @@ export default defineConfig({
           include: ['src/**/*.e2e.test.ts'],
           setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
+          env: { MASTRA_TEST_REAL_RETRY_DELAYS: '1' },
         },
       },
       {

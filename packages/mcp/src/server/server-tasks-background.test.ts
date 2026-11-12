@@ -48,6 +48,8 @@ class User {
 
 interface Probe {
   runs: Array<{ tool: string; resumeData: unknown }>;
+  /** When set, `waits` stays open until it settles, so a test controls when its tasks finish. */
+  hold?: Promise<void>;
 }
 
 /** A release: `prepare` (a side effect), then `ask` who approves. Records every step start in `probe`. */
@@ -185,6 +187,7 @@ function makeTools(probe: Probe, counterFile: string) {
       inputSchema: z.object({}),
       execute: async (_input, context) => {
         probe.runs.push({ tool: 'waits', resumeData: 'start' });
+        await probe.hold;
         const aborted = await new Promise<boolean>(resolve => {
           const timer = setTimeout(() => resolve(false), LEASE_MS * 1.5);
           context.abortSignal?.addEventListener('abort', () => {
@@ -453,6 +456,9 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
   it('caps open tasks per client across instances sharing storage', async () => {
     const tasks = { tools: { waits: 'always' as const }, maxOpenTasksPerClient: 2 };
+    // Keep alice's two tasks open until the limit has been checked; the lease-length wait alone can elapse first.
+    let release!: () => void;
+    probe.hold = new Promise(resolve => (release = resolve));
     const a = await instance(tasks);
     const b = await instance(tasks);
     const first = await call(a.url, 'waits');
@@ -478,6 +484,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     await call(b.url, 'waits', {}, { 'x-test-user': 'bob' });
 
     // A finished task frees its slot, on whichever instance the next call lands.
+    release();
     await waitFor(await requester(b.url), first, 'completed');
     await call(b.url, 'waits');
   });
