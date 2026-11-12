@@ -7,6 +7,8 @@ import { workItemFilterOptions } from './board-filter-options.js';
 import { boardPhases } from './board-phases.js';
 
 const BOARD = { id: 'work', phases: ['intake', 'planning', 'done'] };
+// The route names a card by the body it sends; nothing here reads the name.
+const version = (card: Card) => `version of ${card.id}`;
 
 /** The view a reader's query string asks for, parsed as the route parses it. */
 function view(query: Record<string, string | string[]> = {}) {
@@ -15,7 +17,7 @@ function view(query: Record<string, string | string[]> = {}) {
 }
 
 function listedIds(list: readonly Card[], query: Record<string, string | string[]> = {}, userId = 'u1') {
-  const { body } = boardPhases(list, BOARD, view(query), userId);
+  const { body } = boardPhases(list, BOARD, view(query), userId, version);
   return Object.fromEntries(body.phases.map(entry => [entry.phase, entry.cards.map(card => card.id)]));
 }
 
@@ -95,13 +97,14 @@ describe('boardPhases', () => {
       { id: 'work', phases: [longest] },
       view({ limit: '1', window: [`${longest}:2`] }),
       'u1',
+      version,
     );
 
     expect(body.phases[0]?.cards.map(card => card.id)).toEqual(['b', 'a']);
   });
 
   it('shows a card held by none of the board’s phases under the first one only', () => {
-    const { body } = boardPhases([testCard('lost', { stages: ['retired-lane'] })], BOARD, view(), 'u1');
+    const { body } = boardPhases([testCard('lost', { stages: ['retired-lane'] })], BOARD, view(), 'u1', version);
 
     expect(body.phases.map(entry => [entry.phase, entry.total])).toEqual([
       ['intake', 1],
@@ -159,9 +162,9 @@ describe('boardPhases', () => {
       stageHistory: [entered('intake', '2026-03-02T00:00:00.000Z')],
     });
 
-    const { body, named } = boardPhases([parent, child], BOARD, view({ limit: '1' }), 'u1');
+    const { body, named } = boardPhases([parent, child], BOARD, view({ limit: '1' }), 'u1', version);
 
-    expect(body.related).toEqual([{ id: 'parent', changedAt: null }]);
+    expect(body.related).toEqual([{ id: 'parent', version: 'version of parent' }]);
     expect(named.map(card => card.id)).toEqual(['child', 'parent']);
   });
 });

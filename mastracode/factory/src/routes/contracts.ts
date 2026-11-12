@@ -480,7 +480,10 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
-    /** Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing. */
+    /**
+     * Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing.
+     * Each card comes with the `version` the phases read names it by.
+     */
     workItemId: z.array(uuidSchema).min(1).max(100).optional(),
     /**
      * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
@@ -609,8 +612,11 @@ export const boardPhasesQuerySchema = z.object({
   cards: z.enum(['true']).optional(),
 });
 
-/** Names a card and the version of it the answer was read from. */
-const cardStampSchema = z.object({ id: z.string(), changedAt: z.string().nullable() });
+/**
+ * Names a card and the body the answer was read from. `version` is another value whenever any of
+ * the body is, so a reader that holds the card at this version holds this body.
+ */
+const cardStampSchema = z.object({ id: z.string(), version: z.string() });
 
 export const boardPhasesResponseSchema = z.object({
   /** The board's phases in declaration order. */
@@ -629,7 +635,7 @@ export const boardPhasesResponseSchema = z.object({
   boardTotal: countSchema,
   /** Cards of the board that match the view, each counted once: a card in two phases is one. */
   matchingTotal: countSchema,
-  /** With `cards=true`: the body of every card named in `phases` and `related`. */
+  /** With `cards=true`: the body of every card named in `phases` and `related`, each with its `version`. */
   workItems: z.array(cardSchema).optional(),
   /** Among the named cards. */
   runningSessionIds: z.array(z.string()),

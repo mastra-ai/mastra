@@ -2501,16 +2501,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "id": {
               "type": "string"
             },
-            "changedAt": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "version": {
+              "type": "string"
             }
           },
           "required": [
             "id",
-            "changedAt"
+            "version"
           ]
         }
       }

@@ -21,7 +21,7 @@ export interface PhasesBoard {
 }
 
 /** The view, as the phases route parses it. `cards` is the route's own: bodies are not computed here. */
-export type BoardPhasesView = Omit<BoardPhasesQuery, 'board' | 'cards'>;
+export type BoardPhasesView = Omit<BoardPhasesQuery, 'cards'>;
 
 export interface BoardPhases {
   /** The answer, without what only the route knows: session states and card bodies. */
@@ -141,21 +141,20 @@ function viewMatcher(view: BoardPhasesView): ((card: Card) => boolean) | undefin
 
 const EVERY_CARD: ReadonlyArray<(entry: Placed) => boolean> = [() => true];
 
-function stamp(card: Card): { id: string; changedAt: string | null } {
-  return { id: card.id, changedAt: card.changedAt ? card.changedAt.toISOString() : null };
-}
-
 /**
  * The phases of `board` as `view` shows them to `userId`, read from the project's whole `list`.
  * A window for a phase the board does not have deepens nothing: a reader may still hold a
- * phase deeper after the board lost that phase, and keeps its board.
+ * phase deeper after the board lost that phase, and keeps its board. `version` names the body the
+ * caller sends for a card: the caller knows that body, this module does not.
  */
 export function boardPhases(
   list: readonly Card[],
   board: PhasesBoard,
   view: BoardPhasesView,
   userId: string,
+  version: (card: Card) => string,
 ): BoardPhases {
+  const stamp = (card: Card) => ({ id: card.id, version: version(card) });
   const index = boardIndex(list, board);
   const matches = viewMatcher(view);
   // `recent-mine` is `recent` read twice: the cards the reader last moved here, then the others.

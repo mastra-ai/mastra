@@ -3415,10 +3415,20 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       const raw = await (await json('GET', phasesPath('limit=1&window=planning:1&cards=true'))).json();
 
       const unrelated = raw.phases.find((entry: { phase: string }) => entry.phase === 'planning').cards[0];
-      expect(raw.workItems).toEqual([wire(pullRequest.id), wire(unrelated.id), wire(parent.id)]);
-      // A reader tells its copy of a card from the answer's by this stamp.
-      expect(raw.related).toEqual([{ id: parent.id, changedAt: wire(parent.id).changedAt }]);
-      expect(wire(parent.id).changedAt).toEqual(expect.any(String));
+      const sent = raw.workItems.map(({ version: _version, ...card }: { version: string }) => card);
+      expect(sent).toEqual([wire(pullRequest.id), wire(unrelated.id), wire(parent.id)]);
+      // A reader tells its copy of a card from the answer's by its version.
+      expect(raw.related).toEqual([{ id: parent.id, version: raw.workItems[2].version }]);
+      expect(raw.workItems[2].version).toEqual(expect.any(String));
+    });
+
+    it('names a card by the same version in the by-id read, so a reader can tell it holds the body', async () => {
+      const card = await file('1');
+
+      const phases = await read();
+      const byId = await (await json('GET', `${itemsPath()}?workItemId=${card.id}`)).json();
+
+      expect(byId.workItems).toMatchObject([{ id: card.id, version: phases.phases[0]?.cards[0]?.version }]);
     });
 
     it('reports which sessions of the named cards run or wait, and none of an unlisted card', async () => {
@@ -3466,7 +3476,7 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       expect(await again.text()).toBe('');
     });
 
-    it('sends the answer again, with the card’s new stamp, once a listed card changes', async () => {
+    it('sends the answer again, with the card’s new version, once a listed card changes', async () => {
       const card = await file('1');
       const app = buildApp(orgUser);
       const first = await app.request(phasesPath());
@@ -3480,7 +3490,75 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       expect(after.status).toBe(200);
       const body = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await after.json());
       expect(under(body, 'intake').ids).toEqual([card.id]);
-      expect(body.phases[0]?.cards[0]?.changedAt).not.toBe(before.phases[0]?.cards[0]?.changedAt);
+      expect(body.phases[0]?.cards[0]?.version).not.toBe(before.phases[0]?.cards[0]?.version);
+    });
+
+    it('sends a new version when a source sync changes a listed card in the millisecond of its last write', async () => {
+      const card = await file('1');
+      at('2026-11-01T10:00:07Z');
+      await json('PATCH', `/web/factory/work-items/${card.id}`, { title: 'Renamed' });
+      const app = buildApp(orgUser);
+      const view = phasesPath('cards=true');
+      const first = await app.request(view);
+      const before = await first.json();
+
+      // The clock has not moved: the sync stamps the card with the instant the rename did.
+      await seed.workItems.syncWorkItemSource({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        provider: 'github',
+        externalId: before.workItems[0].workItem.externalId,
+        patch: { labels: ['urgent'] },
+      });
+
+      const after = await app.request(view, { headers: { 'if-none-match': first.headers.get('etag')! } });
+      expect(after.status).toBe(200);
+      const body = await after.json();
+      expect(body.workItems[0]).toMatchObject({ changedAt: before.workItems[0].changedAt });
+      expect(body.workItems[0].workItem.labels).toEqual(['urgent']);
+      expect(body.phases[0].cards[0].version).not.toBe(before.phases[0].cards[0].version);
+      expect(body.workItems[0].version).toBe(body.phases[0].cards[0].version);
+    });
+
+    it('sends a new version of a Review card that reads as a Work card once Review closes, though nothing wrote it', async () => {
+      const closed = await file('closed', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'closed' },
+      });
+      const open = await file('open', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'open' },
+      });
+      // Rows as the retired Review board left them: one done, one still in review.
+      const stored = (id: string, stages: string[]) =>
+        seed.storage.ops.updateMany('factory_board_items', { id }, { board: 'review', stages });
+      await stored(closed.id, ['done']);
+      await stored(open.id, ['review']);
+      const app = buildApp(orgUser);
+      const byId = async () =>
+        (await (await app.request(`${itemsPath()}?workItemId=${closed.id}`)).json()).workItems[0];
+      at('2026-11-01T10:01:00Z');
+      await json('PATCH', `/web/factory/work-items/${open.id}`, { title: 'Still open' });
+      const held = await byId();
+      expect(held).toMatchObject({ board: 'review' });
+      const etag = (await app.request(phasesPath())).headers.get('etag');
+
+      at('2026-11-01T10:02:00Z');
+      await seed.workItems.update({
+        orgId: 'org1',
+        id: open.id,
+        userId: orgUser.workosId,
+        patch: { stages: ['done'] },
+      });
+
+      const after = await app.request(phasesPath(), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      const done = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema
+        .parse(await after.json())
+        .phases.find(entry => entry.phase === 'done');
+      const named = done?.cards.find(card => card.id === closed.id);
+      const now = await byId();
+      expect(now).toMatchObject({ board: 'work', changedAt: held.changedAt });
+      expect(named?.version).toBe(now.version);
+      expect(named?.version).not.toBe(held.version);
     });
 
     it('still answers 304 when the card that changed is outside every window', async () => {

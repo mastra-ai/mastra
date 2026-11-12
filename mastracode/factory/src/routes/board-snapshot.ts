@@ -71,6 +71,24 @@ export function hashedBody(body: unknown): BoardSnapshot {
   return { etag: `W/"${sha1(json)}"`, json, gzipped: () => gzip(json) };
 }
 
+/**
+ * An answer whose `names` hold the version of every card body `bodies` adds: its ETag is a hash of
+ * `names`, and the bodies are serialized only for a reader that does not hold the answer.
+ */
+export function namedBody(names: object, bodies?: () => object): BoardSnapshot {
+  const named = JSON.stringify(names);
+  let whole: string | undefined;
+  const json = () => (whole ??= bodies ? JSON.stringify({ ...names, ...bodies() }) : named);
+  return {
+    // An answer with bodies is not one a reader of the names alone holds.
+    etag: `W/"${sha1(named)}${bodies ? '.bodies' : ''}"`,
+    get json() {
+      return json();
+    },
+    gzipped: () => gzip(json()),
+  };
+}
+
 const checks = new WeakMap<readonly Card[], string>();
 
 /** {@link boardCheck} of a cached list, computed once for every reader that sends its cursor. */
@@ -106,7 +124,8 @@ function snapshot(
   return cards.latest;
 }
 
-function sha1(text: string): string {
+/** Names a text: a reader holding another text holds another name. */
+export function sha1(text: string): string {
   return createHash('sha1').update(text).digest('base64url');
 }
 
