@@ -4791,8 +4791,8 @@ export class Mastra<
       await this.#restartWorkflowRun(workflow, run.runId);
     };
 
-    // Checked here, right before the add: a pass checks before its ownership read, and a recheck can queue
-    // the run during that read.
+    // Checked here, right before the add: a pass checks before its ownership read, and anything that queues
+    // the run during that read must still leave it one restart.
     const key = recoveryRunKey(run.workflowName, run.runId);
     if (this.#queuedRecoveryRestarts.has(key)) {
       return Promise.resolve();
