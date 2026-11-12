@@ -5937,6 +5937,13 @@ export class Agent<
    * so sending references to them causes model providers to reject or
    * mishandle the request.
    *
+   * Provider-executed tool results are stripped too. When a provider runs a tool
+   * itself (OpenAI hosted tool search, Anthropic server tools) AI SDK v5 places the
+   * tool_result part in the *same assistant message* as its tool_call, so removing only
+   * the call leaves an orphaned result that providers reject — "No tool call found for
+   * tool search output with call_id ...". Client-executed results live in `role: 'tool'`
+   * messages instead and are already dropped below.
+   *
    * This function removes those parts while preserving all other
    * conversation context (user messages, assistant text, etc.).
    * @internal
@@ -5953,7 +5960,7 @@ export class Agent<
         }
 
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter(part => part.type !== 'tool-call');
+          const filtered = message.content.filter(part => part.type !== 'tool-call' && part.type !== 'tool-result');
           if (filtered.length === 0) return null;
           return { ...message, content: filtered };
         }

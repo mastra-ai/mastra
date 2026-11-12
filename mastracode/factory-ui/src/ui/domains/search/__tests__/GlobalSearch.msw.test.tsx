@@ -10,10 +10,8 @@ import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { releaseBoard, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
-import { queryKeys } from '../../../../api/keys';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
-import { listWorkItems } from '../../factory/services/workItems';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
@@ -25,6 +23,7 @@ import {
   FIRST_REPOSITORY_ID,
   intakeIssues,
   intakePullRequests,
+  listWorkItemsResponse,
   OTHER_FACTORY_ID,
   OTHER_REPOSITORY_ID,
   SECOND_REPOSITORY_ID,
@@ -53,7 +52,8 @@ interface SearchRequestState {
   transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
   intakeRequests: number;
   sessionRequests: Record<string, number>;
-  workItemRequests: number;
+  /** The query string of each read of the card list; `''` is a read of the whole board. */
+  workItemQueries: string[];
 }
 
 interface StubSearchOptions {
@@ -62,6 +62,11 @@ interface StubSearchOptions {
   failSessionAttempts?: number;
   failIntake?: boolean;
   failWorkItems?: boolean;
+  /**
+   * A server that narrows the list by session only, as before the palette's reads existed: it
+   * ignores `started`, `q`, `limit` and `source`, and sends the whole board with no `total`.
+   */
+  serverNarrowsBySessionOnly?: boolean;
   sessionsGate?: Promise<void>;
   onSessionsAbort?: () => void;
   running?: boolean;
@@ -108,7 +113,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     transitions: [],
     intakeRequests: 0,
     sessionRequests: {},
-    workItemRequests: 0,
+    workItemQueries: [],
   };
 
   server.use(
@@ -129,13 +134,16 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         ? HttpResponse.json({ project })
         : HttpResponse.json({ error: 'Factory not found' }, { status: 404 });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params }) => {
-      state.workItemRequests += 1;
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params, request }) => {
+      const query = new URL(request.url).searchParams;
+      state.workItemQueries.push(query.toString());
       if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
-      const factoryProjectId = String(params.factoryProjectId);
-      return HttpResponse.json({
-        workItems: factoryProjectId === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems).map(toWireWorkItem) : [],
-      });
+      const cards = String(params.factoryProjectId) === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems) : [];
+      if (options.serverNarrowsBySessionOnly) {
+        for (const ignored of ['started', 'q', 'limit', 'source']) query.delete(ignored);
+      }
+      const listed = listWorkItemsResponse(cards, query);
+      return listed ? HttpResponse.json(listed) : HttpResponse.json({ error: 'invalid_scope' }, { status: 400 });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
@@ -327,14 +335,29 @@ function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/setti
   return { router, client };
 }
 
-async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryClient>) {
-  await Promise.all([
-    client.query(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.query({
-      queryKey: queryKeys.workItems(ACTIVE_FACTORY_ID),
-      queryFn: ({ signal }) => listWorkItems(TEST_BASE_URL, ACTIVE_FACTORY_ID, signal),
-    }),
-  ]);
+/** A card nobody started work on, last touched on `day`. */
+function unstartedCard(id: string, title: string, day: string): WorkItem {
+  return {
+    id,
+    orgId: 'org-search',
+    createdBy: 'user-search',
+    githubProjectId: ACTIVE_FACTORY_ID,
+    source: 'manual',
+    sourceKey: null,
+    parentWorkItemId: null,
+    title,
+    url: null,
+    stages: ['intake'],
+    stageHistory: [],
+    sessions: {},
+    metadata: {},
+    triageType: null,
+    acceptedAt: null,
+    description: null,
+    revision: 1,
+    createdAt: `${day}T08:00:00.000Z`,
+    updatedAt: `${day}T08:00:00.000Z`,
+  };
 }
 
 async function openWithShortcut() {
@@ -563,7 +586,7 @@ describe('Global search', () => {
     expect(within(rail).getByRole('button', { name: /Review sessions/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('filters locally across titles, branches, ids, and Factory repositories without issuing more requests', async () => {
+  it('filters across titles, branches, ids, and Factory repositories without ever downloading the board', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
@@ -572,7 +595,6 @@ describe('Global search', () => {
 
     const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
     const sessionRequestCount = Object.values(requests.sessionRequests).reduce((total, count) => total + count, 0);
-    const workItemRequestCount = requests.workItemRequests;
 
     await user.type(input, 'universal 321');
     expect(await screen.findByText('Add universal command search')).toBeInTheDocument();
@@ -594,22 +616,134 @@ describe('Global search', () => {
     expect(Object.values(requests.sessionRequests).reduce((total, count) => total + count, 0)).toBe(
       sessionRequestCount,
     );
-    expect(requests.workItemRequests).toBe(workItemRequestCount);
+    // The server is asked once typing pauses, never for the whole board.
+    await waitFor(() => expect(requests.workItemQueries).toContain('started=false&q=nothing+can+match+this'));
+    expect(requests.workItemQueries).not.toContain('');
   });
 
-  it('reuses warm session and work-item caches without refetching', async () => {
+  it('opens on warm sessions without refetching them, and reads the cards in parts instead of the board', async () => {
     const requests = stubSearchApi();
     const { client } = renderSearchRoute();
 
-    await warmSessionsAndWorkItems(client);
+    await client.query(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID));
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    expect(requests.workItemRequests).toBe(1);
 
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
+    await screen.findByText('Bump the command palette dependencies');
+    await screen.findByText('Harden the review board drop target');
 
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    expect(requests.workItemRequests).toBe(1);
+    // The sidebar already read the cards holding a session: the palette shares that read.
+    expect(requests.workItemQueries.toSorted()).toEqual([
+      'scope=sessions',
+      // Each live candidate, by its key and its URL, to learn which of them a card is already filed from.
+      `source=${[
+        'github-pr:20454',
+        'https://github.com/mastra-ai/mastra/pull/20454',
+        'github-issue:20455',
+        'https://github.com/mastra-ai/mastra/issues/20455',
+        'github-pr:900',
+        'https://github.com/mastra-ai/mastra/pull/900',
+      ]
+        .map(encodeURIComponent)
+        .join('&source=')}`,
+      'started=false&q=',
+    ]);
+  });
+
+  it('finds a card past the first 20 once its words are typed, while the rail keeps counting every card', async () => {
+    const backlog = Array.from({ length: 24 }, (_, index) =>
+      unstartedCard(`backlog-${index}`, `Backlog chore ${index}`, `2026-07-${String(index + 1).padStart(2, '0')}`),
+    );
+    const requests = stubSearchApi({
+      workItems: [...backlog, unstartedCard('signing-keys', 'Rotate the signing keys', '2026-06-01')],
+    });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    const rail = screen.getByRole('complementary', { name: 'Search categories' });
+
+    // 25 cards, plus the three live candidates no card is filed from.
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*28$/ })).toBeInTheDocument();
+    expect(within(dialog).getByText('Backlog chore 23')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Rotate the signing keys')).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'SIGNING rotate');
+
+    expect(await within(dialog).findByText('Rotate the signing keys')).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /^Work items\s*28$/ })).toBeInTheDocument();
+    // One search for the settled text, none for the letters on the way to it.
+    expect(requests.workItemQueries.filter(query => query.startsWith('started=false'))).toEqual([
+      'started=false&q=',
+      'started=false&q=SIGNING+rotate',
+    ]);
+  });
+
+  it('does not offer a pull request whose card is past the first 20, and lists that card once typed', async () => {
+    const backlog = Array.from({ length: 24 }, (_, index) =>
+      unstartedCard(`backlog-${index}`, `Backlog chore ${index}`, `2026-07-${String(index + 1).padStart(2, '0')}`),
+    );
+    const [pullRequest] = intakePullRequests;
+    stubSearchApi({
+      workItems: [
+        ...backlog,
+        {
+          ...unstartedCard('filed-pull-request', pullRequest.title, '2026-06-01'),
+          source: 'github-pr',
+          sourceKey: `github-pr:${pullRequest.number}`,
+          url: pullRequest.url,
+          metadata: { number: pullRequest.number },
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    const rail = screen.getByRole('complementary', { name: 'Search categories' });
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+
+    // 25 cards and two unfiled candidates: the pull request counts as its card, not as a candidate too.
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*27$/ })).toBeInTheDocument();
+    expect(await within(results).findByText('Rail scopes overflow on narrow viewports')).toBeInTheDocument();
+    expect(within(results).queryByText(pullRequest.title)).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), `#${pullRequest.number}`);
+
+    expect(await within(results).findByRole('option', { name: /not started/ })).toHaveTextContent(pullRequest.title);
+    expect(within(results).getAllByRole('option')).toHaveLength(1);
+  });
+
+  it.each([
+    ['a server that searches the cards itself', false],
+    ['a server that sends the whole board whatever is asked', true],
+  ])('lists the same cards from %s', async (_server, serverNarrowsBySessionOnly) => {
+    stubSearchApi({ serverNarrowsBySessionOnly });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    await screen.findByText('Review command palette PR');
+    const rail = screen.getByRole('complementary', { name: 'Search categories' });
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+    const listed = (titles: string[]) =>
+      waitFor(() => {
+        expect(within(results).getAllByRole('option')).toHaveLength(titles.length);
+        for (const title of titles) expect(within(results).getByText(title)).toBeInTheDocument();
+      });
+
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*4$/ })).toBeInTheDocument();
+    await user.click(within(rail).getByRole('button', { name: /Work items/ }));
+    // The cards holding no session and the candidates not filed, each once; no card holding a session.
+    await listed([
+      'Harden the review board drop target',
+      'Rail scopes overflow on narrow viewports',
+      'Bump the command palette dependencies',
+      'Palette keyboard traps focus on mobile',
+    ]);
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'palette');
+    await listed(['Bump the command palette dependencies', 'Palette keyboard traps focus on mobile']);
+    expect(within(rail).getByRole('button', { name: /^Work items\s*4$/ })).toBeInTheDocument();
   });
 
   it('keeps search open while choosing a repository for an unattributed work item', async () => {
@@ -644,6 +778,33 @@ describe('Global search', () => {
     await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
     await waitFor(() => expect(starts).toHaveLength(1));
     await waitFor(() => expect(search).not.toBeInTheDocument());
+  });
+
+  it('opens the session a listed card gained since, instead of starting another', async () => {
+    const listed = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
+    const cards = [listed];
+    const requests = stubSearchApi({ workItems: cards });
+    const user = userEvent.setup();
+    const { router } = renderSearchRoute();
+    const search = await openWithShortcut();
+    const row = await within(search).findByText(listed.title);
+
+    // Someone starts work on the card while the palette still lists it as not started.
+    cards[0] = {
+      ...listed,
+      sessions: {
+        build: { sessionId: 'session-late', branch: 'factory/late', threadId: 'thread-late', startedBy: 'user-other' },
+      },
+    };
+    await user.click(row);
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/factories/${ACTIVE_FACTORY_ID}/workspaces/session-late/threads/thread-late`,
+      ),
+    );
+    expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
+    expect(requests.createSessionRequests).toBe(0);
   });
 
   it('reports a session failure while retaining navigation and Factories, then recovers on retry', async () => {
@@ -1152,7 +1313,7 @@ describe('Global search', () => {
     expect(within(results).getByText('Navigation')).toBeInTheDocument();
     expect(within(results).getByText('Factories')).toBeInTheDocument();
     expect(Object.values(requests.sessionRequests)).toHaveLength(0);
-    expect(requests.workItemRequests).toBe(0);
+    expect(requests.workItemQueries).toHaveLength(0);
     expect(requests.intakeRequests).toBe(0);
   });
 

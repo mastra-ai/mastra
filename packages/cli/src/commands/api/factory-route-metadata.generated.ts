@@ -359,8 +359,12 @@ export const FACTORY_API_ROUTE_METADATA = {
       "id"
     ],
     "queryParams": [
+      "limit",
+      "q",
       "scope",
-      "sessionId"
+      "sessionId",
+      "source",
+      "started"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -3428,6 +3432,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "scope": {
           "$ref": "#/$defs/__schema1"
+        },
+        "started": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "q": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "limit": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "source": {
+          "$ref": "#/$defs/__schema5"
         }
       },
       "$defs": {
@@ -3444,6 +3460,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "sessions"
           ]
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "false"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "__schema4": {
+          "type": "string"
+        },
+        "__schema5": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema6"
+          }
+        },
+        "__schema6": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
         }
       }
     },
@@ -3522,6 +3564,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "type": "string"
           }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
